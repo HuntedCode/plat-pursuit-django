@@ -6,7 +6,7 @@ Enriches PlatPursuit Concepts with data from the Internet Game Database (IGDB), 
 
 IGDB acts as a supplementary data layer. PSN remains the source of truth for game identity (concepts, trophy lists, earn data). IGDB enrichment is best-effort: if IGDB is unavailable or a match cannot be found, the system continues normally with PSN data only.
 
-The matching system uses a confidence-based approach with a 7-strategy pipeline. Each Concept is matched to an IGDB game entry through progressively broader searches. Matches above 85% confidence are auto-accepted; 50-84% are flagged for staff review; below 50% are discarded. Staff can approve, reject, or re-match via Django admin or management commands.
+The matching system uses a confidence-based approach with a 6-strategy pipeline. Each Concept is matched to an IGDB game entry through progressively broader searches. Each concept matches independently (no family-based inheritance). Matches above 85% confidence are auto-accepted; matches at or above the review threshold (50%) are flagged for staff review. Platform overlap with the concept's games is required: results without at least one shared PlayStation platform are skipped entirely. Staff can approve, reject, or re-match via Django admin or management commands.
 
 Company data is fully normalized. A single Company record represents a real-world studio (e.g. Naughty Dog), linked to Concepts via a ConceptCompany through table that tracks per-game roles (developer, publisher, porting, supporting). This supports developer badges, developer-based challenges, shovelware detection, and stats.
 
@@ -16,7 +16,7 @@ Rate limiting is distributed across all workers via Redis, ensuring all 24 token
 
 | File | Purpose |
 |------|---------|
-| `trophies/services/igdb_service.py` | Core service: auth, search, matching, confidence scoring, enrichment, VR detection, family propagation |
+| `trophies/services/igdb_service.py` | Core service: auth, search, matching, confidence scoring, enrichment, VR detection |
 | `trophies/management/commands/enrich_from_igdb.py` | Management command for batch enrichment, search, manual matching, review, refresh |
 | `trophies/models.py` (Company, ConceptCompany, IGDBMatch) | Data models for IGDB integration |
 | `trophies/admin.py` (CompanyAdmin, IGDBMatchAdmin) | Django admin for match review and company browsing |
@@ -100,19 +100,18 @@ OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method
 
 ## Key Flows
 
-### 7-Strategy Matching Pipeline
+### 6-Strategy Matching Pipeline
 
 When `IGDBService.match_concept(concept)` is called, strategies run in order until one succeeds:
 
 | # | Strategy | API Calls | What It Catches |
 |---|----------|-----------|-----------------|
-| 1 | **Family sibling lookup** | 0 | Regional variants (e.g. Asian version inherits from NA match) |
-| 2 | **External PSN ID** | 1-2 | Games with PlayStation Store IDs in IGDB |
+| 1 | **External PSN ID** | 1-2 | Games with PlayStation Store IDs in IGDB |
+| 2 | **Fuzzy search** (PS-filtered) | 1 | Standard title matching, handles 90%+ of games |
 | 3 | **Exact name query** (PS-filtered) | 1-2 | Base games buried under DLC in fuzzy search (e.g. Batman: Arkham Knight) |
-| 4 | **Fuzzy search** (PS-filtered) | 1 | Standard title matching, handles 90%+ of games |
-| 5 | **Fuzzy search** (unfiltered) | 1 | PC-first games that came to PlayStation later (e.g. The Finals) |
-| 6 | **Alternative name search** | 1-2 | Regional title differences (e.g. "Sly Raccoon" -> "Sly Cooper and the Thievius Raccoonus") |
-| 7 | **Truncated title search** | 1 | Series prefix matching (e.g. "Sly 3: Honour Among Thieves" -> search "Sly 3"), capped at pending_review |
+| 4 | **Fuzzy search** (unfiltered) | 1 | PC-first games that came to PlayStation later (e.g. The Finals); confidence is reduced by 5% to reflect the looser filter |
+| 5 | **Alternative name search** | 1-2 | Regional title differences (e.g. "Sly Raccoon" -> "Sly Cooper and the Thievius Raccoonus") |
+| 6 | **Truncated title search** | 1 | Series prefix matching (e.g. "Sly 3: Honour Among Thieves" -> search "Sly 3"), capped below auto-accept threshold |
 
 All strategies (except external ID) filter out likely DLC results before scoring, using a name-pattern heuristic (entries with " - Skin", " - Pack", " - DLC", " - Season Pass", etc.).
 
@@ -129,7 +128,9 @@ Before searching IGDB, titles are cleaned to improve match rates:
 
 ### Confidence Scoring
 
-Each IGDB result is scored against the concept. The score considers:
+Each IGDB result is first filtered by **platform overlap** (a hard requirement, not a confidence modifier): the IGDB result must list at least one PlayStation platform that the concept's games also have. Results with no overlap (including VR-only IGDB entries when the concept is not on PSVR/PSVR2) are skipped before scoring runs.
+
+For results that survive the platform filter, the score considers:
 
 - **Title similarity**: SequenceMatcher ratio against primary name AND all alternative names
 - **Containment**: PSN title is a substring of IGDB name (or vice versa)
@@ -138,23 +139,17 @@ Each IGDB result is scored against the concept. The score considers:
 - **Release year proximity**: +5% if within 1 year
 - **Publisher match**: +5% if publisher names match
 
-Thresholds: >= 85% auto-accepted, 50-84% pending review, < 50% discarded.
+Thresholds: >= 85% auto-accepted, >= 50% pending review. There is no hard discard floor for results that pass platform overlap; the lowest-scored survivor is still surfaced for staff review (so no signal is lost).
 
 ### Enrichment Pipeline
 
 1. Match found with confidence >= 0.85: auto-accepted, enrichment applied immediately
 2. Match found with confidence 0.50-0.84: IGDBMatch created with `pending_review` status, enrichment deferred
-3. No match found by any of the 7 strategies: IGDBMatch created with `no_match` status (via `IGDBService.record_no_match`). Default enrichment runs skip these on subsequent passes; use `--retry-no-match` to re-attempt them or `--unmatched` to assign manually. `record_no_match` refuses to overwrite an existing accepted/pending/rejected row.
+3. No match found by any of the 6 strategies: IGDBMatch created with `no_match` status (via `IGDBService.record_no_match`). Default enrichment runs skip these on subsequent passes; use `--retry-no-match` to re-attempt them or `--unmatched` to assign manually. `record_no_match` refuses to overwrite an existing accepted/pending/rejected row.
 4. Staff approves pending match via admin action or `--manual`: enrichment applied
 5. Enrichment creates Company records, ConceptCompany entries, updates Concept's `igdb_genres`/`igdb_themes`, and adds VR platforms to Games
 
-### Family Propagation
-
-When a Concept is enriched and belongs to a GameFamily, the enrichment automatically propagates to family siblings that lack their own IGDBMatch. This means:
-- NA version matches IGDB -> Asian version inherits automatically
-- Works during backfill, refresh, and admin approval
-
-If two Concepts match to the same IGDB game but are NOT in the same family, a GameFamilyProposal is automatically created for staff review.
+Each Concept matches independently. Family-based propagation was removed because it caused regional/platform variants to inherit incorrect data when one sibling matched poorly. PS4 and PS5 versions of the same game now each get their own full IGDBMatch record, as do regional siblings, and each is matched and reviewed on its own merits.
 
 ### VR Platform Detection
 
@@ -165,7 +160,7 @@ Sony does not provide VR platform information. During enrichment, if IGDB report
 In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` creates a NEW concept:
 - `IGDBService.enrich_concept(concept)` is called (best-effort, wrapped in try/except)
 - Only fires for newly created concepts (not existing ones)
-- Only fires for non-stub concepts (skips PP_ prefixed)
+- Fires for all concepts including `PP_` stubs. Stubs benefit the most from IGDB enrichment because they lack PSN-side metadata, so excluding them was a regression worth reverting.
 
 ## Integration Points
 
@@ -185,7 +180,7 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 - **ALL CAPS titles**: IGDB search handles all-caps poorly. Title cleaning lowercases before searching.
 - **Colon in titles**: Colons break IGDB's Apicalypse query parser. Stripped from fuzzy search queries, preserved for exact name `where` clauses.
 - **Time-to-beat is community-sourced**: Not all games have it. Newer/niche games often have empty time-to-beat data. Fields are nullable.
-- **Duplicate IGDB ID constraint**: When two Concepts match to the same IGDB game (e.g. PS4 and PS5 versions), only the first gets an IGDBMatch record. The second gets enrichment (companies, genres, themes) applied directly without its own match row.
+- **Multiple Concepts can share an IGDB ID**: PS4, PS5, PS3, and regional siblings of the same game can each have their own IGDBMatch row pointing at the same `igdb_id`. The unique constraint was dropped (only `db_index=True` remains) so each concept owns its own enrichment lifecycle. Use `find_igdb_family_ties` to surface concepts that share an `igdb_id` but are not in the same `GameFamily`, which usually indicates a missing family grouping.
 - **Company mergers**: IGDB tracks renames/mergers via `changed_company_id`. The `Company.current_company` property follows the chain. When displaying company names, prefer `current_company` for accuracy.
 - **Raw response storage**: The `raw_response` JSONField stores the full IGDB API response (5-20KB per game). Tier 2 data can be parsed later without re-querying.
 - **no_match never overwrites real matches**: `IGDBService.record_no_match()` checks for an existing IGDBMatch first and bails if its status is anything other than `no_match`. This means if `--all` is run and a previously-accepted concept temporarily fails to match (transient IGDB hiccup), the accepted row is preserved. The summary still counts it as `no_match` since the matcher returned nothing, but the DB is left untouched.

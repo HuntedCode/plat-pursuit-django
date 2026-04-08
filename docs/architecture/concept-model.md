@@ -1,12 +1,12 @@
 # Concept Model System
 
-The Concept model is the central abstraction that unifies PlayStation games sharing the same trophy list. When Sony publishes a game on multiple platforms (e.g., PS4 and PS5), each platform version is a separate `Game` record in PlatPursuit, but they all share the same "concept" in the PSN API. The `Concept` model captures this grouping so that comments, ratings, reviews, checklists, badges, and other user-generated content are scoped to the logical game rather than a specific platform stack. This means a user's review of "God of War Ragnarok" applies whether they played the PS4 or PS5 version.
+The Concept model is the central abstraction that unifies PlayStation games sharing the same trophy list. When Sony publishes a game on multiple platforms (e.g., PS4 and PS5), each platform version is a separate `Game` record in PlatPursuit, but they all share the same "concept" in the PSN API. The `Concept` model captures this grouping so that ratings, reviews, roadmaps, badges, IGDB enrichment, and other user-facing content are scoped to the logical game rather than a specific platform stack. This means a user's review of "God of War Ragnarok" applies whether they played the PS4 or PS5 version.
 
 ## Architecture Overview
 
 The system has four core models and several supporting relationships:
 
-1. **Concept**: The logical game entity. Identified by `concept_id` (from the PSN API, or a `PP_` prefix for stub concepts). Groups one or more `Game` records. All user-facing content (comments, ratings, reviews, checklists) is scoped to Concept, not Game.
+1. **Concept**: The logical game entity. Identified by `concept_id` (from the PSN API, or a `PP_` prefix for stub concepts). Groups one or more `Game` records. All user-facing content (ratings, reviews, roadmaps, IGDB enrichment) is scoped to Concept, not Game.
 2. **Game**: A specific platform release. Has a FK to `Concept` (nullable, SET_NULL). The `add_concept()` method handles assignment and triggers `absorb()` when a concept reassignment orphans the old one.
 3. **TitleID**: Links PSN title IDs (per-platform identifiers) to the system. Used during sync to look up concept details from the PSN API and for deduplication.
 4. **GameFamily**: A lightweight cross-generation grouping layer. Unlike Concept (which merges content), GameFamily groups related Concepts WITHOUT merging them. Each Concept in a family retains its own comments, ratings, and checklists.
@@ -126,7 +126,7 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 
 This method migrates ALL related data from `other` (the orphaned concept) to `self` (the surviving concept). The order of operations matters. Here is every relationship handled:
 
-1. **Comments** (concept-level, trophy-level, and checklist-level): `other.comments.update(concept=self)`. Bulk update, no deduplication needed (comments are always unique).
+1. **Comments** (legacy concept-level, trophy-level, and checklist-level historical data): `other.comments.update(concept=self)`. Bulk update, no deduplication needed. The comment system itself is no longer accepting new comments, but historical rows are still migrated so vote/report/moderation paths over old data remain valid.
 
 2. **UserConceptRatings**: Iterates `other.user_ratings.all()`. Skips duplicates keyed by `(profile_id, concept_trophy_group_id)`. Non-duplicates are re-pointed with `save(update_fields=['concept'])`.
 
@@ -134,7 +134,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 4. **Reviews**: Iterates `other.reviews.all()`. Skips duplicates keyed by `(profile_id, concept_trophy_group_id)`. Non-duplicates are re-pointed with `save(update_fields=['concept'])`.
 
-5. **Checklists**: `other.checklists.update(concept=self)`. Bulk update, includes all checklist sections, items, votes, reports, and user progress (cascaded through Checklist FK).
+5. **Checklists** (legacy): `other.checklists.update(concept=self)`. Bulk update, includes cascaded sections, items, votes, reports, and user progress. The checklist system was removed in favor of staff-authored Roadmaps, but the underlying tables are retained so historical data is preserved across concept merges.
 
 6. **FeaturedGuide entries**: `other.featured_entries.update(concept=self)`.
 
@@ -179,10 +179,10 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 - **Token Keeper** (`trophies/token_keeper.py`): The sync pipeline calls `_job_sync_title_id()` for each game during profile sync. This is where concepts are created, assigned, and reassigned. Health check at sync completion ensures every game has a concept.
 - **PSN API Service** (`trophies/services/psn_api_service.py`): `create_concept_from_details()` does `get_or_create` on Concept from PSN API data. `update_profile_game_with_title_stats()` detects stale concepts and triggers re-sync.
-- **Comment System** (`trophies/services/comment_service.py`): Comments are scoped to Concept via FK. Cache invalidation is triggered after `absorb()`.
 - **Rating System** (`trophies/services/rating_service.py`): `UserConceptRating` is scoped to Concept + ConceptTrophyGroup. Cache invalidation is triggered after `absorb()`.
 - **Review System**: `Review` model has FK to Concept. Reviews are migrated during `absorb()` with deduplication by `(profile_id, concept_trophy_group_id)`.
-- **Checklist System**: `Checklist` model has FK to Concept. All checklists (and their sections, items, user progress) follow the concept via cascade.
+- **Roadmap System**: `Roadmap` is 1:1 with Concept (staff-authored platinum guides). Migrated as part of the Checklist legacy data preservation since roadmaps replaced checklists as the user-facing guide surface.
+- **IGDB Integration**: `IGDBMatch` is 1:1 with Concept and is transferred during `absorb()` if the surviving concept lacks one. `ConceptCompany`, `ConceptGenre`, `ConceptTheme`, and `ConceptEngine` M2M-through rows are migrated with role merging and de-duplication.
 - **Badge System**: `Stage.concepts` (M2M) defines which concepts count toward badge completion. `Badge.most_recent_concept` tracks the newest game in a badge series. Both are handled by `absorb()`.
 - **Challenge System**: `GenreChallengeSlot` and `GenreBonusSlot` reference Concept for genre challenge game picks.
 - **GameFamily Service** (`core/services/game_family_service.py`): Matches related Concepts into families via name-based and trophy-based algorithms. Runs daily via management command.
@@ -191,7 +191,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 ## Gotchas and Pitfalls
 
-- **Forgetting to update `absorb()` causes data loss.** Any new model with a FK, M2M, or other relationship to Concept MUST have its migration logic added to `absorb()`. When a concept is reassigned and the old one becomes orphaned, `absorb()` runs and then the orphan is deleted. Any relationships not handled by `absorb()` will cascade-delete or become null with no recovery. The checklist in CLAUDE.md must be updated alongside the code.
+- **Forgetting to update `absorb()` causes data loss.** Any new model with a FK, M2M, or other relationship to Concept MUST have its migration logic added to `absorb()`. When a concept is reassigned and the old one becomes orphaned, `absorb()` runs and then the orphan is deleted. Any relationships not handled by `absorb()` will cascade-delete or become null with no recovery. The "Concept Model: Critical `absorb()` Method" checklist in the project [CLAUDE.md](../../CLAUDE.md) tracks every relationship currently handled and must be updated alongside the code.
 
 - **`concept_lock` prevents sync from overwriting concepts.** When `concept_lock` is True on a Game, `add_concept()` returns immediately without any changes. This is used by admins to manually assign concepts that differ from what the PSN API returns. If a locked game's concept needs changing, the lock must be explicitly removed first.
 
@@ -219,4 +219,6 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 ## Related Docs
 
 - [Gamification](gamification.md): Badge stages reference Concepts via `Stage.concepts` M2M
-- [Community Hub](../community-hub.md): Uses `Concept.slug` for game-scoped ratings, reviews, and discussions
+- [Community Hub](../features/community-hub.md): Uses `Concept.slug` for game-scoped ratings, reviews, and discussions
+- [IGDB Integration](igdb-integration.md): Per-concept enrichment via `IGDBMatch`, `ConceptCompany`, `ConceptGenre`, `ConceptTheme`, and `ConceptEngine`
+- [Roadmap System](../features/roadmap-system.md): 1:1 with Concept; replaced the legacy checklist system on game detail pages
