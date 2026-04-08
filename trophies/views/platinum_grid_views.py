@@ -1,16 +1,19 @@
 """
 View for the Platinum Grid share image wizard page.
 
-Staff-only during testing phase. Will be opened to all users later.
+Public to all logged-in users (Phase 9 of the Community Hub initiative
+ungated this view from staff-only).
 """
 import json
 import logging
 
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import F
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils.safestring import mark_safe
 
-from trophies.mixins import StaffRequiredMixin, ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin
 from trophies.models import EarnedTrophy, ProfileGame
 from trophies.services.dashboard_service import get_effective_premium
 from trophies.themes import get_available_themes_for_grid
@@ -20,7 +23,7 @@ from django.views.generic import TemplateView
 logger = logging.getLogger(__name__)
 
 
-class PlatinumGridView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
+class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     """
     Wizard page for building a shareable platinum trophy grid image.
 
@@ -30,8 +33,17 @@ class PlatinumGridView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
     3. Preview & Download: layout, theme, generate PNG
 
     Limits: 100 platinums (premium), 50 (free).
+
+    Public to all logged-in users. Users without a linked profile are
+    redirected to the PSN linking flow before the view tries to read
+    profile-scoped trophy data.
     """
     template_name = 'trophies/platinum_grid.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and not hasattr(request.user, 'profile'):
+            return redirect('link_psn')
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

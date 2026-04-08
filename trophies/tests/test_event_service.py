@@ -2325,3 +2325,87 @@ class CommunityFeedTest(TestCase):
         self.assertIn('platinum_earned', slugs)
         self.assertIn('rare_trophy_earned', slugs)
         self.assertNotIn('badge_earned', slugs)  # not valid in trophy mode
+
+
+class StaffUngatedViewsTest(TestCase):
+    """Phase 9: MyStatsView and PlatinumGridView are now public to all logged-in users.
+
+    Both views were previously gated by StaffRequiredMixin "during testing".
+    Phase 9 swaps them to LoginRequiredMixin so any authenticated user with
+    a linked profile can access them, and adds an link_psn redirect for
+    authenticated users without a profile.
+    """
+
+    def setUp(self):
+        # A normal (non-staff) user with a linked profile
+        self.user = CustomUser.objects.create_user(
+            email='ungated@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='ungated',  # 7 chars
+            account_id='ung-001',
+            is_linked=True,
+        )
+
+        # A user with NO linked profile (should redirect to link_psn)
+        self.no_profile_user = CustomUser.objects.create_user(
+            email='noprofile@example.com',
+            password='testpass123',
+            username='noprofile',
+        )
+
+    # ---- MyStatsView ---------------------------------------------------
+
+    def test_my_stats_anonymous_redirects_to_login(self):
+        """Anonymous visitors get the LoginRequiredMixin redirect to /accounts/login/."""
+        from django.test import Client
+        client = Client()
+        response = client.get('/my-stats/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('login', response.url)
+
+    def test_my_stats_logged_in_non_staff_returns_200(self):
+        """A normal (non-staff) authenticated user with a profile can access /my-stats/."""
+        from django.test import Client
+        client = Client()
+        client.force_login(self.user)
+        self.assertFalse(self.user.is_staff)  # sanity check
+        response = client.get('/my-stats/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_my_stats_logged_in_no_profile_redirects_to_link_psn(self):
+        """An authenticated user without a profile is redirected to the PSN linking flow."""
+        from django.test import Client
+        client = Client()
+        client.force_login(self.no_profile_user)
+        response = client.get('/my-stats/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('link', response.url)
+
+    # ---- PlatinumGridView ---------------------------------------------
+
+    def test_platinum_grid_anonymous_redirects_to_login(self):
+        from django.test import Client
+        client = Client()
+        response = client.get('/staff/platinum-grid/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('login', response.url)
+
+    def test_platinum_grid_logged_in_non_staff_returns_200(self):
+        from django.test import Client
+        client = Client()
+        client.force_login(self.user)
+        self.assertFalse(self.user.is_staff)
+        response = client.get('/staff/platinum-grid/')
+        self.assertEqual(response.status_code, 200)
+
+    def test_platinum_grid_logged_in_no_profile_redirects_to_link_psn(self):
+        """The Phase 9 dispatch hook catches no-profile users and redirects them."""
+        from django.test import Client
+        client = Client()
+        client.force_login(self.no_profile_user)
+        response = client.get('/staff/platinum-grid/')
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('link', response.url)
