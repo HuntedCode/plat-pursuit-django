@@ -134,15 +134,24 @@ For the rendering decisions and chart-library choices that resulted, see the liv
 
 ---
 
-## Resolved: Gamification Surfaces
+## Future: Pending Full Gamification Launch
 
-The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the gamification system shipped. Gamification has shipped, and the data ended up surfaced through existing modules rather than as standalone tiles:
+The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the full gamification system shipped. **The full system has not shipped.** Only the Badge XP foundation exists today (`ProfileGamification.total_badge_xp` populated by signals from badge progress and badge earns). The P.L.A.T.I.N.U.M. stats, Jobs, quests, currency, star chart, and avatar frames described in [Gamification Vision](gamification-vision.md) are all unimplemented.
 
-- **XP / level progress** is in [`badge_xp_leaderboard`](#category-badges--achievements) (header section) and [`advanced_stats`](#category-premium-exclusive)
-- **P.L.A.T.I.N.U.M. stats** are in [`my_stats_teaser`](#category-at-a-glance) and the [`/my-stats/`](stats-page.md) page
-- **Leaderboard position** is in [`badge_xp_leaderboard`](#category-badges--achievements) and [`country_xp_leaderboard`](#category-badges--achievements)
+What's already surfaced from the Badge XP foundation:
 
-No standalone gamification modules are planned. If a future feature needs one, design it from scratch against the current `ProfileGamification` shape rather than reviving the F1-F3 sketches.
+- **Badge XP totals + leaderboards** are in [`badge_xp_leaderboard`](#category-badges--achievements) and [`country_xp_leaderboard`](#category-badges--achievements)
+- **XP velocity / breakdown** is in [`advanced_stats`](#category-premium-exclusive) and [`advanced_badge_stats`](#category-premium-exclusive) (premium)
+
+What's still planned for after the full gamification launch:
+
+| # | Module | Blocked By |
+|---|--------|------------|
+| F1 | Level / Tier Progress | Player level system (currently no level concept beyond series tiers) |
+| F2 | P.L.A.T.I.N.U.M. Stats Radar | `StageStatValue` data population and stat aggregation service |
+| F3 | Active Jobs / Quest Tracker | Jobs and quests system from `gamification-vision.md` |
+
+Design these against the schema in `architecture/gamification.md` (which already documents the dormant `StatType` / `StageStatValue` tables) when the time comes.
 
 ---
 
