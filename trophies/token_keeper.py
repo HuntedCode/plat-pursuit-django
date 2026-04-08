@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import connection, transaction, OperationalError
-from django.db.models import Sum
+from django.db.models import Sum, Max
 from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
@@ -1132,6 +1132,26 @@ class TokenKeeper:
             return
         job_type = 'sync_complete'
 
+        # Pursuit Feed: snapshot the set of concepts this profile already had
+        # at 100% BEFORE any sync_complete work runs. We diff against the
+        # post-sync set in the finishing phase to identify newly-completed
+        # concepts and emit one `concept_100_percent` event per crossover.
+        # See docs/architecture/event-system.md for the watermark rationale.
+        # A "concept" is 100% if any ProfileGame stack for that concept is at
+        # progress=100 — this matches dashboard_service.provide_top_developers
+        # semantics. Best-effort: snapshot failures log and skip the watermark
+        # for this sync rather than failing _job_sync_complete.
+        try:
+            pre_completed_concepts = set(
+                ProfileGame.objects
+                .filter(profile=profile, progress=100, game__concept__isnull=False)
+                .values_list('game__concept_id', flat=True)
+                .distinct()
+            )
+        except Exception:
+            logger.exception("Failed to snapshot pre-sync 100%% concepts for profile %s", profile_id)
+            pre_completed_concepts = None
+
         try:
             # Brief buffer to ensure the last job's DB writes have fully committed.
             # Jobs use transaction.atomic() so writes commit before job completion,
@@ -1558,6 +1578,55 @@ class TokenKeeper:
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
 
+            # Pursuit Feed: diff the post-sync 100%-concept set against the
+            # pre-sync snapshot and emit one `concept_100_percent` event for
+            # each newly-crossed concept. occurred_at uses the most recent
+            # earned_date_time across the concept's trophies (NOT now()), so
+            # the feed sorts events in their true chronological position.
+            # Best-effort: failures log and continue.
+            if pre_completed_concepts is not None:
+                try:
+                    from trophies.services.event_service import event_collector, EventCollector
+                    post_completed_concepts = set(
+                        ProfileGame.objects
+                        .filter(profile=profile, progress=100, game__concept__isnull=False)
+                        .values_list('game__concept_id', flat=True)
+                        .distinct()
+                    )
+                    newly_completed = post_completed_concepts - pre_completed_concepts
+                    if newly_completed:
+                        # Resolve concepts and per-concept earn timestamps in
+                        # bulk to avoid N+1 queries during the diff loop.
+                        concepts_qs = Concept.objects.filter(id__in=newly_completed)
+                        latest_earns = dict(
+                            EarnedTrophy.objects
+                            .filter(
+                                profile=profile,
+                                trophy__game__concept_id__in=newly_completed,
+                                earned=True,
+                            )
+                            .values('trophy__game__concept_id')
+                            .annotate(latest=Max('earned_date_time'))
+                            .values_list('trophy__game__concept_id', 'latest')
+                        )
+                        with event_collector(profile_id=profile.id):
+                            for concept in concepts_qs:
+                                occurred_at = latest_earns.get(concept.id) or timezone.now()
+                                EventCollector.add_concept_100(
+                                    profile_id=profile.id,
+                                    concept=concept,
+                                    occurred_at=occurred_at,
+                                )
+                        logger.info(
+                            f"Profile {profile_id}: emitted {len(newly_completed)} "
+                            f"concept_100_percent events"
+                        )
+                except Exception:
+                    logger.exception(
+                        "Failed to emit concept_100_percent events for profile %s",
+                        profile_id,
+                    )
+
             from trophies.services.timeline_service import invalidate_timeline_cache
             invalidate_timeline_cache(profile_id)
 
@@ -1911,9 +1980,18 @@ class TokenKeeper:
         # Suppress the EarnedTrophy pre_save signal during sync: the signal fires a SELECT per
         # save to track earned state, but during sync notifications are handled by
         # DeferredNotificationService and earned-flip detection is in create_or_update_earned_trophy_from_trophy_data.
+        #
+        # The `event_collector` context wraps the same loop so Pursuit Feed events
+        # (platinum_earned, rare_trophy_earned) are queued in thread-local memory
+        # during the trophy writes and flushed via bulk_create AFTER the per-batch
+        # transactions commit. The collector exits in a `finally` so events flush
+        # even if a batch raises; flush failures log and continue (events are
+        # best-effort, sync correctness is paramount). See
+        # docs/architecture/event-system.md for the full ingestion strategy.
         from trophies.sync_utils import sync_signal_suppressor
+        from trophies.services.event_service import event_collector
         batch_size = 50
-        with sync_signal_suppressor():
+        with sync_signal_suppressor(), event_collector(profile_id=profile.id):
             for i in range(0, len(trophies), batch_size):
                 batch = trophies[i:i + batch_size]
                 with transaction.atomic():

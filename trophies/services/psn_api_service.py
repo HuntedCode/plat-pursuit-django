@@ -7,6 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_t
 from collections import defaultdict
 from django.db.models import F, Count, Max, Q
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
+from trophies.services.event_service import EventCollector, RARE_TROPHY_EARN_RATE_THRESHOLD
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 from trophies.discord_utils.discord_notifications import notify_new_platinum
@@ -454,6 +455,35 @@ class PsnApiService:
                         )
                     except Exception:
                         logger.exception(f"Failed to queue deferred platinum notification for earned flip")
+
+        # Pursuit Feed event collection. EventCollector.is_active() gates the
+        # whole block so non-sync callers (and tests of this method outside a
+        # collector context) are unaffected. occurred_at uses the historical
+        # earn time, NEVER timezone.now() — see docs/architecture/event-system.md
+        # for the rationale on why historical truth matters for the global feed.
+        # Re-uses the in-memory `is_new_earn` already computed above so we don't
+        # add a SELECT to the hot path.
+        if is_new_earn and EventCollector.is_active() and trophy_data.earned_date_time:
+            try:
+                if trophy.trophy_type == 'platinum' and not trophy.game.is_shovelware:
+                    EventCollector.add_platinum(
+                        profile_id=profile.id,
+                        trophy=trophy,
+                        earned_at=trophy_data.earned_date_time,
+                    )
+                elif (
+                    trophy.trophy_earn_rate
+                    and 0 < trophy.trophy_earn_rate < RARE_TROPHY_EARN_RATE_THRESHOLD
+                    and not trophy.game.is_shovelware
+                ):
+                    EventCollector.add_rare_trophy(
+                        profile_id=profile.id,
+                        trophy=trophy,
+                        earned_at=trophy_data.earned_date_time,
+                    )
+            except Exception:
+                # Event collection is best-effort. Never let it propagate.
+                logger.exception("Failed to queue Pursuit Feed event for trophy %s", trophy.id)
 
         return earned_trophy, created
 
