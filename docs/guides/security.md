@@ -13,7 +13,12 @@ Security measures, configurations, and audit findings for the PlatPursuit applic
 | X-Content-Type-Options | `SECURE_CONTENT_TYPE_NOSNIFF` | True (nosniff) |
 | X-Frame-Options | `X_FRAME_OPTIONS` | DENY |
 | CSRF Cookie | `CSRF_COOKIE_SECURE` | True |
+| CSRF Cookie HttpOnly | `CSRF_COOKIE_HTTPONLY` | True (Safari ITP drops non-HttpOnly cookies more aggressively) |
+| CSRF Cookie SameSite | `CSRF_COOKIE_SAMESITE` | `'Lax'` (Safari ITP compatibility) |
 | Session Cookie | `SESSION_COOKIE_SECURE` | True |
+| Session Cookie SameSite | `SESSION_COOKIE_SAMESITE` | `'Lax'` (Safari ITP compatibility) |
+
+**Safari ITP context**: The three SameSite/HttpOnly settings were added after Safari users started failing CSRF checks immediately after login. Safari's Intelligent Tracking Prevention drops non-HttpOnly cookies on cross-site contexts and treats `SameSite=None` cookies more aggressively than Chrome/Firefox. Setting all auth-relevant cookies to `HttpOnly + SameSite=Lax` resolved the symptom and is the documented Safari-friendly configuration. Do not relax these without re-testing on Safari.
 
 ### Content Security Policy (django-csp)
 
@@ -43,8 +48,10 @@ All user-facing POST/DELETE endpoints should have rate limits. Current coverage:
 | Category | Endpoints | Rate |
 |----------|-----------|------|
 | Easter eggs | roll, claim | 20/m, 10/m |
-| Comments | create, vote, report | 10/m, 20/m, 5/m |
-| Checklists | create, publish, vote | 30/h, 10/m, 20/m |
+| Comments (legacy) | vote, report, edit/delete | 30/m, 5/h, 20/m |
+| Reviews | create, vote, report, replies | 10/m, 30/m, 5/h, 10/m |
+| Game flags | submit | 5/h |
+| Roadmap editor | step CRUD, image upload | 30/m, 10/m |
 | Challenges | create (all types) | 30/h |
 | Device tokens | register, delete | 10/m |
 | Titles | equip | 15/m |

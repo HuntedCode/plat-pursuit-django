@@ -11,7 +11,6 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 30 min | `refresh_profiles` | Every 30 minutes | TokenKeeper must be running to process queued syncs |
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | Top of every hour | `process_scheduled_notifications` | Hourly | None |
-| 00:00 UTC daily | `refresh_homepage_daily` | Daily | None |
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
@@ -39,19 +38,12 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 - **Schedule**: Every hour (top of the hour)
 - **Command**: `python manage.py refresh_homepage_hourly`
-- **What it does**: Precomputes and caches three hourly homepage data sources: community stats, latest badges awarded, and the "What's New" feed. Cache keys include the current date and hour (e.g., `community_stats_2026-03-07_14`), so each hour gets its own slot.
+- **What it does**: Computes and caches the site heartbeat (the "PlatPursuit at a Glance" / "Built for Hunters" ribbon shown across all four home shells and the dashboard). Single cache key per hour: `site_heartbeat_{YYYY-MM-DD}_{HH}`. See [Homepage Services](../reference/homepage-services.md) for the data shape.
 - **Dependencies**: None. Reads directly from the database.
 - **Idempotency**: Fully safe to re-run. Overwrites the same cache key with fresh data.
-- **Failure impact**: The homepage falls back to the previous hour's cached data (the view checks the prior hour's key as a fallback). If two consecutive hours fail, the affected sections render as empty/null.
+- **Failure impact**: The ribbon falls back to the previous hour's cached data. If two consecutive hours fail, the entire ribbon silently hides itself across every home shell. This is the only homepage data source left that is invisible to dashboard module caching, so monitor it explicitly.
 
-### refresh_homepage_daily
-
-- **Schedule**: Daily at midnight UTC
-- **Command**: `python manage.py refresh_homepage_daily`
-- **What it does**: Precomputes and caches three daily homepage data sources: featured games, featured badges, and featured checklists. Cache keys include the current date (e.g., `featured_games_2026-03-07`), with a 48-hour TTL so yesterday's data survives as a fallback.
-- **Dependencies**: None. Reads directly from the database.
-- **Idempotency**: Fully safe to re-run. Overwrites the same date-keyed cache entry.
-- **Failure impact**: The homepage falls back to the previous day's data. If that also expired, the affected sections render as empty/null.
+> **Removed: `refresh_homepage_daily`.** This command was retired when the homepage redesign collapsed onto the dashboard. There are no daily-cached "featured games / featured badges / featured checklists" sources anymore; the dashboard's Recent Platinums, Recent Badges, and Top Studios modules took their place. Disable any legacy Render Cron entry pointing at it.
 
 ### update_leaderboards
 
@@ -180,8 +172,7 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
     EVERY 6 HOURS ──── update_leaderboards
 
 
-    DAILY ──────────── refresh_homepage_daily
-                        check_subscription_milestones
+    DAILY ──────────── check_subscription_milestones
                         populate_title_ids
                             |
                             v  (title data improves matching)
@@ -224,7 +215,7 @@ There is no centralized cron job monitoring dashboard. Use these approaches to v
 
 ### Detecting failures
 
-- **Stale homepage data**: If the homepage shows yesterday's featured games or the community stats feel outdated, the hourly/daily cache jobs may have failed.
+- **Missing site heartbeat ribbon**: If the "PlatPursuit at a Glance" ribbon disappears from every home shell, `refresh_homepage_hourly` has been failing for at least two consecutive hours (the partial silently hides when both the current and fallback buckets are empty). Check the Render cron logs.
 - **Leaderboard staleness**: Each leaderboard page shows a "Last updated" timestamp sourced from the `_refresh_time` cache key.
 - **Sync queue backlog**: If profiles are not updating, check the TokenKeeper stats via `redis_admin` or the token monitoring admin page (`/staff/token-monitoring/`).
 - **Missing recap emails**: On the 3rd-4th of each month, spot-check that recap emails were sent by querying `MonthlyRecap.objects.filter(email_sent=False, is_finalized=True)`.
@@ -243,7 +234,7 @@ python manage.py <command>              # execute
 
 ## Related Docs
 
-- [Management Commands](management-commands.md): Full reference for all 58+ management commands
+- [Management Commands](management-commands.md): Full reference for all 65+ management commands
 - [Token Keeper](../architecture/token-keeper.md): Architecture of the PSN sync worker
 - [Monthly Recap](../features/monthly-recap.md): Recap generation and delivery pipeline
 - [Notification System](../architecture/notification-system.md): Scheduled notification delivery
