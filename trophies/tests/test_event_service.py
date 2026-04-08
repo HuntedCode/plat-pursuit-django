@@ -1792,3 +1792,267 @@ class DashboardConfigSlugMigrationTest(TestCase):
         self.assertNotIn('recent_platinums', overrides)
         self.assertEqual(overrides['pursuit_activity'], 'My Custom Tab')
         self.assertEqual(overrides['badge_progress'], 'Other Tab')
+
+
+class CommunityHubTest(TestCase):
+    """Phase 7: Community Hub page at /community/.
+
+    Covers:
+    - ReviewHubService.get_top_reviewers (new method)
+    - community_hub_service.build_community_hub_context (the assembler)
+    - End-to-end view dispatch via the test client (anonymous + logged-in)
+    - Module isolation: a single broken module does not break the page
+    """
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='hub@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='hub_user',  # 8 chars
+            account_id='hub-001',
+            is_linked=True,
+            country='United States',
+            country_code='US',
+        )
+
+    # ---- ReviewHubService.get_top_reviewers ---------------------------
+
+    def test_top_reviewers_returns_profiles_with_helpful_votes(self):
+        from trophies.services.review_hub_service import ReviewHubService
+
+        concept = Concept.objects.create(
+            unified_title='Top Test', concept_id='CUSA40001', slug='top-test',
+        )
+        ctg = ConceptTrophyGroup.objects.create(
+            concept=concept, trophy_group_id='default', display_name='Base',
+        )
+        Review.objects.create(
+            profile=self.profile,
+            concept=concept,
+            concept_trophy_group=ctg,
+            body='An honest opinion with enough characters to pass validation.' * 2,
+            recommended=True,
+            helpful_count=42,
+        )
+
+        result = ReviewHubService.get_top_reviewers(limit=10)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['psn_username'], 'hub_user')
+        self.assertEqual(result[0]['total_helpful'], 42)
+        self.assertEqual(result[0]['review_count'], 1)
+
+    def test_top_reviewers_excludes_zero_helpful_count(self):
+        """Profiles whose only reviews have 0 helpful votes don't appear."""
+        from trophies.services.review_hub_service import ReviewHubService
+
+        concept = Concept.objects.create(
+            unified_title='Zero Test', concept_id='CUSA40002', slug='zero-test',
+        )
+        ctg = ConceptTrophyGroup.objects.create(
+            concept=concept, trophy_group_id='default', display_name='Base',
+        )
+        Review.objects.create(
+            profile=self.profile,
+            concept=concept,
+            concept_trophy_group=ctg,
+            body='Brand new review with no votes yet that has enough characters.' * 2,
+            recommended=True,
+            helpful_count=0,
+        )
+
+        result = ReviewHubService.get_top_reviewers(limit=10)
+        self.assertEqual(len(result), 0)
+
+    def test_top_reviewers_excludes_deleted_reviews(self):
+        """Soft-deleted reviews don't contribute to the helpful_count sum."""
+        from trophies.services.review_hub_service import ReviewHubService
+
+        concept = Concept.objects.create(
+            unified_title='Del Test', concept_id='CUSA40003', slug='del-test',
+        )
+        ctg = ConceptTrophyGroup.objects.create(
+            concept=concept, trophy_group_id='default', display_name='Base',
+        )
+        Review.objects.create(
+            profile=self.profile,
+            concept=concept,
+            concept_trophy_group=ctg,
+            body='Soft deleted review that should not count toward totals.' * 2,
+            recommended=True,
+            helpful_count=99,
+            is_deleted=True,
+        )
+
+        result = ReviewHubService.get_top_reviewers(limit=10)
+        self.assertEqual(len(result), 0)
+
+    def test_top_reviewers_orders_by_total_helpful_descending(self):
+        """Multiple reviewers are ordered by their summed helpful_count desc."""
+        from trophies.services.review_hub_service import ReviewHubService
+
+        # Create a second profile with MORE helpful votes
+        user2 = CustomUser.objects.create_user(
+            email='hub2@example.com', password='testpass123', username='hub2',
+        )
+        profile2 = Profile.objects.create(
+            user=user2, psn_username='hub_top',
+            account_id='hub-002', is_linked=True,
+        )
+
+        concept = Concept.objects.create(
+            unified_title='Order Test', concept_id='CUSA40004', slug='order-test',
+        )
+        ctg = ConceptTrophyGroup.objects.create(
+            concept=concept, trophy_group_id='default', display_name='Base',
+        )
+
+        # self.profile: 50 helpful
+        Review.objects.create(
+            profile=self.profile, concept=concept, concept_trophy_group=ctg,
+            body='Review one with enough characters to pass validation cleanly.' * 2,
+            recommended=True, helpful_count=50,
+        )
+        # profile2: 100 helpful
+        concept2 = Concept.objects.create(
+            unified_title='Order Test 2', concept_id='CUSA40005', slug='order-test-2',
+        )
+        ctg2 = ConceptTrophyGroup.objects.create(
+            concept=concept2, trophy_group_id='default', display_name='Base',
+        )
+        Review.objects.create(
+            profile=profile2, concept=concept2, concept_trophy_group=ctg2,
+            body='Review two with enough characters to pass validation cleanly.' * 2,
+            recommended=True, helpful_count=100,
+        )
+
+        result = ReviewHubService.get_top_reviewers(limit=10)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]['psn_username'], 'hub_top')
+        self.assertEqual(result[0]['total_helpful'], 100)
+        self.assertEqual(result[1]['psn_username'], 'hub_user')
+
+    # ---- community_hub_service.build_community_hub_context ------------
+
+    def test_build_context_returns_all_expected_keys(self):
+        from core.services.community_hub_service import build_community_hub_context
+
+        context = build_community_hub_context(viewer_profile=None)
+        self.assertIn('feed_preview', context)
+        self.assertIn('xp_leaderboard', context)
+        self.assertIn('country_leaderboard', context)
+        self.assertIn('top_reviewers', context)
+        self.assertIn('active_challenges', context)
+        self.assertIn('site_heartbeat', context)
+
+    def test_build_context_anonymous_no_country_leaderboard(self):
+        """Anonymous viewers get country_leaderboard=None."""
+        from core.services.community_hub_service import build_community_hub_context
+        context = build_community_hub_context(viewer_profile=None)
+        self.assertIsNone(context['country_leaderboard'])
+
+    def test_build_context_logged_in_with_country_attempts_country_leaderboard(self):
+        """A logged-in user with a country code gets a non-None country_leaderboard dict.
+
+        The actual entries list will be empty in tests because the Redis
+        leaderboard sorted set is also empty, but the structure should be
+        present (not None).
+        """
+        from core.services.community_hub_service import build_community_hub_context
+        context = build_community_hub_context(viewer_profile=self.profile)
+        self.assertIsNotNone(context['country_leaderboard'])
+        self.assertEqual(context['country_leaderboard']['country_code'], 'US')
+
+    def test_build_context_feed_preview_only_includes_pursuit_feed_types(self):
+        """The feed preview filters to PURSUIT_FEED_TYPES (excludes day_zero)."""
+        from core.services.community_hub_service import build_community_hub_context
+
+        Event.objects.create(
+            profile=self.profile,
+            event_type='platinum_earned',
+            occurred_at=timezone.now(),
+            metadata={'trophy_name': 'The Plat'},
+        )
+        # day_zero exists from migration but should NOT appear
+        context = build_community_hub_context(viewer_profile=None)
+        types = [e.event_type for e in context['feed_preview']]
+        self.assertIn('platinum_earned', types)
+        self.assertNotIn('day_zero', types)
+
+    def test_build_context_active_challenges_filters_to_started_completed(self):
+        """active_challenges only contains challenge_started and challenge_completed events."""
+        from core.services.community_hub_service import build_community_hub_context
+
+        Event.objects.create(
+            profile=self.profile, event_type='challenge_started',
+            occurred_at=timezone.now(),
+            metadata={'challenge_type': 'az', 'name': 'Test'},
+        )
+        Event.objects.create(
+            profile=self.profile, event_type='challenge_progress',
+            occurred_at=timezone.now(),
+            metadata={'challenge_type': 'az'},
+        )
+        Event.objects.create(
+            profile=self.profile, event_type='platinum_earned',
+            occurred_at=timezone.now(),
+            metadata={'trophy_name': 'X'},
+        )
+
+        context = build_community_hub_context(viewer_profile=None)
+        types = [e.event_type for e in context['active_challenges']]
+        self.assertIn('challenge_started', types)
+        self.assertNotIn('challenge_progress', types)
+        self.assertNotIn('platinum_earned', types)
+
+    def test_build_context_module_isolation_on_failure(self):
+        """A single failing module returns its empty fallback rather than breaking the page."""
+        from core.services.community_hub_service import build_community_hub_context
+
+        with patch(
+            'core.services.community_hub_service._get_top_reviewers',
+            side_effect=RuntimeError("simulated failure"),
+        ):
+            context = build_community_hub_context(viewer_profile=None)
+
+        # Other modules still loaded successfully
+        self.assertIn('feed_preview', context)
+        self.assertIn('xp_leaderboard', context)
+        # Failing module fell back to empty list
+        self.assertEqual(context['top_reviewers'], [])
+
+    # ---- End-to-end view dispatch --------------------------------------
+
+    def test_anonymous_get_returns_200(self):
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('feed_preview', response.context)
+
+    def test_logged_in_get_includes_viewer_profile_in_context(self):
+        """Logged-in users get viewer-specific touches (rank highlight, country leaderboard)."""
+        from django.test import Client
+        client = Client()
+        client.force_login(self.user)
+        response = client.get('/community/')
+        self.assertEqual(response.status_code, 200)
+        # Country leaderboard should be present (we set country_code='US' in setUp)
+        self.assertIsNotNone(response.context['country_leaderboard'])
+
+    def test_template_renders_breadcrumb_and_seo(self):
+        """The view sets the right context for SEO meta tags + breadcrumb."""
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/')
+        self.assertEqual(response.context['seo_title'], 'Community Hub - Platinum Pursuit')
+        self.assertIn('Pursuit Feed', response.context['seo_description'])
+        # Breadcrumb has Home + Community Hub
+        self.assertEqual(len(response.context['breadcrumb']), 2)
+
+    def test_url_is_named_community_hub(self):
+        """The URL pattern is registered with name='community_hub' for reverse() lookups."""
+        from django.urls import reverse
+        self.assertEqual(reverse('community_hub'), '/community/')

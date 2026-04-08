@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap,
@@ -55,6 +55,9 @@ urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     # Legacy alias - keep old /dashboard/ links working
     path('dashboard/', RedirectView.as_view(pattern_name='home', permanent=True), name='dashboard'),
+    # Community Hub: site-wide community destination (Phase 7 of the
+    # Community Hub initiative). See docs/features/community-hub.md.
+    path('community/', CommunityHubView.as_view(), name='community_hub'),
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/flagged/', FlaggedGamesView.as_view(), name='flagged_games'),
     path('games/<str:np_communication_id>/roadmap/edit/', RoadmapEditorView.as_view(), name='roadmap_edit'),

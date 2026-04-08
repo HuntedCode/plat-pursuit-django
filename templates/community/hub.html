@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+{% load static humanize custom_filters %}
+
+{% block title %}Community Hub{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-1 md:px-2 lg:px-4 py-3 md:py-4">
+
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Page header ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold italic text-primary leading-tight">
+                        Community Hub
+                    </h1>
+                    <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-2xl">
+                        What's happening across PlatPursuit right now. The Pursuit Feed, global leaderboards,
+                        top reviewers, active challenges, and more — all in one place.
+                    </p>
+                </div>
+                <a href="#" class="btn btn-primary btn-sm md:btn-md gap-2 shrink-0" aria-label="View the full Pursuit Feed">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    </svg>
+                    Pursuit Feed
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {# ── Hero: site heartbeat (lift as-is from dashboard partial) ── #}
+    {% include 'trophies/partials/dashboard/built_for_hunters.html' %}
+
+    {# ── Active fundraiser callout (auto-rendered when context processor sets it) ── #}
+    {% if active_fundraiser %}
+    <section class="max-w-4xl mx-auto mt-3">
+        <div class="card bg-accent/10 border-2 border-accent/30 shadow-md shadow-neutral hover:shadow-lg hover:shadow-accent/30 transition-all">
+            <a href="{% url 'fundraiser' active_fundraiser.slug %}" class="card-body p-3 md:p-5 lg:p-7 flex flex-row items-center gap-3 md:gap-4">
+                <div class="w-12 h-12 md:w-16 md:h-16 rounded-lg bg-accent/20 ring-1 ring-accent shrink-0 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-8 md:h-8 text-accent" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-base md:text-lg font-bold text-accent line-clamp-1 pr-1">{{ active_fundraiser.title|default:"Community Fundraiser" }}</h3>
+                    <p class="text-xs md:text-sm text-base-content/70 line-clamp-2">Support the community and unlock badge artwork.</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </a>
+        </div>
+    </section>
+    {% endif %}
+
+    {# ── Pursuit Feed preview ── #}
+    <section class="max-w-4xl mx-auto mt-3">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        Pursuit Feed
+                    </h2>
+                    <a href="#" class="text-xs text-base-content/60 hover:text-primary transition-colors" aria-label="View the full Pursuit Feed">View all →</a>
+                </div>
+
+                {% if feed_preview %}
+                    <div class="space-y-2">
+                        {% for event in feed_preview %}
+                            <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
+
+                                {# Actor avatar #}
+                                {% if event.profile %}
+                                <a href="{% url 'profile_detail' event.profile.psn_username %}" class="w-8 h-8 lg:w-10 lg:h-10 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300 hover:ring-primary transition-all">
+                                    {% if event.profile.avatar_url %}
+                                        <img src="{{ event.profile.avatar_url }}" alt="{{ event.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                    {% else %}
+                                        <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"></circle><path d="M5.5 21a8.38 8.38 0 0 1 13 0"></path></svg>
+                                        </div>
+                                    {% endif %}
+                                </a>
+                                {% else %}
+                                {# System event (Day Zero) — no actor avatar #}
+                                <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-primary/15 ring-1 ring-primary shrink-0 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                </div>
+                                {% endif %}
+
+                                {# Type-specific verb + target #}
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm line-clamp-1 pr-1">
+                                        {% if event.profile %}
+                                            <a href="{% url 'profile_detail' event.profile.psn_username %}" class="font-semibold hover:text-primary transition-colors">{{ event.profile.display_psn_username }}</a>
+                                        {% else %}
+                                            <span class="font-semibold text-primary">PlatPursuit</span>
+                                        {% endif %}
+                                        {% if event.event_type == 'platinum_earned' %}
+                                            earned a platinum{% if event.metadata.trophy_name %}: <span class="text-base-content/70">{{ event.metadata.trophy_name }}</span>{% endif %}
+                                        {% elif event.event_type == 'rare_trophy_earned' %}
+                                            earned an ultra-rare trophy{% if event.metadata.trophy_name %}: <span class="text-base-content/70">{{ event.metadata.trophy_name }}</span>{% endif %}
+                                        {% elif event.event_type == 'concept_100_percent' %}
+                                            reached 100% completion{% if event.metadata.concept_name %}: <span class="text-base-content/70">{{ event.metadata.concept_name }}</span>{% endif %}
+                                        {% elif event.event_type == 'badge_earned' %}
+                                            {% with count=event.metadata.count|default:1 %}
+                                                earned {% if count > 1 %}{{ count }} badges{% else %}a badge{% if event.metadata.badges %}: <span class="text-base-content/70">{{ event.metadata.badges.0.name }}</span>{% endif %}{% endif %}
+                                            {% endwith %}
+                                        {% elif event.event_type == 'milestone_hit' %}
+                                            hit a milestone{% if event.metadata.milestone_name %}: <span class="text-base-content/70">{{ event.metadata.milestone_name }}</span>{% endif %}
+                                        {% elif event.event_type == 'review_posted' %}
+                                            posted a review{% if event.metadata.concept_title %} for <span class="text-base-content/70">{{ event.metadata.concept_title }}</span>{% endif %}
+                                        {% elif event.event_type == 'game_list_published' %}
+                                            published a list{% if event.metadata.list_name %}: <span class="text-base-content/70">{{ event.metadata.list_name }}</span>{% endif %}
+                                        {% elif event.event_type == 'challenge_started' %}
+                                            started a {{ event.metadata.challenge_type|default:"" }} challenge
+                                        {% elif event.event_type == 'challenge_progress' %}
+                                            made challenge progress
+                                        {% elif event.event_type == 'challenge_completed' %}
+                                            completed a {{ event.metadata.challenge_type|default:"" }} challenge
+                                        {% elif event.event_type == 'profile_linked' %}
+                                            joined the chronicle
+                                        {% elif event.event_type == 'day_zero' %}
+                                            {{ event.metadata.message|default:"Day Zero" }}
+                                        {% else %}
+                                            {{ event.event_type }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <span class="text-xs text-base-content/40 hidden md:inline shrink-0" data-time-format="relative" data-time="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|iso_naturaltime }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-info/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <p class="text-sm text-base-content/50">The chronicle is just beginning.</p>
+                        <p class="text-xs text-base-content/40 mt-1">Activity will appear here as the community syncs.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    {# ── Two-column row: leaderboards (left) + top reviewers + active challenges (right) ── #}
+    <div class="max-w-4xl mx-auto mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+
+        {# ── Full Badge XP Leaderboard ── #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            Top XP Hunters
+                        </h2>
+                        {% if xp_leaderboard.viewer_rank %}
+                            <span class="text-xs text-accent font-bold">You: #{{ xp_leaderboard.viewer_rank }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if xp_leaderboard.entries %}
+                        <div class="space-y-1">
+                            {% for entry in xp_leaderboard.entries %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
+                                    <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
+                                        {% if entry.avatar_url %}
+                                            <img src="{{ entry.avatar_url }}" alt="{{ entry.psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}">{{ entry.psn_username }}</span>
+                                    {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
+                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="flex items-center justify-between mt-3 pt-3 border-t border-base-content/10 text-xs text-base-content/40">
+                            <span>{{ xp_leaderboard.total_count|intcomma }} hunters ranked</span>
+                            <a href="{% url 'overall_badge_leaderboards' %}" class="text-base-content/60 hover:text-primary transition-colors">Full board →</a>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-sm text-base-content/50">No badge XP yet.</p>
+                            <p class="text-xs text-base-content/40 mt-1">Be the first to earn badges and claim a spot!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        {# ── Country Leaderboard (logged-in + has country) ── #}
+        {% if country_leaderboard %}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="2" y1="12" x2="22" y2="12"></line>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                            </svg>
+                            Top in {{ country_leaderboard.country_name }}
+                        </h2>
+                        {% if country_leaderboard.viewer_rank %}
+                            <span class="text-xs text-secondary font-bold">You: #{{ country_leaderboard.viewer_rank }}</span>
+                        {% endif %}
+                    </div>
+                    {% if country_leaderboard.entries %}
+                        <div class="space-y-1">
+                            {% for entry in country_leaderboard.entries %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg {% if entry.is_self %}bg-secondary/10 border border-secondary/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
+                                    <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-secondary{% else %}ring-base-300{% endif %}">
+                                        {% if entry.avatar_url %}
+                                            <img src="{{ entry.avatar_url }}" alt="{{ entry.psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-secondary{% endif %}">{{ entry.psn_username }}</span>
+                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="text-xs text-base-content/40 mt-3 pt-3 border-t border-base-content/10">
+                            {{ country_leaderboard.total_count|intcomma }} hunters in {{ country_leaderboard.country_name }}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-sm text-base-content/50">No regional leaderboard yet.</p>
+                            <p class="text-xs text-base-content/40 mt-1">Be the first to put {{ country_leaderboard.country_name }} on the board!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+    </div>
+
+    {# ── Two-column row: top reviewers + active challenges ── #}
+    <div class="max-w-4xl mx-auto mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+
+        {# ── Top Reviewers ── #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            Top Reviewers
+                        </h2>
+                        <a href="{% url 'reviews_landing' %}" class="text-xs text-base-content/60 hover:text-primary transition-colors">Review Hub →</a>
+                    </div>
+
+                    {% if top_reviewers %}
+                        <div class="space-y-1">
+                            {% for reviewer in top_reviewers %}
+                                <a href="{% url 'profile_detail' reviewer.psn_username %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-success/30 transition-colors">
+                                    <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ forloop.counter }}</span>
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
+                                        {% if reviewer.avatar_url %}
+                                            <img src="{{ reviewer.avatar_url }}" alt="{{ reviewer.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <span class="text-sm font-medium line-clamp-1 pr-1 flex-1">{{ reviewer.display_psn_username }}</span>
+                                    {% if reviewer.flag %}<span class="text-xs">{{ reviewer.flag }}</span>{% endif %}
+                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ reviewer.total_helpful|intcomma }} helpful</span>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-sm text-base-content/50">No reviews yet.</p>
+                            <p class="text-xs text-base-content/40 mt-1">Be the first to share your thoughts on a game!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        {# ── Active Challenges ── #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                                <line x1="4" y1="22" x2="4" y2="15"></line>
+                            </svg>
+                            Active Challenges
+                        </h2>
+                        <a href="{% url 'challenges_browse' %}" class="text-xs text-base-content/60 hover:text-primary transition-colors">Browse →</a>
+                    </div>
+
+                    {% if active_challenges %}
+                        <div class="space-y-1">
+                            {% for ev in active_challenges %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5">
+                                    {% if ev.profile %}
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
+                                        {% if ev.profile.avatar_url %}
+                                            <img src="{{ ev.profile.avatar_url }}" alt="{{ ev.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm line-clamp-1 pr-1">
+                                            {% if ev.profile %}<span class="font-semibold">{{ ev.profile.display_psn_username }}</span>{% endif %}
+                                            {% if ev.event_type == 'challenge_started' %}
+                                                started
+                                            {% else %}
+                                                <span class="text-success">completed</span>
+                                            {% endif %}
+                                            a {{ ev.metadata.challenge_type|default:"" }} challenge
+                                        </div>
+                                    </div>
+                                    <span class="text-xs text-base-content/40 shrink-0" data-time-format="relative" data-time="{{ ev.occurred_at|date:'c' }}">{{ ev.occurred_at|iso_naturaltime }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-6">
+                            <p class="text-sm text-base-content/50">No recent challenge activity.</p>
+                            <p class="text-xs text-base-content/40 mt-1">Start an A-Z, Calendar, or Genre challenge to get going!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+    </div>
+
+</div>
+{% endblock %}
