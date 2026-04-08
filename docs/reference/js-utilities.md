@@ -1,6 +1,8 @@
 # JavaScript Utilities
 
-All shared JavaScript utilities live in `static/js/utils.js` (~978 lines) and are exported on the `window.PlatPursuit` namespace. Every page includes this file, making these utilities available globally. Individual page scripts access them as `PlatPursuit.API`, `PlatPursuit.ToastManager`, etc.
+All shared JavaScript utilities live in `static/js/utils.js` (~1100 lines) and are exported on the `window.PlatPursuit` namespace. Every page includes this file, making these utilities available globally. Individual page scripts access them as `PlatPursuit.API`, `PlatPursuit.ToastManager`, etc.
+
+The browse pages (Games, Profiles, Trophies, Companies, Genres, Themes, Flagged Games) share an HTMX-driven filter controller in `static/js/browse-filters.js` (~290 lines). It is a separate file rather than a `PlatPursuit.*` utility because it self-initializes against `[data-browse-filters]` containers and is only loaded on browse templates.
 
 ## Utilities
 
@@ -209,4 +211,4 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works
 - [Dashboard](../features/dashboard.md): Uses DragReorderManager for module reordering
-- [Checklist System](../features/checklist-system.md): Uses API, InfiniteScroller, UnsavedChangesManager
+- [Roadmap System](../features/roadmap-system.md): Uses API, UnsavedChangesManager, DragReorderManager in the staff editor

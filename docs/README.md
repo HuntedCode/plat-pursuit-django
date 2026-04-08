@@ -40,9 +40,8 @@ Self-contained feature documentation. Read the relevant doc when working on that
 
 | Doc | Description |
 |-----|-------------|
-| [Checklist System](features/checklist-system.md) | Checklist CRUD, sections, items, voting, sharing |
 | [Challenge Systems](features/challenge-systems.md) | A-Z, Calendar, and Genre platinum challenges |
-| [Comment System](features/comment-system.md) | Comments, voting, moderation |
+| [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
 | [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |
 | [Community Hub](features/community-hub.md) | Reviews, ratings, concept trophy groups |
 | [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
@@ -53,6 +52,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
 | [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
+| [Roadmap System](features/roadmap-system.md) | Staff-authored platinum guides on game detail (replaces the legacy checklist system) |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |
 
@@ -85,6 +85,7 @@ Quick-lookup tables for mid-task reference.
 | [Shovelware Detection](reference/shovelware-detection.md) | Detection algorithm, thresholds, management commands |
 | [Homepage Services](reference/homepage-services.md) | Featured content, What's New, community stats |
 | [SEO & Meta Tags](reference/seo-meta-tags.md) | Meta tags, JSON-LD structured data, sitemaps, robots directives |
+| [Stats Page Inventory](reference/stats-page-inventory.md) | Quick reference of every stat displayed on `/my-stats/` (12 sections, 120+ stats) |
 
 ## Mini-Games
 

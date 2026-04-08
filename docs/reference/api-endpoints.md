@@ -1,6 +1,6 @@
 # API Endpoints
 
-All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The web app uses session/CSRF authentication; the mobile app uses token authentication (`Authorization: Token <token>`). Staff-only endpoints require the `StaffRequiredAPIMixin`. There are approximately 120 endpoints across 16 categories.
+All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The web app uses session/CSRF authentication; the mobile app uses token authentication (`Authorization: Token <token>`). Staff-only endpoints require the `StaffRequiredAPIMixin`. There are approximately 130 endpoints across 19 categories.
 
 ## Authentication Patterns
 
@@ -9,8 +9,8 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | Session + CSRF | Web app (default for all non-mobile endpoints) |
 | Token auth | Mobile app endpoints (`/api/v1/auth/`, `/api/v1/mobile/`) |
 | Login required | Most write operations |
-| Staff required | Admin endpoints, game family management, dashboard (during dev) |
-| No auth | Some read-only endpoints (comment lists, checklist lists) |
+| Staff required | Admin endpoints, game family management, roadmap editor, subscription admin |
+| No auth | Some read-only endpoints (recent reviews feed, review list/detail/replies, profile card image rendering) |
 
 ## Endpoints by Category
 
@@ -28,47 +28,31 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | GET | `/api/v1/summary/` | Login | Profile summary data |
 | POST | `/api/v1/trophy-case/` | Login | Update trophy case selections |
 
-### Comments (Checklist Only)
+### Comments (Legacy / Read-Only)
+
+The comment system no longer accepts new comments. The list/create endpoints have been removed; only vote, report, and detail/edit/delete on existing rows remain. See [Comment System (Legacy)](../features/comment-system.md) for the full story.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/comments/concept/<id>/checklist/<id>/` | No | List checklist comments |
-| POST | `/api/v1/comments/concept/<id>/checklist/<id>/create/` | Login | Create checklist comment |
-| GET/PUT/DELETE | `/api/v1/comments/<id>/` | Login | Comment detail/edit/delete |
-| POST | `/api/v1/comments/<id>/vote/` | Login | Toggle upvote |
-| POST | `/api/v1/comments/<id>/report/` | Login | Report comment |
-| POST | `/api/v1/guidelines/agree/` | Login | Accept community guidelines |
+| GET/PUT/DELETE | `/api/v1/comments/<comment_id>/` | Login | Detail/edit/delete a historical comment (owner only for write ops) |
+| POST | `/api/v1/comments/<comment_id>/vote/` | Login | Toggle upvote on an existing comment |
+| POST | `/api/v1/comments/<comment_id>/report/` | Login | Flag an existing comment for staff review |
+| POST | `/api/v1/guidelines/agree/` | Login | Accept community guidelines (still required by other systems, e.g. reviews) |
 
-### Checklists
+### Roadmaps (Staff Only)
+
+Staff-authored platinum guides on game detail pages. Replaces the old Checklists API. See [Roadmap System](../features/roadmap-system.md).
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/checklists/concept/<id>/` | No | List checklists for concept |
-| POST | `/api/v1/checklists/concept/<id>/create/` | Login | Create checklist |
-| GET/PUT/DELETE | `/api/v1/checklists/<id>/` | Login | Checklist detail/edit/delete |
-| POST | `/api/v1/checklists/<id>/publish/` | Login | Publish/unpublish |
-| POST | `/api/v1/checklists/<id>/vote/` | Login | Toggle vote |
-| POST | `/api/v1/checklists/<id>/report/` | Login | Report checklist |
-| GET | `/api/v1/checklists/<id>/progress/` | Login | Get user's progress |
-| POST | `/api/v1/checklists/<id>/progress/toggle/<item_id>/` | Login | Toggle item progress |
-| POST | `/api/v1/checklists/<id>/sections/<id>/bulk-progress/` | Login | Bulk toggle section |
-| GET/POST | `/api/v1/checklists/<id>/sections/` | Login | List/create sections |
-| PUT | `/api/v1/checklists/<id>/sections/reorder/` | Login | Reorder sections |
-| GET/PUT/DELETE | `/api/v1/checklists/<id>/sections/<id>/` | Login | Section detail |
-| GET/POST | `/api/v1/checklists/sections/<id>/items/` | Login | List/create items |
-| POST | `/api/v1/checklists/sections/<id>/items/bulk/` | Login | Bulk create items |
-| POST | `/api/v1/checklists/sections/<id>/items/image/` | Login | Create image item |
-| PUT | `/api/v1/checklists/sections/<id>/items/reorder/` | Login | Reorder items |
-| PUT | `/api/v1/checklists/<id>/items/bulk-update/` | Login | Bulk update items |
-| GET/PUT/DELETE | `/api/v1/checklists/items/<id>/` | Login | Item detail |
-| POST | `/api/v1/checklists/<id>/image/` | Login | Upload checklist image |
-| POST | `/api/v1/checklists/sections/<id>/image/` | Login | Upload section image |
-| POST | `/api/v1/checklists/<id>/select-game/` | Login | Select game for trophy integration |
-| GET | `/api/v1/checklists/<id>/available-trophies/` | Login | Available trophies for items |
-| GET | `/api/v1/checklists/my-drafts/` | Login | User's draft checklists |
-| GET | `/api/v1/checklists/my-published/` | Login | User's published checklists |
-| GET | `/api/v1/checklists/my-progress/` | Login | Checklists user is tracking |
-| POST | `/api/v1/markdown/preview/` | Login | Preview markdown rendering |
+| PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/` | Staff | Update tab metadata (name, intro markdown) |
+| GET/POST | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/` | Staff | List or create steps within a tab |
+| PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/reorder/` | Staff | Reorder steps within a tab |
+| GET/PUT/DELETE | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/<step_id>/` | Staff | Step detail / edit / delete |
+| POST | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/<step_id>/trophies/` | Staff | Attach trophies to a step |
+| PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/trophy-guides/<trophy_id>/` | Staff | Edit per-trophy guide text |
+| POST | `/api/v1/roadmap/<roadmap_id>/publish/` | Staff | Publish or unpublish a roadmap |
+| POST | `/api/v1/roadmap/upload-image/` | Staff | Upload an inline image for the editor |
 
 ### Notifications
 
@@ -197,15 +181,47 @@ All API endpoints live under `/api/v1/` and are defined in `api/urls.py`. The we
 | POST | `/api/v1/fundraiser/claim/` | Login | Claim badge series |
 | POST | `/api/v1/admin/fundraiser/claim-status/` | Staff | Update claim status |
 
-### Dashboard (Staff During Dev)
+### Dashboard
+
+The dashboard is the synced-state home page for all users (see [Home Page Router](../features/home-page.md) and [Dashboard](../features/dashboard.md)). Auth requirements per endpoint reflect what is exposed in the redesigned site, not the temporary staff gate from the rebuild phase.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/v1/dashboard/module/<slug>/` | Staff | Lazy module HTML |
-| POST | `/api/v1/dashboard/config/` | Staff | Update module config |
-| POST | `/api/v1/dashboard/reorder/` | Staff | Save module order |
-| POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview |
-| POST | `/api/v1/user/quick-settings/` | Staff | Quick Settings auto-save (toggles, timezone, region) |
+| GET | `/api/v1/dashboard/module/<slug>/` | Login | Lazy module HTML |
+| POST | `/api/v1/dashboard/config/` | Login | Update hidden modules / settings / order / tab config |
+| POST | `/api/v1/dashboard/reorder/` | Login (Premium) | Save drag-drop order |
+| POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview (debug only) |
+| POST | `/api/v1/user/quick-settings/` | Login | Quick Settings auto-save (toggles, timezone, region) |
+
+### Stats Page
+
+The `/my-stats/` premium stats page (12 sections, 120+ stats). See [Stats Page Inventory](stats-page-inventory.md).
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/v1/stats/premium/` | Login (premium) | Lazy section data for the My Stats page |
+
+### Game Flags
+
+User-submitted data quality flags (delisted, shovelware, VR-only, buggy trophies, etc.). See [Community Flags](../features/community-flags.md).
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/v1/games/<game_id>/flag/` | Login | Submit a community flag report against a game |
+
+### Profile Cards & Badge Showcase
+
+Shareable profile card images, forum signatures, and the public badge showcase. See [Profile Cards](../features/profile-cards.md).
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| GET | `/api/v1/profile-card/html/` | No (token) | Profile card HTML for Playwright rendering |
+| GET | `/api/v1/profile-card/png/` | No (token) | Profile card PNG (cached, served by token) |
+| GET/POST | `/api/v1/profile-card/settings/` | Login | Profile card settings (theme, public sig toggle, displayed badge) |
+| POST | `/api/v1/profile-card/regenerate-token/` | Login | Rotate the public sig token (invalidates the old image URL) |
+| POST | `/api/v1/badges/displayed/` | Login | Set the badge displayed on the profile card |
+| POST | `/api/v1/badges/showcase/` | Login | Toggle a badge in the 5-slot profile showcase |
+| POST | `/api/v1/badges/showcase/reorder/` | Login (Premium) | Drag-reorder the showcase slots |
 
 ### Subscription Admin (Staff Only)
 
@@ -221,6 +237,7 @@ Review responses include a `body_html` field containing server-rendered markdown
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
+| GET | `/api/v1/reviews/search/` | No | Search reviews by concept (typeahead) |
 | GET | `/api/v1/reviews/wizard/queue/` | Login | Rate My Games queue (filters: unrated/unreviewed/both, queue_type: base/dlc) |
 | GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (sort: helpful/newest/oldest) |
 | POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Login | Create review (body + recommended) |
@@ -284,6 +301,8 @@ Rate limits are applied via `django-ratelimit` on specific endpoints:
 ## Related Docs
 
 - [Mobile App](../guides/mobile-app.md): Mobile-specific endpoint details
-- [Checklist System](../features/checklist-system.md): Checklist API details
+- [Roadmap System](../features/roadmap-system.md): Roadmap editor API details (replaced the legacy Checklists API)
 - [Challenge Systems](../features/challenge-systems.md): Challenge API details
+- [Community Flags](../features/community-flags.md): Game flag categories and effects
 - [Fundraiser](../features/fundraiser.md): Donation/claim API details
+- [Comment System (Legacy)](../features/comment-system.md): Why the comment list/create endpoints are gone
