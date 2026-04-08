@@ -1,0 +1,194 @@
+{% load static custom_filters %}
+{# Dashboard module: Pursuit Activity. Hybrid event-backed feed + grouped trophy earns. #}
+{# Replaces the legacy recent_activity and recent_platinums modules. See              #}
+{# docs/architecture/event-system.md for the hybrid rationale.                         #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                Pursuit Activity
+            </h2>
+        </div>
+
+        {% if data.events %}
+            <div class="space-y-2">
+                {% for event in data.events %}
+                    {% if event.type == 'platinum' %}
+                        {# Standalone platinum earn (event-backed) #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/20 ring-1 ring-primary shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-primary" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-primary line-clamp-1 pr-1">Platinum earned!</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name }}</div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <span class="badge badge-xs badge-primary">Platinum</span>
+                                <span class="text-xs text-base-content/40 hidden lg:inline" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                            </div>
+                        </div>
+
+                    {% elif event.type == 'rare_trophy' %}
+                        {# Ultra-rare trophy earn (event-backed) #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-warning/10 border border-warning/20 hover:bg-warning/15 transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-warning/20 ring-1 ring-warning shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-warning" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2z"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-warning line-clamp-1 pr-1">Ultra-rare trophy</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name }}</div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                {% if event.earn_rate %}
+                                    <span class="badge badge-xs badge-warning">{{ event.earn_rate|floatformat:1 }}%</span>
+                                {% endif %}
+                                <span class="text-xs text-base-content/40 hidden lg:inline" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                            </div>
+                        </div>
+
+                    {% elif event.type == 'concept_100' %}
+                        {# 100% completion (event-backed) #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-success/10 border border-success/20 hover:bg-success/15 transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-success/20 ring-1 ring-success shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-success line-clamp-1 pr-1">100% complete</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name }}</div>
+                            </div>
+                            <span class="text-xs text-base-content/40 hidden lg:inline shrink-0" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                        </div>
+
+                    {% elif event.type == 'trophy_group' %}
+                        {# Grouped trophy earns for a game on the same day (EarnedTrophy-backed) #}
+                        {# Bronze/silver/gold trophies are NOT in the Event table by design.    #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group relative">
+                            {% if event.np_communication_id %}
+                                <a href="/games/{{ event.np_communication_id }}/" class="absolute inset-0 z-10" aria-label="{{ event.game_name }}" title="{{ event.game_name }}"></a>
+                            {% endif %}
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
+                                {% if event.icon_url %}
+                                    <img src="{{ event.icon_url }}" alt="{{ event.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                                {% else %}
+                                    <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ event.count }} trophies earned</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.game_name }}</div>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                                {% if event.type_counts.gold %}
+                                    <span class="badge badge-xs badge-warning">{{ event.type_counts.gold }}G</span>
+                                {% endif %}
+                                {% if event.type_counts.silver %}
+                                    <span class="badge badge-xs badge-secondary">{{ event.type_counts.silver }}S</span>
+                                {% endif %}
+                                {% if event.type_counts.bronze %}
+                                    <span class="badge badge-xs text-amber-700 bg-amber-700/10 border-amber-700/30">{{ event.type_counts.bronze }}B</span>
+                                {% endif %}
+                                <span class="text-xs text-base-content/40 hidden lg:inline" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                            </div>
+                        </div>
+
+                    {% elif event.type == 'badge_event' %}
+                        {# Badge earned (event-backed; replaces the legacy badge variant) #}
+                        {# Note: legacy `recent_activity` rendered the actual badge layers, but #}
+                        {# the event metadata only carries series_slug + tier, so we render a   #}
+                        {# tier-colored placeholder. Click-through goes to the badge detail.    #}
+                        <a href="{% if event.series_slug %}{% url 'badge_detail' event.series_slug %}{% else %}#{% endif %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-{{ event.tier|badge_color }}/10 border border-{{ event.tier|badge_color }}/20 hover:bg-{{ event.tier|badge_color }}/15 transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-{{ event.tier|badge_color }}/20 ring-1 ring-{{ event.tier|badge_color }} shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-{{ event.tier|badge_color }}" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">
+                                    {% if event.count > 1 %}{{ event.count }} badges earned{% else %}{{ event.name }}{% endif %}
+                                </div>
+                                <div class="text-xs text-base-content/50">Badge{{ event.count|pluralize }} earned</div>
+                            </div>
+                            <span class="text-xs text-base-content/40 hidden lg:inline shrink-0" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                        </a>
+
+                    {% elif event.type == 'milestone' %}
+                        {# Milestone hit (event-backed) #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-accent/10 border border-accent/20 hover:bg-accent/15 transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-accent/20 ring-1 ring-accent shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-accent line-clamp-1 pr-1">Milestone hit</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name }}</div>
+                            </div>
+                            <span class="text-xs text-base-content/40 hidden lg:inline shrink-0" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                        </div>
+
+                    {% elif event.type == 'review' %}
+                        {# Review posted (event-backed) #}
+                        <a href="{% if event.concept_slug %}{% url 'review_hub' event.concept_slug %}{% else %}#{% endif %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-success/10 border border-success/20 hover:bg-success/15 transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-success/20 ring-1 ring-success shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{% if event.is_dlc %}DLC review{% else %}Review{% endif %} posted</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name }}</div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                {% if event.recommended %}
+                                    <span class="badge badge-xs badge-success">Yes</span>
+                                {% else %}
+                                    <span class="badge badge-xs badge-error">No</span>
+                                {% endif %}
+                                <span class="text-xs text-base-content/40 hidden lg:inline" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                            </div>
+                        </a>
+
+                    {% elif event.type == 'list_published' %}
+                        {# Game list published (event-backed) #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/20 ring-1 ring-primary shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm line-clamp-1 pr-1">Game list published</div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name }}{% if event.game_count %} · {{ event.game_count }} games{% endif %}</div>
+                            </div>
+                            <span class="text-xs text-base-content/40 hidden lg:inline shrink-0" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                        </div>
+
+                    {% elif event.type == 'challenge_started' or event.type == 'challenge_completed' or event.type == 'challenge_progress' %}
+                        {# Challenge events (event-backed) #}
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-secondary/10 border border-secondary/20 hover:bg-secondary/15 transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-secondary/20 ring-1 ring-secondary shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm line-clamp-1 pr-1">
+                                    {% if event.type == 'challenge_started' %}Challenge started
+                                    {% elif event.type == 'challenge_completed' %}Challenge completed
+                                    {% else %}Challenge progress{% if event.count %} ({{ event.count }} new){% endif %}{% endif %}
+                                </div>
+                                <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ event.name|default:event.challenge_type|capfirst }}</div>
+                            </div>
+                            <span class="text-xs text-base-content/40 hidden lg:inline shrink-0" data-time-format="relative" data-time="{{ event.date|date:'c' }}">{{ event.date|iso_naturaltime }}</span>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-info/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                <p class="text-sm text-base-content/50">No recent activity.</p>
+                <p class="text-xs text-base-content/40 mt-1">Time to earn some trophies!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

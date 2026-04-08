@@ -1474,3 +1474,321 @@ class ProfileActivityTabTest(TestCase):
             'trophies/partials/profile_detail/activity_list_items.html',
             template_names,
         )
+
+
+class PursuitActivityModuleTest(TestCase):
+    """Phase 6: hybrid event-backed dashboard activity module.
+
+    The new `pursuit_activity` provider replaces the legacy `recent_activity`
+    and `recent_platinums` providers. It is INTENTIONALLY hybrid:
+    event-backed for noteworthy event types (platinum, rare trophy, badge,
+    milestone, review, etc.) PLUS a direct EarnedTrophy query for trophy_group
+    cards (bronze/silver/gold grouped by game+day). The trophy_group stream
+    preserves the existing UX where non-rare trophies group together — those
+    aren't tracked in the Event table by design.
+
+    These tests cover:
+    - Event-backed cards appear in the merged feed
+    - Trophy_group cards appear from EarnedTrophy (non-platinums only)
+    - Platinum events are NOT double-counted (Event stream owns them)
+    - Empty profile produces an empty events list
+    - Limit is honored after merge+sort
+    - Module registry: `pursuit_activity` registered, legacy slugs gone
+    """
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='pa_module@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='pa_module_user',  # 14 chars
+            account_id='pa-001',
+            is_linked=True,
+        )
+
+    def test_provider_returns_events_dict(self):
+        """The provider returns {'events': [...]} matching the template contract."""
+        from trophies.services.dashboard_service import provide_pursuit_activity
+        result = provide_pursuit_activity(self.profile)
+        self.assertIn('events', result)
+        self.assertIsInstance(result['events'], list)
+
+    def test_provider_includes_event_backed_cards(self):
+        """Events authored by the user appear in the merged feed."""
+        from trophies.services.dashboard_service import provide_pursuit_activity
+
+        Event.objects.create(
+            profile=self.profile,
+            event_type='platinum_earned',
+            occurred_at=timezone.now(),
+            metadata={'trophy_name': 'The Plat', 'earn_rate': 4.5},
+        )
+        Event.objects.create(
+            profile=self.profile,
+            event_type='review_posted',
+            occurred_at=timezone.now() - timedelta(hours=1),
+            metadata={'concept_title': 'Reviewed Game', 'recommended': True},
+        )
+
+        result = provide_pursuit_activity(self.profile)
+        types = [e['type'] for e in result['events']]
+        self.assertIn('platinum', types)
+        self.assertIn('review', types)
+
+    def test_provider_includes_trophy_group_cards(self):
+        """Bronze/silver/gold earnings are grouped by game+day from EarnedTrophy."""
+        from trophies.services.dashboard_service import provide_pursuit_activity
+
+        concept = Concept.objects.create(
+            unified_title='Group Test', concept_id='CUSA50001',
+        )
+        game = Game.objects.create(
+            np_communication_id='NPWR50001_00',
+            title_name='Group Test Game',
+            concept=concept,
+        )
+        # Create bronze + silver trophies and earn them
+        for i, (ttype, tname) in enumerate([
+            ('bronze', 'B1'), ('bronze', 'B2'), ('silver', 'S1'),
+        ]):
+            t = Trophy.objects.create(
+                trophy_id=i + 1,
+                trophy_name=tname,
+                trophy_type=ttype,
+                game=game,
+                trophy_earn_rate=50.0,
+            )
+            EarnedTrophy.objects.create(
+                profile=self.profile,
+                trophy=t,
+                earned=True,
+                earned_date_time=timezone.now() - timedelta(hours=2),
+            )
+
+        result = provide_pursuit_activity(self.profile)
+        groups = [e for e in result['events'] if e['type'] == 'trophy_group']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['count'], 3)
+        self.assertEqual(groups[0]['type_counts']['bronze'], 2)
+        self.assertEqual(groups[0]['type_counts']['silver'], 1)
+
+    def test_provider_excludes_platinums_from_trophy_group_stream(self):
+        """Platinums must NOT show up in the trophy_group stream — they're event-backed."""
+        from trophies.services.dashboard_service import provide_pursuit_activity
+
+        concept = Concept.objects.create(
+            unified_title='Plat Test', concept_id='CUSA50002',
+        )
+        game = Game.objects.create(
+            np_communication_id='NPWR50002_00',
+            title_name='Plat Test Game',
+            concept=concept,
+        )
+        plat = Trophy.objects.create(
+            trophy_id=99,
+            trophy_name='The Platinum',
+            trophy_type='platinum',
+            game=game,
+            trophy_earn_rate=10.0,
+        )
+        EarnedTrophy.objects.create(
+            profile=self.profile,
+            trophy=plat,
+            earned=True,
+            earned_date_time=timezone.now(),
+        )
+
+        result = provide_pursuit_activity(self.profile)
+        # No trophy_group card should be produced from a platinum-only earn
+        groups = [e for e in result['events'] if e['type'] == 'trophy_group']
+        self.assertEqual(len(groups), 0)
+
+    def test_provider_empty_profile_returns_empty_list(self):
+        from trophies.services.dashboard_service import provide_pursuit_activity
+        result = provide_pursuit_activity(self.profile)
+        self.assertEqual(result['events'], [])
+
+    def test_provider_honors_limit(self):
+        """The result is trimmed to settings['limit'] after merge+sort."""
+        from trophies.services.dashboard_service import provide_pursuit_activity
+
+        # Create 10 platinum events; limit=3 should return only 3.
+        for i in range(10):
+            Event.objects.create(
+                profile=self.profile,
+                event_type='platinum_earned',
+                occurred_at=timezone.now() - timedelta(hours=i),
+                metadata={'trophy_name': f'Plat {i}', 'earn_rate': 4.5},
+            )
+
+        result = provide_pursuit_activity(self.profile, settings={'limit': 3})
+        self.assertEqual(len(result['events']), 3)
+
+    def test_provider_sorts_newest_first(self):
+        """The merged feed is ordered by date descending."""
+        from trophies.services.dashboard_service import provide_pursuit_activity
+
+        old = Event.objects.create(
+            profile=self.profile,
+            event_type='review_posted',
+            occurred_at=timezone.now() - timedelta(days=5),
+            metadata={'concept_title': 'Old'},
+        )
+        recent = Event.objects.create(
+            profile=self.profile,
+            event_type='review_posted',
+            occurred_at=timezone.now() - timedelta(hours=1),
+            metadata={'concept_title': 'Recent'},
+        )
+
+        result = provide_pursuit_activity(self.profile)
+        names = [e['name'] for e in result['events']]
+        self.assertEqual(names[0], 'Recent')
+        self.assertEqual(names[1], 'Old')
+
+    # ---- Module registry --------------------------------------------------
+
+    def test_pursuit_activity_module_registered(self):
+        """The new module is in DASHBOARD_MODULES with the expected slug."""
+        from trophies.services.dashboard_service import DASHBOARD_MODULES
+        slugs = [m['slug'] for m in DASHBOARD_MODULES]
+        self.assertIn('pursuit_activity', slugs)
+
+    def test_legacy_module_slugs_removed(self):
+        """The legacy slugs must NOT exist in the registry anymore."""
+        from trophies.services.dashboard_service import DASHBOARD_MODULES
+        slugs = [m['slug'] for m in DASHBOARD_MODULES]
+        self.assertNotIn('recent_activity', slugs)
+        self.assertNotIn('recent_platinums', slugs)
+
+
+class DashboardConfigSlugMigrationTest(TestCase):
+    """Phase 6: data migration helpers that rewrite legacy dashboard slugs.
+
+    The migration logic lives in trophies/migrations/0186_dashboardconfig_pursuit_activity.py
+    as pure-functional helpers. We test the helpers directly because they take
+    plain Python lists/dicts and don't touch the DB, which gives us tight,
+    fast tests that don't require a real DashboardConfig row mutation cycle.
+    """
+
+    def _import_helpers(self):
+        # The migration module isn't a normal package member; import via
+        # the migrations subpackage.
+        from importlib import import_module
+        return import_module('trophies.migrations.0186_dashboardconfig_pursuit_activity')
+
+    def test_module_order_replaces_both_legacy_slugs_with_one_pursuit(self):
+        helpers = self._import_helpers()
+        result = helpers._rewrite_module_order([
+            'trophy_snapshot', 'recent_platinums', 'challenge_hub',
+            'recent_activity', 'badge_progress',
+        ])
+        # First legacy slug position becomes pursuit_activity, second is dropped
+        self.assertEqual(result, [
+            'trophy_snapshot', 'pursuit_activity', 'challenge_hub', 'badge_progress',
+        ])
+
+    def test_module_order_with_only_one_legacy_slug(self):
+        helpers = self._import_helpers()
+        result = helpers._rewrite_module_order(['trophy_snapshot', 'recent_activity'])
+        self.assertEqual(result, ['trophy_snapshot', 'pursuit_activity'])
+
+    def test_module_order_with_no_legacy_slugs_unchanged(self):
+        helpers = self._import_helpers()
+        result = helpers._rewrite_module_order(['trophy_snapshot', 'challenge_hub'])
+        self.assertEqual(result, ['trophy_snapshot', 'challenge_hub'])
+
+    def test_module_order_dedupes_existing_pursuit_activity(self):
+        """If the user somehow has both pursuit_activity AND a legacy slug, dedupe."""
+        helpers = self._import_helpers()
+        result = helpers._rewrite_module_order([
+            'pursuit_activity', 'recent_activity', 'badge_progress',
+        ])
+        self.assertEqual(result, ['pursuit_activity', 'badge_progress'])
+
+    def test_hidden_modules_promotes_legacy_to_pursuit(self):
+        helpers = self._import_helpers()
+        result = helpers._rewrite_hidden_modules(['recent_activity', 'quick_settings'])
+        self.assertEqual(set(result), {'pursuit_activity', 'quick_settings'})
+
+    def test_hidden_modules_no_legacy_unchanged(self):
+        helpers = self._import_helpers()
+        result = helpers._rewrite_hidden_modules(['quick_settings'])
+        self.assertEqual(result, ['quick_settings'])
+
+    def test_settings_dict_merges_legacy_settings(self):
+        helpers = self._import_helpers()
+        result = helpers._rewrite_settings_dict({
+            'recent_activity': {'limit': 12},
+            'recent_platinums': {'limit': 6},
+            'unrelated_module': {'foo': 'bar'},
+        })
+        self.assertNotIn('recent_activity', result)
+        self.assertNotIn('recent_platinums', result)
+        self.assertEqual(result['pursuit_activity']['limit'], 12)  # recent_activity wins
+        self.assertEqual(result['unrelated_module'], {'foo': 'bar'})
+
+    def test_settings_dict_no_legacy_unchanged(self):
+        helpers = self._import_helpers()
+        original = {'unrelated_module': {'foo': 'bar'}}
+        self.assertEqual(helpers._rewrite_settings_dict(original), original)
+
+    def test_settings_dict_existing_pursuit_activity_takes_priority(self):
+        """If the user already has pursuit_activity settings, they win the merge."""
+        helpers = self._import_helpers()
+        result = helpers._rewrite_settings_dict({
+            'pursuit_activity': {'limit': 5},  # user-set, should win
+            'recent_activity': {'limit': 12},  # legacy, would default
+        })
+        self.assertEqual(result['pursuit_activity']['limit'], 5)
+
+    def test_full_migration_e2e_against_real_dashboard_config(self):
+        """End-to-end: create a DashboardConfig with legacy slugs, run rewrite_configs, verify."""
+        from trophies.models import DashboardConfig
+        helpers = self._import_helpers()
+
+        user = CustomUser.objects.create_user(
+            email='cfg@example.com', password='testpass123',
+        )
+        profile = Profile.objects.create(
+            user=user, psn_username='cfg_user',
+            account_id='cfg-001', is_linked=True,
+        )
+        config = DashboardConfig.objects.create(
+            profile=profile,
+            module_order=['trophy_snapshot', 'recent_activity', 'recent_platinums', 'challenge_hub'],
+            hidden_modules=['recent_activity'],
+            module_settings={
+                'recent_activity': {'limit': 12},
+                'recent_platinums': {'limit': 10},
+            },
+            tab_config={
+                'module_tab_overrides': {
+                    'recent_activity': 'My Custom Tab',
+                    'recent_platinums': 'My Custom Tab',
+                    'badge_progress': 'Other Tab',
+                },
+            },
+        )
+
+        # Patch the apps.get_model lookup so the helper uses the real model
+        from unittest.mock import MagicMock
+        fake_apps = MagicMock()
+        fake_apps.get_model.return_value = DashboardConfig
+        helpers.rewrite_configs(fake_apps, None)
+
+        config.refresh_from_db()
+        self.assertEqual(config.module_order, [
+            'trophy_snapshot', 'pursuit_activity', 'challenge_hub',
+        ])
+        self.assertEqual(config.hidden_modules, ['pursuit_activity'])
+        self.assertEqual(config.module_settings['pursuit_activity']['limit'], 12)
+        self.assertNotIn('recent_activity', config.module_settings)
+        self.assertNotIn('recent_platinums', config.module_settings)
+        overrides = config.tab_config['module_tab_overrides']
+        self.assertNotIn('recent_activity', overrides)
+        self.assertNotIn('recent_platinums', overrides)
+        self.assertEqual(overrides['pursuit_activity'], 'My Custom Tab')
+        self.assertEqual(overrides['badge_progress'], 'Other Tab')

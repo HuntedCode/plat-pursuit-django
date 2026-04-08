@@ -85,32 +85,177 @@ def provide_trophy_snapshot(profile):
     }
 
 
-def provide_recent_platinums(profile, settings=None):
-    """Last N platinum trophies earned with game info and rarity."""
-    from trophies.models import EarnedTrophy
+def provide_pursuit_activity(profile, settings=None):
+    """Hybrid recent-activity feed: Pursuit Feed events + grouped trophy earns.
+
+    This module replaces the legacy `recent_activity` and `recent_platinums`
+    providers. It is intentionally NOT pure-event-backed: the Event table
+    only records noteworthy events (platinum_earned, rare_trophy_earned,
+    badge_earned, milestone_hit, review_posted, etc.) and deliberately does
+    NOT track individual non-rare trophies. To preserve the existing
+    "8 trophies in Persona today" UX, this provider also runs a direct
+    EarnedTrophy query for trophy_group cards and merges both streams.
+
+    Result shape: a list of dicts with `type` discriminator. Trophy_group
+    rows come from the EarnedTrophy query; everything else comes from the
+    Event table. The template (pursuit_activity.html) renders each type
+    variant. See docs/architecture/event-system.md for the full feed
+    semantics and the rationale for the hybrid approach.
+    """
+    from collections import defaultdict
+    from trophies.models import Event, EarnedTrophy
+    import pytz
 
     settings = settings or {}
-    limit = settings.get('limit', 6)
-    plats = (
+    limit = settings.get('limit', 8)
+
+    # Get user timezone for trophy_group date bucketing
+    tz_name = profile.user.user_timezone if profile.user else 'UTC'
+    user_tz = pytz.timezone(tz_name or 'UTC')
+
+    events = []
+
+    # ── Stream 1: Event-backed cards ─────────────────────────────────────
+    # Query the user's recent Pursuit Feed events. We pull a generous
+    # window so the merge below has plenty to choose from after sort+trim.
+    # `feed_visible()` filters out events whose target was soft-deleted.
+    event_rows = (
+        Event.objects
+        .for_profile(profile)
+        .feed_visible()
+        .order_by('-occurred_at')[:limit * 3]
+    )
+    for ev in event_rows:
+        et = ev.event_type
+        meta = ev.metadata or {}
+        if et == 'platinum_earned':
+            events.append({
+                'type': 'platinum',
+                'name': meta.get('trophy_name') or 'Platinum',
+                # game_id/concept_id are in meta but the legacy template
+                # expects np_communication_id for the link target. We
+                # cannot reverse it cheaply from metadata, so leave None
+                # to skip the link wrapper. Click-throughs are still
+                # available via the target object on the standalone feed.
+                'icon_url': '',
+                'np_communication_id': None,
+                'date': ev.occurred_at,
+                'earn_rate': meta.get('earn_rate'),
+            })
+        elif et == 'rare_trophy_earned':
+            events.append({
+                'type': 'rare_trophy',
+                'name': meta.get('trophy_name') or 'Rare Trophy',
+                'icon_url': '',
+                'np_communication_id': None,
+                'date': ev.occurred_at,
+                'earn_rate': meta.get('earn_rate'),
+                'trophy_type': meta.get('trophy_type'),
+            })
+        elif et == 'concept_100_percent':
+            events.append({
+                'type': 'concept_100',
+                'name': meta.get('concept_name') or 'Game',
+                'icon_url': '',
+                'np_communication_id': None,
+                'date': ev.occurred_at,
+                'concept_slug': meta.get('concept_slug'),
+            })
+        elif et == 'badge_earned':
+            badges = meta.get('badges') or []
+            count = meta.get('count', len(badges))
+            events.append({
+                'type': 'badge_event',
+                'name': badges[0]['name'] if badges else 'Badge',
+                'series_slug': badges[0].get('series_slug') if badges else None,
+                'tier': badges[0].get('tier') if badges else None,
+                'count': count,
+                'date': ev.occurred_at,
+            })
+        elif et == 'milestone_hit':
+            events.append({
+                'type': 'milestone',
+                'name': meta.get('milestone_name') or 'Milestone',
+                'criteria_type': meta.get('criteria_type'),
+                'date': ev.occurred_at,
+            })
+        elif et == 'review_posted':
+            events.append({
+                'type': 'review',
+                'name': meta.get('concept_title') or 'Game',
+                'recommended': meta.get('recommended'),
+                'is_dlc': meta.get('is_dlc_review'),
+                'concept_slug': meta.get('concept_slug'),
+                'date': ev.occurred_at,
+            })
+        elif et == 'game_list_published':
+            events.append({
+                'type': 'list_published',
+                'name': meta.get('list_name') or 'Game List',
+                'game_count': meta.get('game_count'),
+                'date': ev.occurred_at,
+            })
+        elif et in ('challenge_started', 'challenge_completed'):
+            events.append({
+                'type': et,  # 'challenge_started' or 'challenge_completed'
+                'name': meta.get('name') or 'Challenge',
+                'challenge_type': meta.get('challenge_type'),
+                'date': ev.occurred_at,
+            })
+        elif et == 'challenge_progress':
+            events.append({
+                'type': 'challenge_progress',
+                'challenge_type': meta.get('challenge_type'),
+                'count': meta.get('count'),
+                'date': ev.occurred_at,
+            })
+        # profile_linked, day_zero, and any unknown types are intentionally
+        # skipped on the dashboard module (the user already knows they
+        # joined, and Day Zero is a global system event).
+
+    # ── Stream 2: Trophy-group cards (non-event source) ──────────────────
+    # The Event table deliberately doesn't track individual non-rare
+    # bronze/silver/gold trophies. Pull them directly from EarnedTrophy
+    # and group by (game, local_date). Platinums are SKIPPED here because
+    # they're already covered by the Event stream above; including them
+    # would double up.
+    fetch_limit = limit * 4
+    trophy_qs = (
         EarnedTrophy.objects
-        .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .exclude(trophy__trophy_type='platinum')
         .select_related('trophy__game__concept')
-        .order_by('-earned_date_time')[:limit]
+        .order_by('-earned_date_time')[:fetch_limit]
     )
 
-    platinums = []
-    for et in plats:
-        game = et.trophy.game
+    groups = defaultdict(list)
+    for et_row in trophy_qs:
+        game = et_row.trophy.game
+        local_dt = et_row.earned_date_time.astimezone(user_tz)
+        local_date = local_dt.date()
+        np_id = game.np_communication_id if game else None
+        groups[(np_id, local_date)].append(et_row)
+
+    for (np_id, local_date), trophy_list in groups.items():
+        first = trophy_list[0]
+        game = first.trophy.game
         concept = getattr(game, 'concept', None) if game else None
-        platinums.append({
+        type_counts = defaultdict(int)
+        for t in trophy_list:
+            type_counts[t.trophy.trophy_type] += 1
+        events.append({
+            'type': 'trophy_group',
+            'count': len(trophy_list),
             'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
             'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
-            'earned_date': et.earned_date_time,
-            'earn_rate': et.trophy.trophy_earn_rate,
-            'np_communication_id': game.np_communication_id if game else None,
+            'np_communication_id': np_id,
+            'type_counts': dict(type_counts),
+            'date': max(t.earned_date_time for t in trophy_list),
         })
 
-    return {'platinums': platinums}
+    # ── Merge and trim ──────────────────────────────────────────────────
+    events.sort(key=lambda e: e['date'], reverse=True)
+    return {'events': events[:limit]}
 
 
 def _find_challenge(profile, challenge_type):
@@ -316,99 +461,6 @@ def provide_recent_badges(profile, settings=None):
         })
 
     return {'badges': badges}
-
-
-def provide_recent_activity(profile, settings=None):
-    """Trophy-focused activity feed with grouping by game + day.
-
-    Trophies are grouped by game + local date (timezone-aware). Platinums
-    are always shown as standalone events. Badges are never grouped.
-    """
-    from trophies.models import EarnedTrophy, UserBadge
-    import pytz
-
-    settings = settings or {}
-    limit = settings.get('limit', 8)
-
-    # Get user timezone for date grouping
-    tz_name = profile.user.user_timezone if profile.user else 'UTC'
-    user_tz = pytz.timezone(tz_name or 'UTC')
-
-    # Fetch more than needed since grouping reduces count
-    fetch_limit = limit * 4
-    trophy_qs = (
-        EarnedTrophy.objects
-        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
-        .select_related('trophy__game__concept')
-        .order_by('-earned_date_time')[:fetch_limit]
-    )
-
-    badge_qs = (
-        UserBadge.objects
-        .filter(profile=profile)
-        .select_related('badge', 'badge__base_badge')
-        .order_by('-earned_at')[:limit]
-    )
-
-    events = []
-
-    # Group trophies by (game, local_date), but platinums are always standalone
-    groups = defaultdict(list)
-    for et in trophy_qs:
-        game = et.trophy.game
-        concept = getattr(game, 'concept', None) if game else None
-        local_dt = et.earned_date_time.astimezone(user_tz)
-        local_date = local_dt.date()
-        np_id = game.np_communication_id if game else None
-
-        if et.trophy.trophy_type == 'platinum':
-            # Platinums are always standalone
-            events.append({
-                'type': 'platinum',
-                'name': concept.unified_title if concept else game.title_name if game else 'Unknown',
-                'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
-                'np_communication_id': np_id,
-                'date': et.earned_date_time,
-                'earn_rate': et.trophy.trophy_earn_rate,
-            })
-        else:
-            groups[(np_id, local_date)].append(et)
-
-    # Build grouped trophy events
-    for (np_id, local_date), trophy_list in groups.items():
-        first = trophy_list[0]
-        game = first.trophy.game
-        concept = getattr(game, 'concept', None) if game else None
-        # Count by type for the badge display
-        type_counts = defaultdict(int)
-        for et in trophy_list:
-            type_counts[et.trophy.trophy_type] += 1
-
-        events.append({
-            'type': 'trophy_group',
-            'count': len(trophy_list),
-            'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
-            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
-            'np_communication_id': np_id,
-            'type_counts': dict(type_counts),
-            'date': max(et.earned_date_time for et in trophy_list),
-        })
-
-    # Badge events (never grouped)
-    for ub in badge_qs:
-        badge = ub.badge
-        events.append({
-            'type': 'badge',
-            'name': badge.effective_display_series or badge.name,
-            'tier_name': badge.get_tier_display(),
-            'tier': badge.tier,
-            'series_slug': badge.series_slug,
-            'layers': badge.get_badge_layers(),
-            'date': ub.earned_at,
-        })
-
-    events.sort(key=lambda e: e['date'], reverse=True)
-    return {'events': events[:limit]}
 
 
 def provide_monthly_recap_preview(profile):
@@ -4731,19 +4783,19 @@ DASHBOARD_MODULES = [
         'allowed_sizes': ['small', 'medium', 'large'],
     },
     {
-        'slug': 'recent_platinums',
-        'name': 'Recent Platinums',
-        'description': 'Your latest platinum conquests with rarity and earn dates.',
+        'slug': 'pursuit_activity',
+        'name': 'Pursuit Activity',
+        'description': 'Your recent platinums, badges, milestones, reviews, and trophy earns in one feed.',
         'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/recent_platinums.html',
-        'provider': provide_recent_platinums,
+        'template': 'trophies/partials/dashboard/pursuit_activity.html',
+        'provider': provide_pursuit_activity,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 3,  # at_a_glance #3
-        'default_settings': {'limit': 6},
+        'default_order': 2,  # at_a_glance #2 (replaces both recent_platinums and recent_activity)
+        'default_settings': {'limit': 8},
         'configurable_settings': [
-            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
-             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 10, 'label': '10'}]},
+            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 8,
+             'options': [{'value': 5, 'label': '5'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
         ],
         'cache_ttl': 300,
         'default_size': 'medium',
@@ -4800,25 +4852,6 @@ DASHBOARD_MODULES = [
              'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 9, 'label': '9'}]},
         ],
         'cache_ttl': 600,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
-    {
-        'slug': 'recent_activity',
-        'name': 'Recent Activity',
-        'description': 'Your latest trophy earns and badge awards in one feed.',
-        'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/recent_activity.html',
-        'provider': provide_recent_activity,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 2,  # at_a_glance #2
-        'default_settings': {'limit': 8},
-        'configurable_settings': [
-            {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 8,
-             'options': [{'value': 5, 'label': '5'}, {'value': 8, 'label': '8'}, {'value': 12, 'label': '12'}]},
-        ],
-        'cache_ttl': 300,
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
     },
