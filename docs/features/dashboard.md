@@ -71,6 +71,7 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |
 | `challenge_share_cards` | Challenge Cards | share | Lazy | 10m | No |
 | `recap_share_card` | Recap Card | share | Lazy | 30m | No |
+| `platinum_grid_cta` | Platinum Grid | share | Lazy | 10m | No |
 | `library_health_alerts` | Library Health | highlights | Lazy | 30m | No |
 | `my_stats_teaser` | Your Stats | at_a_glance | Lazy | 10m | No |
 | `top_developers` | Top Studios | highlights | Lazy | 30m | No |
