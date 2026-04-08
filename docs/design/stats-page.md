@@ -11,7 +11,10 @@
 **Template:** `templates/trophies/my_stats.html` + 13 partials in `templates/trophies/partials/stats/`
 **Cache:** `stats_page:{profile_id}`, 4-hour TTL, invalidated on sync completion
 
-**To launch publicly:** Change `StaffRequiredMixin` to `LoginRequiredMixin` in `stats_views.py` and remove the preview toggle button from the template.
+**To launch publicly:**
+1. Change `StaffRequiredMixin` to `LoginRequiredMixin` in `trophies/views/stats_views.py:15`
+2. Remove the preview toggle button from `templates/trophies/my_stats.html`
+3. Re-add the "My Stats" link to `templates/partials/navbar.html` (My Pursuit dropdown) and `templates/partials/mobile_tabbar.html` (My Pursuit section). The links were stripped in commit `d85a4f0` for the staff-only window.
 
 ## Architecture Decisions
 
@@ -64,8 +67,8 @@ Two shared fetches power multiple sections (avoiding redundant queries):
 | `templates/trophies/partials/stats/premium_sections.html` | All premium sections (rendered by API) |
 | `templates/trophies/partials/stats/*.html` | 12 individual section partials |
 | `trophies/token_keeper.py` | Cache invalidation hookpoint (after sync) |
-| `templates/partials/navbar.html` | "My Stats" nav link in My Pursuit dropdown |
-| `templates/partials/mobile_tabbar.html` | "My Stats" nav link in mobile drawer |
+
+**Navigation status:** The "My Stats" link was removed from both `navbar.html` and `mobile_tabbar.html` while the page is staff-gated (commit `d85a4f0`). The page is reachable directly via `/my-stats/` and via the dashboard's `my_stats_teaser` module (whose CTA links to it). Re-add the nav links to both templates as part of the public launch.
 
 ## Gotchas and Pitfalls
 
