@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Pursuit Feed{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-1 md:px-2 lg:px-4 py-3 md:py-4">
+
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Page header ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold italic text-primary leading-tight">
+                        Pursuit Feed
+                    </h1>
+                    <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-2xl">
+                        Browse the full chronicle of platinums, badges, reviews, lists, and challenges across the PlatPursuit community.
+                    </p>
+                </div>
+                <a href="{% url 'community_hub' %}" class="btn btn-ghost btn-sm md:btn-md gap-2 shrink-0 border border-base-300" aria-label="Back to Community Hub">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                    Community Hub
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {# ── Filter form ── #}
+    <form data-browse-form
+          hx-get="{% url 'community_feed' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-indicator="#browse-results"
+          class="mb-3">
+
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body p-3 md:p-4 lg:p-5 space-y-3">
+
+                {# Hidden page input — browse-filters.js resets this on filter change #}
+                <input type="hidden" name="page" value="{{ page_obj.number|default:1 }}" />
+
+                {# ── Mode toggle ── #}
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2 block">Feed Mode</label>
+                    <div class="flex flex-col md:flex-row gap-2">
+                        {% for value, label, hint in feed_mode_options %}
+                            <label class="flex-1 cursor-pointer">
+                                <input type="radio" name="feed_mode" value="{{ value }}" class="sr-only peer" {% if feed_mode == value %}checked{% endif %} />
+                                <div class="card bg-white/[0.03] border-2 border-base-content/10 peer-checked:border-primary peer-checked:bg-primary/5 hover:border-primary/50 transition-all p-2.5 md:p-3">
+                                    <div class="font-bold text-sm md:text-base">{{ label }}</div>
+                                    <div class="text-xs text-base-content/50 mt-0.5 line-clamp-2 pr-1">{{ hint }}</div>
+                                </div>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Time range ── #}
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2 block">Time Range</label>
+                    <div class="flex flex-wrap gap-2">
+                        {% for value, label in time_range_options %}
+                            <label class="cursor-pointer">
+                                <input type="radio" name="time_range" value="{{ value }}" class="sr-only peer" {% if time_range == value %}checked{% endif %} />
+                                <span class="badge badge-md md:badge-lg badge-ghost border-base-content/20 peer-checked:badge-primary peer-checked:border-primary cursor-pointer hover:border-primary/50 transition-colors">
+                                    {{ label }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# ── Event type chips ── #}
+                <div>
+                    <label class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2 block">Event Types <span class="text-base-content/30 normal-case font-normal">(leave blank for all)</span></label>
+                    <div class="flex flex-wrap gap-1.5">
+                        {% for type, label in valid_event_types %}
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="event_type" value="{{ type }}" class="sr-only peer" {% if type in active_event_types %}checked{% endif %} />
+                                <span class="badge badge-sm md:badge-md badge-ghost border-base-content/20 peer-checked:badge-secondary peer-checked:border-secondary cursor-pointer hover:border-secondary/50 transition-colors">
+                                    {{ label }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </form>
+
+    {# ── Results container ── #}
+    <div id="browse-results">
+        {% include 'community/partials/feed_results.html' %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+{% endblock %}

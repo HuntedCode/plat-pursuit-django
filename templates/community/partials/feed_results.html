@@ -1,0 +1,83 @@
+{# Pursuit Feed results partial. Returned on HTMX requests via HtmxListMixin. #}
+{# Renders pagination + the event-row list. Mirrors the structure of         #}
+{# trophies/partials/game_list/browse_results.html.                          #}
+{% load humanize custom_filters %}
+
+{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+<div id="items-grid" class="space-y-2">
+    {% for event in events %}
+        <div class="flex items-center gap-2 md:gap-3 p-3 rounded-lg bg-base-200/70 border border-base-300 hover:border-primary/30 hover:shadow-md hover:shadow-primary/10 transition-all">
+
+            {# ── Actor avatar ── #}
+            {% if event.profile %}
+            <a href="{% url 'profile_detail' event.profile.psn_username %}" class="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300 hover:ring-primary transition-all">
+                {% if event.profile.avatar_url %}
+                    <img src="{{ event.profile.avatar_url }}" alt="{{ event.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                {% else %}
+                    <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"></circle><path d="M5.5 21a8.38 8.38 0 0 1 13 0"></path></svg>
+                    </div>
+                {% endif %}
+            </a>
+            {% else %}
+            {# System event (Day Zero) — distinct icon, no profile link #}
+            <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-primary/15 ring-1 ring-primary shrink-0 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </div>
+            {% endif %}
+
+            {# ── Verb + target ── #}
+            <div class="flex-1 min-w-0">
+                <div class="text-sm md:text-base line-clamp-2 pr-1">
+                    {% if event.profile %}
+                        <a href="{% url 'profile_detail' event.profile.psn_username %}" class="font-bold hover:text-primary transition-colors">{{ event.profile.display_psn_username }}</a>
+                    {% else %}
+                        <span class="font-bold text-primary">PlatPursuit</span>
+                    {% endif %}
+                    {% if event.event_type == 'platinum_earned' %}
+                        earned a platinum{% if event.metadata.trophy_name %}: <span class="text-base-content/70">{{ event.metadata.trophy_name }}</span>{% endif %}
+                    {% elif event.event_type == 'rare_trophy_earned' %}
+                        earned an ultra-rare trophy{% if event.metadata.trophy_name %}: <span class="text-base-content/70">{{ event.metadata.trophy_name }}</span>{% endif %}{% if event.metadata.earn_rate %} <span class="badge badge-xs badge-warning">{{ event.metadata.earn_rate|floatformat:1 }}%</span>{% endif %}
+                    {% elif event.event_type == 'concept_100_percent' %}
+                        reached <span class="text-success font-semibold">100%</span> on <span class="text-base-content/70">{{ event.metadata.concept_name|default:"a game" }}</span>
+                    {% elif event.event_type == 'badge_earned' %}
+                        {% with count=event.metadata.count|default:1 %}
+                            earned {% if count > 1 %}<span class="text-secondary font-semibold">{{ count }} badges</span>{% else %}a badge{% if event.metadata.badges %}: <span class="text-base-content/70">{{ event.metadata.badges.0.name }}</span>{% endif %}{% endif %}
+                        {% endwith %}
+                    {% elif event.event_type == 'milestone_hit' %}
+                        hit a milestone{% if event.metadata.milestone_name %}: <span class="text-accent font-semibold">{{ event.metadata.milestone_name }}</span>{% endif %}
+                    {% elif event.event_type == 'review_posted' %}
+                        posted a {% if event.metadata.is_dlc_review %}DLC {% endif %}review{% if event.metadata.concept_title %} for <span class="text-base-content/70">{{ event.metadata.concept_title }}{% if event.metadata.is_dlc_review and event.metadata.dlc_name %} ({{ event.metadata.dlc_name }}){% endif %}</span>{% endif %}{% if event.metadata.recommended is True %} <span class="badge badge-xs badge-success">Recommended</span>{% endif %}
+                    {% elif event.event_type == 'game_list_published' %}
+                        published a game list{% if event.metadata.list_name %}: <span class="text-base-content/70">{{ event.metadata.list_name }}</span>{% endif %}{% if event.metadata.game_count %} <span class="text-xs text-base-content/40">({{ event.metadata.game_count }} games)</span>{% endif %}
+                    {% elif event.event_type == 'challenge_started' %}
+                        started a {{ event.metadata.challenge_type|default:"" }} challenge{% if event.metadata.name %}: <span class="text-base-content/70">{{ event.metadata.name }}</span>{% endif %}
+                    {% elif event.event_type == 'challenge_progress' %}
+                        made progress on a {{ event.metadata.challenge_type|default:"" }} challenge{% if event.metadata.count %} <span class="text-xs text-base-content/40">({{ event.metadata.count }} new slot{{ event.metadata.count|pluralize }})</span>{% endif %}
+                    {% elif event.event_type == 'challenge_completed' %}
+                        <span class="text-success font-semibold">completed</span> a {{ event.metadata.challenge_type|default:"" }} challenge{% if event.metadata.name %}: <span class="text-base-content/70">{{ event.metadata.name }}</span>{% endif %}
+                    {% elif event.event_type == 'profile_linked' %}
+                        joined the chronicle
+                    {% elif event.event_type == 'day_zero' %}
+                        {{ event.metadata.message|default:"Day Zero" }}
+                    {% else %}
+                        {{ event.event_type }}
+                    {% endif %}
+                </div>
+            </div>
+
+            <span class="text-xs text-base-content/40 hidden md:inline shrink-0 self-start mt-1" data-time-format="relative" data-time="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|iso_naturaltime }}</span>
+        </div>
+    {% empty %}
+        <div class="text-center py-12">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-base-content/30 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+            <p class="text-base text-base-content/50">No events match these filters.</p>
+            <p class="text-sm text-base-content/40 mt-1">Try a wider time range or different event types.</p>
+        </div>
+    {% endfor %}
+</div>
+
+{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

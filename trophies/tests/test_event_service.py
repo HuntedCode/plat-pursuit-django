@@ -2056,3 +2056,272 @@ class CommunityHubTest(TestCase):
         """The URL pattern is registered with name='community_hub' for reverse() lookups."""
         from django.urls import reverse
         self.assertEqual(reverse('community_hub'), '/community/')
+
+
+class CommunityFeedTest(TestCase):
+    """Phase 8: standalone /community/feed/ page with Pursuit/Trophy modes.
+
+    Covers:
+    - URL routing
+    - Default mode + time range + event_type filter behavior
+    - Mode toggle (pursuit vs trophy) restricts the valid event_type set
+    - Multi-select event_type filtering (and silent dropping of invalid types)
+    - time_range filtering (24h, 7d, 30d, all)
+    - Pagination
+    - HTMX partial template short-circuit
+    - System events (Day Zero) excluded from both modes
+    - Soft-deleted-target events filtered out
+    """
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='feed@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='feed_user',  # 9 chars
+            account_id='feed-001',
+            is_linked=True,
+        )
+
+    def _make_event(self, *, event_type, when=None, profile=None):
+        return Event.objects.create(
+            profile=profile if profile is not None else self.profile,
+            event_type=event_type,
+            occurred_at=when or timezone.now(),
+            metadata={},
+        )
+
+    # ---- URL routing --------------------------------------------------
+
+    def test_url_is_named_community_feed(self):
+        from django.urls import reverse
+        self.assertEqual(reverse('community_feed'), '/community/feed/')
+
+    # ---- Default behavior (no filters) --------------------------------
+
+    def test_default_get_returns_200_pursuit_mode(self):
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/feed/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['feed_mode'], 'pursuit')
+        self.assertEqual(response.context['time_range'], '7d')
+
+    def test_default_excludes_old_events(self):
+        """Default time range is 7d; events older than 7 days don't appear."""
+        from django.test import Client
+
+        recent = self._make_event(
+            event_type='platinum_earned',
+            when=timezone.now() - timedelta(hours=2),
+        )
+        old = self._make_event(
+            event_type='platinum_earned',
+            when=timezone.now() - timedelta(days=30),
+        )
+
+        client = Client()
+        response = client.get('/community/feed/')
+        events = list(response.context['events'])
+        ids = [e.id for e in events]
+        self.assertIn(recent.id, ids)
+        self.assertNotIn(old.id, ids)
+
+    def test_all_time_range_includes_old_events(self):
+        """?time_range=all bypasses the recency filter."""
+        from django.test import Client
+
+        old = self._make_event(
+            event_type='platinum_earned',
+            when=timezone.now() - timedelta(days=365),
+        )
+        client = Client()
+        response = client.get('/community/feed/?time_range=all')
+        ids = [e.id for e in response.context['events']]
+        self.assertIn(old.id, ids)
+
+    # ---- Mode toggle --------------------------------------------------
+
+    def test_pursuit_mode_includes_user_action_events(self):
+        """Pursuit mode shows reviews, badges, etc."""
+        from django.test import Client
+
+        platinum = self._make_event(event_type='platinum_earned')
+        review = self._make_event(event_type='review_posted')
+        badge = self._make_event(event_type='badge_earned')
+
+        client = Client()
+        response = client.get('/community/feed/?feed_mode=pursuit&time_range=24h')
+        types = set(e.event_type for e in response.context['events'])
+        self.assertIn('platinum_earned', types)
+        self.assertIn('review_posted', types)
+        self.assertIn('badge_earned', types)
+
+    def test_trophy_mode_excludes_user_action_events(self):
+        """Trophy mode restricts to platinums/rare/100% only."""
+        from django.test import Client
+
+        self._make_event(event_type='platinum_earned')
+        self._make_event(event_type='rare_trophy_earned')
+        self._make_event(event_type='concept_100_percent')
+        self._make_event(event_type='review_posted')
+        self._make_event(event_type='badge_earned')
+
+        client = Client()
+        response = client.get('/community/feed/?feed_mode=trophy&time_range=24h')
+        types = set(e.event_type for e in response.context['events'])
+        self.assertEqual(types, {'platinum_earned', 'rare_trophy_earned', 'concept_100_percent'})
+
+    def test_invalid_feed_mode_falls_back_to_pursuit(self):
+        """Unknown ?feed_mode values default to pursuit."""
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/feed/?feed_mode=junk')
+        self.assertEqual(response.context['feed_mode'], 'pursuit')
+
+    # ---- event_type chip filtering ------------------------------------
+
+    def test_event_type_chip_filter_narrows_results(self):
+        """A specific event_type chip selection limits the queryset to those types."""
+        from django.test import Client
+
+        self._make_event(event_type='platinum_earned')
+        self._make_event(event_type='review_posted')
+        self._make_event(event_type='badge_earned')
+
+        client = Client()
+        response = client.get('/community/feed/?event_type=platinum_earned&time_range=24h')
+        types = set(e.event_type for e in response.context['events'])
+        self.assertEqual(types, {'platinum_earned'})
+
+    def test_multi_event_type_filter(self):
+        """Multiple event_type values OR together."""
+        from django.test import Client
+
+        self._make_event(event_type='platinum_earned')
+        self._make_event(event_type='review_posted')
+        self._make_event(event_type='badge_earned')
+
+        client = Client()
+        response = client.get(
+            '/community/feed/?event_type=platinum_earned&event_type=review_posted&time_range=24h'
+        )
+        types = set(e.event_type for e in response.context['events'])
+        self.assertEqual(types, {'platinum_earned', 'review_posted'})
+
+    def test_invalid_event_type_for_mode_silently_dropped(self):
+        """Asking for badge_earned while in trophy mode is silently dropped (and the chip set
+        falls back to all valid trophy types). This guards against stale URLs from a mode switch."""
+        from django.test import Client
+
+        self._make_event(event_type='platinum_earned')
+        self._make_event(event_type='badge_earned')
+
+        client = Client()
+        response = client.get(
+            '/community/feed/?feed_mode=trophy&event_type=badge_earned&time_range=24h'
+        )
+        # badge_earned is not a trophy-mode type, so it's filtered out and the
+        # query falls back to all trophy types. Result should include the
+        # platinum but NOT the badge.
+        types = set(e.event_type for e in response.context['events'])
+        self.assertIn('platinum_earned', types)
+        self.assertNotIn('badge_earned', types)
+
+    # ---- HTMX partial template ----------------------------------------
+
+    def test_htmx_request_returns_partial(self):
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/feed/', HTTP_HX_REQUEST='true')
+        self.assertEqual(response.status_code, 200)
+        template_names = [t.name for t in response.templates if t.name]
+        self.assertIn('community/partials/feed_results.html', template_names)
+        # The full page template should NOT be used on HTMX requests
+        self.assertNotIn('community/feed.html', template_names)
+
+    # ---- System event exclusion ---------------------------------------
+
+    def test_day_zero_not_in_pursuit_mode(self):
+        """Day Zero is a system event (not in PURSUIT_FEED_TYPES) and must not appear."""
+        from django.test import Client
+        client = Client()
+        # day_zero exists from migration with occurred_at=now()
+        response = client.get('/community/feed/?time_range=all')
+        types = [e.event_type for e in response.context['events']]
+        self.assertNotIn('day_zero', types)
+
+    def test_day_zero_not_in_trophy_mode(self):
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/feed/?feed_mode=trophy&time_range=all')
+        types = [e.event_type for e in response.context['events']]
+        self.assertNotIn('day_zero', types)
+
+    # ---- Pagination ---------------------------------------------------
+
+    def test_pagination_respects_paginate_by(self):
+        """The page is paginated at 25 items per page."""
+        from django.test import Client
+
+        for i in range(30):
+            self._make_event(
+                event_type='platinum_earned',
+                when=timezone.now() - timedelta(minutes=i),
+            )
+        client = Client()
+        response = client.get('/community/feed/?time_range=24h')
+        self.assertTrue(response.context['is_paginated'])
+        self.assertEqual(len(list(response.context['events'])), 25)
+        # Page 2 should have the remaining 5
+        response2 = client.get('/community/feed/?time_range=24h&page=2')
+        self.assertEqual(len(list(response2.context['events'])), 5)
+
+    # ---- Soft-deleted target filter -----------------------------------
+
+    def test_soft_deleted_review_event_excluded(self):
+        """A review_posted event whose Review is soft-deleted does not appear."""
+        from django.test import Client
+
+        concept = Concept.objects.create(
+            unified_title='Feed Soft Del', concept_id='CUSA30001', slug='feed-soft-del',
+        )
+        ctg = ConceptTrophyGroup.objects.create(
+            concept=concept, trophy_group_id='default', display_name='Base',
+        )
+        review = Review.objects.create(
+            profile=self.profile, concept=concept, concept_trophy_group=ctg,
+            body='A review with enough characters to pass validation cleanly.' * 2,
+            recommended=True,
+        )
+        EventService.record_review_posted(review)
+
+        client = Client()
+        response_before = client.get('/community/feed/?time_range=24h')
+        ids_before = [e.id for e in response_before.context['events']]
+        self.assertEqual(len(ids_before), 1)
+
+        review.is_deleted = True
+        review.save(update_fields=['is_deleted'])
+
+        response_after = client.get('/community/feed/?time_range=24h')
+        ids_after = [e.id for e in response_after.context['events']]
+        self.assertEqual(len(ids_after), 0)
+
+    # ---- Context shape ------------------------------------------------
+
+    def test_context_includes_filter_state_for_template(self):
+        """The view context exposes the active filter state so the form can render checked/active states."""
+        from django.test import Client
+        client = Client()
+        response = client.get('/community/feed/?feed_mode=trophy&time_range=30d&event_type=platinum_earned')
+        self.assertEqual(response.context['feed_mode'], 'trophy')
+        self.assertEqual(response.context['time_range'], '30d')
+        self.assertIn('platinum_earned', response.context['active_event_types'])
+        # valid_event_types is a list of (slug, label) tuples for the trophy mode
+        slugs = [pair[0] for pair in response.context['valid_event_types']]
+        self.assertIn('platinum_earned', slugs)
+        self.assertIn('rare_trophy_earned', slugs)
+        self.assertNotIn('badge_earned', slugs)  # not valid in trophy mode
