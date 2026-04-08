@@ -4723,7 +4723,7 @@ DASHBOARD_MODULES = [
         'provider': provide_trophy_snapshot,
         'requires_premium': False,
         'load_strategy': 'server',
-        'default_order': 1,
+        'default_order': 1,  # at_a_glance #1
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
@@ -4739,7 +4739,7 @@ DASHBOARD_MODULES = [
         'provider': provide_recent_platinums,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 2,
+        'default_order': 3,  # at_a_glance #3
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
@@ -4758,7 +4758,7 @@ DASHBOARD_MODULES = [
         'provider': provide_challenge_hub,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 3,
+        'default_order': 1,  # progress #1
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 300,
@@ -4774,7 +4774,7 @@ DASHBOARD_MODULES = [
         'provider': provide_badge_progress,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 4,
+        'default_order': 1,  # badges #1
         'default_settings': {'limit': 4},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 4,
@@ -4793,7 +4793,7 @@ DASHBOARD_MODULES = [
         'provider': provide_recent_badges,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 5,
+        'default_order': 2,  # badges #2
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
@@ -4812,7 +4812,7 @@ DASHBOARD_MODULES = [
         'provider': provide_recent_activity,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 6,
+        'default_order': 2,  # at_a_glance #2
         'default_settings': {'limit': 8},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 8,
@@ -4831,7 +4831,7 @@ DASHBOARD_MODULES = [
         'provider': provide_monthly_recap_preview,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 7,
+        'default_order': 1,  # highlights #1
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -4847,7 +4847,7 @@ DASHBOARD_MODULES = [
         'provider': provide_quick_settings,
         'requires_premium': False,
         'load_strategy': 'server',
-        'default_order': 8,
+        'default_order': 6,  # at_a_glance #6
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
@@ -4863,7 +4863,7 @@ DASHBOARD_MODULES = [
         'provider': provide_badge_stats,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 9,
+        'default_order': 3,  # badges #3
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -4879,7 +4879,7 @@ DASHBOARD_MODULES = [
         'provider': provide_badge_xp_leaderboard,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 10,
+        'default_order': 4,  # badges #4
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -4895,7 +4895,7 @@ DASHBOARD_MODULES = [
         'provider': provide_country_xp_leaderboard,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 11,
+        'default_order': 5,  # badges #5
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -4911,7 +4911,7 @@ DASHBOARD_MODULES = [
         'provider': provide_az_challenge,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 11,
+        'default_order': 5,  # progress #5
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 300,
@@ -4927,7 +4927,7 @@ DASHBOARD_MODULES = [
         'provider': provide_genre_challenge,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 12,
+        'default_order': 7,  # progress #7
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 300,
@@ -4943,7 +4943,7 @@ DASHBOARD_MODULES = [
         'provider': provide_calendar_challenge,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 13,
+        'default_order': 6,  # progress #6
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 300,
@@ -4959,7 +4959,7 @@ DASHBOARD_MODULES = [
         'provider': provide_completion_milestones,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 14,
+        'default_order': 2,  # progress #2
         'default_settings': {'limit': 6, 'threshold': 90},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
@@ -4980,7 +4980,7 @@ DASHBOARD_MODULES = [
         'provider': provide_milestone_tracker,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 15,
+        'default_order': 3,  # progress #3
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
@@ -4999,7 +4999,7 @@ DASHBOARD_MODULES = [
         'provider': provide_my_reviews,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 16,
+        'default_order': 6,  # highlights #6
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Reviews to show', 'type': 'select', 'default': 6,
@@ -5018,7 +5018,7 @@ DASHBOARD_MODULES = [
         'provider': provide_rarity_showcase,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 17,
+        'default_order': 5,  # highlights #5
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Trophies to show', 'type': 'select', 'default': 6,
@@ -5037,7 +5037,7 @@ DASHBOARD_MODULES = [
         'provider': provide_rate_my_games,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 18,
+        'default_order': 7,  # highlights #7
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5053,7 +5053,7 @@ DASHBOARD_MODULES = [
         'provider': provide_library_health_alerts,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 19,
+        'default_order': 2,  # highlights #2
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Items to show', 'type': 'select', 'default': 6,
@@ -5072,7 +5072,7 @@ DASHBOARD_MODULES = [
         'provider': provide_my_stats_teaser,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 20,
+        'default_order': 4,  # at_a_glance #4
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -5088,7 +5088,7 @@ DASHBOARD_MODULES = [
         'provider': provide_top_developers,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 21,
+        'default_order': 3,  # highlights #3
         'default_settings': {'limit': 8},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Studios per tab', 'type': 'select', 'default': 8,
@@ -5107,7 +5107,7 @@ DASHBOARD_MODULES = [
         'provider': provide_roadmap_recommendations,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 22,
+        'default_order': 4,  # progress #4
         'default_settings': {'limit': 6},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Roadmaps to show', 'type': 'select', 'default': 6,
@@ -5126,7 +5126,7 @@ DASHBOARD_MODULES = [
         'provider': provide_earned_titles,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 23,
+        'default_order': 4,  # highlights #4
         'default_settings': {'limit': 12},
         'configurable_settings': [
             {'key': 'limit', 'label': 'Titles to show', 'type': 'select', 'default': 12,
@@ -5145,7 +5145,7 @@ DASHBOARD_MODULES = [
         'provider': provide_vr_trophy_hunter,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 24,
+        'default_order': 8,  # progress #8
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5161,7 +5161,7 @@ DASHBOARD_MODULES = [
         'provider': provide_trophy_diversity_score,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 25,
+        'default_order': 5,  # at_a_glance #5
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5177,7 +5177,7 @@ DASHBOARD_MODULES = [
         'provider': provide_badge_showcase,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 10,
+        'default_order': 6,  # share #6
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
@@ -5193,7 +5193,7 @@ DASHBOARD_MODULES = [
         'provider': provide_profile_card_preview,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 11,
+        'default_order': 1,  # share #1
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
@@ -5209,7 +5209,7 @@ DASHBOARD_MODULES = [
         'provider': provide_recent_platinum_card,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 12,
+        'default_order': 2,  # share #2
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -5225,7 +5225,7 @@ DASHBOARD_MODULES = [
         'provider': provide_challenge_share_cards,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 13,
+        'default_order': 5,  # share #5
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -5241,7 +5241,7 @@ DASHBOARD_MODULES = [
         'provider': provide_recap_share_card,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 14,
+        'default_order': 3,  # share #3
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5257,7 +5257,7 @@ DASHBOARD_MODULES = [
         'provider': provide_platinum_grid_cta,
         'requires_premium': False,
         'load_strategy': 'lazy',
-        'default_order': 15,
+        'default_order': 4,  # share #4
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 600,
@@ -5274,7 +5274,7 @@ DASHBOARD_MODULES = [
         'provider': provide_advanced_stats,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 2,
+        'default_order': 1,  # premium #1
         'default_settings': {'range': 'all'},
         'configurable_settings': [
             {'key': 'range', 'label': 'Date Range', 'type': 'select', 'default': 'all',
@@ -5299,7 +5299,7 @@ DASHBOARD_MODULES = [
         'provider': provide_premium_settings,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 3,
+        'default_order': 8,  # premium #8
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
@@ -5315,7 +5315,7 @@ DASHBOARD_MODULES = [
         'provider': provide_trophy_visualizations,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 4,
+        'default_order': 2,  # premium #2
         'default_settings': {'year': ''},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5331,7 +5331,7 @@ DASHBOARD_MODULES = [
         'provider': provide_advanced_badge_stats,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 8,
+        'default_order': 4,  # premium #4
         'default_settings': {'range': 'all'},
         'configurable_settings': [
             {'key': 'range', 'label': 'Date Range', 'type': 'select', 'default': 'all',
@@ -5356,7 +5356,7 @@ DASHBOARD_MODULES = [
         'provider': provide_badge_series_overview,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 8,
+        'default_order': 3,  # premium #3
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5372,7 +5372,7 @@ DASHBOARD_MODULES = [
         'provider': provide_badge_visualizations,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 9,
+        'default_order': 5,  # premium #5
         'default_settings': {'year': ''},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5388,7 +5388,7 @@ DASHBOARD_MODULES = [
         'provider': provide_theme_mastery,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 10,
+        'default_order': 6,  # premium #6
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5404,7 +5404,7 @@ DASHBOARD_MODULES = [
         'provider': provide_time_to_beat_insights,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 11,
+        'default_order': 7,  # premium #7
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 1800,
@@ -5420,7 +5420,7 @@ DASHBOARD_MODULES = [
         'provider': provide_profile_badge_showcase_editor,
         'requires_premium': True,
         'load_strategy': 'lazy',
-        'default_order': 12,
+        'default_order': 9,  # premium #9
         'default_settings': {},
         'configurable_settings': [],
         'cache_ttl': 0,
