@@ -49,7 +49,8 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 | `sync_orchestrator_pending:{profile_id}` | String (flag) | 1800s (30m) | Set before orchestrator job runs; prevents stuck-sync false positives |
 | `sync_queued_games:{profile_id}` | Set | 7200s (2h) | `np_communication_id` values already queued this cycle (deduplication) |
 | `pending_sync_complete:{profile_id}` | String (JSON) | 21600s (6h) | `{touched_profilegame_ids, queue_name}` waiting for jobs to drain |
-| `sync_complete_in_progress:{profile_id}` | String (NX lock) | 1800s (30m) | Prevents duplicate concurrent `_job_sync_complete` runs |
+| `sync_complete_in_progress:{profile_id}` | String (NX lock) | 1800s (30m) | Prevents duplicate concurrent `_job_sync_complete` runs. Also read by `ProfileSyncStatusView` to expose `is_finalizing` so the hotbar can show "Finalizing..." once the bar hits 100% |
+| `finalize_phase:{profile_id}` | String | 1800s (30m) | Sub-phase string (`health_check`, `stats_badges`, `milestones`, `challenges`, `finishing`) written by `_job_sync_complete()` at each boundary. Read by `ProfileSyncStatusView` and surfaced as `finalize_phase` so the UI can show "Finalizing... (Badges)" instead of just "Finalizing..." |
 | `stuck_sync_check_lock` | String (NX lock) | 90s | Ensures only one TK instance runs stuck-sync detection per cycle |
 
 **Files**: `trophies/psn_manager.py`, `trophies/token_keeper.py`, `trophies/views/sync_views.py`
@@ -261,9 +262,9 @@ The `redis_admin.py` management command provides targeted flush operations for o
 |------|-------------|
 | `--flush-index` | All homepage keys: `featured_games_*`, `playing_now_*`, `featured_badges_*`, `featured_checklists_*`, `whats_new_*`, `latest_badges_*` |
 | `--flush-game-page {np_id}` | `game:imageurls:{np_id}`, `game:trophygroups:{np_id}`, `game:stats:{np_id}:*` |
-| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
+| `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `finalize_phase:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
 | `--clear-psn-outage` | `site:psn_outage`, `psn:5xx_timestamps` |
-| `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}` |
+| `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}`, `finalize_phase:{id}` |
 | `--flush-dashboard {profile_id}` | `dashboard:mod:{slug}:{id}` for each registered module |
 | `--flush-concept {concept_id}` | Game page keys for all games under the concept |
 | `--flush-community` | `review:recommend:*`, `concept:averages:*:group:*` |

@@ -12,13 +12,13 @@
 <section class="max-w-4xl mx-auto">
     {% include 'partials/breadcrumb.html' %}
 
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 {% if profile.sync_status == 'error' %}border-l-error{% else %}border-l-warning{% endif %} shadow-lg shadow-neutral mb-3">
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 {% if psn_outage %}border-l-info{% elif profile.sync_status == 'error' %}border-l-error{% else %}border-l-warning{% endif %} shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-7">
             <div class="flex flex-col md:flex-row items-center gap-4 md:gap-6">
 
                 {# Avatar with spinner ring while syncing #}
                 <div class="avatar shrink-0">
-                    <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-full ring-2 {% if profile.sync_status == 'error' %}ring-error{% else %}ring-warning animate-pulse{% endif %}">
+                    <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-full ring-2 {% if psn_outage %}ring-info{% elif profile.sync_status == 'error' %}ring-error{% else %}ring-warning animate-pulse{% endif %}">
                         <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}"
                              alt="{{ profile.display_psn_username|default:profile.psn_username }}"
                              class="object-cover" loading="eager" />
@@ -28,44 +28,73 @@
                 <div class="flex-1 min-w-0 text-center md:text-left w-full">
                     <div class="flex items-center gap-2 flex-wrap justify-center md:justify-start">
                         <h1 class="text-xl md:text-2xl lg:text-3xl font-bold">
-                            {% if profile.sync_status == 'error' %}
+                            {% comment %}
+                            PSN outage takes precedence over every other state. While PSN
+                            is down the user can't act on an error anyway (the trigger sync
+                            endpoint returns 503), so showing "Sync paused" with the outage
+                            explanation is more accurate and reassuring than "We hit a snag,
+                            retry from the hotbar" which they literally cannot do.
+                            {% endcomment %}
+                            {% if psn_outage %}
+                                Sync paused
+                            {% elif profile.sync_status == 'error' %}
                                 We hit a snag
+                            {% elif is_initial_sync %}
+                                Setting up your Pursuit...
                             {% else %}
                                 Pulling your trophies...
                             {% endif %}
                         </h1>
                         <span id="home-sync-badge"
-                              class="badge badge-sm md:badge-md {% if profile.sync_status == 'error' %}badge-error{% else %}badge-warning{% endif %} font-bold"
+                              class="badge badge-sm md:badge-md {% if psn_outage %}badge-info{% elif profile.sync_status == 'error' %}badge-error{% else %}badge-warning{% endif %} font-bold"
                               role="status">
-                            {{ profile.sync_status|sync_status_display }}
+                            {% if psn_outage %}PSN Down{% else %}{{ profile.sync_status|sync_status_display }}{% endif %}
                         </span>
+                        {% if profile.sync_status == 'syncing' and not psn_outage %}
+                        {# A3: Elapsed timer. JS counts up from data-elapsed every second. #}
+                        <span id="home-sync-elapsed"
+                              class="text-xs md:text-sm text-base-content/50 font-semibold tabular-nums"
+                              data-elapsed="{{ sync_elapsed_seconds }}"
+                              aria-label="Time elapsed since sync started">
+                            Started just now
+                        </span>
+                        {% endif %}
                     </div>
                     <p class="text-xs md:text-sm text-base-content/60 mt-1 italic pr-1">
-                        {% if profile.sync_status == 'error' %}
+                        {% if psn_outage %}
+                            PlayStation Network is currently unavailable, so we've parked your sync where it is. The moment PSN is back, we'll pick up right where we left off, no action needed on your end.
+                        {% elif profile.sync_status == 'error' %}
                             Something tripped up the last sync. Try again from the hotbar above. If it keeps happening, double-check that your PSN "Gaming History" permission is set to "Anyone".
+                        {% elif is_initial_sync %}
+                            Welcome aboard, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. First syncs are the heaviest one you'll ever do: we're pulling every trophy you've ever popped on PSN. This can take 10-30 minutes depending on the size of your library, but every future refresh will be much faster. Stretch, grab a drink, and we'll have you on the dashboard before you know it.
                         {% else %}
-                            Hang tight, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. We're working through every trophy you've ever popped on PSN. The moment we're done, you'll land straight on your dashboard.
+                            Welcome back, <span class="font-bold text-base-content/80">{{ profile.display_psn_username|default:profile.psn_username }}</span>. Quick refresh in progress, this should only take a moment. The instant we're done, you'll land straight on your dashboard.
                         {% endif %}
                     </p>
 
-                    {% if profile.sync_status == 'syncing' %}
-                    {# Live progress bar (driven server-side; hotbar.js polling keeps the hotbar version live) #}
+                    {% if profile.sync_status == 'syncing' and not psn_outage %}
+                    {% comment %}
+                    Live progress bar. Initial values are server-rendered; hotbar.js dispatches
+                    'platpursuit:sync-progress' on every poll and the listener below keeps these
+                    elements in lockstep with the hotbar's progress bar.
+                    {% endcomment %}
                     <div class="mt-3 md:mt-4">
                         <div class="flex items-center justify-between text-xs md:text-sm mb-1.5">
                             <span class="text-base-content/60 font-semibold">Sync progress</span>
-                            <span class="text-base-content/80 font-bold tabular-nums">
+                            <span id="home-sync-progress-text" class="text-base-content/80 font-bold tabular-nums">
                                 {% if profile.sync_progress_target %}
-                                    {{ profile.sync_progress_value|intcomma }} / {{ profile.sync_progress_target|intcomma }}
+                                    {{ profile.sync_progress_value|intcomma }} / {{ profile.sync_progress_target|intcomma }} tasks
                                 {% else %}
                                     Getting started...
                                 {% endif %}
                             </span>
                         </div>
-                        <progress class="progress progress-warning w-full h-3"
+                        <progress id="home-sync-progress-bar"
+                                  class="progress progress-warning w-full h-3"
                                   value="{{ profile.sync_percentage|floatformat:0|default:0 }}"
                                   max="100"
                                   aria-label="Sync progress"></progress>
-                        <p class="text-[10px] md:text-xs text-base-content/40 mt-1.5">
+                        <p id="home-sync-phase-text" class="text-[10px] md:text-xs text-base-content/40 mt-1.5">
                             Watch the hotbar above for live progress. The second it flips to synced, we'll throw you straight onto your dashboard.
                         </p>
                     </div>
@@ -91,9 +120,10 @@
                 </h2>
                 <span class="text-xs text-base-content/40 italic pr-1 hidden md:inline">Something to chew on while we work.</span>
             </div>
-            <p class="text-sm md:text-base text-base-content/80 leading-relaxed">
+            <p id="did-you-know-text" class="text-sm md:text-base text-base-content/80 leading-relaxed transition-opacity duration-500">
                 {{ did_you_know }}
             </p>
+            {{ did_you_know_facts|json_script:"did-you-know-facts" }}
         </div>
     </div>
 </section>
@@ -181,15 +211,123 @@
 
 {% block js_scripts %}
 <script>
-// Auto-refresh: when hotbar.js detects sync transitioned to 'synced' it dispatches
-// 'platpursuit:sync-status-changed'. Reload so HomeView re-resolves the state and
-// renders the full dashboard.
 (function() {
+    // C1: Auto-refresh on real status transitions. Reload on either 'synced'
+    // (advance to dashboard) OR 'error' (re-render with error styling/messaging).
+    // Both cases let HomeView re-resolve the state instead of leaving the user
+    // staring at a misleading in-progress card.
     document.addEventListener('platpursuit:sync-status-changed', function(e) {
-        if (e.detail && e.detail.status === 'synced') {
+        if (!e.detail) return;
+        if (e.detail.status === 'synced' || e.detail.status === 'error') {
             window.location.reload();
         }
     });
+
+    // ──────────────────────────────────────────────────────────────────
+    // Live progress: hotbar.js dispatches 'platpursuit:sync-progress' on
+    // every successful poll. Mirror its values into the larger progress
+    // card so the two never visibly diverge.
+    // ──────────────────────────────────────────────────────────────────
+    var bar = document.getElementById('home-sync-progress-bar');
+    var text = document.getElementById('home-sync-progress-text');
+    var phaseText = document.getElementById('home-sync-phase-text');
+    var defaultPhaseCopy = phaseText ? phaseText.textContent : '';
+
+    // Friendly labels for the sub-phases _job_sync_complete moves through.
+    // Server emits machine-readable phase names; UI maps them to copy.
+    var FINALIZE_PHASE_LABELS = {
+        health_check: 'Verifying your trophy data with PSN...',
+        stats_badges: 'Updating stats and awarding badges...',
+        milestones:   'Checking milestones...',
+        challenges:   'Updating challenge progress...',
+        finishing:    'Wrapping things up...'
+    };
+
+    if (bar || text || phaseText) {
+        document.addEventListener('platpursuit:sync-progress', function(e) {
+            var data = (e && e.detail) || {};
+            if (bar && data.sync_percentage != null) {
+                bar.value = parseInt(data.sync_percentage, 10) || 0;
+            }
+            if (text) {
+                if (data.is_finalizing) {
+                    // Bar is at 100% but _job_sync_complete is still running
+                    // (health check, badges, milestones, dashboard cache).
+                    text.textContent = 'Finalizing sync...';
+                } else if (data.sync_target) {
+                    var progress = Number(data.sync_progress || 0).toLocaleString('en-US');
+                    var target = Number(data.sync_target).toLocaleString('en-US');
+                    text.textContent = progress + ' / ' + target + ' tasks';
+                } else {
+                    text.textContent = 'Getting started...';
+                }
+            }
+            if (phaseText) {
+                if (data.is_finalizing && data.finalize_phase && FINALIZE_PHASE_LABELS[data.finalize_phase]) {
+                    phaseText.textContent = FINALIZE_PHASE_LABELS[data.finalize_phase];
+                } else {
+                    phaseText.textContent = defaultPhaseCopy;
+                }
+            }
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // A3: Elapsed time counter. The server seeds the initial value via
+    // data-elapsed (in seconds) and we tick once per second. Format ranges:
+    //   0-9s    -> "Started just now"
+    //   10-59s  -> "Started 23s ago"
+    //   1-59m   -> "Started 4m ago"
+    //   1h+     -> "Started 1h 23m ago"
+    // ──────────────────────────────────────────────────────────────────
+    var elapsedEl = document.getElementById('home-sync-elapsed');
+    if (elapsedEl) {
+        var elapsed = parseInt(elapsedEl.dataset.elapsed, 10) || 0;
+
+        function formatElapsed(s) {
+            if (s < 10) return 'Started just now';
+            if (s < 60) return 'Started ' + s + 's ago';
+            var minutes = Math.floor(s / 60);
+            if (minutes < 60) return 'Started ' + minutes + 'm ago';
+            var hours = Math.floor(minutes / 60);
+            var remMin = minutes % 60;
+            return 'Started ' + hours + 'h ' + remMin + 'm ago';
+        }
+
+        function tick() {
+            elapsed += 1;
+            elapsedEl.textContent = formatElapsed(elapsed);
+        }
+
+        elapsedEl.textContent = formatElapsed(elapsed);
+        setInterval(tick, 1000);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // D2: Rotate "Did You Know?" facts every 30 seconds with a quick fade.
+    // Server already shuffled the array per-request, so each visit starts
+    // from a different fact. We just walk the list in order from there.
+    // ──────────────────────────────────────────────────────────────────
+    var factText = document.getElementById('did-you-know-text');
+    var factDataEl = document.getElementById('did-you-know-facts');
+    if (factText && factDataEl) {
+        try {
+            var facts = JSON.parse(factDataEl.textContent);
+            if (Array.isArray(facts) && facts.length > 1) {
+                var idx = 0;  // server already rendered facts[0]
+                setInterval(function() {
+                    idx = (idx + 1) % facts.length;
+                    factText.style.opacity = '0';
+                    setTimeout(function() {
+                        factText.textContent = facts[idx];
+                        factText.style.opacity = '1';
+                    }, 500);
+                }, 30000);
+            }
+        } catch (err) {
+            // Malformed JSON: leave the server-rendered fact in place.
+        }
+    }
 })();
 </script>
 {% endblock %}

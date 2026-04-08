@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 
 from django.contrib.staticfiles.finders import find
 from django.http import HttpResponse
@@ -7,6 +8,7 @@ from django.shortcuts import render
 from django.views.generic import TemplateView, View
 
 from trophies.mixins import ProfileHotbarMixin
+from trophies.util_modules.cache import redis_client
 from trophies.views.dashboard_views import build_dashboard_context, _get_site_heartbeat
 
 logger = logging.getLogger('psn_api')
@@ -144,7 +146,42 @@ class HomeView(ProfileHotbarMixin, TemplateView):
         context['site_heartbeat'] = _get_site_heartbeat()
 
         if state == 'syncing':
-            context['profile'] = self.request.user.profile
-            context['did_you_know'] = random.choice(SYNCING_DID_YOU_KNOW)
+            profile = self.request.user.profile
+            context['profile'] = profile
+
+            # First-time sync detection: a profile that has never completed a
+            # sync has total_trophies == 0. This is the simplest and cheapest
+            # signal we can give to the template to tailor copy ("first time"
+            # vs "quick refresh"). Holds up after unlink/relink because
+            # total_trophies is reset to 0 on relink.
+            context['is_initial_sync'] = (profile.total_trophies == 0)
+
+            # Elapsed time: read sync_started_at:{profile_id} from Redis. The
+            # API endpoint also exposes this so the JS can keep counting up
+            # without re-fetching, but rendering it server-side ensures the
+            # initial paint shows the correct value (no flash of "0 seconds").
+            sync_started_at_raw = redis_client.get(f'sync_started_at:{profile.id}')
+            elapsed_seconds = 0
+            if sync_started_at_raw:
+                try:
+                    started_at = float(
+                        sync_started_at_raw.decode()
+                        if isinstance(sync_started_at_raw, bytes)
+                        else sync_started_at_raw
+                    )
+                    elapsed_seconds = max(0, int(time.time() - started_at))
+                except (ValueError, TypeError):
+                    elapsed_seconds = 0
+            context['sync_elapsed_seconds'] = elapsed_seconds
+
+            # D2: send the full fact list (instead of one randomly chosen) so
+            # the template can rotate them client-side. Shuffle server-side so
+            # different page loads start from a different fact.
+            facts = list(SYNCING_DID_YOU_KNOW)
+            random.shuffle(facts)
+            context['did_you_know_facts'] = facts
+            # Backwards-compat: keep `did_you_know` for the initial render so
+            # the template doesn't need a special "first fact" path.
+            context['did_you_know'] = facts[0]
 
         return context

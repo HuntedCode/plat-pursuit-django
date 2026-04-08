@@ -320,6 +320,24 @@ Several jobs contain the pattern: `game.title_platform[0] if not game.title_plat
 
 Only one `sync_complete` can run per profile at a time, enforced by the `sync_complete_in_progress:{profile_id}` Redis key with `nx=True`. If a second sync_complete is triggered while one is running, the pending data is stored and the duplicate is skipped. The follow-up sync_complete will be triggered by `_complete_job()` when it detects the pending key after the first one finishes.
 
+This same key doubles as a UI-facing "finalizing" signal: `ProfileSyncStatusView` reads it (only when `sync_status == 'syncing'`) and surfaces `is_finalizing: true` in the JSON response. The hotbar uses this to swap "Syncing..." for "Finalizing..." once the bar hits 100% and the post-sync pipeline (health check, badges, milestones, challenges, dashboard cache) is running. The signal also correctly toggles back off if the health check finds a trophy count mismatch and re-queues child jobs, since the `finally` block at the end of `_job_sync_complete()` always clears the key before re-queueing.
+
+### Finalize Sub-Phase Tracking
+
+`_job_sync_complete()` writes a machine-readable phase string to `finalize_phase:{profile_id}` at each meaningful boundary so the UI can show the user what's actually happening instead of an opaque "Finalizing...". The phases (in order) are:
+
+| Phase | Triggered before | Hotbar badge | Home page copy |
+|-------|------------------|--------------|----------------|
+| `health_check` | The `trophy_summary` health check call | `Verifying...` | "Verifying your trophy data with PSN..." |
+| `stats_badges` | `update_plats()`, `update_profilegame_stats()`, `check_profile_badges()` | `Badges...` | "Updating stats and awarding badges..." |
+| `milestones` | `check_all_milestones_for_user()` | `Milestones...` | "Checking milestones..." |
+| `challenges` | A-Z, Calendar, and Genre challenge checks | `Challenges...` | "Updating challenge progress..." |
+| `finishing` | `update_profile_trophy_counts()`, status flip, cache invalidation, sig render | `Wrapping up...` | "Wrapping things up..." |
+
+The key is set with the same 1800s TTL as `sync_complete_in_progress` and is cleared in the same `finally` block so they always travel together. `ProfileSyncStatusView` exposes the current phase as `finalize_phase` in the JSON response (only populated when `is_finalizing` is true). The hotbar shows the phase verb directly in the badge (no "Finalizing..." prefix, since the phase label already implies finalization and the badge is too narrow on mobile to fit the longer string); the home page progress card shows the friendlier copy in its phase text element.
+
+If the health check finds a mismatch and re-queues, the early-return path passes through the same `finally`, so the key is cleared and the phase indicator naturally goes away while the bar drops back below 100%. When the second `sync_complete` runs, the phases tick through again from the top.
+
 ### Deadlock Recovery Behavior
 
 When a deadlock occurs in `sync_complete`, the profile is NOT marked as `error`. Instead, `last_synced` is backdated by 10 days and `sync_status` is set to `synced`. This causes the cron job to pick the profile up for a normal `profile_refresh` on its next run, avoiding the need for manual intervention.
@@ -441,7 +459,8 @@ python manage.py redis_admin --move-whale-jobs
 | `pending_sync_complete:{profile_id}` | string (JSON) | 21600s (6h) | Stores `touched_profilegame_ids` and `queue_name` for deferred sync_complete |
 | `sync_started_at:{profile_id}` | string (timestamp) | 7200s (2h) | When the sync began (for grace period in stuck detection) |
 | `sync_orchestrator_pending:{profile_id}` | string | 1800s (30m) | Flag: orchestrator job queued but not yet executed |
-| `sync_complete_in_progress:{profile_id}` | string | 1800s (30m) | Atomic guard: prevents concurrent sync_complete |
+| `sync_complete_in_progress:{profile_id}` | string | 1800s (30m) | Atomic guard: prevents concurrent sync_complete. Also surfaced via the sync status API as `is_finalizing` so the hotbar can show "Finalizing..." while the post-sync pipeline runs. |
+| `finalize_phase:{profile_id}` | string | 1800s (30m) | Sub-phase string written by `_job_sync_complete()` at each boundary (`health_check`, `stats_badges`, `milestones`, `challenges`, `finishing`). Surfaced via the sync status API as `finalize_phase`; cleared in the same `finally` block as `sync_complete_in_progress`. |
 | `sync_queued_games:{profile_id}` | set | 7200s (2h) | Dedup set of np_communication_ids already queued |
 | `sync_trophies_lock:{np_communication_id}` | string | 120s | Per-game lock to prevent concurrent sync_trophies |
 | `deferred_jobs:{profile_id}` | list | 86400s (1d) | Deferred jobs for later execution |

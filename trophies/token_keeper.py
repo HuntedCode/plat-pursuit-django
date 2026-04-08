@@ -1101,6 +1101,15 @@ class TokenKeeper:
 
     def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
         sync_complete_key = f"sync_complete_in_progress:{profile_id}"
+        # B1: Surface sub-phase progress to the UI. Each phase boundary writes
+        # a machine-readable phase string to this key; ProfileSyncStatusView
+        # exposes it as `finalize_phase` so the hotbar/syncing card can show
+        # "Verifying...", "Updating stats...", etc. instead of just "Finalizing..."
+        # for the entire post-sync window.
+        finalize_phase_key = f"finalize_phase:{profile_id}"
+
+        def _set_phase(phase: str):
+            redis_client.set(finalize_phase_key, phase, ex=1800)
 
         # Atomic guard: only one sync_complete runs at a time per profile.
         # If another is already in progress, re-store pending data and bail out.
@@ -1119,6 +1128,7 @@ class TokenKeeper:
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
             redis_client.delete(sync_complete_key)
+            redis_client.delete(finalize_phase_key)
             return
         job_type = 'sync_complete'
 
@@ -1131,6 +1141,7 @@ class TokenKeeper:
             logger.info(f"Starting complete sync job for {profile_id}...")
 
             # Check profile heatlh
+            _set_phase('health_check')
             logger.info(f"Starting health check for {profile_id}...")
             summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
             tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
@@ -1500,6 +1511,7 @@ class TokenKeeper:
                     profile.save(update_fields=['last_profile_health_check'])
                     return
 
+            _set_phase('stats_badges')
             logger.info(f"Updating plats for {profile_id}...")
             profile.update_plats()
             logger.info(f"Updating profilegame stats for {profile_id}...")
@@ -1515,12 +1527,14 @@ class TokenKeeper:
                 logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
 
             logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+            _set_phase('milestones')
             from trophies.milestone_constants import ALL_CALENDAR_TYPES, ALL_GENRE_TYPES
             # Challenge-specific types are excluded here because they're checked
             # separately by their respective check_*_challenge_progress() functions below
             check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES)
             logger.info(f"Milestones checked for {profile_id} successfully!")
 
+            _set_phase('challenges')
             # Check A-Z challenge progress
             from trophies.services.challenge_service import check_az_challenge_progress, check_calendar_challenge_progress, check_genre_challenge_progress
             try:
@@ -1540,6 +1554,7 @@ class TokenKeeper:
             except Exception:
                 logger.exception(f"Failed to check genre challenge progress for profile {profile_id}")
 
+            _set_phase('finishing')
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
 
@@ -1603,6 +1618,7 @@ class TokenKeeper:
         finally:
             # Always clear the sync_complete in-progress flag, even on error
             redis_client.delete(sync_complete_key)
+            redis_client.delete(finalize_phase_key)
             redis_client.delete(f"sync_started_at:{profile_id}")
 
     def _job_handle_privacy_error(self, profile_id: int):

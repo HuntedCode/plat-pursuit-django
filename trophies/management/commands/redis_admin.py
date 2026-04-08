@@ -235,7 +235,7 @@ class Command(BaseCommand):
                 deleted_count += redis_client.delete(queue)
 
             # Clear profile_jobs:* (all queues), sync locks, orchestrator pending flags, and dedup sets
-            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*']:
+            for pattern in ['profile_jobs:*', 'deferred_jobs:*', 'pending_sync_complete:*', 'sync_started_at:*', 'sync_trophies_lock:*', 'shovelware_concept_lock:*', 'sync_orchestrator_pending:*', 'sync_queued_games:*', 'sync_complete_in_progress:*', 'finalize_phase:*']:
                 matching_keys = redis_client.keys(pattern)
                 if matching_keys:
                     deleted_count += redis_client.delete(*matching_keys)
@@ -268,6 +268,7 @@ class Command(BaseCommand):
             orchestrator_key = f"sync_orchestrator_pending:{profile_id}"
             dedup_key = f"sync_queued_games:{profile_id}"
             sync_complete_key = f"sync_complete_in_progress:{profile_id}"
+            finalize_phase_key = f"finalize_phase:{profile_id}"
             redis_client.delete(lock_key)
             self.stdout.write(self.style.SUCCESS(f"Lock successfully flushed!"))
             redis_client.delete(profile_jobs_key)
@@ -280,6 +281,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Queued games dedup set successfully flushed!"))
             redis_client.delete(sync_complete_key)
             self.stdout.write(self.style.SUCCESS(f"Sync complete in-progress flag successfully flushed!"))
+            redis_client.delete(finalize_phase_key)
+            self.stdout.write(self.style.SUCCESS(f"Finalize phase tracker successfully flushed!"))
         except Exception as e:
             logger.exception(f"Error during complete lock flush: {e}")
             self.stdout.write(self.style.ERROR(f"Error: {e}"))

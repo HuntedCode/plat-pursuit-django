@@ -84,10 +84,30 @@ class ProfileSyncStatusView(LoginRequiredMixin, View):
             'sync_percentage': profile.sync_percentage,
             'seconds_to_next_sync': seconds_to_next_sync,
             'psn_outage': bool(redis_client.get('site:psn_outage')),
+            'is_finalizing': False,
+            'finalize_phase': None,
         }
 
         if profile.sync_status == 'syncing':
-            data['queue_position'] = _get_queue_position(profile.id)
+            # Surface the sync_complete in-progress flag so the UI can show
+            # "Finalizing..." instead of leaving the bar parked at 100% while
+            # _job_sync_complete runs the post-sync pipeline (health check,
+            # badges, milestones, challenges, dashboard cache invalidation).
+            data['is_finalizing'] = bool(redis_client.get(f'sync_complete_in_progress:{profile.id}'))
+
+            if data['is_finalizing']:
+                # Sub-phase string written by _job_sync_complete at each
+                # boundary so the UI can show "Verifying...", "Badges...", etc.
+                # Same lifetime as sync_complete_in_progress, so we only check
+                # for it inside this branch.
+                phase_raw = redis_client.get(f'finalize_phase:{profile.id}')
+                if phase_raw:
+                    data['finalize_phase'] = phase_raw.decode() if isinstance(phase_raw, bytes) else phase_raw
+            else:
+                # Queue position is only meaningful before finalization. Skip
+                # the Redis pipeline lookup once we're past 100% to avoid the
+                # cost (and the UI hides the indicator anyway when finalizing).
+                data['queue_position'] = _get_queue_position(profile.id)
 
         return JsonResponse(data)
 

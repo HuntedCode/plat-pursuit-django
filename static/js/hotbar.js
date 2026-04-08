@@ -54,6 +54,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // becomes 'synced' so the user is automatically advanced to the dashboard.
     let lastSyncStatus = initialStatus;
 
+    // Short labels for the finalize sub-phases. Keys must match the strings
+    // written by `_job_sync_complete()` in trophies/token_keeper.py. The badge
+    // is very tight on mobile (badge-xs), so we display these AS the badge
+    // text (with an ellipsis) rather than wrapping them in "Finalizing... (X)"
+    // which would overflow. The phase verb already implies finalization.
+    const HOTBAR_PHASE_TAGS = {
+        health_check: 'Verifying',
+        stats_badges: 'Badges',
+        milestones:   'Milestones',
+        challenges:   'Challenges',
+        finishing:    'Wrapping up'
+    };
+
     // Toggle state
     const STORAGE_KEY = 'hotbar_hidden';
 
@@ -119,7 +132,19 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (data.sync_status === 'syncing') {
             syncBadge?.classList.remove('badge-success', 'badge-error');
             syncBadge?.classList.add('badge-warning');
-            if (syncBadge) syncBadge.textContent = 'Syncing...';
+            // While the bar is full and _job_sync_complete is running the
+            // post-sync pipeline, swap "Syncing..." for the current phase verb
+            // so the badge moves visibly. We drop the "Finalizing..." prefix
+            // because the phase label already implies finalization and the
+            // badge is too narrow on mobile to fit "Finalizing... (Badges)".
+            if (syncBadge) {
+                if (data.is_finalizing) {
+                    var phaseTag = HOTBAR_PHASE_TAGS[data.finalize_phase];
+                    syncBadge.textContent = phaseTag ? phaseTag + '...' : 'Finalizing...';
+                } else {
+                    syncBadge.textContent = 'Syncing...';
+                }
+            }
             hide(syncBtn);
             show(syncDiv);
 
@@ -127,12 +152,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 syncProgress.value = data.sync_percentage;
             }
             if (syncPercent) {
-                syncPercent.textContent = `${parseInt(data.sync_percentage)}%`;
+                if (data.is_finalizing) {
+                    var pctPhaseTag = HOTBAR_PHASE_TAGS[data.finalize_phase];
+                    syncPercent.textContent = pctPhaseTag ? pctPhaseTag + '...' : 'Finalizing...';
+                } else {
+                    syncPercent.textContent = `${parseInt(data.sync_percentage)}%`;
+                }
             }
 
-            // Queue position indicator
+            // Queue position indicator (hide once finalizing - position no longer meaningful)
             if (syncQueuePosition) {
-                if (data.queue_position != null && data.queue_position > 0) {
+                if (!data.is_finalizing && data.queue_position != null && data.queue_position > 0) {
                     syncQueuePosition.textContent = `~${data.queue_position} ahead`;
                     show(syncQueuePosition);
                 } else {
@@ -141,7 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (syncAnnouncement) {
-                syncAnnouncement.textContent = `Syncing in progress: ${parseInt(data.sync_percentage)}% complete`;
+                if (data.is_finalizing) {
+                    var phaseLabel = HOTBAR_PHASE_TAGS[data.finalize_phase];
+                    syncAnnouncement.textContent = phaseLabel
+                        ? 'Finalizing sync: ' + phaseLabel.toLowerCase()
+                        : 'Finalizing sync, almost done';
+                } else {
+                    syncAnnouncement.textContent = `Syncing in progress: ${parseInt(data.sync_percentage)}% complete`;
+                }
             }
 
         } else {
@@ -161,6 +198,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Notify any listeners (e.g. home/syncing.html) of real transitions.
         maybeDispatchStatusChange(data.sync_status);
+
+        // Broadcast progress on every successful poll so other parts of the
+        // page (e.g. the larger progress card on home/syncing.html) can stay
+        // in lockstep with the hotbar without doing their own polling.
+        document.dispatchEvent(new CustomEvent('platpursuit:sync-progress', {
+            detail: data
+        }));
     }
 
     /**
