@@ -3,6 +3,7 @@ import uuid
 from django.db import models, DatabaseError, IntegrityError, OperationalError
 from django.utils import timezone
 from users.models import CustomUser
+from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.postgres.fields import ArrayField
 from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import RegexValidator, MinValueValidator, MaxValueValidator
@@ -22,6 +23,7 @@ from trophies.util_modules.constants import (
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
     BadgeManager, MilestoneManager, CommentManager, ChecklistManager,
+    EventManager,
 )
 import re
 
@@ -4223,3 +4225,77 @@ class GameFlag(models.Model):
 
     def __str__(self):
         return f"{self.get_flag_type_display()} on {self.game.title_name} by {self.reporter.psn_username}"
+
+
+class Event(models.Model):
+    """Polymorphic activity event for the Pursuit Feed and per-profile activity timelines.
+
+    Events are append-only facts about things that happened in the community: a
+    platinum was earned, a review was posted, a badge was unlocked, a challenge
+    was completed. They power the Community Hub feed preview, the standalone
+    /community/feed/ page, the per-profile Activity tab, and the dashboard's
+    pursuit_activity module — all reading from this single source of truth.
+
+    Schema and ingestion strategy are documented in
+    `docs/architecture/event-system.md`. Event type constants live in
+    `trophies/services/event_service.py`.
+
+    Key constraints:
+    - `profile` is nullable so the system can record `day_zero` and any future
+      system events with no human author.
+    - `occurred_at` is the **historical truth** of when the event happened
+      (e.g. when the trophy was actually earned), NOT when the row was inserted.
+      Sync floods of historical data must not pollute "Last 24h" feed views.
+    - Events are immutable. When a source object is soft-deleted later, the
+      Event row remains and is filtered at read time via
+      `Event.objects.feed_visible()`.
+    """
+
+    profile = models.ForeignKey(
+        'Profile',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='events',
+        help_text='The actor who caused the event. Nullable for system events (Day Zero, etc.).'
+    )
+    event_type = models.CharField(max_length=32)
+    occurred_at = models.DateTimeField(
+        db_index=True,
+        help_text='Historical truth of when the event happened. NEVER use timezone.now() at insert time for trophy events.'
+    )
+
+    # Generic FK target so each event can point at the originating object
+    # (Trophy, Review, UserBadge, Challenge, Concept, etc.) without requiring
+    # per-type FK columns.
+    target_content_type = models.ForeignKey(
+        'contenttypes.ContentType',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    target_object_id = models.PositiveIntegerField(null=True, blank=True)
+    target = GenericForeignKey('target_content_type', 'target_object_id')
+
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Per-event-type structured payload (rare-trophy earn rate, badge tier, coalesced sub-event lists, etc.).'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = EventManager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['-occurred_at'], name='event_occurred_idx'),
+            models.Index(fields=['profile', '-occurred_at'], name='event_profile_idx'),
+            models.Index(fields=['event_type', '-occurred_at'], name='event_type_idx'),
+            models.Index(fields=['target_content_type', 'target_object_id'], name='event_target_idx'),
+        ]
+        ordering = ['-occurred_at']
+
+    def __str__(self):
+        actor = self.profile.psn_username if self.profile else 'system'
+        return f"{self.event_type} by {actor} at {self.occurred_at:%Y-%m-%d %H:%M}"
