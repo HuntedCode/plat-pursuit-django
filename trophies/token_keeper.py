@@ -1537,6 +1537,12 @@ class TokenKeeper:
             logger.info(f"Updating profilegame stats for {profile_id}...")
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
             logger.info(f"Checking profile badges for {profile_id}...")
+            # Pursuit Feed: snapshot a watermark just before badge checks so we
+            # can identify NEWLY-awarded badges below for one coalesced
+            # `badge_earned` event per sync (instead of N per-badge events from
+            # the signal receiver, which short-circuits inside bulk contexts).
+            from trophies.models import UserBadge as _UserBadge
+            badge_watermark = timezone.now()
             check_profile_badges(profile, touched_profilegame_ids)
 
             # Create consolidated badge notifications
@@ -1545,6 +1551,24 @@ class TokenKeeper:
                 DeferredNotificationService.create_badge_notifications(profile_id, profile=profile)
             except Exception as e:
                 logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
+
+            # Pursuit Feed: emit ONE coalesced badge_earned event per profile
+            # per sync, listing every badge awarded during check_profile_badges.
+            # Best-effort: failures log and continue.
+            try:
+                new_badges = list(
+                    _UserBadge.objects
+                    .filter(profile=profile, earned_at__gt=badge_watermark)
+                    .select_related('badge')
+                )
+                if new_badges:
+                    from trophies.services.event_service import EventService
+                    EventService.record_bulk_badges_for_profile(profile, new_badges)
+            except Exception:
+                logger.exception(
+                    "Failed to emit bulk badge_earned event for profile %s",
+                    profile_id,
+                )
 
             logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
             _set_phase('milestones')

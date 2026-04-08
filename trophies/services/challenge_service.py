@@ -122,6 +122,28 @@ def check_az_challenge_progress(profile):
                     'completed_count', 'filled_count', 'updated_at',
                 ])
 
+            # Pursuit Feed: emit ONE coalesced challenge_progress event with
+            # all newly-completed slots, and (if the challenge just crossed
+            # to is_complete) a single challenge_completed event. Recorders
+            # swallow their own errors.
+            try:
+                from trophies.services.event_service import EventService
+                slots_meta = [
+                    {
+                        'letter': s.letter,
+                        'game_id': s.game_id,
+                        'completed_at': s.completed_at,
+                    }
+                    for s in slots_to_update
+                ]
+                EventService.record_challenge_progress(challenge, slots_meta)
+                if challenge.is_complete:
+                    EventService.record_challenge_completed(challenge)
+            except Exception:
+                logger.exception(
+                    f"Failed to emit challenge events for AZ challenge {challenge.id}"
+                )
+
             # Check A-Z milestone progress (return notified for consolidated email)
             from trophies.services.milestone_service import check_all_milestones_for_user
             _, notified = check_all_milestones_for_user(profile, criteria_type='az_progress')
@@ -354,7 +376,12 @@ def _reconcile_calendar_days(challenge, user_tz=None):
     Updates plat_count, game_id, and platinum_earned_at on all days.
 
     Returns:
-        tuple: (newly_filled_count, newly_unfilled_count, to_update_list)
+        tuple: (newly_filled_count, newly_unfilled_count, to_update_list, newly_filled_days)
+        where `newly_filled_days` is the list of CalendarChallengeDay objects
+        that flipped from is_filled=False to True during this reconciliation.
+        Used by sync-path callers to emit Pursuit Feed challenge_progress
+        events. The backfill caller (which runs at challenge creation, before
+        any user activity) ignores it.
     """
     if user_tz is None:
         user_tz = _get_user_tz(challenge.profile)
@@ -392,6 +419,7 @@ def _reconcile_calendar_days(challenge, user_tz=None):
     to_update = []
     newly_filled = 0
     newly_unfilled = 0
+    newly_filled_days = []
 
     for key, day_obj in all_days.items():
         changed = False
@@ -408,6 +436,7 @@ def _reconcile_calendar_days(challenge, user_tz=None):
                 day_obj.game_id = et.trophy.game_id
                 changed = True
                 newly_filled += 1
+                newly_filled_days.append(day_obj)
             else:
                 # Already filled: ensure earliest platinum is still correct
                 if day_obj.platinum_earned_at != et.earned_date_time:
@@ -433,7 +462,7 @@ def _reconcile_calendar_days(challenge, user_tz=None):
         if changed:
             to_update.append(day_obj)
 
-    return newly_filled, newly_unfilled, to_update
+    return newly_filled, newly_unfilled, to_update, newly_filled_days
 
 
 def backfill_calendar_from_history(challenge):
@@ -441,10 +470,15 @@ def backfill_calendar_from_history(challenge):
     Full reconciliation of a calendar challenge against the user's platinum history.
     Fills matching days, unfills phantom days, and corrects plat_count values.
     Respects user timezone. Excludes shovelware and hidden games.
+
+    Backfill runs at challenge creation time, before any user activity, so
+    it does not emit Pursuit Feed events even if it fills many days. The
+    challenge_started event from create_calendar_challenge already covers
+    the "this user just started" signal in the feed.
     """
     now = timezone.now()
 
-    newly_filled, newly_unfilled, to_update = _reconcile_calendar_days(challenge)
+    newly_filled, newly_unfilled, to_update, _ = _reconcile_calendar_days(challenge)
 
     if to_update:
         CalendarChallengeDay.objects.bulk_update(
@@ -491,7 +525,7 @@ def check_calendar_challenge_progress(profile):
         user_tz = _get_user_tz(profile)
         now = timezone.now()
 
-        newly_filled, newly_unfilled, to_update = _reconcile_calendar_days(
+        newly_filled, newly_unfilled, to_update, newly_filled_days = _reconcile_calendar_days(
             challenge, user_tz,
         )
 
@@ -517,6 +551,31 @@ def check_calendar_challenge_progress(profile):
                 challenge.save(update_fields=[
                     'completed_count', 'filled_count', 'updated_at',
                 ])
+
+            # Pursuit Feed: emit ONE coalesced challenge_progress event with
+            # the days that newly filled this sync, and (if the challenge
+            # just crossed to is_complete) a single challenge_completed
+            # event. We intentionally do NOT emit on unfill-only events —
+            # the feed should celebrate forward progress, not regressions.
+            if newly_filled_days:
+                try:
+                    from trophies.services.event_service import EventService
+                    days_meta = [
+                        {
+                            'month': d.month,
+                            'day': d.day,
+                            'game_id': d.game_id,
+                            'completed_at': d.filled_at,
+                        }
+                        for d in newly_filled_days
+                    ]
+                    EventService.record_challenge_progress(challenge, days_meta)
+                    if challenge.is_complete:
+                        EventService.record_challenge_completed(challenge)
+                except Exception:
+                    logger.exception(
+                        f"Failed to emit challenge events for calendar challenge {challenge.id}"
+                    )
         elif to_update:
             # Only plat_counts changed; advance the watermark
             challenge.save(update_fields=['updated_at'])
@@ -801,6 +860,38 @@ def check_genre_challenge_progress(profile):
                 _create_completion_notification(challenge)
             else:
                 challenge.save(update_fields=save_fields)
+
+            # Pursuit Feed: emit ONE coalesced challenge_progress event for
+            # both genre and bonus slots that just completed, plus a
+            # challenge_completed event if the whole challenge crossed to
+            # is_complete this sync. Recorders swallow their own errors.
+            try:
+                from trophies.services.event_service import EventService
+                slots_meta = [
+                    {
+                        'genre': s.genre,
+                        'concept_id': s.concept_id,
+                        'completed_at': s.completed_at,
+                        'is_bonus': False,
+                    }
+                    for s in genre_to_update
+                ] + [
+                    {
+                        'genre': s.concept.unified_title if s.concept else None,
+                        'concept_id': s.concept_id,
+                        'completed_at': s.completed_at,
+                        'is_bonus': True,
+                    }
+                    for s in bonus_to_update
+                ]
+                if slots_meta:
+                    EventService.record_challenge_progress(challenge, slots_meta)
+                if challenge.is_complete:
+                    EventService.record_challenge_completed(challenge)
+            except Exception:
+                logger.exception(
+                    f"Failed to emit challenge events for genre challenge {challenge.id}"
+                )
 
     # Check genre milestone progress after processing all challenges
     from trophies.services.milestone_service import check_all_milestones_for_user

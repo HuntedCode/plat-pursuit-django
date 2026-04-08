@@ -22,12 +22,70 @@ The hybrid ingestion strategy and the routing rules are documented in
 `docs/architecture/event-system.md`. Future contributors adding new event
 sources MUST consult that doc to choose the right ingestion path.
 """
+import datetime as _dt
 import logging
 import threading
 from contextlib import contextmanager
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_metadata(value):
+    """Recursively normalize a metadata payload into JSON-safe primitives.
+
+    Postgres' JSONField encoder cannot serialize raw `datetime` (or `date`)
+    objects, and a failed insert inside an outer `transaction.atomic()` block
+    poisons the whole transaction with a `TransactionManagementError` for
+    every subsequent query. Centralizing the conversion here means future
+    contributors cannot accidentally break a sync by stuffing a datetime into
+    `metadata` somewhere — every recorder runs its payload through this
+    helper before passing it to `Event.objects.create`.
+
+    `datetime` and `date` instances become ISO-8601 strings. Lists and dicts
+    are walked recursively. Everything else is passed through unchanged so
+    primitives, None, ints, floats, strs, and bools are unaffected.
+    """
+    if isinstance(value, dict):
+        return {k: _serialize_metadata(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_metadata(v) for v in value]
+    if isinstance(value, _dt.datetime):
+        return value.isoformat()
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    return value
+
+
+def _create_event_safely(**fields):
+    """Create an Event row inside a savepoint so failures cannot poison the outer transaction.
+
+    Recorders are called from inside service methods that are themselves
+    wrapped in `@transaction.atomic` (e.g. `ReviewService.create_review`)
+    or run during the sync pipeline's atomic blocks. If `Event.objects.create`
+    raises mid-call (bad data, schema drift, DB connection drop), Django
+    marks the OUTER transaction as broken and every subsequent query in
+    that transaction fails — turning a single bad event into a sync-killing
+    cascade. The savepoint isolates the create so its failure rolls back
+    only the event, not the surrounding work.
+
+    Returns the created Event on success, None on failure. Always logs the
+    exception with full stack trace via `logger.exception`.
+    """
+    from django.db import transaction
+    from trophies.models import Event
+
+    # Normalize the metadata payload before the savepoint so a serialization
+    # bug never reaches Postgres in the first place.
+    if 'metadata' in fields:
+        fields['metadata'] = _serialize_metadata(fields['metadata'])
+
+    try:
+        with transaction.atomic():
+            return Event.objects.create(**fields)
+    except Exception:
+        logger.exception("Failed to create Event row (savepoint rolled back)")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -225,13 +283,16 @@ class EventCollector:
         instances = []
         for ev in events_to_flush:
             target_type = ev.get('target_type')
+            # Defensive: run metadata through _serialize_metadata so any
+            # future EventCollector.add_* method that includes a datetime
+            # in its payload doesn't poison the bulk_create transaction.
             instances.append(Event(
                 profile_id=ev['profile_id'],
                 event_type=ev['event_type'],
                 occurred_at=ev['occurred_at'],
                 target_content_type=ct_map.get(target_type) if target_type else None,
                 target_object_id=ev.get('target_id'),
-                metadata=ev.get('metadata', {}),
+                metadata=_serialize_metadata(ev.get('metadata', {})),
             ))
 
         with transaction.atomic():
@@ -302,7 +363,7 @@ class EventService:
         Called from `ReviewService.create_review` after a successful create.
         """
         from django.contrib.contenttypes.models import ContentType
-        from trophies.models import Review, Event
+        from trophies.models import Review
 
         try:
             # `is_dlc_review` distinguishes DLC reviews from base game reviews
@@ -310,7 +371,7 @@ class EventService:
             # but the 'default' trophy_group_id is the base game by convention.
             ctg = review.concept_trophy_group
             is_dlc_review = bool(ctg and ctg.trophy_group_id != 'default')
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=review.profile,
                 event_type='review_posted',
                 occurred_at=review.created_at,
@@ -339,10 +400,10 @@ class EventService:
         """
         from django.contrib.contenttypes.models import ContentType
         from django.utils import timezone
-        from trophies.models import GameList, Event
+        from trophies.models import GameList
 
         try:
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=game_list.profile,
                 event_type='game_list_published',
                 occurred_at=timezone.now(),
@@ -364,10 +425,10 @@ class EventService:
         Called from each challenge create API view (AZ, Calendar, Genre).
         """
         from django.contrib.contenttypes.models import ContentType
-        from trophies.models import Challenge, Event
+        from trophies.models import Challenge
 
         try:
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=challenge.profile,
                 event_type='challenge_started',
                 occurred_at=challenge.created_at,
@@ -394,17 +455,20 @@ class EventService:
         """
         from django.contrib.contenttypes.models import ContentType
         from django.utils import timezone
-        from trophies.models import Challenge, Event
+        from trophies.models import Challenge
 
         if not slots:
             return None
 
         try:
+            # _serialize_metadata converts datetimes to ISO strings, but we
+            # also compute last_slot_completed_at here for convenience and
+            # consistency across the metadata shape.
             last_completed = max(
                 (s.get('completed_at') for s in slots if s.get('completed_at')),
                 default=None,
             )
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=challenge.profile,
                 event_type='challenge_progress',
                 occurred_at=timezone.now(),
@@ -414,7 +478,11 @@ class EventService:
                     'challenge_type': challenge.challenge_type,
                     'slots': slots,
                     'count': len(slots),
-                    'last_slot_completed_at': last_completed.isoformat() if last_completed else None,
+                    'last_slot_completed_at': (
+                        last_completed.isoformat()
+                        if hasattr(last_completed, 'isoformat')
+                        else last_completed
+                    ),
                 },
             )
         except Exception:
@@ -430,10 +498,10 @@ class EventService:
         False-reset path).
         """
         from django.contrib.contenttypes.models import ContentType
-        from trophies.models import Challenge, Event
+        from trophies.models import Challenge
 
         try:
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=challenge.profile,
                 event_type='challenge_completed',
                 occurred_at=challenge.completed_at or challenge.created_at,
@@ -460,10 +528,10 @@ class EventService:
         """
         from django.contrib.contenttypes.models import ContentType
         from django.utils import timezone
-        from trophies.models import Profile, Event
+        from trophies.models import Profile
 
         try:
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=profile,
                 event_type='profile_linked',
                 occurred_at=timezone.now(),
@@ -485,11 +553,11 @@ class EventService:
         `award_milestone_directly` inside the `if created:` block.
         """
         from django.contrib.contenttypes.models import ContentType
-        from trophies.models import UserMilestone, Event
+        from trophies.models import UserMilestone
 
         try:
             milestone = user_milestone.milestone
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=user_milestone.profile,
                 event_type='milestone_hit',
                 occurred_at=user_milestone.earned_at,
@@ -516,11 +584,11 @@ class EventService:
         sync produces one coalesced event per profile, not one per badge.
         """
         from django.contrib.contenttypes.models import ContentType
-        from trophies.models import UserBadge, Event
+        from trophies.models import UserBadge
 
         try:
             badge = user_badge.badge
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=user_badge.profile,
                 event_type='badge_earned',
                 occurred_at=user_badge.earned_at,
@@ -557,7 +625,7 @@ class EventService:
 
         from django.contrib.contenttypes.models import ContentType
         from django.utils import timezone
-        from trophies.models import UserBadge, Event
+        from trophies.models import UserBadge
 
         try:
             badges_meta = []
@@ -577,7 +645,7 @@ class EventService:
                 default=timezone.now(),
             )
 
-            return Event.objects.create(
+            return _create_event_safely(
                 profile=profile,
                 event_type='badge_earned',
                 occurred_at=most_recent,

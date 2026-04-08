@@ -29,7 +29,8 @@ from django.utils import timezone
 
 from trophies.models import (
     Profile, Game, Trophy, Concept, Event, Review, ConceptTrophyGroup,
-    EarnedTrophy,
+    EarnedTrophy, Badge, UserBadge, Milestone, UserMilestone,
+    Challenge, AZChallengeSlot, ProfileGame,
 )
 from trophies.services.event_service import (
     EventCollector,
@@ -898,3 +899,378 @@ class ServiceActionEmitterTest(TestCase):
             _user_events().filter(event_type='profile_linked', profile=self.profile).count(),
             0,
         )
+
+
+class SignalAndBulkEmitterTest(TestCase):
+    """Phase 4: signal-handled and bulk emitters.
+
+    Covers:
+    - The sibling badge_earned signal receiver (fires outside bulk context,
+      short-circuits inside bulk context)
+    - milestone_hit emission via the direct award path
+    - milestone_hit emission via the auto-award path (with mocked criteria)
+    - challenge_progress + challenge_completed for AZ challenges with real
+      ProfileGame.has_plat=True data
+
+    Calendar and genre challenge progress emitters share the same coalescing
+    structure as AZ; they're verified by manual sync against a real PSN
+    profile rather than unit tests, since the test setup for them is
+    significantly heavier.
+    """
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='signal@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='signal_test',
+            account_id='sig-001',
+            is_linked=True,
+        )
+
+    # ---- Badge sibling receiver ---------------------------------------
+
+    def test_badge_signal_emits_outside_bulk_context(self):
+        """A new UserBadge created outside bulk_gamification_update fires the receiver."""
+        badge = Badge.objects.create(
+            name='Solo Badge',
+            series_slug='solo-test',
+            tier=1,
+        )
+        UserBadge.objects.create(profile=self.profile, badge=badge)
+
+        events = _user_events().filter(event_type='badge_earned', profile=self.profile)
+        self.assertEqual(events.count(), 1)
+        ev = events.first()
+        self.assertEqual(ev.metadata['count'], 1)
+        self.assertEqual(ev.metadata['badges'][0]['series_slug'], 'solo-test')
+        self.assertEqual(ev.metadata['badges'][0]['tier'], 1)
+
+    def test_badge_signal_short_circuits_in_bulk_context(self):
+        """Inside bulk_gamification_update, the sibling receiver does NOT emit."""
+        from trophies.services.xp_service import bulk_gamification_update
+
+        badge = Badge.objects.create(
+            name='Bulk Badge',
+            series_slug='bulk-test',
+            tier=2,
+        )
+        with bulk_gamification_update():
+            UserBadge.objects.create(profile=self.profile, badge=badge)
+
+        # The receiver short-circuited; no per-badge event was created.
+        self.assertEqual(
+            _user_events().filter(event_type='badge_earned', profile=self.profile).count(),
+            0,
+        )
+
+    def test_record_bulk_badges_for_profile_emits_coalesced_event(self):
+        """The bulk emitter produces ONE event listing all badges."""
+        b1 = Badge.objects.create(name='B1', series_slug='ser1', tier=1)
+        b2 = Badge.objects.create(name='B2', series_slug='ser2', tier=3)
+        ub1 = UserBadge.objects.create(profile=self.profile, badge=b1)
+        # Reset events from the signal receiver firing on those creates so
+        # we only see the bulk emission.
+        Event.objects.filter(profile=self.profile).delete()
+        ub2 = UserBadge.objects.create(profile=self.profile, badge=b2)
+        Event.objects.filter(profile=self.profile).delete()
+
+        ev = EventService.record_bulk_badges_for_profile(self.profile, [ub1, ub2])
+        self.assertIsNotNone(ev)
+        self.assertEqual(ev.event_type, 'badge_earned')
+        self.assertTrue(ev.metadata['coalesced'])
+        self.assertEqual(ev.metadata['count'], 2)
+        slugs = {b['series_slug'] for b in ev.metadata['badges']}
+        self.assertEqual(slugs, {'ser1', 'ser2'})
+
+    # ---- Milestone emitters --------------------------------------------
+
+    def test_award_milestone_directly_emits_milestone_hit(self):
+        """The direct award path fires record_milestone_hit inside its `if created` block."""
+        from trophies.services.milestone_service import award_milestone_directly
+
+        milestone = Milestone.objects.create(
+            name='Test Direct Milestone',
+            criteria_type='manual',
+            criteria_details={'target': 1},
+        )
+        user_milestone, created = award_milestone_directly(
+            self.profile, milestone, notify=False,
+        )
+        self.assertTrue(created)
+        events = _user_events().filter(event_type='milestone_hit', profile=self.profile)
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().target, user_milestone)
+
+    def test_award_milestone_directly_idempotent_no_double_emit(self):
+        """Re-calling award_milestone_directly does not emit a second event."""
+        from trophies.services.milestone_service import award_milestone_directly
+
+        milestone = Milestone.objects.create(
+            name='Idempotent Milestone',
+            criteria_type='manual',
+            criteria_details={'target': 1},
+        )
+        award_milestone_directly(self.profile, milestone, notify=False)
+        award_milestone_directly(self.profile, milestone, notify=False)
+        self.assertEqual(
+            _user_events().filter(event_type='milestone_hit', profile=self.profile).count(),
+            1,
+        )
+
+    def test_check_and_award_milestone_emits_when_criteria_met(self):
+        """check_and_award_milestone fires the recorder when the handler returns achieved=True."""
+        from trophies.services.milestone_service import check_and_award_milestone
+
+        milestone = Milestone.objects.create(
+            name='Auto Milestone',
+            criteria_type='plat_count',
+            criteria_details={'target': 1},
+        )
+
+        # Mock the milestone handler to force achievement without needing
+        # real platinum data. The handler dict lives at
+        # trophies.milestone_handlers.MILESTONE_HANDLERS and is imported by
+        # check_and_award_milestone via local import; patch the import
+        # location with a stub callable.
+        fake_handler = lambda profile, milestone, _cache=None: {'achieved': True, 'progress': 1}
+        with patch.dict(
+            'trophies.milestone_handlers.MILESTONE_HANDLERS',
+            {'plat_count': fake_handler},
+            clear=False,
+        ):
+            result = check_and_award_milestone(self.profile, milestone)
+
+        self.assertTrue(result['awarded'])
+        self.assertTrue(result['created'])
+        self.assertEqual(
+            _user_events().filter(event_type='milestone_hit', profile=self.profile).count(),
+            1,
+        )
+
+    # ---- AZ Challenge progress + completed -----------------------------
+
+    def test_az_challenge_progress_and_completed_events(self):
+        """check_az_challenge_progress emits coalesced progress + completed events."""
+        from trophies.services.challenge_service import (
+            create_az_challenge, check_az_challenge_progress,
+        )
+
+        # Create a challenge and assign games to all 26 slots so a single
+        # check call drives it from 0/26 to 26/26 in one pass.
+        challenge = create_az_challenge(self.profile, name='Speedrun')
+
+        # Wipe events from create_az_challenge (challenge_started) so the
+        # assertions below see only progress + completed.
+        Event.objects.filter(profile=self.profile).delete()
+
+        concept = Concept.objects.create(
+            unified_title='AZ Test Concept',
+            concept_id='CUSA70001',
+        )
+        # Create 26 games, 26 ProfileGame rows with has_plat=True, and
+        # assign each game to a different letter slot.
+        slots = list(challenge.az_slots.all())
+        for idx, slot in enumerate(slots):
+            game = Game.objects.create(
+                np_communication_id=f'NPWR700{idx:02d}_00',
+                title_name=f'AZ Game {idx}',
+                concept=concept,
+            )
+            ProfileGame.objects.create(
+                profile=self.profile, game=game, has_plat=True,
+            )
+            slot.game = game
+            slot.save(update_fields=['game'])
+
+        check_az_challenge_progress(self.profile)
+
+        # Reload challenge from DB to see the is_complete flip
+        challenge.refresh_from_db()
+        self.assertTrue(challenge.is_complete)
+
+        # ONE coalesced challenge_progress event with all 26 slots in metadata
+        progress_events = _user_events().filter(
+            event_type='challenge_progress', profile=self.profile,
+        )
+        self.assertEqual(progress_events.count(), 1)
+        progress_ev = progress_events.first()
+        self.assertEqual(progress_ev.metadata['count'], 26)
+        self.assertEqual(len(progress_ev.metadata['slots']), 26)
+
+        # ONE challenge_completed event for the crossover
+        completed_events = _user_events().filter(
+            event_type='challenge_completed', profile=self.profile,
+        )
+        self.assertEqual(completed_events.count(), 1)
+        self.assertEqual(completed_events.first().target, challenge)
+
+    def test_az_challenge_partial_progress_no_completed_event(self):
+        """Partial slot completion emits challenge_progress but NOT challenge_completed."""
+        from trophies.services.challenge_service import (
+            create_az_challenge, check_az_challenge_progress,
+        )
+
+        challenge = create_az_challenge(self.profile, name='Slow Burn')
+        Event.objects.filter(profile=self.profile).delete()
+
+        concept = Concept.objects.create(
+            unified_title='Partial Test',
+            concept_id='CUSA70100',
+        )
+
+        # Only assign games to 3 letter slots (not 26)
+        slots = list(challenge.az_slots.all())[:3]
+        for idx, slot in enumerate(slots):
+            game = Game.objects.create(
+                np_communication_id=f'NPWR701{idx:02d}_00',
+                title_name=f'Partial Game {idx}',
+                concept=concept,
+            )
+            ProfileGame.objects.create(
+                profile=self.profile, game=game, has_plat=True,
+            )
+            slot.game = game
+            slot.save(update_fields=['game'])
+
+        check_az_challenge_progress(self.profile)
+
+        challenge.refresh_from_db()
+        self.assertFalse(challenge.is_complete)
+
+        # ONE coalesced progress event with 3 slots
+        progress_events = _user_events().filter(
+            event_type='challenge_progress', profile=self.profile,
+        )
+        self.assertEqual(progress_events.count(), 1)
+        self.assertEqual(progress_events.first().metadata['count'], 3)
+
+        # NO completed event
+        self.assertEqual(
+            _user_events().filter(
+                event_type='challenge_completed', profile=self.profile,
+            ).count(),
+            0,
+        )
+
+
+class MetadataSerializationTest(TestCase):
+    """Regression tests for the datetime-in-metadata bug.
+
+    During Phase 4 development, the AZ challenge progress recorder put raw
+    Python `datetime` objects into the slot dicts via `slot.completed_at`.
+    Postgres' JSONField encoder cannot serialize datetimes, so the insert
+    raised TypeError, which then poisoned the surrounding `transaction.atomic`
+    block (TransactionManagementError on every subsequent query). This is
+    one of the failure modes the plan explicitly tries to prevent: events
+    must NEVER break the calling transaction.
+
+    The fix has two layers:
+    1. `_serialize_metadata` recursively converts datetimes to ISO strings.
+    2. `_create_event_safely` wraps the create in `transaction.atomic()` so
+       a failure rolls back to the savepoint instead of poisoning the outer
+       transaction.
+
+    These tests guard both layers.
+    """
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='meta@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='meta_test',
+            account_id='meta-001',
+            is_linked=True,
+        )
+
+    def test_datetime_in_metadata_serializes_to_iso_string(self):
+        """A datetime nested inside metadata must round-trip as an ISO string."""
+        from trophies.services.event_service import _serialize_metadata
+
+        now = timezone.now()
+        payload = {
+            'top': now,
+            'nested': {'inner': now},
+            'list': [{'completed_at': now}, {'completed_at': now}],
+            'unaffected_str': 'plain',
+            'unaffected_int': 42,
+            'unaffected_none': None,
+        }
+        result = _serialize_metadata(payload)
+        self.assertEqual(result['top'], now.isoformat())
+        self.assertEqual(result['nested']['inner'], now.isoformat())
+        self.assertEqual(result['list'][0]['completed_at'], now.isoformat())
+        self.assertEqual(result['list'][1]['completed_at'], now.isoformat())
+        self.assertEqual(result['unaffected_str'], 'plain')
+        self.assertEqual(result['unaffected_int'], 42)
+        self.assertIsNone(result['unaffected_none'])
+
+    def test_create_event_safely_handles_datetime_in_metadata(self):
+        """_create_event_safely converts datetimes before insert and produces a valid Event."""
+        from trophies.services.event_service import _create_event_safely
+
+        now = timezone.now()
+        ev = _create_event_safely(
+            profile=self.profile,
+            event_type='challenge_progress',
+            occurred_at=now,
+            metadata={
+                'slots': [
+                    {'letter': 'A', 'completed_at': now},
+                ],
+                'last_slot_completed_at': now,
+            },
+        )
+        self.assertIsNotNone(ev)
+        # Metadata should be persisted as JSON-safe primitives
+        self.assertEqual(ev.metadata['slots'][0]['completed_at'], now.isoformat())
+        self.assertEqual(ev.metadata['last_slot_completed_at'], now.isoformat())
+
+    def test_create_event_safely_savepoint_does_not_poison_outer_transaction(self):
+        """A failed _create_event_safely call must not break the surrounding transaction."""
+        from django.db import transaction
+        from trophies.services.event_service import _create_event_safely
+
+        with transaction.atomic():
+            # Force a failure by passing an invalid event_type that exceeds
+            # the CharField max_length=32. The savepoint inside
+            # _create_event_safely should roll back the failed insert
+            # without poisoning the outer transaction.
+            ev = _create_event_safely(
+                profile=self.profile,
+                event_type='x' * 100,  # too long for max_length=32
+                occurred_at=timezone.now(),
+                metadata={},
+            )
+            self.assertIsNone(ev)
+
+            # The outer transaction should still be usable: this query
+            # would raise TransactionManagementError if the savepoint
+            # protection were broken.
+            count = Profile.objects.filter(pk=self.profile.pk).count()
+            self.assertEqual(count, 1)
+
+    def test_record_challenge_progress_with_datetime_slots(self):
+        """End-to-end: record_challenge_progress accepts slot dicts with datetime values."""
+        from trophies.services.challenge_service import create_az_challenge
+
+        challenge = create_az_challenge(self.profile, name='Datetime Slot Test')
+        # Wipe events from create
+        Event.objects.filter(profile=self.profile).delete()
+
+        now = timezone.now()
+        slots_meta = [
+            {'letter': 'A', 'game_id': 1, 'completed_at': now},
+            {'letter': 'B', 'game_id': 2, 'completed_at': now - timedelta(minutes=5)},
+        ]
+        ev = EventService.record_challenge_progress(challenge, slots_meta)
+        self.assertIsNotNone(ev)
+        # Verify the datetime fields are now ISO strings, not raw datetimes
+        self.assertEqual(ev.metadata['slots'][0]['completed_at'], now.isoformat())
+        self.assertIsInstance(ev.metadata['last_slot_completed_at'], str)
+        self.assertEqual(ev.metadata['count'], 2)
