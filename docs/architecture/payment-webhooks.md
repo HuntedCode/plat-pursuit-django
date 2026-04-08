@@ -251,6 +251,6 @@ If the `BILLING.SUBSCRIPTION.CANCELLED` event arrives without a `next_billing_ti
 
 ## Related Docs
 
-- `../community-hub.md` : Community features that premium unlocks
-- `../dashboard.md` : Dashboard system (premium modules)
+- `../features/review-hub.md` : Review Hub features that premium unlocks
+- `../features/dashboard.md` : Dashboard system (premium modules)
 - `../../CLAUDE.md` : Project conventions including `Concept.absorb()` requirements

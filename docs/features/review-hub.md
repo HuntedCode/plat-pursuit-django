@@ -1,12 +1,14 @@
-# Community Reviews & Ratings Hub
+# Review Hub
 
 A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. The system spans three pages: a discovery landing at `/reviews/`, per-game detail pages at `/reviews/<slug>/`, and a Rate My Games wizard at `/reviews/rate-my-games/`.
 
 **Status**: All phases complete and public. Admin moderation views remain staff-only.
 
+> **Naming note**: This system was originally documented as "Community Hub" while the feature was being designed. It is now called the **Review Hub** because PlatPursuit has a separate, dedicated [Community Hub](community-hub.md) at `/community/` that aggregates community-wide signal across many subsystems (Pursuit Feed, leaderboards, top reviewers, active challenges). The Review Hub is one of the destinations the Community Hub links out to.
+
 ## Architecture Overview
 
-The Community Hub extends the existing rating system with full-text reviews, voting, and DLC-aware grouping. The key architectural addition is `ConceptTrophyGroup`, which bridges game-level `TrophyGroup` records to concept-level groups. This enables per-DLC ratings and reviews without modifying the trophy sync pipeline.
+The Review Hub extends the existing rating system with full-text reviews, voting, and DLC-aware grouping. The key architectural addition is `ConceptTrophyGroup`, which bridges game-level `TrophyGroup` records to concept-level groups. This enables per-DLC ratings and reviews without modifying the trophy sync pipeline.
 
 Reviews are separate from ratings by design. Ratings keep the platinum requirement (high barrier, numeric scores). Reviews have a lower barrier (just own the game for base, 1+ earned trophy for DLC) and use thumbs up/down plus markdown text. This separation means a user can rate without reviewing and vice versa.
 

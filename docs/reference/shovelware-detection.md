@@ -57,7 +57,7 @@ The property `game.is_shovelware` returns `True` for both `auto_flagged` and `ma
 
 When a game is marked shovelware:
 - **Challenges**: Excluded from A-Z, Calendar, and Genre challenge game search (cannot be assigned to slots)
-- **Community Hub**: Concepts where ALL games are shovelware are excluded entirely (404)
+- **Review Hub**: Concepts where ALL games are shovelware are excluded entirely (404)
 - **Leaderboards**: Shovelware platinums may be filtered from certain views
 - **Badges**: Shovelware games in badge stages still count (badges evaluate at concept level)
 
@@ -89,5 +89,5 @@ The `update_shovelware` command: resets all auto flags, rebuilds publisher black
 
 - [Token Keeper](../architecture/token-keeper.md): Shovelware evaluation during sync
 - [Challenge Systems](../features/challenge-systems.md): Shovelware exclusion in game search
-- [Community Hub](../features/community-hub.md): Shovelware concept exclusion
+- [Review Hub](../features/review-hub.md): Shovelware concept exclusion
 - [Cron Jobs](../guides/cron-jobs.md): Daily `update_shovelware` schedule

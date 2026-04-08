@@ -21,6 +21,7 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 | [Payment & Webhooks](architecture/payment-webhooks.md) | Stripe + PayPal, subscriptions, donations, webhook routing |
 | [Concept Model](architecture/concept-model.md) | Concept sync, absorb(), default concepts, concept lock |
 | [Data Model](architecture/data-model.md) | Core model relationships and entity overview |
+| [Event System](architecture/event-system.md) | Polymorphic Event model, EventCollector, hybrid ingestion strategy, Pursuit Feed source of truth |
 | [Gamification](architecture/gamification.md) | P.L.A.T.I.N.U.M. stats, XP system, ProfileGamification |
 
 ## Design
@@ -43,7 +44,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Challenge Systems](features/challenge-systems.md) | A-Z, Calendar, and Genre platinum challenges |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
 | [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |
-| [Community Hub](features/community-hub.md) | Reviews, ratings, concept trophy groups |
+| [Community Hub](features/community-hub.md) | Site-wide community destination: Pursuit Feed, leaderboards, top reviewers, active challenges |
 | [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
 | [Easter Eggs](features/easter-eggs.md) | Hidden milestones, titles, and the claim API |
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
@@ -52,6 +53,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
 | [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
+| [Review Hub](features/review-hub.md) | Reviews, ratings, concept trophy groups (formerly "Community Hub") |
 | [Roadmap System](features/roadmap-system.md) | Staff-authored platinum guides on game detail (replaces the legacy checklist system) |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |

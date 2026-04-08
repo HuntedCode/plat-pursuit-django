@@ -2,19 +2,20 @@
 
 The site's navigation consists of four layers: a desktop navbar with mega-menu dropdowns, a mobile drawer (mirroring the navbar), a footer sitemap grid, and cross-links embedded within feature pages. Together they ensure every major feature is discoverable from multiple entry points.
 
+> **IN FLIGHT (Community Hub initiative)**: This document describes the **planned** post-Community-Hub navigation structure. Until Phase 10 of the initiative ships, the live navbar still has the legacy 5-menu structure (Browse / Discover / Community / Earn / My Pursuit). The collapse-to-4 work happens in the final phase of the branch alongside the URL audit. See [the Community Hub feature doc](community-hub.md) for the full initiative scope.
+
 ## Architecture Overview
 
 Navigation is rendered globally via `base.html` includes. The navbar and footer appear on every page. The mobile drawer replaces the navbar below `lg:` (1024px).
 
 The design philosophy: **no feature silos**. Every page should link outward to related features. The Challenge Hub links to Milestones. Badge detail links to Titles. Profile pages surface Challenges and Reviews. This "mesh" of cross-links reduces dead ends and increases feature discovery.
 
-Menus are organized by intent, not by data type:
+Menus are organized by intent, not by data type. The post-initiative shape collapses the previous 5 menus to 4, sharpening the boundaries between community, personal progression, and discovery:
 
-- **Browse**: Finding content (Games, Profiles, Trophies)
-- **Discover**: Exploring metadata (Companies, Genres & Themes, Flagged Games)
-- **Community**: Social features (Discord, Challenges, Game Lists, Review Hub)
-- **Earn**: Progression features (Badges, Milestones, Leaderboards, Titles)
-- **My Pursuit**: Personal hub (Dashboard, Customization, Recap, My Challenges/Lists/Profile/Shareables)
+- **Browse**: Finding content (Games, Profiles, Trophies, Companies, Genres & Themes, Flagged Games). Absorbs the previous Discover menu.
+- **Community**: Both a clickable destination (`/community/`) AND a dropdown. Hub, Pursuit Feed, Challenges, Reviews, Game Lists, Leaderboards, Fundraiser (when active), Discord.
+- **Achievements**: Personal progression features (Badges, Milestones, Titles). Renamed from "Earn". Leaderboards moved out to Community.
+- **My Pursuit**: Personal hub (Customization, Recap, My Challenges, My Lists, My Profile, My Shareables, My Stats, Platinum Grid). The dashboard is the site root `/` and is no longer listed as a menu item.
 
 ## File Map
 
@@ -31,16 +32,18 @@ Menus are organized by intent, not by data type:
 
 ## Desktop Navbar Structure
 
-### Mega-Menus
+### Mega-Menus (planned post-initiative shape)
 
-| Menu | Items | Auth-Gated Items |
-|------|-------|------------------|
-| Discover | Companies, Genres & Themes, Flagged Games | None |
-| Community | Discord, Challenges, Game Lists, Review Hub | Fundraiser (when active) |
-| Earn | Badges, Milestones, Leaderboards, Titles | Titles |
-| My Pursuit | Dashboard, Customization, Monthly Recap, My Challenges, My Lists, My Profile, My Shareables | All (entire menu auth-gated) |
+| Menu | Clickable Label | Items | Auth-Gated Items |
+|------|-----------------|-------|------------------|
+| Browse | No (dropdown only) | Games, Profiles, Trophies, Companies, Genres & Themes, Flagged Games | None |
+| Community | Yes → `/community/` | Community Hub, Pursuit Feed, Challenges, Reviews, Game Lists, Leaderboards, Discord | Fundraiser (when active) |
+| Achievements | No (dropdown only) | Badges, Milestones, Titles | Titles |
+| My Pursuit | No (dropdown only) | Customization, Monthly Recap, My Challenges, My Lists, My Profile, My Shareables, My Stats, Platinum Grid | All (entire menu auth-gated) |
 
-Dashboard is staff-only within My Pursuit.
+The Community menu is the only top-level item with a clickable label that itself navigates somewhere — clicking the label goes to `/community/`, while hovering opens the dropdown of deep links. The first item in the dropdown is always "Community Hub" (which goes to the same place) so users who don't notice the clickable label still have a path in.
+
+The dashboard at `/` is the universal landing page; it does not appear in any menu because every authenticated user lands there by default. Personal stats (`/my-stats/`) and the platinum grid wizard (`/staff/platinum-grid/` → `/tools/...` after the URL audit) are public after Phase 9 of the Community Hub initiative.
 
 ### Avatar Dropdown
 
@@ -54,20 +57,23 @@ Visible at `lg:` (1024px+). At `md:` (768-1023px), the mobile tab bar provides n
 
 Mirrors the navbar exactly. Section headers match mega-menu names. Auth gating is identical.
 
-## Footer Sitemap Grid
+## Footer Sitemap Grid (planned post-initiative shape)
 
-Six-column grid (`grid-cols-3 lg:grid-cols-6`):
+Five-column grid (`grid-cols-2 lg:grid-cols-5`) following the new menu structure:
 
-| Browse | Discover | Community | Earn | My Pursuit / Account | Legal + Connect |
-|--------|----------|-----------|------|---------------------|-----------------|
-| Games | Companies | Discord | Badges | My Profile | Privacy |
-| Profiles | Genres & Themes | Challenges | Milestones | My Challenges | Terms |
-| Trophies | Flagged Games | Game Lists | Leaderboards | My Lists | About |
-| | | Review Hub | Titles* | My Shareables | Contact |
-| | | | | | + Social icons |
+| Browse | Community | Achievements | My Pursuit / Account | Legal + Connect |
+|--------|-----------|--------------|---------------------|-----------------|
+| Games | Community Hub | Badges | My Profile | Privacy |
+| Profiles | Pursuit Feed | Milestones | My Challenges | Terms |
+| Trophies | Challenges | Titles* | My Lists | About |
+| Companies | Reviews | | My Shareables | Contact |
+| Genres & Themes | Game Lists | | My Stats | + Social icons |
+| Flagged Games | Leaderboards | | Platinum Grid | |
+| | Discord | | | |
 
 - Titles link: auth-gated (only shown to authenticated users with a profile)
-- My Pursuit column: shown only for authenticated users with a profile. Guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always).
+- My Pursuit column: shown only for authenticated users with a profile. Guests see "Account" with Sign In / Sign Up links instead (ensures 5 grid children always).
+- The footer shrinks from 6 columns to 5 because Discover collapses into Browse. The grid uses `grid-cols-2 lg:grid-cols-5` to accommodate the new shape.
 
 ## Cross-Linking Inventory
 
@@ -88,7 +94,7 @@ These are the cross-links embedded in feature pages:
 
 ## Profile Page Tabs
 
-The profile page has 6 tabs, switchable via `?tab=` URL parameter:
+The profile page has 7 tabs (planned, Phase 5 of the Community Hub initiative adds the Activity tab), switchable via `?tab=` URL parameter:
 
 | Tab | Context Variable | Paginated | Infinite Scroll | Filters |
 |-----|-----------------|-----------|-----------------|---------|
@@ -98,6 +104,9 @@ The profile page has 6 tabs, switchable via `?tab=` URL parameter:
 | Lists | `profile_lists` | No | No | None |
 | Challenges | `profile_challenges` | No | No | None |
 | Reviews | `profile_reviews` | Yes (50/page) | Yes | None |
+| Activity | `profile_events` | Yes (50/page) | Yes | None (v1) |
+
+The Activity tab reads from the `Event` table filtered by `profile=target_profile`. v1 shows only events authored BY the target user (their badges, reviews, platinums, etc.). It does not show "events about them" (e.g. someone replied to your review).
 
 Tab handlers in `ProfileDetailView`:
 - `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`, `_build_lists_tab_context()`, `_build_challenges_tab_context()`, `_build_reviews_tab_context()`
@@ -138,5 +147,6 @@ Tab handlers in `ProfileDetailView`:
 - [Template Architecture](../reference/template-architecture.md): base.html structure, zoom wrapper
 - [JS Utilities](../reference/js-utilities.md): InfiniteScroller, ZoomScaler
 - [Challenge Systems](challenge-systems.md): Challenge types and detail pages
-- [Community Hub](community-hub.md): Reviews, ratings, review hub
+- [Review Hub](review-hub.md): Reviews, ratings, concept trophy groups
+- [Community Hub](community-hub.md): Site-wide community destination, Pursuit Feed, leaderboards
 - [Badge System](../architecture/badge-system.md): Badges, titles, leaderboards

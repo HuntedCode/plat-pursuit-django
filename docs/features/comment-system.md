@@ -7,7 +7,7 @@ The comment system was originally Platinum Pursuit's discussion layer. It suppor
 - **Game-level and trophy-level comments** were removed when the discussion focus shifted to concept-scoped checklist threads.
 - **Checklist-level comments** were removed when the entire checklist system was replaced by the staff-authored Roadmap system. See [Roadmap System](roadmap-system.md).
 
-Comments on the new Roadmap system were intentionally not built. The Community Hub's [Reviews & Replies](community-hub.md) flow is the supported path for user discussion going forward.
+Comments on the new Roadmap system were intentionally not built. The [Review Hub](review-hub.md)'s Reviews & Replies flow is the supported path for user discussion going forward.
 
 ## What Still Exists
 
@@ -53,7 +53,7 @@ The model tables are preserved as-is. See `trophies/models.py` for the canonical
 
 ## Gotchas and Pitfalls
 
-- **Do not build new comment surfaces against this code.** The pattern is intentionally retired. New discussion features should plug into the Community Hub's Reviews & Replies pipeline (`api/review_views.py`, `ReviewReplyListView` / `ReviewReplyDetailView`) instead.
+- **Do not build new comment surfaces against this code.** The pattern is intentionally retired. New discussion features should plug into the Review Hub's Reviews & Replies pipeline (`api/review_views.py`, `ReviewReplyListView` / `ReviewReplyDetailView`) instead.
 - **`ChecklistService.process_markdown()` is the only thing in `CommentService` that current code still calls outside of moderation.** The review system uses it for markdown rendering. Do not delete the helper while the review system depends on it.
 - **`Concept.absorb()` still walks comment relationships.** When concepts merge, comments, votes, reports, and moderation logs follow the surviving concept. If you delete the comment tables in the future, also strip the corresponding step from `absorb()`.
 - **The `trophy_id` and `checklist_id` columns on `Comment` are dead but still indexed.** Leave them; future migrations can drop them if/when the historical data is fully retired.
@@ -62,5 +62,5 @@ The model tables are preserved as-is. See `trophies/models.py` for the canonical
 ## Related Docs
 
 - [Roadmap System](roadmap-system.md): the user-facing replacement for checklists; intentionally has no comment surface
-- [Community Hub](community-hub.md): the supported pattern for new discussion features (Reviews & Replies)
+- [Review Hub](review-hub.md): the supported pattern for new discussion features (Reviews & Replies)
 - [Concept Model](../architecture/concept-model.md): how `absorb()` keeps legacy comment rows attached to surviving concepts

@@ -169,7 +169,7 @@ All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Da
 
 **Files**: `trophies/views/game_views.py`, `trophies/models.py`
 
-### Community Hub / Ratings
+### Review Hub / Ratings
 
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|

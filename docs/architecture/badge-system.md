@@ -376,4 +376,4 @@ All leaderboard cache keys are set by the `update_leaderboards` management comma
 - [Gamification](gamification.md): Badge XP foundation that's currently active (`ProfileGamification.total_badge_xp`)
 - [Gamification Vision](../design/gamification-vision.md): Full P.L.A.T.I.N.U.M. stats, Jobs system, and future XP expansion plans (unimplemented)
 - [Dashboard](../features/dashboard.md): Dashboard modules that display badge progress and XP
-- [Community Hub](../features/community-hub.md): Reviews and ratings system (feeds into `rating_count` milestones)
+- [Review Hub](../features/review-hub.md): Reviews and ratings system (feeds into `rating_count` milestones)
