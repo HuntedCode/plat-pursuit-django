@@ -1274,3 +1274,203 @@ class MetadataSerializationTest(TestCase):
         self.assertEqual(ev.metadata['slots'][0]['completed_at'], now.isoformat())
         self.assertIsInstance(ev.metadata['last_slot_completed_at'], str)
         self.assertEqual(ev.metadata['count'], 2)
+
+
+class ProfileActivityTabTest(TestCase):
+    """Phase 5: per-user Activity tab on ProfileDetailView.
+
+    Verifies the new 7th profile tab queries events correctly, applies the
+    v1 semantics (events authored BY the target user only), excludes system
+    events (Day Zero) and soft-deleted-target events, and renders the right
+    template on both full-page and AJAX requests.
+    """
+
+    def setUp(self):
+        # Profile.psn_username has max_length=16, so test values must fit.
+        self.user = CustomUser.objects.create_user(
+            email='activity_tab@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='activity_user',  # 13 chars
+            account_id='at-001',
+            is_linked=True,
+        )
+        # A second profile so we can verify the tab does NOT leak other
+        # users' events into this profile's tab.
+        self.other_user = CustomUser.objects.create_user(
+            email='other_activity@example.com',
+            password='testpass123',
+            username='other_activity',
+        )
+        self.other_profile = Profile.objects.create(
+            user=self.other_user,
+            psn_username='other_user',  # 10 chars
+            account_id='at-002',
+            is_linked=True,
+        )
+
+    def _make_event(self, profile, event_type='platinum_earned', when=None):
+        return Event.objects.create(
+            profile=profile,
+            event_type=event_type,
+            occurred_at=when or timezone.now(),
+        )
+
+    # ---- _build_activity_tab_context unit tests ------------------------
+
+    def test_handler_returns_events_for_target_profile(self):
+        """The tab handler returns events whose FK matches the target profile."""
+        from trophies.views.profile_views import ProfileDetailView
+
+        self._make_event(self.profile, 'platinum_earned')
+        self._make_event(self.profile, 'badge_earned')
+        self._make_event(self.profile, 'review_posted')
+
+        view = ProfileDetailView()
+        result = view._build_activity_tab_context(self.profile, per_page=50, page_number=1)
+
+        events = list(result['profile_events'])
+        self.assertEqual(len(events), 3)
+        for ev in events:
+            self.assertEqual(ev.profile, self.profile)
+
+    def test_handler_excludes_other_profiles_events(self):
+        """Events authored by other profiles must NOT appear on this profile's tab."""
+        from trophies.views.profile_views import ProfileDetailView
+
+        self._make_event(self.profile, 'platinum_earned')
+        self._make_event(self.other_profile, 'platinum_earned')
+        self._make_event(self.other_profile, 'review_posted')
+
+        view = ProfileDetailView()
+        result = view._build_activity_tab_context(self.profile, per_page=50, page_number=1)
+
+        events = list(result['profile_events'])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].profile, self.profile)
+
+    def test_handler_excludes_day_zero_system_event(self):
+        """Day Zero (profile=None) is naturally excluded by for_profile()."""
+        from trophies.views.profile_views import ProfileDetailView
+
+        # Day Zero exists from the migration. Create one user-authored event
+        # so we have something to compare against.
+        self._make_event(self.profile, 'platinum_earned')
+
+        view = ProfileDetailView()
+        result = view._build_activity_tab_context(self.profile, per_page=50, page_number=1)
+
+        events = list(result['profile_events'])
+        types = [ev.event_type for ev in events]
+        self.assertEqual(types, ['platinum_earned'])
+        self.assertNotIn('day_zero', types)
+
+    def test_handler_orders_by_occurred_at_descending(self):
+        """Events sort newest-first by occurred_at (NOT created_at)."""
+        from trophies.views.profile_views import ProfileDetailView
+
+        old = self._make_event(
+            self.profile, 'platinum_earned',
+            when=timezone.now() - timedelta(days=10),
+        )
+        recent = self._make_event(
+            self.profile, 'platinum_earned',
+            when=timezone.now() - timedelta(hours=1),
+        )
+
+        view = ProfileDetailView()
+        result = view._build_activity_tab_context(self.profile, per_page=50, page_number=1)
+
+        events = list(result['profile_events'])
+        self.assertEqual(events[0].pk, recent.pk)
+        self.assertEqual(events[1].pk, old.pk)
+
+    def test_handler_paginates(self):
+        """Pagination respects per_page and page_number."""
+        from trophies.views.profile_views import ProfileDetailView
+
+        # Create 5 events
+        for i in range(5):
+            self._make_event(
+                self.profile, 'platinum_earned',
+                when=timezone.now() - timedelta(hours=i),
+            )
+
+        view = ProfileDetailView()
+
+        # Page 1, per_page=2 → should get the 2 newest
+        page1 = list(view._build_activity_tab_context(self.profile, per_page=2, page_number=1)['profile_events'])
+        self.assertEqual(len(page1), 2)
+
+        # Page 3, per_page=2 → should get the last (1 event remaining)
+        page3 = list(view._build_activity_tab_context(self.profile, per_page=2, page_number=3)['profile_events'])
+        self.assertEqual(len(page3), 1)
+
+    def test_handler_filters_soft_deleted_review_targets(self):
+        """A review_posted event whose review is soft-deleted must NOT appear."""
+        from trophies.views.profile_views import ProfileDetailView
+
+        concept = Concept.objects.create(
+            unified_title='Filter Test', concept_id='CUSA60001', slug='filter-test',
+        )
+        ctg = ConceptTrophyGroup.objects.create(
+            concept=concept, trophy_group_id='default', display_name='Base Game',
+        )
+        review = Review.objects.create(
+            profile=self.profile,
+            concept=concept,
+            concept_trophy_group=ctg,
+            body='An honest opinion with enough characters to pass validation.' * 2,
+            recommended=True,
+        )
+        EventService.record_review_posted(review)
+
+        view = ProfileDetailView()
+        before = list(view._build_activity_tab_context(self.profile, per_page=50, page_number=1)['profile_events'])
+        self.assertEqual(len(before), 1)
+
+        # Soft delete the review
+        review.is_deleted = True
+        review.save(update_fields=['is_deleted'])
+
+        after = list(view._build_activity_tab_context(self.profile, per_page=50, page_number=1)['profile_events'])
+        self.assertEqual(len(after), 0)
+
+    # ---- End-to-end view dispatch -------------------------------------
+
+    def test_full_page_request_renders_profile_template_with_activity_context(self):
+        """GET /profiles/<u>/?tab=activity renders the profile template and includes profile_events."""
+        from django.test import Client
+
+        self._make_event(self.profile, 'platinum_earned')
+        self._make_event(self.profile, 'badge_earned')
+
+        client = Client()
+        response = client.get(f'/profiles/{self.profile.psn_username}/?tab=activity')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('profile_events', response.context)
+        self.assertEqual(response.context['current_tab'], 'activity')
+        self.assertEqual(len(list(response.context['profile_events'])), 2)
+        # The activity count annotation should match
+        self.assertEqual(response.context['profile_activity_count'], 2)
+
+    def test_ajax_request_returns_partial_template(self):
+        """An XMLHttpRequest with tab=activity returns the activity_list_items partial."""
+        from django.test import Client
+
+        self._make_event(self.profile, 'platinum_earned')
+
+        client = Client()
+        response = client.get(
+            f'/profiles/{self.profile.psn_username}/?tab=activity&page=1',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        # The partial template should be used (not the full profile_detail.html)
+        template_names = [t.name for t in response.templates if t.name]
+        self.assertIn(
+            'trophies/partials/profile_detail/activity_list_items.html',
+            template_names,
+        )
