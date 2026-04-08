@@ -262,8 +262,12 @@ def get_excluded_game_ids(profile):
 def _create_completion_notification(challenge):
     """Create in-app notification for challenge completion (type-aware)."""
     try:
+        from django.urls import reverse
         from notifications.services.notification_service import NotificationService
 
+        # Resolve action URLs via reverse() so the Phase 10 URL audit (and any
+        # future renames) only need to update plat_pursuit/urls.py — this
+        # function picks up the new path automatically.
         if challenge.challenge_type == 'calendar':
             title = 'Platinum Calendar Complete!'
             message = (
@@ -271,7 +275,7 @@ def _create_completion_notification(challenge):
                 f'"{challenge.name}"! {challenge.total_items}/{challenge.total_items}: '
                 f'welcome to the Hall of Fame!'
             )
-            action_url = f'/challenges/calendar/{challenge.id}/'
+            action_url = reverse('calendar_challenge_detail', kwargs={'challenge_id': challenge.id})
         elif challenge.challenge_type == 'genre':
             title = 'Genre Challenge Complete!'
             message = (
@@ -279,14 +283,14 @@ def _create_completion_notification(challenge):
                 f'{challenge.completed_count}/{challenge.total_items} genres mastered. '
                 f'Welcome to the Hall of Fame!'
             )
-            action_url = f'/challenges/genre/{challenge.id}/'
+            action_url = reverse('genre_challenge_detail', kwargs={'challenge_id': challenge.id})
         else:
             title = 'A-Z Challenge Complete!'
             message = (
                 f'You completed your A-Z Challenge "{challenge.name}"! '
                 f'Welcome to the Hall of Fame!'
             )
-            action_url = f'/challenges/az/{challenge.id}/'
+            action_url = reverse('az_challenge_detail', kwargs={'challenge_id': challenge.id})
 
         NotificationService.create_notification(
             recipient=challenge.profile.user,

@@ -115,7 +115,7 @@ PlatPursuit.ReviewHubLanding = {
             const reviewLabel = r.review_count === 1 ? 'review' : 'reviews';
 
             return `
-                <a href="/reviews/${esc(r.slug)}/" class="flex items-center gap-3 p-3 hover:bg-base-200 focus:bg-base-200 focus:outline-none transition-colors cursor-pointer border-b border-base-300 last:border-b-0">
+                <a href="/community/reviews/${esc(r.slug)}/" class="flex items-center gap-3 p-3 hover:bg-base-200 focus:bg-base-200 focus:outline-none transition-colors cursor-pointer border-b border-base-300 last:border-b-0">
                     ${icon}
                     <div class="flex-1 min-w-0">
                         <p class="text-sm font-bold text-base-content line-clamp-1 pr-1">${esc(r.unified_title)}</p>
@@ -249,7 +249,7 @@ PlatPursuit.ReviewHubLanding = {
         return `
         <div class="card bg-base-100 border-2 border-base-300 shadow-sm">
             <div class="card-body p-4">
-                <a href="/reviews/${esc(concept.slug || '')}/" class="flex items-center gap-3 mb-3 hover:opacity-80 transition-opacity">
+                <a href="/community/reviews/${esc(concept.slug || '')}/" class="flex items-center gap-3 mb-3 hover:opacity-80 transition-opacity">
                     ${conceptIcon}
                     <span class="font-bold text-sm text-primary line-clamp-1 pr-1">${esc(concept.unified_title || '')}</span>
                 </a>
@@ -262,7 +262,7 @@ PlatPursuit.ReviewHubLanding = {
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">
                             <span class="${thumbColor}">${thumbIcon}</span>
-                            <a href="/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
+                            <a href="/community/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
                             ${author.displayed_title ? `<span class="text-xs ${author.is_premium ? 'legendary-title' : 'text-secondary'} italic pr-1 hidden lg:inline">${esc(author.displayed_title)}</span>` : ''}
                             <span class="text-xs text-base-content/40 ml-auto">${esc(timeAgo)}</span>
                         </div>
@@ -276,7 +276,7 @@ PlatPursuit.ReviewHubLanding = {
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                                 ${review.reply_count} replies
                             </span>
-                            <a href="/reviews/${esc(concept.slug || '')}/" class="text-primary hover:underline ml-auto">View in Review Hub</a>
+                            <a href="/community/reviews/${esc(concept.slug || '')}/" class="text-primary hover:underline ml-auto">View in Review Hub</a>
                         </div>
                     </div>
                 </div>

@@ -19,7 +19,10 @@
 
     <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1">
-            <!-- Browse -->
+            {# ── Browse: Games, Profiles, Trophies, Companies, Genres & Themes, Flagged Games ── #}
+            {# Phase 10 of the Community Hub initiative absorbed the previous Discover menu      #}
+            {# (Companies, Genres & Themes, Flagged Games) into Browse so the IA distinguishes   #}
+            {# "find content" (Browse) from "see what the community is doing" (Community).      #}
             <li>
                 <details class="mega-menu-dropdown">
                     <summary>Browse</summary>
@@ -27,29 +30,28 @@
                         <li><a href="{% url 'games_list' %}">Games</a></li>
                         <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
                         <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
-                    </ul>
-                </details>
-            </li>
-            <!-- Discover -->
-            <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Discover</summary>
-                    <ul class="mega-menu-content">
                         <li><a href="{% url 'companies_list' %}">Companies</a></li>
-                        <li><a href="{% url 'genres_list' %}">Genres & Themes</a></li>
+                        <li><a href="{% url 'genres_list' %}">Genres &amp; Themes</a></li>
                         <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
                     </ul>
                 </details>
             </li>
-            <!-- Community -->
+            {# ── Community: Hub, Pursuit Feed, Challenges, Reviews, Game Lists, Leaderboards ── #}
+            {# The "Community Hub" entry is the FIRST item so users who don't notice the         #}
+            {# clickable summary still have a path to the destination page. The Leaderboards     #}
+            {# link relocated here from the old Earn menu — leaderboards are inherently          #}
+            {# competitive/community content.                                                    #}
             <li>
                 <details class="mega-menu-dropdown">
                     <summary>Community</summary>
                     <ul class="mega-menu-content">
-                        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
+                        <li><a href="{% url 'community_hub' %}">Community Hub</a></li>
+                        <li><a href="{% url 'community_feed' %}">Pursuit Feed</a></li>
                         <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
-                        <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
                         <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
+                        <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
+                        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
+                        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
                         {% if active_fundraiser %}
                             <li>
                                 <a href="{% url 'fundraiser' active_fundraiser.slug %}">
@@ -63,22 +65,22 @@
                     </ul>
                 </details>
             </li>
-            <!-- Earn -->
+            {# ── Achievements: Badges, Milestones, Titles ── #}
+            {# Renamed from "Earn" so the boundary between this (personal progression) and     #}
+            {# Community (competitive/social) is sharper. Leaderboards moved out to Community. #}
             <li>
                 <details class="mega-menu-dropdown">
-                    <summary>Earn</summary>
+                    <summary>Achievements</summary>
                     <ul class="mega-menu-content">
                         <li><a href="{% url 'badges_list' %}">Badges</a></li>
                         <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
-                        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
                         {% if user.is_authenticated and user.profile %}
                             <li><a href="{% url 'my_titles' %}">Titles</a></li>
                         {% endif %}
                     </ul>
                 </details>
             </li>
-            {# Guides section hidden during redesign - will be reintroduced later #}
-            <!-- My Pursuit -->
+            {# ── My Pursuit ── #}
             {% if user.is_authenticated and user.profile %}
             <li>
                 <details class="mega-menu-dropdown">

@@ -206,7 +206,7 @@ PlatPursuit.ReviewHub = {
                         </div>
                     </div>
                     <div class="text-center md:text-left lg:text-left">
-                        <a href="/profiles/${esc(author.psn_username || '')}/" class="font-bold text-sm ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline line-clamp-1 pr-1">${esc(author.display_psn_username || author.psn_username || '')}</a>
+                        <a href="/community/profiles/${esc(author.psn_username || '')}/" class="font-bold text-sm ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline line-clamp-1 pr-1">${esc(author.display_psn_username || author.psn_username || '')}</a>
                         ${author.displayed_title ? (author.title_source
                             ? `<div class="tooltip tooltip-bottom cursor-help" data-tip="${esc(author.title_source)}"><p class="text-xs ${author.is_premium ? 'legendary-title' : 'text-secondary'} italic pr-1 line-clamp-1">${esc(author.displayed_title)}</p></div>`
                             : `<p class="text-xs ${author.is_premium ? 'legendary-title' : 'text-secondary'} italic pr-1 line-clamp-1">${esc(author.displayed_title)}</p>`)
@@ -391,7 +391,7 @@ PlatPursuit.ReviewHub = {
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <a href="/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
+                    <a href="/community/profiles/${esc(author.psn_username || '')}/" class="text-sm font-bold ${author.is_premium ? 'legendary-title' : 'text-primary'} hover:underline">${esc(author.display_psn_username || author.psn_username || '')}</a>
                     <span class="text-xs text-base-content/40">${esc(timeAgo)}${editedTag}</span>
                     ${ownActions}
                 </div>

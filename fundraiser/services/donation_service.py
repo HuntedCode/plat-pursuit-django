@@ -20,6 +20,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import F, Sum
+from django.urls import reverse
 from django.utils import timezone
 
 from core.services.email_service import EmailService
@@ -549,7 +550,7 @@ class DonationService:
                         'order': 2,
                     },
                 ],
-                action_url=f'/badges/{claim.series_slug}/',
+                action_url=reverse('badge_detail', kwargs={'series_slug': claim.series_slug}),
                 action_text='View Badge',
                 priority='high',
                 metadata={
@@ -663,7 +664,7 @@ class DonationService:
                         'order': 2,
                     },
                 ],
-                action_url=f'/badges/{claim.series_slug}/',
+                action_url=reverse('badge_detail', kwargs={'series_slug': claim.series_slug}),
                 action_text='View Badge',
                 priority='normal',
                 metadata={

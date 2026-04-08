@@ -3,34 +3,39 @@
     <div class="max-w-7xl mx-auto px-4 md:px-6 pt-6 md:pt-8 lg:pt-10 pb-4 md:pb-6">
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8 lg:gap-6">
 
-            {# Browse #}
+            {# Browse — absorbs old Discover items per Phase 10 IA restructure #}
             <nav aria-label="Browse pages">
                 <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Browse</h3>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'games_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Games</a></li>
                     <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
                     <li><a href="{% url 'trophies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Trophies</a></li>
+                    <li><a href="{% url 'companies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Companies</a></li>
+                    <li><a href="{% url 'genres_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Genres &amp; Themes</a></li>
+                    <li><a href="{% url 'flagged_games' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Flagged Games</a></li>
                 </ul>
             </nav>
 
-            {# Community #}
+            {# Community — Hub + Pursuit Feed first, Leaderboards moved here from old Earn #}
             <nav aria-label="Community pages">
                 <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h3>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Discord</a></li>
+                    <li><a href="{% url 'community_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Community Hub</a></li>
+                    <li><a href="{% url 'community_feed' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Pursuit Feed</a></li>
                     <li><a href="{% url 'challenges_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Challenges</a></li>
-                    <li><a href="{% url 'lists_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Game Lists</a></li>
                     <li><a href="{% url 'reviews_landing' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Review Hub</a></li>
+                    <li><a href="{% url 'lists_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Game Lists</a></li>
+                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Leaderboards</a></li>
+                    <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Discord</a></li>
                 </ul>
             </nav>
 
-            {# Earn #}
-            <nav aria-label="Earn pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Earn</h3>
+            {# Achievements — renamed from Earn, Leaderboards moved out to Community #}
+            <nav aria-label="Achievements pages">
+                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Achievements</h3>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
-                    <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Leaderboards</a></li>
                     {% if user.is_authenticated and user.profile %}
                     <li><a href="{% url 'my_titles' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Titles</a></li>
                     {% endif %}

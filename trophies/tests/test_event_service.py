@@ -1448,7 +1448,7 @@ class ProfileActivityTabTest(TestCase):
         self._make_event(self.profile, 'badge_earned')
 
         client = Client()
-        response = client.get(f'/profiles/{self.profile.psn_username}/?tab=activity')
+        response = client.get(f'/community/profiles/{self.profile.psn_username}/?tab=activity')
         self.assertEqual(response.status_code, 200)
         self.assertIn('profile_events', response.context)
         self.assertEqual(response.context['current_tab'], 'activity')
@@ -1464,7 +1464,7 @@ class ProfileActivityTabTest(TestCase):
 
         client = Client()
         response = client.get(
-            f'/profiles/{self.profile.psn_username}/?tab=activity&page=1',
+            f'/community/profiles/{self.profile.psn_username}/?tab=activity&page=1',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 200)
@@ -2362,17 +2362,17 @@ class StaffUngatedViewsTest(TestCase):
         """Anonymous visitors get the LoginRequiredMixin redirect to /accounts/login/."""
         from django.test import Client
         client = Client()
-        response = client.get('/my-stats/')
+        response = client.get('/tools/stats/')
         self.assertEqual(response.status_code, 302)
         self.assertIn('login', response.url)
 
     def test_my_stats_logged_in_non_staff_returns_200(self):
-        """A normal (non-staff) authenticated user with a profile can access /my-stats/."""
+        """A normal (non-staff) authenticated user with a profile can access /tools/stats/."""
         from django.test import Client
         client = Client()
         client.force_login(self.user)
         self.assertFalse(self.user.is_staff)  # sanity check
-        response = client.get('/my-stats/')
+        response = client.get('/tools/stats/')
         self.assertEqual(response.status_code, 200)
 
     def test_my_stats_logged_in_no_profile_redirects_to_link_psn(self):
@@ -2380,7 +2380,7 @@ class StaffUngatedViewsTest(TestCase):
         from django.test import Client
         client = Client()
         client.force_login(self.no_profile_user)
-        response = client.get('/my-stats/')
+        response = client.get('/tools/stats/')
         self.assertEqual(response.status_code, 302)
         self.assertIn('link', response.url)
 
@@ -2389,7 +2389,7 @@ class StaffUngatedViewsTest(TestCase):
     def test_platinum_grid_anonymous_redirects_to_login(self):
         from django.test import Client
         client = Client()
-        response = client.get('/staff/platinum-grid/')
+        response = client.get('/tools/platinum-grid/')
         self.assertEqual(response.status_code, 302)
         self.assertIn('login', response.url)
 
@@ -2398,7 +2398,7 @@ class StaffUngatedViewsTest(TestCase):
         client = Client()
         client.force_login(self.user)
         self.assertFalse(self.user.is_staff)
-        response = client.get('/staff/platinum-grid/')
+        response = client.get('/tools/platinum-grid/')
         self.assertEqual(response.status_code, 200)
 
     def test_platinum_grid_logged_in_no_profile_redirects_to_link_psn(self):
@@ -2406,6 +2406,177 @@ class StaffUngatedViewsTest(TestCase):
         from django.test import Client
         client = Client()
         client.force_login(self.no_profile_user)
-        response = client.get('/staff/platinum-grid/')
+        response = client.get('/tools/platinum-grid/')
         self.assertEqual(response.status_code, 302)
         self.assertIn('link', response.url)
+
+
+class LegacyURLRedirectTest(TestCase):
+    """Phase 10: every renamed URL must 301-redirect from its legacy path
+    to the new canonical path.
+
+    These tests are the safety net for the URL audit. Without them, a
+    silent rename (or a missing redirect entry) would break external links,
+    bookmarks, and search engine indices. Each test exercises one renamed
+    route by hitting the OLD path with a real client and asserting the
+    Location header points at the NEW canonical path.
+
+    Test parameterization is intentional: rather than one big test with
+    a tuple of (old, new), each renamed surface gets its own named test
+    so failures point at the exact rename that broke.
+    """
+
+    def setUp(self):
+        # A linked profile so badge_detail_with_profile and trophy_case
+        # paths have a real psn_username to substitute in.
+        self.user = CustomUser.objects.create_user(
+            email='redirect@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='redir_user',  # 10 chars
+            account_id='red-001',
+            is_linked=True,
+        )
+
+    def _assert_redirect(self, old_path, new_path):
+        """Assert that GET on old_path returns 301 with Location=new_path."""
+        from django.test import Client
+        client = Client()
+        response = client.get(old_path)
+        self.assertEqual(
+            response.status_code, 301,
+            msg=f"Expected 301 from {old_path}, got {response.status_code}",
+        )
+        self.assertEqual(
+            response.url, new_path,
+            msg=f"Expected redirect to {new_path}, got {response.url}",
+        )
+
+    # ---- Profiles → /community/profiles/ -------------------------------
+
+    def test_profiles_list_redirects(self):
+        self._assert_redirect('/profiles/', '/community/profiles/')
+
+    def test_profile_detail_redirects(self):
+        self._assert_redirect(
+            f'/profiles/{self.profile.psn_username}/',
+            f'/community/profiles/{self.profile.psn_username}/',
+        )
+
+    def test_trophy_case_redirects(self):
+        self._assert_redirect(
+            f'/profiles/{self.profile.psn_username}/trophy-case/',
+            f'/community/profiles/{self.profile.psn_username}/trophy-case/',
+        )
+
+    def test_profile_redirect_preserves_query_string(self):
+        """The query_string=True flag means ?tab=activity etc. survive the redirect."""
+        self._assert_redirect(
+            f'/profiles/{self.profile.psn_username}/?tab=activity',
+            f'/community/profiles/{self.profile.psn_username}/?tab=activity',
+        )
+
+    # ---- Achievements (badges, milestones, titles) ---------------------
+
+    def test_badges_list_redirects(self):
+        self._assert_redirect('/badges/', '/achievements/badges/')
+
+    def test_badge_detail_redirects(self):
+        self._assert_redirect('/badges/horror/', '/achievements/badges/horror/')
+
+    def test_milestones_list_redirects(self):
+        self._assert_redirect('/milestones/', '/achievements/milestones/')
+
+    def test_my_titles_redirects(self):
+        self._assert_redirect('/my-titles/', '/achievements/titles/')
+
+    # ---- Tools (Phase 9 ungated views) ---------------------------------
+
+    def test_my_stats_redirects(self):
+        self._assert_redirect('/my-stats/', '/tools/stats/')
+
+    def test_platinum_grid_redirects(self):
+        self._assert_redirect('/staff/platinum-grid/', '/tools/platinum-grid/')
+
+    # ---- Leaderboards → /community/leaderboards/ -----------------------
+
+    def test_leaderboard_badges_redirects(self):
+        self._assert_redirect(
+            '/leaderboard/badges/',
+            '/community/leaderboards/badges/',
+        )
+
+    def test_leaderboard_badges_series_redirects(self):
+        self._assert_redirect(
+            '/leaderboard/badges/horror/',
+            '/community/leaderboards/badges/horror/',
+        )
+
+    # ---- Game Lists → /community/lists/ --------------------------------
+
+    def test_lists_browse_redirects(self):
+        self._assert_redirect('/lists/', '/community/lists/')
+
+    def test_list_create_redirects(self):
+        self._assert_redirect('/lists/create/', '/community/lists/create/')
+
+    def test_list_detail_redirects(self):
+        self._assert_redirect('/lists/42/', '/community/lists/42/')
+
+    def test_list_edit_redirects(self):
+        self._assert_redirect('/lists/42/edit/', '/community/lists/42/edit/')
+
+    # ---- Challenges → /community/challenges/ ---------------------------
+
+    def test_challenges_browse_redirects(self):
+        self._assert_redirect('/challenges/', '/community/challenges/')
+
+    def test_az_challenge_detail_redirects(self):
+        self._assert_redirect(
+            '/challenges/az/42/',
+            '/community/challenges/az/42/',
+        )
+
+    def test_calendar_challenge_detail_redirects(self):
+        self._assert_redirect(
+            '/challenges/calendar/42/',
+            '/community/challenges/calendar/42/',
+        )
+
+    def test_genre_challenge_detail_redirects(self):
+        self._assert_redirect(
+            '/challenges/genre/42/',
+            '/community/challenges/genre/42/',
+        )
+
+    # ---- Reviews → /community/reviews/ ---------------------------------
+
+    def test_reviews_landing_redirects(self):
+        self._assert_redirect('/reviews/', '/community/reviews/')
+
+    def test_rate_my_games_redirects(self):
+        self._assert_redirect(
+            '/reviews/rate-my-games/',
+            '/community/reviews/rate-my-games/',
+        )
+
+    def test_review_hub_detail_redirects(self):
+        self._assert_redirect(
+            '/reviews/some-game-slug/',
+            '/community/reviews/some-game-slug/',
+        )
+
+    # ---- Negative cases: paths that should NOT redirect ----------------
+
+    def test_canonical_community_paths_return_200_not_redirect(self):
+        """Hitting the new canonical paths directly should NOT cycle back through a redirect."""
+        from django.test import Client
+        client = Client()
+        # /community/ is the hub itself
+        response = client.get('/community/')
+        self.assertEqual(response.status_code, 200)
+        # /community/feed/ is the standalone feed page
+        response = client.get('/community/feed/')
+        self.assertEqual(response.status_code, 200)
