@@ -36,6 +36,14 @@
         <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
     </ul>
 
+    <!-- Discover -->
+    <div class="more-drawer-section-title">Discover</div>
+    <ul class="menu menu-sm px-2">
+        <li><a href="{% url 'companies_list' %}">Companies</a></li>
+        <li><a href="{% url 'genres_list' %}">Genres & Themes</a></li>
+        <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
+    </ul>
+
     <!-- Community -->
     <div class="more-drawer-section-title">Community</div>
     <ul class="menu menu-sm px-2">
@@ -66,14 +74,7 @@
         {% endif %}
     </ul>
 
-    <!-- Guides -->
-    <div class="more-drawer-section-title">Guides</div>
-    <ul class="menu menu-sm px-2">
-        <li><a href="{% url 'guides_browse' %}">Guide Hub</a></li>
-        {% if user.is_authenticated and user.profile %}
-            <li><a href="{% url 'my_guides' %}">My Guides</a></li>
-        {% endif %}
-    </ul>
+    {# Guides section hidden during redesign #}
 
     <!-- My Pursuit -->
     {% if user.is_authenticated and user.profile %}
@@ -84,7 +85,6 @@
         {% endif %}
         <li><a href="{% url 'settings' %}">Customization</a></li>
         <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-        <li><a href="{% url 'my_guides' %}">My Guides</a></li>
         <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
         <li><a href="{% url 'my_lists' %}">My Lists</a></li>
         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>

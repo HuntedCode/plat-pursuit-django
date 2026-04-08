@@ -13,25 +13,27 @@
      data-user-review-id="{{ user_review.id|default:'' }}"
      data-guidelines-agreed="{{ guidelines_agreed|yesno:'true,false' }}">
 
-    <section class="section-container w-full">
-        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
+    <div class="mb-3">
         {% include 'trophies/partials/reviews/hub_header.html' %}
+    </div>
 
-        {% if trophy_groups|length > 1 %}
+    {% if trophy_groups|length > 1 %}
+        <div class="mb-3">
             {% include 'trophies/partials/reviews/tab_bar.html' %}
-        {% endif %}
-    </section>
-
-    {% if trophy_list %}
-        <section class="mt-4">
-            {% include 'trophies/partials/reviews/trophy_strip.html' %}
-        </section>
+        </div>
     {% endif %}
 
-    <div class="flex flex-col md:flex-col lg:flex-row gap-4 mt-4 items-start">
+    {% if trophy_list %}
+        <div class="mb-3">
+            {% include 'trophies/partials/reviews/trophy_strip.html' %}
+        </div>
+    {% endif %}
+
+    <div class="flex flex-col lg:flex-row gap-3 items-start">
         {# SIDEBAR #}
-        <aside class="w-full md:w-full lg:w-1/3 flex flex-col gap-4">
+        <aside class="w-full lg:w-1/3 flex flex-col gap-4">
             {% include 'trophies/partials/reviews/recommendation_banner.html' %}
             {% if user.is_authenticated %}
                 {% include 'trophies/partials/reviews/user_rating_panel.html' %}
@@ -40,11 +42,11 @@
         </aside>
 
         {# MAIN CONTENT #}
-        <main class="w-full md:w-full lg:w-2/3 flex flex-col gap-4">
+        <main class="w-full lg:w-2/3 flex flex-col gap-4">
             {% if user.is_authenticated %}
                 {% if needs_guidelines and not user_review %}
                     {# Guidelines are the only barrier to reviewing #}
-                    <div class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral">
+                    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
                         <div class="card-body p-4 text-center">
                             <p class="text-sm text-base-content/70 mb-3">Before you can write a review, please read and agree to our community guidelines.</p>
                             <div class="flex justify-center gap-2">
@@ -93,7 +95,6 @@
 <script src="{% static 'js/review-hub.js' %}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        PlatPursuit.ZoomScaler.init();
         PlatPursuit.ReviewHub.init({
             conceptId: {{ concept.id }},
             activeGroup: '{{ active_group_id }}',

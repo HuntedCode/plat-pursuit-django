@@ -1,172 +1,66 @@
-# Comment System
+# Comment System (Legacy / Read-Only)
 
-The comment system lets users discuss checklists across the platform. Comments are organized at the Concept level so discussions carry across regional and platform stacks of the same game. Users can upvote comments, report rule violations, and staff can moderate through a dedicated dashboard. All user-facing text is sanitized with bleach and checked against a database-managed banned word list before being stored.
+> **Status: Legacy.** The comment system no longer accepts new comments. Historical data is preserved in the database, the moderation pipeline is still wired for staff cleanup, and a small set of API endpoints remain so existing comments can be voted on, reported, edited, or deleted by their owners. There is no creation path on any current page.
 
-Note: Game-level and trophy-level comments were removed. Comments now only exist on checklists. Historical concept-level and trophy-level comments remain in the database but are no longer displayed or creatable.
+The comment system was originally Platinum Pursuit's discussion layer. It supported concept-level discussion, then trophy-level, then checklist-level. Each surface was deprecated in turn:
 
-## Architecture Overview
+- **Game-level and trophy-level comments** were removed when the discussion focus shifted to concept-scoped checklist threads.
+- **Checklist-level comments** were removed when the entire checklist system was replaced by the staff-authored Roadmap system. See [Roadmap System](roadmap-system.md).
 
-Comments are Concept-scoped rather than Game-scoped. This means a discussion about "Elden Ring" is shared across the PS4, PS5, and regional editions rather than being fragmented. Comments target a specific checklist (identified by `checklist_id`) within a Concept.
+Comments on the new Roadmap system were intentionally not built. The Community Hub's [Reviews & Replies](community-hub.md) flow is the supported path for user discussion going forward.
 
-Threading is implemented via a self-referential foreign key (`parent`). Depth is denormalized on each comment (0 = top-level, 1 = first reply, etc.) and capped at 10 levels to prevent deeply nested threads that are hard to read and expensive to render. Upvote counts are also denormalized on the Comment model for efficient sorting without JOINs.
+## What Still Exists
 
-The moderation pipeline is separate from the CRUD path. Reports go into a queue (`CommentReport`), staff review them through the moderation dashboard (`/staff/moderation/`), and every moderator action is recorded in `ModerationLog` with the original comment body preserved for accountability and appeals.
+- The `Comment`, `CommentVote`, `CommentReport`, `ModerationLog`, and `BannedWord` model tables remain populated with historical data.
+- `CommentService` still exposes vote, report, edit, and soft-delete operations for existing comments.
+- The staff moderation dashboard at `/staff/moderation/` still surfaces pending `CommentReport` rows so historical content can be cleaned up.
+- `Concept.absorb()` still migrates legacy comments during concept reassignment so historical rows survive concept merges (see [Concept Model](../architecture/concept-model.md)).
 
-Sanitization happens in two layers. First, bleach strips all HTML tags (zero-tolerance: no tags allowed at all). Second, the banned word filter runs a regex-based check with configurable word boundary matching. Both layers run on create and edit, so existing comments cannot be edited to bypass the filter.
+## What Was Removed
 
-## File Map
+- Comment **list** and **create** endpoints (no surface in the UI calls them).
+- The `comments.js` client and the comment composer UI.
+- The cache key `comments:concept:{id}:checklist:{checklist_id}` (no fresh writes; reads are no longer happening).
+- The `BannedWord` filter is still wired into `CommentService.create_comment()`, but since no creation path exists, the filter primarily survives for the markdown filters used by the review system.
 
-| File | Purpose |
-|------|---------|
-| `trophies/services/comment_service.py` | All business logic: CRUD, voting, reporting, sanitization, banned word checking |
-| `trophies/models.py` (Comment) | Comment model with threading, soft delete, denormalized depth/upvotes |
-| `trophies/models.py` (CommentVote) | One-vote-per-profile-per-comment tracking |
-| `trophies/models.py` (CommentReport) | User-submitted reports with reason codes and status tracking |
-| `trophies/models.py` (ModerationLog) | Audit trail for all moderator actions |
-| `trophies/models.py` (BannedWord) | Staff-managed word filter list |
-| `api/views.py` | REST endpoints: CommentListView, CommentCreateView, CommentDetailView, CommentVoteView, CommentReportView |
-| `trophies/views/admin_views.py` | CommentModerationView (dashboard), ModerationActionView (action handler) |
-| `static/js/comments.js` | Client-side comment UI (CommentSystem class) |
-
-## Data Model
-
-### Comment
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `concept` | FK to Concept | CASCADE. The game concept this comment belongs to |
-| `trophy_id` | IntegerField (nullable) | Legacy field. No longer used for new comments |
-| `checklist_id` | IntegerField (nullable) | Checklist ID within concept |
-| `profile` | FK to Profile | CASCADE. Author |
-| `parent` | FK to self (nullable) | CASCADE. Enables threading |
-| `depth` | PositiveIntegerField | Denormalized: auto-calculated from parent chain on save |
-| `body` | TextField (max 2000) | Sanitized plain text |
-| `upvote_count` | PositiveIntegerField | Denormalized vote tally for sort performance |
-| `is_edited` | BooleanField | Set to True on any edit |
-| `is_deleted` | BooleanField | Soft delete flag |
-| `deleted_at` | DateTimeField (nullable) | When soft deletion occurred |
-
-### CommentVote
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `comment` | FK to Comment | CASCADE |
-| `profile` | FK to Profile | CASCADE |
-
-Unique constraint on `(comment, profile)`.
-
-### CommentReport
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `comment` | FK to Comment | CASCADE |
-| `reporter` | FK to Profile | CASCADE |
-| `reason` | CharField | One of: spam, harassment, inappropriate, misinformation, other |
-| `status` | CharField | One of: pending, reviewed, dismissed, action_taken |
-| `details` | TextField | Capped at 500 characters |
-| `reviewed_by` | FK to CustomUser (nullable) | Staff member who handled the report |
-
-### ModerationLog
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `moderator` | FK to CustomUser | PROTECT. Never delete moderator history |
-| `action_type` | CharField | delete, restore, dismiss_report, approve_comment, warning_issued, bulk_delete, report_reviewed |
-| `comment` | FK to Comment (nullable) | SET_NULL. Preserved via snapshot fields even if comment is hard-deleted |
-| `comment_id_snapshot` | IntegerField | Preserves comment ID regardless of deletion |
-| `comment_author` | FK to Profile (nullable) | SET_NULL |
-| `original_body` | TextField | Full original text at time of moderation |
-| `concept` | FK to Concept (nullable) | SET_NULL |
-| `trophy_id` | IntegerField (nullable) | Legacy: trophy context if applicable |
-| `related_report` | FK to CommentReport (nullable) | SET_NULL |
-| `reason` | TextField | Moderator's stated reason |
-| `ip_address` | GenericIPAddressField (nullable) | Captured from request for audit |
-
-### BannedWord
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `word` | CharField (unique) | Case-insensitive match target |
-| `is_active` | BooleanField | Toggle without deleting |
-| `use_word_boundaries` | BooleanField | True: regex `\bword\b` matching. False: substring matching |
-| `added_by` | FK to CustomUser (nullable) | Staff member who added it |
-
-## Key Flows
-
-### Creating a Comment
-
-1. Client POSTs to `/api/v1/comments/concept/<concept_id>/checklist/<checklist_id>/create/` with `body` and optional `parent_id`
-2. `CommentService.can_comment(profile)` checks: logged in, PSN linked, community guidelines agreed
-3. `sanitize_text()` strips all HTML via bleach, then unescapes entities back to plain text
-4. Body length validated (0 < length <= 2000)
-5. `check_banned_words()` loads active words from cache (5-minute TTL), checks each against the body using word boundaries or substring matching
-6. If replying: validate parent exists, belongs to same concept/checklist, and depth < 10
-7. Comment created in a transaction. Depth auto-calculated in `save()` from parent
-8. Cache invalidated for the concept/checklist scope
-9. API returns rendered HTML partial for the new comment
-
-### Voting on a Comment
-
-1. Client POSTs to `/api/v1/comments/<comment_id>/vote/`
-2. `CommentService.can_interact(profile)` checks: logged in, PSN linked
-3. Cannot vote on own comments or deleted comments
-4. Toggle logic: if existing `CommentVote` found, delete it and decrement `upvote_count` via `F()` expression. Otherwise create vote and increment
-5. Uses `refresh_from_db()` after F-expression update to return accurate count
-
-### Soft Deleting a Comment
-
-1. Owner can delete own comment. Staff can delete any comment
-2. `Comment.soft_delete()` preserves original body in `ModerationLog` (if moderator action), then overwrites body with `[deleted]`
-3. Sets `is_deleted=True` and `deleted_at=now()`
-4. Thread structure preserved: replies still reference the deleted parent. UI shows "[deleted]" placeholder
-5. If moderator: creates ModerationLog entry with original body, IP address, and reason
-
-### Reporting a Comment
-
-1. Client POSTs to `/api/v1/comments/<comment_id>/report/` with `reason` and optional `details`
-2. Duplicate report check: one report per profile per comment
-3. `CommentReport` created with status `pending`
-4. Report appears in staff moderation dashboard at `/staff/moderation/`
-
-### Moderating a Report
-
-1. Staff navigates to CommentModerationView, which shows pending reports with full context
-2. Staff chooses an action via POST to ModerationActionView: delete (soft-deletes comment), dismiss (closes report without action), or review
-3. All actions create a ModerationLog entry
-4. Report status updated (action_taken, dismissed, reviewed)
-
-## API Endpoints
+## Surviving API Endpoints
 
 | Method | Path | Auth | Rate Limit | Purpose |
 |--------|------|------|------------|---------|
-| GET | `/api/v1/comments/concept/<concept_id>/checklist/<checklist_id>/` | No | None | List checklist-level comments |
-| POST | `/api/v1/comments/concept/<concept_id>/checklist/<checklist_id>/create/` | Yes | 10/min | Create checklist-level comment |
-| PUT | `/api/v1/comments/<comment_id>/` | Yes | 20/min | Edit a comment |
-| DELETE | `/api/v1/comments/<comment_id>/` | Yes | 20/min | Soft-delete a comment |
-| POST | `/api/v1/comments/<comment_id>/vote/` | Yes | 30/min | Toggle upvote |
-| POST | `/api/v1/comments/<comment_id>/report/` | Yes | 5/hour | Report a comment |
+| GET/PUT/DELETE | `/api/v1/comments/<comment_id>/` | Login | 20/min | Detail/edit/delete a historical comment (owner only for edit/delete) |
+| POST | `/api/v1/comments/<comment_id>/vote/` | Login | 30/min | Toggle upvote on an existing comment |
+| POST | `/api/v1/comments/<comment_id>/report/` | Login | 5/hour | Flag an existing comment for staff review |
+| POST | `/api/v1/guidelines/agree/` | Login | None | Accept community guidelines (still used by other systems for `profile.guidelines_agreed`) |
 
-## Integration Points
+The list and create endpoints (`/api/v1/comments/concept/<id>/checklist/<id>/`) are no longer registered in `api/urls.py`.
 
-- **Concept.absorb()**: When concepts merge, all comments (and their votes and reports) are migrated. Historical concept-level and trophy-level comments are still migrated for data integrity.
-- **Community guidelines**: `profile.guidelines_agreed` must be True before commenting. This is set through the guidelines agreement flow on the frontend.
+## Data Model (Reference Only)
 
-## Cache Keys
+The model tables are preserved as-is. See `trophies/models.py` for the canonical definitions:
 
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `comments:concept:{id}:checklist:{checklist_id}` | 5 min | Cached checklist-level comment list |
-| `banned_words:active` | 5 min | Cached list of active banned words |
+- `Comment` (with `concept` FK, optional `checklist_id` and `trophy_id` legacy fields, threading via `parent`, `depth`, `upvote_count`, `is_deleted`, `body`)
+- `CommentVote` (unique on `(comment, profile)`)
+- `CommentReport` (status: `pending` / `reviewed` / `dismissed` / `action_taken`)
+- `ModerationLog` (audit trail; preserves the original body and reporter context even if the comment is later hard-deleted)
+- `BannedWord` (still consulted by `ChecklistService.process_markdown()`, which the review system uses)
+
+## Moderation Flow (Still Active)
+
+1. A user POSTs to `/api/v1/comments/<id>/report/` with a `reason` and optional `details`. Duplicate reports per profile are blocked.
+2. The `CommentReport` row appears in the staff moderation queue at `/staff/moderation/` (rendered by `CommentModerationView` in `trophies/views/admin_views.py`).
+3. Staff acts via `ModerationActionView`: delete (soft-delete the comment), dismiss (close the report), or review.
+4. Every action records a `ModerationLog` entry preserving the original body and the moderator's reason.
 
 ## Gotchas and Pitfalls
 
-- **Soft delete preserves thread structure**: Deleted comments are NOT removed from the database. They remain as `[deleted]` placeholders so replies are not orphaned.
-- **Banned word boundaries**: Setting `use_word_boundaries=True` prevents false positives (e.g., "assassin" will not match "ass"). Setting it to False enables substring matching for phrases that should be caught regardless of surrounding text.
-- **Sanitization order matters**: bleach strips HTML first, then `html.unescape()` converts entities back to plain text. This prevents double-encoding (e.g., `&amp;` becoming `&amp;amp;`).
-- **trophy_id is a legacy field**: The `trophy_id` field still exists on Comment for historical data but is no longer used for new comments. The `Concept.absorb()` method still migrates these comments during concept reassignment.
-- **F-expression race safety**: Upvote counts use `F('upvote_count') + 1` / `F('upvote_count') - 1` to prevent race conditions from concurrent votes. Always `refresh_from_db()` after to read the actual value.
+- **Do not build new comment surfaces against this code.** The pattern is intentionally retired. New discussion features should plug into the Community Hub's Reviews & Replies pipeline (`api/review_views.py`, `ReviewReplyListView` / `ReviewReplyDetailView`) instead.
+- **`ChecklistService.process_markdown()` is the only thing in `CommentService` that current code still calls outside of moderation.** The review system uses it for markdown rendering. Do not delete the helper while the review system depends on it.
+- **`Concept.absorb()` still walks comment relationships.** When concepts merge, comments, votes, reports, and moderation logs follow the surviving concept. If you delete the comment tables in the future, also strip the corresponding step from `absorb()`.
+- **The `trophy_id` and `checklist_id` columns on `Comment` are dead but still indexed.** Leave them; future migrations can drop them if/when the historical data is fully retired.
+- **`profile.guidelines_agreed`** is still read by the moderation flow and by review creation (not just comments). Do not remove the guidelines model when retiring comments.
 
 ## Related Docs
 
-- [Concept Model](../architecture/concept-model.md): Core Concept model and the `absorb()` migration pattern
-- [Checklist System](../features/checklist-system.md): Checklists where comments are used
+- [Roadmap System](roadmap-system.md): the user-facing replacement for checklists; intentionally has no comment surface
+- [Community Hub](community-hub.md): the supported pattern for new discussion features (Reviews & Replies)
+- [Concept Model](../architecture/concept-model.md): how `absorb()` keeps legacy comment rows attached to surviving concepts

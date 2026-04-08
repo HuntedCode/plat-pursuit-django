@@ -43,7 +43,7 @@ The primary constants file (~235 lines). Contains:
 | Constant | Value | Purpose |
 |----------|-------|---------|
 | `MODERN_PLATFORMS` | `['PS5', 'PS4']` | Platforms with title stats support |
-| `ALL_PLATFORMS` | `['PS5', 'PS4', 'PS3', 'PSVITA', 'PSVR']` | Full platform list |
+| `ALL_PLATFORMS` | `['PS5', 'PS4', 'PS3', 'PSVITA', 'PSVR', 'PSVR2']` | Full platform list (PSVR2 added with the IGDB integration's VR-platform detection) |
 | `NA_REGION_CODES` | `['IP', 'UB', 'UP', 'US', 'UT']` | North American title ID prefixes |
 | `EU_REGION_CODES` | `['EB', 'EP']` | European prefixes |
 | `JP_REGION_CODES` | `['JA', 'JB', 'JP', 'KP']` | Japanese prefixes |

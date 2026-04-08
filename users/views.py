@@ -91,6 +91,10 @@ class SettingsView(LoginRequiredMixin, View):
             'selected_theme_name': selected_theme_name,
             'selected_theme_css': selected_theme_css,
             'initial_background_json': initial_bg_data,
+            'breadcrumb': [
+                {'text': 'Home', 'url': '/'},
+                {'text': 'Settings'},
+            ],
         }
         track_page_view('settings', 'user', request)
         return render(request, self.template_name, context)

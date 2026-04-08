@@ -86,7 +86,7 @@ class UpdateQuickSettingsAPIView(APIView):
     POST /api/v1/user/quick-settings/
     Body: {"setting": "hide_hiddens", "value": true}
       or: {"setting": "user_timezone", "value": "America/New_York"}
-      or: {"setting": "default_region", "value": "NA"}
+      or: {"setting": "browse_defaults", "value": {"page": "games", "filters": {"platform": ["PS5"]}}}
 
     Updates a single profile or user setting.
     Used by the dashboard Quick Settings module for auto-save.
@@ -140,13 +140,23 @@ class UpdateQuickSettingsAPIView(APIView):
                     ):
                         backfill_calendar_from_history(cal)
 
-        # Region setting
-        elif setting == 'default_region':
-            from trophies.util_modules.constants import REGIONS
-            if value is not None and value not in REGIONS and value != '':
-                return Response({'error': 'Invalid region.'}, status=http_status.HTTP_400_BAD_REQUEST)
-            request.user.default_region = value if value else None
-            request.user.save(update_fields=['default_region'])
+        # Browse page default filters (save/clear per page)
+        elif setting == 'browse_defaults':
+            if not isinstance(value, dict):
+                return Response({'error': 'Value must be an object with page and filters.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            page = value.get('page', '')
+            filters = value.get('filters', {})
+            if page not in ('games', 'trophies', 'profiles'):
+                return Response({'error': 'Invalid page.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            if not isinstance(filters, dict):
+                return Response({'error': 'Filters must be an object.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            defaults = request.user.browse_defaults or {}
+            if filters:
+                defaults[page] = filters
+            else:
+                defaults.pop(page, None)
+            request.user.browse_defaults = defaults
+            request.user.save(update_fields=['browse_defaults'])
 
         # Premium theme setting
         elif setting == 'selected_theme':
@@ -167,6 +177,11 @@ class UpdateQuickSettingsAPIView(APIView):
                     return Response({'error': 'Game art themes cannot be used as site theme.'}, status=http_status.HTTP_400_BAD_REQUEST)
             profile.selected_theme = value or None
             profile.save(update_fields=['selected_theme'])
+            try:
+                from trophies.services.dashboard_service import invalidate_dashboard_cache
+                invalidate_dashboard_cache(profile.pk)
+            except Exception:
+                pass
 
         # Premium background setting (concept_id or null to clear)
         elif setting == 'selected_background':
@@ -192,6 +207,22 @@ class UpdateQuickSettingsAPIView(APIView):
                     return Response({'error': 'This game has no background art.'}, status=http_status.HTTP_400_BAD_REQUEST)
                 profile.selected_background = concept
                 profile.save(update_fields=['selected_background'])
+
+        # Banner vertical position (0-100)
+        elif setting == 'banner_position':
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            if not profile.user_is_premium:
+                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
+            try:
+                pos = int(value)
+                if not 0 <= pos <= 100:
+                    raise ValueError
+            except (ValueError, TypeError):
+                return Response({'error': 'Position must be an integer between 0 and 100.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            profile.banner_position = pos
+            profile.save(update_fields=['banner_position'])
 
         else:
             return Response({'error': f'Unknown setting: {setting}'}, status=http_status.HTTP_400_BAD_REQUEST)

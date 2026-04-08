@@ -130,6 +130,7 @@ Sync operations use a two-tier orchestrator pattern:
     - Checks milestones (excluding challenge-specific types)
     - Checks A-Z challenge, Calendar challenge, and Genre challenge progress
     - Updates trophy counts, invalidates timeline cache
+    - Invalidates the dashboard module cache (`invalidate_dashboard_cache(profile)`) alongside the stats cache, so module data freshens unconditionally on every successful sync regardless of which sub-services touched it
     - Sets `sync_status='synced'`
 
 ### Profile Refresh Flow
@@ -266,6 +267,16 @@ During `sync_trophy_groups`, after creating TrophyGroup records for a game, `Con
 ### High Sync Volume Banner
 
 The health loop calls `_check_high_sync_volume()` which uses hysteresis logic to set/clear a `site:high_sync_volume` Redis key. This drives a site-wide banner informing users that sync times may be longer than usual. Activation threshold: 10+ profiles with 200+ pending jobs. Deactivation threshold: fewer than 5 such profiles.
+
+### Health Check Mismatch Circuit Breaker
+
+Prevents infinite retry loops for games whose earned trophy counts persistently disagree with PSN's `trophy_summary` response.
+
+**Detection**: During `sync_complete`, the health check compares per-platform earned counts against PSN's authoritative numbers. When a mismatch is found, the affected games are re-queued for sync and a follow-up `sync_complete` is scheduled. Each re-queue increments a per-profile retry counter in Redis (`health_mismatch_retries:{profile_id}`).
+
+**Behavior when limit reached**: After `MAX_MISMATCH_RETRIES` (3) attempts on the same mismatch, the games are skipped with a `skipping unresolvable mismatch` log entry rather than re-queued again. The sync still finalizes (badges, milestones, challenges, notifications) so the rest of the user's data stays current; only the games causing the loop are deferred.
+
+**Recovery**: The retry counter expires after 24 hours, so the next routine `refresh_profiles` cron run will get a fresh attempt. Most unresolvable mismatches turn out to be PSN-side data quality issues (deleted/private games, region edge cases) that resolve on their own.
 
 ### PSN Outage Circuit Breaker
 
@@ -458,5 +469,6 @@ python manage.py redis_admin --move-whale-jobs
 
 ## Related Docs
 
-- [Dashboard System](../dashboard.md)
-- [Community Hub](../community-hub.md)
+- [Dashboard System](../features/dashboard.md)
+- [Community Hub](../features/community-hub.md)
+- [IGDB Integration](igdb-integration.md): the enrichment hook that runs after new concepts are created

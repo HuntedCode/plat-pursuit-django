@@ -2,8 +2,8 @@
 {% load static custom_filters %}
 
 {# ─── Search + Sort ──────────────────────────────────────────────────── #}
-<div class="p-4 pb-0">
-    <form method="GET" class="flex flex-row gap-2">
+<div class="p-3 md:p-4 pb-0">
+    <form method="GET" class="flex flex-col md:flex-row gap-2">
         <input type="hidden" name="type" value="{{ current_type }}" />
         <input type="hidden" name="tab" value="{{ current_tab }}" />
         <input
@@ -11,14 +11,14 @@
             name="q"
             value="{{ search_query }}"
             placeholder="Search by name or hunter..."
-            class="input input-bordered flex-1"
+            class="input input-bordered input-sm md:input-md flex-1"
             aria-label="Search challenges"
         />
-        <select name="sort" class="select select-bordered w-auto">
+        <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-auto">
             <option value="progress" {% if current_sort == 'progress' %}selected{% endif %}>Most Progress</option>
             <option value="recent" {% if current_sort == 'recent' %}selected{% endif %}>Most Recent</option>
         </select>
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="btn btn-primary btn-sm md:btn-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -29,7 +29,7 @@
 </div>
 
 {# ─── In Progress / Hall of Fame Sub-Tabs ────────────────────────────── #}
-<div class="p-4 pb-0">
+<div class="p-3 md:p-4 pb-0">
     <div class="tabs tabs-box bg-base-200 inline-flex">
         <a href="?type={{ current_type }}&tab=active{% if search_query %}&q={{ search_query }}{% endif %}{% if current_sort != 'progress' %}&sort={{ current_sort }}{% endif %}"
            class="tab {% if current_tab == 'active' %}tab-active{% endif %}">
@@ -46,7 +46,7 @@
 
 {# ─── Card Grid ──────────────────────────────────────────────────────── #}
 {% if challenges %}
-    <div id="hub-card-grid" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+    <div id="hub-card-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3 lg:gap-4 p-3 md:p-4">
         {% for challenge in challenges %}
             {% if current_type == 'calendar' %}
                 {% include 'partials/calendar_challenge/challenge_card.html' with challenge=challenge %}
@@ -64,7 +64,7 @@
     </div>
 {% else %}
     {# ─── Empty States ───────────────────────────────────────────────── #}
-    <div class="text-center py-8 px-4">
+    <div class="text-center py-6 md:py-8 px-3 md:px-4">
         {% if search_query %}
             <p class="text-base-content/50">No challenges found for "{{ search_query }}"</p>
             <a href="?type={{ current_type }}&tab={{ current_tab }}" class="btn btn-ghost btn-sm mt-2">Clear search</a>

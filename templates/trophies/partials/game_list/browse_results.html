@@ -1,0 +1,16 @@
+{# Games browse results partial. Returned on HTMX requests. #}
+{% load humanize %}
+
+{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+{% if view_type == 'list' %}
+    <div id="items-grid" class="space-y-1.5 md:space-y-2">
+        {% include 'trophies/partials/game_list/game_list_items.html' %}
+    </div>
+{% else %}
+    <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
+        {% include 'trophies/partials/game_list/game_cards.html' %}
+    </div>
+{% endif %}
+
+{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

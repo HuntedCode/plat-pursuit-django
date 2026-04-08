@@ -1,14 +1,14 @@
 import logging
 from core.services.tracking import track_page_view
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, F
+from django.db.models import Q, F, Case, When, Value, IntegerField
 from django.db.models.functions import Lower
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, View
 from urllib.parse import urlencode
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from ..models import Trophy, EarnedTrophy, Profile, UserTrophySelection
 from ..forms import TrophySearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS
@@ -16,7 +16,7 @@ from trophies.util_modules.constants import MODERN_PLATFORMS
 logger = logging.getLogger("psn_api")
 
 
-class TrophiesListView(ProfileHotbarMixin, ListView):
+class TrophiesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     """
     Display paginated list of trophies with filtering and sorting options.
 
@@ -30,24 +30,41 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
     """
     model = Trophy
     template_name = 'trophies/trophy_list.html'
-    paginate_by = 25
+    partial_template_name = 'trophies/partials/trophy_list/browse_results.html'
+    paginate_by = 30
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = TrophySearchForm(self.request.GET)
+        return self._filter_form
 
     def dispatch(self, request, *args, **kwargs):
         if not request.GET:
-            default_params = {'platform': MODERN_PLATFORMS}
-            if request.user.is_authenticated and request.user.default_region:
-                default_params['region'] = ['global', request.user.default_region]
-
-            if default_params:
-                query_string = urlencode(default_params, doseq=True)
-                url = reverse('trophies_list') + '?' + query_string
-                return HttpResponseRedirect(url)
+            if request.user.is_authenticated:
+                defaults = (request.user.browse_defaults or {}).get('trophies', {})
+                if defaults:
+                    return HttpResponseRedirect(
+                        reverse('trophies_list') + '?' + urlencode(defaults, doseq=True)
+                    )
+            # Anonymous or no saved defaults: modern platforms only
+            return HttpResponseRedirect(
+                reverse('trophies_list') + '?' + urlencode({'platform': MODERN_PLATFORMS}, doseq=True)
+            )
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('game')
-        form = TrophySearchForm(self.request.GET)
-        order = [Lower('trophy_name')]
+        form = self.get_filter_form()
+
+        # Sort ASCII names before non-ASCII (English-first for majority userbase)
+        qs = qs.annotate(
+            is_ascii_name=Case(
+                When(trophy_name__regex=r'^[A-Za-z0-9]', then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+        )
+        order = ['is_ascii_name', Lower('trophy_name')]
 
         if form.is_valid():
             query = form.cleaned_data.get('query')
@@ -92,17 +109,17 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
 
 
             if sort_val == 'earned':
-                order = ['-earned_count', Lower('trophy_name')]
+                order = ['-earned_count', 'is_ascii_name', Lower('trophy_name')]
             elif sort_val == 'earned_inv':
-                order = ['earned_count', Lower('trophy_name')]
+                order = ['earned_count', 'is_ascii_name', Lower('trophy_name')]
             elif sort_val == 'rate':
-                order = ['-earn_rate', Lower('trophy_name')]
+                order = ['-earn_rate', 'is_ascii_name', Lower('trophy_name')]
             elif sort_val == 'rate_inv':
-                order = ['earn_rate', Lower('trophy_name')]
+                order = ['earn_rate', 'is_ascii_name', Lower('trophy_name')]
             elif sort_val == 'psn_rate':
-                order = ['-trophy_earn_rate', Lower('trophy_name')]
+                order = ['-trophy_earn_rate', 'is_ascii_name', Lower('trophy_name')]
             elif sort_val == 'psn_rate_inv':
-                order = ['trophy_earn_rate', Lower('trophy_name')]
+                order = ['trophy_earn_rate', 'is_ascii_name', Lower('trophy_name')]
 
         return qs.order_by(*order)
 
@@ -114,7 +131,7 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
             {'text': 'Trophies'},
         ]
 
-        context['form'] = TrophySearchForm(self.request.GET)
+        context['form'] = self.get_filter_form()
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_types'] = self.request.GET.getlist('type')
         context['selected_regions'] = self.request.GET.getlist('region')
@@ -125,6 +142,25 @@ class TrophiesListView(ProfileHotbarMixin, ListView):
         context['seo_description'] = (
             "Search PlayStation trophies on Platinum Pursuit. "
             "Filter by type, rarity, and game to find what you're looking for."
+        )
+
+        # Post-pagination: user earned data (1 query, authenticated only)
+        page_trophies = context['object_list']
+        if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+            trophy_ids = [t.id for t in page_trophies]
+            earned_ids = set(
+                EarnedTrophy.objects.filter(
+                    profile=self.request.user.profile,
+                    trophy_id__in=trophy_ids,
+                    earned=True
+                ).values_list('trophy_id', flat=True)
+            )
+            context['user_earned_ids'] = earned_ids
+
+        # Auto-open filter drawer when any filters are active
+        context['has_active_filters'] = any(
+            v for k, v in self.request.GET.lists()
+            if k not in ('page', 'view') and any(v)
         )
 
         track_page_view('trophies_list', 'list', self.request)
@@ -145,15 +181,36 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        form = TrophySearchForm(self.request.GET)
         profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
-        if form.is_valid():
-            query = form.cleaned_data.get('query')
-            qs = EarnedTrophy.objects.filter(profile=profile, earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game').order_by(F('earned_date_time').desc(nulls_last=True))
+        qs = EarnedTrophy.objects.filter(
+            profile=profile, earned=True, trophy__trophy_type='platinum'
+        ).select_related('trophy', 'trophy__game')
 
-            if query:
-                qs = qs.filter(trophy__game__title_name__icontains=query)
-            return qs
+        # Search
+        query = self.request.GET.get('query', '').strip()
+        if query:
+            qs = qs.filter(trophy__game__title_name__icontains=query)
+
+        # Filter
+        filter_val = self.request.GET.get('filter', '')
+        if filter_val == 'selected':
+            selected_ids = list(profile.trophy_selections.values_list('earned_trophy_id', flat=True))
+            qs = qs.filter(id__in=selected_ids)
+
+        # Sort
+        sort_val = self.request.GET.get('sort', 'recent')
+        if sort_val == 'oldest':
+            qs = qs.order_by(F('earned_date_time').asc(nulls_last=True))
+        elif sort_val == 'rarest_psn':
+            qs = qs.order_by('trophy__trophy_earn_rate', F('earned_date_time').desc(nulls_last=True))
+        elif sort_val == 'rarest_pp':
+            qs = qs.order_by('trophy__earn_rate', F('earned_date_time').desc(nulls_last=True))
+        elif sort_val == 'alpha':
+            qs = qs.order_by(Lower('trophy__game__title_name'))
+        else:
+            qs = qs.order_by(F('earned_date_time').desc(nulls_last=True))
+
+        return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

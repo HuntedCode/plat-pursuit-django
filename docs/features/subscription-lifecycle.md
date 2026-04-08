@@ -208,5 +208,5 @@ When `global_unsubscribe` is set to `True`, all other preferences are forced to 
 
 ## Related Docs
 
-- [Community Hub](../community-hub.md): Premium features may gate certain community hub capabilities
-- [Dashboard](../dashboard.md): Dashboard modules may be premium-only
+- [Community Hub](community-hub.md): Premium features may gate certain community hub capabilities
+- [Dashboard](dashboard.md): Dashboard modules may be premium-only

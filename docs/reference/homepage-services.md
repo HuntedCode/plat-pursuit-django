@@ -1,118 +1,68 @@
-# Homepage Services
+# Site Heartbeat & Home Shells
 
-The homepage (`/`) displays community stats, featured content, and activity feeds. All data is pre-computed by cron jobs and stored in Django cache with time-bucketed keys. The view (`IndexView` in `core/views.py`) reads from cache with fallback to the previous time period if the current bucket is missing.
+The site root (`/`) is no longer a single homepage. It is a smart router (`HomeView` in `core/views.py`, see [Home Page Router](../features/home-page.md)) that selects one of four templates based on whether the user is anonymous, has not linked PSN, is mid-sync, or is fully synced. The fully-synced state renders the dashboard directly. There is no separate "homepage view."
 
-## Sections
+What this reference covers is the small set of services that still feed those four shells: a single hourly cache job, the cached community statistics it produces, and the partial that displays them across every state ("PlatPursuit at a Glance" / "Built for Hunters" ribbon). The previous fan-out of `featured_badges`, `featured_checklists`, `whats_new`, `playing_now`, and `featured_games` services has been removed; those collections were made redundant by the dashboard's module pipeline.
 
-### Hero Section
-- Shown only to unauthenticated users
-- Static marketing content with CTA to sign up
+## What's Cached
 
-### Community Stats
-- 8 aggregate statistics about the platform (total profiles, trophies earned, etc.)
-- Cache: hourly time bucket
-- Source: Cron-populated cache
+| Cache key | Service | TTL | Frequency | Purpose |
+|-----------|---------|-----|-----------|---------|
+| `site_heartbeat_{YYYY-MM-DD}_{HH}` | `compute_site_heartbeat()` | 7200s (2x the cron interval) | Hourly via `refresh_homepage_hourly` | Aggregated platform stats for the "Built for Hunters" ribbon |
 
-### Featured Badges
-- 6 curated badges: top 4 by `earned_count` (social proof) + 2 newest
-- Filter: Tier 1 (Bronze entry), must have badge image, has `series_slug`
-- Cache: daily time bucket
+There is no daily homepage cache. `refresh_homepage_daily` was removed when the homepage redesign collapsed onto the dashboard. If you find a Render cron entry pointing at it, disable or delete it.
 
-### Featured Checklists
-- 4 most-tracked published checklists
-- Ordered by `progress_save_count` (primary), `upvote_count` (tie-breaker)
-- Filter: `status='published'`, `is_deleted=False`
-- Cache: daily time bucket
+## site_heartbeat.py
 
-### Shareable Cards Showcase
-- Static example images in `static/images/showcase/`
-- No dynamic data; requires manual screenshots from PlatPursuit profiles
+Location: `core/services/site_heartbeat.py`. Single public function: `compute_site_heartbeat() -> dict`.
 
-### What's New Sidebar
-- Up to 8 items from 3 sources (max 3 each): new badges, new checklists, new guides
-- Time window: last 14 days
-- All items sorted by timestamp descending
-- Cache: hourly time bucket
-
-## Services
-
-### featured_badges.py (`core/services/`)
+The dict shape is intentionally stable so the template can do simple nested lookups (e.g. `heartbeat.always.trophies_total.value`). All queries are wrapped in their own `try/except`; a failure on one stat sets `meta.is_partial = True` and returns `None` for that field rather than blanking the whole ribbon.
 
 ```python
-def get_featured_badges(limit=6):
-    # Top 4 by earned_count + 2 newest
-    # Returns: list of badge dicts with name, series, tier, earned_count, layers
+{
+    "meta": {"computed_at": ISO timestamp, "is_partial": bool},
+    "always": {
+        "trophies_total": {"value", "label", "sublabel"},
+        "games_total":    {"value", "label", "sublabel", "delta"},
+        "profiles_total": {"value", "label", "sublabel", "delta"},
+        "trophies_24h":   {"value", "label", "sublabel"},
+    },
+    "expanded": {
+        "platinums_total": {...},
+        "badges_total":    {...},
+        "badge_xp_total":  {...},
+        "hours_hunted":    {...},
+    },
+    "flavor": {"tagline": str, "numbers": str},
+}
 ```
 
-Badge layers come from `badge.get_badge_layers()` which returns a dict with backdrop/main/foreground image URLs. The `has_custom_image` flag determines whether to use `{% static %}` paths or raw URLs in templates.
+The `always` group renders as the four primary stat tiles. The `expanded` group is shown when the ribbon is expanded. `hours_hunted` and `trophies_24h` are computed live in the service from `ProfileGame.play_duration` and `EarnedTrophy` respectively. The other six values are sourced from `core.services.stats.compute_community_stats()` so the heartbeat doesn't double-query the same aggregates.
 
-### featured_checklists.py (`core/services/`)
+## How It's Read
 
-```python
-def get_featured_checklists(limit=4):
-    # Most tracked (progress_save_count), then most upvoted
-    # Returns: list of checklist dicts with author, game icon, description
-```
+`HomeView` (and `DashboardView` for the legacy `/dashboard/` redirect path) call `_get_site_heartbeat()` from `trophies/views/dashboard_views.py`, which reads the current hour's cache key and falls back to the previous hour if the current one is missing. The result is attached to the template context as `site_heartbeat`. The `built_for_hunters.html` partial under `templates/trophies/partials/dashboard/` renders it.
 
-Uses `select_related('profile', 'concept')` for author and game metadata. Description truncated to 150 chars.
+All four home states (`landing.html`, `link_psn.html`, `syncing.html`, `dashboard.html`) include this partial, so the visual is consistent across the user journey. If the cache is missing for two consecutive hours (i.e. both the current and the fallback bucket are empty), the partial silently hides itself rather than showing zeros. Check `refresh_homepage_hourly` if it disappears.
 
-### whats_new.py (`core/services/`)
+## Refresh Job
 
-```python
-def get_whats_new(limit=8):
-    # Aggregates 3 item types in unified feed
-    # Returns: list of activity items sorted by timestamp
-```
+`core/management/commands/refresh_homepage_hourly.py` runs every hour on Render Cron. It iterates a single-entry `HOURLY_JOBS` list, calls `compute_site_heartbeat()`, and writes the result to `site_heartbeat_{date}_{hour}` with a 2-hour TTL (so the previous bucket survives as a fallback while the current one is being written).
 
-Item types:
-- `new_badge`: Recently created badge series (tier=1, last 14 days, max 3)
-- `new_checklist`: Recently published checklists (last 14 days, max 3)
-- `new_guide`: Concepts with guides created in last 14 days (max 3)
-
-### playing_now.py (`core/services/`)
-
-Returns profiles with recent sync activity, indicating currently active users.
-
-## Caching
-
-### Cache Key Patterns
-
-| Key Pattern | TTL | Frequency | Purpose |
-|-------------|-----|-----------|---------|
-| `community_stats_{YYYY-MM-DD}_{HH:00}` | 3600s | Hourly | Platform aggregate stats |
-| `latest_badges_{YYYY-MM-DD}_{HH:00}` | 3600s | Hourly | Recently awarded badges |
-| `whats_new_{YYYY-MM-DD}_{HH:00}` | 3600s | Hourly | Activity feed items |
-| `featured_badges_{YYYY-MM-DD}` | 86400s | Daily | Curated badge showcase |
-| `featured_checklists_{YYYY-MM-DD}` | 86400s | Daily | Curated checklist showcase |
-| `featured_games_{YYYY-MM-DD}` | 86400s | Daily | Featured games |
-| `playing_now_{YYYY-MM-DD}` | 172800s | Daily | Active players |
-
-### Fallback Pattern
-
-The view checks the current time bucket first. If empty (cron hasn't run yet), it falls back to the previous period:
-- Hourly keys: check `{HH-1:00}` bucket
-- Daily keys: check `{YYYY-MM-DD-1}` bucket
-
-This prevents blank sections during the brief window after midnight or between cron runs.
-
-## Management Commands
-
-| Command | Schedule | Purpose |
-|---------|----------|---------|
-| `refresh_homepage_hourly` | Every hour | Populate community stats, latest badges, what's new |
-| `refresh_homepage_daily` | Daily midnight UTC | Populate featured badges, checklists, games |
-| `redis_admin --flush-index` | Manual | Clear all homepage cache keys |
+The command logs success or failure per stat. There is no retry: a failure means the ribbon falls back to the previous hour until the next run.
 
 ## Gotchas and Pitfalls
 
-- **Badge image serialization**: `get_badge_layers()` returns a dict. Templates check `has_custom_image` to decide between `{% static %}` and raw URL. Getting this wrong shows broken images.
-- **Fallback TTL**: Daily keys use 86400s (24h), but the fallback checks the previous day. If both days are missing, sections render empty.
-- **Cron dependency**: The homepage is entirely cache-driven. If cron jobs stop running, data becomes stale after TTL expiry. There is no on-demand fallback to live queries.
-- **Showcase images are static**: The shareable cards section uses pre-captured screenshots. These need manual updates when the share card design changes.
+- **There is no daily homepage cron anymore.** Anything that references `refresh_homepage_daily` is stale (cron-jobs.md, old Render configurations, the previous version of this doc). Featured games/badges/checklists were folded into dashboard modules instead.
+- **`featured_*` and `whats_new` services have been deleted.** Do not import them; they no longer exist in `core/services/`. The dashboard's "Recent Platinums," "Recent Badges," "What's New" feels are handled by per-module providers in `dashboard_service.py`.
+- **The site heartbeat ribbon is one of two homepage caches.** The other is the Redis client cache used by individual dashboard modules (see [Dashboard](../features/dashboard.md) and [Redis Keys](redis-keys.md)). They are independent: invalidating dashboard module caches does not refresh the heartbeat, and vice versa.
+- **The cache key is namespaced by hour, not by user.** Every visitor sees the same heartbeat snapshot for that hour. Don't try to personalize it; user-specific stats belong on the dashboard.
+- **`is_partial` is silent in the UI.** If a single stat fails, the ribbon still renders with the rest. The flag exists for log scraping, not for end-users. Watch the `refresh_homepage_hourly` job logs in Render if you suspect query drift.
+- **`hours_hunted` is real PSN playtime.** It is summed from `ProfileGame.play_duration` (a `DurationField`), not from any computed estimate. PS3 / Vita games typically lack play_duration so the number under-represents pre-PS4 hours.
 
 ## Related Docs
 
-- [Cron Jobs](../guides/cron-jobs.md): Homepage cache warming schedules
-- [Badge System](../architecture/badge-system.md): Badge data and `get_badge_layers()`
-- [Checklist System](../features/checklist-system.md): Checklist data model
-- [Redis Keys](redis-keys.md): Complete cache key reference
+- [Home Page Router](../features/home-page.md): the `HomeView` smart router and the four shells
+- [Dashboard](../features/dashboard.md): the synced state and where dashboard module data comes from
+- [Cron Jobs](../guides/cron-jobs.md): the `refresh_homepage_hourly` schedule and dependencies
+- [Redis Keys](redis-keys.md): full key map for raw Redis and Django cache

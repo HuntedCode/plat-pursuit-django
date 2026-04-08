@@ -9,6 +9,7 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError
+from django.utils.text import slugify
 
 from trophies.models import Company, ConceptCompany, IGDBMatch
 from trophies.util_modules.cache import redis_client
@@ -65,7 +66,7 @@ GAME_FIELDS = (
     'themes.name, themes.slug, '
     'keywords.name, keywords.slug, '
     'game_modes.name, player_perspectives.name, '
-    'game_engines.name, '
+    'game_engines.name, game_engines.slug, '
     'involved_companies.company.name, '
     'involved_companies.company.slug, '
     'involved_companies.company.description, '
@@ -915,8 +916,11 @@ class IGDBService:
         # Create/update Company records and ConceptCompany entries
         cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
 
-        # Update Concept fields
+        # Update Concept fields (JSON fields for backward compatibility)
         cls._update_concept_fields(concept, igdb_data)
+
+        # Create normalized Genre/Theme/Engine records
+        cls._create_normalized_tags(concept, igdb_data)
 
         # Add VR platforms to Games that are missing them
         cls._apply_vr_platforms(concept, igdb_data)
@@ -1042,6 +1046,70 @@ class IGDBService:
 
         if update_fields:
             concept.save(update_fields=update_fields)
+
+    @classmethod
+    def _create_normalized_tags(cls, concept, igdb_data):
+        """Create normalized Genre, Theme, and GameEngine records from IGDB data.
+
+        Parses the genres, themes, and game_engines arrays from igdb_data
+        (which contain id, name, slug objects) and creates the corresponding
+        model records plus through-model links to the Concept.
+        """
+        from trophies.models import (
+            Genre, Theme, GameEngine,
+            ConceptGenre, ConceptTheme, ConceptEngine,
+        )
+
+        for genre_data in igdb_data.get('genres', []):
+            igdb_id = genre_data.get('id')
+            name = genre_data.get('name', '')
+            slug = genre_data.get('slug', '') or slugify(name)
+            if not igdb_id or not name:
+                continue
+            try:
+                genre, _ = Genre.objects.get_or_create(
+                    igdb_id=igdb_id,
+                    defaults={'name': name, 'slug': slug},
+                )
+            except IntegrityError:
+                genre = Genre.objects.filter(slug=slug).first()
+                if not genre:
+                    continue
+            ConceptGenre.objects.get_or_create(concept=concept, genre=genre)
+
+        for theme_data in igdb_data.get('themes', []):
+            igdb_id = theme_data.get('id')
+            name = theme_data.get('name', '')
+            slug = theme_data.get('slug', '') or slugify(name)
+            if not igdb_id or not name:
+                continue
+            try:
+                theme, _ = Theme.objects.get_or_create(
+                    igdb_id=igdb_id,
+                    defaults={'name': name, 'slug': slug},
+                )
+            except IntegrityError:
+                theme = Theme.objects.filter(slug=slug).first()
+                if not theme:
+                    continue
+            ConceptTheme.objects.get_or_create(concept=concept, theme=theme)
+
+        for engine_data in igdb_data.get('game_engines', []):
+            igdb_id = engine_data.get('id')
+            name = engine_data.get('name', '')
+            slug = engine_data.get('slug', '') or slugify(name)
+            if not igdb_id or not name:
+                continue
+            try:
+                engine, _ = GameEngine.objects.get_or_create(
+                    igdb_id=igdb_id,
+                    defaults={'name': name, 'slug': slug},
+                )
+            except IntegrityError:
+                engine = GameEngine.objects.filter(slug=slug).first()
+                if not engine:
+                    continue
+            ConceptEngine.objects.get_or_create(concept=concept, engine=engine)
 
     @classmethod
     def _apply_vr_platforms(cls, concept, igdb_data):

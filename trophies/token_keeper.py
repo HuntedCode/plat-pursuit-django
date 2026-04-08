@@ -1549,6 +1549,13 @@ class TokenKeeper:
             from trophies.services.stats_service import invalidate_stats_cache
             invalidate_stats_cache(profile_id)
 
+            # Bulletproof dashboard invalidation: badge_service has its own hook
+            # but it can early-return on no-op syncs. Invalidating here guarantees
+            # every full sync refreshes all dashboard modules regardless of which
+            # sub-services ran.
+            from trophies.services.dashboard_service import invalidate_dashboard_cache
+            invalidate_dashboard_cache(profile_id)
+
             # Re-render forum signature if enabled (SVG only: fast, no Playwright)
             try:
                 from trophies.models import ProfileCardSettings

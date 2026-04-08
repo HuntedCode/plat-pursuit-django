@@ -66,7 +66,7 @@
                                     </div>
                                     {% for cell in row.cells %}
                                         {% if cell.in_year %}
-                                            <div class="rounded-sm {% if cell.level == 0 %}bg-base-300/40{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
+                                            <div class="rounded-sm {% if cell.level == 0 %}bg-white/[0.03] border border-base-content/5{% elif cell.level == 1 %}bg-primary/30{% elif cell.level == 2 %}bg-primary/50{% elif cell.level == 3 %}bg-primary/70{% else %}bg-primary{% endif %}"
                                                  style="flex: 1; aspect-ratio: 1; min-width: 6px;"
                                                  title="{{ cell.date }}: {{ cell.count }} troph{{ cell.count|pluralize:"y,ies" }}"></div>
                                         {% else %}
@@ -80,7 +80,7 @@
                     {# Legend #}
                     <div class="flex items-center justify-end gap-1 mt-2">
                         <span class="text-[0.55rem] text-base-content/40">Less</span>
-                        <div class="w-2.5 h-2.5 rounded-sm bg-base-300/40"></div>
+                        <div class="w-2.5 h-2.5 rounded-sm bg-white/[0.03] border border-base-content/5"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/30"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/50"></div>
                         <div class="w-2.5 h-2.5 rounded-sm bg-primary/70"></div>
@@ -99,28 +99,29 @@
         <div class="border-t border-base-content/10 my-3"></div>
         {% endif %}
 
-        {# ========== Genre Radar + Rarity Radar + Platform Radar (3-col) ========== #}
+        {# ========== Engine Radar + Rarity Radar + Platform Radar (3-col) ========== #}
         <div class="grid grid-cols-1 md:grid-cols-3 gap-0 md:gap-2 lg:gap-4 my-4 divide-y md:divide-y-0 md:divide-x divide-base-content/10">
 
-            {# Genre Radar #}
-            {% with gr=data.genre_radar %}
+            {# Engine Radar #}
+            {% with er=data.engine_radar %}
                 <div class="pb-3 md:pb-0">
                     <h3 class="text-xs lg:text-sm font-semibold text-base-content/70 flex items-center gap-1 lg:gap-1.5 mb-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 lg:w-3.5 lg:h-3.5 text-accent/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                         </svg>
-                        Genre Radar
+                        Engine Radar
                     </h3>
-                    {% if gr.has_data %}
-                        <span class="text-[0.6rem] text-base-content/40">{{ gr.total }} trophies</span>
+                    {% if er.has_data %}
+                        <span class="text-[0.6rem] text-base-content/40">{{ er.total }} trophies</span>
                         <div style="height: 200px; position: relative;">
-                            <canvas class="genre-radar-canvas"
-                                    data-labels='{{ gr.labels|tojson }}'
-                                    data-counts='{{ gr.counts|tojson }}'></canvas>
+                            <canvas class="engine-radar-canvas"
+                                    data-labels='{{ er.labels|tojson }}'
+                                    data-counts='{{ er.counts|tojson }}'></canvas>
                         </div>
                     {% else %}
                         <div class="text-center py-6">
-                            <p class="text-xs text-base-content/40">No genre data.</p>
+                            <p class="text-xs text-base-content/40">No engine data yet.</p>
                         </div>
                     {% endif %}
                 </div>

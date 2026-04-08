@@ -15,6 +15,7 @@ cryptography==46.0.3
 dj-database-url==3.0.1
 dj-stripe==2.10.3
 Django==5.2.7
+django-htmx==1.21.0
 django-allauth==65.13.1
 django-cors-headers==4.7.0
 django-csp==4.0

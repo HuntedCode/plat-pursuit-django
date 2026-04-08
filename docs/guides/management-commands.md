@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **58 custom management commands** spread across 4 Django apps: `trophies` (28), `core` (18), `notifications` (5), and `users` (2). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **65 custom management commands** spread across 5 Django apps: `trophies` (38), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -41,6 +41,13 @@ PlatPursuit has **58 custom management commands** spread across 4 Django apps: `
 | `grant_milestone` | Manually grant a milestone (with all side effects: UserTitle, Discord role, notification) to one or more users. | `milestone` (positional, required), `--username`, `--usernames` (comma-separated), `--dry-run`, `--silent` | `python manage.py grant_milestone "Platinum Race Winner" --username Jlowe` |
 | `redis_admin` | Swiss-army knife for Redis operations: flush caches, manage TokenKeeper queues, adjust bulk thresholds, migrate whale jobs. | `--flushall`, `--flush-index`, `--flush-game-page <np_id>`, `--flush-token-keeper`, `--flush-complete-lock <profile_id>`, `--flush-dashboard <profile_id>`, `--flush-concept <concept_id>`, `--flush-community`, `--get-bulk-threshold`, `--set-bulk-threshold <n>`, `--move-whale-jobs` (all mutually exclusive) | `python manage.py redis_admin --flush-index` |
 | `backfill_concept_trophy_groups` | Create ConceptTrophyGroup records from game-level TrophyGroups. Also includes mismatch detection and audit modes. | `--dry-run`, `--check-mismatches`, `--collections-only`, `--audit-missing-trophies`, `--audit-missing-groups` | `python manage.py backfill_concept_trophy_groups --check-mismatches` |
+| `audit_calendar` | Audit Calendar Challenge state against actual platinum data, surfacing day cells whose `filled` flag has drifted from the underlying earned trophies. | `--dry-run`, `--username` | `python manage.py audit_calendar --dry-run` |
+| `backfill_stage_completions` | Backfill historical `StageCompletionEvent` rows for users whose stage completions predate the event-tracking system. | `--dry-run`, `--username` | `python manage.py backfill_stage_completions --dry-run` |
+| `enrich_from_igdb` | Run the IGDB enrichment pipeline against concepts (developer/publisher, genres/themes, time-to-beat, engine, VR detection). Supports targeted, refresh, retry, search, manual-assign, review queue, and unmatched-queue modes. See [IGDB Integration](../architecture/igdb-integration.md). | `--concept-id`, `--refresh`, `--retry-no-match`, `--search`, `--manual`, `--review`, `--unmatched`, `--badge`, `--all`, `--force`, `--verbose`, `--dry-run` | `python manage.py enrich_from_igdb --review` |
+| `find_igdb_family_ties` | Find concepts that share an IGDB ID but are NOT in the same `GameFamily`. Used to discover missing family groupings (e.g. PS4/PS5 versions of the same game). | (none) | `python manage.py find_igdb_family_ties` |
+| `recalculate_calendars` | Recalculate Calendar Challenge fill state and platinum counts for all users, repairing drift between cached counts and the underlying data. | `--dry-run`, `--username` | `python manage.py recalculate_calendars --dry-run` |
+| `render_profile_sigs` | Pre-render forum-signature PNG and SVG variants of the profile card image. Used as a one-time backfill and as a periodic refresh after design changes. | `--username`, `--all` | `python manage.py render_profile_sigs --all` |
+| `trigger_concept_health_checks` | Queue `sync_title_stats` jobs for PS4/PS5 games whose concept is missing or stuck on a stub. Identifies users by `psn_username`, not `user.username`. | `--dry-run`, `--limit` | `python manage.py trigger_concept_health_checks --dry-run` |
 
 ### core
 
@@ -54,8 +61,7 @@ PlatPursuit has **58 custom management commands** spread across 4 Django apps: `
 | `send_monthly_recap_emails` | Send monthly recap emails and in-app notifications to users with finalized recaps. Respects email opt-out preferences. | `--dry-run`, `--year`, `--month`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_monthly_recap_emails --dry-run` |
 | `mark_recaps_sent` | One-time fix: mark all existing recaps as `email_sent` and `notification_sent` to prevent stale sends. | `--dry-run` | `python manage.py mark_recaps_sent` |
 | `cleanup_old_analytics` | Delete old AnalyticsSession records and anonymize IP addresses from PageView records for GDPR compliance. | `--dry-run`, `--days` (default: 90), `--force` | `python manage.py cleanup_old_analytics --force` |
-| `refresh_homepage_hourly` | Refresh hourly homepage cache data: community stats, latest badges, what's new. | (none) | `python manage.py refresh_homepage_hourly` |
-| `refresh_homepage_daily` | Refresh daily homepage cache data: featured games, featured badges, featured checklists. | (none) | `python manage.py refresh_homepage_daily` |
+| `refresh_homepage_hourly` | Compute and cache the site heartbeat ribbon data ("PlatPursuit at a Glance"). Single cache key per hour. See [Homepage Services](../reference/homepage-services.md). | (none) | `python manage.py refresh_homepage_hourly` |
 | `populate_title_ids` | Populate TitleID table from external PlayStation Titles GitHub repository (PS4 + PS5 TSV files). | (none) | `python manage.py populate_title_ids` |
 | `match_game_families` | Find and group related Concepts into GameFamily records using name-based and trophy-based matching algorithms. | `--dry-run`, `--auto-only`, `--verbose`, `--diagnose <concept_id>`, `--top` (default: 10) | `python manage.py match_game_families --dry-run --verbose` |
 | `backfill_guide_view_counts` | Reconcile `Checklist.view_count` from actual PageView records after the `page_type` rename from `checklist` to `guide`. | `--dry-run` | `python manage.py backfill_guide_view_counts` |
@@ -84,6 +90,12 @@ PlatPursuit has **58 custom management commands** spread across 4 Django apps: `
 | `backfill_subscription_periods` | Create SubscriptionPeriod records for existing premium subscribers who don't have one, using a specified start date. | `--start` (required, format: YYYY-MM-DD), `--dry-run` | `python manage.py backfill_subscription_periods --start 2026-01-20 --dry-run` |
 | `audit_subscription_status` | Audit users marked as premium against actual Stripe/PayPal subscription status. Optionally revoke premium for users with unpaid or missing subscriptions. | `--fix`, `--dry-run` | `python manage.py audit_subscription_status --fix --dry-run` |
 
+### fundraiser
+
+| Command | Purpose | Key Flags | Typical Usage |
+|---------|---------|-----------|---------------|
+| `fix_badge_picks` | Recompute `badge_picks_earned` for fundraiser donations from users who donated multiple times across overlapping campaigns. One-time repair, safe to re-run. | `--dry-run` | `python manage.py fix_badge_picks --dry-run` |
+
 ---
 
 ## Command Categories
@@ -95,8 +107,7 @@ These commands run on automated schedules. See your hosting provider's cron conf
 | Command | Schedule | Notes |
 |---------|----------|-------|
 | `refresh_profiles` | Every 30 minutes | Queues profiles for PSN sync by tier |
-| `refresh_homepage_hourly` | Every hour | Community stats, latest badges, what's new |
-| `refresh_homepage_daily` | Daily | Featured games, badges, checklists |
+| `refresh_homepage_hourly` | Every hour | Site heartbeat ribbon (single cache key) |
 | `update_leaderboards` | Every 6 hours | Badge leaderboards (7h cache TTL) |
 | `process_scheduled_notifications` | Every hour | Delivers due scheduled notifications |
 | `check_subscription_milestones` | Daily | Checks subscription duration milestones |
@@ -123,11 +134,17 @@ Commands for staff to run manually as needed.
 | `audit_user_awards` | Audit and clean up orphaned titles/milestones |
 | `audit_subscription_status` | Verify premium users against payment provider status |
 | `audit_profile_gamification` | Find XP discrepancies in gamification records |
+| `audit_calendar` | Audit Calendar Challenge fill state against actual platinums |
 | `sync_all_discord_roles` | Re-push Discord roles for all verified users |
 | `clean_titles` | Strip symbols and normalize titles across all models |
 | `enforce_az_challenge_rules` | Remove excluded games from A-Z challenge slots |
+| `recalculate_calendars` | Repair Calendar Challenge fill drift |
 | `test_email_system` | Send preview emails for any template |
 | `create_test_notification` | Create test notifications for inbox development |
+| `enrich_from_igdb` | IGDB enrichment pipeline (review queue, manual assign, refresh) |
+| `find_igdb_family_ties` | Surface concepts that share IGDB ID but not GameFamily |
+| `trigger_concept_health_checks` | Queue sync for PS4/PS5 games stuck on stub concepts |
+| `render_profile_sigs` | Pre-render forum-signature PNG/SVG variants of the profile card |
 
 ### One-Time Backfills
 
@@ -142,7 +159,9 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `backfill_game_regions` | Populate Game.region from TitleID data |
 | `backfill_guide_view_counts` | Fix guide view counts after page_type rename |
 | `backfill_subscription_periods` | Create SubscriptionPeriod for existing subscribers |
+| `backfill_stage_completions` | Backfill historical StageCompletionEvent rows |
 | `backfill_platted_subgenre_count` | Fix subgenre counts and revoke bad milestones |
+| `fix_badge_picks` | Recompute fundraiser badge_picks_earned for multi-donation users |
 | `mark_recaps_sent` | Prevent stale recap sends after email fix |
 | `populate_badges` | Initial badge evaluation for all profiles |
 | `populate_profile_plats` | Recalculate platinum counts for all profiles |

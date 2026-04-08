@@ -38,9 +38,10 @@
                 </div>
                 {# Inline action buttons #}
                 <div class="flex items-center gap-1.5 shrink-0">
+                    {% if request.user.is_staff %}
                     <button id="preview-toggle-btn"
                             class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
-                            title="Toggle premium/free preview">
+                            title="Toggle premium/free preview (staff)">
                         {% if is_premium %}
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
@@ -57,6 +58,7 @@
                     {% if preview_mode %}
                         <span class="badge badge-xs badge-outline badge-warning">Preview</span>
                     {% endif %}
+                    {% endif %}
                     <button id="customize-btn" class="btn btn-ghost btn-xs border border-base-300 gap-1" title="Customize">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
@@ -69,6 +71,9 @@
         </div>
     </div>
 </section>
+
+{# ─── Built for Hunters (site heartbeat ribbon, always visible) ───────── #}
+{% include 'trophies/partials/dashboard/built_for_hunters.html' %}
 
 {# ─── System Tab Bar (default categories, immutable) ──────────────────── #}
 <div id="dashboard-tabs" class="max-w-4xl mx-auto mt-4 flex gap-1 p-1 bg-base-200/60 rounded-box border-2 border-base-300" role="tablist">
@@ -91,7 +96,7 @@
 
 {# ─── Custom Tab Bar (premium user-created tabs, rendered below system bar) #}
 {% if custom_tabs %}
-<div id="dashboard-custom-tabs" class="max-w-4xl mx-auto mt-1 flex gap-1 p-1 bg-base-300/30 rounded-lg border border-base-300/50" role="tablist">
+<div id="dashboard-custom-tabs" class="max-w-4xl mx-auto mt-1 flex gap-1 p-1 bg-white/[0.03] rounded-lg border border-base-content/5" role="tablist">
     {% for tab in custom_tabs %}
         <button role="tab"
                 id="tab-btn-{{ tab.slug }}"
@@ -266,6 +271,18 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.reload();
         } catch (e) {
             PlatPursuit.ToastManager.error('Failed to toggle preview mode.');
+        }
+    });
+
+    // Home router handoff: when sync transitions away from 'synced' (user clicks
+    // Sync in the hotbar, sync errors out, etc.) reload so HomeView re-resolves
+    // and renders home/syncing.html instead of leaving the user on a stale
+    // dashboard. Symmetric to the home/syncing.html listener that reloads on
+    // the reverse transition. The CustomEvent is dispatched by hotbar.js only
+    // on real status transitions, not on every poll.
+    document.addEventListener('platpursuit:sync-status-changed', function(e) {
+        if (e.detail && e.detail.status !== 'synced') {
+            window.location.reload();
         }
     });
 });

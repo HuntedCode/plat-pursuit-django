@@ -5,37 +5,35 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-        <div class="card-body">
-            <div class="flex flex-row items-center justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl lg:text-3xl font-bold">My Challenges</h1>
-                    <p class="text-base-content/70">Track your progress and manage your challenges.</p>
-                </div>
-                <a href="{% url 'challenges_browse' %}" class="btn btn-ghost btn-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    Browse All
-                </a>
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <div class="flex flex-row items-center justify-between gap-4">
+            <div>
+                <h1 class="text-lg md:text-xl font-bold">My Challenges</h1>
+                <p class="text-base-content/70">Track your progress and manage your challenges.</p>
             </div>
+            <a href="{% url 'challenges_browse' %}" class="btn btn-ghost btn-md">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                Browse All
+            </a>
         </div>
     </div>
-</section>
+</div>
 
 {# ─── A-Z Platinum Challenge Section ─────────────────────────────────── #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="p-4">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         <h2 class="text-lg font-bold mb-3">
             <span class="text-primary">A-Z Platinum Challenge</span>
         </h2>
 
         {% if active_az %}
-            <div class="card bg-base-100 border-2 border-primary/30 shadow-md">
+            <div class="card bg-base-200/90 border-2 border-primary/30 shadow-md">
                 <div class="card-body p-4">
                     <div class="flex flex-row items-center justify-between gap-4">
                         <div class="flex-1">
@@ -78,7 +76,7 @@
                 </div>
             </div>
         {% elif can_create_az %}
-            <div class="card bg-base-100 border-2 border-dashed border-base-300">
+            <div class="card bg-base-200/90 border-2 border-dashed border-base-300">
                 <div class="card-body items-center text-center py-8">
                     <p class="text-4xl mb-2">&#127775;</p>
                     <p class="text-lg font-bold text-base-content/70">The alphabet awaits, hunter.</p>
@@ -91,17 +89,17 @@
             </div>
         {% endif %}
     </div>
-</section>
+</div>
 
 {# ─── Platinum Calendar Section ──────────────────────────────────────── #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="p-4">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         <h2 class="text-lg font-bold mb-3">
             <span class="text-primary">Platinum Calendar</span>
         </h2>
 
         {% if active_calendar %}
-            <div class="card bg-base-100 border-2 border-primary/30 shadow-md">
+            <div class="card bg-base-200/90 border-2 border-primary/30 shadow-md">
                 <div class="card-body p-4">
                     <div class="flex flex-row items-center justify-between gap-4">
                         <div class="flex-1">
@@ -126,7 +124,7 @@
 
                     {# Mini calendar month grid #}
                     {% if active_calendar_months %}
-                    <div class="grid grid-cols-6 lg:grid-cols-12 gap-2 mt-3">
+                    <div class="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-1.5 md:gap-2 mt-3">
                         {% for month in active_calendar_months %}
                         <div class="flex flex-col items-center py-1.5 rounded-md {% if month.filled_count == month.total_days %}bg-warning/10 ring-1 ring-warning/30{% endif %}">
                             <div class="text-xs font-bold {% if month.filled_count == month.total_days %}text-warning{% elif month.filled_count > 0 %}text-base-content/70{% else %}text-base-content/30{% endif %}">{{ month.month_abbr }}</div>
@@ -138,7 +136,7 @@
                 </div>
             </div>
         {% elif can_create_calendar %}
-            <div class="card bg-base-100 border-2 border-dashed border-base-300">
+            <div class="card bg-base-200/90 border-2 border-dashed border-base-300">
                 <div class="card-body items-center text-center py-8">
                     <p class="text-4xl mb-2">&#128197;</p>
                     <p class="text-lg font-bold text-base-content/70">365 days, 365 platinums.</p>
@@ -156,17 +154,17 @@
             </div>
         {% endif %}
     </div>
-</section>
+</div>
 
 {# ─── Genre Challenge Section ──────────────────────────────────────── #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="p-4">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         <h2 class="text-lg font-bold mb-3">
             <span class="text-primary">Genre Challenge</span>
         </h2>
 
         {% if active_genre %}
-            <div class="card bg-base-100 border-2 border-primary/30 shadow-md">
+            <div class="card bg-base-200/90 border-2 border-primary/30 shadow-md">
                 <div class="card-body p-4">
                     <div class="flex flex-row items-center justify-between gap-4">
                         <div class="flex-1">
@@ -211,7 +209,7 @@
                 </div>
             </div>
         {% elif can_create_genre %}
-            <div class="card bg-base-100 border-2 border-dashed border-base-300">
+            <div class="card bg-base-200/90 border-2 border-dashed border-base-300">
                 <div class="card-body items-center text-center py-8">
                     <p class="text-4xl mb-2">&#127918;</p>
                     <p class="text-lg font-bold text-base-content/70">Every genre, one platinum.</p>
@@ -224,14 +222,14 @@
             </div>
         {% endif %}
     </div>
-</section>
+</div>
 
 {# ─── History Section ────────────────────────────────────────────────── #}
 {% if history %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="p-4">
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
         <h2 class="text-lg font-bold mb-3">Challenge History</h2>
-        <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {% for challenge in history %}
                 {% if challenge.challenge_type == 'genre' %}
                     {% include 'partials/genre_challenge/challenge_card.html' with challenge=challenge %}
@@ -243,7 +241,7 @@
             {% endfor %}
         </div>
     </div>
-</section>
+</div>
 {% endif %}
 
 {# ─── Genre Delete Confirmation Modal ──────────────────────────────── #}
@@ -282,7 +280,6 @@
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 <script src="{% static 'js/az-challenge.js' %}"></script>
 {% if active_calendar %}
 <script>

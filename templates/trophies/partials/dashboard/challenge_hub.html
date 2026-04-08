@@ -18,7 +18,7 @@
 
             {# ─── A-Z Challenge ─────────────────────────────── #}
             {% with challenge_data=data.az %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-2 md:p-3 flex flex-col">
+                <div class="rounded-lg border border-base-content/5 bg-white/[0.03] p-2 md:p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
                             <div class="flex items-center gap-2 mb-2">
@@ -45,7 +45,7 @@
                             {% if challenge_data.slots %}
                                 <div class="flex flex-wrap gap-1 mb-2 justify-center">
                                     {% for slot in challenge_data.slots %}
-                                        <span class="w-7 h-7 lg:w-8 lg:h-8 rounded-md text-xs lg:text-sm font-bold flex items-center justify-center {% if slot.completed %}bg-success/20 text-success{% elif slot.filled %}bg-accent/20 text-accent{% else %}bg-base-300/50 text-base-content/30{% endif %}">{{ slot.letter }}</span>
+                                        <span class="w-7 h-7 lg:w-8 lg:h-8 rounded-md text-xs lg:text-sm font-bold flex items-center justify-center {% if slot.completed %}bg-success/20 text-success{% elif slot.filled %}bg-accent/20 text-accent{% else %}bg-white/[0.03] border border-base-content/5 text-base-content/30{% endif %}">{{ slot.letter }}</span>
                                     {% endfor %}
                                 </div>
                             {% endif %}
@@ -71,7 +71,7 @@
 
             {# ─── Calendar Challenge ────────────────────────── #}
             {% with challenge_data=data.calendar %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-2 md:p-3 flex flex-col">
+                <div class="rounded-lg border border-base-content/5 bg-white/[0.03] p-2 md:p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
                             <div class="flex items-center gap-2 mb-2">
@@ -101,7 +101,7 @@
                                             <div></div>
                                         {% endfor %}
                                         {% for day in challenge_data.current_month.days %}
-                                            <div class="w-full aspect-square rounded-sm flex items-center justify-center {% if day.is_filled %}bg-info/30{% else %}bg-base-300/40{% endif %} {% if day.day == challenge_data.current_month.today %}ring-1 ring-primary{% endif %}" style="font-size: 0.5rem;">
+                                            <div class="w-full aspect-square rounded-sm flex items-center justify-center {% if day.is_filled %}bg-info/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %} {% if day.day == challenge_data.current_month.today %}ring-1 ring-primary{% endif %}" style="font-size: 0.5rem;">
                                                 <span class="{% if day.day == challenge_data.current_month.today %}text-primary font-black{% elif day.is_filled %}text-info font-bold{% else %}text-base-content/20{% endif %}">{{ day.day }}</span>
                                             </div>
                                         {% endfor %}
@@ -134,7 +134,7 @@
 
             {# ─── Genre Challenge ───────────────────────────── #}
             {% with challenge_data=data.genre %}
-                <div class="rounded-lg border border-base-300/60 bg-base-300/20 p-2 md:p-3 flex flex-col">
+                <div class="rounded-lg border border-base-content/5 bg-white/[0.03] p-2 md:p-3 flex flex-col">
                     {% if challenge_data %}
                         {% if challenge_data.is_complete %}
                             <div class="flex items-center gap-2 mb-2">

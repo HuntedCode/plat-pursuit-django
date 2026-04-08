@@ -1,5 +1,5 @@
 {% load static %}
-<nav class="navbar bg-base-200 shadow-lg" role="navigation" aria-label="Main navigation">
+<nav class="navbar bg-base-200 shadow-lg border-b-2 border-primary/30" role="navigation" aria-label="Main navigation">
 
     <!-- navbar-start: Logo -->
     <div class="navbar-start flex items-center">
@@ -27,6 +27,17 @@
                         <li><a href="{% url 'games_list' %}">Games</a></li>
                         <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
                         <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
+                    </ul>
+                </details>
+            </li>
+            <!-- Discover -->
+            <li>
+                <details class="mega-menu-dropdown">
+                    <summary>Discover</summary>
+                    <ul class="mega-menu-content">
+                        <li><a href="{% url 'companies_list' %}">Companies</a></li>
+                        <li><a href="{% url 'genres_list' %}">Genres & Themes</a></li>
+                        <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
                     </ul>
                 </details>
             </li>
@@ -66,18 +77,7 @@
                     </ul>
                 </details>
             </li>
-            <!-- Guides -->
-            <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Guides</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'guides_browse' %}">Guide Hub</a></li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'my_guides' %}">My Guides</a></li>
-                        {% endif %}
-                    </ul>
-                </details>
-            </li>
+            {# Guides section hidden during redesign - will be reintroduced later #}
             <!-- My Pursuit -->
             {% if user.is_authenticated and user.profile %}
             <li>
@@ -89,7 +89,6 @@
                         {% endif %}
                         <li><a href="{% url 'settings' %}">Customization</a></li>
                         <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-                        <li><a href="{% url 'my_guides' %}">My Guides</a></li>
                         <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
                         <li><a href="{% url 'my_lists' %}">My Lists</a></li>
                         <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>

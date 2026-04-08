@@ -200,5 +200,5 @@ In both cases, the JS knows the rating status before the user clicks download, w
 
 ## Related Docs
 
-- [Mobile App](../mobile-app.md): Mobile app may consume share image endpoints
-- [Dashboard](../dashboard.md): Dashboard may include shareable statistics modules
+- [Mobile App](../guides/mobile-app.md): Mobile app may consume share image endpoints
+- [Dashboard](dashboard.md): Dashboard may include shareable statistics modules

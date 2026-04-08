@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}Genres & Themes{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Header Card ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Genres & Themes</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Browse games by what they are and what they feel like. Data sourced from
+            <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>
+            and may not cover every game in our library.
+            </p>
+        </div>
+    </div>
+
+    {# ── Tab Toggle ── #}
+    <div class="flex gap-2 mb-3">
+        <a href="?tab=genres{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+           class="btn btn-sm {% if active_tab == 'genres' %}btn-secondary{% else %}btn-ghost border border-base-300{% endif %}">
+            Genres
+        </a>
+        <a href="?tab=themes{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}{% if request.GET.sort %}&sort={{ request.GET.sort }}{% endif %}"
+           class="btn btn-sm {% if active_tab == 'themes' %}btn-secondary{% else %}btn-ghost border border-base-300{% endif %}">
+            Themes
+        </a>
+    </div>
+
+    {# ── Search + Sort ── #}
+    <form method="get" class="mb-3">
+        <input type="hidden" name="tab" value="{{ active_tab }}" />
+        <div class="flex flex-col md:flex-row gap-2">
+            <div class="relative flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" name="query" value="{{ request.GET.query }}"
+                       class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
+                       placeholder="Search {{ active_tab }}..." />
+            </div>
+            <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-48">
+                <option value="alpha" {% if request.GET.sort == 'alpha' or not request.GET.sort %}selected{% endif %}>Alphabetical</option>
+                <option value="games" {% if request.GET.sort == 'games' %}selected{% endif %}>Most Games</option>
+            </select>
+            <button type="submit" class="btn btn-sm md:btn-md btn-primary">Search</button>
+        </div>
+    </form>
+
+    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+
+    {# ── Tag Cards Grid ── #}
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-3">
+        {% for item in items %}
+            <a href="{% url detail_url_name slug=item.slug %}"
+               class="card bg-base-200/90 border-2 border-base-300 shadow-md hover:shadow-lg hover:border-secondary/50 transition-all duration-200 group">
+                <div class="card-body p-3 md:p-4">
+                    <h3 class="font-bold text-sm md:text-base group-hover:text-secondary transition-colors">
+                        {{ item.name }}
+                    </h3>
+                    <span class="badge badge-sm badge-ghost mt-1">{{ item.game_count|intcomma }} game{{ item.game_count|pluralize }}</span>
+                </div>
+            </a>
+        {% empty %}
+            <div class="col-span-full card bg-base-200/90 border-2 border-base-300 shadow-lg">
+                <div class="card-body items-center text-center py-12">
+                    <p class="text-base-content/40 text-sm">No {{ active_tab }} found matching your search.</p>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+{% endblock %}

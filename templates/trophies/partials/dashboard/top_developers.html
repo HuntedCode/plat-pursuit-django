@@ -1,0 +1,104 @@
+{% load custom_filters %}
+{# Dashboard module: Top Developers/Publishers. Sub-tab toggle with rich per-studio stats. #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21h18"></path>
+                    <path d="M5 21V7l8-4v18"></path>
+                    <path d="M19 21V11l-6-4"></path>
+                </svg>
+                Top Studios
+            </h2>
+        </div>
+
+        {% if data.has_data %}
+            {# Sub-tab toggle #}
+            <div class="flex items-center gap-1 mb-3 top-studios-tabs">
+                <button type="button" class="btn btn-xs btn-primary top-studios-tab" data-tab="dev">Developers</button>
+                <button type="button" class="btn btn-xs btn-ghost top-studios-tab" data-tab="pub">Publishers</button>
+            </div>
+
+            {# Developers panel (default visible) #}
+            <div class="top-studios-panel" data-panel="dev">
+                {% if data.developers %}
+                    <div class="space-y-1.5">
+                        {% for c in data.developers %}
+                            <a href="{% url 'company_detail' c.slug %}" class="block p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ c.name }}</span>
+                                    <span class="text-xs font-bold text-secondary shrink-0">{{ c.trophies }} <span class="text-base-content/40 font-normal">trophies</span></span>
+                                </div>
+                                <div class="w-full bg-base-300 rounded-full h-1 mb-1.5">
+                                    <div class="bg-secondary rounded-full h-1 transition-all duration-500" style="width: {{ c.pct }}%"></div>
+                                </div>
+                                <div class="flex items-center gap-2 lg:gap-3 text-[0.65rem] lg:text-xs text-base-content/50">
+                                    <span class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="15" x2="15.01" y1="13" y2="13"></line><line x1="18" x2="18.01" y1="11" y2="11"></line><rect width="20" height="12" x="2" y="6" rx="2"></rect></svg>
+                                        <span class="font-semibold text-base-content/70">{{ c.games }}</span> {{ c.games|pluralize:"game,games" }}
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                        <span class="font-semibold text-base-content/70">{{ c.plats }}</span> plat{{ c.plats|pluralize }}
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <span class="font-semibold text-base-content/70">{{ c.completed }}</span> 100%
+                                    </span>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 text-xs text-base-content/40">No developer data yet.</div>
+                {% endif %}
+            </div>
+
+            {# Publishers panel (hidden by default) #}
+            <div class="top-studios-panel hidden" data-panel="pub">
+                {% if data.publishers %}
+                    <div class="space-y-1.5">
+                        {% for c in data.publishers %}
+                            <a href="{% url 'company_detail' c.slug %}" class="block p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                                <div class="flex items-center justify-between gap-2 mb-1">
+                                    <span class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ c.name }}</span>
+                                    <span class="text-xs font-bold text-accent shrink-0">{{ c.trophies }} <span class="text-base-content/40 font-normal">trophies</span></span>
+                                </div>
+                                <div class="w-full bg-base-300 rounded-full h-1 mb-1.5">
+                                    <div class="bg-accent rounded-full h-1 transition-all duration-500" style="width: {{ c.pct }}%"></div>
+                                </div>
+                                <div class="flex items-center gap-2 lg:gap-3 text-[0.65rem] lg:text-xs text-base-content/50">
+                                    <span class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="15" x2="15.01" y1="13" y2="13"></line><line x1="18" x2="18.01" y1="11" y2="11"></line><rect width="20" height="12" x="2" y="6" rx="2"></rect></svg>
+                                        <span class="font-semibold text-base-content/70">{{ c.games }}</span> {{ c.games|pluralize:"game,games" }}
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                                        <span class="font-semibold text-base-content/70">{{ c.plats }}</span> plat{{ c.plats|pluralize }}
+                                    </span>
+                                    <span class="flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                        <span class="font-semibold text-base-content/70">{{ c.completed }}</span> 100%
+                                    </span>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-4 text-xs text-base-content/40">No publisher data yet.</div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-secondary/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21h18"></path>
+                    <path d="M5 21V7l8-4v18"></path>
+                </svg>
+                <p class="text-sm text-base-content/50">No studio data yet</p>
+                <p class="text-xs text-base-content/40 mt-1">IGDB enrichment in progress for your library.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

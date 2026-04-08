@@ -234,7 +234,7 @@
     });
 
     // Remove cross-gen duplicates: for each GameFamily, keep the newest platform version
-    const PLATFORM_PRIORITY = { 'PS5': 5, 'PS4': 4, 'PS3': 3, 'PS Vita': 2, 'PSP': 1 };
+    const PLATFORM_PRIORITY = { 'PS5': 5, 'PSVR2': 4.5, 'PS4': 4, 'PSVR': 3.5, 'PS3': 3, 'PS Vita': 2, 'PSP': 1 };
 
     function bestPlatformScore(platforms) {
         if (!platforms || !platforms.length) return 0;

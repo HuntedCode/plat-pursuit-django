@@ -6,101 +6,111 @@
 
 {% block content %}
 {% if sync_gate %}
-<div class="max-w-2xl mx-auto py-16 px-4 text-center">
-    <div class="mb-8">
-        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='h-24 w-24' extra_class='mx-auto text-primary mb-4' %}
-        <h1 class="text-3xl font-bold text-primary mb-2">Monthly Recap</h1>
-        <p class="text-base-content/70">Your trophy hunting highlights, wrapped!</p>
+<div class="max-w-2xl mx-auto">
+    {# Header #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 items-center text-center">
+            {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='h-16 w-16 md:h-20 md:w-20' extra_class='text-primary mb-2' %}
+            <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Monthly Recap</h1>
+            <p class="text-xs md:text-sm text-base-content/50 italic pr-1">Your trophy hunting highlights, wrapped!</p>
+        </div>
     </div>
+
     {% include 'recap/_timezone_section.html' %}
-    <div class="card bg-base-200 shadow-xl p-8">
-        {% if sync_gate == 'no_profile' %}
-        <h2 class="text-xl font-semibold mb-4">Link Your PSN First</h2>
-        <p class="text-base-content/70 mb-6">
-            Connect your PSN account to start tracking trophies and unlock Monthly Recap.
-        </p>
-        <a href="{% url 'link_psn' %}" class="btn btn-primary">Link PSN</a>
-        {% elif sync_gate == 'syncing' %}
-        <h2 class="text-xl font-semibold mb-4">Sync In Progress</h2>
-        <p class="text-base-content/70 mb-6">
-            Your trophy data is still syncing. Once it's complete, your Monthly Recap will be ready.
-        </p>
-        <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-primary">View Sync Progress</a>
-        {% elif sync_gate == 'sync_stale' %}
-        <h2 class="text-xl font-semibold mb-4">Fresh Sync Needed</h2>
-        <p class="text-base-content/70 mb-6">
-            Your trophy data needs a fresh sync before your {{ stale_month_name }} {{ stale_year }} recap
-            can be generated. Head to your profile page to kick off a sync and make sure your recap
-            is accurate and complete.
-        </p>
-        <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-primary">Go to Profile</a>
-        {% else %}
-        <h2 class="text-xl font-semibold mb-4">Sync Error</h2>
-        <p class="text-base-content/70 mb-6">
-            There was a problem syncing your profile. Make sure your PSN "Gaming History" is set to "Anybody", then try re-syncing.
-        </p>
-        <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-primary">Go to Profile</a>
-        {% endif %}
+
+    {# Sync Gate Card #}
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-3 md:p-5 lg:p-7 items-center text-center">
+            {% if sync_gate == 'no_profile' %}
+                <h2 class="text-base md:text-lg font-bold mb-2">Link Your PSN First</h2>
+                <p class="text-sm text-base-content/50 mb-4">
+                    Connect your PSN account to start tracking trophies and unlock Monthly Recap.
+                </p>
+                <a href="{% url 'link_psn' %}" class="btn btn-sm md:btn-md btn-primary">Link PSN</a>
+            {% elif sync_gate == 'syncing' %}
+                <h2 class="text-base md:text-lg font-bold mb-2">Sync In Progress</h2>
+                <p class="text-sm text-base-content/50 mb-4">
+                    Your trophy data is still syncing. Once it's complete, your Monthly Recap will be ready.
+                </p>
+                <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-sm md:btn-md btn-primary">View Sync Progress</a>
+            {% elif sync_gate == 'sync_stale' %}
+                <h2 class="text-base md:text-lg font-bold mb-2">Fresh Sync Needed</h2>
+                <p class="text-sm text-base-content/50 mb-4">
+                    Your trophy data needs a fresh sync before your {{ stale_month_name }} {{ stale_year }} recap
+                    can be generated. Head to your profile page to kick off a sync.
+                </p>
+                <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-sm md:btn-md btn-primary">Go to Profile</a>
+            {% else %}
+                <h2 class="text-base md:text-lg font-bold mb-2">Sync Error</h2>
+                <p class="text-sm text-base-content/50 mb-4">
+                    There was a problem syncing your profile. Make sure your PSN "Gaming History" is set to "Anybody", then try re-syncing.
+                </p>
+                <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-sm md:btn-md btn-primary">Go to Profile</a>
+            {% endif %}
+        </div>
     </div>
 </div>
+
 {% else %}
-<div class="max-w-2xl mx-auto py-16 px-4 text-center">
-    <div class="mb-8">
-        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='h-24 w-24' extra_class='mx-auto text-primary mb-4' %}
-        <h1 class="text-3xl font-bold text-primary mb-2">Monthly Recap</h1>
-        <p class="text-base-content/70">Your trophy hunting highlights, wrapped!</p>
+<div class="max-w-2xl mx-auto">
+    {# Header #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 items-center text-center">
+            {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='h-16 w-16 md:h-20 md:w-20' extra_class='text-primary mb-2' %}
+            <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Monthly Recap</h1>
+            <p class="text-xs md:text-sm text-base-content/50 italic pr-1">Your trophy hunting highlights, wrapped!</p>
+        </div>
     </div>
+
     {% include 'recap/_timezone_section.html' %}
 
     {% if no_activity %}
-    <div class="card bg-base-200 shadow-xl p-8">
-        <h2 class="text-xl font-semibold mb-4">No Recap Available Yet</h2>
-        <p class="text-base-content/70 mb-6">
-            Earn at least one trophy this month to unlock your monthly recap!
-            Your recap will show your trophy hunting highlights and let you share them with friends.
-        </p>
-        <a href="{% url 'home' %}" class="btn btn-primary">
-            Start Trophy Hunting
-        </a>
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-3 md:p-5 lg:p-7 items-center text-center">
+            <h2 class="text-base md:text-lg font-bold mb-2">No Recap Available Yet</h2>
+            <p class="text-sm text-base-content/50 mb-4">
+                Earn at least one trophy this month to unlock your monthly recap!
+                Your recap will show your trophy hunting highlights and let you share them with friends.
+            </p>
+            <a href="{% url 'home' %}" class="btn btn-sm md:btn-md btn-primary">Start Trophy Hunting</a>
+        </div>
     </div>
 
     {% elif available_months %}
-    <div class="card bg-base-200 shadow-xl p-8">
-        <h2 class="text-xl font-semibold mb-4">View Your Recaps</h2>
-        <p class="text-base-content/70 mb-6">
-            Select a month to view your trophy hunting highlights.
-        </p>
-        <div class="flex flex-wrap gap-2 justify-center">
-            {% for m in available_months %}
-            <a href="{% url 'recap_view' year=m.year month=m.month %}"
-               class="btn {% if m.is_current %}btn-primary{% else %}btn-outline{% endif %}">
-                {{ m.short_month_name }} {{ m.year }}
-                {% if m.is_premium_required and not is_premium %}
-                <span class="badge badge-warning badge-xs ml-1">PRO</span>
-                {% endif %}
-            </a>
-            {% endfor %}
-        </div>
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-5 lg:p-7 items-center text-center">
+            <h2 class="text-base md:text-lg font-bold mb-3">View Your Recaps</h2>
+            <p class="text-sm text-base-content/50 mb-4">Select a month to view your trophy hunting highlights.</p>
+            <div class="flex flex-wrap gap-2 justify-center">
+                {% for m in available_months %}
+                <a href="{% url 'recap_view' year=m.year month=m.month %}"
+                   class="btn btn-sm {% if m.is_current %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">
+                    {{ m.short_month_name }} {{ m.year }}
+                    {% if m.is_premium_required and not is_premium %}
+                    <span class="badge badge-warning badge-xs ml-1">PRO</span>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
 
-        {% if not is_premium %}
-        <div class="mt-8 p-4 bg-base-300 rounded-lg">
-            <p class="text-sm text-base-content/70 mb-2">
-                <span class="badge badge-warning badge-sm mr-1">PRO</span>
-                Past recaps are available with Premium
-            </p>
-            <a href="{% url 'account_settings' %}" class="btn btn-sm btn-outline">
-                Upgrade to Premium
-            </a>
+            {% if not is_premium %}
+            <div class="mt-6 p-3 bg-white/[0.03] border border-base-content/5 rounded-lg w-full max-w-md">
+                <p class="text-xs text-base-content/50 mb-2">
+                    <span class="badge badge-warning badge-xs mr-1">PRO</span>
+                    Past recaps are available with Premium
+                </p>
+                <a href="{% url 'subscribe' %}" class="btn btn-xs btn-primary">Upgrade to Premium</a>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     {% else %}
-    <div class="card bg-base-200 shadow-xl p-8">
-        <h2 class="text-xl font-semibold mb-4">No Recaps Yet</h2>
-        <p class="text-base-content/70">
-            Start earning trophies to see your monthly recaps here!
-        </p>
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-3 md:p-5 lg:p-7 items-center text-center">
+            <h2 class="text-base md:text-lg font-bold mb-2">No Recaps Yet</h2>
+            <p class="text-sm text-base-content/50">Start earning trophies to see your monthly recaps here!</p>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -109,7 +119,4 @@
 
 {% block js_scripts %}
 {% include 'recap/_timezone_section_js.html' %}
-<script>
-    PlatPursuit.ZoomScaler.init();
-</script>
 {% endblock %}

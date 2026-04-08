@@ -4,47 +4,157 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    <div class="card bg-base-100 border-4 border-base-300 shadow-md shadow-neutral">
-        <div class="card-body">
-            <h1 class="text-2xl lg:text-3xl font-bold">My Shareables</h1>
-            <p class="text-base-content/70">Create and share images of your gaming achievements.</p>
+{# Page Header #}
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                    </svg>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">My Shareables</h1>
+                    {% if total_platinums %}
+                        <span class="badge badge-sm badge-ghost font-bold">{{ total_platinums }} platinum{{ total_platinums|pluralize }}</span>
+                    {% endif %}
+                </div>
+                <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                    Create and share images of your platinum trophies.
+                </p>
+            </div>
         </div>
     </div>
-</section>
+</div>
 
-{# Tabs #}
-<section class="shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 w-full p-0 lg:p-4 mt-6">
-    <div class="tabs tabs-boxed bg-base-100 p-2">
-        <a href="?tab=profile_card" class="tab tab-lg {% if active_tab == 'profile_card' %}tab-active{% endif %}">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
-            </svg>
-            Profile Card
-            <span class="badge badge-primary badge-sm ml-2">New</span>
-        </a>
-        <a href="?tab=platinum_images" class="tab tab-lg {% if active_tab == 'platinum_images' %}tab-active{% endif %}">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="var(--color-trophy-platinum)" viewBox="0 0 24 24">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-            </svg>
-            Platinum Share Images
-            {% if total_platinums %}
-                <span class="badge badge-sm ml-2">{{ total_platinums }}</span>
-            {% endif %}
-        </a>
-    </div>
+{# Platinum Share Images #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {% if platinums_by_year %}
+            {# Search + Year Jump + Shovelware Toggle #}
+            <div class="flex flex-col md:flex-row gap-2 md:gap-3 mb-4">
+                <div class="relative flex-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text"
+                           id="platinum-search"
+                           placeholder="Search your platinums..."
+                           class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10 pr-10"
+                           autocomplete="off">
+                    <button type="button"
+                            id="clear-search"
+                            class="absolute inset-y-0 right-0 z-20 items-center pr-3 hidden"
+                            aria-label="Clear search">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/50 hover:text-base-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
 
-    {# Tab Content #}
-    <div class="mt-4 p-4">
-        {% if active_tab == 'profile_card' %}
-            {% include 'shareables/partials/profile_card_tab.html' %}
-        {% elif active_tab == 'platinum_images' %}
-            {% include 'shareables/partials/platinum_grid.html' %}
+                <select id="jump-to-year" class="select select-bordered select-sm md:select-md w-full md:w-48">
+                    <option value="">Jump to year...</option>
+                    {% for year, platinums in platinums_by_year.items %}
+                    <option value="{{ year }}">{{ year }} ({{ platinums|length }})</option>
+                    {% endfor %}
+                </select>
+
+                {% if shovelware_count > 0 %}
+                <label class="flex items-center gap-2 cursor-pointer shrink-0 px-2">
+                    <span class="text-xs text-base-content/50">Hide Shovelware</span>
+                    <span class="badge badge-xs badge-ghost">{{ shovelware_count }}</span>
+                    <input type="checkbox" id="hide-shovelware-toggle" class="toggle toggle-xs toggle-primary" />
+                </label>
+                {% endif %}
+            </div>
+            <p id="search-results-count" class="text-sm text-base-content/50 mb-3 hidden"></p>
+
+            {# Platinum Grid by Year #}
+            {% for year, platinums in platinums_by_year.items %}
+            <div class="mb-6 year-group" data-year="{{ year }}">
+                <div class="flex items-center gap-2 mb-3 year-header">
+                    <span class="badge badge-primary font-bold">{{ year }}</span>
+                    <span class="text-xs text-base-content/40">{{ platinums|length }} platinum{{ platinums|length|pluralize }}</span>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 md:gap-2">
+                    {% for et in platinums %}
+                    <div class="card bg-base-200/90 border-2 {% if et.is_milestone %}shimmer{% else %}border-base-300{% endif %} shadow-md shadow-neutral
+                                transition-all duration-300 hover:shadow-lg hover:shadow-primary/30 hover:border-primary
+                                cursor-pointer group p-1 md:p-1.5 platinum-card"
+                         data-earned-trophy-id="{{ et.id }}"
+                         data-game-name="{{ et.trophy.game.title_name }}"
+                         data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.title_icon_url }}"
+                         data-concept-bg-url="{{ et.trophy.game.concept.bg_url|default:'' }}"
+                         data-concept-id="{{ et.trophy.game.concept.id|default:'' }}"
+                         data-search-name="{{ et.trophy.game.title_name|lower }}"
+                         data-is-shovelware="{{ et.is_shovelware|yesno:'true,false' }}"
+                         onclick="openShareModal(this)">
+                        <figure class="px-2 pt-2 md:px-3 md:pt-3">
+                            <div class="relative w-full aspect-square">
+                                <img src="{{ et.trophy.game.title_icon_url }}"
+                                     alt="{{ et.trophy.game.title_name }}"
+                                     loading="lazy"
+                                     decoding="async"
+                                     class="rounded-lg w-full h-full object-cover border border-base-content/5">
+                                {# Milestone number badge #}
+                                {% if et.is_milestone %}
+                                <div class="absolute -top-2 -left-2 bg-gradient-to-br from-primary to-secondary text-primary-content rounded-full min-w-8 h-8 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-base-200 z-10">
+                                    #{{ et.platinum_number }}
+                                </div>
+                                {% endif %}
+                                {# Platinum badge overlay #}
+                                <div class="absolute -bottom-1 -right-1 bg-base-200 rounded-full p-1 border-2 border-base-300 group-hover:border-primary transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="var(--color-trophy-platinum)" viewBox="0 0 24 24">
+                                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                                    </svg>
+                                </div>
+                                {# Shovelware indicator #}
+                                {% if et.is_shovelware %}
+                                <div class="absolute top-1 right-1 opacity-60 group-hover:opacity-100 transition-opacity" title="Shovelware">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning drop-shadow" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </figure>
+                        <div class="card-body m-0 px-1.5 md:px-2 py-1.5 md:py-2 gap-1">
+                            <h4 class="text-xs font-bold line-clamp-2 pr-1 min-h-[2.25rem]">{{ et.trophy.game.title_name }}</h4>
+                            <p class="text-[0.6rem] text-base-content/40">
+                                {% if et.earned_date_time %}
+                                    {{ et.earned_date_time|format_date:"format_short" }}
+                                {% else %}
+                                    Unknown date
+                                {% endif %}
+                            </p>
+                            <button class="btn btn-primary btn-xs w-full gap-1 mt-auto share-btn"
+                                    onclick="event.stopPropagation(); openShareModal(this.closest('[data-earned-trophy-id]'))">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                                </svg>
+                                Share
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            {# Empty State #}
+            <div class="text-center py-12 md:py-16">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 md:h-16 md:w-16 mx-auto text-base-content/30" fill="var(--color-trophy-platinum)" viewBox="0 0 24 24">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                </svg>
+                <p class="text-base-content/60 mt-3 mb-1 text-base md:text-lg font-semibold">No platinum trophies yet</p>
+                <p class="text-base-content/40 text-xs md:text-sm">Earn platinum trophies to create shareable images!</p>
+            </div>
         {% endif %}
     </div>
-</section>
+</div>
 
 {# Share Image Modal #}
 <dialog id="share-modal" class="modal">
@@ -58,7 +168,6 @@
         </form>
         <h3 class="font-bold text-lg mb-4" id="share-modal-title">Create Share Image</h3>
         <div id="share-modal-content">
-            {# ShareableManager will render content here #}
             <div class="flex justify-center items-center py-12">
                 <span class="loading loading-spinner loading-lg"></span>
             </div>
@@ -69,70 +178,17 @@
     </form>
 </dialog>
 
-{# Color Grid Modal - for background selection #}
+{# Color Grid Modal #}
 {% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
-
-{# Rate Before Download Modal - prompts unrated users to rate before downloading share card #}
+{# Rate Before Download Modal #}
 {% include 'partials/rate_before_download_modal.html' %}
-{# Theme Nudge Modal - prompts users to pick a theme before downloading with default #}
+{# Theme Nudge Modal #}
 {% include 'partials/theme_nudge_modal.html' %}
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
-<!-- Gradient themes from server (single source of truth) -->
 <script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
 <script src="{% static 'js/share-image.js' %}"></script>
 <script src="{% static 'js/color-grid-modal.js' %}"></script>
 <script src="{% static 'js/shareable-manager.js' %}"></script>
-<script src="{% static 'js/profile-card-share.js' %}"></script>
-{% if active_tab == 'profile_card' %}
-<script>
-(function() {
-    const manager = new PlatPursuit.ProfileCardShareManager();
-
-    // Initialize social card share section
-    const shareContent = document.getElementById('profile-card-share-content');
-    if (shareContent) {
-        shareContent.innerHTML = manager.renderShareSection();
-        manager.init();
-    }
-
-    // Click preview to open full-size modal
-    const preview = document.getElementById('share-preview');
-    if (preview) {
-        preview.style.cursor = 'pointer';
-        preview.title = 'Click to view full size';
-        preview.addEventListener('click', async function() {
-            const modal = document.getElementById('card-preview-modal');
-            const fullsize = document.getElementById('card-preview-fullsize');
-            if (!modal || !fullsize) return;
-
-            try {
-                const html = await manager.fetchCardHTML(manager.currentFormat);
-                const dims = manager.dimensions[manager.currentFormat];
-                // Scale to fit viewport with padding (48px top/bottom)
-                const maxW = window.innerWidth - 80;
-                const maxH = window.innerHeight - 96;
-                const scale = Math.min(1, maxW / dims.width, maxH / dims.height);
-                fullsize.innerHTML = html;
-                const inner = fullsize.querySelector('.share-image-content');
-                if (inner) {
-                    inner.style.transform = 'scale(' + scale + ')';
-                    inner.style.transformOrigin = 'top center';
-                    fullsize.style.width = (dims.width * scale) + 'px';
-                    fullsize.style.height = (dims.height * scale) + 'px';
-                    manager.applyBackground(inner);
-                }
-                modal.showModal();
-            } catch (err) {
-                console.error('Failed to load full-size preview:', err);
-            }
-        });
-    }
-
-    // Forum sig management removed (kept in back pocket for later)
-})();
-</script>
-{% endif %}
 {% endblock %}

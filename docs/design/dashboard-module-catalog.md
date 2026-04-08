@@ -1,24 +1,25 @@
 # Dashboard Module Catalog
 
-The dashboard serves as the index page for all logged-in users. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and up to 6 user-created custom tabs (premium). Each module belongs to a default category tab. See [Dashboard System](../features/dashboard.md) for full architecture docs.
+The dashboard is the synced-state home page (`/`) for all logged-in users. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and up to 6 user-created custom tabs (premium). Each module belongs to a default category tab.
 
-**Design principles:**
-- **Performance first:** Always cache, always invalidate properly. This is the production index page.
+**For the canonical, always-current module list, see [Dashboard System](../features/dashboard.md).** This catalog is the design/roadmap document: it tracks the original vision, what was cut, and what (if anything) remains planned. When the live registry and this doc disagree, the live registry wins and this doc should be updated.
+
+**Design principles (still load-bearing):**
+- **Performance first:** Always cache, always invalidate properly. This is the production home page.
 - **Badges are the selling point:** Maximum badge presence across modules.
 - **Smart CTAs:** Modules show actionable prompts when the user hasn't started (never blank cards).
 - **Premium as upgrade path:** Settings, reorder, and premium-exclusive modules drive conversions.
 - **Visualizations sell premium:** Rich data visualizations are the primary premium differentiator.
-- **Gamification deferred:** Hold off on gamification modules until the system goes live.
 
-## Module Status
+## Module Status (as of 2026-04-08)
 
 | Status | Count |
 |--------|-------|
-| Complete (Tier 1-4 + Share + Premium + Viz) | 26 |
-| Cut (low value) | 8 |
-| Planned (Stats Page) | 1 |
-| Future (Gamification + Roadmap) | 4 |
-| **Total** | **39** |
+| Complete (live in `DASHBOARD_MODULES`) | 41 |
+| Cut (planned but rejected as low value) | 9 |
+| **Catalog total** | **50** |
+
+The "Complete" count is the source of truth from `DASHBOARD_MODULES` in `trophies/services/dashboard_service.py`. Run `grep -c "^        'slug':" trophies/services/dashboard_service.py` to verify.
 
 ---
 
@@ -32,6 +33,8 @@ The dashboard serves as the index page for all logged-in users. Modules are orga
 | 4 | Sync Status | Server | **Cut** | Redundant with sync hotbar on every page |
 | 5 | Unread Notifications | Lazy | **Cut** | Redundant with navbar notification bell |
 | 29 | Quick Settings | Server | **Done** | Profile + CustomUser (settings fields) |
+| 37 | My Stats Teaser | Lazy (10m) | **Done** | `stats_service.get_career_overview()`. 4 hero stats + CTA to `/my-stats/` |
+| 40 | Trophy Diversity Score | Lazy (30m) | **Done** | `ConceptGenre` + `ConceptTheme` M2Ms. Composite 0-100 score across distinct genres + themes the user has trophies in (IGDB-powered) |
 
 ### Quick Settings (#29) - DONE
 - Inline toggle switches for `hide_hiddens`, `hide_zeros`, `use_24hr_clock`
@@ -55,6 +58,8 @@ All challenge modules show smart CTAs when no active challenge exists.
 | 9 | Genre Challenge Progress | Lazy (5m) | **Done** | GenreChallengeSlot + subgenres + last plat, next target, Pick Next Game CTA |
 | 10 | Milestone Tracker | Lazy (10m) | **Done** | UserMilestoneProgress, Python-side pct sort |
 | 11 | Almost There | Lazy (10m) | **Done** | ProfileGame (90%+ configurable threshold) |
+| 28 | Roadmaps for Your Library | Lazy (30m) | **Done** | `Roadmap` (1:1 with `Concept`). Surfaces published roadmaps for concepts in the user's library where they haven't platinumed yet. The dashboard replacement for the legacy "My Checklists" surface. |
+| 41 | VR Trophy Hunter | Lazy (30m) | **Done** | PSVR + PSVR2 progress at a glance: stats, in-progress games, "back into the headset" CTA. Powered by IGDB VR-platform detection. |
 
 ## Category: Badges & Achievements
 
@@ -77,6 +82,7 @@ Badges are a flagship feature with dedicated real estate.
 | S1 | Latest Platinum | Lazy (10m) | **Done** | Live share card preview via `/api/v1/shareables/platinum/<id>/html/` |
 | S2 | Challenge Cards | Lazy (10m) | **Done** | Up to 3 challenge share card previews (A-Z, Calendar, Genre) |
 | S3 | Recap Card | Lazy (30m) | **Done** | Most recent finalized recap share card preview |
+| S4 | Platinum Grid CTA | Lazy (10m) | **Done** | Builds a shareable grid image of every platinum the user has earned |
 
 Moved to Highlights: My Reviews (#16 old), Rate My Games (#18 old). Cut: Community Spotlight, My Checklists, My Game Lists.
 
@@ -89,7 +95,10 @@ Moved to Highlights: My Reviews (#16 old), Rate My Games (#18 old). Cut: Communi
 | 21 | Trophy Timeline | Lazy | **Cut** | Low utility, didn't add enough value |
 | 22 | Monthly Recap Preview | Lazy (30m) | **Done** | MonthlyRecap (most recent finalized) |
 | 23 | Rarity Showcase | Lazy (10m) | **Done** | EarnedTrophy sorted by earn_rate, rarity_color_hex |
-| 32 | Personal Records | - | **Moved** | Moved to planned `/my-stats/` dedicated page |
+| 32 | Personal Records | - | **Moved** | Moved to `/my-stats/` dedicated page (shipped, currently staff-gated) |
+| 38 | Top Studios | Lazy (30m) | **Done** | `ConceptCompany` (developer/publisher roles) joined to earned trophies. Sub-tab toggle between developers and publishers. Links to `/companies/<slug>/`. IGDB-powered. |
+| 39 | Library Health Alerts | Lazy (30m) | **Done** | Surfaces games in the user's library with auto-applied data quality flags from the `GameFlag` system. Severity buckets: blockers (delisted/unobtainable), issues (buggy/online), info (manually flagged). Filters to games where the user has earned at least one trophy. |
+| 42 | Earned Titles | Lazy (10m) | **Done** | Quick-equip from the user's collection of earned `UserTitle` records. Switch displayed title without leaving the dashboard. |
 
 ## Category: Utility
 
@@ -105,101 +114,44 @@ The premium dashboard should feel indispensable. Visualization modules are the p
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
 | 26 | Advanced Stats | Lazy (30m) | **Done** | EarnedTrophy aggregates (velocity, rarity tiers, platform breakdown, completion tiers, time/day patterns) |
-| 27 | Premium Settings | Lazy (none) | **Done** | Profile theme/background inline management (theme picker + background search) |
-| 28 | Trophy Roadmap | Lazy | Future | Requires standalone Roadmap feature first |
-| 30-34 | Trophy Visualizations | Lazy (30m) | **Done** | Combined module with year/all selector. Contains: trophy heatmap (CSS grid), genre radar (Chart.js), year-in-review (Chart.js line), games started vs completed (Chart.js line), trophy progress earned vs unearned (Chart.js line), yearly totals with quarterly breakdown (Chart.js stacked bar, all-time mode). Uses first-earn-per-game reconstruction for accurate unearned history. |
+| 27 | Theme Picker (formerly Premium Settings) | Lazy (none) | **Done** | Quick-pick row + full 105-theme browser. Renamed from "Premium Settings" to better describe what it does. |
+| 30-34 | Trophy Visualizations | Lazy (30m) | **Done** | Combined module with year/all selector. Contains: trophy heatmap (CSS grid), engine radar (Chart.js, replaces the old genre radar), year-in-review (Chart.js line), games started vs completed (Chart.js line), trophy progress earned vs unearned (Chart.js line), yearly totals with quarterly breakdown (Chart.js stacked bar, all-time mode). Uses first-earn-per-game reconstruction for accurate unearned history. |
 | 35 | Advanced Badge Stats | Lazy (30m) | **Done** | Badge velocity, series completion depth, XP breakdown by series, badge type distribution, tier distribution, rarest badges, stage progress, XP efficiency, stage velocity. Date range switcher using StageCompletionEvent. |
 | 36a | Badge Series Overview | Lazy (30m) | **Done** | All-time badge status: stage progress bar (current grind), series XP radar, series completion tier grid. Not date-filtered. |
 | 36b | Badge Visualizations | Lazy (30m) | **Done** | Date-filtered badge timeline with year/all selector: stages by series (stacked bar), XP growth, badges vs stages (dual cumulative line), stage completion rate. All stage data from StageCompletionEvent. |
-| 32 | Personal Records / Stats Page | - | Planned | Dedicated `/my-stats/` page (not a module), video game stats screen aesthetic |
+| 43 | Genre & Themes (theme_mastery) | Lazy (30m) | **Done** | Combined module: side-by-side IGDB genre and theme radars across earned trophies (`ConceptGenre` + `ConceptTheme`). All-time only. The year-aware genre radar lives nowhere now since the field was moved out of trophy_visualizations into engine_radar. |
+| 44 | Time-to-Beat | Lazy (30m) | **Done** | `IGDBMatch.time_to_beat_completely` to compute average plat duration, longest hunts, and currently-grinding remaining hours. IGDB-powered. |
+| 45 | Profile Showcase Editor | Lazy (none) | **Done** | Drag-reorder for the 5-slot `ProfileBadgeShowcase`. Persisted via `POST /api/v1/badges/showcase/reorder/`. Coexists with the existing `badge_showcase` module (which handles the share-card featured badge picker). |
+| 32 | Personal Records / Stats Page | - | **Done (off-dashboard)** | The `/my-stats/` page shipped (currently staff-gated). Not a dashboard module; the dashboard's `my_stats_teaser` (#37) is the on-dashboard surface that links to it. See [Stats Page](stats-page.md). |
 
-### Visualization Module Details
+### Visualization Module Details (Historical Sketches)
 
-#### Platinum Heatmap (#30)
-- GitHub-style contribution grid for platinum earns
-- Each cell = one day, color intensity = platinums earned that day
-- Shows streaks, dry spells, and seasonal patterns
-- Covers current year (365 cells) with month labels
-- Data: `EarnedTrophy.objects.filter(trophy__trophy_type='platinum', earned=True)` grouped by `earned_date_time` date
-- Rendering: Pure CSS/SVG grid (no chart library needed). Each cell is a small colored div.
-- Cache: High TTL (30m+), invalidate on sync
-- Premium: **Yes**
+The original catalog defined five separate visualization modules (Platinum Heatmap, Rarity Radar, Personal Records, Year in Review, Trophy Type Breakdown). All shipped, but as **components inside the combined `trophy_visualizations` module** rather than standalone tiles. Pulling them apart would have meant six separate Chart.js loads on the same tab. The combined module is the canonical implementation.
 
-#### Rarity Radar (#31)
-- Spider/radar chart showing the user's collection by rarity tier
-- Axes: Ultra Rare (<5%), Very Rare (5-10%), Rare (10-20%), Uncommon (20-50%), Common (>50%)
-- Shows what kind of hunter you are: "rarity chaser" vs "casual completionist"
-- Data: `EarnedTrophy` joined with `Trophy.trophy_earn_rate`, bucketed by rarity threshold
-- Rendering: Chart.js radar chart or pure SVG
-- Cache: High TTL (30m+), invalidate on sync
-- Premium: **Yes**
+For the rendering decisions and chart-library choices that resulted, see the live [`trophy_visualizations` module template](../../templates/trophies/partials/dashboard/trophy_visualizations.html) and `provide_trophy_visualizations()` in `dashboard_service.py`.
 
-#### Personal Records (#32)
-- Visual cards showing the user's personal trophy hunting records
-- Records: Fastest platinum (fewest days from first trophy to plat), Most platinums in a month, Longest daily streak, Rarest platinum earned, Most trophies in a single day
-- Each record shows the value, the game/date, and a small icon
-- Data: Aggregated from `EarnedTrophy` with date math
-- Rendering: Card grid, no chart library needed
-- Cache: High TTL (1hr), invalidate on sync
-- Premium: **Yes**
-
-#### Year in Review (#33)
-- Line chart comparing this year vs last year
-- Metrics: Cumulative platinums, total trophies, games completed
-- Shows growth trajectory and pacing
-- Data: `EarnedTrophy` grouped by month for current and previous year
-- Rendering: Chart.js line chart or pure SVG sparkline
-- Cache: High TTL (1hr), invalidate on sync
-- Premium: **Yes**
-
-#### Trophy Type Breakdown Over Time (#34)
-- Stacked area chart showing bronze/silver/gold/platinum earns by month
-- Reveals trends: "Am I earning more platinums over time?" "Am I becoming more of a completionist?"
-- Data: `EarnedTrophy` grouped by `trophy__trophy_type` and month
-- Rendering: Chart.js stacked area chart
-- Cache: High TTL (1hr), invalidate on sync
-- Premium: **Yes**
-
-### Free Visualization Modules
-
-These could be offered to all users as simpler, non-chart visualizations:
-
-#### Trophy Earn Rate Timeline (part of Trophy Snapshot or standalone)
-- Simple sparkline showing trophies earned per week over the last 3 months
-- Rendering: Pure CSS/SVG sparkline (no chart library)
-- Could be integrated into the existing Trophy Snapshot module rather than a standalone module
-
-#### Genre Breakdown (part of Advanced Stats or standalone)
-- Donut/pie chart of platinums by genre
-- "You're 40% Action, 25% RPG, 20% Adventure..."
-- Data: `EarnedTrophy` joined with `Concept.genres`
-- Could be free as a simpler version, with detailed drilldowns premium-only
-
-#### Completion Distribution (part of Advanced Stats or standalone)
-- Histogram of games by completion percentage (0-25%, 25-50%, 50-75%, 75-100%)
-- Shows backlog shape at a glance
-- Data: `ProfileGame.progress` bucketed
-- Simple enough to be free
-
-### Chart Library Considerations
-
-For visualization modules, two approaches:
-
-1. **Chart.js** (~60KB gzipped, Canvas-based): Best for radar charts, line charts, stacked area charts. Zero dependencies. Load only on pages/tabs that need it (lazy script load).
-
-2. **Pure CSS/SVG**: Best for heatmaps, sparklines, simple grids. No library overhead. Better for server-rendered modules.
-
-**Recommendation:** Use pure CSS/SVG for simpler visualizations (heatmap, sparklines, card-based records). Use Chart.js only for complex charts (radar, line, stacked area). Load Chart.js lazily only when a premium visualization tab is activated.
+**Chart library decision (final):** Chart.js (~60KB gzipped, Canvas-based) is loaded lazily only when a premium visualization tab is activated. Pure CSS/SVG is used for the heatmap component within `trophy_visualizations`. This matches the original recommendation.
 
 ---
 
-## Future: Pending Gamification Launch
+## Future: Pending Full Gamification Launch
+
+The original catalog reserved three modules (XP & Level Progress, P.L.A.T.I.N.U.M. Stats, Leaderboard Position) for after the full gamification system shipped. **The full system has not shipped.** Only the Badge XP foundation exists today (`ProfileGamification.total_badge_xp` populated by signals from badge progress and badge earns). The P.L.A.T.I.N.U.M. stats, Jobs, quests, currency, star chart, and avatar frames described in [Gamification Vision](gamification-vision.md) are all unimplemented.
+
+What's already surfaced from the Badge XP foundation:
+
+- **Badge XP totals + leaderboards** are in [`badge_xp_leaderboard`](#category-badges--achievements) and [`country_xp_leaderboard`](#category-badges--achievements)
+- **XP velocity / breakdown** is in [`advanced_stats`](#category-premium-exclusive) and [`advanced_badge_stats`](#category-premium-exclusive) (premium)
+
+What's still planned for after the full gamification launch:
 
 | # | Module | Blocked By |
 |---|--------|------------|
-| F1 | XP & Level Progress | Gamification system launch |
-| F2 | P.L.A.T.I.N.U.M. Stats | Gamification system launch |
-| F3 | Leaderboard Position | Gamification system launch |
+| F1 | Level / Tier Progress | Player level system (currently no level concept beyond series tiers) |
+| F2 | P.L.A.T.I.N.U.M. Stats Radar | `StageStatValue` data population and stat aggregation service |
+| F3 | Active Jobs / Quest Tracker | Jobs and quests system from `gamification-vision.md` |
+
+Design these against the schema in `architecture/gamification.md` (which already documents the dormant `StatType` / `StageStatValue` tables) when the time comes.
 
 ---
 
@@ -256,35 +208,35 @@ For visualization modules, two approaches:
 | 24 | Quick Links | Cut: navbar covers navigation |
 | 25 | Featured Content | Cut: better suited for homepage |
 
-### Premium Visualization Tier
+### Premium Visualization Tier (COMPLETE)
 
-These are the crown jewels that make premium feel indispensable.
+These are the crown jewels that make premium feel indispensable. The original sketches (Platinum Heatmap, Rarity Radar, Personal Records, Year in Review, Trophy Type Breakdown) shipped as **components inside the combined `trophy_visualizations` module** (#30-34) rather than as standalone tiles. Personal Records ended up on the dedicated `/my-stats/` page.
 
-| # | Module | Why |
-|---|--------|-----|
-| 30 | Platinum Heatmap | GitHub-style grid. Visual, addictive, shareable. |
-| 31 | Rarity Radar | Spider chart reveals your hunter identity. |
-| 32 | Personal Records | Gamifies your history. "Can I beat my record?" |
-| 33 | Year in Review | Growth trajectory. Motivational. |
-| 34 | Trophy Type Breakdown | Trends over time. "Am I improving?" |
-| 26 | Advanced Stats | Deep analytics for power users. |
-| 27 | Profile Theme Preview | Premium identity. |
-| 28 | Trophy Roadmap | Crown jewel (needs feature first). |
+| # | Module | Why | Lives In |
+|---|--------|-----|----------|
+| 30-34 | Trophy Visualizations | The combined visualization suite. Heatmap + radar + cumulative + stacked bar. | Standalone module |
+| 26 | Advanced Stats | Deep analytics for power users. | Standalone module |
+| 27 | Theme Picker | Premium identity. Renamed from "Profile Theme Preview". | Standalone module |
+| 28 | Roadmaps for Your Library | Surfaces staff-authored platinum guides for the user's unplatted library. Was originally listed as a future module blocked by a "standalone Roadmap feature"; the Roadmap system shipped, so this module shipped with it. | Standalone module (free, not premium) |
+| 32 | Personal Records | Gamifies your history. | Off-dashboard at `/my-stats/` |
+| 35 | Advanced Badge Stats | Velocity, depth, XP breakdowns. Shipped as a separate premium module after the original catalog was written. | Standalone module |
+| 36a/b | Badge Series Overview / Badge Visualizations | Stage-completion timeline and series radar. New since the original catalog. | Two standalone modules |
+| 43-45 | Genre & Themes / Time-to-Beat / Profile Showcase Editor | IGDB-driven additions to the premium tier. New since the original catalog. | Standalone modules |
 
 ---
 
-## Customize Panel Categories
+## Customize Panel Categories (System Tabs)
 
 | Slug | Display Name | Modules |
 |------|-------------|---------|
-| `premium` | Premium | Advanced Stats, Theme Preview, Trophy Roadmap, Platinum Heatmap, Rarity Radar, Personal Records, Year in Review, Trophy Type Breakdown |
-| `at_a_glance` | At a Glance | Trophy Snapshot, Recent Platinums, Recent Activity, Sync Status, Notifications, Quick Settings |
-| `progress` | Progress & Challenges | Challenge Hub, A-Z, Calendar, Genre, Milestones, Completion Milestones |
+| `premium` | Premium | Advanced Stats, Theme Picker, Trophy Visualizations, Advanced Badge Stats, Badge Series Overview, Badge Visualizations, Genre & Themes, Time-to-Beat, Profile Showcase Editor |
+| `at_a_glance` | At a Glance | Trophy Snapshot, Recent Activity, Recent Platinums, Your Stats (teaser), Diversity Score, Quick Settings |
+| `progress` | Progress & Challenges | Challenge Hub, Almost There, Milestone Tracker, Roadmaps for Your Library, A-Z Challenge, Platinum Calendar, Genre Challenge, VR Trophy Hunter |
 | `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Stats, Badge XP & Leaderboard, Country XP Leaderboard |
-| `highlights` | Highlights & History | Monthly Recap Preview, Rarity Showcase, My Reviews, Rate My Games |
-| `share` | Share & Export | Badge Showcase, Profile Card, Latest Platinum, Challenge Cards, Recap Card |
+| `highlights` | Highlights & History | Monthly Recap Preview, Library Health, Top Studios, Earned Titles, Rarity Showcase, My Reviews, Rate My Games |
+| `share` | Share & Export | Profile Card, Latest Platinum, Recap Card, Platinum Grid CTA, Challenge Cards, Badge Showcase |
 
-Utility modules (Quick Links, Featured Content) fold into At a Glance or Highlights.
+The 6 system tabs are immutable. Premium users can additionally create up to 6 custom tabs and move modules between any tabs. See [Dashboard](../features/dashboard.md#tab-system) for the live tab system reference.
 
 ## Gotchas and Pitfalls
 

@@ -8,7 +8,7 @@
 
     {# ─── Header ──────────────────────────────────────────────────────── #}
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 class="text-3xl font-bold mb-4 md:mb-0">Fundraiser Admin</h1>
+        <h1 class="text-2xl md:text-3xl font-bold mb-4 md:mb-0">Fundraiser Admin</h1>
         <div class="flex gap-2 flex-wrap">
             <a href="{% url 'badge_reveal' %}" class="btn btn-ghost btn-sm">Badge Reveal</a>
             <a href="{% url 'subscription_admin' %}" class="btn btn-ghost btn-sm">Subscriptions</a>
@@ -246,7 +246,6 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         PlatPursuit.FundraiserAdmin.init();
-        PlatPursuit.ZoomScaler.init();
     });
 </script>
 {% endblock %}

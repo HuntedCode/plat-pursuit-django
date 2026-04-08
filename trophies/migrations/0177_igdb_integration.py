@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("trophies", "0171_alter_badge_badge_type"),
+        ("trophies", "0176_roadmap_step_youtube"),
     ]
 
     operations = [

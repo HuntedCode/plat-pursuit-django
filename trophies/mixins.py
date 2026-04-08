@@ -100,6 +100,22 @@ class ProfileHotbarMixin(View):
         return context
 
 
+class HtmxListMixin:
+    """Mixin for ListViews that returns a partial template on HTMX requests.
+
+    Subclasses must set ``partial_template_name`` to the results-only partial
+    (cards + pagination). On normal requests the full page template is rendered;
+    on HTMX requests only the partial is returned, enabling snappy filter
+    updates without a full page reload.
+    """
+    partial_template_name = None  # e.g. 'trophies/partials/game_list/browse_results.html'
+
+    def get_template_names(self):
+        if self.request.htmx and self.partial_template_name:
+            return [self.partial_template_name]
+        return super().get_template_names()
+
+
 class BackgroundContextMixin:
     """
     Mixin for views that display page-specific game image backgrounds.

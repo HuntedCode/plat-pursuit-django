@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}{{ genre.name }} Games{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Header Card ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">{{ genre.name }}</h1>
+                <span class="badge badge-sm badge-secondary">Genre</span>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                {{ total_game_count|intcomma }} game{{ total_game_count|pluralize }} in this genre. Find your next platinum.
+            </p>
+        </div>
+    </div>
+
+    {# ── Filter Drawer ── #}
+    {% include 'trophies/partials/genre_detail/filter_drawer.html' %}
+
+    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+
+    <div id="browse-results">
+        {% include 'trophies/partials/genre_detail/browse_results.html' %}
+    </div>
+
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+{% endblock %}

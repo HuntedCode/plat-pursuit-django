@@ -39,6 +39,12 @@
                 <div class="text-lg md:text-xl font-black text-primary">{{ data.game_families }}</div>
                 <div class="text-xs text-base-content/50 font-medium">Game Families</div>
             </div>
+            {% if data.buggy_trophies %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
+                <div class="text-lg md:text-xl font-black text-error">{{ data.buggy_trophies }}</div>
+                <div class="text-xs text-base-content/50 font-medium">Buggy Trophies</div>
+            </div>
+            {% endif %}
         </div>
 
         {# Completion tier distribution #}

@@ -1,62 +1,108 @@
 {% load custom_filters static humanize %}
-<div class="space-y-2">
+<div class="space-y-1.5 md:space-y-2">
     {% for trophy in trophies %}
         {% with profile_earned|dict_get:trophy.trophy_id as earned %}
-            <div id="{{ trophy.trophy_id }}" class="card bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral transition-all duration-300 hover:border-{{ trophy|trophy_color }} hover:shadow-{{ trophy|trophy_color }} group">
-                <div class="w-full{% if earned.earned %} bg-success/15{% endif %}">
-                    <div class="card-body {% if earned.earned %}border-l-4 border-success{% endif %} flex flex-row items-center justify-between p-2">
-                        <div class="flex flex-row items-center gap-2 lg:gap-3 min-w-0 flex-1">
-                            <div class="flex flex-row items-center justify-center gap-3">
-                                <figure class="w-14 h-14 lg:w-16 lg:h-16 flex items-center justify-center overflow-hidden border-2 border-base-300 shadow-sm shadow-neutral transition-all duration-300 group-hover:border-{{ trophy|trophy_color }} group-hover:shadow-{{ trophy|trophy_color }}">
-                                    <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-full h-full object-cover hover:scale-105" />
-                                </figure>
-                                <div class="bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral w-10 h-10 hover:scale-105 group-hover:border-{{ trophy|trophy_color }} group-hover:shadow-{{ trophy|trophy_color }} lg:hidden">
-                                    {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-full p-2' %}
-                                </div>
+            <div id="{{ trophy.trophy_id }}"
+                 class="card bg-white/[0.03] border border-base-content/5
+                        transition-all duration-300 hover:shadow-lg hover:shadow-trophy-{{ trophy.trophy_type }}/30
+                        hover:border-trophy-{{ trophy.trophy_type }} hover:z-10 group
+                        {% if earned.earned %}border-l-4 border-l-success{% endif %}">
+                <div class="card-body m-0 p-2 md:p-3">
+                    <div class="flex items-center gap-2 md:gap-3">
+
+                        {# ── Trophy Icon ── #}
+                        <div class="shrink-0">
+                            <div class="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden
+                                        border-2 border-base-300 group-hover:border-trophy-{{ trophy.trophy_type }} transition-all">
+                                <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}"
+                                     class="w-full h-full object-cover" loading="lazy" />
                             </div>
-                            <div class="flex flex-col gap-0">
-                                <h1 class="text-sm md:text-base lg:text-lg text-base-content font-semibold pr-1 line-clamp-2">{{ trophy.trophy_name }}</h1>
-                                <h3 class="text-xs lg:text-sm text-base-content/80 pr-1 italic line-clamp-2">{{ trophy.trophy_detail }}</h3>
-                                {% if earned.earned %}
-                                    <h4 class="text-xs text-base-content/60 italic pr-1 line-clamp-1">Earned: {{ earned.earned_date_time|format_date:"with_tz" }}</h4>
+                        </div>
+
+                        {# ── Content Zone ── #}
+                        <div class="flex-1 min-w-0">
+                            {# Trophy name + type badge #}
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="font-semibold text-sm md:text-base line-clamp-1 pr-1
+                                             group-hover:text-trophy-{{ trophy.trophy_type }} transition-colors">{{ trophy.trophy_name }}</span>
+                                <span class="badge badge-xs md:badge-sm font-bold border shrink-0"
+                                      style="color: {{ trophy|trophy_css_color }}; border-color: {{ trophy|trophy_css_color }};">
+                                    {{ trophy.trophy_type|title }}
+                                </span>
+                            </div>
+
+                            {# Description #}
+                            <p class="text-xs text-base-content/50 line-clamp-1 pr-1 mt-0.5">{{ trophy.trophy_detail }}</p>
+
+                            {# Earned date (md:+ only, full format) #}
+                            {% if earned.earned and earned.earned_date_time %}
+                                <span class="hidden md:inline text-xs text-success/70 italic">Earned: {{ earned.earned_date_time|format_date:"with_tz" }}</span>
+                            {% endif %}
+
+                            {# Progress (if has target and not earned) #}
+                            {% if profile and trophy.progress_target_value and not earned.earned %}
+                                <div class="flex items-center gap-2 mt-1 max-w-48">
+                                    <span class="text-[0.55rem] text-base-content/40 font-medium uppercase">Progress</span>
+                                    <div class="flex-1 bg-base-300/50 rounded-full h-1">
+                                        {% with earned.progress|default:0 as prog %}
+                                        {% with trophy.progress_target_value as target %}
+                                            <div class="h-full rounded-full bg-accent transition-all"
+                                                 style="width: {% widthratio prog target 100 %}%"></div>
+                                        {% endwith %}
+                                        {% endwith %}
+                                    </div>
+                                    <span class="text-[0.6rem] font-bold text-accent">{{ earned.progress|default:0|intcomma }}/{{ trophy.progress_target_value|intcomma }}</span>
+                                </div>
+                            {% endif %}
+
+                            {# Mobile stats row (with condensed date if earned) #}
+                            <div class="flex items-center gap-1.5 mt-1 md:hidden text-xs text-base-content/50">
+                                <div class="flex items-center gap-0.5">
+                                    {% include 'partials/icons/pp_logo.html' with size='w-3 h-3' %}
+                                    <span>{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
+                                </div>
+                                <span class="text-base-content/20">&middot;</span>
+                                <div class="flex items-center gap-0.5">
+                                    {% include 'partials/icons/ps_logo.html' with size='w-3 h-3' %}
+                                    <span>{{ trophy.trophy_earn_rate }}%</span>
+                                </div>
+                                {% if earned.earned and earned.earned_date_time %}
+                                    <span class="text-base-content/20">&middot;</span>
+                                    <span class="text-success/60 italic sm:hidden">{{ earned.earned_date_time|date:"n/j/y" }}</span>
+                                    <span class="text-success/60 italic hidden sm:inline">{{ earned.earned_date_time|date:"n/j/y g:iA" }}</span>
                                 {% endif %}
                             </div>
                         </div>
 
-                        <div class="flex flex-row flex-wrap items-center mr-4">
-                            {% if profile and trophy.progress_target_value and not earned.earned %}
-                                <div class="divider divider-horizontal hidden md:block"></div>
-                                <div class="flex flex-col justify-center gap-0">
-                                    <h6 class="text-xs text-base-content/60 text-center italic">Progress</h6>
-                                    <h3 class="text-xs lg:text-sm text-base-content font-bold"><span class="text-accent text-sm lg:text-lg">{{ earned.progress|default:0|intcomma }}</span> / {{ trophy.progress_target_value|intcomma }}</h3>
+                        {# ── Stats Panel (md:+) ── #}
+                        <div class="hidden md:flex items-center gap-2 lg:gap-3 shrink-0">
+                            {% if earned.earned %}
+                                <div class="flex items-center shrink-0" title="Earned!">
+                                    {% include 'partials/icons/checkmark.html' with color='var(--color-success)' size='w-4 h-4 lg:w-5 lg:h-5' %}
                                 </div>
                             {% endif %}
-                            <div class="divider divider-horizontal hidden md:block"></div>
-                            <div class="flex flex-row items-center gap-1.5">
-                                <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit" class="w-5 lg:w-6 h-5 lg:h-6" />
-                                <div class="flex flex-col items-center gap-0">
-                                    <span class="text-xs text-base-content/60 italic">PP</span>
-                                    <span class="text-xs lg:text-sm text-base-content font-semibold">{{ trophy.earn_rate|multiply:100|floatformat:2 }}%</span>
-                                    <span class="text-xs text-base-content/60 italic">{{ trophy.pp_rarity }}</span>
+                            {# PP Rate #}
+                            <div class="flex flex-col items-center gap-0.5 min-w-14 lg:min-w-16">
+                                <div class="flex items-center gap-1">
+                                    {% include 'partials/icons/pp_logo.html' with size='w-3.5 h-3.5' %}
+                                    <span class="text-sm lg:text-base font-bold text-base-content/80">{{ trophy.earn_rate|multiply:100|floatformat:1 }}%</span>
                                 </div>
+                                <span class="text-[0.6rem] text-base-content/40 font-medium uppercase">PP Rate</span>
                             </div>
-                            <div class="divider divider-horizontal hidden md:block"></div>
-                            <div class="flex flex-row items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 lg:w-6 h-5 lg:h-6" fill="var(--color-base-content)" viewBox="0 0 16 16"><path d="M15.858 11.451c-.313.395-1.079.676-1.079.676l-5.696 2.046v-1.509l4.192-1.493c.476-.17.549-.412.162-.538-.386-.127-1.085-.09-1.56.08l-2.794.984v-1.566l.161-.054s.807-.286 1.942-.412c1.135-.125 2.525.017 3.616.43 1.23.39 1.368.962 1.056 1.356M9.625 8.883v-3.86c0-.453-.083-.87-.508-.988-.326-.105-.528.198-.528.65v9.664l-2.606-.827V2c1.108.206 2.722.692 3.59.985 2.207.757 2.955 1.7 2.955 3.825 0 2.071-1.278 2.856-2.903 2.072Zm-8.424 3.625C-.061 12.15-.271 11.41.304 10.984c.532-.394 1.436-.69 1.436-.69l3.737-1.33v1.515l-2.69.963c-.474.17-.547.411-.161.538.386.126 1.085.09 1.56-.08l1.29-.469v1.356l-.257.043a8.45 8.45 0 0 1-4.018-.323Z"/></svg>
-                                <div class="flex flex-col items-center gap-0">
-                                    <span class="text-xs text-base-content/60 italic">PSN</span>
-                                    <span class="text-xs lg:text-sm text-base-content font-semibold">{{ trophy.trophy_earn_rate }}%</span>
-                                    <span class="text-xs text-base-content/60 italic">{{ trophy.trophy_rarity|psn_rarity }}</span>
+
+                            {# PSN Rate #}
+                            <div class="flex flex-col items-center gap-0.5 min-w-14 lg:min-w-16">
+                                <div class="flex items-center gap-1">
+                                    {% include 'partials/icons/ps_logo.html' with size='w-3.5 h-3.5' %}
+                                    <span class="text-sm lg:text-base font-bold text-base-content/80">{{ trophy.trophy_earn_rate }}%</span>
                                 </div>
-                            </div>
-                            <div class="divider divider-horizontal hidden md:block"></div>
-                            <div class="bg-base-100 border-2 border-base-300 shadow-sm shadow-neutral w-10 h-10 hover:scale-105 group-hover:border-{{ trophy|trophy_color }} group-hover:shadow-{{ trophy|trophy_color }} hidden lg:block">
-                                {% include 'partials/icons/trophy_cup.html' with color=trophy|trophy_css_color size='w-full p-2' %}
+                                <span class="text-[0.6rem] text-base-content/40 font-medium uppercase">PSN Rate</span>
                             </div>
                         </div>
+
                     </div>
                 </div>
-            {% endwith %}
-        </div>
+            </div>
+        {% endwith %}
     {% endfor %}
 </div>

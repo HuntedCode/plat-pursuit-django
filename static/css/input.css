@@ -161,6 +161,16 @@
     @apply shadow-lg shadow-neutral bg-base-200/80 rounded-box border-2 border-base-300 p-0 lg:p-4;
   }
 
+  /* Guide edit: ensure content is not hidden behind sticky toolbar */
+  #checklist-edit-container {
+    padding-bottom: 4rem;
+  }
+
+  /* Guide edit: details chevron rotation */
+  details[open] .details-chevron {
+    transform: rotate(180deg);
+  }
+
   /* Panel container - sidebars, filter panels, split panes */
   .panel-container {
     @apply bg-base-200 rounded-lg shadow-md border-2 border-base-300;
@@ -770,3 +780,52 @@ html {
   border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
   animation: spinner-knife-shimmer 1.2s ease-in-out infinite;
 }
+
+/* Badge Showcase Carousel - crossfade rotation */
+.badge-showcase-carousel .badge-showcase-slide {
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+
+/* 1 badge: static, always visible */
+.badge-showcase-carousel[data-count="1"] .badge-showcase-slide {
+  opacity: 1;
+}
+
+/* 2 badges: alternate every 4s (8s cycle) */
+@keyframes badge-crossfade-2 {
+  0%, 42% { opacity: 1; }
+  50%, 92% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.badge-showcase-carousel[data-count="2"] .badge-showcase-slide:nth-child(1) {
+  animation: badge-crossfade-2 8s ease-in-out infinite;
+}
+.badge-showcase-carousel[data-count="2"] .badge-showcase-slide:nth-child(2) {
+  animation: badge-crossfade-2 8s ease-in-out infinite;
+  animation-delay: 4s;
+}
+
+/* 3 badges: rotate every 4s (12s cycle) */
+@keyframes badge-crossfade-3 {
+  0%, 28% { opacity: 1; }
+  33%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.badge-showcase-carousel[data-count="3"] .badge-showcase-slide:nth-child(1) {
+  animation: badge-crossfade-3 12s ease-in-out infinite;
+}
+.badge-showcase-carousel[data-count="3"] .badge-showcase-slide:nth-child(2) {
+  animation: badge-crossfade-3 12s ease-in-out infinite;
+  animation-delay: 4s;
+}
+.badge-showcase-carousel[data-count="3"] .badge-showcase-slide:nth-child(3) {
+  animation: badge-crossfade-3 12s ease-in-out infinite;
+  animation-delay: 8s;
+}
+
+/* Pause on hover */
+.badge-showcase-carousel:hover .badge-showcase-slide {
+  animation-play-state: paused;
+}
+

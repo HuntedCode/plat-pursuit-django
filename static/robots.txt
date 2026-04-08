@@ -10,3 +10,7 @@ Disallow: /api/
 # Disallow internal pages
 Disallow: /staff/
 Disallow: /monitoring/
+
+# Disallow guides (temporarily hidden during redesign)
+Disallow: /guides/
+Disallow: /my-guides/

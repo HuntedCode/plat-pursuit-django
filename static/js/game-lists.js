@@ -108,7 +108,6 @@ const GameListEditor = {
         this._bindRemoveButtons();
         this._bindNoteEditing();
         this._bindSettingsToggle();
-        this._bindThemeGrid();
     },
 
     // --- Settings Toggle ---
@@ -937,58 +936,6 @@ const GameListEditor = {
             try { const errData = await err.response?.json(); msg = errData?.error || msg; } catch {}
             PlatPursuit.ToastManager.error(msg);
         }
-    },
-
-    // --- Background Theme Grid ---
-    _bindThemeGrid() {
-        const grid = document.getElementById('list-theme-grid');
-        if (!grid || !this.isPremium) return;
-
-        grid.addEventListener('click', async (e) => {
-            const btn = e.target.closest('.theme-preview-btn');
-            if (!btn) return;
-
-            const themeKey = btn.dataset.themeKey;
-            const themeName = btn.dataset.themeName;
-            const currentSelected = grid.dataset.selected;
-
-            // Toggle: clicking already-selected theme deselects it
-            const newTheme = (themeKey === currentSelected) ? '' : themeKey;
-            const newName = newTheme ? themeName : 'None';
-
-            try {
-                await PlatPursuit.API.patch(`/api/v1/lists/${this.listId}/update/`, {
-                    selected_theme: newTheme,
-                });
-
-                // Update grid visual state
-                grid.querySelectorAll('.theme-preview-btn').forEach(b => {
-                    b.classList.remove('border-primary', 'ring-2', 'ring-primary');
-                    b.classList.add('border-base-300');
-                });
-                if (newTheme) {
-                    btn.classList.remove('border-base-300');
-                    btn.classList.add('border-primary', 'ring-2', 'ring-primary');
-                }
-                grid.dataset.selected = newTheme;
-
-                // Update name display
-                const nameEl = document.getElementById('selected-theme-name');
-                if (nameEl) nameEl.textContent = newName;
-
-                // Update preview
-                const preview = document.getElementById('theme-preview-container');
-                if (preview) {
-                    preview.style.background = newTheme
-                        ? btn.style.background
-                        : 'linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34)';
-                }
-
-                PlatPursuit.ToastManager.success(`Theme ${newTheme ? 'updated' : 'removed'}.`);
-            } catch (err) {
-                PlatPursuit.ToastManager.error('Failed to update theme.');
-            }
-        });
     }
 };
 

@@ -55,13 +55,18 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     context_object_name = 'display_data'
     paginate_by = None
 
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = BadgeSearchForm(self.request.GET)
+        return self._filter_form
+
     def get_queryset(self):
         qs = super().get_queryset().live().select_related(
             'base_badge', 'most_recent_concept', 'title',
             'base_badge__most_recent_concept', 'base_badge__title',
             'submitted_by', 'base_badge__submitted_by',
         )
-        form = BadgeSearchForm(self.request.GET)
+        form = self.get_filter_form()
 
         if form.is_valid():
             series_slug = slugify(form.cleaned_data.get('series_slug'))
@@ -240,7 +245,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             display_data.sort(key=lambda d: (d['badge'].effective_display_title or '').lower())
 
         # Paginate
-        paginate_by = 25
+        paginate_by = 30
         paginator = Paginator(display_data, paginate_by)
         page_number = self.request.GET.get('page')
         page_obj = paginator.get_page(page_number)
@@ -301,7 +306,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Badges'},
         ]
-        context['form'] = BadgeSearchForm(self.request.GET)
+        context['form'] = self.get_filter_form()
+        context['selected_badge_type'] = self.request.GET.get('badge_type', '')
 
         context['seo_description'] = (
             "Explore all badge series on Platinum Pursuit. "
@@ -439,14 +445,25 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             for game in games:
                 community_ratings[game] = RatingService.get_cached_community_averages(game.concept)
 
+            all_game_entries = [{
+                'game': game,
+                'profile_game': profile_games.get(game.id),
+                'community_ratings': community_ratings.get(game),
+                'has_guide': bool(game.concept.guide_slug),
+            } for game in games]
+
+            unobtainable = [g for g in all_game_entries if not g['game'].is_obtainable or g['game'].is_delisted]
+            unobtainable_completed = sum(
+                1 for g in unobtainable
+                if g['profile_game'] and (g['profile_game'].progress == 100 or g['profile_game'].has_plat)
+            )
+
             structured_data.append({
                 'stage': stage,
-                'games': [{
-                    'game': game,
-                    'profile_game': profile_games.get(game.id),
-                    'community_ratings': community_ratings.get(game),
-                    'has_guide': bool(game.concept.guide_slug),
-                } for game in games],
+                'games': all_game_entries,
+                'obtainable_games': [g for g in all_game_entries if g['game'].is_obtainable and not g['game'].is_delisted],
+                'unobtainable_games': unobtainable,
+                'unobtainable_completed': unobtainable_completed,
             })
 
         all_badges = Badge.objects.by_series(badge.series_slug)
@@ -707,9 +724,10 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['completion'] = badge_completion
         context['badge_requirements'] = badge_requirements
         context['is_earned'] = is_earned
+        context['highest_tier_earned'] = highest_tier_earned
 
         if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
             context['recent_concept_name'] = badge.most_recent_concept.unified_title
         else:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
@@ -818,7 +836,7 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
 
         context['badge'] = badge
         if badge.most_recent_concept:
-            context['image_urls'] = {'bg_url': badge.most_recent_concept.bg_url, 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
+            context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.concept_icon_url}
         else:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
         context['breadcrumb'] = [

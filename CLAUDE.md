@@ -8,13 +8,25 @@ All pages should be designed with the "Platinum Pursuit Standard" in mind: Profe
 
 ---
 
-## Responsive Design Standards
+## Site-Wide Redesign
 
-### Philosophy: Three Layouts, Mobile-First
+### Overview
+
+Every page in PlatPursuit is being rebuilt to match the dashboard's design language. This is a full redesign, not a re-style. The dashboard is the reference implementation and the design baseline. The goal: every page should feel like it belongs to the same app as the dashboard.
+
+**Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). Redesigned and legacy pages coexist safely due to the opt-in ZoomScaler architecture.
+
+### Three-Part Process Per Page
+
+**1. Backend Audit**: Read the view, queryset, and services. Identify performance issues (N+1 queries, expensive subqueries), missing data opportunities (user-specific context, annotations), and cleanup candidates. Only rebuild the backend where there's a clear win.
+
+**2. Frontend Rebuild**: Ground-up template rebuild. Not "add breakpoints" or "swap colors." The test: **"Would this component look at home inside a dashboard module?"** If no, rebuild it.
+
+**3. Polish**: Final audit against the Platinum Pursuit Standard, responsive compliance, visual cohesion, interactive polish.
+
+### Responsive Philosophy: Three Layouts, Mobile-First
 
 We build **three** layouts per page: **mobile (375px+)**, **tablet (768px+)**, and **desktop (1024px+)**. Tailwind's mobile-first breakpoints mean base styles target phones, with `md:` and `lg:` adding complexity for larger screens.
-
-**Migration in progress**: Pages are being incrementally migrated from the legacy ZoomScaler system (transform-scale) to proper responsive styles. Migrated and non-migrated pages coexist safely. See the ZoomScaler Legacy section below for details on non-migrated pages.
 
 ### Design Targets
 
@@ -32,37 +44,39 @@ We build **three** layouts per page: **mobile (375px+)**, **tablet (768px+)**, a
 
 ### Design System Reference
 
-All styling tokens, patterns, and rules are documented in **[docs/reference/design-system.md](docs/reference/design-system.md)**. This includes:
+All styling tokens, patterns, component blueprints, and rules are documented in **[docs/reference/design-system.md](docs/reference/design-system.md)**. This includes:
 
-- Card anatomy and class strings
+- Card anatomy and variants (content, utility, browse, page header)
+- Component patterns (page headers, filter toolbars, toggle buttons, pagination, browse cards, empty states)
 - Responsive spacing progressions (`p-3 md:p-5 lg:p-7`)
 - Grid collapse rules (which grids go 1-col on mobile vs. stay multi-col)
-- Color/contrast tokens (backgrounds, borders, dividers)
+- Color/contrast tokens (backgrounds, borders, dividers, hover glow)
 - Mobile-specific patterns (icon-only buttons, short dates, hidden timestamps)
 - Typography scale
 
-**Consult the design system doc before styling any page.** It is the single source of truth for how components should look.
+**Consult the design system doc before rebuilding any page.** It is the single source of truth for how components should look and behave.
 
 ### Reference Implementation
 
-See `templates/trophies/dashboard.html` and its module partials in `templates/trophies/partials/dashboard/` for the canonical responsive implementation.
+See `templates/trophies/dashboard.html` and its module partials in `templates/trophies/partials/dashboard/` for the canonical implementation.
 
-### ZoomScaler Legacy System (Non-Migrated Pages)
+### ZoomScaler Legacy System (Non-Redesigned Pages)
 
-Pages not yet migrated still use the ZoomScaler transform-scale system. This is being phased out incrementally.
+Pages not yet redesigned still use the ZoomScaler transform-scale system. This is being phased out as pages are rebuilt.
 
 **How it works**: The `#zoom-container` and `#zoom-wrapper` divs in `base.html` are always present but inert. When a page calls `PlatPursuit.ZoomScaler.init()`, it adds `.zoom-active` which activates CSS transform rules that scale the 768px layout down to fit smaller screens.
 
-**For non-migrated pages:**
+**For non-redesigned pages:**
 - Base styles target 768px (tablet), `lg:` targets desktop
 - Do NOT use `grid-cols-1 md:grid-cols-2` patterns (base must show the tablet layout)
 - Verify layout at exactly 768px wide (the baseline that gets scaled down)
 
-**To migrate a page:**
-1. Remove `PlatPursuit.ZoomScaler.init()` from the page's JS
-2. Apply the design system tokens: shift base styles to mobile-first, push current base to `md:`
-3. Run `npm run build` to regenerate Tailwind CSS
-4. Test at 375px, 768px, and 1024px+
+**To redesign a page:**
+1. Backend audit: review view, queryset, services for optimization opportunities
+2. Remove `PlatPursuit.ZoomScaler.init()` from the page's JS
+3. Rebuild templates from scratch using design system tokens and component patterns
+4. Run `npm run build` to regenerate Tailwind CSS
+5. Test at 375px, 768px, and 1024px+
 
 Fixed-position elements (toasts, modals, mobile tabbar) live OUTSIDE the wrapper divs in `base.html` and are unaffected by either system.
 
@@ -88,6 +102,9 @@ Currently handled by `absorb()`:
 - GameFamilyProposal M2M
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)
+- ConceptGenre (move to target, skip duplicates by genre_id)
+- ConceptTheme (move to target, skip duplicates by theme_id)
+- ConceptEngine (move to target, skip duplicates by engine_id)
 - Concept.title_ids (merged/deduplicated)
 
 ---
@@ -140,12 +157,13 @@ In addition to the standard inline audit, check for Django-specific security pit
 The final audit should review every new/modified template and JS file against:
 
 1. **Platinum Pursuit Standard**: Does it feel professional, sleek, and modern while retaining the indie charm? Or does it feel generic/sterile?
-2. **Responsive design compliance**: Two-layout system, no `sm:` breakpoints, base styles correct at 768px, proper `md:`/`lg:` progression
-3. **Visual cohesion**: Consistent spacing, colors, and component patterns with existing pages (reference: `profile_detail.html`, `game_detail.html`, `badge_detail.html`)
-4. **Interactive polish**: Hover states, transitions, focus indicators, loading states
-5. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
-6. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
-7. **Tailwind consistency**: Using project-standard classes rather than one-off values
+2. **Dashboard cohesion**: Would this component look at home inside a dashboard module? Uses the correct tokens from the design system doc?
+3. **Responsive design compliance**: Three-layout mobile-first system, base styles correct at 375px, proper `md:`/`lg:` progression
+4. **Component pattern compliance**: Page header cards, filter toolbars, browse cards, pagination, empty states all follow the design system patterns
+5. **Interactive polish**: Hover glow (not scale), transitions, focus indicators, loading states
+6. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
+7. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
+8. **Tailwind consistency**: Using project-standard classes rather than one-off values
 
 ---
 

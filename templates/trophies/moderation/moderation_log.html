@@ -7,7 +7,7 @@
 {% block content %}
 <div class="container mx-auto p-4">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 class="text-3xl font-bold mb-4 md:mb-0">Moderation Action Log</h1>
+        <h1 class="text-2xl md:text-3xl font-bold mb-4 md:mb-0">Moderation Action Log</h1>
         <div class="flex gap-2">
             <a href="{% url 'comment_moderation' %}" class="btn btn-secondary btn-sm">
                 ← Back to Dashboard
@@ -256,5 +256,4 @@ function showDetailsModal(logId) {
 {% endblock %}
 
 {% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

@@ -6,7 +6,7 @@
 {% block content %}
 <div class="container mx-auto p-4">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-        <h1 class="text-3xl font-bold mb-4 md:mb-0">Notification Center</h1>
+        <h1 class="text-2xl md:text-3xl font-bold mb-4 md:mb-0">Notification Center</h1>
         <div class="flex gap-2">
             <a href="{% url 'admin_notification_history' %}" class="btn btn-secondary btn-sm">
                 History
@@ -494,5 +494,4 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="{% static 'js/section-builder.js' %}"></script>
 <script src="{% static 'js/admin-notifications.js' %}"></script>
-<script>PlatPursuit.ZoomScaler.init();</script>
 {% endblock %}

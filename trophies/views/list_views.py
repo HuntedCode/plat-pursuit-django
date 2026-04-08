@@ -159,11 +159,6 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
 
         context['owner_is_premium'] = game_list.profile.user_is_premium
 
-        # Apply list background theme (only if owner is still premium)
-        if game_list.selected_theme and game_list.profile.user_is_premium:
-            from trophies.themes import get_theme_style
-            context['user_theme_style'] = get_theme_style(game_list.selected_theme)
-
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Lists', 'url': reverse_lazy('lists_browse')},
@@ -219,15 +214,6 @@ class GameListEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView):
         context['is_premium'] = profile.user_is_premium
         context['max_items'] = None if profile.user_is_premium else GAME_LIST_FREE_MAX_ITEMS
         context['at_item_limit'] = not profile.user_is_premium and game_list.game_count >= GAME_LIST_FREE_MAX_ITEMS
-        context['has_lapsed_premium_settings'] = (
-            not profile.user_is_premium
-            and (game_list.is_public or game_list.selected_theme)
-        )
-
-        # Background theme grid
-        from trophies.themes import get_available_themes_for_grid
-        context['available_themes'] = get_available_themes_for_grid(include_game_art=False, grouped=True)
-
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'My Lists', 'url': reverse_lazy('my_lists')},

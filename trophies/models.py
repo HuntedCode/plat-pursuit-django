@@ -21,7 +21,7 @@ from trophies.util_modules.constants import (
 )
 from trophies.managers import (
     ProfileManager, GameManager, ProfileGameManager,
-    BadgeManager, MilestoneManager, CommentManager, ChecklistManager
+    BadgeManager, MilestoneManager, CommentManager, ChecklistManager,
 )
 import re
 
@@ -127,6 +127,7 @@ class Profile(models.Model):
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
+    banner_position = models.PositiveSmallIntegerField(default=50, help_text='Banner vertical position (0=top, 50=center, 100=bottom).')
     selected_theme = models.CharField(max_length=50, blank=True, null=True, help_text='Selected gradient theme key for premium site-wide background.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
     hide_zeros = models.BooleanField(default=False, help_text="If true, hide games with no trophies earned.")
@@ -792,6 +793,28 @@ class Concept(models.Model):
                 ctg.concept = self
                 ctg.save(update_fields=['concept'])
 
+        # Roadmap: move if target has none, re-point tabs to target's CTGs
+        try:
+            source_roadmap = other.roadmap
+        except Roadmap.DoesNotExist:
+            source_roadmap = None
+
+        if source_roadmap:
+            if not Roadmap.objects.filter(concept=self).exists():
+                source_roadmap.concept = self
+                source_roadmap.save(update_fields=['concept'])
+                # Re-point tabs to target concept's CTGs (source CTG duplicates will cascade-delete)
+                target_ctgs = {
+                    ctg.trophy_group_id: ctg
+                    for ctg in self.concept_trophy_groups.all()
+                }
+                for tab in source_roadmap.tabs.select_related('concept_trophy_group').all():
+                    target_ctg = target_ctgs.get(tab.concept_trophy_group.trophy_group_id)
+                    if target_ctg and target_ctg != tab.concept_trophy_group:
+                        tab.concept_trophy_group = target_ctg
+                        tab.save(update_fields=['concept_trophy_group'])
+            # else: target already has a roadmap; source's cascades with concept deletion
+
         # Reviews: re-point non-duplicate (keyed by profile + concept_trophy_group)
         existing_review_keys = set(
             self.reviews.values_list('profile_id', 'concept_trophy_group_id')
@@ -855,6 +878,33 @@ class Concept(models.Model):
             else:
                 cc.concept = self
                 cc.save(update_fields=['concept'])
+
+        # ConceptGenre: move to target, skip duplicates
+        existing_genre_ids = set(
+            self.concept_genres.values_list('genre_id', flat=True)
+        )
+        for cg in other.concept_genres.all():
+            if cg.genre_id not in existing_genre_ids:
+                cg.concept = self
+                cg.save(update_fields=['concept'])
+
+        # ConceptTheme: move to target, skip duplicates
+        existing_theme_ids = set(
+            self.concept_themes.values_list('theme_id', flat=True)
+        )
+        for ct in other.concept_themes.all():
+            if ct.theme_id not in existing_theme_ids:
+                ct.concept = self
+                ct.save(update_fields=['concept'])
+
+        # ConceptEngine: move to target, skip duplicates
+        existing_engine_ids = set(
+            self.concept_engines.values_list('engine_id', flat=True)
+        )
+        for ce in other.concept_engines.all():
+            if ce.engine_id not in existing_engine_ids:
+                ce.concept = self
+                ce.save(update_fields=['concept'])
 
         # IGDBMatch: move to target if target lacks one, otherwise discard source's
         if hasattr(other, 'igdb_match'):
@@ -1460,6 +1510,42 @@ class UserBadge(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} - {self.badge.name}"
+
+class ProfileBadgeShowcase(models.Model):
+    """
+    Premium feature: up to 3 badge series showcased on a user's public profile.
+    Separate from UserBadge.is_displayed (which controls the share card badge).
+    """
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_showcase')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='showcased_by')
+    display_order = models.PositiveSmallIntegerField(default=0, help_text="Position in the showcase (1-5), auto-assigned on creation")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'badge']
+        ordering = ['display_order', 'created_at']
+        indexes = [
+            models.Index(fields=['profile', 'display_order'], name='showcase_profile_order_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            from django.db import transaction
+            with transaction.atomic():
+                count = ProfileBadgeShowcase.objects.select_for_update().filter(
+                    profile=self.profile
+                ).count()
+                if count >= 5:
+                    raise ValueError("Maximum 5 showcase badges allowed.")
+                if not self.display_order or self.display_order < 1:
+                    self.display_order = count + 1
+                super().save(*args, **kwargs)
+        else:
+            super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.profile.psn_username} showcase #{self.display_order}: {self.badge.name}"
+
 
 class UserBadgeProgress(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='badge_progress')
@@ -3818,6 +3904,107 @@ class ConceptCompany(models.Model):
         return f"{self.company.name} ({', '.join(roles or ['No role'])}) - {self.concept}"
 
 
+class Genre(models.Model):
+    """Normalized IGDB genre (e.g. Shooter, RPG, Puzzle)."""
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Theme(models.Model):
+    """Normalized IGDB theme (e.g. Science fiction, Open world, Horror)."""
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class GameEngine(models.Model):
+    """Normalized IGDB game engine (e.g. Unreal Engine 5, Unity, Decima)."""
+    igdb_id = models.IntegerField(unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'game engine'
+        verbose_name_plural = 'game engines'
+
+    def __str__(self):
+        return self.name
+
+
+class ConceptGenre(models.Model):
+    """Links a Concept to a Genre (M2M through model)."""
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_genres'
+    )
+    genre = models.ForeignKey(
+        Genre, on_delete=models.CASCADE, related_name='genre_concepts'
+    )
+
+    class Meta:
+        unique_together = ['concept', 'genre']
+        indexes = [
+            models.Index(fields=['concept'], name='conceptgenre_concept_idx'),
+            models.Index(fields=['genre'], name='conceptgenre_genre_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.genre.name}"
+
+
+class ConceptTheme(models.Model):
+    """Links a Concept to a Theme (M2M through model)."""
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_themes'
+    )
+    theme = models.ForeignKey(
+        Theme, on_delete=models.CASCADE, related_name='theme_concepts'
+    )
+
+    class Meta:
+        unique_together = ['concept', 'theme']
+        indexes = [
+            models.Index(fields=['concept'], name='concepttheme_concept_idx'),
+            models.Index(fields=['theme'], name='concepttheme_theme_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.theme.name}"
+
+
+class ConceptEngine(models.Model):
+    """Links a Concept to a GameEngine (M2M through model)."""
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_engines'
+    )
+    engine = models.ForeignKey(
+        GameEngine, on_delete=models.CASCADE, related_name='engine_concepts'
+    )
+
+    class Meta:
+        unique_together = ['concept', 'engine']
+        indexes = [
+            models.Index(fields=['concept'], name='conceptengine_concept_idx'),
+            models.Index(fields=['engine'], name='conceptengine_engine_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.engine.name}"
+
+
 class IGDBMatch(models.Model):
     """Tracks the match between a PlatPursuit Concept and an IGDB game entry.
 
@@ -3916,21 +4103,72 @@ class IGDBMatch(models.Model):
             models.Index(fields=['match_confidence'], name='igdbmatch_confidence_idx'),
         ]
 
-    @property
-    def completion_time_display(self):
-        """Human-readable completion time estimate."""
-        seconds = self.time_to_beat_completely
+    @staticmethod
+    def _format_seconds(seconds):
+        """Format a duration in seconds to a human-readable string like '42h' or '30m'."""
         if not seconds:
             return None
         hours = seconds / 3600
         if hours >= 1:
-            return f'{hours:.0f}h' if hours == int(hours) else f'{hours:.1f}h'
+            return f'{hours:.0f}h' if hours % 1 == 0 else f'{hours:.1f}h'
         minutes = seconds / 60
         return f'{minutes:.0f}m'
 
+    @property
+    def completion_time_display(self):
+        """Human-readable 100% completion time estimate."""
+        return self._format_seconds(self.time_to_beat_completely)
+
+    @property
+    def speedrun_time_display(self):
+        """Human-readable speedrun time estimate."""
+        return self._format_seconds(self.time_to_beat_hastily)
+
+    @property
+    def normal_time_display(self):
+        """Human-readable average playthrough time estimate."""
+        return self._format_seconds(self.time_to_beat_normally)
+
+    @property
+    def has_time_to_beat(self):
+        """True if any time-to-beat data exists."""
+        return bool(
+            self.time_to_beat_hastily
+            or self.time_to_beat_normally
+            or self.time_to_beat_completely
+        )
+
+    @property
+    def is_trusted(self):
+        """True if the match has been accepted (manually or automatically)."""
+        return self.status in ('accepted', 'auto_accepted')
+
+    EXTERNAL_LINK_META = [
+        ('official', 'Official Site'),
+        ('wikipedia', 'Wikipedia'),
+        ('steam', 'Steam'),
+        ('reddit', 'Reddit'),
+        ('discord', 'Discord'),
+        ('youtube', 'YouTube'),
+        ('twitch', 'Twitch'),
+        ('epicgames', 'Epic Games'),
+        ('gog', 'GOG'),
+        ('itch', 'itch.io'),
+    ]
+
+    @property
+    def notable_external_urls(self):
+        """Curated list of external links as {'key', 'label', 'url'} dicts."""
+        if not self.external_urls:
+            return []
+        result = []
+        for key, label in self.EXTERNAL_LINK_META:
+            url = self.external_urls.get(key)
+            if url:
+                result.append({'key': key, 'label': label, 'url': url})
+        return result
+
     def __str__(self):
-        if self.match_confidence is None:
-            return f"{self.concept} -> [{self.get_status_display()}]"
         return f"{self.concept} -> {self.igdb_name} ({self.get_status_display()}, {self.match_confidence:.0%})"
 
 

@@ -288,6 +288,7 @@ def _build_xp_display_data(profile, total_xp, total_badges):
         'avatar_url': profile.avatar_url or '',
         'flag': profile.flag or '',
         'is_premium': profile.user_is_premium,
+        'displayed_title': profile.displayed_title() or '',
         'total_xp': total_xp,
         'total_badges': total_badges,
     }
@@ -379,6 +380,7 @@ def _build_earner_display_data(profile, tier, earned_at):
         'avatar_url': profile.avatar_url or '',
         'flag': profile.flag or '',
         'is_premium': profile.user_is_premium,
+        'displayed_title': profile.displayed_title() or '',
         'highest_tier': tier,
         'earn_date': earned_at.isoformat() if earned_at else 'Unknown',
     }
@@ -474,6 +476,7 @@ def _build_progress_display_data(profile, plats, golds, silvers, bronzes, last_e
         'avatar_url': profile.avatar_url or '',
         'flag': profile.flag or '',
         'is_premium': profile.user_is_premium,
+        'displayed_title': profile.displayed_title() or '',
         'trophy_totals': {
             'plats': plats,
             'golds': golds,

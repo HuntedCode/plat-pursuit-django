@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from core.services.tracking import track_page_view
 from django.contrib import messages
@@ -35,13 +36,13 @@ from ..models import (
     Challenge,
     Review,
 )
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
 
 
-class ProfilesListView(ProfileHotbarMixin, ListView):
+class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     """
     Display paginated list of user profiles with filtering and sorting.
 
@@ -54,14 +55,31 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
     """
     model = Profile
     template_name = 'trophies/profile_list.html'
-    paginate_by = 25
+    partial_template_name = 'trophies/partials/profile_list/browse_results.html'
+    paginate_by = 30
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.GET and request.user.is_authenticated:
+            defaults = (request.user.browse_defaults or {}).get('profiles', {})
+            if defaults:
+                return HttpResponseRedirect(
+                    reverse('profiles_list') + '?' + urlencode(defaults, doseq=True)
+                )
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = ProfileSearchForm(self.request.GET)
+        return self._filter_form
 
     def get_queryset(self):
         qs = super().get_queryset()
-        form = ProfileSearchForm(self.request.GET)
+        form = self.get_filter_form()
         order = [Lower('psn_username')]
 
-        #qs = qs.exclude(psn_history_public=False)
+        # Always prefetch recent platinum (needed by template regardless of form state)
+        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
+        qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
         if form.is_valid():
             query = form.cleaned_data.get('query')
@@ -72,9 +90,6 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
                 qs = qs.filter(Q(psn_username__icontains=query))
             if country:
                 qs = qs.filter(country_code=country)
-
-            recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
-            qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
             if sort_val == 'trophies':
                 order = ['-total_trophies', Lower('psn_username')]
@@ -97,7 +112,8 @@ class ProfilesListView(ProfileHotbarMixin, ListView):
             {'text': 'Profiles'},
         ]
 
-        context['form'] = ProfileSearchForm(self.request.GET)
+        context['form'] = self.get_filter_form()
+        context['selected_country'] = self.request.GET.get('country', '')
 
         context['seo_description'] = (
             "Browse PlayStation trophy hunter profiles and leaderboards on Platinum Pursuit."
@@ -163,6 +179,58 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         else:
             header_stats['rarest_platinum'] = None
 
+        # Fastest platinum (shortest play_duration on a game where plat was earned)
+        fastest_plat_game = ProfileGame.objects.filter(
+            profile=profile,
+            has_plat=True,
+            play_duration__isnull=False,
+            play_duration__gt=timedelta(0),
+        ).select_related('game').order_by('play_duration').first()
+
+        if fastest_plat_game:
+            fastest_plat_trophy = EarnedTrophy.objects.filter(
+                profile=profile,
+                trophy__game=fastest_plat_game.game,
+                trophy__trophy_type='platinum',
+                earned=True,
+            ).select_related('trophy', 'trophy__game').first()
+            if fastest_plat_trophy:
+                header_stats['fastest_platinum'] = {
+                    'trophy': fastest_plat_trophy.trophy,
+                    'game': fastest_plat_game.game,
+                    'play_duration': fastest_plat_game.play_duration,
+                    'earned_date': fastest_plat_trophy.earned_date_time,
+                }
+            else:
+                header_stats['fastest_platinum'] = None
+        else:
+            header_stats['fastest_platinum'] = None
+
+        # Milestone platinum (most recent round-number plat: 10, 20, 30, etc.)
+        header_stats['milestone_platinum'] = None
+        if profile.total_plats >= 10:
+            # Find the highest milestone reached (10, 20, 30, ...)
+            milestone_number = (profile.total_plats // 10) * 10
+            # Get the Nth platinum earned chronologically
+            milestone_earned = EarnedTrophy.objects.filter(
+                profile=profile,
+                trophy__trophy_type='platinum',
+                earned=True,
+                earned_date_time__isnull=False,
+            ).select_related('trophy', 'trophy__game').order_by('earned_date_time')
+
+            # Use array slicing to get the Nth item (0-indexed)
+            try:
+                milestone_entry = milestone_earned[milestone_number - 1]
+                header_stats['milestone_platinum'] = {
+                    'trophy': milestone_entry.trophy,
+                    'game': milestone_entry.trophy.game,
+                    'milestone_number': milestone_number,
+                    'earned_date': milestone_entry.earned_date_time,
+                }
+            except (IndexError, Exception):
+                header_stats['milestone_platinum'] = None
+
         return header_stats
 
     def _build_trophy_case(self, profile):
@@ -184,6 +252,48 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Pad with None to reach max_trophies
         trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
         return trophy_case
+
+    def _build_badge_showcase(self, profile):
+        """
+        Build badge showcase data for the profile carousel (premium feature).
+
+        Returns:
+            list[dict]: Showcase badge data, or empty list
+        """
+        if not profile.user_is_premium:
+            return []
+
+        from trophies.models import ProfileBadgeShowcase
+        showcase_entries = (
+            ProfileBadgeShowcase.objects
+            .filter(profile=profile)
+            .select_related('badge', 'badge__base_badge', 'badge__most_recent_concept')
+            .order_by('display_order')
+        )
+
+        badges = []
+        tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+        for entry in showcase_entries:
+            badge = entry.badge
+            try:
+                layers = badge.get_badge_layers()
+            except Exception:
+                continue
+            if not layers.get('has_custom_image'):
+                continue
+            concept = badge.most_recent_concept
+            bg_url = concept.bg_url if concept else ''
+            badges.append({
+                    'layers': layers,
+                    'name': badge.effective_display_series or badge.series_slug,
+                    'tier': badge.tier,
+                    'tier_name': tier_names.get(badge.tier, ''),
+                    'series_slug': badge.series_slug,
+                    'bg_url': bg_url or '',
+                })
+        # Pad to 5 with None for placeholder rendering
+        badges += [None] * (5 - len(badges))
+        return badges
 
     def _build_timeline(self, profile):
         """
@@ -527,10 +637,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             'recent_plat__trophy__game', 'rarest_plat__trophy__game'
         ).get(id=profile.id)
 
-        # Build shared context (header stats, trophy case, and timeline)
+        # Build shared context (header stats, trophy case, badge showcase, and timeline)
         context['header_stats'] = self._build_header_stats(profile)
         context['trophy_case'] = self._build_trophy_case(profile)
         context['trophy_case_count'] = len(context['trophy_case'])
+        showcase_badges = self._build_badge_showcase(profile)
+        context['profile_showcase_badges'] = showcase_badges
+        context['has_showcase_badges'] = any(b for b in showcase_badges)
         if profile.psn_history_public:
             context['timeline_events'] = self._build_timeline(profile)
 
@@ -569,9 +682,34 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         ]
         context['current_tab'] = tab
 
-        # Add premium background if applicable
-        if profile.user_is_premium and profile.selected_background:
-            context['image_urls'] = {'bg_url': profile.selected_background.bg_url}
+        # Premium profile personalization
+        if profile.user_is_premium:
+            # Theme accent colors
+            if profile.selected_theme:
+                from trophies.themes import get_theme, get_theme_css
+                theme = get_theme(profile.selected_theme)
+                if theme:
+                    context['profile_theme_accent'] = theme['accent_color']
+                    context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
+
+            # Profile banner image from selected background concept
+            if profile.selected_background and profile.selected_background.bg_url:
+                context['profile_banner_url'] = profile.selected_background.bg_url
+                context['profile_banner_position'] = profile.banner_position
+                import json
+                context['profile_banner_data_json'] = json.dumps({
+                    'concept_id': profile.selected_background.id,
+                    'title_name': profile.selected_background.unified_title or '',
+                    'icon_url': profile.selected_background.concept_icon_url or '',
+                    'bg_url': profile.selected_background.bg_url or '',
+                })
+
+        # Own profile check (for edit controls)
+        context['is_own_profile'] = (
+            self.request.user.is_authenticated and
+            hasattr(self.request.user, 'profile') and
+            self.request.user.profile == profile
+        )
 
         context['seo_description'] = (
             f"{profile.display_psn_username}'s PlayStation trophy profile. "

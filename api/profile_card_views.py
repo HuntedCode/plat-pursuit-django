@@ -363,6 +363,154 @@ class SetDisplayedBadgeView(APIView):
         return Response({'status': 'ok'})
 
 
+class ToggleShowcaseBadgeView(APIView):
+    """
+    POST /api/v1/badges/showcase/
+
+    Toggle a badge in/out of the profile showcase (max 3, premium only).
+    Send {"badge_id": <id>} to toggle.
+    Returns the current showcase state.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def post(self, request):
+        from trophies.models import UserBadge, ProfileBadgeShowcase
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
+
+        from trophies.services.dashboard_service import get_effective_premium
+
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response({'error': 'No profile linked.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        if not get_effective_premium(request):
+            return Response({'error': 'Premium subscription required.'}, status=http_status.HTTP_403_FORBIDDEN)
+
+        badge_id = request.data.get('badge_id')
+        try:
+            badge_id = int(badge_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid badge_id.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        # Verify earned + has custom artwork
+        ub = (
+            UserBadge.objects
+            .filter(profile=profile, badge_id=badge_id)
+            .select_related('badge', 'badge__base_badge')
+            .first()
+        )
+        if not ub:
+            return Response({'error': 'Badge not earned.'}, status=http_status.HTTP_404_NOT_FOUND)
+
+        try:
+            layers = ub.badge.get_badge_layers()
+            if not layers.get('has_custom_image'):
+                return Response({'error': 'Badge must have custom artwork.'}, status=http_status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({'error': 'Unable to verify badge artwork.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        # Toggle within a transaction to prevent race conditions
+        from django.db import transaction
+        with transaction.atomic():
+            existing = ProfileBadgeShowcase.objects.filter(profile=profile, badge_id=badge_id)
+            if existing.exists():
+                existing.delete()
+                # Reorder remaining to close gaps
+                remaining = list(
+                    ProfileBadgeShowcase.objects.filter(profile=profile)
+                    .select_for_update()
+                    .order_by('display_order')
+                )
+                for i, item in enumerate(remaining, 1):
+                    if item.display_order != i:
+                        item.display_order = i
+                        item.save(update_fields=['display_order'])
+                action = 'removed'
+            else:
+                try:
+                    ProfileBadgeShowcase.objects.create(profile=profile, badge_id=badge_id)
+                    action = 'added'
+                except ValueError:
+                    return Response(
+                        {'error': 'Maximum 5 showcase badges allowed.'},
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
+
+        try:
+            invalidate_dashboard_cache(profile.pk)
+        except Exception:
+            pass
+
+        showcase_ids = list(
+            ProfileBadgeShowcase.objects.filter(profile=profile)
+            .order_by('display_order')
+            .values_list('badge_id', flat=True)
+        )
+        return Response({'status': 'ok', 'action': action, 'showcase_badge_ids': showcase_ids})
+
+
+class ReorderShowcaseBadgesView(APIView):
+    """
+    POST /api/v1/badges/showcase/reorder/
+
+    Persist a new display order for the user's profile badge showcase.
+    Send {"badge_ids": [<id>, <id>, ...]} with the new order. All ids must
+    already belong to the user's showcase. Premium only.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    def post(self, request):
+        from trophies.models import ProfileBadgeShowcase
+        from trophies.services.dashboard_service import (
+            invalidate_dashboard_cache, get_effective_premium,
+        )
+        from django.db import transaction
+
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response({'error': 'No profile linked.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+        if not get_effective_premium(request):
+            return Response({'error': 'Premium subscription required.'}, status=http_status.HTTP_403_FORBIDDEN)
+
+        badge_ids = request.data.get('badge_ids')
+        if not isinstance(badge_ids, list) or not all(isinstance(b, int) for b in badge_ids):
+            return Response(
+                {'error': 'badge_ids must be a list of integers.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        if len(badge_ids) > 5:
+            return Response(
+                {'error': 'Cannot reorder more than 5 badges.'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            existing = list(
+                ProfileBadgeShowcase.objects
+                .select_for_update()
+                .filter(profile=profile)
+            )
+            existing_ids = {sc.badge_id for sc in existing}
+            if set(badge_ids) != existing_ids:
+                return Response(
+                    {'error': 'badge_ids must exactly match your current showcase.'},
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+
+            for i, bid in enumerate(badge_ids, 1):
+                ProfileBadgeShowcase.objects.filter(profile=profile, badge_id=bid).update(display_order=i)
+
+        try:
+            invalidate_dashboard_cache(profile.pk)
+        except Exception:
+            pass
+
+        return Response({'status': 'ok', 'showcase_badge_ids': badge_ids})
+
+
 # ---------------------------------------------------------------------------
 # Public forum signature serving (no auth)
 # ---------------------------------------------------------------------------

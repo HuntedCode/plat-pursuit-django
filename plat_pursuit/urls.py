@@ -21,11 +21,11 @@ from django.contrib import admin
 from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
-from django.views.generic import TemplateView
-from core.views import IndexView, AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView
+from django.views.generic import RedirectView, TemplateView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
-    BadgeSitemap, GuideSitemap, GameListSitemap, ChallengeSitemap,
+    BadgeSitemap, GameListSitemap, ChallengeSitemap,
 )
 
 sitemaps = {
@@ -33,11 +33,10 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
     'badges': BadgeSitemap,
-    'guides': GuideSitemap,
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, ChecklistDetailView, ChecklistCreateView, ChecklistEditView, MyChecklistsView, MyShareablesView, BrowseGuidesView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, DashboardView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, MyStatsView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -53,9 +52,21 @@ from notifications.views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", IndexView.as_view(), name="home"),
-    path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    path("", HomeView.as_view(), name="home"),
+    # Legacy alias - keep old /dashboard/ links working
+    path('dashboard/', RedirectView.as_view(pattern_name='home', permanent=True), name='dashboard'),
     path('games/', GamesListView.as_view(), name='games_list'),
+    path('games/flagged/', FlaggedGamesView.as_view(), name='flagged_games'),
+    path('games/<str:np_communication_id>/roadmap/edit/', RoadmapEditorView.as_view(), name='roadmap_edit'),
+
+    # Company pages
+    path('companies/', CompanyListView.as_view(), name='companies_list'),
+    path('companies/<slug:slug>/', CompanyDetailView.as_view(), name='company_detail'),
+
+    # Genre/Theme pages
+    path('genres/', GenreThemeListView.as_view(), name='genres_list'),
+    path('genres/<slug:slug>/', GenreDetailView.as_view(), name='genre_detail'),
+    path('themes/<slug:slug>/', ThemeDetailView.as_view(), name='theme_detail'),
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
     path('games/<str:np_communication_id>/<str:psn_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
@@ -74,14 +85,13 @@ urlpatterns = [
     path('leaderboard/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
     path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
 
-    path('guides/', BrowseGuidesView.as_view(), name='guides_browse'),
-
-    # Guide URLs (checklists)
-    path('guides/<int:guide_id>/', ChecklistDetailView.as_view(), name='guide_detail'),
-    path('guides/<int:guide_id>/edit/', ChecklistEditView.as_view(), name='guide_edit'),
-    path('guides/create/<int:concept_id>/<str:np_communication_id>/', ChecklistCreateView.as_view(), name='guide_create'),
-    path('my-guides/', MyChecklistsView.as_view(), name='my_guides'),
-    path('my-shareables/', MyShareablesView.as_view(), name='my_shareables'),
+    # Guide/checklist URLs - all redirected to home (system removed, replaced by roadmaps)
+    path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),
+    path('guides/<int:guide_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_detail'),
+    path('guides/<int:guide_id>/edit/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_edit'),
+    path('guides/create/<int:concept_id>/<str:np_communication_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_create'),
+    path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
+    path('my-shareables/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_shareables'),
 
     # Game List URLs
     path('lists/', BrowseListsView.as_view(), name='lists_browse'),

@@ -40,15 +40,15 @@
 
                 {# Stats row #}
                 <div class="grid grid-cols-3 gap-1.5 md:gap-2 mb-3">
-                    <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                         <div class="text-sm lg:text-base font-black text-info">{{ data.total_filled }}</div>
                         <div class="text-xs text-base-content/50">Days Filled</div>
                     </div>
-                    <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                         <div class="text-sm lg:text-base font-black text-base-content">{{ data.longest_streak }}</div>
                         <div class="text-xs text-base-content/50">Day Streak</div>
                     </div>
-                    <div class="bg-base-300/50 rounded-lg p-2 text-center">
+                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
                         <div class="text-sm lg:text-base font-black text-base-content">{{ data.best_month_filled }}</div>
                         <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ data.best_month_name }}</div>
                     </div>
@@ -68,7 +68,7 @@
                 {# 3-month paginated calendar #}
                 <div class="grid grid-cols-3 gap-1.5 md:gap-3 lg:gap-4" data-calendar-grid>
                     {% for month in data.months %}
-                        <div class="bg-base-300/20 rounded-lg p-1.5 md:p-2 lg:p-3 {% if forloop.counter == data.today_month %}ring-1 ring-primary/30{% endif %}" data-calendar-month="{{ forloop.counter }}">
+                        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-2 lg:p-3 {% if forloop.counter == data.today_month %}ring-1 ring-primary/30{% endif %}" data-calendar-month="{{ forloop.counter }}">
                             {# Month name #}
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-xs font-semibold text-base-content/60">{{ month.month_name }}</span>
@@ -92,7 +92,7 @@
                                 {% for day in month.days %}
                                     <div class="w-full aspect-square rounded-sm flex items-center justify-center
                                         {% if forloop.parentloop.counter == data.today_month and day.day == data.today_day %}ring-1 ring-primary{% endif %}
-                                        {% if day.is_filled %}bg-info/30{% else %}bg-base-300/40{% endif %}" style="font-size: 0.55rem;">
+                                        {% if day.is_filled %}bg-info/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}" style="font-size: 0.55rem;">
                                         <span class="{% if forloop.parentloop.counter == data.today_month and day.day == data.today_day %}text-primary font-black{% elif day.is_filled %}text-info font-bold{% else %}text-base-content/20{% endif %}">{{ day.day }}</span>
                                     </div>
                                 {% endfor %}

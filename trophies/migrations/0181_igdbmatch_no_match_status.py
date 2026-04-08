@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("trophies", "0180_roadmapstep_roadmap_roadmapsteptrophy_roadmaptab_and_more"),
+        ("trophies", "0179_game_has_buggy_trophies_gameflag"),
     ]
 
     operations = [

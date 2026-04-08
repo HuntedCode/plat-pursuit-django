@@ -1,6 +1,8 @@
 # Dashboard System
 
-The dashboard is the personal trophy hunting command center at `/dashboard/`. It will serve as the index page for all logged-in users (currently `StaffRequiredMixin` during dev). Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and support for premium user-created custom tabs. Only the active tab's lazy modules load on page init for performance.
+The dashboard is the personal trophy hunting command center. It is rendered at the site root (`/`) by [HomeView](home-page.md) for any logged-in user whose PSN profile has finished syncing. Users in earlier states (anonymous, no PSN linked, sync in progress) get one of three lighter shells that share the dashboard's design language but skip the heavy module pipeline. Modules are organized into a **tabbed navigation system** with 6 immutable system tabs and support for premium user-created custom tabs. Only the active tab's lazy modules load on page init for performance.
+
+`/dashboard/` is preserved as a permanent redirect to `/` so legacy bookmarks keep working. The standalone `DashboardView` class is now a thin wrapper around `build_dashboard_context()` (in `trophies/views/dashboard_views.py`) which is the single source of truth for dashboard context. `HomeView` calls the same helper directly for synced users without going through view inheritance.
 
 ## Architecture Overview
 
@@ -59,7 +61,7 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `rarity_showcase` | Rarity Showcase | highlights | Lazy | 10m | No |
 | `rate_my_games` | Rate My Games | highlights | Lazy | 30m | No |
 | `advanced_stats` | Advanced Stats | premium | Lazy | 30m | Yes |
-| `premium_settings` | Premium Settings | premium | Lazy | None | Yes |
+| `premium_settings` | Theme Picker | premium | Lazy | None | Yes |
 | `trophy_visualizations` | Trophy Visualizations | premium | Lazy | 30m | Yes |
 | `advanced_badge_stats` | Advanced Badge Stats | premium | Lazy | 30m | Yes |
 | `badge_series_overview` | Badge Series Overview | premium | Lazy | 30m | Yes |
@@ -69,8 +71,51 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |
 | `challenge_share_cards` | Challenge Cards | share | Lazy | 10m | No |
 | `recap_share_card` | Recap Card | share | Lazy | 30m | No |
+| `platinum_grid_cta` | Platinum Grid | share | Lazy | 10m | No |
+| `library_health_alerts` | Library Health | highlights | Lazy | 30m | No |
+| `my_stats_teaser` | Your Stats | at_a_glance | Lazy | 10m | No |
+| `top_developers` | Top Studios | highlights | Lazy | 30m | No |
+| `roadmap_recommendations` | Roadmaps for Your Library | progress | Lazy | 30m | No |
+| `theme_mastery` | Genre & Themes | premium | Lazy | 30m | Yes |
+| `time_to_beat_insights` | Time-to-Beat | premium | Lazy | 30m | Yes |
+| `earned_titles` | Earned Titles | highlights | Lazy | 10m | No |
+| `vr_trophy_hunter` | VR Trophy Hunter | progress | Lazy | 30m | No |
+| `profile_badge_showcase_editor` | Profile Showcase | premium | Lazy | None | Yes |
+| `trophy_diversity_score` | Diversity Score | at_a_glance | Lazy | 30m | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
+
+## IGDB-powered modules
+
+Several modules surface data from the IGDB integration shipped in March 2026:
+
+- **Top Developers**: aggregates `ConceptCompany` (developer/publisher roles) joined to user's earned trophies. Sub-tab toggle between developers and publishers. Links to `/companies/<slug>/`.
+- **Genre & Themes** (premium): combined module with side-by-side genre + theme radars (via `ConceptGenre` and `ConceptTheme`). All-time only; year-aware genre data lives nowhere now since the field was removed from `trophy_visualizations`.
+- **Time-to-Beat** (premium): uses `IGDBMatch.time_to_beat_completely` to compute average plat duration, longest hunts, and currently-grinding remaining hours.
+- **Trophy Diversity Score**: composite score of distinct genres + themes the user has trophies in (using `ConceptGenre` + `ConceptTheme` normalized M2Ms).
+- **Engine Radar** (in trophy_visualizations): replaced the genre radar slot. Uses `ConceptEngine` to surface what engines power the user's library (Unreal, Unity, Decima, etc.). Falls back gracefully when engine data is sparse.
+
+## Library Health Alerts
+
+Surfaces games in the user's library with auto-applied data quality flags from the GameFlag system. Severity buckets:
+
+- **Blockers** (red): `is_obtainable=False`, `is_delisted=True`
+- **Issues** (warning): `has_buggy_trophies=True`, `has_online_trophies=True`
+- **Info** (gray): `shovelware_status='manually_flagged'`
+
+Filters to games where the user has earned at least one trophy (`earned_trophies_count > 0`) so the list only shows games actually in active rotation. Links to game detail page for each flagged game and to `/games/flagged/` for the full browse list.
+
+## Profile Badge Showcase Editor
+
+Premium dedicated module for the 5-slot `ProfileBadgeShowcase`. Includes drag-reorder via `DragReorderManager` (SortableJS), persisted via the new `POST /api/v1/badges/showcase/reorder/` endpoint. Coexists with the existing `badge_showcase` module (which handles the share card featured badge picker).
+
+## Roadmaps for Your Library
+
+Roadmaps are 1:1 with `Concept` and have no per-user state (no follows/bookmarks). The module surfaces published roadmaps for concepts in the user's library where the user hasn't platinumed any game in that concept yet. This is the dashboard replacement for the legacy "My Checklists" surface that was removed when checklists were deleted.
+
+## My Stats Teaser
+
+Reuses `trophies/services/stats_service.py:get_career_overview()` (denormalized, instant). Displays 4 hero stats and a few wow callouts with a CTA to `/my-stats/`. The CTA is enabled even though `/my-stats/` is currently staff-gated; will activate for all users when the gate is removed.
 
 ## Per-Module Settings Framework
 
@@ -108,7 +153,8 @@ Each tab is a collapsible section listing its modules. Each module row shows:
 | File | Purpose |
 |------|---------|
 | `trophies/services/dashboard_service.py` | Module registry, providers, tab functions, settings framework, caching |
-| `trophies/views/dashboard_views.py` | `DashboardView` with tab context |
+| `trophies/views/dashboard_views.py` | `build_dashboard_context()` helper + thin `DashboardView` wrapper |
+| `core/views.py` | `HomeView` (smart router at `/`); calls `build_dashboard_context()` for synced users |
 | `api/dashboard_views.py` | 4 API endpoints: module data, config, reorder, preview toggle |
 | `api/user_settings_views.py` | `UpdateQuickSettingsAPIView` for dashboard Quick Settings auto-save |
 | `trophies/models.py` | `DashboardConfig` model with `tab_config` field |
@@ -240,7 +286,7 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 
 ## Related Docs
 
-- [Module Catalog](../design/dashboard-module-catalog.md): Full 28-module roadmap
+- [Module Catalog](../design/dashboard-module-catalog.md): Design history, cuts, and remaining roadmap (deferred to this doc for the live module list)
 - [Data Model](../architecture/data-model.md): DashboardConfig model
 - [JS Utilities](../reference/js-utilities.md): DragReorderManager
 - [Challenge Systems](../features/challenge-systems.md): Challenge models and services

@@ -122,12 +122,13 @@
                     <span class="hidden md:inline">Replay</span>
                 </button>
                 {% endif %}
+                {% if request.user.is_staff %}
                 {% if preview_mode %}
                     <span class="badge badge-xs badge-outline badge-warning">Preview</span>
                 {% endif %}
                 <button id="preview-toggle-btn"
                         class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
-                        title="Toggle premium/free preview">
+                        title="Toggle premium/free preview (staff)">
                     {% if is_premium %}
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
@@ -142,6 +143,7 @@
                         <span class="hidden md:inline">Free</span>
                     {% endif %}
                 </button>
+                {% endif %}
             </div>
         </div>
     </div>

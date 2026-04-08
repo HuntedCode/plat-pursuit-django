@@ -1,0 +1,63 @@
+{% load humanize %}
+{# Reusable ratings grid. Expects `averages` variable (dict or None). #}
+<div class="mb-4">
+{% if averages %}
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-1.5" data-ratings-grid>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="difficulty">
+            <div class="text-lg md:text-xl font-black {% if averages.avg_difficulty < 4 %}text-success{% elif averages.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}" data-stat-value>{{ averages.avg_difficulty|floatformat:1 }}</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Difficulty</div>
+            <progress class="progress progress-xs {% if averages.avg_difficulty < 4 %}progress-success{% elif averages.avg_difficulty < 8 %}progress-warning{% else %}progress-error{% endif %} mt-1" value="{{ averages.avg_difficulty }}" max="10"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="grindiness">
+            <div class="text-lg md:text-xl font-black {% if averages.avg_grindiness < 4 %}text-success{% elif averages.avg_grindiness < 8 %}text-warning{% else %}text-error{% endif %}" data-stat-value>{{ averages.avg_grindiness|floatformat:1 }}</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Grindiness</div>
+            <progress class="progress progress-xs {% if averages.avg_grindiness < 4 %}progress-success{% elif averages.avg_grindiness < 8 %}progress-warning{% else %}progress-error{% endif %} mt-1" value="{{ averages.avg_grindiness }}" max="10"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="hours">
+            <div class="text-lg md:text-xl font-black {% if averages.avg_hours < 25 %}text-success{% elif averages.avg_hours < 75 %}text-warning{% elif averages.avg_hours < 100 %}text-accent{% else %}text-error{% endif %}" data-stat-value>{{ averages.avg_hours|floatformat:0|intcomma }}<span class="text-[0.6rem] text-base-content/40 font-normal">h</span></div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Hours to Plat</div>
+            <progress class="progress progress-xs {% if averages.avg_hours < 25 %}progress-success{% elif averages.avg_hours < 75 %}progress-warning{% elif averages.avg_hours < 100 %}progress-accent{% else %}progress-error{% endif %} mt-1" value="{{ averages.avg_hours }}" max="100"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="fun">
+            <div class="text-lg md:text-xl font-black {% if averages.avg_fun < 4 %}text-error{% elif averages.avg_fun < 8 %}text-warning{% else %}text-success{% endif %}" data-stat-value>{{ averages.avg_fun|floatformat:1 }}</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Fun</div>
+            <progress class="progress progress-xs {% if averages.avg_fun < 4 %}progress-error{% elif averages.avg_fun < 8 %}progress-warning{% else %}progress-success{% endif %} mt-1" value="{{ averages.avg_fun }}" max="10"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center col-span-2 md:col-span-1" data-stat="overall">
+            <div class="text-lg md:text-xl font-black {% if averages.avg_rating < 2 %}text-error{% elif averages.avg_rating < 4 %}text-warning{% else %}text-success{% endif %}" data-stat-value>{{ averages.avg_rating|floatformat:1 }}<span class="text-[0.6rem] text-base-content/40 font-normal">/5</span></div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Overall</div>
+            <progress class="progress progress-xs {% if averages.avg_rating < 2 %}progress-error{% elif averages.avg_rating < 4 %}progress-warning{% else %}progress-success{% endif %} mt-1" value="{{ averages.avg_rating }}" max="5"></progress>
+        </div>
+    </div>
+    <p class="text-xs text-base-content/50 text-center italic mt-2" data-ratings-count>Based on {{ averages.count|intcomma }} community rating{{ averages.count|pluralize }}.</p>
+{% else %}
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-1.5" data-ratings-grid>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="difficulty">
+            <div class="text-lg md:text-xl font-black text-base-content/20" data-stat-value>&mdash;</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Difficulty</div>
+            <progress class="progress progress-xs mt-1" value="0" max="10"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="grindiness">
+            <div class="text-lg md:text-xl font-black text-base-content/20" data-stat-value>&mdash;</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Grindiness</div>
+            <progress class="progress progress-xs mt-1" value="0" max="10"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="hours">
+            <div class="text-lg md:text-xl font-black text-base-content/20" data-stat-value>&mdash;</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Hours to Plat</div>
+            <progress class="progress progress-xs mt-1" value="0" max="100"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="fun">
+            <div class="text-lg md:text-xl font-black text-base-content/20" data-stat-value>&mdash;</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Fun</div>
+            <progress class="progress progress-xs mt-1" value="0" max="10"></progress>
+        </div>
+        <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center col-span-2 md:col-span-1" data-stat="overall">
+            <div class="text-lg md:text-xl font-black text-base-content/20" data-stat-value>&mdash;</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Overall</div>
+            <progress class="progress progress-xs mt-1" value="0" max="5"></progress>
+        </div>
+    </div>
+    <p class="text-xs text-base-content/50 text-center italic mt-2" data-ratings-count>No community ratings yet. Be the first to rate!</p>
+{% endif %}
+</div>

@@ -66,23 +66,6 @@
                     </div>
                 </div>
 
-                {# Region selector #}
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <span class="text-sm font-medium">Default Region</span>
-                        <p class="text-xs text-base-content/40">Preferred region filter for games</p>
-                    </div>
-                    <select class="select select-xs select-bordered w-20 quick-setting-select"
-                            data-setting="default_region">
-                        <option value="" {% if not data.default_region %}selected{% endif %}>Any</option>
-                        <option value="NA" {% if data.default_region == 'NA' %}selected{% endif %}>NA</option>
-                        <option value="EU" {% if data.default_region == 'EU' %}selected{% endif %}>EU</option>
-                        <option value="JP" {% if data.default_region == 'JP' %}selected{% endif %}>JP</option>
-                        <option value="AS" {% if data.default_region == 'AS' %}selected{% endif %}>AS</option>
-                        <option value="KR" {% if data.default_region == 'KR' %}selected{% endif %}>KR</option>
-                        <option value="CN" {% if data.default_region == 'CN' %}selected{% endif %}>CN</option>
-                    </select>
-                </div>
             </div>
         </div>
     </div>

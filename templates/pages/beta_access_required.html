@@ -4,7 +4,7 @@
 {% block title %}Beta Feature{% endblock %}
 {% block content %}
 <div class="container mx-auto p-4 max-w-2xl flex items-center justify-center mt-12">
-    <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral text-center">
+    <div class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral text-center">
         <div class="card-body">
             <figure class="mb-4">
                 <img src="{% static 'images/logo.png' %}" alt="PlatPursuit logo" class="w-24 mx-auto" loading="lazy" decoding="async" />
@@ -26,8 +26,3 @@
 </div>
 {% endblock %}
 
-{% block js_scripts %}
-<script>
-    PlatPursuit.ZoomScaler.init();
-</script>
-{% endblock %}

@@ -1,0 +1,60 @@
+{% load custom_filters %}
+{# Dashboard module: Roadmaps for Your Library. Published staff roadmaps for unplatinumed games. #}
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        {# Header #}
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+                    <line x1="8" y1="2" x2="8" y2="18"></line>
+                    <line x1="16" y1="6" x2="16" y2="22"></line>
+                </svg>
+                Roadmaps for Your Library
+            </h2>
+            {% if data.roadmaps %}
+                <span class="badge badge-ghost badge-sm">{{ data.roadmaps|length }}</span>
+            {% endif %}
+        </div>
+
+        {% if data.has_data %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3">
+                {% for rm in data.roadmaps %}
+                    <a href="{% url 'game_detail' rm.np_communication_id %}#roadmap" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group relative">
+                        {# Game icon #}
+                        <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
+                            {% if rm.icon_url %}
+                                <img src="{{ rm.icon_url }}" alt="{{ rm.game_name }}" class="w-full h-full object-cover" loading="lazy" />
+                            {% else %}
+                                <div class="w-full h-full bg-base-300 flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon></svg>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {# Roadmap info #}
+                        <div class="flex-1 min-w-0">
+                            <div class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors mb-0.5">{{ rm.game_name }}</div>
+                            <div class="text-xs text-base-content/40 flex items-center gap-2">
+                                <span>{{ rm.tab_count }} tab{{ rm.tab_count|pluralize }}</span>
+                                <span class="text-base-content/20">·</span>
+                                <span>{{ rm.step_count }} step{{ rm.step_count|pluralize }}</span>
+                            </div>
+                        </div>
+
+                        {# Arrow #}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-accent/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+                </svg>
+                <p class="text-sm text-base-content/50">No roadmaps yet</p>
+                <p class="text-xs text-base-content/40 mt-1">Either you've platted everything, or staff hasn't written guides for your library yet. Check back soon!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>

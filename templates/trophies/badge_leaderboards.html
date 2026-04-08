@@ -3,54 +3,47 @@
 
 {% block title %}{{ badge.effective_display_series }} - Leaderboards{% endblock %}
 {% block content %}
-    <section class="shadow-lg shadow-neutral bg-base-200/95 rounded-box border-2 border-base-300 w-full p-0 lg:p-4">
-        {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-        {# ─── Hero Section ─────────────────────────────────────────────── #}
-        <div class="card bg-base-100 border-4 border-base-300 shadow-lg shadow-neutral mb-4">
-            <div class="card-body p-3 lg:p-5">
-                <div class="flex flex-col lg:flex-row items-center gap-3 lg:gap-5">
-                    <figure class="w-16 lg:w-20 h-16 lg:h-20 shrink-0 overflow-visible">
-                        {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
-                    </figure>
-                    <div class="flex flex-col items-center lg:items-start gap-1 flex-1 min-w-0">
-                        <h1 class="text-xl lg:text-2xl font-bold italic pr-1 line-clamp-1">{{ badge.effective_display_series }}</h1>
-                        {% if badge.effective_user_title %}
-                            <p class="text-sm legendary-title italic pr-1">{{ badge.effective_user_title }}</p>
-                        {% endif %}
-                        <p class="text-sm text-base-content/60 italic pr-1">Who reigns supreme?</p>
-                    </div>
-                    <a href="{% url 'badge_detail' badge.series_slug %}" class="btn btn-ghost btn-sm gap-1 shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <polyline points="15 18 9 12 15 6"></polyline>
-                        </svg>
-                        Badge Detail
-                    </a>
+    {# Hero Section #}
+    <div class="card bg-base-200/70 border-2 border-base-300 border-l-4 border-l-secondary shadow-md shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <div class="flex flex-col md:flex-row items-center md:items-start gap-3">
+                <figure class="w-14 h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 shrink-0 overflow-visible">
+                    {% include 'partials/badge.html' with layers=badge.get_badge_layers %}
+                </figure>
+                <div class="flex flex-col items-center md:items-start gap-0.5 flex-1 min-w-0 text-center md:text-left">
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold italic pr-1 line-clamp-1">{{ badge.effective_display_series }}</h1>
+                    {% if badge.effective_user_title %}
+                        <p class="text-xs md:text-sm legendary-title italic pr-1">{{ badge.effective_user_title }}</p>
+                    {% endif %}
+                    <p class="text-xs text-base-content/50 italic pr-1">Who reigns supreme?</p>
                 </div>
+                <a href="{% url 'badge_detail' badge.series_slug %}" class="btn btn-ghost btn-xs md:btn-sm gap-1 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    Badge Detail
+                </a>
             </div>
         </div>
+    </div>
 
-        {# ─── User Stats ──────────────────────────────────────────────── #}
-        {% include 'trophies/partials/leaderboard_user_stats.html' with leaderboard_type='series' %}
+    {# User Stats #}
+    {% include 'trophies/partials/leaderboard_user_stats.html' with leaderboard_type='series' %}
 
-        {# ─── Info Alert ──────────────────────────────────────────────── #}
-        <div class="alert alert-info mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            <span class="text-base italic pr-1">Only PSN accounts linked to a PlatPursuit profile are ranked. Link yours to join the competition.</span>
-        </div>
+    {# Info Alert #}
+    <div class="alert alert-info mb-3 text-xs md:text-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span class="italic pr-1">Only PSN accounts linked to a PlatPursuit profile are ranked.</span>
+    </div>
 
-        {# ─── Tabbed Layout ────────────────────────────────────────────── #}
-        <div class="tabs tabs-box bg-base-300/80 mb-3" role="tablist" aria-label="Leaderboard type">
-            <a href="?tab=earners" class="tab {% if active_tab == 'earners' %}tab-active{% endif %}">Earners</a>
-            <a href="?tab=progress" class="tab {% if active_tab == 'progress' %}tab-active{% endif %}">Badge Progress</a>
-        </div>
-        {% if active_tab == 'earners' %}
-            {% include 'trophies/partials/leaderboard_earners_table.html' %}
-        {% else %}
-            {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Series Badge Progress' progress_page_obj=lb_progress_page_obj progress_paginator=lb_progress_paginator progress_page_param='lb_progress_page' progress_user_page=lb_progress_user_page progress_user_rank=lb_progress_user_rank progress_rank_prefix='2' %}
-        {% endif %}
-    </section>
-{% endblock %}
-{% block js_scripts %}
-<script>PlatPursuit.ZoomScaler.init();</script>
+    {# Tabbed Layout #}
+    <div class="tabs tabs-box bg-base-300/80 mb-3" role="tablist" aria-label="Leaderboard type">
+        <a href="?tab=earners" class="tab text-xs md:text-sm {% if active_tab == 'earners' %}tab-active{% endif %}">Earners</a>
+        <a href="?tab=progress" class="tab text-xs md:text-sm {% if active_tab == 'progress' %}tab-active{% endif %}">Badge Progress</a>
+    </div>
+    {% if active_tab == 'earners' %}
+        {% include 'trophies/partials/leaderboard_earners_table.html' %}
+    {% else %}
+        {% include 'trophies/partials/leaderboard_progress_table.html' with progress_heading='Series Badge Progress' progress_page_obj=lb_progress_page_obj progress_paginator=lb_progress_paginator progress_page_param='lb_progress_page' progress_user_page=lb_progress_user_page progress_user_rank=lb_progress_user_rank progress_rank_prefix='2' %}
+    {% endif %}
 {% endblock %}

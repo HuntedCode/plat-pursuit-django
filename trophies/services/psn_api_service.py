@@ -161,7 +161,13 @@ class PsnApiService:
     @classmethod
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_exception_type(OperationalError), reraise=True)
     def create_or_update_game(cls, trophy_title: TrophyTitle):
-        """Create or update Game model from PSN trophy title data."""
+        """Create or update Game model from PSN trophy title data.
+
+        The defaults dict only contains fields derived from the TrophyTitle payload.
+        Any other Game field (flags, counters, status fields) should rely on its
+        model-level default. Do NOT hardcode values here just to mirror model defaults,
+        the list will rot every time a new field is added to Game.
+        """
         game, created = Game.objects.get_or_create(
             np_communication_id=trophy_title.np_communication_id.strip(),
             defaults={
@@ -170,7 +176,6 @@ class PsnApiService:
                 "title_name": trophy_title.title_name,
                 "title_detail": trophy_title.title_detail,
                 "title_icon_url": trophy_title.title_icon_url,
-                "force_title_icon": False,
                 "title_platform": [platform.value for platform in trophy_title.title_platform],
                 "has_trophy_groups": trophy_title.has_trophy_groups,
                 "defined_trophies": {
@@ -179,12 +184,6 @@ class PsnApiService:
                     "gold": trophy_title.defined_trophies.gold,
                     "platinum": trophy_title.defined_trophies.platinum
                 },
-                "played_count": 0,
-                "view_count": 0,
-                "is_regional": False,
-                "is_obtainable": True,
-                "is_delisted": False,
-                "has_online_trophies": False,
             },
         )
         needs_trophy_update = created

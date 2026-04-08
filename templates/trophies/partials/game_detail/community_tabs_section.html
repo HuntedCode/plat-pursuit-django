@@ -1,0 +1,228 @@
+{% load static custom_filters markdown_filters humanize %}
+
+<div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+
+        {# ── Section Header ── #}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            Community
+        </h4>
+
+        {% if community_tabs|length > 1 %}
+        {# ── DLC Tab Bar (only if multiple CTGs) ── #}
+        <div class="flex gap-1 p-1 bg-white/[0.03] rounded-lg border border-base-content/5 mb-4" role="tablist">
+            {% for ct in community_tabs %}
+                <button role="tab"
+                        class="community-tab-btn flex-1 text-center px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                               {% if forloop.first %}bg-primary text-primary-content shadow-sm{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
+                        data-ctg-id="{{ ct.ctg.id }}"
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                        aria-controls="community-panel-{{ ct.ctg.id }}">
+                    {{ ct.ctg.display_name }}
+                </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Per-CTG Panels ── #}
+        {% for ct in community_tabs %}
+        <div id="community-panel-{{ ct.ctg.id }}"
+             class="community-tab-panel {% if not forloop.first %}hidden{% endif %}"
+             data-ctg-id="{{ ct.ctg.id }}">
+
+            {# ══ Ratings Grid ══ #}
+            {% include 'trophies/partials/game_detail/ratings_grid.html' with averages=ct.averages %}
+
+            {# ══ Roadmap ══ #}
+            {% with rdm_tab=roadmap_tabs_by_ctg|get_item:ct.ctg.id %}
+                {% if rdm_tab and rdm_tab.steps.all %}
+                    {% include 'trophies/partials/game_detail/roadmap_tab_content.html' with tab=rdm_tab %}
+                {% else %}
+                    {# No roadmap content for this trophy group - matches CTA dimensions #}
+                    <div class="mt-4 bg-gradient-to-r from-base-content/[0.03] via-base-content/[0.02] to-transparent rounded-lg p-3 md:p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-base-content/5 border-2 border-base-content/10 flex items-center justify-center shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm md:text-base font-bold text-base-content/30">Trophy Roadmap</span>
+                                <p class="text-xs text-base-content/25 mt-0.5">No roadmap available for {{ ct.ctg.display_name }} yet.</p>
+                            </div>
+                            {% if request.user.is_staff and game.concept %}
+                                <a href="{% url 'roadmap_edit' game.np_communication_id %}" class="btn btn-xs btn-primary gap-1 shrink-0" onclick="event.stopPropagation();">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                                    Create
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+            {% endwith %}
+        </div>
+        {% endfor %}
+
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if community_tabs|length > 1 %}
+        // ── DLC Tab switching ──
+        document.querySelectorAll('.community-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ctgId = btn.dataset.ctgId;
+                document.querySelectorAll('.community-tab-btn').forEach(b => {
+                    const isActive = b.dataset.ctgId === ctgId;
+                    b.classList.toggle('bg-primary', isActive);
+                    b.classList.toggle('text-primary-content', isActive);
+                    b.classList.toggle('shadow-sm', isActive);
+                    b.classList.toggle('text-base-content/60', !isActive);
+                    b.classList.toggle('hover:text-base-content', !isActive);
+                    b.classList.toggle('hover:bg-base-300/50', !isActive);
+                    b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+                document.querySelectorAll('.community-tab-panel').forEach(p => {
+                    p.classList.toggle('hidden', p.dataset.ctgId !== ctgId);
+                });
+            });
+        });
+        {% endif %}
+
+        {% if roadmap %}
+        // ── Slide animation helpers ──
+        function slideDown(el, duration) {
+            el.style.overflow = 'hidden';
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+            el.classList.remove('hidden');
+            const height = el.scrollHeight;
+            el.style.transition = 'max-height ' + duration + 'ms ease-out, opacity ' + duration + 'ms ease-out';
+            requestAnimationFrame(function() { el.style.maxHeight = height + 'px'; el.style.opacity = '1'; });
+            el.addEventListener('transitionend', function handler() {
+                el.style.maxHeight = ''; el.style.overflow = ''; el.style.transition = '';
+                el.removeEventListener('transitionend', handler);
+            });
+        }
+        function slideUp(el, duration) {
+            el.style.overflow = 'hidden';
+            el.style.maxHeight = el.scrollHeight + 'px';
+            el.style.transition = 'max-height ' + duration + 'ms ease-in, opacity ' + duration + 'ms ease-in';
+            requestAnimationFrame(function() { el.style.maxHeight = '0'; el.style.opacity = '0'; });
+            el.addEventListener('transitionend', function handler() {
+                el.classList.add('hidden'); el.style.maxHeight = ''; el.style.overflow = ''; el.style.opacity = ''; el.style.transition = '';
+                el.removeEventListener('transitionend', handler);
+            });
+        }
+
+        // ── Roadmap expand/collapse (per tab) ──
+        document.querySelectorAll('.roadmap-expand-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var cta = btn.closest('.roadmap-cta');
+                var content = cta.parentElement.querySelector('.roadmap-content[data-tab-id="' + cta.dataset.tabId + '"]');
+                if (content) { cta.classList.add('hidden'); slideDown(content, 350); }
+            });
+        });
+        document.querySelectorAll('.roadmap-collapse-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var content = btn.closest('.roadmap-content');
+                var cta = content.parentElement.querySelector('.roadmap-cta[data-tab-id="' + content.dataset.tabId + '"]');
+                slideUp(content, 250);
+                setTimeout(function() { if (cta) { cta.classList.remove('hidden'); cta.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }, 260);
+            });
+        });
+
+        // ── Animated <details> ──
+        document.querySelectorAll('.roadmap-step-details, .trophy-guide-item, details.group').forEach(function(details) {
+            var summary = details.querySelector('summary');
+            var inner = details.querySelector('summary + div');
+            if (!summary || !inner) return;
+            var animating = false;
+            summary.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (animating) return;
+                animating = true;
+                if (details.open) {
+                    inner.style.overflow = 'hidden'; inner.style.maxHeight = inner.scrollHeight + 'px';
+                    inner.style.transition = 'max-height 250ms ease-in, opacity 250ms ease-in';
+                    requestAnimationFrame(function() { inner.style.maxHeight = '0'; inner.style.opacity = '0'; });
+                    inner.addEventListener('transitionend', function handler() {
+                        details.open = false; inner.style.maxHeight = ''; inner.style.overflow = ''; inner.style.opacity = ''; inner.style.transition = ''; animating = false;
+                        inner.removeEventListener('transitionend', handler);
+                    });
+                } else {
+                    details.open = true; inner.style.overflow = 'hidden'; inner.style.maxHeight = '0'; inner.style.opacity = '0';
+                    var height = inner.scrollHeight;
+                    inner.style.transition = 'max-height 300ms ease-out, opacity 300ms ease-out';
+                    requestAnimationFrame(function() { inner.style.maxHeight = height + 'px'; inner.style.opacity = '1'; });
+                    inner.addEventListener('transitionend', function handler() {
+                        inner.style.maxHeight = ''; inner.style.overflow = ''; inner.style.transition = ''; animating = false;
+                        inner.removeEventListener('transitionend', handler);
+                    });
+                }
+            });
+        });
+
+        // ── Trophy link scroll ──
+        function scrollToTrophyGuide(targetId) {
+            var target = document.getElementById(targetId);
+            if (!target) return;
+            if (!target.open) target.open = true;
+            setTimeout(function() {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                target.classList.add('ring-2', 'ring-primary/40');
+                setTimeout(function() { target.classList.remove('ring-2', 'ring-primary/40'); }, 1500);
+            }, 50);
+        }
+
+        document.querySelectorAll('.roadmap-trophy-link').forEach(function(link) {
+            link.addEventListener('click', function(e) { e.preventDefault(); scrollToTrophyGuide(link.getAttribute('href').substring(1)); });
+        });
+
+        // ── Trophy link styling (inline markdown links) ──
+        document.querySelectorAll('.roadmap-step-details a[href^="#trophy-guide-"]:not(.roadmap-trophy-link), .trophy-guide-item a[href^="#trophy-guide-"]').forEach(function(link) {
+            var targetId = link.getAttribute('href').substring(1);
+            var target = document.getElementById(targetId);
+            var iconSrc = target && target.querySelector('img') ? target.querySelector('img').src : null;
+            if (iconSrc) {
+                var img = document.createElement('img');
+                img.src = iconSrc; img.alt = ''; img.className = 'w-4 h-4 rounded-sm object-cover inline-block align-text-bottom';
+                link.insertBefore(img, link.firstChild);
+                link.insertBefore(document.createTextNode('\u00A0'), img.nextSibling);
+            }
+            link.classList.remove('link-primary');
+            link.classList.add('text-accent', 'decoration-accent/40', 'hover:decoration-accent');
+            link.addEventListener('click', function(e) { e.preventDefault(); scrollToTrophyGuide(targetId); });
+        });
+
+        // ── Trophy guide sort/filter ──
+        var TYPE_ORDER = { platinum: 0, gold: 1, silver: 2, bronze: 3 };
+        document.querySelectorAll('.trophy-guides-display-section').forEach(function(section) {
+            var list = section.querySelector('.trophy-guides-list');
+            var sortSelect = section.querySelector('.trophy-guide-sort');
+            var hideEarnedCb = section.querySelector('.trophy-guide-earned-filter input');
+            if (!list || !sortSelect) return;
+            function applySort() {
+                var items = Array.from(list.querySelectorAll('.trophy-guide-item'));
+                var sort = sortSelect.value;
+                var hideEarned = hideEarnedCb && hideEarnedCb.checked;
+                items.sort(function(a, b) {
+                    switch (sort) {
+                        case 'type': return (TYPE_ORDER[a.dataset.type] || 9) - (TYPE_ORDER[b.dataset.type] || 9);
+                        case 'rarity': return parseFloat(a.dataset.rarity) - parseFloat(b.dataset.rarity);
+                        case 'earned': return parseInt(b.dataset.earned) - parseInt(a.dataset.earned);
+                        case 'unearned': return parseInt(a.dataset.earned) - parseInt(b.dataset.earned);
+                        default: return parseInt(a.dataset.order) - parseInt(b.dataset.order);
+                    }
+                });
+                items.forEach(function(item) {
+                    item.classList.toggle('hidden', hideEarned && item.dataset.earned === '1');
+                    list.appendChild(item);
+                });
+            }
+            sortSelect.addEventListener('change', applySort);
+            if (hideEarnedCb) hideEarnedCb.addEventListener('change', applySort);
+        });
+        {% endif %}
+    });
+</script>
