@@ -160,7 +160,7 @@ class TokenInstance:
         ]
         for key in expired:
             del self.user_cache[key]
-        logger.info(f"Cleaned {len(expired)} expired users from instance {self.instance_id}")
+        logger.info(f"Cleaned {len(expired)} expired users from instance {self.group_id}-{self.instance_id}")
 
 class TokenKeeper:
     """Singleton: Maintains 3 live PSNAWP instances and handles API requests via pub/sub."""
@@ -1202,18 +1202,28 @@ class TokenKeeper:
                                 _earned_by_game[game.id] = 0
 
                         # Track concept-less games for resolution after the loop.
-                        # Modern platform games get queued through sync_title_stats
-                        # for proper concept resolution. Legacy-only games get stubs.
+                        # Modern platform games WITH title_ids get queued through
+                        # sync_title_stats for proper concept resolution. Everything
+                        # else (legacy platforms, OR modern games whose PSN
+                        # trophy_titles entry never returned a PPSA/CUSA SKU) has no
+                        # path through sync_title_stats and gets a stub inline.
+                        # Without the empty-title_ids carve-out, those games would
+                        # re-trigger sync_title_stats on every health check forever
+                        # because PSN's title_stats endpoint can't reach them.
                         if game.concept is None:
                             has_modern = any(p in TITLE_STATS_SUPPORTED_PLATFORMS for p in game.title_platform)
-                            if has_modern:
+                            has_title_ids = bool(game.title_ids)
+                            if has_modern and has_title_ids:
                                 games_needing_concepts.append(game)
                             else:
                                 try:
                                     default_concept = Concept.create_default_concept(game)
                                     game.add_concept(default_concept)
                                     self._try_igdb_enrich(default_concept)
-                                    logger.info(f"Health check: created default concept for legacy game {game.title_name}")
+                                    logger.info(
+                                        f"Health check: created default concept for {game.title_name} "
+                                        f"({game.np_communication_id})"
+                                    )
                                 except Exception:
                                     logger.exception(f"Health check: failed to create default concept for {game.title_name}")
 
@@ -1833,9 +1843,7 @@ class TokenKeeper:
                 args = [title.np_title_id, title.np_communication_id]
                 PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id, priority_override='medium_priority')
                 job_counter += 1
-            for stats in remaining_title_stats:
-                PsnApiService.update_profile_game_with_title_stats(profile, stats)
-            
+
             profile.add_to_sync_target(job_counter)
 
     def _job_sync_trophies(self, profile_id: int, np_communication_id: str, platform: str):
@@ -2222,9 +2230,7 @@ class TokenKeeper:
                 args = [title.np_title_id, title.np_communication_id]
                 PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
                 job_counter += 1
-            for stats in remaining_title_stats:
-                PsnApiService.update_profile_game_with_title_stats(profile, stats)
-            
+
             profile.add_to_sync_target(job_counter)
 
         pending_key = f"pending_sync_complete:{profile_id}"
