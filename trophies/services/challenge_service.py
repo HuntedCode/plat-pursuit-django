@@ -55,6 +55,12 @@ def create_az_challenge(profile, name='My A-Z Challenge'):
 
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
+
+    # Pursuit Feed: record a challenge_started event. Recorder swallows its
+    # own errors so challenge creation never fails on event side effects.
+    from trophies.services.event_service import EventService
+    EventService.record_challenge_started(challenge)
+
     return challenge
 
 
@@ -329,6 +335,12 @@ def create_calendar_challenge(profile, name='My Platinum Calendar'):
 
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
+
+    # Pursuit Feed: record a challenge_started event. Recorder swallows its
+    # own errors so challenge creation never fails on event side effects.
+    from trophies.services.event_service import EventService
+    EventService.record_challenge_started(challenge)
+
     return challenge
 
 
@@ -675,6 +687,12 @@ def create_genre_challenge(profile, name='My Genre Challenge'):
 
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
+
+    # Pursuit Feed: record a challenge_started event. Recorder swallows its
+    # own errors so challenge creation never fails on event side effects.
+    from trophies.services.event_service import EventService
+    EventService.record_challenge_started(challenge)
+
     return challenge
 
 

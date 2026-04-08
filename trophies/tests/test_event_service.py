@@ -683,3 +683,218 @@ class DayZeroSeedTest(TestCase):
         # for_profile filters by profile=given_profile, so null-profile rows
         # never match any specific user's activity tab.
         self.assertEqual(Event.objects.for_profile(profile).count(), 0)
+
+
+class ServiceActionEmitterTest(TestCase):
+    """Phase 3: integration tests for service-action event emitters.
+
+    Each test exercises the upstream service method (or API view, for the
+    GameList publish-flip case) and asserts that the right Event row is
+    produced. These tests catch regressions where someone moves or removes
+    the EventService.record_* call site without realizing it powers the
+    Pursuit Feed.
+
+    The recorders themselves are unit-tested in EventServiceRecorderTest.
+    """
+
+    def setUp(self):
+        self.user = CustomUser.objects.create_user(
+            email='action@example.com',
+            password='testpass123',
+        )
+        self.profile = Profile.objects.create(
+            user=self.user,
+            psn_username='action_test',
+            account_id='act-001',
+            is_linked=True,
+            guidelines_agreed=True,
+        )
+        self.concept = Concept.objects.create(
+            unified_title='Action Test Concept',
+            concept_id='CUSA80001',
+            slug='action-test',
+        )
+        self.ctg = ConceptTrophyGroup.objects.create(
+            concept=self.concept,
+            trophy_group_id='default',
+            display_name='Base Game',
+        )
+
+    # ---- Review --------------------------------------------------------
+
+    def test_review_service_emits_review_posted_event(self):
+        """ReviewService.create_review must produce a review_posted event."""
+        from trophies.services.review_service import ReviewService
+
+        # Mock the access check so we don't need a full ProfileGame setup.
+        with patch(
+            'trophies.services.concept_trophy_group_service.ConceptTrophyGroupService.can_review_group',
+            return_value=(True, None),
+        ):
+            review, error = ReviewService.create_review(
+                profile=self.profile,
+                concept=self.concept,
+                concept_trophy_group=self.ctg,
+                body='A solid review with enough characters to clear the minimum length cleanly.' * 2,
+                recommended=True,
+            )
+        self.assertIsNone(error)
+        self.assertIsNotNone(review)
+
+        events = _user_events().filter(event_type='review_posted')
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().target, review)
+
+    # ---- Challenges (3 types) -----------------------------------------
+
+    def test_create_az_challenge_emits_challenge_started(self):
+        from trophies.services.challenge_service import create_az_challenge
+        challenge = create_az_challenge(self.profile, name='Test AZ')
+        events = _user_events().filter(event_type='challenge_started')
+        self.assertEqual(events.count(), 1)
+        ev = events.first()
+        self.assertEqual(ev.target, challenge)
+        self.assertEqual(ev.metadata['challenge_type'], 'az')
+        self.assertEqual(ev.metadata['name'], 'Test AZ')
+
+    def test_create_calendar_challenge_emits_challenge_started(self):
+        from trophies.services.challenge_service import create_calendar_challenge
+        challenge = create_calendar_challenge(self.profile, name='Test Calendar')
+        # The calendar create path calls backfill_calendar_from_history which
+        # could potentially produce additional events. Filter strictly to
+        # challenge_started rather than asserting total count.
+        events = _user_events().filter(event_type='challenge_started')
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().metadata['challenge_type'], 'calendar')
+
+    def test_create_genre_challenge_emits_challenge_started(self):
+        from trophies.services.challenge_service import create_genre_challenge
+        challenge = create_genre_challenge(self.profile, name='Test Genre')
+        events = _user_events().filter(event_type='challenge_started')
+        self.assertEqual(events.count(), 1)
+        self.assertEqual(events.first().metadata['challenge_type'], 'genre')
+
+    # ---- GameList publish flip ----------------------------------------
+
+    def test_game_list_publish_flip_emits_event(self):
+        """GameListUpdateView.patch must emit on a real false->true publish flip."""
+        from trophies.models import GameList
+        from api.game_list_views import GameListUpdateView
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        # Create a private list with at least one game (game_count > 0).
+        game_list = GameList.objects.create(
+            profile=self.profile,
+            name='Test List',
+            is_public=False,
+            game_count=3,
+        )
+
+        factory = APIRequestFactory()
+        request = factory.patch(
+            f'/api/v1/lists/{game_list.id}/',
+            {'is_public': True},
+            format='json',
+        )
+        force_authenticate(request, user=self.user)
+        view = GameListUpdateView.as_view()
+        response = view(request, list_id=game_list.id)
+        self.assertEqual(response.status_code, 200, msg=response.data)
+
+        events = _user_events().filter(event_type='game_list_published')
+        self.assertEqual(events.count(), 1)
+        ev = events.first()
+        self.assertEqual(ev.target, game_list)
+        self.assertEqual(ev.metadata['list_name'], 'Test List')
+        self.assertEqual(ev.metadata['game_count'], 3)
+
+    def test_game_list_publish_already_public_no_event(self):
+        """Re-PATCHing is_public=True on an already-public list does not double-emit."""
+        from trophies.models import GameList
+        from api.game_list_views import GameListUpdateView
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        game_list = GameList.objects.create(
+            profile=self.profile,
+            name='Already Public',
+            is_public=True,
+            game_count=2,
+        )
+
+        factory = APIRequestFactory()
+        request = factory.patch(
+            f'/api/v1/lists/{game_list.id}/',
+            {'is_public': True},  # No flip — already true
+            format='json',
+        )
+        force_authenticate(request, user=self.user)
+        view = GameListUpdateView.as_view()
+        response = view(request, list_id=game_list.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(_user_events().filter(event_type='game_list_published').count(), 0)
+
+    def test_game_list_publish_empty_list_no_event(self):
+        """Publishing an empty list (game_count=0) must NOT emit (avoid surfacing empty lists)."""
+        from trophies.models import GameList
+        from api.game_list_views import GameListUpdateView
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        game_list = GameList.objects.create(
+            profile=self.profile,
+            name='Empty List',
+            is_public=False,
+            game_count=0,
+        )
+
+        factory = APIRequestFactory()
+        request = factory.patch(
+            f'/api/v1/lists/{game_list.id}/',
+            {'is_public': True},
+            format='json',
+        )
+        force_authenticate(request, user=self.user)
+        view = GameListUpdateView.as_view()
+        response = view(request, list_id=game_list.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(_user_events().filter(event_type='game_list_published').count(), 0)
+
+    # ---- Profile link --------------------------------------------------
+
+    def test_link_profile_emits_profile_linked_event(self):
+        """VerificationService.link_profile_to_user emits exactly once when newly linking."""
+        from trophies.services.verification_service import VerificationService
+
+        # Create a fresh unlinked profile and a fresh user to link it to.
+        # Note: CustomUser.username is unique, and the default empty string
+        # collides with self.user's empty username from setUp. Pass an
+        # explicit username to avoid the unique-constraint violation.
+        unlinked_user = CustomUser.objects.create_user(
+            email='to_link@example.com',
+            password='testpass123',
+            username='to_link_user',
+        )
+        unlinked_profile = Profile.objects.create(
+            psn_username='to_link',
+            account_id='link-001',
+            is_linked=False,
+        )
+
+        VerificationService.link_profile_to_user(unlinked_profile, unlinked_user)
+
+        events = _user_events().filter(event_type='profile_linked', profile=unlinked_profile)
+        self.assertEqual(events.count(), 1)
+        ev = events.first()
+        self.assertEqual(ev.metadata['psn_username'], 'to_link')
+
+    def test_link_already_linked_profile_no_event(self):
+        """Re-calling link_profile_to_user on an already-linked profile is a no-op."""
+        from trophies.services.verification_service import VerificationService
+
+        # self.profile is already linked in setUp. Re-linking should be a no-op.
+        VerificationService.link_profile_to_user(self.profile, self.user)
+
+        # No event for self.profile (it was already linked before this test ran)
+        self.assertEqual(
+            _user_events().filter(event_type='profile_linked', profile=self.profile).count(),
+            0,
+        )

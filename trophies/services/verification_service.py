@@ -125,6 +125,13 @@ class VerificationService:
             from trophies.services.milestone_service import check_all_milestones_for_user
             check_all_milestones_for_user(profile, criteria_type='psn_linked')
 
+            # Pursuit Feed: record a profile_linked event. This block only
+            # runs when a profile is newly linked (the `if not profile.user`
+            # guard above), so the event fires exactly once per profile-link
+            # ever. Recorder swallows its own errors.
+            from trophies.services.event_service import EventService
+            EventService.record_profile_linked(profile)
+
             # Send one-time welcome email (idempotent, guards via EmailLog)
             try:
                 from core.services.email_service import send_welcome_email

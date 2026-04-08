@@ -93,6 +93,11 @@ class ReviewService:
             from trophies.services.milestone_service import check_all_milestones_for_user
             check_all_milestones_for_user(profile, criteria_type='review_count')
 
+            # Pursuit Feed: record a review_posted event. The recorder catches
+            # its own exceptions so review creation never fails on event errors.
+            from trophies.services.event_service import EventService
+            EventService.record_review_posted(review)
+
             logger.info(
                 f"Review {review.id} created by {profile.psn_username} "
                 f"on concept {concept.id} group {concept_trophy_group.trophy_group_id}"
