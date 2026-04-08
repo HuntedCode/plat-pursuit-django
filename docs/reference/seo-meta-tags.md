@@ -122,5 +122,5 @@ Django auto-generates a sitemap index when multiple sections exist. Pagination i
 
 ## Related Docs
 
-- [Data Model](../architecture/data-model.md): Game, Profile, Badge, Checklist, Challenge models
-- [JS Utils](../reference/js-utils.md): Frontend utilities
+- [Data Model](../architecture/data-model.md): Game, Profile, Badge, Challenge models (Checklist tables retained in schema but the system was retired)
+- [JS Utilities](js-utilities.md): Frontend utilities

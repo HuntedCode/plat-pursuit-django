@@ -320,6 +320,6 @@ When a milestone has an associated `title` FK (to the `Title` model), `_build_mi
 
 ## Related Docs
 
-- [Dashboard System](../dashboard.md): Dashboard modules may display notification counts
-- [Community Hub](../community-hub.md): Review reply and review milestone notification types
-- [Sync Pipeline Optimization](../../MEMORY.md): Details on `sync_signal_suppressor()` and batch query patterns
+- [Dashboard System](../features/dashboard.md): Dashboard modules may display notification counts
+- [Community Hub](../features/community-hub.md): Review reply and review milestone notification types
+- [Token Keeper](token-keeper.md): `sync_signal_suppressor()` context manager and the deferred notification queue used during bulk sync

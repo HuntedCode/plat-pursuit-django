@@ -286,7 +286,7 @@ Staff can switch between "view as premium" and "view as free" via a header butto
 
 ## Related Docs
 
-- [Module Catalog](../design/dashboard-module-catalog.md): Full 28-module roadmap
+- [Module Catalog](../design/dashboard-module-catalog.md): Design history, cuts, and remaining roadmap (deferred to this doc for the live module list)
 - [Data Model](../architecture/data-model.md): DashboardConfig model
 - [JS Utilities](../reference/js-utilities.md): DragReorderManager
 - [Challenge Systems](../features/challenge-systems.md): Challenge models and services

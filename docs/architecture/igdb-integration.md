@@ -211,4 +211,4 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 ## Related Docs
 
 - [Data Model](data-model.md): Concept, Game, and related models that IGDB enriches
-- [Sync Pipeline](../guides/sync-pipeline.md): Where IGDB enrichment hooks into the PSN sync flow
+- [Token Keeper](token-keeper.md): Where IGDB enrichment hooks into the PSN sync flow (after `create_concept_from_details()` and during the health-check default-concept fallback path)
