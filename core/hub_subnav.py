@@ -179,7 +179,12 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # My Pursuit
     'badge_detail': ('my_pursuit', 'badges'),
     'badge_detail_with_profile': ('my_pursuit', 'badges'),
-    # Dashboard: nested sub-pages
+    # Dashboard: nested sub-pages. The shareables sub-pages all live under
+    # /dashboard/shareables/* and should highlight the Shareables sub-nav
+    # item; the platinum_grid wizard is one of those nested children.
+    'my_shareables_platinums': ('dashboard', 'shareables'),
+    'my_shareables_profile_card': ('dashboard', 'shareables'),
+    'my_shareables_challenges': ('dashboard', 'shareables'),
     'platinum_grid': ('dashboard', 'shareables'),
     'recap_view': ('dashboard', 'recap'),
 }
