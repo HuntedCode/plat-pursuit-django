@@ -27,7 +27,7 @@
                 <div class="flex flex-row items-center gap-1.5 md:gap-2 xl:gap-3 min-w-0">
                     {% if hotbar.profile %}
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar shrink-0">
-                            <div class="w-5 md:w-7 xl:w-8 rounded-full ring-1 md:ring-2 ring-primary hover:scale-105 transition-transform">
+                            <div class="w-5 md:w-7 xl:w-8 rounded-full ring-1 md:ring-2 ring-primary">
                                 <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                             </div>
                         </a>
@@ -96,7 +96,7 @@
     <button id="hotbar-toggle"
             class="block mx-auto bg-base-300 border-2 border-primary border-t-0 rounded-b-lg px-4 py-1 shadow-md shadow-primary/25 cursor-pointer transition-all duration-300 hover:bg-base-200 hover:shadow-primary/40 group"
             aria-label="Toggle hotbar">
-        <svg id="toggle-icon" class="w-5 h-5 text-primary rotate-180 transition-transform duration-300 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-labelledby="hotbar-toggle-icon">
+        <svg id="toggle-icon" class="w-5 h-5 text-primary rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-labelledby="hotbar-toggle-icon">
             <title id="hotbar-toggle-icon">Toggle hotbar visibility</title>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7" />
         </svg>
