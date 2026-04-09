@@ -28,24 +28,45 @@
 <div id="more-drawer" class="more-drawer lg:!hidden" role="dialog" aria-label="Navigation menu" aria-hidden="true">
     <div class="more-drawer-handle"></div>
 
-    {# ── Browse: absorbs old Discover items per Phase 10 IA restructure ── #}
+    {# ── Hub-of-Hubs mobile drawer ──                                                       #}
+    {# Mirrors the desktop hub structure: 4 hub sections (Dashboard, Browse, Community,    #}
+    {# My Pursuit), each with its sub-pages. The bottom tab bar handles Home/Games/Search/#}
+    {# Notifications; this drawer is for everything else. Customization is killed entirely.#}
+    {# The legacy "My Pursuit" personal-utility section is replaced by the Dashboard hub  #}
+    {# (Stats, Shareables, Recap), and the new "My Pursuit" section is the renamed         #}
+    {# Achievements hub (Badges, Milestones, Titles). See docs/architecture/ia-and-subnav.md.#}
+
+    {# ── Dashboard hub (auth only) ── #}
+    {% if user.is_authenticated and user.profile %}
+    <div class="more-drawer-section-title">Dashboard</div>
+    <ul class="menu menu-sm px-2">
+        <li><a href="{% url 'home' %}">Dashboard</a></li>
+        <li><a href="{% url 'my_stats' %}">My Stats</a></li>
+        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
+        <li><a href="{% url 'recap_index' %}">Recap</a></li>
+        <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
+        <li><a href="{% url 'my_lists' %}">My Lists</a></li>
+    </ul>
+    {% endif %}
+
+    {# ── Browse hub ── #}
     <div class="more-drawer-section-title">Browse</div>
     <ul class="menu menu-sm px-2">
         <li><a href="{% url 'games_list' %}">Games</a></li>
-        <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
         <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
         <li><a href="{% url 'companies_list' %}">Companies</a></li>
         <li><a href="{% url 'genres_list' %}">Genres &amp; Themes</a></li>
         <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
     </ul>
 
-    {# ── Community: Hub + Pursuit Feed first, then existing surfaces, plus Leaderboards ── #}
+    {# ── Community hub: Profiles relocated here from Browse since they're community discovery ── #}
     <div class="more-drawer-section-title">Community</div>
     <ul class="menu menu-sm px-2">
         <li><a href="{% url 'community_hub' %}">Community Hub</a></li>
         <li><a href="{% url 'community_feed' %}">Pursuit Feed</a></li>
+        <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
+        <li><a href="{% url 'reviews_landing' %}">Reviews</a></li>
         <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
-        <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
         <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
         <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
         <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
@@ -61,8 +82,8 @@
         {% endif %}
     </ul>
 
-    {# ── Achievements: renamed from Earn, Leaderboards moved out to Community ── #}
-    <div class="more-drawer-section-title">Achievements</div>
+    {# ── My Pursuit hub: renamed from Achievements, forward-compatible with gamification ── #}
+    <div class="more-drawer-section-title">My Pursuit</div>
     <ul class="menu menu-sm px-2">
         <li><a href="{% url 'badges_list' %}">Badges</a></li>
         <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
@@ -70,26 +91,6 @@
             <li><a href="{% url 'my_titles' %}">Titles</a></li>
         {% endif %}
     </ul>
-
-    {# Guides section hidden during redesign #}
-
-    <!-- My Pursuit -->
-    {% if user.is_authenticated and user.profile %}
-    <div class="more-drawer-section-title">My Pursuit</div>
-    <ul class="menu menu-sm px-2">
-        {% if user.is_staff %}
-        <li><a href="{% url 'dashboard' %}">My Dashboard (Staff Only)</a></li>
-        {% endif %}
-        <li><a href="{% url 'settings' %}">Customization</a></li>
-        <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-        <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
-        <li><a href="{% url 'my_lists' %}">My Lists</a></li>
-        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
-        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-        <li><a href="{% url 'my_stats' %}">My Stats</a></li>
-        <li><a href="{% url 'platinum_grid' %}">Platinum Grid</a></li>
-    </ul>
-    {% endif %}
 
     <!-- Account -->
     <div class="more-drawer-section-title">Account</div>

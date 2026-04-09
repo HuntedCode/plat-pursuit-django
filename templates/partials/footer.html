@@ -3,12 +3,11 @@
     <div class="max-w-7xl mx-auto px-4 md:px-6 pt-6 md:pt-8 lg:pt-10 pb-4 md:pb-6">
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8 lg:gap-6">
 
-            {# Browse — absorbs old Discover items per Phase 10 IA restructure #}
+            {# Browse hub — content discovery #}
             <nav aria-label="Browse pages">
                 <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Browse</h3>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'games_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Games</a></li>
-                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
                     <li><a href="{% url 'trophies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Trophies</a></li>
                     <li><a href="{% url 'companies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Companies</a></li>
                     <li><a href="{% url 'genres_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Genres &amp; Themes</a></li>
@@ -16,23 +15,24 @@
                 </ul>
             </nav>
 
-            {# Community — Hub + Pursuit Feed first, Leaderboards moved here from old Earn #}
+            {# Community hub — people/social discovery. Profiles relocated here from Browse. #}
             <nav aria-label="Community pages">
                 <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h3>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'community_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Community Hub</a></li>
                     <li><a href="{% url 'community_feed' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Pursuit Feed</a></li>
+                    <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
+                    <li><a href="{% url 'reviews_landing' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Reviews</a></li>
                     <li><a href="{% url 'challenges_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Challenges</a></li>
-                    <li><a href="{% url 'reviews_landing' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Review Hub</a></li>
                     <li><a href="{% url 'lists_browse' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Game Lists</a></li>
                     <li><a href="{% url 'overall_badge_leaderboards' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Leaderboards</a></li>
-                    <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Discord</a></li>
                 </ul>
             </nav>
 
-            {# Achievements — renamed from Earn, Leaderboards moved out to Community #}
-            <nav aria-label="Achievements pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Achievements</h3>
+            {# My Pursuit hub — personal progression. Renamed from Achievements; #}
+            {# forward-compatible with the gamification initiative.              #}
+            <nav aria-label="My Pursuit pages">
+                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h3>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
@@ -42,17 +42,17 @@
                 </ul>
             </nav>
 
-            {# My Pursuit / Account #}
+            {# Dashboard hub / Account #}
             {% if user.is_authenticated and user.profile %}
-            <nav aria-label="My Pursuit pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h3>
+            <nav aria-label="Dashboard pages">
+                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Dashboard</h3>
                 <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'profile_detail' user.profile.psn_username %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Profile</a></li>
+                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Dashboard</a></li>
+                    <li><a href="{% url 'my_stats' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Stats</a></li>
+                    <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Shareables</a></li>
+                    <li><a href="{% url 'recap_index' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Recap</a></li>
                     <li><a href="{% url 'my_challenges' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Challenges</a></li>
                     <li><a href="{% url 'my_lists' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Lists</a></li>
-                    <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Shareables</a></li>
-                    <li><a href="{% url 'my_stats' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Stats</a></li>
-                    <li><a href="{% url 'platinum_grid' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Platinum Grid</a></li>
                 </ul>
             </nav>
             {% else %}

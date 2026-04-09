@@ -17,90 +17,39 @@
         </a>
     </div>
 
+    {# ── Hub-of-Hubs navigation: 3 direct-link hub destinations + Dashboard logo ──         #}
+    {# Phase 10a of the Community Hub initiative collapsed the legacy 4-dropdown navbar     #}
+    {# into 3 direct-link buttons (Browse, Community, My Pursuit) plus the Dashboard logo  #}
+    {# at navbar-start. Each hub has its own sub-navigation strip rendered globally below   #}
+    {# this navbar (templates/partials/hub_subnav.html) which surfaces sub-pages on every  #}
+    {# URL in the hub's family. Customization is killed entirely — Settings (avatar         #}
+    {# dropdown) + the dashboard's Edit Layout controls cover all touchpoints.              #}
+    {#                                                                                       #}
+    {# Active state: hub_section comes from the hub_subnav context processor (always set    #}
+    {# for hub-family URLs, None for settings/auth/staff pages). The browse/community/      #}
+    {# my-pursuit buttons each highlight when their hub is active. The Dashboard logo at    #}
+    {# navbar-start serves as the dashboard hub link and isn't styled as a button. See      #}
+    {# docs/architecture/ia-and-subnav.md for the design rationale.                          #}
     <div class="navbar-center hidden lg:flex">
-        <ul class="menu menu-horizontal px-1">
-            {# ── Browse: Games, Profiles, Trophies, Companies, Genres & Themes, Flagged Games ── #}
-            {# Phase 10 of the Community Hub initiative absorbed the previous Discover menu      #}
-            {# (Companies, Genres & Themes, Flagged Games) into Browse so the IA distinguishes   #}
-            {# "find content" (Browse) from "see what the community is doing" (Community).      #}
+        <ul class="menu menu-horizontal px-1 gap-1">
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Browse</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'games_list' %}">Games</a></li>
-                        <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
-                        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
-                        <li><a href="{% url 'companies_list' %}">Companies</a></li>
-                        <li><a href="{% url 'genres_list' %}">Genres &amp; Themes</a></li>
-                        <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
-                    </ul>
-                </details>
+                <a href="{% url 'games_list' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'browse' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    Browse
+                </a>
             </li>
-            {# ── Community: Hub, Pursuit Feed, Challenges, Reviews, Game Lists, Leaderboards ── #}
-            {# The "Community Hub" entry is the FIRST item so users who don't notice the         #}
-            {# clickable summary still have a path to the destination page. The Leaderboards     #}
-            {# link relocated here from the old Earn menu — leaderboards are inherently          #}
-            {# competitive/community content.                                                    #}
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Community</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'community_hub' %}">Community Hub</a></li>
-                        <li><a href="{% url 'community_feed' %}">Pursuit Feed</a></li>
-                        <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
-                        <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
-                        <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
-                        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
-                        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
-                        {% if active_fundraiser %}
-                            <li>
-                                <a href="{% url 'fundraiser' active_fundraiser.slug %}">
-                                    <span class="flex flex-row gap-2 items-center">
-                                        Fundraiser
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                                    </span>
-                                </a>
-                            </li>
-                        {% endif %}
-                    </ul>
-                </details>
+                <a href="{% url 'community_hub' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'community' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    Community
+                </a>
             </li>
-            {# ── Achievements: Badges, Milestones, Titles ── #}
-            {# Renamed from "Earn" so the boundary between this (personal progression) and     #}
-            {# Community (competitive/social) is sharper. Leaderboards moved out to Community. #}
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Achievements</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'badges_list' %}">Badges</a></li>
-                        <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'my_titles' %}">Titles</a></li>
-                        {% endif %}
-                    </ul>
-                </details>
+                <a href="{% url 'badges_list' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    My Pursuit
+                </a>
             </li>
-            {# ── My Pursuit ── #}
-            {% if user.is_authenticated and user.profile %}
-            <li>
-                <details class="mega-menu-dropdown">
-                    <summary>My Pursuit</summary>
-                    <ul class="mega-menu-content">
-                        {% if user.is_staff %}
-                        <li><a href="{% url 'dashboard' %}">My Dashboard (Staff Only)</a></li>
-                        {% endif %}
-                        <li><a href="{% url 'settings' %}">Customization</a></li>
-                        <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-                        <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
-                        <li><a href="{% url 'my_lists' %}">My Lists</a></li>
-                        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
-                        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-                        <li><a href="{% url 'my_stats' %}">My Stats</a></li>
-                        <li><a href="{% url 'platinum_grid' %}">Platinum Grid</a></li>
-                    </ul>
-                </details>
-            </li>
-            {% endif %}
         </ul>
     </div>
 
