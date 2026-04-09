@@ -154,62 +154,11 @@ See docs/features/community-hub.md for the design rationale.
             </div>
         </section>
 
-        {# ── Challenges feature card ── #}
-        <section>
-            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-secondary/40 shadow-lg shadow-neutral hover:shadow-secondary/10 transition-all h-full">
-                <div class="card-body p-3 md:p-5 lg:p-7">
-                    {# Header: icon + title + tagline #}
-                    <div class="flex items-start gap-3 mb-3">
-                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-secondary/15 ring-2 ring-secondary/30 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-                                <line x1="4" y1="22" x2="4" y2="15"></line>
-                            </svg>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Challenges</h2>
-                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">Push yourself further. A-Z, Calendar, Genre, and more.</p>
-                        </div>
-                    </div>
-
-                    {# Data preview: 3 active challenges #}
-                    {% if active_challenges %}
-                        <div class="space-y-1 mb-3">
-                            {% for challenge in active_challenges %}
-                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5">
-                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
-                                        {% if challenge.profile.avatar_url %}
-                                            <img src="{{ challenge.profile.avatar_url }}" alt="{{ challenge.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
-                                        {% else %}
-                                            <div class="w-full h-full bg-base-300"></div>
-                                        {% endif %}
-                                    </div>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="text-sm line-clamp-1 pr-1">
-                                            <span class="font-semibold">{{ challenge.profile.display_psn_username }}</span>
-                                            <span class="text-base-content/70">— {{ challenge.name }}</span>
-                                        </div>
-                                    </div>
-                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ challenge.progress_percentage }}%</span>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-4 mb-3">
-                            <p class="text-sm text-base-content/50">No active challenges — start one!</p>
-                        </div>
-                    {% endif %}
-
-                    {# Hero CTA #}
-                    <a href="{% url 'challenges_browse' %}" class="btn btn-secondary btn-sm gap-2 w-full">
-                        Browse Challenges
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                    </a>
-                </div>
-            </div>
-        </section>
-
         {# ── Game Lists feature card ── #}
+        {# Paired with Reviews on row 1 — both are title-shaped cards (concept   #}
+        {# icons + game titles), so they read as a balanced row. Challenges and  #}
+        {# Leaderboards are paired on row 2 because both are people-shaped       #}
+        {# (avatars + usernames + a percentage/score on the right).              #}
         <section>
             <div class="card bg-base-200/90 border-2 border-base-300 hover:border-primary/40 shadow-lg shadow-neutral hover:shadow-primary/10 transition-all h-full">
                 <div class="card-body p-3 md:p-5 lg:p-7">
@@ -260,6 +209,61 @@ See docs/features/community-hub.md for the design rationale.
                     {# Hero CTA #}
                     <a href="{% url 'lists_browse' %}" class="btn btn-primary btn-sm gap-2 w-full">
                         Browse Lists
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {# ── Challenges feature card ── #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-secondary/40 shadow-lg shadow-neutral hover:shadow-secondary/10 transition-all h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    {# Header: icon + title + tagline #}
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-secondary/15 ring-2 ring-secondary/30 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                                <line x1="4" y1="22" x2="4" y2="15"></line>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Challenges</h2>
+                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">Push yourself further. A-Z, Calendar, Genre, and more.</p>
+                        </div>
+                    </div>
+
+                    {# Data preview: 3 active challenges #}
+                    {% if active_challenges %}
+                        <div class="space-y-1 mb-3">
+                            {% for challenge in active_challenges %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5">
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
+                                        {% if challenge.profile.avatar_url %}
+                                            <img src="{{ challenge.profile.avatar_url }}" alt="{{ challenge.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm line-clamp-1 pr-1">
+                                            <span class="font-semibold">{{ challenge.profile.display_psn_username }}</span>
+                                            <span class="text-base-content/70">— {{ challenge.name }}</span>
+                                        </div>
+                                    </div>
+                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ challenge.progress_percentage }}%</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4 mb-3">
+                            <p class="text-sm text-base-content/50">No active challenges — start one!</p>
+                        </div>
+                    {% endif %}
+
+                    {# Hero CTA #}
+                    <a href="{% url 'challenges_browse' %}" class="btn btn-secondary btn-sm gap-2 w-full">
+                        Browse Challenges
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </a>
                 </div>

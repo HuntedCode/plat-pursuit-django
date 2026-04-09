@@ -52,14 +52,14 @@ When an active fundraiser exists, render a prominent banner here above the featu
 
 ### 3. Feature Grid *(2x2 on `lg:`, 1-col on mobile)*
 
-Each card has icon + feature name + tagline + small data preview + hero CTA.
+Each card has icon + feature name + tagline + small data preview + hero CTA. The 2x2 ordering pairs cards by visual shape so each row reads as balanced: row 1 is *title-shaped* cards (concept icons + game titles on the left, a small score on the right) and row 2 is *people-shaped* cards (avatars + usernames on the left, a percentage on the right).
 
-| Card | Tagline | Data Preview | CTA |
-|------|---------|--------------|-----|
-| **Review Hub** | "See what hunters are saying about your next platinum." | 3 most recently reviewed titles (icon + title + review count + recommendation %) | "Visit Review Hub" |
-| **Challenges** | "Push yourself further. A-Z, Calendar, Genre, and more." | 3 active challenges (icon + title + participants) | "Browse Challenges" |
-| **Game Lists** | "Curated by the community. Your next obsession is in here." | 3 most recent published lists (icon + title + author) | "Browse Lists" |
-| **Leaderboards** | "Climb the ranks. Compete with hunters worldwide." | Top 5 badge XP (rank + avatar + name + XP) | "View Leaderboards" |
+| Row | Card | Tagline | Data Preview | CTA |
+|-----|------|---------|--------------|-----|
+| 1 (left)  | **Review Hub**   | "See what hunters are saying about your next platinum." | 3 most recently reviewed titles (icon + title + review count + recommendation %) | "Visit Review Hub" |
+| 1 (right) | **Game Lists**   | "Curated by the community. Your next obsession is in here." | 3 most recent published lists (icon + title + author + game count) | "Browse Lists" |
+| 2 (left)  | **Challenges**   | "Push yourself further. A-Z, Calendar, Genre, and more." | 3 active challenges (avatar + author — challenge name + progress %) | "Browse Challenges" |
+| 2 (right) | **Leaderboards** | "Climb the ranks. Compete with hunters worldwide." | Top 5 badge XP (rank + avatar + name + XP) | "View Leaderboards" |
 
 The leaderboard card shows top 5, NOT top 25. The full top-25 leaderboard lives on `/community/leaderboards/badges/` — the hub just teases it.
 
