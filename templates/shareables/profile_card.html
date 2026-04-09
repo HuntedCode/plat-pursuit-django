@@ -21,12 +21,12 @@ we instantiate a minimal manager and manually invoke the per-module
 init for the data-module-slug="profile_card_preview" element on this
 page.
 
-Premium gating: theme switching is premium-only, enforced by the
-init code (the theme picker shows a toast if non-premium clicks it).
-The default theme is always available.
+Themes are open to all users (matching how every other share-card
+surface — platinum cards, challenge cards, recap cards — works). The
+default theme is the saved fallback.
 
 See trophies/views/shareables_views.py:MyProfileCardView for the
-context shape (card_theme, is_premium, available_themes).
+context shape (card_theme, available_themes).
 {% endcomment %}
 
 {% block content %}
@@ -42,12 +42,6 @@ context shape (card_theme, is_premium, available_themes).
                 <polyline points="21 15 16 10 5 21"></polyline>
             </svg>
             <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Profile Card</h1>
-            {% if not is_premium %}
-                <span class="badge badge-sm badge-warning gap-1 font-bold">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg>
-                    Themes are Premium
-                </span>
-            {% endif %}
         </div>
         <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
             Generate a share image showcasing your trophy profile, badges, and stats.
@@ -60,8 +54,7 @@ context shape (card_theme, is_premium, available_themes).
 {# picks it up from the bootstrap script at the bottom of this page.   #}
 <div data-module-slug="profile_card_preview"
      class="dashboard-module relative card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral"
-     data-card-theme="{{ card_theme }}"
-     data-is-premium="{{ is_premium|yesno:'true,false' }}">
+     data-card-theme="{{ card_theme }}">
     <div class="card-body p-3 md:p-5 lg:p-7">
 
         {# Preview container — dashboard.js _initProfileCardPreview wires this up #}
@@ -120,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         moduleDataUrl: '/api/v1/dashboard/module/',
         configUrl: '/api/v1/dashboard/config/',
         reorderUrl: '/api/v1/dashboard/reorder/',
-        isPremium: {{ is_premium|yesno:"true,false" }},
+        isPremium: false,
         maxFreeHidden: 0,
         hiddenModules: [],
         moduleSettings: {},

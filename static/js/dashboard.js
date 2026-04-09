@@ -2077,7 +2077,6 @@
         _initProfileCardPreview(el) {
             const card = el.querySelector('[data-card-theme]');
             let currentTheme = card ? card.dataset.cardTheme : 'default';
-            const isPremium = card && card.dataset.isPremium === 'true';
             const themes = window.GRADIENT_THEMES || {};
             const container = el.querySelector('.profile-card-module-preview');
             const content = el.querySelector('.profile-card-module-content');
@@ -2167,10 +2166,6 @@
 
                 const openPicker = function(e) {
                     e.stopPropagation();
-                    if (!isPremium) {
-                        PlatPursuit.ToastManager.show('Premium required for custom themes.', 'warning');
-                        return;
-                    }
                     const colorModal = PlatPursuit.getColorGridModal?.();
                     if (!colorModal) return;
                     colorModal.open(currentTheme, function(themeKey) {
