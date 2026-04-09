@@ -44,6 +44,7 @@ The Community Hub is a single fixed-layout page (no drag-and-drop, no module lib
 | `core/services/community_hub_service.py` | Page-data assembler. Houses the four community-pulse helpers, the four personal-hook helpers, and `_pad_to_limit` (which right-pads each list to `SPOTLIGHT_LIMIT` rows so cards stay visually balanced). |
 | `templates/community/hub.html` | Community Hub page template |
 | `templates/community/partials/personal_half_empty.html` | Shared empty-state for the personal half of every feature card. Renders a "Sign in" CTA for anonymous viewers and a "Link your PSN" CTA for authenticated-but-unlinked viewers, in a dashed box that matches the populated bottom half's vertical space. |
+| `templates/community/partials/roadmap_recruitment_strip.html` | Roadmap Team recruitment strip rendered between the feature grid and the Discord callout. Hidden for staff (gated at the call site in `hub.html` via `{% if not request.user.is_staff %}`). See [Roadmap System](roadmap-system.md) Discoverability Surfaces. |
 | `templates/trophies/partials/dashboard/built_for_hunters.html` | Site heartbeat ribbon — lifted as-is from the dashboard, used as the hub's hero. Already fully community-flavored. |
 | `plat_pursuit/urls.py` | Route: `/community/` (community_hub) |
 | `core/sitemaps.py` | Entry in `StaticViewSitemap.items()` at priority 0.7 |
@@ -85,7 +86,17 @@ The leaderboard card top half shows top 5, NOT top 25. The full top-25 leaderboa
 
 All four cards stay the same height regardless of how much real data exists, because both halves are padded to a fixed slot count. The Challenges card's per-type slot grid is the most opinionated bottom half — it ensures all 3 challenge types are always visible to the viewer (with a "Start →" affordance for empty types) instead of the natural-but-uneven shape of "show only the types you've started."
 
-### 4. Discord Callout *(full-width strip, always shown)*
+### 4. Roadmap Team Recruitment Strip *(full-width slim strip, hidden for staff)*
+
+A top-of-funnel recruitment surface for the PlatPursuit Roadmap Team, the small curated group of trophy hunters who write the site's platinum roadmaps. Mirrors the Discord callout's full-width slim-strip anatomy (gradient shell + icon + headline + body + CTA button) but in the primary accent color since the Team is a PlatPursuit-branded thing rather than a Discord-branded one.
+
+- **Audience**: non-staff visitors. Hidden for staff users via `{% if not request.user.is_staff %}` at the call site since they're already on the team. The visibility check sits in `hub.html` rather than the partial so the partial stays a pure render.
+- **Framing**: aspirational and identity-driven, NOT transactional. The copy positions roadmap writing as joining a small curated team rather than filling out a content form. This matches the closed-shop product model — the publisher (Jeffrey) personally onboards each author and the Team is intentionally small.
+- **CTA**: routes to `https://discord.gg/PlatPursuit`. The recruitment conversation happens in Discord rather than via a form, which keeps the inbound funnel narrow (high signal, low triage cost).
+
+The strip is paired with the per-game **"Join the Team" CTA** on the no-roadmap empty state on game detail pages — the two surfaces capture potential authors at different moments. The hub strip catches users who are browsing the site as a whole; the per-game CTA catches them at the specific moment they realize a game they care about doesn't have a roadmap. See [Roadmap System Discoverability Surfaces](roadmap-system.md#discoverability-surfaces) for the full funnel design.
+
+### 5. Discord Callout *(full-width strip, always shown)*
 
 Invite-style banner with Discord branding, member count if available, and a "Join the Discord" CTA. Treated as a permanent fixture, not feature-gated. Even if Discord member count fetching fails, the callout still renders without the count.
 
@@ -109,6 +120,7 @@ This split means the user gets community context on the hub AND personal context
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA design that puts Community as one of three top-level destinations + the sub-nav infrastructure that surfaces sub-pages on every Community page
 - [Navigation](navigation.md): the navbar/footer/mobile structure, profile tabs, cross-link inventory
 - [Badge System](../architecture/badge-system.md): the badge XP leaderboard powers the hub leaderboard card
+- [Roadmap System](roadmap-system.md): the hub's Roadmap Team recruitment strip is one of four discoverability surfaces in the broader roadmap funnel. The strip captures top-of-funnel interest; the per-game empty-state CTAs on game detail pages capture in-context interest at the moment a hunter realizes a specific game has no roadmap.
 - [Event System (Deferred)](../architecture/event-system-deferred.md): the rolled-back Pursuit Feed feature that an earlier iteration of this initiative built; preserved as a reference for future revival
 
 ## Gotchas and Pitfalls
@@ -120,6 +132,8 @@ This split means the user gets community context on the hub AND personal context
 - **The hub uses full site container width.** Do not wrap hub sections in `max-w-4xl`. The dashboard does that because it's modular/customizable; the hub is a destination page and should match the rest of the site (Review Hub, browse pages, etc.).
 
 - **The hub is not customizable.** Unlike the dashboard, the Community Hub has a fixed module layout. Resist the urge to add "let users hide modules" or drag-and-drop. The hub is curated; the dashboard is personal. This separation is a deliberate product decision.
+
+- **The Roadmap recruitment strip is hidden for staff.** The visibility check (`{% if not request.user.is_staff %}`) lives at the call site in `hub.html`, not inside the partial. This is intentional: the partial stays a pure render and the visibility logic is co-located with the rest of the page composition. If you ever need to widen the "is on the team" check beyond `is_staff` (e.g., introducing non-staff authors via a `Profile.is_roadmap_author` flag), update the call site, not the partial.
 
 - **`built_for_hunters.html` is shared between dashboard, home shells, and the Community Hub.** It is cached hourly via the existing `refresh_homepage_hourly` cron and silently hides if its cache is empty. If the cron breaks, the entire heartbeat ribbon disappears from all surfaces; check the cron and the `site_heartbeat_*` Redis keys before assuming the hub is broken.
 
