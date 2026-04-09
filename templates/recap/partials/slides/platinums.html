@@ -4,30 +4,30 @@ Variables: count, games (list of dicts with game_name, game_image, earned_date, 
 {% endcomment %}
 <div class="flex items-center justify-center w-full h-full">
     <!-- Display Box -->
-    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-8 py-10 md:px-12 md:py-12 text-center w-full max-w-2xl">
-        <p class="text-lg text-base-content/70 mb-2">You earned</p>
+    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-4 py-6 md:px-8 md:py-8 text-center w-full max-w-2xl">
+        <p class="text-base text-base-content/70 mb-1">You earned</p>
 
         <!-- Big Platinum Count -->
-        <div class="text-6xl md:text-7xl font-bold text-primary mb-2 count-up">{{ count }}</div>
-        <p class="text-2xl text-base-content/70 mb-8">platinum{{ count|pluralize }} this month!</p>
+        <div class="text-5xl md:text-6xl font-bold text-primary mb-1 count-up">{{ count }}</div>
+        <p class="text-xl text-base-content/70 mb-4">platinum{{ count|pluralize }} this month!</p>
 
         <!-- Game Cards -->
         {% if games %}
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
             {% for game in games|slice:":4" %}
-            <div class="card bg-base-300 border-4 border-base-300 rounded-box shadow-md shadow-neutral hover:border-primary hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
+            <div class="card bg-base-300 rounded-box shadow-md shadow-neutral hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 stagger-item" style="animation-delay: {{ forloop.counter0|add:1 }}00ms;">
                 {% if game.game_image %}
-                <figure class="relative h-28 md:h-36 overflow-hidden">
+                <figure class="relative h-20 md:h-24 overflow-hidden">
                     <img src="{{ game.game_image }}" alt="{{ game.game_name }}" class="w-full h-full object-cover" loading="lazy" />
                     <!-- Platinum Trophy Overlay -->
                     <div class="absolute bottom-1 right-1 bg-base-300/90 rounded-full p-1">
-                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5' extra_class='text-primary' %}
+                        {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-4 h-4' extra_class='text-primary' %}
                     </div>
                 </figure>
                 {% endif %}
-                <div class="card-body p-3">
-                    <h3 class="card-title text-xs md:text-sm line-clamp-2 justify-center text-base-content">{{ game.game_name }}</h3>
-                    <p class="text-xs text-primary font-medium">{{ game.earned_date }}</p>
+                <div class="card-body p-2">
+                    <h3 class="card-title text-xs line-clamp-2 justify-center text-base-content pr-1">{{ game.game_name }}</h3>
+                    <p class="text-[0.65rem] text-primary font-medium">{{ game.earned_date }}</p>
                 </div>
             </div>
             {% endfor %}
@@ -35,7 +35,7 @@ Variables: count, games (list of dicts with game_name, game_image, earned_date, 
         {% endif %}
 
         {% if flavor_text %}
-        <p class="text-sm text-base-content/50 italic mt-6">{{ flavor_text }}</p>
+        <p class="text-xs text-base-content/50 italic mt-3 pr-1">{{ flavor_text }}</p>
         {% endif %}
     </div>
 </div>
