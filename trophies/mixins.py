@@ -60,18 +60,27 @@ class RecapSyncGateMixin:
     """
     def _get_sync_gate_response(self, request):
         from django.shortcuts import render as _render
+        from django.urls import reverse_lazy
         user_tz = request.user.user_timezone or 'UTC'
+        # Same breadcrumb every recap-gated path renders, kept inline because
+        # there are only the two callers below.
+        breadcrumb = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Monthly Recap'},
+        ]
         profile = getattr(request.user, 'profile', None)
         if not profile:
             return _render(request, 'recap/recap_index.html', {
                 'sync_gate': 'no_profile',
                 'user_timezone': user_tz,
+                'breadcrumb': breadcrumb,
             })
         if profile.sync_status != 'synced':
             return _render(request, 'recap/recap_index.html', {
                 'sync_gate': profile.sync_status,
                 'profile': profile,
                 'user_timezone': user_tz,
+                'breadcrumb': breadcrumb,
             })
         return None
 

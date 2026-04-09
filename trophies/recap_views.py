@@ -4,6 +4,7 @@ User-facing views for Monthly Recap feature.
 import calendar
 import json
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 from django.http import Http404
 from django.shortcuts import redirect, render
@@ -41,6 +42,10 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
                 'stale_month_name': calendar.month_name[target_month],
                 'stale_year': target_year,
                 'user_timezone': request.user.user_timezone or 'UTC',
+                'breadcrumb': [
+                    {'text': 'Home', 'url': reverse_lazy('home')},
+                    {'text': 'Monthly Recap'},
+                ],
             })
 
         # Try to get the target month's recap
@@ -77,6 +82,11 @@ class RecapIndexView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['is_premium'] = profile.user_is_premium
         context['no_activity'] = len(available_months) == 0
         context['user_timezone'] = self.request.user.user_timezone or 'UTC'
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Monthly Recap'},
+        ]
 
         return context
 
@@ -122,6 +132,10 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
                 'stale_month_name': calendar.month_name[month],
                 'stale_year': year,
                 'user_timezone': request.user.user_timezone or 'UTC',
+                'breadcrumb': [
+                    {'text': 'Home', 'url': reverse_lazy('home')},
+                    {'text': 'Monthly Recap'},
+                ],
             })
 
         # Don't allow future months
@@ -150,6 +164,12 @@ class RecapSlideView(LoginRequiredMixin, RecapSyncGateMixin, ProfileHotbarMixin,
         context['month_name'] = calendar.month_name[month]
         context['is_premium'] = profile.user_is_premium
         context['user_timezone'] = self.request.user.user_timezone or 'UTC'
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Monthly Recap', 'url': reverse_lazy('recap_index')},
+            {'text': f'{calendar.month_name[month]} {year}'},
+        ]
 
         # Calendar month selector
         calendar_data = MonthlyRecapService.get_available_months_by_year(

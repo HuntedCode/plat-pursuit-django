@@ -5,6 +5,9 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
+<div class="max-w-2xl mx-auto">
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+</div>
 {% if sync_gate %}
 <div class="max-w-2xl mx-auto">
     {# Header #}
