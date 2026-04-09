@@ -88,37 +88,6 @@ def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
     _update_earner_leaderboard_on_badge_change(instance.profile, instance.badge.series_slug)
 
 
-@receiver(post_save, sender=UserBadge, dispatch_uid="record_badge_earned_event")
-def record_badge_earned_event(sender, instance, created, **kwargs):
-    """Pursuit Feed: record a `badge_earned` event when a badge is awarded.
-
-    Sync-path badge awards happen inside a `bulk_gamification_update()`
-    context where `is_bulk_update_active()` returns True. The bulk caller
-    in token_keeper._job_sync_complete emits ONE coalesced event per
-    profile per sync via EventService.record_bulk_badges_for_profile,
-    so this receiver short-circuits inside that context to avoid
-    per-badge spam in the feed.
-
-    Non-sync paths (admin tools, manual rechecks, future direct
-    UserBadge.objects.create call sites) DO go through this receiver,
-    each producing a single-badge `badge_earned` event.
-
-    The recorder catches its own exceptions so badge writes never break
-    on event failures. Ordering is fine: this receiver is registered AFTER
-    update_gamification_on_badge_earned, so by the time it runs the
-    profile's XP/leaderboard state is already current.
-    """
-    if not created:
-        return
-
-    from trophies.services.xp_service import is_bulk_update_active
-    if is_bulk_update_active():
-        return
-
-    from trophies.services.event_service import EventService
-    EventService.record_badge_earned(instance)
-
-
 @receiver(post_delete, sender=UserBadge, dispatch_uid="update_gamification_on_badge_revoked")
 def update_gamification_on_badge_revoked(sender, instance, **kwargs):
     """

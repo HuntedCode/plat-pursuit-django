@@ -56,11 +56,6 @@ def create_az_challenge(profile, name='My A-Z Challenge'):
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
 
-    # Pursuit Feed: record a challenge_started event. Recorder swallows its
-    # own errors so challenge creation never fails on event side effects.
-    from trophies.services.event_service import EventService
-    EventService.record_challenge_started(challenge)
-
     return challenge
 
 
@@ -121,28 +116,6 @@ def check_az_challenge_progress(profile):
                 challenge.save(update_fields=[
                     'completed_count', 'filled_count', 'updated_at',
                 ])
-
-            # Pursuit Feed: emit ONE coalesced challenge_progress event with
-            # all newly-completed slots, and (if the challenge just crossed
-            # to is_complete) a single challenge_completed event. Recorders
-            # swallow their own errors.
-            try:
-                from trophies.services.event_service import EventService
-                slots_meta = [
-                    {
-                        'letter': s.letter,
-                        'game_id': s.game_id,
-                        'completed_at': s.completed_at,
-                    }
-                    for s in slots_to_update
-                ]
-                EventService.record_challenge_progress(challenge, slots_meta)
-                if challenge.is_complete:
-                    EventService.record_challenge_completed(challenge)
-            except Exception:
-                logger.exception(
-                    f"Failed to emit challenge events for AZ challenge {challenge.id}"
-                )
 
             # Check A-Z milestone progress (return notified for consolidated email)
             from trophies.services.milestone_service import check_all_milestones_for_user
@@ -362,11 +335,6 @@ def create_calendar_challenge(profile, name='My Platinum Calendar'):
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
 
-    # Pursuit Feed: record a challenge_started event. Recorder swallows its
-    # own errors so challenge creation never fails on event side effects.
-    from trophies.services.event_service import EventService
-    EventService.record_challenge_started(challenge)
-
     return challenge
 
 
@@ -555,31 +523,6 @@ def check_calendar_challenge_progress(profile):
                 challenge.save(update_fields=[
                     'completed_count', 'filled_count', 'updated_at',
                 ])
-
-            # Pursuit Feed: emit ONE coalesced challenge_progress event with
-            # the days that newly filled this sync, and (if the challenge
-            # just crossed to is_complete) a single challenge_completed
-            # event. We intentionally do NOT emit on unfill-only events —
-            # the feed should celebrate forward progress, not regressions.
-            if newly_filled_days:
-                try:
-                    from trophies.services.event_service import EventService
-                    days_meta = [
-                        {
-                            'month': d.month,
-                            'day': d.day,
-                            'game_id': d.game_id,
-                            'completed_at': d.filled_at,
-                        }
-                        for d in newly_filled_days
-                    ]
-                    EventService.record_challenge_progress(challenge, days_meta)
-                    if challenge.is_complete:
-                        EventService.record_challenge_completed(challenge)
-                except Exception:
-                    logger.exception(
-                        f"Failed to emit challenge events for calendar challenge {challenge.id}"
-                    )
         elif to_update:
             # Only plat_counts changed; advance the watermark
             challenge.save(update_fields=['updated_at'])
@@ -751,11 +694,6 @@ def create_genre_challenge(profile, name='My Genre Challenge'):
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
 
-    # Pursuit Feed: record a challenge_started event. Recorder swallows its
-    # own errors so challenge creation never fails on event side effects.
-    from trophies.services.event_service import EventService
-    EventService.record_challenge_started(challenge)
-
     return challenge
 
 
@@ -864,38 +802,6 @@ def check_genre_challenge_progress(profile):
                 _create_completion_notification(challenge)
             else:
                 challenge.save(update_fields=save_fields)
-
-            # Pursuit Feed: emit ONE coalesced challenge_progress event for
-            # both genre and bonus slots that just completed, plus a
-            # challenge_completed event if the whole challenge crossed to
-            # is_complete this sync. Recorders swallow their own errors.
-            try:
-                from trophies.services.event_service import EventService
-                slots_meta = [
-                    {
-                        'genre': s.genre,
-                        'concept_id': s.concept_id,
-                        'completed_at': s.completed_at,
-                        'is_bonus': False,
-                    }
-                    for s in genre_to_update
-                ] + [
-                    {
-                        'genre': s.concept.unified_title if s.concept else None,
-                        'concept_id': s.concept_id,
-                        'completed_at': s.completed_at,
-                        'is_bonus': True,
-                    }
-                    for s in bonus_to_update
-                ]
-                if slots_meta:
-                    EventService.record_challenge_progress(challenge, slots_meta)
-                if challenge.is_complete:
-                    EventService.record_challenge_completed(challenge)
-            except Exception:
-                logger.exception(
-                    f"Failed to emit challenge events for genre challenge {challenge.id}"
-                )
 
     # Check genre milestone progress after processing all challenges
     from trophies.services.milestone_service import check_all_milestones_for_user

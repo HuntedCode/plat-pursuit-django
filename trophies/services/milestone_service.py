@@ -83,11 +83,6 @@ def check_and_award_milestone(profile, milestone, _cache=None):
                         'source_id': milestone.id
                     }
                 )
-            # Pursuit Feed: record a milestone_hit event. Recorder swallows
-            # its own errors so milestone awarding never breaks on event
-            # failures.
-            from trophies.services.event_service import EventService
-            EventService.record_milestone_hit(user_milestone)
 
         # Assign Discord role if applicable (idempotent: safe to call every check
         # so roles are re-assigned if user leaves/rejoins the Discord server).
@@ -255,12 +250,6 @@ def award_milestone_directly(profile, milestone, notify=True):
 
         from trophies.services.dashboard_service import invalidate_dashboard_cache
         invalidate_dashboard_cache(profile.id)
-
-        # Pursuit Feed: record a milestone_hit event. Same recorder as the
-        # auto-award path in check_and_award_milestone above; swallows its
-        # own errors.
-        from trophies.services.event_service import EventService
-        EventService.record_milestone_hit(user_milestone)
 
         logger.info(f"Milestone '{milestone.name}' awarded to {profile.psn_username}")
 

@@ -244,13 +244,7 @@ class GameListUpdateView(APIView):
                 game_list.description = description
                 update_fields.append('description')
 
-            # Capture the previous is_public value BEFORE mutation so the
-            # post-save hook can detect a false->true publish flip and emit
-            # a Pursuit Feed event. The variable is None when is_public is
-            # not in the patch payload, signalling "no flip to check".
-            was_public = None
             if 'is_public' in request.data:
-                was_public = game_list.is_public
                 game_list.is_public = bool(request.data['is_public'])
                 update_fields.append('is_public')
 
@@ -270,14 +264,6 @@ class GameListUpdateView(APIView):
 
             if update_fields:
                 game_list.save(update_fields=update_fields + ['updated_at'])
-
-            # Pursuit Feed: emit game_list_published only on a genuine
-            # false->true publish flip AND only if the list has at least one
-            # game (don't surface empty lists). The recorder swallows its own
-            # errors so failures here never break the PATCH response.
-            if was_public is False and game_list.is_public and game_list.game_count > 0:
-                from trophies.services.event_service import EventService
-                EventService.record_game_list_published(game_list)
 
             return Response({
                 'success': True,
