@@ -23,6 +23,7 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 | [Data Model](architecture/data-model.md) | Core model relationships and entity overview |
 | [Event System](architecture/event-system.md) | Polymorphic Event model, EventCollector, hybrid ingestion strategy, Pursuit Feed source of truth |
 | [Gamification](architecture/gamification.md) | P.L.A.T.I.N.U.M. stats, XP system, ProfileGamification |
+| [IA and Sub-Nav](architecture/ia-and-subnav.md) | Hub-of-hubs IA, sub-navigation infrastructure, URL prefix matching, hub configuration |
 
 ## Design
 
@@ -51,7 +52,8 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
 | [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
-| [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
+| [My Pursuit Hub](features/my-pursuit-hub.md) | Personal-progression hub at `/my-pursuit/`: badges, milestones, titles (forward-compatible with gamification) |
+| [Navigation & Site Organization](features/navigation.md) | Navbar, footer, sub-nav, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
 | [Review Hub](features/review-hub.md) | Reviews, ratings, concept trophy groups (formerly "Community Hub") |
 | [Roadmap System](features/roadmap-system.md) | Staff-authored platinum guides on game detail (replaces the legacy checklist system) |
