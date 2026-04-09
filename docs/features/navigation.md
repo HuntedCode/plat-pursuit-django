@@ -65,19 +65,19 @@ Streamlined to essentials: Theme Toggle, Profile, My Premium (if premium), Setti
 
 ## Hub Sub-Navigation Strip
 
-A thin pill-tab strip rendered below the main navbar (and ABOVE the hotbar) on every page that belongs to a hub's family. URL-prefix matched. Sticky at `top-16 z-40` on all breakpoints (sits flush against the 64px navbar). On mobile it becomes a horizontal scroll strip when items overflow.
+A thin pill-tab strip rendered below the main navbar (and ABOVE the hotbar) on every page that belongs to a hub's family. URL-prefix matched. Sticky at `top-16 z-40` on all breakpoints (sits flush against the 64px navbar). It uses the same `border-b-2 border-primary/30 shadow-lg` divider as the navbar, so the navbar + sub-nav read as one continuous bar of pinned chrome. On mobile it becomes a horizontal scroll strip when items overflow.
 
 Stacking order (top of viewport):
 
 ```
 [Main navbar — sticky top-0 z-50 — 64px]
-[Hub sub-nav — sticky top-16 z-40 — ~44px]
-[Hotbar — inline, NOT sticky]
+[Hub sub-nav — sticky top-16 z-40 — ~46px]
+[Hotbar — sticky top-[6.75rem] z-30 — variable height (auth-only, has its own collapse toggle)]
 [Page content]
 [Mobile bottom tab bar — sticky bottom-0 z-40, lg:hidden — 56px]
 ```
 
-The sub-nav is hidden on pages that don't belong to any hub (settings, auth flows, notification inbox, staff admin pages, error pages).
+All three top chrome strips pin together as a unit. On non-hub pages (settings, auth flows, notification inbox, staff admin pages, error pages), the sub-nav is hidden and the hotbar's `top-*` falls back to `top-16` (so it pins directly below the navbar). The hotbar template branches on `hub_section` to pick the right offset.
 
 See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the prefix matching algorithm, the configuration shape, and the visual treatment details.
 
@@ -198,7 +198,7 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 - **The Dashboard hub is the personal cockpit.** Its sub-nav is for navigating to personal-utility sub-pages (Stats, Shareables, Recap). The dashboard's existing module tabs (Default + custom) are an in-page premium feature for module organization, separate from the IA-level sub-nav. Don't conflate them.
 
-- **Sticky chrome stacks vertically — keep the budget honest.** On desktop the navbar (64px) + sub-nav (~44px) + on mobile the bottom tab bar (56px) all consume pinned viewport space. Adding any new sticky chrome (banners, status bars, announcement strips) means subtracting somewhere else. The budget was set deliberately during the Community Hub initiative; revisit `ia-and-subnav.md` before introducing more pinned elements.
+- **Sticky chrome stacks vertically — keep the budget honest.** On desktop the navbar (64px) + sub-nav (~46px) + hotbar (variable, ~80-110px when expanded) all pin to the top, and on mobile the bottom tab bar (56px) pins to the bottom. With everything visible the user gives up ~190-210px on desktop and ~250px on mobile. The hotbar's collapse toggle is the relief valve — users can shrink it to ~28px (just the toggle button) to reclaim the space. Adding any new sticky chrome (banners, status bars, announcement strips) means subtracting somewhere else. The budget was set deliberately during the Community Hub initiative; revisit `ia-and-subnav.md` before introducing more pinned elements.
 
 - **My Shareables is a landing-page-with-sub-pages distributor.** `/dashboard/shareables/` is the index page that shows 5 sub-feature cards (Platinum Cards, Platinum Grid, Profile Card, Monthly Recap, Challenge Cards). Each sub-page has its own URL and they all map back to `my_shareables` in the sub-nav active-state via `_URL_NAME_TO_SLUG_OVERRIDES` in `core/hub_subnav.py`. New shareable sub-pages must be added to that override map.
 

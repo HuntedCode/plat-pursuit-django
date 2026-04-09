@@ -62,19 +62,19 @@ The sub-nav is a thin pill-tab strip rendered below the main navbar (and ABOVE t
 
 ```
 [Main navbar — sticky top-0 z-50 — 64px height (daisyUI .navbar min-h-16)]
-[Hub sub-nav — sticky top-16 z-40 — ~44px height]
-[Hotbar — inline, NOT sticky, scrolls with page]
+[Hub sub-nav — sticky top-16 z-40 — ~46px (h-10/h-11 + border-b-2)]
+[Hotbar — sticky top-[6.75rem] z-30 — variable height, has its own collapse toggle]
 [Page content]
-[Mobile bottom tab bar — sticky bottom-0, lg:hidden — 56px height]
+[Mobile bottom tab bar — sticky bottom-0 z-40, lg:hidden — 56px height]
 ```
 
-Both the navbar and sub-nav strip are sticky at all breakpoints. As the user scrolls, both stay pinned: the navbar at `top-0`, the sub-nav directly below it at `top-16` (matching the navbar's 64px height). The mobile bottom tab bar is also sticky at the bottom of the viewport. Total pinned chrome: ~108px on desktop, ~164px on mobile (navbar + sub-nav + bottom tab bar).
+All three top-of-viewport chrome elements are sticky at all breakpoints. As the user scrolls, they stay pinned together: the navbar at `top-0`, the sub-nav directly below it at `top-16` (matching the navbar's 64px height), and the hotbar directly below the sub-nav at `top-[6.75rem]` (108px = navbar 64 + sub-nav 44). The mobile bottom tab bar is also sticky at the bottom of the viewport. Total pinned chrome on desktop with the hotbar visible: ~190-210px (varies with hotbar's per-state height + the toggle button). The hotbar's user-controllable collapse toggle (the chevron button hanging off its bottom edge) lets users reclaim that space whenever they want.
 
 The earlier iteration of this work made only the sub-nav sticky and let the navbar scroll away, with the rationale "the navbar is too tall to pin always (~120px combined)." That decision was reversed when the user pointed out that scrolling deep into a page made it hard to jump between hubs — they had to scroll back to the top to see the navbar's hub buttons. Pinning both gives constant access to hub navigation at any scroll position.
 
 The previous "navbar would be too tall" concern was also based on an outdated navbar shape that included the search bar and a Recap shortcut icon. Both were dropped when the bottom tab bar took over mobile navigation: search was deprioritized (the IA wayfinding handles content discovery), and Recap is reachable via the Dashboard sub-nav. The slimmer navbar (logo + 4 hub buttons + bell + avatar) at 64px is comfortable to pin alongside the 44px sub-nav.
 
-The hotbar is intentionally non-sticky. It's situational ("what's happening with your account right now?") rather than architectural ("where am I?"), and a third pinned strip would push pinned chrome past 150px on desktop. The hotbar lives in the main content flow and scrolls naturally.
+The hotbar got the same treatment in a follow-up pass. Originally we left it inline because pinning a third strip felt heavy, but the result was inconsistent: the navbar and sub-nav scrolled as a unit, then the hotbar scrolled away on its own and its sync controls became unreachable mid-page. Sticky-as-a-unit is the more consistent behavior, and the hotbar already has a built-in collapse toggle for users who want to reclaim the vertical space. On non-hub pages (settings, notifications, etc.) where the sub-nav doesn't render, the hotbar pins directly below the navbar at `top-16` instead of `top-[6.75rem]` — the template branches on `hub_section` to pick the right offset.
 
 ### Mobile layout
 
@@ -294,7 +294,7 @@ The footer (`templates/partials/footer.html`) gets a 6-column refresh to match t
 
 - **Customization removal — verify the audit.** Before merging Phase 10b, manually verify that every customization touchpoint that existed in the old menu is reachable via the avatar dropdown's Settings link OR the dashboard's existing "Edit Layout" / theme controls. If anything is stranded, revive it as a Settings sub-page rather than re-adding the Customization menu item.
 
-- **Sticky chrome stacking.** Three pinned elements at the top of the viewport: navbar at `sticky top-0 z-50` (64px tall, daisyUI `.navbar` min-h-16), sub-nav at `sticky top-16 z-40` (~44px), and on mobile a bottom tab bar at `sticky bottom-0 z-40` (56px). The sub-nav's `top-16` offset MUST match the navbar's height. If the navbar height ever changes (e.g. by overriding `.navbar`'s `min-height` or making it taller), update the sub-nav's `top-*` value to match — otherwise the sub-nav will overlap or leave a gap below the navbar. Toast/modal overlays use higher z values (z-50+ for toasts, much higher for modals) and intentionally sit above the navbar.
+- **Sticky chrome stacking.** Four pinned elements at the edges of the viewport: navbar at `sticky top-0 z-50` (64px tall, daisyUI `.navbar` min-h-16), sub-nav at `sticky top-16 z-40` (~46px), hotbar at `sticky top-[6.75rem] z-30` (variable height) when inside a hub family, and on mobile a bottom tab bar at `sticky bottom-0 z-40` (56px). Each pinned element's `top-*` offset MUST match the cumulative height of the elements above it: the sub-nav's `top-16` matches the navbar's 64px height, and the hotbar's `top-[6.75rem]` matches navbar 64 + sub-nav 44 = 108px. If the navbar height ever changes (e.g. by overriding `.navbar`'s `min-height` or making it taller), update both the sub-nav's `top-*` value AND the hotbar's `top-[6.75rem]` value — otherwise things will overlap or leave gaps. The hotbar template branches on `hub_section` to fall back to `top-16` on non-hub pages where the sub-nav is hidden. Toast/modal overlays use higher z values (z-50+ for toasts, much higher for modals) and intentionally sit above the navbar.
 
 - **Mobile sub-nav horizontal scroll affordance.** Without a visual cue (a fade-out gradient on the right edge), users may not realize there's more content to scroll to. Add a subtle right-edge gradient mask when the strip overflows, and ensure the active item auto-scrolls into view on page load.
 

@@ -1,7 +1,13 @@
 {% load custom_filters %}
 {% load static %}
 {% load humanize %}
-<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto transition-all duration-300 ease-in-out">
+{# Sticky position depends on whether the hub sub-nav strip is rendered above   #}
+{# the hotbar. When inside a hub family, sub-nav (44px) sits below the 64px      #}
+{# navbar so the hotbar pins at 64+44 ≈ 108px (6.75rem). On non-hub pages        #}
+{# (settings, notifications, etc.) the sub-nav is hidden so the hotbar pins      #}
+{# directly below the navbar at 64px (top-16). z-30 keeps it under the navbar    #}
+{# (z-50) and the sub-nav (z-40) so they layer correctly when scrolled.          #}
+<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section %}top-[6.75rem]{% else %}top-16{% endif %} z-30 transition-all duration-300 ease-in-out">
     <div id="hotbar-container"
          class="hotbar-loading bg-base-200/95 backdrop-blur-md border-2 border-primary rounded-box shadow-lg shadow-primary/25 w-full overflow-hidden transition-all duration-300 ease-in-out"
          data-url-sync="{% url 'profile_sync_status' %}"
