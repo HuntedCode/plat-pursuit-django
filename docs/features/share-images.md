@@ -16,6 +16,42 @@ The rendering pipeline has three layers: data assembly, HTML generation, and PNG
 
 The legacy Pillow-based renderer (`ShareImageService`) still exists for the original notification-attached share images stored in S3 as `PlatinumShareImage` records. New share card types all use the Playwright pipeline.
 
+## My Shareables: User-Facing Surfaces
+
+The user-facing entry point for share image generation is `/dashboard/shareables/`, the **My Shareables landing page**. The landing is a 5-card wayfinder grid that distributes users to dedicated sub-pages for each share type. Each card has an icon, name, tagline, an example image (or gradient fallback), and a CTA button.
+
+The 5 sub-pages and their purposes:
+
+| Card / Sub-page | URL | What it does |
+|---|---|---|
+| **Platinum Cards** | `/dashboard/shareables/platinums/` | Browse every platinum trophy you've earned, click any one to generate a themed share image. The original "My Shareables" experience before the landing-page restructure. |
+| **Platinum Grid** | `/dashboard/shareables/platinum-grid/` | Multi-platinum collage wizard. Pick platinums and a theme, generate a single combined image. |
+| **Profile Card** | `/dashboard/shareables/profile-card/` | Generate a share image showcasing your trophy profile, badges, and stats. Theme picker is premium-gated. |
+| **Monthly Recap** | `/dashboard/recap/` | Spotify-Wrapped style summary card for any month you've been hunting. (Lives in the recap feature, not under shareables, but the My Shareables landing card still surfaces it.) |
+| **Challenge Cards** | `/dashboard/shareables/challenges/` | Generate share images for your A-Z, Calendar, and Genre challenges. Lists all your non-deleted challenges grouped by type with inline previews and download buttons. |
+
+The original My Shareables page was a single browse-all-platinums interface that hid the other 4 share types. The landing-page restructure (piece 6c of the Community Hub initiative) split it so each share type has a dedicated home and the landing serves as a wayfinder for new users who don't know what's available. The existing per-challenge share buttons on individual challenge detail pages are unchanged — the new challenges sub-page is additive.
+
+### View architecture
+
+`MyShareablesView` is the lightweight landing page view (no per-user data, just renders the 5 cards). The three new sub-pages each have their own view class:
+
+- `MyPlatinumSharesView` — query and group all the user's platinums by year (the same logic that used to live in `MyShareablesView` before the landing took over)
+- `MyChallengeSharesView` — fetch every non-deleted challenge for the user, grouped by type, ordered active-first
+- `MyProfileCardView` — load the user's `ProfileCardSettings` (theme + premium status) so the page renders with their saved theme
+
+All four classes share a `_RequireLinkedProfileMixin` that redirects to the PSN linking flow if the user has no linked profile. The mixin lives in `trophies/views/shareables_views.py` alongside the views.
+
+### JS init reuse
+
+The Challenges and Profile Card sub-pages reuse the dashboard module init code (`_initShareCards` and `_initProfileCardPreview`) without copying it. They include `static/js/dashboard.js`, instantiate a minimal `PlatPursuit.DashboardManager`, and manually invoke `dashboard._moduleInits[<slug>](moduleEl)` for each module element on the page. The pattern mirrors the existing premium preview module init in `templates/trophies/dashboard.html` lines 258-265.
+
+This avoids extracting the ~300 lines of share-card init logic into a standalone JS file. The trade-off is that the sub-pages load the full `dashboard.js` (~6000 lines) on first visit, but `dashboard.js` is already cached by anyone who has visited the dashboard, which is most users. The dashboard manager itself does nothing on the sub-pages because there are no tab elements to wire up — only the explicitly-invoked module init runs.
+
+### Example image assets
+
+The 5 landing cards each reference a static image at `static/images/shareables/landing-<slug>.png`. The CSS uses a layered background-image: the static PNG first, then a gradient as a fallback. If the PNG file doesn't exist (or fails to load), the gradient shows cleanly with no broken-image icon. Drop new asset PNGs into `static/images/shareables/` to replace the placeholders. See `static/images/shareables/README.md` for the file list and recommended dimensions.
+
 ## File Map
 
 | File | Purpose |
@@ -32,7 +68,12 @@ The legacy Pillow-based renderer (`ShareImageService`) still exists for the orig
 | `api/genre_challenge_share_views.py` | GenreChallengeShareHTMLView, GenreChallengeSharePNGView |
 | `templates/partials/rate_before_download_modal.html` | Rating prompt modal shown before downloading if user hasn't rated |
 | `trophies/themes.py` | GRADIENT_THEMES dictionary: background CSS for each selectable theme |
-| `trophies/views/checklist_views.py` (MyShareablesView) | My Shareables hub page view |
+| `trophies/views/shareables_views.py` | The 4 My Shareables page views: landing + platinums + challenges + profile-card |
+| `templates/shareables/landing.html` | Landing page (5-card grid wayfinder) at `/dashboard/shareables/` |
+| `templates/shareables/platinums.html` | Per-platinum browse page at `/dashboard/shareables/platinums/` |
+| `templates/shareables/challenges.html` | Challenge cards page at `/dashboard/shareables/challenges/` |
+| `templates/shareables/profile_card.html` | Profile Card builder at `/dashboard/shareables/profile-card/` |
+| `static/images/shareables/` | Example image assets for the landing-page cards (with gradient fallback when files are missing) |
 | `notifications/models.py` (PlatinumShareImage) | S3-stored share images for notification-based generation |
 
 ## Data Model
