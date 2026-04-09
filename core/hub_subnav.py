@@ -55,18 +55,10 @@ class HubSubnavConfig:
 # Hub definitions
 # ---------------------------------------------------------------------------
 #
-# Today's URL state has Achievements at /achievements/* and Stats/Grid at
-# /tools/*. Phase 10a of the Community Hub initiative renames those to
-# /my-pursuit/* and /dashboard/* respectively. Until that ships, the prefix
-# lists below include BOTH the legacy and the planned-canonical paths so the
-# sub-nav strip activates correctly throughout the transition. After the
-# rename, the legacy entries will become 301-redirected URLs that no real
-# request hits — they're harmless to leave in the prefix list, but can be
-# pruned in a follow-up.
-#
-# The ``url_name`` on each item stays bound to the canonical name (which
-# Django routes to whatever the current canonical path is), so the actual
-# rendered ``href`` updates automatically when the URL audit runs.
+# Each hub's ``url_name`` references resolve to the new canonical paths
+# established in the Phase 10a URL audit. Sub-nav items use URL names so
+# they continue to resolve correctly across any future rename without
+# touching this file.
 
 DASHBOARD_HUB = HubSubnavConfig(
     key='dashboard',
@@ -74,19 +66,14 @@ DASHBOARD_HUB = HubSubnavConfig(
     icon='layout-dashboard',
     # The bare '/' prefix is checked separately as an exact-equality match
     # in resolve_hub_subnav so it doesn't shadow other hubs. The /dashboard/
-    # prefix here covers /dashboard/stats/, /dashboard/shareables/, etc.
-    # once they exist (Phase 10a). Until Phase 10a, /dashboard/ itself is
-    # a 301 redirect to / so the only way Dashboard becomes active is via
-    # the bare-root match.
+    # prefix here covers /dashboard/stats/, /dashboard/shareables/,
+    # /dashboard/recap/, plus their nested children.
     prefixes=('/dashboard/',),
     items=(
         HubSubnavItem('home', 'Dashboard', 'home', 'home'),
-        # The other Dashboard sub-nav items target URLs that don't exist
-        # yet; they're commented out until Phase 10a creates the routes.
-        # See docs/features/my-pursuit-hub.md and docs/architecture/ia-and-subnav.md.
-        # HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3'),
-        # HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image'),
-        # HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar'),
+        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3'),
+        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image'),
+        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar'),
     ),
 )
 
@@ -133,13 +120,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     key='my_pursuit',
     label='My Pursuit',
     icon='trophy',
-    # /achievements/* is the current canonical path; /my-pursuit/* lands in
-    # Phase 10a. /badges/, /milestones/, /my-titles/ are legacy redirects
-    # but listing them here is harmless and would catch any direct hit.
-    prefixes=(
-        '/my-pursuit/',
-        '/achievements/',
-    ),
+    prefixes=('/my-pursuit/',),
     items=(
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
@@ -199,6 +180,9 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # My Pursuit
     'badge_detail': ('my_pursuit', 'badges'),
     'badge_detail_with_profile': ('my_pursuit', 'badges'),
+    # Dashboard: nested sub-pages
+    'platinum_grid': ('dashboard', 'shareables'),
+    'recap_view': ('dashboard', 'recap'),
 }
 
 

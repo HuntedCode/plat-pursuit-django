@@ -36,7 +36,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CommunityFeedView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyShareablesView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, CommunityFeedView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -93,16 +93,27 @@ urlpatterns = [
     path('community/profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
     path('community/profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
 
-    # Achievements: badges, milestones, titles (canonical paths under /achievements/)
-    path('achievements/badges/', BadgeListView.as_view(), name='badges_list'),
-    path('achievements/badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
-    path('achievements/badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
-    path('achievements/milestones/', MilestoneListView.as_view(), name='milestones_list'),
-    path('achievements/titles/', MyTitlesView.as_view(), name='my_titles'),
+    # My Pursuit hub: badges, milestones, titles (canonical paths under /my-pursuit/)
+    # The original Phase 10 commit had these under /achievements/. The Phase 10a
+    # rework relocates them to /my-pursuit/ to align with the renamed hub
+    # (see docs/features/my-pursuit-hub.md for the rationale). Both the legacy
+    # /badges/, /milestones/, /my-titles/ paths AND the previous /achievements/*
+    # paths now redirect here via the legacy redirect block below.
+    path('my-pursuit/badges/', BadgeListView.as_view(), name='badges_list'),
+    path('my-pursuit/badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
+    path('my-pursuit/badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
+    path('my-pursuit/milestones/', MilestoneListView.as_view(), name='milestones_list'),
+    path('my-pursuit/titles/', MyTitlesView.as_view(), name='my_titles'),
 
-    # Tools: public utilities ungated in Phase 9 (My Stats and Platinum Grid)
-    path('tools/stats/', MyStatsView.as_view(), name='my_stats'),
-    path('tools/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
+    # Dashboard hub: personal-utility pages live under /dashboard/.
+    # The original Phase 10 commit put these under /tools/. The Phase 10a
+    # rework relocates them to /dashboard/ because they're personal-cockpit
+    # features that belong in the Dashboard hub (see ia-and-subnav.md). The
+    # Platinum Grid wizard lives nested inside Shareables since it generates
+    # one of the shareable image types.
+    path('dashboard/stats/', MyStatsView.as_view(), name='my_stats'),
+    path('dashboard/shareables/', MyShareablesView.as_view(), name='my_shareables'),
+    path('dashboard/shareables/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
 
     path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),
 
@@ -116,7 +127,6 @@ urlpatterns = [
     path('guides/<int:guide_id>/edit/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_edit'),
     path('guides/create/<int:concept_id>/<str:np_communication_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_create'),
     path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
-    path('my-shareables/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_shareables'),
 
     # Game Lists (canonical paths under /community/lists/)
     path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
@@ -144,9 +154,11 @@ urlpatterns = [
     path('community/reviews/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
     path('community/reviews/<slug:slug>/', ReviewHubDetailView.as_view(), name='review_hub'),
 
-    # Monthly Recap URLs
-    path('recap/', RecapIndexView.as_view(), name='recap_index'),
-    path('recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
+    # Monthly Recap URLs (canonical paths under /dashboard/recap/)
+    # Recap is a Dashboard hub citizen — see docs/architecture/ia-and-subnav.md.
+    # Legacy /recap/ paths redirect here via the redirect block below.
+    path('dashboard/recap/', RecapIndexView.as_view(), name='recap_index'),
+    path('dashboard/recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
 
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),
 
@@ -154,30 +166,48 @@ urlpatterns = [
     # Phase 10 legacy redirects: 301 from old paths to new canonical names.
     # ─────────────────────────────────────────────────────────────────────
     # These keep external links, bookmarks, and search engine indices alive
-    # while the URL audit reshuffles paths into the cleaner /community/,
-    # /achievements/, and /tools/ namespaces. RedirectView with
+    # as the URL audit reshuffles paths into the cleaner /community/,
+    # /my-pursuit/, and /dashboard/ namespaces. RedirectView with
     # `pattern_name=` resolves the redirect target via the new canonical
     # `name=`, so any future rename requires updating only the canonical
     # path above (this section keeps working unchanged).
     #
     # `query_string=True` propagates query strings (?tab=, ?page=, etc.)
     # through the redirect so deep links survive intact.
+    #
+    # The Phase 10a rework added a SECOND wave of redirects: the original
+    # Phase 10 had moved badges/milestones/titles to /achievements/* and
+    # Stats/Grid to /tools/*. Phase 10a re-renamed those to /my-pursuit/*
+    # and /dashboard/*, so the previously-canonical paths now also need
+    # redirect entries here alongside the original legacy paths.
 
     # Profiles → /community/profiles/
     path('profiles/', RedirectView.as_view(pattern_name='profiles_list', permanent=True, query_string=True)),
     path('profiles/<str:psn_username>/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
     path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='trophy_case', permanent=True, query_string=True)),
 
-    # Achievements: badges, milestones, titles
+    # My Pursuit hub: badges, milestones, titles
+    # Two waves: pre-Phase-10 legacy paths AND the intermediate /achievements/* paths
     path('badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
     path('badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
     path('badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
     path('milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
     path('my-titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
+    path('achievements/badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
+    path('achievements/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
+    path('achievements/badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
+    path('achievements/milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
+    path('achievements/titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
 
-    # Tools (Phase 9 ungated views)
+    # Dashboard hub: My Stats, My Shareables, Platinum Grid, Recap
+    # Two waves: pre-Phase-10 legacy paths AND the intermediate /tools/* paths
     path('my-stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
+    path('my-shareables/', RedirectView.as_view(pattern_name='my_shareables', permanent=True, query_string=True)),
     path('staff/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
+    path('tools/stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
+    path('tools/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
+    path('recap/', RedirectView.as_view(pattern_name='recap_index', permanent=True, query_string=True)),
+    path('recap/<int:year>/<int:month>/', RedirectView.as_view(pattern_name='recap_view', permanent=True, query_string=True)),
 
     # Leaderboards
     path('leaderboard/badges/', RedirectView.as_view(pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
