@@ -1,13 +1,18 @@
 {% load custom_filters %}
 {% load static %}
 {% load humanize %}
-{# Sticky position depends on whether the hub sub-nav strip is rendered above   #}
-{# the hotbar. When inside a hub family, sub-nav (44px) sits below the 64px      #}
-{# navbar so the hotbar pins at 64+44 ≈ 108px (6.75rem). On non-hub pages        #}
-{# (settings, notifications, etc.) the sub-nav is hidden so the hotbar pins      #}
-{# directly below the navbar at 64px (top-16). z-30 keeps it under the navbar    #}
-{# (z-50) and the sub-nav (z-40) so they layer correctly when scrolled.          #}
-<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section %}top-[6.75rem]{% else %}top-16{% endif %} z-30 transition-all duration-300 ease-in-out">
+{# The Tailwind sticky offsets here (top-[7.25rem] inside a hub, top-[4.5rem]    #}
+{# on non-hub pages) are good first guesses but `alignStickyChrome()` in         #}
+{# main.js measures the actual rendered navbar + sub-nav heights on load and     #}
+{# inline-styles `top:` to match exactly, insulating the layout from font        #}
+{# metrics, avatar size, and DPI rounding. The function also drops the 8px gap   #}
+{# above the hotbar to 0 when the user collapses it (localStorage `hotbar_hidden #}
+{# = true`) so the toggle "tab" attaches flush against the sub-nav's bottom edge #}
+{# instead of floating below it. z-30 keeps the hotbar under the navbar (z-50)   #}
+{# and the sub-nav (z-40) so they layer correctly when scrolled. Note: hotbar.js #}
+{# MUST NOT set `wrapper.style.top` inline — that overrides the JS-managed       #}
+{# offset and jams the toggle behind the navbar/sub-nav.                         #}
+<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section %}top-[7.25rem]{% else %}top-[4.5rem]{% endif %} z-30 transition-all duration-300 ease-in-out">
     <div id="hotbar-container"
          class="hotbar-loading bg-base-200/95 backdrop-blur-md border-2 border-primary rounded-box shadow-lg shadow-primary/25 w-full overflow-hidden transition-all duration-300 ease-in-out"
          data-url-sync="{% url 'profile_sync_status' %}"

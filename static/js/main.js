@@ -1,4 +1,56 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // ===== Sticky chrome alignment =====
+    // The pinned chrome stack (navbar → sub-nav → hotbar) uses Tailwind sticky
+    // offsets like top-16 (64px) and top-[7.25rem] (116px) as good first guesses,
+    // but the actual rendered navbar height varies by 1-2px depending on font
+    // metrics, avatar dimensions, and DPI rounding. Hardcoded offsets cause a
+    // visible shift on first scroll because the sub-nav's natural position and
+    // its sticky position don't match exactly.
+    //
+    // This function measures the real heights and inline-styles `top:` on the
+    // sub-nav and hotbar so they always sit flush against whatever is above
+    // them. The Tailwind classes remain as the pre-JS fallback (avoids FOUC on
+    // slow loads) and the JS overrides them once the layout is known.
+    function alignStickyChrome() {
+        const navbar = document.querySelector('nav.navbar');
+        if (!navbar) return;
+        const navH = Math.round(navbar.getBoundingClientRect().height);
+
+        const subnav = document.querySelector('.hub-subnav');
+        let subnavH = 0;
+        if (subnav) {
+            subnav.style.top = navH + 'px';
+            subnavH = Math.round(subnav.getBoundingClientRect().height);
+        }
+
+        const hotbar = document.getElementById('hotbar-wrapper');
+        if (hotbar) {
+            // When the hotbar is expanded, leave 8px breathing room between it
+            // and whatever pins above. When collapsed, drop the gap to 0 so the
+            // toggle "tab" attaches flush against the bottom of the sub-nav (or
+            // navbar on non-hub pages), reading as a tab handle of the chrome
+            // above rather than a floating element.
+            const isCollapsed = localStorage.getItem('hotbar_hidden') === 'true';
+            const gap = isCollapsed ? 0 : 8;
+            const top = subnav ? (navH + subnavH + gap) : (navH + gap);
+            hotbar.style.top = top + 'px';
+        }
+    }
+
+    alignStickyChrome();
+    // Re-measure on resize because font scaling, orientation changes, and
+    // viewport width can all change the navbar's actual height.
+    window.addEventListener('resize', alignStickyChrome);
+    // Re-measure after web fonts finish loading (font swap can change line
+    // heights and therefore navbar height).
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(alignStickyChrome);
+    }
+    // Re-measure when the hotbar is toggled so the gap above it shrinks to 0
+    // when collapsed (toggle becomes flush with sub-nav) and grows back to 8px
+    // when expanded. hotbar.js dispatches this event from toggleHotbar().
+    document.addEventListener('hotbar:toggle', alignStickyChrome);
+
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');
     if (backToTop) {
