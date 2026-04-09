@@ -38,10 +38,16 @@ class BrowseListsView(ProfileHotbarMixin, ListView):
 
     def get_queryset(self):
         """Return public game lists with optimized queries and optional filtering."""
+        # Public lists from ANY user — no premium gate. The publish toggle
+        # in the API (`api/game_list_views.py:247`) is open to all users, so
+        # gating discoverability here was a (since-resolved) inconsistency:
+        # free users could mark lists public but the lists never appeared
+        # anywhere on the site. The same gate was lifted from
+        # `_get_recent_lists_spotlight()` and the total_lists count below
+        # in the same change.
         queryset = GameList.objects.filter(
             is_public=True,
             is_deleted=False,
-            profile__user_is_premium=True,
         ).select_related('profile')
 
         # Search query
@@ -65,7 +71,7 @@ class BrowseListsView(ProfileHotbarMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['total_lists'] = GameList.objects.filter(
-            is_public=True, is_deleted=False, profile__user_is_premium=True,
+            is_public=True, is_deleted=False,
         ).count()
         context['sort'] = self.request.GET.get('sort', 'popular')
         context['query'] = self.request.GET.get('q', '')

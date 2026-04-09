@@ -153,9 +153,11 @@ def _get_active_challenges_spotlight(limit=SPOTLIGHT_LIMIT):
 def _get_recent_lists_spotlight(limit=SPOTLIGHT_LIMIT):
     """Most recent published public game lists — Game Lists card top half.
 
-    Mirrors BrowseListsView's queryset shape: gated to public + non-deleted
-    + premium-author lists (the same gating the public lists browse page
-    uses). Ordered newest-first by creation time.
+    Mirrors BrowseListsView's queryset shape: gated to public + non-deleted,
+    open to ALL users (no premium gate). The publish toggle in the
+    GameList API is also open to all users, so any free user who marks a
+    list public will surface here and on /community/lists/. Ordered
+    newest-first by creation time.
 
     Returns a list of GameList instances with profile preloaded, padded
     to ``limit`` slots with None entries for placeholder rendering.
@@ -163,7 +165,7 @@ def _get_recent_lists_spotlight(limit=SPOTLIGHT_LIMIT):
     from trophies.models import GameList
     rows = list(
         GameList.objects
-        .filter(is_public=True, is_deleted=False, profile__user_is_premium=True)
+        .filter(is_public=True, is_deleted=False)
         .select_related('profile')
         .order_by('-created_at')[:limit]
     )
