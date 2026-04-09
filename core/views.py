@@ -90,19 +90,22 @@ class ContactView(TemplateView):
 class CommunityHubView(ProfileHotbarMixin, TemplateView):
     """The Community Hub destination page at /community/.
 
-    A fixed-layout page composed of curated modules: site heartbeat ribbon,
-    Pursuit Feed preview, full badge XP leaderboard, country leaderboard
-    (logged-in + has country only), top reviewers, active challenges, and
-    fundraiser callout (when active).
+    A fixed-layout **Feature Spotlight** page (NOT an aggregator) composed
+    of: site heartbeat hero, conditional active fundraiser banner, Pursuit
+    Feed Spotlight promo block (3 sample events + CTA), 2x2 feature grid
+    (Reviews / Challenges / Lists / Leaderboards), and a permanent Discord
+    callout. Each card is part-marketing (icon, tagline, CTA) and
+    part-preview (3-5 items of real signal); the hub is a wayfinder, not
+    a feed-of-feeds.
 
     Unlike the dashboard, this page is NOT customizable: no drag-and-drop,
     no module library, no per-user hidden modules. The hub is curated;
     the dashboard is personal. See docs/features/community-hub.md for the
-    page anatomy and the rationale for the split.
+    page anatomy and the rationale for the Feature Spotlight design.
 
     Public access — no auth required. Anonymous visitors get the same
-    layout but without viewer-specific touches (no rank highlight on
-    leaderboards, no country leaderboard module).
+    layout; the only viewer-specific touch is the rank highlight on the
+    Leaderboards card when logged in.
     """
     template_name = 'community/hub.html'
 
