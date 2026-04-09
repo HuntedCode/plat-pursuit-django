@@ -520,12 +520,12 @@ See docs/features/community-hub.md for the design rationale.
 
     {# ─────────────────────────────────────────────────────────────────── #}
     {# 5. Roadmap Team recruitment strip                                   #}
-    {# Hidden for staff (they're already on the team). See the partial    #}
-    {# header for the design rationale and the audit it implements.       #}
-    {# ─────────────────────────────────────────────────────────────────── #}
-    {% if not request.user.is_staff %}
-        {% include 'community/partials/roadmap_recruitment_strip.html' %}
-    {% endif %}
+    {# Visible to everyone for now. The earlier `is_staff`-hide gate was  #}
+    {# a proxy for "already on the team," which is a problem we don't yet #}
+    {# have (the team is being built from zero). When real Roadmap Team   #}
+    {# membership exists, gate this on a `Profile.is_roadmap_author` flag #}
+    {# instead of `is_staff` — see the gotcha in community-hub.md.        #}
+    {% include 'community/partials/roadmap_recruitment_strip.html' %}
 
     {# ─────────────────────────────────────────────────────────────────── #}
     {# 6. Discord callout — permanent fixture, full-width strip            #}
