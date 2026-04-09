@@ -18,7 +18,7 @@ The four hubs:
 |-----|-----|-------------|---------------|
 | **Dashboard** | `/` | "your personal cockpit" | Dashboard, Stats, Shareables, Recap |
 | **Browse** | `/games/` | "find new content" | Games, Trophies, Companies, Genres & Themes, Flagged Games |
-| **Community** | `/community/` | "what's everyone doing" | Hub, Pursuit Feed, Reviews, Challenges, Lists, Leaderboards, Profiles |
+| **Community** | `/community/` | "what's everyone doing" | Hub, Profiles, Reviews, Challenges, Lists, Leaderboards |
 | **My Pursuit** | `/my-pursuit/` | "your trophy hunting identity and progression" | Badges, Milestones, Titles *(today)* |
 
 The Browse hub IS the games list page — no separate landing — because games are what most users browse for and the sub-nav handles wayfinding to the other browse pages. The Community and My Pursuit hubs have dedicated landing pages designed as destinations.
@@ -35,11 +35,10 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, 
 | `templates/partials/footer.html` | Sitemap grid footer (6-column layout matching the hub structure) |
 | `core/context_processors.py` | `hub_subnav_context()` — URL-prefix matcher that drives the sub-nav |
 | `core/constants.py` *(or new `core/hub_subnav.py`)* | `HUB_SUBNAV_CONFIG` — the hub definitions |
-| `templates/trophies/profile_detail.html` | Profile page with 7 tabs (Games, Trophies, Badges, Lists, Challenges, Reviews, Activity) |
+| `templates/trophies/profile_detail.html` | Profile page with 6 tabs (Games, Trophies, Badges, Lists, Challenges, Reviews) |
 | `templates/trophies/partials/profile_detail/profile_detail_header.html` | Profile header with quick links row |
 | `templates/trophies/partials/profile_detail/challenge_list_items.html` | Profile Challenges tab content |
 | `templates/trophies/partials/profile_detail/review_list_items.html` | Profile Reviews tab content (supports infinite scroll) |
-| `templates/trophies/partials/profile_detail/activity_list_items.html` | Profile Activity tab content (supports infinite scroll) |
 | `trophies/views/profile_views.py` | ProfileDetailView with tab handlers |
 
 ## Global Navbar
@@ -91,12 +90,11 @@ Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`) matching the hub s
 | Browse | Community | My Pursuit | Dashboard | Legal | Connect |
 |--------|-----------|------------|-----------|-------|---------|
 | Games | Hub | Badges | My Profile | Privacy | Social icons |
-| Trophies | Pursuit Feed | Milestones | My Stats | Terms | (X, YouTube, Discord) |
+| Trophies | Profiles | Milestones | My Stats | Terms | (X, YouTube, Discord) |
 | Companies | Reviews | Titles* | My Shareables | About | |
 | Genres & Themes | Challenges | | Recap | Contact | |
 | Flagged Games | Lists | | | | |
 | | Leaderboards | | | | |
-| | Profiles | | | | |
 
 - Titles link is auth-gated (only shown to authenticated users with a profile)
 - Dashboard column is auth-gated; guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always)
@@ -122,7 +120,7 @@ These are the cross-links embedded in feature pages. The "mesh" of cross-links r
 
 ## Profile Page Tabs
 
-The profile page has 7 tabs, switchable via `?tab=` URL parameter:
+The profile page has 6 tabs, switchable via `?tab=` URL parameter:
 
 | Tab | Context Variable | Paginated | Infinite Scroll | Filters |
 |-----|-----------------|-----------|-----------------|---------|
@@ -132,13 +130,12 @@ The profile page has 7 tabs, switchable via `?tab=` URL parameter:
 | Lists | `profile_lists` | No | No | None |
 | Challenges | `profile_challenges` | No | No | None |
 | Reviews | `profile_reviews` | Yes (50/page) | Yes | None |
-| Activity | `profile_events` | Yes (50/page) | Yes | None (v1) |
 
-The Activity tab reads from the `Event` table filtered by `profile=target_profile`. v1 shows only events authored BY the target user (their badges, reviews, platinums, etc.). It does not show "events about them" (e.g. someone replied to your review).
+> **Activity tab deferred**: an earlier iteration of the Community Hub initiative added a 7th `Activity` tab backed by a polymorphic `Event` model, then rolled it back. See [Event System (Deferred)](../architecture/event-system-deferred.md) for the design space if you want to revive a per-profile activity timeline.
 
 Tab handlers in `ProfileDetailView`:
-- `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`, `_build_lists_tab_context()`, `_build_challenges_tab_context()`, `_build_reviews_tab_context()`, `_build_activity_tab_context()`
-- Counts for tab badges: `profile_challenge_count`, `profile_review_count`, `profile_lists_count`, `profile_event_count`
+- `_build_games_tab_context()`, `_build_trophies_tab_context()`, `_build_badges_tab_context()`, `_build_lists_tab_context()`, `_build_challenges_tab_context()`, `_build_reviews_tab_context()`
+- Counts for tab badges: `profile_challenge_count`, `profile_review_count`, `profile_lists_count`
 - AJAX partial templates returned for paginated tabs via `get_template_names()`
 
 Profile pages live under `/community/profiles/<u>/`, so they show the Community sub-nav strip with "Profiles" highlighted as active.
@@ -162,8 +159,6 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 4. View returns `review_list_items.html` partial (detected via `X-Requested-With: XMLHttpRequest`)
 5. New cards appended to `reviews-grid`
 
-The Activity tab uses the same pattern with `activity-*` IDs.
-
 ### Sub-Nav Active State
 
 1. Request comes in to e.g. `/community/profiles/<u>/`
@@ -182,7 +177,7 @@ The Activity tab uses the same pattern with `activity-*` IDs.
 
 - **Profile tab handlers**: adding a new tab requires updates in four places: (1) tab link + panel in `profile_detail.html`, (2) handler method in `ProfileDetailView`, (3) tab routing in `get_context_data()`, (4) AJAX template name in `get_template_names()` if paginated.
 
-- **Challenges tab is not paginated**: unlike Games, Trophies, Reviews, and Activity, Challenges loads all records at once. No sentinel/loading elements are needed. The InfiniteScroller gracefully handles missing element IDs.
+- **Challenges tab is not paginated**: unlike Games, Trophies, and Reviews, Challenges loads all records at once. No sentinel/loading elements are needed. The InfiniteScroller gracefully handles missing element IDs.
 
 - **`sm:` breakpoints are forbidden in navigation templates** (per CLAUDE.md). The minimum designed layout is 768px (tablet) for legacy templates; redesigned templates support 375px base. Navigation templates use `md:` and `lg:` only.
 

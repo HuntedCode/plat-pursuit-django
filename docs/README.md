@@ -21,7 +21,7 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 | [Payment & Webhooks](architecture/payment-webhooks.md) | Stripe + PayPal, subscriptions, donations, webhook routing |
 | [Concept Model](architecture/concept-model.md) | Concept sync, absorb(), default concepts, concept lock |
 | [Data Model](architecture/data-model.md) | Core model relationships and entity overview |
-| [Event System](architecture/event-system.md) | Polymorphic Event model, EventCollector, hybrid ingestion strategy, Pursuit Feed source of truth |
+| [Event System (Deferred)](architecture/event-system-deferred.md) | DEFERRED. Polymorphic Event model and Pursuit Feed design, rolled back before reaching production. Preserved for future revival. |
 | [Gamification](architecture/gamification.md) | P.L.A.T.I.N.U.M. stats, XP system, ProfileGamification |
 | [IA and Sub-Nav](architecture/ia-and-subnav.md) | Hub-of-hubs IA, sub-navigation infrastructure, URL prefix matching, hub configuration |
 

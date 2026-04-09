@@ -42,7 +42,8 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | Slug | Name | Category | Strategy | Cache | Premium |
 |------|------|----------|----------|-------|---------|
 | `trophy_snapshot` | Trophy Snapshot | at_a_glance | Server | None | No |
-| `pursuit_activity` | Pursuit Activity | at_a_glance | Lazy | 5m | No |
+| `recent_activity` | Recent Activity | at_a_glance | Lazy | 5m | No |
+| `recent_platinums` | Recent Platinums | at_a_glance | Lazy | 5m | No |
 | `challenge_hub` | Challenge Hub | progress | Lazy | 5m | No |
 | `badge_progress` | Badge Progress | badges | Lazy | 10m | No |
 | `recent_badges` | Recent Badges | badges | Lazy | 10m | No |

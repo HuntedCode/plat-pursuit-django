@@ -1,8 +1,29 @@
-# Event System
+# Event System (DEFERRED)
+
+> **STATUS: deferred.** The Event System was designed and fully implemented during the Community Hub initiative (Phases 1-8 on the `feature/community-hub` branch), then rolled back before reaching production. The Pursuit Feed feature it powered turned out to be the wrong thing to introduce as part of an IA-cleanup initiative — it was scope creep, the social-feed metaphor didn't fit PlatPursuit's audience yet, and maintaining a feature few users would actually want was net cost. Nothing shipped to production.
+>
+> This doc is preserved as a reference for future revival. The architectural design (lean polymorphic Event row, hybrid ingestion strategy, EventCollector context manager mirroring `sync_signal_suppressor`, bulk-per-sync coalescing for badges, "occurred_at = historical truth" rule, soft-deleted target filtering via `feed_visible()`) is solid and worth saving. If the project ever ships a real social/activity feature, this doc is the starting point.
+>
+> **What rolled back when the Pursuit Feed was deferred:**
+> - The `Event` model and its `trophies_event` table (migration `0188_drop_event` is the schema removal)
+> - `trophies/services/event_service.py` (EventCollector + EventService recorders + PURSUIT_FEED_TYPES / TROPHY_FEED_TYPES constants)
+> - `trophies/managers.py:EventQuerySet` and `EventManager` (the `feed_visible()` and `for_profile()` filter helpers)
+> - `trophies/admin.py:EventAdmin` registration
+> - All emitter call sites in `psn_api_service.py`, `token_keeper.py`, `signals.py`, `review_service.py`, `verification_service.py`, `milestone_service.py`, `challenge_service.py`, `api/game_list_views.py`
+> - `trophies/views/community_views.py:CommunityFeedView` and the `/community/feed/` URL
+> - The Activity tab on profile pages (7th profile tab → back to 6 tabs)
+> - The `pursuit_activity` dashboard module (replaced by restoring the legacy `recent_activity` and `recent_platinums` modules from before Phase 6)
+> - The Pursuit Feed Spotlight section on the Community Hub
+> - The "Pursuit Feed" sub-nav item in the Community hub strip
+> - All Pursuit Feed entries from the navbar / mobile drawer / footer
+>
+> **What stayed:** the rest of the Community Hub initiative shipped intact: hub-of-hubs IA, sub-navigation infrastructure, navbar collapse to 3 direct-link buttons, URL audit (`/my-pursuit/*` and `/dashboard/*` namespaces), MyShareablesView restoration, Customization removal, Community Hub Feature Spotlight design (minus the Pursuit Feed Spotlight section).
+>
+> **If you revive this:** the design below stands. The hardest re-implementation work would be re-wiring the emitter call sites and re-validating the bulk-per-sync coalescing semantics. Start by looking at the commits between `cc11a56` (Phase 1: Event model) and `0556b60` (Phase 7: Community Hub) on `feature/community-hub` for the historical implementation.
 
 A unified, append-only timeline of community activity that powers PlatPursuit's feeds. The Event system records noteworthy moments — platinums earned, reviews posted, badges awarded, challenges completed, and so on — into a single polymorphic table that the Community Hub, the Pursuit Feed, the per-profile Activity tab, and the dashboard's "recent activity" module all read from.
 
-> **Status**: planned. This doc describes the design committed to during the Community Hub initiative; the implementation lands incrementally across Phases 1-4 of the [Community Hub](../features/community-hub.md) work.
+> **Status**: deferred (see header above). This doc describes the design that was committed during the Community Hub initiative; the implementation was rolled back before reaching production.
 
 ## Architecture Overview
 

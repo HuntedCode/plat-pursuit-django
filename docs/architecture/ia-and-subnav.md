@@ -77,7 +77,7 @@ The hotbar is intentionally non-sticky, both to keep vertical space free during 
 |-----|---------------|
 | **Dashboard** | Dashboard \| Stats \| Shareables \| Recap |
 | **Browse** | Games \| Trophies \| Companies \| Genres & Themes \| Flagged Games |
-| **Community** | Hub \| Pursuit Feed \| Reviews \| Challenges \| Lists \| Leaderboards \| Profiles |
+| **Community** | Hub \| Profiles \| Reviews \| Challenges \| Lists \| Leaderboards |
 | **My Pursuit** *(today)* | Badges \| Milestones \| Titles |
 | **My Pursuit** *(after gamification)* | Logbook \| Star Chart \| Quests \| Arcade \| Market \| Badges \| Milestones \| Titles |
 
@@ -176,7 +176,6 @@ HUB_SUBNAV_CONFIG = {
         'matches': ['/community/'],
         'items': [
             {'slug': 'hub', 'label': 'Hub', 'url_name': 'community_hub', 'icon': 'home'},
-            {'slug': 'feed', 'label': 'Pursuit Feed', 'url_name': 'community_feed', 'icon': 'activity'},
             {'slug': 'profiles', 'label': 'Profiles', 'url_name': 'profiles_list', 'icon': 'user'},
             {'slug': 'reviews', 'label': 'Reviews', 'url_name': 'reviews_landing', 'icon': 'message-square'},
             {'slug': 'challenges', 'label': 'Challenges', 'url_name': 'challenges_browse', 'icon': 'target'},
@@ -257,12 +256,11 @@ The footer (`templates/partials/footer.html`) gets a 6-column refresh to match t
 | Browse | Community | My Pursuit | Dashboard | Legal | Connect |
 |--------|-----------|------------|-----------|-------|---------|
 | Games | Hub | Badges | My Profile | Privacy | Social icons |
-| Trophies | Pursuit Feed | Milestones | My Stats | Terms | (X, YouTube, Discord) |
+| Trophies | Profiles | Milestones | My Stats | Terms | (X, YouTube, Discord) |
 | Companies | Reviews | Titles* | My Shareables | About | |
 | Genres & Themes | Challenges | | Recap | Contact | |
 | Flagged Games | Lists | | | | |
 | | Leaderboards | | | | |
-| | Profiles | | | | |
 
 - Titles link is auth-gated (only shown to authenticated users with a profile)
 - Dashboard column is auth-gated; guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always)

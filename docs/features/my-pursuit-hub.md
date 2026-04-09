@@ -2,7 +2,7 @@
 
 The My Pursuit Hub is PlatPursuit's personal-progression and recognition destination at `/my-pursuit/`. It is one of the four top-level hubs in the [hub-of-hubs IA](../architecture/ia-and-subnav.md) (Dashboard / Browse / Community / My Pursuit). Today its sub-nav contains Badges, Milestones, and Titles. After the gamification initiative ships, the same hub absorbs the full RPG layer (Logbook, Quests, Star Chart, Arcade, Stellar Market) without requiring another IA shuffle.
 
-> **Status**: planned. The hub does not yet exist as a route. Phase 10a of the Community Hub initiative renames `/achievements/*` URLs to `/my-pursuit/*` and registers the hub URL. Phase 10b builds the landing page described in this doc.
+> **Status**: planned (landing page). The URL namespace exists — Phase 10a of the Community Hub initiative renamed `/achievements/*` URLs to `/my-pursuit/*` and the navbar's "My Pursuit" button currently points at `/my-pursuit/badges/` as a placeholder. The hub landing page itself (described in this doc) is the next piece of work and has not yet been built.
 
 ## Why "My Pursuit"
 
@@ -63,7 +63,9 @@ The hero card sets the tone: **"this is your hunt."** Four stat cards in a row s
 
 Horizontal scroll of the last 6 badges/milestones/titles unlocked, mixed and sorted by recency. Each card shows the badge/milestone/title icon, name, and date earned. Click-through goes to the badge / milestone / title detail page.
 
-Data source: `Event.objects.filter(profile=request.user.profile, event_type__in=['badge_earned', 'milestone_hit'])` ordered by `-occurred_at`. Note: `badge_earned` events are bulk-coalesced (one per sync) so the metadata may contain multiple badges; the recent-unlocks renderer expands the metadata into individual cards.
+Data source: query `UserBadge.objects.filter(profile=request.user.profile).order_by('-earned_at')` for badges and `UserMilestone.objects.filter(profile=...).order_by('-earned_at')` for milestones, then merge in Python and trim to 6. Both models already exist and have indexed `earned_at` columns. Title unlocks live in `UserTitle` and can be merged into the same stream if desired.
+
+> **Pursuit Feed deferral note**: an earlier iteration of this initiative built a polymorphic `Event` model that would have powered Recent Unlocks via a single `Event.objects.filter(...)` query. That data layer was rolled back; see [Event System (Deferred)](../architecture/event-system-deferred.md) for the design space if you ever revive it.
 
 ### 3. Near Completion *(authenticated only)*
 
@@ -154,7 +156,7 @@ The reverse-name strategy keeps existing `{% url 'badges_list' %}` and `reverse(
 - [Badge System](../architecture/badge-system.md): the underlying source of badge data, progress tracking, and the existing badge views that become hub sub-pages
 - [Gamification](../architecture/gamification.md): the existing gamification scaffolding (`ProfileGamification`, `StatType`, `StageStatValue`) that feeds the hero progress overview
 - [Gamification Vision](../design/gamification-vision.md): the full RPG system that this hub will host after the next initiative ships
-- [Event System](../architecture/event-system.md): the source of `badge_earned` and `milestone_hit` events that power the Recent Unlocks module
+- [Event System (Deferred)](../architecture/event-system-deferred.md): the rolled-back Pursuit Feed design that an earlier iteration of the initiative would have used to power the Recent Unlocks module
 - [Community Hub](community-hub.md): the parallel hub design (community discovery vs personal progression)
 - [Dashboard](dashboard.md): the personal cockpit at `/` that surfaces personal-utility features as modules; the hub is for structured progression pages, the dashboard is for the modular cockpit
 
@@ -166,7 +168,7 @@ The reverse-name strategy keeps existing `{% url 'badges_list' %}` and `reverse(
 
 - **Anonymous + authenticated rendering must both look intentional.** The marketing variant (anonymous) and the personalized variant (authenticated) are two different visual states. Test both during Phase 10b implementation; an anonymous user landing on a page that looks like "your dashboard but empty" feels broken. The marketing variant should sell the section, not show an empty version of the personal one.
 
-- **Recent Unlocks expands `badge_earned` event metadata.** Bulk-per-sync emission means one `badge_earned` event can represent multiple badges; the recent-unlocks renderer needs to flatten the metadata into individual cards, sorted within the same `occurred_at` timestamp. Use the `metadata['badges']` list, not the event row itself, as the iteration unit.
+- **Recent Unlocks merges UserBadge + UserMilestone in Python, not via UNION.** Both querysets are small (limit 6 from each side) so a Python merge by `earned_at` is fine and avoids the gymnastics of cross-model SQL UNIONs. Order each side first, take 6 from each, merge, sort by `earned_at` descending, slice to 6.
 
 - **Near Completion needs the next-tier progress, not the highest-unlocked tier.** Multi-tier badges (Bronze → Silver → Gold → Platinum) have more nuance than single-tier badges. If a user has earned the Bronze tier but is 80% of the way to Silver, the card should show "Silver: 80% (8/10 stages)", not "Bronze: 100%". Query the badge tier-by-tier when computing completion percentage.
 
