@@ -324,10 +324,22 @@ See docs/features/community-hub.md for the design rationale.
                     </div>
 
                     {# ── Top half: 5 most recent active challenges ── #}
+                    {# `min-h-10` (40px) is shared across all four row types in the    #}
+                    {# Challenges + Leaderboards cards (top + bottom, live + placeholder)#}
+                    {# so every row in row 2 of the grid renders at exactly the same    #}
+                    {# height. The natural height (24px avatar + 12px padding + 2px     #}
+                    {# border = 38px) is JUST under 40px, so the floor wins consistently#}
+                    {# instead of the avatar driving height in some rows but not others.#}
                     <div class="space-y-1 mb-3">
                         {% for challenge in active_challenges %}
                             {% if challenge %}
-                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5">
+                                {# Challenge type → detail URL name. Inline ladder is fine for 3 cases — #}
+                                {# the assembler doesn't enrich top-half rows (only the personal half).  #}
+                                {% if challenge.challenge_type == 'az' %}{% url 'az_challenge_detail' challenge_id=challenge.id as ch_url %}
+                                {% elif challenge.challenge_type == 'calendar' %}{% url 'calendar_challenge_detail' challenge_id=challenge.id as ch_url %}
+                                {% elif challenge.challenge_type == 'genre' %}{% url 'genre_challenge_detail' challenge_id=challenge.id as ch_url %}
+                                {% endif %}
+                                <a href="{{ ch_url }}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
                                     <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
                                         {% if challenge.profile.avatar_url %}
                                             <img src="{{ challenge.profile.avatar_url }}" alt="{{ challenge.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
@@ -342,9 +354,9 @@ See docs/features/community-hub.md for the design rationale.
                                         </div>
                                     </div>
                                     <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ challenge.progress_percentage }}%</span>
-                                </div>
+                                </a>
                             {% else %}
-                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                <div class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
                                     <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
                                     <div class="flex-1 min-w-0">
                                         <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
@@ -369,20 +381,20 @@ See docs/features/community-hub.md for the design rationale.
                         {% if personal_challenge_slots %}
                             <div class="space-y-1">
                                 {% for row in personal_challenge_slots %}
-                                    {# `min-h-9` (36px) matches the Leaderboards "Your neighborhood" row    #}
-                                    {# height (which is driven by its 24px avatar + 12px padding). The     #}
-                                    {# Challenges per-type rows have no avatar and would naturally render  #}
-                                    {# at ~32px from text-sm + padding alone, so we pin them to 36px to    #}
-                                    {# keep the two cards' bottom halves visually balanced.                #}
+                                    {# `min-h-10` (40px) — the shared row-height floor used by every row #}
+                                    {# in row 2 of the grid (Challenges + Leaderboards, top + bottom).   #}
+                                    {# The Leaderboards rows are naturally ~38px from the avatar; we pin #}
+                                    {# everything to 40px so all 8 row types render at exactly the same  #}
+                                    {# height regardless of which children they hold.                    #}
                                     {% if row.challenge %}
-                                        <a href="{% url row.detail_url_name challenge_id=row.challenge.id %}" class="flex items-center gap-2 p-1.5 min-h-9 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
+                                        <a href="{% url row.detail_url_name challenge_id=row.challenge.id %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
                                             {# w-20 (80px) to fit "CALENDAR" — w-14 was too tight and ran into the title #}
                                             <span class="text-xs font-bold w-20 shrink-0 text-secondary uppercase tracking-wide">{{ row.type_label }}</span>
                                             <span class="text-sm font-medium line-clamp-1 pr-1 flex-1">{{ row.challenge.name }}</span>
                                             <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ row.challenge.progress_percentage }}%</span>
                                         </a>
                                     {% else %}
-                                        <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-1.5 min-h-9 rounded-lg bg-white/[0.02] border border-dashed border-base-content/10 hover:border-secondary/30 transition-colors">
+                                        <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/10 hover:border-secondary/30 transition-colors">
                                             <span class="text-xs font-bold w-20 shrink-0 text-base-content/40 uppercase tracking-wide">{{ row.type_label }}</span>
                                             <span class="text-xs text-base-content/40 italic flex-1 line-clamp-1 pr-1">No challenge started</span>
                                             <span class="text-xs text-secondary shrink-0 font-medium">Start →</span>
@@ -429,10 +441,12 @@ See docs/features/community-hub.md for the design rationale.
                     </div>
 
                     {# ── Top half: top 5 badge XP ── #}
+                    {# Same `min-h-10` (40px) floor as the Challenges card so all row 2 #}
+                    {# rows in both cards render at exactly the same height.            #}
                     <div class="space-y-1 mb-3">
                         {% for entry in xp_leaderboard.entries %}
                             {% if entry %}
-                                <div class="flex items-center gap-2 p-1.5 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
+                                <a href="{% url 'profile_detail' entry.psn_username %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg transition-colors {% if entry.is_self %}bg-accent/10 border border-accent/30 hover:bg-accent/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-accent/30{% endif %}">
                                     <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
                                     <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
                                         {% if entry.avatar_url %}
@@ -444,9 +458,9 @@ See docs/features/community-hub.md for the design rationale.
                                     <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}">{{ entry.psn_username }}</span>
                                     {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
                                     <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
-                                </div>
+                                </a>
                             {% else %}
-                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                <div class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
                                     <div class="w-6 h-2.5 rounded bg-base-300/30 shrink-0"></div>
                                     <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
                                     <div class="h-2.5 flex-1 rounded bg-base-300/40"></div>
@@ -465,7 +479,7 @@ See docs/features/community-hub.md for the design rationale.
                             <div class="space-y-1">
                                 {% for entry in personal_xp_neighborhood %}
                                     {% if entry %}
-                                        <div class="flex items-center gap-2 p-1.5 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
+                                        <a href="{% url 'profile_detail' entry.psn_username %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg transition-colors {% if entry.is_self %}bg-accent/10 border border-accent/30 hover:bg-accent/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-accent/30{% endif %}">
                                             <span class="text-xs font-bold w-6 text-center {% if entry.is_self %}text-accent{% else %}text-base-content/50{% endif %}">#{{ entry.rank }}</span>
                                             <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
                                                 {% if entry.avatar_url %}
@@ -477,9 +491,9 @@ See docs/features/community-hub.md for the design rationale.
                                             <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}">{{ entry.psn_username }}</span>
                                             {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
                                             <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
-                                        </div>
+                                        </a>
                                     {% else %}
-                                        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                        <div class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
                                             <div class="w-6 h-2.5 rounded bg-base-300/30 shrink-0"></div>
                                             <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
                                             <div class="h-2.5 flex-1 rounded bg-base-300/40"></div>
