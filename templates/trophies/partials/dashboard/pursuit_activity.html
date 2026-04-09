@@ -19,8 +19,8 @@
                 {% for event in data.events %}
                     {% if event.type == 'platinum' %}
                         {# Standalone platinum earn (event-backed) #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-colors group">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/20 ring-1 ring-primary shrink-0 flex items-center justify-center">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/15 ring-1 ring-primary/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-primary" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -35,8 +35,8 @@
 
                     {% elif event.type == 'rare_trophy' %}
                         {# Ultra-rare trophy earn (event-backed) #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-warning/10 border border-warning/20 hover:bg-warning/15 transition-colors">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-warning/20 ring-1 ring-warning shrink-0 flex items-center justify-center">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-warning/15 ring-1 ring-warning/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-warning" viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2z"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -53,8 +53,8 @@
 
                     {% elif event.type == 'concept_100' %}
                         {# 100% completion (event-backed) #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-success/10 border border-success/20 hover:bg-success/15 transition-colors">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-success/20 ring-1 ring-success shrink-0 flex items-center justify-center">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-success/15 ring-1 ring-success/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -102,10 +102,10 @@
                         {# Badge earned (event-backed; replaces the legacy badge variant) #}
                         {# Note: legacy `recent_activity` rendered the actual badge layers, but #}
                         {# the event metadata only carries series_slug + tier, so we render a   #}
-                        {# tier-colored placeholder. Click-through goes to the badge detail.    #}
-                        <a href="{% if event.series_slug %}{% url 'badge_detail' event.series_slug %}{% else %}#{% endif %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-{{ event.tier|badge_color }}/10 border border-{{ event.tier|badge_color }}/20 hover:bg-{{ event.tier|badge_color }}/15 transition-colors group">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-{{ event.tier|badge_color }}/20 ring-1 ring-{{ event.tier|badge_color }} shrink-0 flex items-center justify-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-{{ event.tier|badge_color }}" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                        {# generic info-colored placeholder. Click-through goes to badge detail.#}
+                        <a href="{% if event.series_slug %}{% url 'badge_detail' event.series_slug %}{% else %}#{% endif %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-info/15 ring-1 ring-info/40 shrink-0 flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-info" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="none" stroke="currentColor" stroke-width="2"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
                                 <div class="text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors">
@@ -118,8 +118,8 @@
 
                     {% elif event.type == 'milestone' %}
                         {# Milestone hit (event-backed) #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-accent/10 border border-accent/20 hover:bg-accent/15 transition-colors">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-accent/20 ring-1 ring-accent shrink-0 flex items-center justify-center">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-accent/15 ring-1 ring-accent/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -131,8 +131,8 @@
 
                     {% elif event.type == 'review' %}
                         {# Review posted (event-backed) #}
-                        <a href="{% if event.concept_slug %}{% url 'review_hub' event.concept_slug %}{% else %}#{% endif %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-success/10 border border-success/20 hover:bg-success/15 transition-colors group">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-success/20 ring-1 ring-success shrink-0 flex items-center justify-center">
+                        <a href="{% if event.concept_slug %}{% url 'review_hub' event.concept_slug %}{% else %}#{% endif %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-success/15 ring-1 ring-success/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -151,8 +151,8 @@
 
                     {% elif event.type == 'list_published' %}
                         {# Game list published (event-backed) #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/15 transition-colors">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/20 ring-1 ring-primary shrink-0 flex items-center justify-center">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-primary/15 ring-1 ring-primary/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -164,8 +164,8 @@
 
                     {% elif event.type == 'challenge_started' or event.type == 'challenge_completed' or event.type == 'challenge_progress' %}
                         {# Challenge events (event-backed) #}
-                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-secondary/10 border border-secondary/20 hover:bg-secondary/15 transition-colors">
-                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-secondary/20 ring-1 ring-secondary shrink-0 flex items-center justify-center">
+                        <div class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
+                            <div class="w-8 h-8 lg:w-10 lg:h-10 rounded-lg bg-secondary/15 ring-1 ring-secondary/40 shrink-0 flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:w-5 lg:h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
                             </div>
                             <div class="flex-1 min-w-0">
