@@ -27,15 +27,75 @@ logger = logging.getLogger(__name__)
 # Feature Grid card data — each helper returns a small slice for one card
 # ---------------------------------------------------------------------------
 
-def _get_top_reviewers_spotlight(limit=3):
-    """Top N reviewers by helpful votes — feeds the Reviews feature card.
+def _get_recently_reviewed_titles_spotlight(limit=3):
+    """Most recently reviewed titles (deduped by concept) — Reviews card.
 
-    Delegates to ReviewHubService.get_top_reviewers. The Feature Spotlight
-    design uses a small N (3) instead of the original aggregator's 10 so
-    the card stays a teaser pointing at the dedicated Review Hub page.
+    Surfaces the N concepts that received the most recent review activity,
+    one row per concept, with the recommendation percentage as the at-a-
+    glance score. This shape was chosen over a raw recent-reviews list for
+    three reasons:
+
+    - Discovery, not reading: a 3-row spotlight is meant to be skimmed in
+      a glance, and a single percentage is far more scannable than a
+      paragraph excerpt.
+    - Natural deduplication: three different people reviewing Elden Ring
+      shouldn't take all 3 slots — title-grouping turns the card into
+      "what 3 games are people talking about right now."
+    - Pattern consistency: every other Feature Spotlight card (recent_lists,
+      active_challenges) shows *things* not *people*, so this card now
+      slots in cleanly instead of being the structural odd one out. (The
+      previous incarnation of the card was "top reviewers by helpful
+      votes," which both showed people AND filtered to `total_helpful__gt=0`
+      — so it was empty on any site without an active vote-helpful culture.)
+
+    Returns a list of dicts: unified_title, slug, concept_icon_url,
+    review_count, recommended_count, recommendation_pct, latest_review_at.
     """
-    from trophies.services.review_hub_service import ReviewHubService
-    return ReviewHubService.get_top_reviewers(limit=limit)
+    from django.db.models import Count, Max, Q
+    from trophies.models import Concept
+
+    concepts = list(
+        Concept.objects
+        .annotate(
+            latest_review_at=Max(
+                'reviews__created_at',
+                filter=Q(reviews__is_deleted=False),
+            ),
+            review_count=Count(
+                'reviews',
+                filter=Q(reviews__is_deleted=False),
+            ),
+            recommended_count=Count(
+                'reviews',
+                filter=Q(
+                    reviews__is_deleted=False,
+                    reviews__recommended=True,
+                ),
+            ),
+        )
+        .filter(latest_review_at__isnull=False)
+        .order_by('-latest_review_at')[:limit]
+        .values(
+            'unified_title', 'slug', 'concept_icon_url',
+            'review_count', 'recommended_count', 'latest_review_at',
+        )
+    )
+
+    # Reuse the same percentage math ReviewHubService.get_most_reviewed_games
+    # uses so the score on the card matches the score on the Review Hub.
+    result = []
+    for c in concepts:
+        total = c['review_count']
+        pct = round(c['recommended_count'] / total * 100) if total else 0
+        result.append({
+            'unified_title': c['unified_title'],
+            'slug': c['slug'],
+            'concept_icon_url': c['concept_icon_url'] or '',
+            'review_count': total,
+            'recommendation_pct': pct,
+            'latest_review_at': c['latest_review_at'],
+        })
+    return result
 
 
 def _get_active_challenges_spotlight(limit=3):
@@ -160,7 +220,7 @@ def build_community_hub_context(viewer_profile=None):
     card.
 
     Returns a dict with these keys:
-        - top_reviewers: list of profile dicts (~3) for the Reviews card
+        - recently_reviewed_titles: list of dicts (~3) for the Reviews card
         - active_challenges: list of Challenge instances (~3) for the Challenges card
         - recent_lists: list of GameList instances (~3) for the Game Lists card
         - xp_leaderboard: dict with entries + viewer_rank + total_count for the Leaderboards card
@@ -173,10 +233,10 @@ def build_community_hub_context(viewer_profile=None):
     context = {}
 
     try:
-        context['top_reviewers'] = _get_top_reviewers_spotlight(limit=3)
+        context['recently_reviewed_titles'] = _get_recently_reviewed_titles_spotlight(limit=3)
     except Exception:
-        logger.exception("Failed to load community hub top_reviewers")
-        context['top_reviewers'] = []
+        logger.exception("Failed to load community hub recently_reviewed_titles")
+        context['recently_reviewed_titles'] = []
 
     try:
         context['active_challenges'] = _get_active_challenges_spotlight(limit=3)

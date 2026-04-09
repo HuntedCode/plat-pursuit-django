@@ -56,7 +56,7 @@ Each card has icon + feature name + tagline + small data preview + hero CTA.
 
 | Card | Tagline | Data Preview | CTA |
 |------|---------|--------------|-----|
-| **Review Hub** | "See what hunters are saying about your next platinum." | Top 3 reviewers (avatar + name + helpful count) | "Visit Review Hub" |
+| **Review Hub** | "See what hunters are saying about your next platinum." | 3 most recently reviewed titles (icon + title + review count + recommendation %) | "Visit Review Hub" |
 | **Challenges** | "Push yourself further. A-Z, Calendar, Genre, and more." | 3 active challenges (icon + title + participants) | "Browse Challenges" |
 | **Game Lists** | "Curated by the community. Your next obsession is in here." | 3 most recent published lists (icon + title + author) | "Browse Lists" |
 | **Leaderboards** | "Climb the ranks. Compete with hunters worldwide." | Top 5 badge XP (rank + avatar + name + XP) | "View Leaderboards" |
@@ -82,7 +82,7 @@ This split means the user gets community context on the hub AND personal context
 
 ## Integration Points
 
-- [Review Hub](review-hub.md): provides community review stats via `ReviewHubService`; the `get_top_reviewers()` method powers the Top Reviewers card
+- [Review Hub](review-hub.md): the dedicated Reviews destination linked from the hub's Reviews feature card. The card itself shows the 3 most-recently-reviewed titles (deduped by concept, with recommendation %) via `_get_recently_reviewed_titles_spotlight()` in `core/services/community_hub_service.py`. The recommendation percentage math reuses the same formula as `ReviewHubService.get_most_reviewed_games` so the score on the spotlight matches the score on the Review Hub
 - [Dashboard](dashboard.md): the hub is the community-side counterpart to the dashboard's personal-cockpit role
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA design that puts Community as one of three top-level destinations + the sub-nav infrastructure that surfaces sub-pages on every Community page
 - [Navigation](navigation.md): the navbar/footer/mobile structure, profile tabs, cross-link inventory
@@ -101,7 +101,7 @@ This split means the user gets community context on the hub AND personal context
 
 - **`built_for_hunters.html` is shared between dashboard, home shells, and the Community Hub.** It is cached hourly via the existing `refresh_homepage_hourly` cron and silently hides if its cache is empty. If the cron breaks, the entire heartbeat ribbon disappears from all surfaces; check the cron and the `site_heartbeat_*` Redis keys before assuming the hub is broken.
 
-- **Top Reviewers is a method on `ReviewHubService`.** Do not try to derive top reviewers from the existing `get_hub_stats()` or `get_trending_reviews()` methods; they aggregate differently. The `get_top_reviewers()` method aggregates `helpful_count` per profile.
+- **The Reviews card shows recently-reviewed titles, not top reviewers and not raw recent reviews.** An earlier iteration sourced this card from `ReviewHubService.get_top_reviewers()`, which filters `total_helpful__gt=0` and excluded any reviewer whose reviews hadn't accumulated helpful votes yet — so the card frequently rendered its empty state on a live site even when fresh reviews existed. A second iteration switched to a raw "most recent reviews" list, but that approach failed two structural tests: it would let three different people reviewing the same hot game take all 3 slots (no deduplication), and it forced reading paragraph excerpts in a card that's meant to be skimmed. The card now groups reviews by concept, orders concepts by `Max(reviews.created_at)`, and shows a recommendation percentage as the at-a-glance score — matching the pattern of every other Feature Spotlight card (`recent_lists`, `active_challenges`) which all show *things* not *people* or *paragraphs*.
 
 - **Discord callout is permanent**, not feature-gated. Even if the Discord member count fetch fails, the callout still renders (without the count). Do not gate the callout behind "is the Discord widget API healthy"; the callout's job is to point users at Discord, and the link works regardless of whether we know the member count.
 
