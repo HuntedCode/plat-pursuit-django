@@ -45,7 +45,10 @@
                 </a>
             </li>
             <li>
-                <a href="{% url 'badges_list' %}"
+                {# /my-pursuit/ is a 301 redirect to /my-pursuit/badges/. The     #}
+                {# Badges page IS the hub landing — there is no separate landing  #}
+                {# page. See docs/features/my-pursuit-hub.md for the rationale.   #}
+                <a href="{% url 'my_pursuit_hub' %}"
                    class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
                     My Pursuit
                 </a>

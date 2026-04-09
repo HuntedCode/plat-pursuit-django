@@ -98,6 +98,15 @@ urlpatterns = [
     # (see docs/features/my-pursuit-hub.md for the rationale). Both the legacy
     # /badges/, /milestones/, /my-titles/ paths AND the previous /achievements/*
     # paths now redirect here via the legacy redirect block below.
+    #
+    # The bare /my-pursuit/ path is a 301 redirect to the headline sub-page
+    # (Badges). My Pursuit deliberately does NOT have its own landing page;
+    # the Badges page IS the landing, and the sub-nav strip handles wayfinding
+    # to Milestones and Titles. This mirrors how /games/ is the Browse hub
+    # landing rather than building a separate Browse landing page. Once the
+    # gamification initiative ships and the section grows to 8+ sub-items,
+    # a dedicated /my-pursuit/ landing page may make sense.
+    path('my-pursuit/', RedirectView.as_view(pattern_name='badges_list', permanent=True), name='my_pursuit_hub'),
     path('my-pursuit/badges/', BadgeListView.as_view(), name='badges_list'),
     path('my-pursuit/badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
     path('my-pursuit/badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),

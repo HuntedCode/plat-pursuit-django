@@ -35,6 +35,7 @@ Long-form vision documents for systems not yet fully implemented.
 | [Gamification Vision](design/gamification-vision.md) | Full RPG system design: stats, jobs, quests, currency, star chart, avatar frames |
 | [Platinum Journey](design/platinum-journey.md) | Premium "patient companion" feature: synthesis layer that knows the user and helps plan their next pursuits |
 | [Stats Page](design/stats-page.md) | Premium `/my-stats/` page: video game stats screen with 100+ trophy hunting stats |
+| [Tutorial System](design/tutorial-system.md) | Brief 4-step Welcome Tour that introduces new users to the four hubs on first PSN-link |
 
 ## Features
 
