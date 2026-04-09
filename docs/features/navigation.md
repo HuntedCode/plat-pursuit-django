@@ -1,14 +1,12 @@
 # Navigation & Site Organization
 
-PlatPursuit's navigation is being reworked into a **hub-of-hubs IA**: 3 direct-link hub destinations in the global navbar (Browse, Community, My Pursuit) plus the Dashboard logo, with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. This doc covers the navigation chrome (navbar, mobile drawer, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
-
-> **Status**: planned. The current navbar is the legacy 4-dropdown form (Browse / Community / Achievements / My Pursuit) with 25 total dropdown items. Phase 10a of the Community Hub initiative implements the hub-of-hubs collapse + sub-nav infrastructure. This doc reflects the planned end state; it will get a final pass after Phase 10a ships to capture any decisions made during build.
+PlatPursuit's navigation uses a **hub-of-hubs IA**: 4 direct-link hub destinations in the global navbar (Dashboard, Browse, Community, My Pursuit), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over, exposing the same 4 hubs at all scroll positions. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
 
 ## Architecture Overview
 
-Navigation is rendered globally via `base.html` includes. The main navbar appears on every page. A persistent **sub-navigation strip** appears on every page that belongs to one of the four hub families (Dashboard, Browse, Community, My Pursuit), URL-prefix matched. The mobile drawer mirrors the desktop nav structure. The footer is a sitemap grid that mirrors the hub structure.
+Navigation is rendered globally via `base.html` includes. The main navbar is sticky at the top of the viewport on every page. A persistent **sub-navigation strip** is sticky just below it on every page that belongs to one of the four hub families (Dashboard, Browse, Community, My Pursuit), URL-prefix matched. On `<lg:` viewports the desktop hub buttons hide and a sticky bottom tab bar takes over for hub navigation. The footer is a sitemap grid that mirrors the hub structure.
 
-Design philosophy: **menus expose the few, hubs expose the many**. The global nav has 3 buttons. Each is a direct link to a hub. The hub does the heavy lifting of "introduce the user to what's in this section." The sub-nav handles "I know what I want, take me to the page." This eliminates the redundancy of having 25 dropdown items spread across menus that duplicate the hubs' job.
+Design philosophy: **menus expose the few, hubs expose the many**. The global nav has 4 buttons. Each is a direct link to a hub. The hub does the heavy lifting of "introduce the user to what's in this section." The sub-nav handles "I know what I want, take me to the page." This eliminates the redundancy of having 25 dropdown items spread across menus that duplicate the hubs' job.
 
 A second design principle: **no feature silos**. Every page should link outward to related features. The Challenge Hub links to Milestones. Badge detail links to Titles. Profile pages surface Challenges and Reviews. This "mesh" of cross-links reduces dead ends and increases feature discovery.
 
@@ -29,9 +27,9 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, 
 
 | File | Purpose |
 |------|---------|
-| `templates/partials/navbar.html` | Global navbar: 3 hub buttons + Dashboard logo + bell + avatar dropdown |
-| `templates/partials/hub_subnav.html` | Sticky sub-nav strip rendered below the navbar on hub-family pages |
-| `templates/partials/mobile_tabbar.html` | Mobile/tablet drawer mirroring navbar + sub-nav structure |
+| `templates/partials/navbar.html` | Global navbar: logo + 4 hub buttons (`hidden lg:flex`) + bell + avatar dropdown. Sticky `top-0 z-50`. |
+| `templates/partials/hub_subnav.html` | Sticky sub-nav strip rendered below the navbar on hub-family pages (`top-16 z-40`, all breakpoints) |
+| `templates/partials/mobile_tabbar.html` | Mobile/tablet bottom tab bar (`lg:hidden`, sticky `bottom-0`). 4 hub buttons mirroring the desktop nav. |
 | `templates/partials/footer.html` | Sitemap grid footer (6-column layout matching the hub structure) |
 | `core/context_processors.py` | `hub_subnav_context()` — URL-prefix matcher that drives the sub-nav |
 | `core/constants.py` *(or new `core/hub_subnav.py`)* | `HUB_SUBNAV_CONFIG` — the hub definitions |
@@ -43,18 +41,23 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the detailed design, 
 
 ## Global Navbar
 
-### 3 hub buttons + chrome
+The navbar is sticky at `top-0 z-50` so users can hub-jump at any scroll depth. It is slim by design (daisyUI `.navbar` `min-h-16` = 64px) which lets it coexist with the sub-nav strip below it without eating too much vertical space.
+
+### 4 hub buttons + chrome
 
 | Element | Behavior |
 |---------|----------|
-| **Logo** | Direct link to `/` (Dashboard) |
-| **Browse** | Direct link to `/games/` |
-| **Community** | Direct link to `/community/` |
-| **My Pursuit** | Direct link to `/my-pursuit/` |
-| **Notification bell** | Existing dropdown, unchanged. Visible at `lg:` (1024px+). At `md:` (768-1023px), the mobile tab bar provides notification access. |
+| **Logo** | Always visible. Direct link to `/` (Dashboard). |
+| **Dashboard** | `hidden lg:flex`. Direct link to `/`. Active when `hub_section == 'dashboard'`. |
+| **Browse** | `hidden lg:flex`. Direct link to `/games/`. Active when `hub_section == 'browse'`. |
+| **Community** | `hidden lg:flex`. Direct link to `/community/`. Active when `hub_section == 'community'`. |
+| **My Pursuit** | `hidden lg:flex`. Direct link to `/my-pursuit/`. Active when `hub_section == 'my_pursuit'`. |
+| **Notification bell** | Existing dropdown, unchanged. Visible at all breakpoints. |
 | **Avatar dropdown** | Theme · Profile · My Premium · Settings · Staff items · Logout |
 
-That's it. 4 direct-link buttons (logo + 3 hubs), zero dropdowns at the global nav level. The "Customization" item that lived in the legacy My Pursuit dropdown is killed entirely — it pointed to `settings`, which the avatar dropdown's Settings link already covers, AND the dashboard already has in-page "Edit Layout" controls for module customization.
+That's it. 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. On `<lg:` viewports the 4 hub buttons hide and the bottom tab bar takes over hub navigation, so users still get one-tap access to every hub at any scroll position.
+
+The "Customization" item that lived in the legacy My Pursuit dropdown is killed entirely — it pointed to `settings`, which the avatar dropdown's Settings link already covers, AND the dashboard already has in-page "Edit Layout" controls for module customization. The site-wide search bar was also dropped during this consolidation: the IA wayfinding (hubs + sub-nav + browse pages with HTMX filters) handles content discovery, so a global search box was redundant chrome.
 
 ### Avatar dropdown
 
@@ -62,26 +65,32 @@ Streamlined to essentials: Theme Toggle, Profile, My Premium (if premium), Setti
 
 ## Hub Sub-Navigation Strip
 
-A thin pill-tab strip rendered below the main navbar (and ABOVE the hotbar) on every page that belongs to a hub's family. URL-prefix matched. Sticky on `lg:+`, inline (horizontal scroll) on mobile.
+A thin pill-tab strip rendered below the main navbar (and ABOVE the hotbar) on every page that belongs to a hub's family. URL-prefix matched. Sticky at `top-16 z-40` on all breakpoints (sits flush against the 64px navbar). On mobile it becomes a horizontal scroll strip when items overflow.
 
 Stacking order (top of viewport):
 
 ```
-[Main navbar — sticky]
-[Hub sub-nav — sticky on lg:+, inline on mobile]
+[Main navbar — sticky top-0 z-50 — 64px]
+[Hub sub-nav — sticky top-16 z-40 — ~44px]
 [Hotbar — inline, NOT sticky]
 [Page content]
+[Mobile bottom tab bar — sticky bottom-0 z-40, lg:hidden — 56px]
 ```
 
 The sub-nav is hidden on pages that don't belong to any hub (settings, auth flows, notification inbox, staff admin pages, error pages).
 
 See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the prefix matching algorithm, the configuration shape, and the visual treatment details.
 
-## Mobile Drawer
+## Mobile Bottom Tab Bar
 
-The mobile drawer (`templates/partials/mobile_tabbar.html`) mirrors the navbar + sub-nav structure: 3 hub buttons + Dashboard logo. When the drawer opens, each section header is a hub name, and the items below the header are that hub's sub-nav items. Mobile users get one-click access to any sub-page from the drawer.
+`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The 4 tabs (Dashboard / Browse / Community / My Pursuit) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor.
 
-The sub-nav strip itself ALSO renders on mobile (as a horizontal scroll strip) so users have two ways to navigate: the drawer (overview) and the strip (in-context).
+Active state details:
+- Each tab compares `hub_section` against its target value (`dashboard`, `browse`, `community`, `my_pursuit`)
+- The Dashboard tab is also treated as active when `hub_section is None` (e.g. settings, notifications, error pages) because those non-hub destinations conceptually belong to "your account" — tapping the Dashboard tab from one of them should always feel correct
+- Active styling uses `text-primary` to match the desktop navbar's `btn-primary` active state
+
+There is no More drawer, no mobile search overlay, and no mobile-specific notification shortcut — all of that chrome was removed when the navbar collapsed to direct-link buttons. The hub sub-nav strip handles "show me everything in this hub," the bell is in the navbar at all breakpoints, and search was dropped site-wide. The bottom tab bar plus the sticky sub-nav strip together cover every navigation case the old chrome tried to handle.
 
 ## Footer Sitemap Grid
 
@@ -169,11 +178,11 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 ## Gotchas and Pitfalls
 
-- **Navbar, drawer, sub-nav, and footer must stay in sync**: any sub-nav item added must also be added to `mobile_tabbar.html` (the drawer) and `footer.html` (the sitemap grid). The sub-nav strip is the source of truth via `HUB_SUBNAV_CONFIG`, but the drawer and footer are still hand-maintained templates and need parallel updates.
+- **Navbar, mobile tab bar, sub-nav, and footer must stay in sync**: the navbar and mobile tab bar both expose the same 4 hubs and must be edited together if a hub is added or renamed. Sub-nav items live in `HUB_SUBNAV_CONFIG` (single source of truth) and are rendered automatically by `hub_subnav.html`, but `footer.html` is still a hand-maintained sitemap grid and needs parallel updates when sub-nav items change.
 
 - **Footer grid requires 6 children**: the footer uses `grid-cols-2 md:grid-cols-3 lg:grid-cols-6`. If the auth-conditional Dashboard column is removed, an "Account" column with Sign In/Sign Up takes its place to maintain 6 grid children. Removing a column without adding a replacement creates an ugly gap.
 
-- **Auth gating on Titles**: the Titles sub-nav item requires `user.is_authenticated and user.profile` because `MyTitlesView` uses `LoginRequiredMixin`. This gating must be applied in all four navigation layers (sub-nav config, mobile drawer, footer, and the My Pursuit hub feature card).
+- **Auth gating on Titles**: the Titles sub-nav item requires `user.is_authenticated and user.profile` because `MyTitlesView` uses `LoginRequiredMixin`. This gating must be applied in the sub-nav config, the footer, and the My Pursuit hub feature card. The bottom tab bar does not surface Titles directly (it only exposes the 4 hubs), so no gating is needed there.
 
 - **Profile tab handlers**: adding a new tab requires updates in four places: (1) tab link + panel in `profile_detail.html`, (2) handler method in `ProfileDetailView`, (3) tab routing in `get_context_data()`, (4) AJAX template name in `get_template_names()` if paginated.
 
@@ -185,11 +194,13 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 - **Sub-nav vs breadcrumb redundancy is acceptable.** The breadcrumb (`Home > Community > Reviews`) and the sub-nav (with "Reviews" highlighted) both signal "you are here." This is intentional: the breadcrumb stays for SEO (JSON-LD) and accessibility, the sub-nav is the visual primary. They serve different audiences.
 
-- **Sub-nav must be hidden on non-hub pages.** Settings, auth flows, notification inbox, staff admin pages, and error pages render NO sub-nav. The context processor returns `hub_section=None` and the template `{% if hub_section %}` short-circuits. Test these explicitly during Phase 10a.
+- **Sub-nav must be hidden on non-hub pages.** Settings, auth flows, notification inbox, staff admin pages, and error pages render NO sub-nav. The context processor returns `hub_section=None` and the template `{% if hub_section %}` short-circuits. Test these explicitly when adding new top-level URLs.
 
 - **The Dashboard hub is the personal cockpit.** Its sub-nav is for navigating to personal-utility sub-pages (Stats, Shareables, Recap). The dashboard's existing module tabs (Default + custom) are an in-page premium feature for module organization, separate from the IA-level sub-nav. Don't conflate them.
 
-- **My Shareables needs full revival, not just a refresh.** The current `/my-shareables/` URL is a 301 redirect to home (the page was deleted at some point). Phase 10b builds a new `/dashboard/shareables/` page from scratch.
+- **Sticky chrome stacks vertically — keep the budget honest.** On desktop the navbar (64px) + sub-nav (~44px) + on mobile the bottom tab bar (56px) all consume pinned viewport space. Adding any new sticky chrome (banners, status bars, announcement strips) means subtracting somewhere else. The budget was set deliberately during the Community Hub initiative; revisit `ia-and-subnav.md` before introducing more pinned elements.
+
+- **My Shareables is a landing-page-with-sub-pages distributor.** `/dashboard/shareables/` is the index page that shows 5 sub-feature cards (Platinum Cards, Platinum Grid, Profile Card, Monthly Recap, Challenge Cards). Each sub-page has its own URL and they all map back to `my_shareables` in the sub-nav active-state via `_URL_NAME_TO_SLUG_OVERRIDES` in `core/hub_subnav.py`. New shareable sub-pages must be added to that override map.
 
 ## Related Docs
 

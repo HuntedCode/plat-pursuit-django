@@ -368,65 +368,6 @@
     }
   }
 
-  /* ===== Expandable Search Bar ===== */
-  .search-expandable {
-    max-width: 0;
-    opacity: 0;
-    overflow: hidden;
-    transition: max-width 300ms ease, opacity 300ms ease;
-  }
-  .search-expandable.active {
-    max-width: 320px;
-    opacity: 1;
-  }
-  @media (min-width: 1280px) {
-    .search-expandable.active {
-      max-width: 400px;
-    }
-  }
-
-  /* ===== Mega Menu Dropdown Content ===== */
-  .mega-menu-content {
-    @apply min-w-48 bg-base-100 border-2 border-base-200 shadow-lg p-2;
-    z-index: 60;
-  }
-
-  /* ===== Mobile More Drawer ===== */
-  .more-drawer-backdrop {
-    @apply fixed inset-0 bg-black/50 z-40 transition-opacity duration-300;
-  }
-  .more-drawer-backdrop.hidden {
-    opacity: 0;
-    pointer-events: none;
-  }
-  .more-drawer {
-    @apply fixed bottom-0 left-0 right-0 z-50 bg-base-200 border-t-2 border-base-300 rounded-t-2xl shadow-2xl;
-    max-height: 85vh;
-    overflow-y: auto;
-    transform: translateY(100%);
-    transition: transform 300ms ease;
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
-  .more-drawer.open {
-    transform: translateY(0);
-  }
-  .more-drawer-handle {
-    @apply w-10 h-1 bg-base-content/30 rounded-full mx-auto mt-3 mb-2;
-  }
-  .more-drawer-section-title {
-    @apply text-xs uppercase tracking-wider text-base-content/50 font-bold px-4 pt-4 pb-1;
-  }
-
-  /* ===== Mobile Search Overlay ===== */
-  .mobile-search-overlay {
-    @apply fixed top-0 left-0 right-0 z-50 bg-base-200 border-b-2 border-base-300 shadow-lg p-3;
-    transform: translateY(-100%);
-    transition: transform 300ms ease;
-  }
-  .mobile-search-overlay.open {
-    transform: translateY(0);
-  }
-
   /* Bottom padding on mobile to prevent content behind tab bar */
   @media (max-width: 1023px) {
     #zoom-wrapper {
@@ -528,29 +469,6 @@
 .text-rotate > *:has(:nth-child(10)) {
   --items: 10;
   animation: rotator var(--duration, 10s) linear(0 0% 9%, 0.1 10% 19%, 0.2 20% 29%, 0.3 30% 39%, 0.4 40% 49%, 0.5 50% 59%, 0.6 60% 69%, 0.7 70% 79%, 0.8 80% 89%, 0.9 90% 99%, 1 100% 100%) infinite;
-}
-
-/* ===== Mega Menu with Sections (My Pursuit) ===== */
-.mega-menu-content .menu-title {
-  @apply text-xs uppercase tracking-wider text-base-content/50 font-bold px-2 pt-2 pb-1;
-}
-
-.mega-menu-content .menu-title:first-child {
-  @apply pt-0;
-}
-
-.mega-menu-content .divider {
-  @apply my-1;
-}
-
-/* Wider mega menu for My Pursuit to accommodate sections */
-.mega-menu-sectioned {
-  @apply min-w-64;
-}
-
-/* Ensure badge indicators are visible on mega menu summaries */
-.mega-menu-dropdown summary .badge {
-  @apply ml-1;
 }
 
 /* ==========================================

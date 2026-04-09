@@ -12,15 +12,19 @@ processor and the if-guard below short-circuits the entire include so
 nothing renders.
 
 Layout:
-- Sticky on lg (sits below the main navbar, stays put on scroll)
-- Inline horizontal scroll on mobile (one line, swipe to see more)
+- Sticky at all breakpoints (sits below the main navbar at top-16,
+  matching daisyUI's .navbar min-height of 4rem)
+- The main navbar is also sticky (top-0 z-50); this strip pins
+  immediately below it (top-16 z-40)
+- Horizontal scroll on mobile (one line, swipe to see more)
 - Active item: filled background + primary-color border + aria-current
 
-See docs/architecture/ia-and-subnav.md for the design rationale.
+See docs/architecture/ia-and-subnav.md for the design rationale and
+the stacking order documentation.
 {% endcomment %}
 {% if hub_section %}
 <nav aria-label="{{ hub_subnav_label }} sub-navigation"
-     class="hub-subnav bg-base-200/95 backdrop-blur border-b border-base-300 shadow-sm shadow-neutral/30 lg:sticky lg:top-0 z-40">
+     class="hub-subnav bg-base-200/95 backdrop-blur border-b border-base-300 shadow-sm shadow-neutral/30 sticky top-16 z-40">
     <div class="container mx-auto px-2 md:px-4">
         <div class="flex items-center gap-2 md:gap-3 h-10 md:h-11 overflow-x-auto hub-subnav-scroll">
 
