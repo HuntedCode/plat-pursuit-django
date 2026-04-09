@@ -220,10 +220,16 @@ See docs/features/community-hub.md for the design rationale.
                     </div>
 
                     {# ── Top half: 5 most recent public lists ── #}
+                    {# Both the live anchor and the placeholder div use `min-h-12` so   #}
+                    {# the row height is pinned at 48px regardless of which children it #}
+                    {# contains. Without it, live rows render at ~48px (text-sm 20px + #}
+                    {# text-xs 16px line-heights + py-1.5 padding) and placeholder rows #}
+                    {# render at ~36px (h-2.5 + h-2 skeleton bars + same padding), so   #}
+                    {# the empty-state and populated cards looked uneven on dev.        #}
                     <div class="space-y-1 mb-3">
                         {% for list in recent_lists %}
                             {% if list %}
-                                <a href="{% url 'list_detail' list.id %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-primary/30 transition-colors">
+                                <a href="{% url 'list_detail' list.id %}" class="flex items-center gap-2 p-1.5 min-h-12 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-primary/30 transition-colors">
                                     <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
                                         {% if list.profile.avatar_url %}
                                             <img src="{{ list.profile.avatar_url }}" alt="{{ list.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
@@ -249,7 +255,7 @@ See docs/features/community-hub.md for the design rationale.
                                     </div>
                                 </a>
                             {% else %}
-                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                <div class="flex items-center gap-2 p-1.5 min-h-12 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
                                     <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
                                     <div class="flex-1 min-w-0">
                                         <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
@@ -363,15 +369,20 @@ See docs/features/community-hub.md for the design rationale.
                         {% if personal_challenge_slots %}
                             <div class="space-y-1">
                                 {% for row in personal_challenge_slots %}
+                                    {# `min-h-9` (36px) matches the Leaderboards "Your neighborhood" row    #}
+                                    {# height (which is driven by its 24px avatar + 12px padding). The     #}
+                                    {# Challenges per-type rows have no avatar and would naturally render  #}
+                                    {# at ~32px from text-sm + padding alone, so we pin them to 36px to    #}
+                                    {# keep the two cards' bottom halves visually balanced.                #}
                                     {% if row.challenge %}
-                                        <a href="{% url row.detail_url_name challenge_id=row.challenge.id %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
+                                        <a href="{% url row.detail_url_name challenge_id=row.challenge.id %}" class="flex items-center gap-2 p-1.5 min-h-9 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
                                             {# w-20 (80px) to fit "CALENDAR" — w-14 was too tight and ran into the title #}
                                             <span class="text-xs font-bold w-20 shrink-0 text-secondary uppercase tracking-wide">{{ row.type_label }}</span>
                                             <span class="text-sm font-medium line-clamp-1 pr-1 flex-1">{{ row.challenge.name }}</span>
                                             <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ row.challenge.progress_percentage }}%</span>
                                         </a>
                                     {% else %}
-                                        <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/10 hover:border-secondary/30 transition-colors">
+                                        <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-1.5 min-h-9 rounded-lg bg-white/[0.02] border border-dashed border-base-content/10 hover:border-secondary/30 transition-colors">
                                             <span class="text-xs font-bold w-20 shrink-0 text-base-content/40 uppercase tracking-wide">{{ row.type_label }}</span>
                                             <span class="text-xs text-base-content/40 italic flex-1 line-clamp-1 pr-1">No challenge started</span>
                                             <span class="text-xs text-secondary shrink-0 font-medium">Start →</span>
