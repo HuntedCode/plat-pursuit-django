@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, Event
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine
 
 
 # Register your models here.
@@ -2385,22 +2385,3 @@ class GameFlagAdmin(admin.ModelAdmin):
                 GameFlagService.dismiss_flag(flag, request.user)
                 count += 1
         messages.success(request, f'Dismissed {count} flag(s).')
-
-
-@admin.register(Event)
-class EventAdmin(admin.ModelAdmin):
-    """Admin for the polymorphic Event model. Read-mostly: events are immutable facts."""
-    list_display = ('id', 'event_type', 'profile', 'occurred_at', 'target_summary', 'created_at')
-    list_filter = ('event_type', 'occurred_at')
-    list_select_related = ('profile', 'target_content_type')
-    search_fields = ('profile__psn_username', 'event_type')
-    raw_id_fields = ('profile', 'target_content_type')
-    readonly_fields = ('created_at',)
-    date_hierarchy = 'occurred_at'
-    ordering = ('-occurred_at',)
-
-    def target_summary(self, obj):
-        if obj.target_content_type and obj.target_object_id:
-            return f"{obj.target_content_type.model}#{obj.target_object_id}"
-        return '-'
-    target_summary.short_description = 'Target'
