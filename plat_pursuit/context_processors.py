@@ -161,3 +161,39 @@ def psn_outage(request):
     except Exception:
         logger.debug("Failed to read PSN outage flag from Redis", exc_info=True)
         return {}
+
+
+def hub_subnav(request):
+    """
+    Resolve the active hub-of-hubs sub-navigation for the current request.
+
+    Inspects ``request.path`` against the configured hub prefixes
+    (``core.hub_subnav.HUB_SUBNAV_CONFIG``) and returns the active hub plus
+    the active sub-nav slug. Pages that don't belong to any hub get
+    ``hub_section=None`` so the ``hub_subnav.html`` template short-circuits
+    and renders nothing.
+
+    See ``docs/architecture/ia-and-subnav.md`` for the design rationale and
+    the URL prefix matching algorithm.
+    """
+    try:
+        from core.hub_subnav import resolve_hub_subnav, visible_items
+
+        match = resolve_hub_subnav(request)
+        if match is None:
+            return {'hub_section': None}
+
+        hub = match['hub']
+        is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
+        items = visible_items(hub, is_authenticated=is_auth)
+
+        return {
+            'hub_section': hub.key,
+            'hub_subnav_label': hub.label,
+            'hub_subnav_icon': hub.icon,
+            'hub_subnav_items': items,
+            'hub_subnav_active_slug': match['active_slug'],
+        }
+    except Exception:
+        logger.debug("Failed to resolve hub_subnav for path %s", request.path, exc_info=True)
+        return {'hub_section': None}
