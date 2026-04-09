@@ -106,7 +106,6 @@ COMMUNITY_HUB = HubSubnavConfig(
     prefixes=('/community/',),
     items=(
         HubSubnavItem('hub', 'Hub', 'community_hub', 'home'),
-        HubSubnavItem('feed', 'Pursuit Feed', 'community_feed', 'activity'),
         HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user'),
         HubSubnavItem('reviews', 'Reviews', 'reviews_landing', 'message-square'),
         HubSubnavItem('challenges', 'Challenges', 'challenges_browse', 'target'),

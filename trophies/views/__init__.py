@@ -33,7 +33,6 @@ from .shareables_views import MyShareablesView
 from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
-from .community_views import CommunityFeedView
 
 __all__ = [
     # Game views
@@ -78,6 +77,4 @@ __all__ = [
     'CompanyListView', 'CompanyDetailView',
     # Genre/Theme views
     'GenreThemeListView', 'GenreDetailView', 'ThemeDetailView',
-    # Community views
-    'CommunityFeedView',
 ]

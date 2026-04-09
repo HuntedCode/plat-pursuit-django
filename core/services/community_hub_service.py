@@ -5,7 +5,6 @@ a fixed-layout **Feature Spotlight** page (NOT an aggregator) composed of:
 
 - Hero (built_for_hunters site heartbeat ribbon)
 - Conditional active fundraiser banner
-- Pursuit Feed Spotlight (3 sample events + CTA, marquee promo block)
 - 2x2 Feature Grid (Reviews / Challenges / Lists / Leaderboards)
 - Permanent Discord callout
 
@@ -22,32 +21,6 @@ the template falls back to the card's own empty state.
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Pursuit Feed Spotlight (top of page, 3 sample events)
-# ---------------------------------------------------------------------------
-
-def _get_pursuit_feed_spotlight(limit=3):
-    """Last N globally-visible Pursuit Feed events for the spotlight promo block.
-
-    Returns a list of Event instances ordered newest-first. Filters via
-    ``feed_visible()`` so soft-deleted-target events are excluded. The
-    standalone /community/feed/ page paginates from the same source.
-
-    The Feature Spotlight design intentionally caps this at a small number
-    (default 3) so the spotlight stays a tease, not a feed.
-    """
-    from trophies.models import Event
-    from trophies.services.event_service import PURSUIT_FEED_TYPES
-
-    return list(
-        Event.objects
-        .feed_visible()
-        .filter(event_type__in=PURSUIT_FEED_TYPES)
-        .select_related('profile', 'target_content_type')
-        .order_by('-occurred_at')[:limit]
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +160,6 @@ def build_community_hub_context(viewer_profile=None):
     card.
 
     Returns a dict with these keys:
-        - feed_spotlight: list of Event instances (~3) for the spotlight promo
         - top_reviewers: list of profile dicts (~3) for the Reviews card
         - active_challenges: list of Challenge instances (~3) for the Challenges card
         - recent_lists: list of GameList instances (~3) for the Game Lists card
@@ -199,12 +171,6 @@ def build_community_hub_context(viewer_profile=None):
     added by their respective context processors / mixins, not here.
     """
     context = {}
-
-    try:
-        context['feed_spotlight'] = _get_pursuit_feed_spotlight(limit=3)
-    except Exception:
-        logger.exception("Failed to load community hub feed_spotlight")
-        context['feed_spotlight'] = []
 
     try:
         context['top_reviewers'] = _get_top_reviewers_spotlight(limit=3)

@@ -10,9 +10,8 @@ Community Hub: Feature Spotlight design.
 Composition (top to bottom):
   1. Hero — site heartbeat ribbon (built_for_hunters partial, lifted as-is)
   2. Active fundraiser banner (conditional)
-  3. Pursuit Feed Spotlight — marquee promo block with 3 sample events
-  4. 2x2 Feature Grid — Reviews / Challenges / Lists / Leaderboards
-  5. Discord callout — permanent fixture
+  3. 2x2 Feature Grid — Reviews / Challenges / Lists / Leaderboards
+  4. Discord callout — permanent fixture
 
 The page uses the full site container width (no max-w-4xl wrapper) to
 match the Review Hub and the rest of the site. The dashboard's narrower
@@ -33,28 +32,13 @@ See docs/features/community-hub.md for the design rationale.
     {# ── Page header ── #}
     <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-7">
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                    <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold italic text-primary leading-tight">
-                        Community Hub
-                    </h1>
-                    <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-2xl">
-                        Your front door to everything PlatPursuit's community has to offer.
-                        Discover reviews, challenges, lists, leaderboards, and the global Pursuit Feed.
-                    </p>
-                </div>
-                <a href="{% url 'community_feed' %}" class="btn btn-primary btn-sm md:btn-md gap-2 shrink-0" aria-label="View the full Pursuit Feed">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="8" y1="6" x2="21" y2="6"></line>
-                        <line x1="8" y1="12" x2="21" y2="12"></line>
-                        <line x1="8" y1="18" x2="21" y2="18"></line>
-                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                    </svg>
-                    Pursuit Feed
-                </a>
-            </div>
+            <h1 class="text-2xl md:text-3xl lg:text-4xl font-bold italic text-primary leading-tight">
+                Community Hub
+            </h1>
+            <p class="text-sm md:text-base text-base-content/70 mt-1 max-w-2xl">
+                Your front door to everything PlatPursuit's community has to offer.
+                Discover reviews, challenges, lists, and leaderboards from hunters worldwide.
+            </p>
         </div>
     </div>
 
@@ -65,9 +49,9 @@ See docs/features/community-hub.md for the design rationale.
 
     {# ── Active fundraiser banner (conditional) ── #}
     {# When an active fundraiser exists, render a prominent banner here #}
-    {# above the Pursuit Feed Spotlight. Urgency + emotional weight     #}
-    {# justify the high placement. When no fundraiser is active, the    #}
-    {# {% if %} below skips the entire section.                          #}
+    {# above the feature grid. Urgency + emotional weight justify the   #}
+    {# high placement. When no fundraiser is active, the if-block below #}
+    {# skips the entire section.                                         #}
     {% if active_fundraiser %}
     <section class="mt-3">
         <div class="card bg-accent/10 border-2 border-accent/30 shadow-md shadow-neutral hover:shadow-lg hover:shadow-accent/30 transition-all">
@@ -86,117 +70,7 @@ See docs/features/community-hub.md for the design rationale.
     {% endif %}
 
     {# ─────────────────────────────────────────────────────────────────── #}
-    {# 3. Pursuit Feed Spotlight — marquee promo block                     #}
-    {# Full-width feature promo with gradient border to feel marketing-tier #}
-    {# distinct from the cards below.                                      #}
-    {# ─────────────────────────────────────────────────────────────────── #}
-    <section class="mt-3">
-        <div class="card bg-gradient-to-br from-info/10 via-base-200/90 to-secondary/10 border-2 border-info/40 shadow-lg shadow-info/10">
-            <div class="card-body p-4 md:p-6 lg:p-8">
-
-                {# Headline + tagline + hero CTA row #}
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4 mb-4">
-                    <div class="flex items-center gap-3">
-                        <div class="shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-lg bg-info/20 ring-2 ring-info/40 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-7 md:h-7 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                            </svg>
-                        </div>
-                        <div class="min-w-0">
-                            <h2 class="text-lg md:text-xl lg:text-2xl font-bold text-info line-clamp-1 pr-1">Introducing the Pursuit Feed</h2>
-                            <p class="text-xs md:text-sm text-base-content/70 italic pr-1">Every platinum, badge, review, and milestone across PlatPursuit, in real time.</p>
-                        </div>
-                    </div>
-                    <a href="{% url 'community_feed' %}" class="btn btn-info btn-sm md:btn-md gap-2 shrink-0">
-                        Explore the Full Feed
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                    </a>
-                </div>
-
-                {# Inline preview: 3 sample events #}
-                {% if feed_spotlight %}
-                    <div class="space-y-2">
-                        {% for event in feed_spotlight %}
-                            <div class="flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors">
-
-                                {# Actor avatar #}
-                                {% if event.profile %}
-                                <a href="{% url 'profile_detail' event.profile.psn_username %}" class="w-9 h-9 lg:w-10 lg:h-10 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300 hover:ring-info transition-all">
-                                    {% if event.profile.avatar_url %}
-                                        <img src="{{ event.profile.avatar_url }}" alt="{{ event.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
-                                    {% else %}
-                                        <div class="w-full h-full bg-base-300 flex items-center justify-center">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"></circle><path d="M5.5 21a8.38 8.38 0 0 1 13 0"></path></svg>
-                                        </div>
-                                    {% endif %}
-                                </a>
-                                {% else %}
-                                {# System event (Day Zero) — no actor avatar #}
-                                <div class="w-9 h-9 lg:w-10 lg:h-10 rounded-full bg-info/15 ring-1 ring-info shrink-0 flex items-center justify-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-info" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                                </div>
-                                {% endif %}
-
-                                {# Type-specific verb + target #}
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm line-clamp-1 pr-1">
-                                        {% if event.profile %}
-                                            <a href="{% url 'profile_detail' event.profile.psn_username %}" class="font-semibold hover:text-info transition-colors">{{ event.profile.display_psn_username }}</a>
-                                        {% else %}
-                                            <span class="font-semibold text-info">PlatPursuit</span>
-                                        {% endif %}
-                                        {% if event.event_type == 'platinum_earned' %}
-                                            earned a platinum{% if event.metadata.trophy_name %}: <span class="text-base-content/70">{{ event.metadata.trophy_name }}</span>{% endif %}
-                                        {% elif event.event_type == 'rare_trophy_earned' %}
-                                            earned an ultra-rare trophy{% if event.metadata.trophy_name %}: <span class="text-base-content/70">{{ event.metadata.trophy_name }}</span>{% endif %}
-                                        {% elif event.event_type == 'concept_100_percent' %}
-                                            reached 100% completion{% if event.metadata.concept_name %}: <span class="text-base-content/70">{{ event.metadata.concept_name }}</span>{% endif %}
-                                        {% elif event.event_type == 'badge_earned' %}
-                                            {% with count=event.metadata.count|default:1 %}
-                                                earned {% if count > 1 %}{{ count }} badges{% else %}a badge{% if event.metadata.badges %}: <span class="text-base-content/70">{{ event.metadata.badges.0.name }}</span>{% endif %}{% endif %}
-                                            {% endwith %}
-                                        {% elif event.event_type == 'milestone_hit' %}
-                                            hit a milestone{% if event.metadata.milestone_name %}: <span class="text-base-content/70">{{ event.metadata.milestone_name }}</span>{% endif %}
-                                        {% elif event.event_type == 'review_posted' %}
-                                            posted a review{% if event.metadata.concept_title %} for <span class="text-base-content/70">{{ event.metadata.concept_title }}</span>{% endif %}
-                                        {% elif event.event_type == 'game_list_published' %}
-                                            published a list{% if event.metadata.list_name %}: <span class="text-base-content/70">{{ event.metadata.list_name }}</span>{% endif %}
-                                        {% elif event.event_type == 'challenge_started' %}
-                                            started a {{ event.metadata.challenge_type|default:"" }} challenge
-                                        {% elif event.event_type == 'challenge_progress' %}
-                                            made challenge progress
-                                        {% elif event.event_type == 'challenge_completed' %}
-                                            completed a {{ event.metadata.challenge_type|default:"" }} challenge
-                                        {% elif event.event_type == 'profile_linked' %}
-                                            joined the chronicle
-                                        {% elif event.event_type == 'day_zero' %}
-                                            {{ event.metadata.message|default:"Day Zero" }}
-                                        {% else %}
-                                            {{ event.event_type }}
-                                        {% endif %}
-                                    </div>
-                                </div>
-
-                                <span class="text-xs text-base-content/40 hidden md:inline shrink-0" data-time-format="relative" data-time="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|iso_naturaltime }}</span>
-                            </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="text-center py-6">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-info/30 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                        </svg>
-                        <p class="text-sm text-base-content/50">The chronicle is just beginning.</p>
-                        <p class="text-xs text-base-content/40 mt-1">Activity will appear here as the community syncs.</p>
-                    </div>
-                {% endif %}
-
-            </div>
-        </div>
-    </section>
-
-    {# ─────────────────────────────────────────────────────────────────── #}
-    {# 4. Feature Grid — 2x2 on lg, 1-col on mobile                        #}
+    {# Feature Grid — 2x2 on lg, 1-col on mobile                           #}
     {# Each card: icon + title + tagline + 3-item preview + hero CTA       #}
     {# ─────────────────────────────────────────────────────────────────── #}
     <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
