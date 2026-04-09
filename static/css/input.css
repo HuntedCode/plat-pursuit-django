@@ -424,11 +424,14 @@
     0 0 6px #c33;
 }
 
-/* Equip glow animation for My Titles page */
+/* Equip glow animation for My Titles page.
+   daisyUI 5 stores the full `oklch(...)` value in `--color-secondary`, so
+   the legacy `oklch(var(--s) / X)` alpha syntax doesn't work — we use
+   `color-mix(in oklab, ..., transparent X%)` instead. */
 @keyframes title-equip-glow {
-  0% { box-shadow: 0 0 0 0 oklch(var(--s) / 0.6); }
-  50% { box-shadow: 0 0 20px 4px oklch(var(--s) / 0.3); }
-  100% { box-shadow: 0 0 0 0 oklch(var(--s) / 0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-secondary), transparent 40%); }
+  50% { box-shadow: 0 0 20px 4px color-mix(in oklab, var(--color-secondary), transparent 70%); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 .title-equip-glow {
   animation: title-equip-glow 0.6s ease-out;
@@ -534,8 +537,8 @@
 /* SortableJS drag states */
 .sortable-ghost {
   @apply opacity-40 rounded-box;
-  border: 2px dashed oklch(var(--p));
-  background: oklch(var(--p) / 0.05);
+  border: 2px dashed var(--color-primary);
+  background: color-mix(in oklab, var(--color-primary), transparent 95%);
 }
 .sortable-chosen {
   @apply z-50;
