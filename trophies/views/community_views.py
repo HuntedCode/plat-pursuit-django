@@ -14,6 +14,7 @@ from django.views.generic import ListView
 from trophies.mixins import HtmxListMixin, ProfileHotbarMixin
 from trophies.models import Event
 from trophies.services.event_service import (
+    EventService,
     PURSUIT_FEED_TYPES,
     TROPHY_FEED_TYPES,
 )
@@ -174,6 +175,16 @@ class CommunityFeedView(HtmxListMixin, ProfileHotbarMixin, ListView):
             (FEED_MODE_PURSUIT, 'Pursuit Feed', 'Everything: trophies, badges, reviews, lists, challenges'),
             (FEED_MODE_TROPHY, 'Trophy Feed', 'Platinums, ultra-rare trophies, and 100% completions only'),
         ]
+
+        # "Right Now" rail module: live event counts in the last 24h.
+        # Cached for 60s inside get_recent_counts so re-renders are cheap.
+        # Wrapped in try/except so a failed cache fetch never breaks the
+        # whole page render — the rail module gracefully hides on None.
+        try:
+            context['recent_counts'] = EventService.get_recent_counts(window_hours=24)
+        except Exception:
+            logger.exception("Failed to load recent_counts for community feed page")
+            context['recent_counts'] = None
 
         # SEO + breadcrumb (only on the full-page render — HtmxListMixin
         # short-circuits to the partial template on htmx requests, where

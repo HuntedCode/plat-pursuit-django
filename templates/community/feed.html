@@ -1,15 +1,39 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static humanize %}
 
 {% block title %}Pursuit Feed{% endblock %}
 {% block meta_description %}{{ seo_description }}{% endblock %}
 
+{% comment %}
+Pursuit Feed standalone page: narrow main column + sticky right rail.
+
+Layout:
+  [Page Header — full width]
+  [2-col flex on lg: main column max-w-3xl + right rail w-80]
+    [Main column]                [Right Rail (sticky lg:top-20)]
+     - Mode toggle (mobile only)  - Filter Controls card
+     - Event feed cards            - "Right Now" mini module (live counts)
+     - Infinite scroll sentinel    - Cross-links to other community features
+
+On <lg: the right rail collapses to inline blocks ABOVE the main column
+so all controls stay accessible. On lg:+ it becomes a sticky sidebar.
+
+Width: feeds at full container width on a 1500px display look stretched
+and amateur. Capping the event grid at max-w-3xl matches the classic
+Reddit/news-site pattern. The right rail uses the leftover width.
+
+The filter form WRAPS the entire layout (rail + main column) so HTMX
+filter swaps continue to update #browse-results regardless of which
+side of the layout the user touches a control from.
+
+See docs/features/community-hub.md for the design rationale.
+{% endcomment %}
+
 {% block content %}
-<div class="max-w-4xl mx-auto px-1 md:px-2 lg:px-4 py-3 md:py-4">
 
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Page header ── #}
+    {# ── Page header (full width) ── #}
     <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-3 md:p-5 lg:p-7">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -31,77 +55,222 @@
         </div>
     </div>
 
-    {# ── Filter form ── #}
+    {# ── Filter form wraps the entire layout ── #}
+    {# HTMX swaps target #browse-results which lives in the main column.    #}
+    {# Inputs in the right rail still trigger the form just fine because    #}
+    {# they're descendants of the form element, regardless of the visual    #}
+    {# split.                                                                #}
     <form data-browse-form
           hx-get="{% url 'community_feed' %}"
           hx-target="#browse-results"
           hx-push-url="true"
           hx-swap="innerHTML"
-          hx-indicator="#browse-results"
-          class="mb-3">
+          hx-indicator="#browse-results">
 
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
-            <div class="card-body p-3 md:p-4 lg:p-5 space-y-3">
+        {# Hidden page input — browse-filters.js resets this on filter change #}
+        <input type="hidden" name="page" value="{{ page_obj.number|default:1 }}" />
 
-                {# Hidden page input — browse-filters.js resets this on filter change #}
-                <input type="hidden" name="page" value="{{ page_obj.number|default:1 }}" />
+        <div class="flex flex-col lg:flex-row lg:items-start lg:gap-4">
 
-                {# ── Mode toggle ── #}
-                <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2 block">Feed Mode</label>
-                    <div class="flex flex-col md:flex-row gap-2">
-                        {% for value, label, hint in feed_mode_options %}
-                            <label class="flex-1 cursor-pointer">
-                                <input type="radio" name="feed_mode" value="{{ value }}" class="sr-only peer" {% if feed_mode == value %}checked{% endif %} />
-                                <div class="card bg-white/[0.03] border-2 border-base-content/10 peer-checked:border-primary peer-checked:bg-primary/5 hover:border-primary/50 transition-all p-2.5 md:p-3">
-                                    <div class="font-bold text-sm md:text-base">{{ label }}</div>
-                                    <div class="text-xs text-base-content/50 mt-0.5 line-clamp-2 pr-1">{{ hint }}</div>
-                                </div>
-                            </label>
-                        {% endfor %}
+            {# ─────────────────────────────────────────────────────── #}
+            {# RIGHT RAIL                                              #}
+            {# Renders FIRST in source order so on mobile (<lg:) the   #}
+            {# filters appear above the feed for one-tap access. On    #}
+            {# lg:+ the order:lg-2 reorders it to the right side.      #}
+            {# ─────────────────────────────────────────────────────── #}
+            <aside class="w-full lg:w-80 shrink-0 lg:order-2 lg:sticky lg:top-20 space-y-3 mb-3 lg:mb-0">
+
+                {# ── Filter Controls card ── #}
+                <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+                    <div class="card-body p-3 md:p-4 space-y-3">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-base-content/60 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                            </svg>
+                            Filters
+                        </h2>
+
+                        {# Mode toggle #}
+                        <div>
+                            <label class="text-[11px] font-bold uppercase tracking-wider text-base-content/50 mb-1.5 block">Feed Mode</label>
+                            <div class="flex flex-col gap-1.5">
+                                {% for value, label, hint in feed_mode_options %}
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="feed_mode" value="{{ value }}" class="sr-only peer" {% if feed_mode == value %}checked{% endif %} />
+                                        <div class="card bg-white/[0.03] border-2 border-base-content/10 peer-checked:border-primary peer-checked:bg-primary/5 hover:border-primary/50 transition-all p-2">
+                                            <div class="font-bold text-xs">{{ label }}</div>
+                                            <div class="text-[11px] text-base-content/50 mt-0.5 line-clamp-2 pr-1">{{ hint }}</div>
+                                        </div>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        {# Time range #}
+                        <div>
+                            <label class="text-[11px] font-bold uppercase tracking-wider text-base-content/50 mb-1.5 block">Time Range</label>
+                            <div class="flex flex-wrap gap-1.5">
+                                {% for value, label in time_range_options %}
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="time_range" value="{{ value }}" class="sr-only peer" {% if time_range == value %}checked{% endif %} />
+                                        <span class="badge badge-sm badge-ghost border-base-content/20 peer-checked:badge-primary peer-checked:border-primary cursor-pointer hover:border-primary/50 transition-colors">
+                                            {{ label }}
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        {# Event type chips #}
+                        <div>
+                            <label class="text-[11px] font-bold uppercase tracking-wider text-base-content/50 mb-1.5 block">Event Types <span class="text-base-content/30 normal-case font-normal">(blank = all)</span></label>
+                            <div class="flex flex-wrap gap-1">
+                                {% for type, label in valid_event_types %}
+                                    <label class="cursor-pointer">
+                                        <input type="checkbox" name="event_type" value="{{ type }}" class="sr-only peer" {% if type in active_event_types %}checked{% endif %} />
+                                        <span class="badge badge-sm badge-ghost border-base-content/20 peer-checked:badge-secondary peer-checked:border-secondary cursor-pointer hover:border-secondary/50 transition-colors">
+                                            {{ label }}
+                                        </span>
+                                    </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 
-                {# ── Time range ── #}
-                <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2 block">Time Range</label>
-                    <div class="flex flex-wrap gap-2">
-                        {% for value, label in time_range_options %}
-                            <label class="cursor-pointer">
-                                <input type="radio" name="time_range" value="{{ value }}" class="sr-only peer" {% if time_range == value %}checked{% endif %} />
-                                <span class="badge badge-md md:badge-lg badge-ghost border-base-content/20 peer-checked:badge-primary peer-checked:border-primary cursor-pointer hover:border-primary/50 transition-colors">
-                                    {{ label }}
-                                </span>
-                            </label>
-                        {% endfor %}
+                {# ── "Right Now" mini module ── #}
+                {# Renders only when recent_counts is set AND total > 0. The #}
+                {# 60s cache means this is essentially free per request.     #}
+                {% if recent_counts and recent_counts.total %}
+                <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+                    <div class="card-body p-3 md:p-4">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-base-content/60 mb-2 flex items-center gap-2">
+                            <span class="inline-block w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                            Right Now
+                        </h2>
+                        <p class="text-[11px] text-base-content/40 mb-2">Last 24 hours across PlatPursuit</p>
+
+                        <div class="space-y-1">
+                            {% if recent_counts.platinum_earned %}
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-base-content/60">Platinums</span>
+                                <span class="font-bold text-primary">{{ recent_counts.platinum_earned|intcomma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if recent_counts.rare_trophy_earned %}
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-base-content/60">Ultra-rare trophies</span>
+                                <span class="font-bold text-warning">{{ recent_counts.rare_trophy_earned|intcomma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if recent_counts.concept_100_percent %}
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-base-content/60">100% completions</span>
+                                <span class="font-bold text-success">{{ recent_counts.concept_100_percent|intcomma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if recent_counts.badge_earned %}
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-base-content/60">Badges</span>
+                                <span class="font-bold text-info">{{ recent_counts.badge_earned|intcomma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if recent_counts.review_posted %}
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-base-content/60">Reviews</span>
+                                <span class="font-bold text-secondary">{{ recent_counts.review_posted|intcomma }}</span>
+                            </div>
+                            {% endif %}
+                            {% if recent_counts.profile_linked %}
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-base-content/60">New hunters</span>
+                                <span class="font-bold text-accent">{{ recent_counts.profile_linked|intcomma }}</span>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="border-t border-base-content/10 mt-2 pt-2 flex items-center justify-between gap-2 text-xs">
+                            <span class="text-base-content/60 font-semibold">Total events</span>
+                            <span class="font-bold">{{ recent_counts.total|intcomma }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {# ── Cross-link cards ── #}
+                <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+                    <div class="card-body p-3 md:p-4">
+                        <h2 class="text-xs font-bold uppercase tracking-wider text-base-content/60 mb-2 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            More to Explore
+                        </h2>
+                        <ul class="space-y-1">
+                            <li>
+                                <a href="{% url 'reviews_landing' %}" class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-success/30 transition-colors text-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                    <span class="font-semibold flex-1">Review Hub</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors text-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                                        <line x1="4" y1="22" x2="4" y2="15"></line>
+                                    </svg>
+                                    <span class="font-semibold flex-1">Challenges</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{% url 'lists_browse' %}" class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-primary/30 transition-colors text-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                                    </svg>
+                                    <span class="font-semibold flex-1">Game Lists</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="{% url 'overall_badge_leaderboards' %}" class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-accent/30 transition-colors text-xs">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                                    </svg>
+                                    <span class="font-semibold flex-1">Leaderboards</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                </a>
+                            </li>
+                        </ul>
                     </div>
                 </div>
 
-                {# ── Event type chips ── #}
-                <div>
-                    <label class="text-xs font-bold uppercase tracking-wider text-base-content/50 mb-2 block">Event Types <span class="text-base-content/30 normal-case font-normal">(leave blank for all)</span></label>
-                    <div class="flex flex-wrap gap-1.5">
-                        {% for type, label in valid_event_types %}
-                            <label class="cursor-pointer">
-                                <input type="checkbox" name="event_type" value="{{ type }}" class="sr-only peer" {% if type in active_event_types %}checked{% endif %} />
-                                <span class="badge badge-sm md:badge-md badge-ghost border-base-content/20 peer-checked:badge-secondary peer-checked:border-secondary cursor-pointer hover:border-secondary/50 transition-colors">
-                                    {{ label }}
-                                </span>
-                            </label>
-                        {% endfor %}
-                    </div>
-                </div>
+            </aside>
 
-            </div>
+            {# ─────────────────────────────────────────────────────── #}
+            {# MAIN COLUMN — narrow, capped at max-w-3xl on lg:        #}
+            {# ─────────────────────────────────────────────────────── #}
+            <main class="flex-1 min-w-0 lg:order-1 lg:max-w-3xl">
+                <div id="browse-results">
+                    {% include 'community/partials/feed_results.html' %}
+                </div>
+            </main>
+
         </div>
     </form>
 
-    {# ── Results container ── #}
-    <div id="browse-results">
-        {% include 'community/partials/feed_results.html' %}
-    </div>
-
-</div>
 {% endblock %}
 
 {% block js_scripts %}

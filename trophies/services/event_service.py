@@ -662,3 +662,60 @@ class EventService:
         except Exception:
             logger.exception("Failed to record bulk badge_earned event for profile %s", getattr(profile, 'pk', None))
             return None
+
+    @staticmethod
+    def get_recent_counts(window_hours: int = 24) -> dict:
+        """Aggregate recent event counts for the Pursuit Feed "Right Now" rail module.
+
+        Returns a dict shaped::
+
+            {
+                'window_hours': 24,
+                'total': 1234,
+                'platinum_earned': 56,
+                'rare_trophy_earned': 89,
+                'concept_100_percent': 12,
+                'badge_earned': 78,
+                'milestone_hit': 23,
+                'review_posted': 34,
+                'game_list_published': 5,
+                'challenge_started': 7,
+                'challenge_progress': 11,
+                'challenge_completed': 3,
+                'profile_linked': 2,
+            }
+
+        Cached for 60 seconds in the default Django cache so the feed page
+        and any other surface that surfaces these counts only pays one query
+        per minute. The cache key includes the window so different windows
+        cache independently.
+        """
+        from django.core.cache import cache
+        from django.db.models import Count
+        from django.utils import timezone
+        from trophies.models import Event
+
+        cache_key = f'event:recent_counts:{window_hours}h'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            since = timezone.now() - timezone.timedelta(hours=window_hours)
+            rows = (
+                Event.objects
+                .feed_visible()
+                .filter(occurred_at__gte=since, event_type__in=PURSUIT_FEED_TYPES)
+                .values('event_type')
+                .annotate(count=Count('id'))
+            )
+            counts = {'window_hours': window_hours, 'total': 0}
+            for row in rows:
+                counts[row['event_type']] = row['count']
+                counts['total'] += row['count']
+        except Exception:
+            logger.exception("Failed to compute event recent counts for window %sh", window_hours)
+            counts = {'window_hours': window_hours, 'total': 0}
+
+        cache.set(cache_key, counts, 60)
+        return counts
