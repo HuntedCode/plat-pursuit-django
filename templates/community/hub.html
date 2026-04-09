@@ -91,9 +91,17 @@ See docs/features/community-hub.md for the design rationale.
     <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {# ── Reviews feature card ── #}
+        {# Anatomy (shared by all 4 cards):                                    #}
+        {#   Header (icon + title + tagline)                                   #}
+        {#   Top half: 5 padded community rows (placeholder if no live data)   #}
+        {#   Divider                                                            #}
+        {#   Bottom half: viewer-specific stats OR sign-in/link-PSN empty CTA   #}
+        {#   Hero CTA button                                                    #}
+        {# The padded-row pattern (from _pad_to_limit in the service) keeps    #}
+        {# every card the same height regardless of how much real data exists. #}
         <section>
             <div class="card bg-base-200/90 border-2 border-base-300 hover:border-success/40 shadow-lg shadow-neutral hover:shadow-success/10 transition-all h-full">
-                <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
                     {# Header: icon + title + tagline #}
                     <div class="flex items-start gap-3 mb-3">
                         <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-success/15 ring-2 ring-success/30 flex items-center justify-center">
@@ -107,10 +115,10 @@ See docs/features/community-hub.md for the design rationale.
                         </div>
                     </div>
 
-                    {# Data preview: 3 most-recently-reviewed titles + recommendation % #}
-                    {% if recently_reviewed_titles %}
-                        <div class="space-y-1 mb-3">
-                            {% for title in recently_reviewed_titles %}
+                    {# ── Top half: 5 most-recently-reviewed titles ── #}
+                    <div class="space-y-1 mb-3">
+                        {% for title in recently_reviewed_titles %}
+                            {% if title %}
                                 <a href="{% url 'review_hub' title.slug %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-success/30 transition-colors">
                                     <div class="w-6 h-6 rounded overflow-hidden shrink-0 ring-1 ring-base-300">
                                         {% if title.concept_icon_url %}
@@ -137,16 +145,47 @@ See docs/features/community-hub.md for the design rationale.
                                         {% endif %}
                                     </div>
                                 </a>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-4 mb-3">
-                            <p class="text-sm text-base-content/50">No reviews yet — be the first!</p>
-                        </div>
-                    {% endif %}
+                            {% else %}
+                                {# Placeholder row — keeps the card the same height as a fully-populated one #}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-6 rounded shrink-0 bg-base-300/40"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
+                                        <div class="h-2 w-1/3 rounded bg-base-300/30 mt-1"></div>
+                                    </div>
+                                    <div class="h-2.5 w-8 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
 
-                    {# Hero CTA #}
-                    <a href="{% url 'reviews_landing' %}" class="btn btn-success btn-sm gap-2 w-full">
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-success/15 after:bg-success/15">Your reviews</div>
+
+                    {# ── Bottom half: personal review stats ── #}
+                    <div class="mb-3">
+                        {% if personal_review_stats %}
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.review_count|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Written</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.helpful_received|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Helpful</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.recommend_pct }}%</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Recommend</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-success' accent_border_class='border-success/30' prompt_text='See how your reviews stack up against the community.' %}
+                        {% endif %}
+                    </div>
+
+                    {# Hero CTA — pinned to the bottom via flex-col + mt-auto so cards stay aligned #}
+                    <a href="{% url 'reviews_landing' %}" class="btn btn-success btn-sm gap-2 w-full mt-auto">
                         Visit Review Hub
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </a>
@@ -161,7 +200,7 @@ See docs/features/community-hub.md for the design rationale.
         {# (avatars + usernames + a percentage/score on the right).              #}
         <section>
             <div class="card bg-base-200/90 border-2 border-base-300 hover:border-primary/40 shadow-lg shadow-neutral hover:shadow-primary/10 transition-all h-full">
-                <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
                     {# Header: icon + title + tagline #}
                     <div class="flex items-start gap-3 mb-3">
                         <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-primary/15 ring-2 ring-primary/30 flex items-center justify-center">
@@ -180,10 +219,10 @@ See docs/features/community-hub.md for the design rationale.
                         </div>
                     </div>
 
-                    {# Data preview: 3 most recent published lists #}
-                    {% if recent_lists %}
-                        <div class="space-y-1 mb-3">
-                            {% for list in recent_lists %}
+                    {# ── Top half: 5 most recent public lists ── #}
+                    <div class="space-y-1 mb-3">
+                        {% for list in recent_lists %}
+                            {% if list %}
                                 <a href="{% url 'list_detail' list.id %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-primary/30 transition-colors">
                                     <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
                                         {% if list.profile.avatar_url %}
@@ -198,16 +237,46 @@ See docs/features/community-hub.md for the design rationale.
                                     </div>
                                     <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ list.game_count }} game{{ list.game_count|pluralize }}</span>
                                 </a>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-4 mb-3">
-                            <p class="text-sm text-base-content/50">No published lists yet.</p>
-                        </div>
-                    {% endif %}
+                            {% else %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
+                                        <div class="h-2 w-1/3 rounded bg-base-300/30 mt-1"></div>
+                                    </div>
+                                    <div class="h-2.5 w-12 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-primary/15 after:bg-primary/15">Your lists</div>
+
+                    {# ── Bottom half: personal list stats ── #}
+                    <div class="mb-3">
+                        {% if personal_list_stats %}
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-primary">{{ personal_list_stats.total_lists|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Lists</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-primary">{{ personal_list_stats.public_lists|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Public</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-primary">{{ personal_list_stats.total_games|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Games</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-primary' accent_border_class='border-primary/30' prompt_text='Build your own lists and share them with the community.' %}
+                        {% endif %}
+                    </div>
 
                     {# Hero CTA #}
-                    <a href="{% url 'lists_browse' %}" class="btn btn-primary btn-sm gap-2 w-full">
+                    <a href="{% url 'lists_browse' %}" class="btn btn-primary btn-sm gap-2 w-full mt-auto">
                         Browse Lists
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </a>
@@ -218,7 +287,7 @@ See docs/features/community-hub.md for the design rationale.
         {# ── Challenges feature card ── #}
         <section>
             <div class="card bg-base-200/90 border-2 border-base-300 hover:border-secondary/40 shadow-lg shadow-neutral hover:shadow-secondary/10 transition-all h-full">
-                <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
                     {# Header: icon + title + tagline #}
                     <div class="flex items-start gap-3 mb-3">
                         <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-secondary/15 ring-2 ring-secondary/30 flex items-center justify-center">
@@ -233,10 +302,10 @@ See docs/features/community-hub.md for the design rationale.
                         </div>
                     </div>
 
-                    {# Data preview: 3 active challenges #}
-                    {% if active_challenges %}
-                        <div class="space-y-1 mb-3">
-                            {% for challenge in active_challenges %}
+                    {# ── Top half: 5 most recent active challenges ── #}
+                    <div class="space-y-1 mb-3">
+                        {% for challenge in active_challenges %}
+                            {% if challenge %}
                                 <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5">
                                     <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
                                         {% if challenge.profile.avatar_url %}
@@ -253,16 +322,54 @@ See docs/features/community-hub.md for the design rationale.
                                     </div>
                                     <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ challenge.progress_percentage }}%</span>
                                 </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-4 mb-3">
-                            <p class="text-sm text-base-content/50">No active challenges — start one!</p>
-                        </div>
-                    {% endif %}
+                            {% else %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
+                                    </div>
+                                    <div class="h-2.5 w-8 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-secondary/15 after:bg-secondary/15">Your challenges</div>
+
+                    {# ── Bottom half: per-type slot rows ── #}
+                    {# 3 fixed rows (A-Z, Calendar, Genre). Each row shows your most  #}
+                    {# recent challenge of that type with progress %, OR a "start one"#}
+                    {# placeholder routed to the matching browse page when empty. The #}
+                    {# always-3-rows shape keeps the bottom half the same height as   #}
+                    {# the top half (which has 5 slimmer rows), giving the card a    #}
+                    {# balanced look in both auth states.                              #}
+                    <div class="mb-3">
+                        {% if personal_challenge_slots %}
+                            <div class="space-y-1">
+                                {% for row in personal_challenge_slots %}
+                                    {% if row.challenge %}
+                                        <a href="{% url row.detail_url_name challenge_id=row.challenge.id %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
+                                            <span class="text-xs font-bold w-14 shrink-0 text-secondary uppercase tracking-wide">{{ row.type_label }}</span>
+                                            <span class="text-sm font-medium line-clamp-1 pr-1 flex-1">{{ row.challenge.name }}</span>
+                                            <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ row.challenge.progress_percentage }}%</span>
+                                        </a>
+                                    {% else %}
+                                        <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/10 hover:border-secondary/30 transition-colors">
+                                            <span class="text-xs font-bold w-14 shrink-0 text-base-content/40 uppercase tracking-wide">{{ row.type_label }}</span>
+                                            <span class="text-xs text-base-content/40 italic flex-1 line-clamp-1 pr-1">No challenge started</span>
+                                            <span class="text-xs text-secondary shrink-0 font-medium">Start →</span>
+                                        </a>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-secondary' accent_border_class='border-secondary/30' prompt_text='Track your A-Z, Calendar, and Genre challenges in one place.' %}
+                        {% endif %}
+                    </div>
 
                     {# Hero CTA #}
-                    <a href="{% url 'challenges_browse' %}" class="btn btn-secondary btn-sm gap-2 w-full">
+                    <a href="{% url 'challenges_browse' %}" class="btn btn-secondary btn-sm gap-2 w-full mt-auto">
                         Browse Challenges
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </a>
@@ -273,7 +380,7 @@ See docs/features/community-hub.md for the design rationale.
         {# ── Leaderboards feature card ── #}
         <section>
             <div class="card bg-base-200/90 border-2 border-base-300 hover:border-accent/40 shadow-lg shadow-neutral hover:shadow-accent/10 transition-all h-full">
-                <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
                     {# Header: icon + title + tagline + viewer rank if logged in #}
                     <div class="flex items-start gap-3 mb-3">
                         <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-accent/15 ring-2 ring-accent/30 flex items-center justify-center">
@@ -294,10 +401,10 @@ See docs/features/community-hub.md for the design rationale.
                         </div>
                     </div>
 
-                    {# Data preview: top 5 badge XP #}
-                    {% if xp_leaderboard.entries %}
-                        <div class="space-y-1 mb-3">
-                            {% for entry in xp_leaderboard.entries %}
+                    {# ── Top half: top 5 badge XP ── #}
+                    <div class="space-y-1 mb-3">
+                        {% for entry in xp_leaderboard.entries %}
+                            {% if entry %}
                                 <div class="flex items-center gap-2 p-1.5 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
                                     <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
                                     <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
@@ -311,16 +418,56 @@ See docs/features/community-hub.md for the design rationale.
                                     {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
                                     <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
                                 </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-4 mb-3">
-                            <p class="text-sm text-base-content/50">No badge XP yet — be the first!</p>
-                        </div>
-                    {% endif %}
+                            {% else %}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-2.5 rounded bg-base-300/30 shrink-0"></div>
+                                    <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                    <div class="h-2.5 flex-1 rounded bg-base-300/40"></div>
+                                    <div class="h-2.5 w-12 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-accent/15 after:bg-accent/15">Your neighborhood</div>
+
+                    {# ── Bottom half: viewer rank + 2 above + 2 below ── #}
+                    <div class="mb-3">
+                        {% if personal_xp_neighborhood is not None %}
+                            <div class="space-y-1">
+                                {% for entry in personal_xp_neighborhood %}
+                                    {% if entry %}
+                                        <div class="flex items-center gap-2 p-1.5 rounded-lg {% if entry.is_self %}bg-accent/10 border border-accent/30{% else %}bg-white/[0.03] border border-base-content/5{% endif %}">
+                                            <span class="text-xs font-bold w-6 text-center {% if entry.is_self %}text-accent{% else %}text-base-content/50{% endif %}">#{{ entry.rank }}</span>
+                                            <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
+                                                {% if entry.avatar_url %}
+                                                    <img src="{{ entry.avatar_url }}" alt="{{ entry.psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                                {% else %}
+                                                    <div class="w-full h-full bg-base-300"></div>
+                                                {% endif %}
+                                            </div>
+                                            <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}">{{ entry.psn_username }}</span>
+                                            {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
+                                            <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
+                                        </div>
+                                    {% else %}
+                                        <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                            <div class="w-6 h-2.5 rounded bg-base-300/30 shrink-0"></div>
+                                            <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                            <div class="h-2.5 flex-1 rounded bg-base-300/40"></div>
+                                            <div class="h-2.5 w-12 rounded bg-base-300/30 shrink-0"></div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-accent' accent_border_class='border-accent/30' prompt_text='See where you sit on the global badge XP leaderboard.' %}
+                        {% endif %}
+                    </div>
 
                     {# Hero CTA #}
-                    <a href="{% url 'overall_badge_leaderboards' %}" class="btn btn-accent btn-sm gap-2 w-full">
+                    <a href="{% url 'overall_badge_leaderboards' %}" class="btn btn-accent btn-sm gap-2 w-full mt-auto">
                         View Leaderboards
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </a>

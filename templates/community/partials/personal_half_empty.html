@@ -1,0 +1,43 @@
+{% comment %}
+Reusable empty-state for the personal (bottom) half of a Community Hub
+feature card. Renders for anonymous viewers OR for authenticated viewers
+who haven't linked a PSN profile yet, picking the right CTA based on
+``viewer_is_authenticated``.
+
+The block reserves the same vertical space as a populated personal half
+so cards stay the same height regardless of the viewer's auth state. The
+icon, copy, and color are all parameterized so the card can match its
+own accent color (Reviews=success, Lists=primary, Challenges=secondary,
+Leaderboards=accent).
+
+Required context:
+- viewer_is_authenticated: bool — set on the page by CommunityHubView
+- accent_color_class: e.g. "text-success" — for the icon tint
+- accent_border_class: e.g. "border-success/30" — for the dashed border
+- prompt_text: short blurb to fill in why the user might want to sign in,
+  e.g. "Sign in to compare your reviews to the community."
+{% endcomment %}
+<div class="rounded-lg border border-dashed {{ accent_border_class }} bg-white/[0.02] p-3 text-center">
+    {% if viewer_is_authenticated %}
+        {# Authenticated but no linked profile — push them to link PSN. #}
+        <p class="text-xs text-base-content/60 mb-2 pr-1">{{ prompt_text }}</p>
+        <a href="{% url 'link_psn' %}" class="btn btn-xs btn-ghost gap-1 {{ accent_color_class }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            Link your PSN
+        </a>
+    {% else %}
+        {# Anonymous — push them to log in. #}
+        <p class="text-xs text-base-content/60 mb-2 pr-1">{{ prompt_text }}</p>
+        <a href="{% url 'account_login' %}" class="btn btn-xs btn-ghost gap-1 {{ accent_color_class }}">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                <polyline points="10 17 15 12 10 7"></polyline>
+                <line x1="15" y1="12" x2="3" y2="12"></line>
+            </svg>
+            Sign in
+        </a>
+    {% endif %}
+</div>

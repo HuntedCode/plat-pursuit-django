@@ -112,11 +112,26 @@ class CommunityHubView(ProfileHotbarMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        # Pull viewer profile if logged in. Used by the leaderboard modules
-        # to mark the viewer's row and scope the country leaderboard.
+        # Pull viewer profile if logged in AND linked. Personal-section
+        # helpers in build_community_hub_context all branch on a None
+        # `viewer_profile` to render the sign-in / link-PSN CTA, so we
+        # collapse "anonymous", "logged in but no profile", and "logged
+        # in with an unlinked profile" into a single None signal here.
+        # Authenticated unlinked users get a "Link your PSN to see your
+        # stats" CTA in each card's bottom half via the same template
+        # branch as anonymous users — both states see the same CTA copy
+        # because both fixes route through `link_psn`.
         viewer_profile = None
         if self.request.user.is_authenticated:
-            viewer_profile = getattr(self.request.user, 'profile', None)
+            profile = getattr(self.request.user, 'profile', None)
+            if profile is not None and profile.is_linked:
+                viewer_profile = profile
+
+        # Pass the auth + linked-state signals through to the template so
+        # it can pick the right CTA copy for the personal half empty state
+        # ("sign in" vs. "link your PSN").
+        context['viewer_is_authenticated'] = self.request.user.is_authenticated
+        context['viewer_has_linked_profile'] = viewer_profile is not None
 
         # All module data lives under top-level context keys keyed by module
         # slug. Each module's template can render or skip independently.
