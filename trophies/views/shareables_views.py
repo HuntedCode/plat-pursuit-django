@@ -235,6 +235,15 @@ class MyChallengeSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Prof
         context['challenges_sections'] = challenges_sections
         context['has_challenges'] = any(s['challenges'] for s in challenges_sections)
 
+        # Theme picker grid for the shared color_grid_modal partial.
+        # Challenges aren't tied to a single game, so game art themes
+        # (which composite a specific game's artwork into the background)
+        # are excluded — same call shape as MyProfileCardView.
+        context['available_themes'] = get_available_themes_for_grid(
+            include_game_art=False,
+            grouped=True,
+        )
+
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'My Shareables', 'url': reverse_lazy('my_shareables')},

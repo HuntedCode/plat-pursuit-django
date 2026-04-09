@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {# Theme picker and rate-prompt modals expected by dashboard.js #}
-{% include 'partials/color_grid_modal.html' with available_themes='' %}
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
 {% include 'partials/rate_before_download_modal.html' %}
 {% include 'partials/theme_nudge_modal.html' %}
 {% endblock %}
