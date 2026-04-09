@@ -3579,13 +3579,13 @@ class DashboardConfig(models.Model):
     Per-user dashboard preferences: visible modules, ordering, and per-module settings.
 
     module_order: ordered list of module slugs (premium-only to customize).
-        ["trophy_summary", "active_challenges", "pursuit_activity", ...]
+        ["trophy_summary", "active_challenges", "recent_activity", ...]
 
     hidden_modules: slugs the user has toggled off (free users: max 3).
         ["community_engagement", "quick_links"]
 
     module_settings: per-module config overrides (premium-only).
-        {"games_in_progress": {"limit": 10}, "pursuit_activity": {"limit": 12}}
+        {"games_in_progress": {"limit": 10}, "recent_activity": {"limit": 12}}
     """
     profile = models.OneToOneField(
         Profile,
