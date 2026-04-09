@@ -61,13 +61,17 @@ The sub-nav is a thin pill-tab strip rendered below the main navbar (and ABOVE t
 ### Stacking order (top of viewport)
 
 ```
-[Main navbar — sticky]
-[Hub sub-nav — sticky on lg:+, inline on mobile]
+[Main navbar — NOT sticky, scrolls away with the page]
+[Hub sub-nav — sticky on lg:+ (z-40), inline on mobile]
 [Hotbar — inline, NOT sticky]
 [Page content]
 ```
 
-The sub-nav is *architectural* (where am I in the site?) and the hotbar is *situational* (what's happening with my account right now?). Architectural concerns sit above situational ones, mirroring GitHub's repo nav above repo-level alerts. The sub-nav being sticky means it stays accessible during long scrolls.
+When the user scrolls, the main navbar scrolls off-screen normally, the sub-nav strip stays pinned to the top of the viewport (on `lg:+`), and the hotbar scrolls with the page content below. The sub-nav becomes the only pinned chrome once you've scrolled past the navbar — which is the intended "where am I" affordance because the sub-nav tells you which hub you're in and which sub-page is active.
+
+The sub-nav is *architectural* (where am I in the site?) and the hotbar is *situational* (what's happening with my account right now?). Architectural concerns deserve the sticky treatment because they're load-bearing for navigation; situational concerns can scroll away because they're "current state of your account" info that the user only needs at glance-time, not during deep scrolling.
+
+The main navbar is **not** sticky on purpose. It's a tall element with the search bar, notification bell, avatar dropdown, and 3 hub buttons — pinning all of that to the viewport while the sub-nav also pins below it would eat ~120px of vertical space at all times. Letting the navbar scroll away and keeping only the slim ~40px sub-nav pinned strikes the right balance: navigation context stays visible, but most of the viewport is page content.
 
 The hotbar is intentionally non-sticky, both to keep vertical space free during long scrolls and to avoid double-stickiness fatigue. If the hotbar's contents become more interaction-heavy, this can be revisited.
 
@@ -277,7 +281,7 @@ The footer (`templates/partials/footer.html`) gets a 6-column refresh to match t
 
 - **Customization removal — verify the audit.** Before merging Phase 10b, manually verify that every customization touchpoint that existed in the old menu is reachable via the avatar dropdown's Settings link OR the dashboard's existing "Edit Layout" / theme controls. If anything is stranded, revive it as a Settings sub-page rather than re-adding the Customization menu item.
 
-- **Sticky sub-nav z-index conflicts.** The sub-nav strip is positioned `lg:sticky lg:top-16` (or wherever the main navbar ends). Verify it stacks correctly with the main navbar (which is also sticky), the hotbar (inline, NOT sticky), and any toast/modal overlays. Use established z-index tokens — don't invent new values inline.
+- **Sticky sub-nav z-index conflicts.** The sub-nav strip is positioned `lg:sticky lg:top-0 z-40`. The main navbar is NOT sticky (it scrolls away normally), and the hotbar is NOT sticky either (it sits in the main content flow). The sub-nav is the only sticky chrome at `top-0`, so z-40 is sufficient — there's nothing else to stack against. Toast/modal overlays use higher z values (z-50+) and intentionally sit above the sub-nav. **Do not** make the navbar or hotbar sticky without also re-tuning the sub-nav's `top-*` offset; the current state assumes the sub-nav pins to the very top of the viewport with no other pinned elements above it.
 
 - **Mobile sub-nav horizontal scroll affordance.** Without a visual cue (a fade-out gradient on the right edge), users may not realize there's more content to scroll to. Add a subtle right-edge gradient mask when the strip overflows, and ensure the active item auto-scrolls into view on page load.
 
