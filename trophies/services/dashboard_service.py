@@ -1982,7 +1982,12 @@ def provide_profile_card_preview(profile, settings=None):
         'theme': card_settings.card_theme or 'default',
         'is_premium': is_premium,
         'themes': themes,
-        'shareables_url': reverse('my_shareables') + '?tab=profile_card',
+        # Customize link goes to the dedicated Profile Card builder page
+        # introduced in piece 6c (the My Shareables landing-page restructure).
+        # Earlier this was '?tab=profile_card' against a tab system that no
+        # longer exists; the build now has a real /dashboard/shareables/
+        # profile-card/ URL.
+        'shareables_url': reverse('my_shareables_profile_card'),
     }
 
 

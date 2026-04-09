@@ -36,7 +36,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyShareablesView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -120,7 +120,12 @@ urlpatterns = [
     # Platinum Grid wizard lives nested inside Shareables since it generates
     # one of the shareable image types.
     path('dashboard/stats/', MyStatsView.as_view(), name='my_stats'),
+    # Shareables hub: landing page + dedicated sub-pages for each share type.
+    # See trophies/views/shareables_views.py for the per-view docstrings.
     path('dashboard/shareables/', MyShareablesView.as_view(), name='my_shareables'),
+    path('dashboard/shareables/platinums/', MyPlatinumSharesView.as_view(), name='my_shareables_platinums'),
+    path('dashboard/shareables/profile-card/', MyProfileCardView.as_view(), name='my_shareables_profile_card'),
+    path('dashboard/shareables/challenges/', MyChallengeSharesView.as_view(), name='my_shareables_challenges'),
     path('dashboard/shareables/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
 
     path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),

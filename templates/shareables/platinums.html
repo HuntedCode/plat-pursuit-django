@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static custom_filters %}
-{% block title %}My Shareables{% endblock %}
+{% block title %}Platinum Cards - My Shareables{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
@@ -9,32 +9,21 @@
 {# Page Header #}
 <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
     <div class="card-body p-3 md:p-4">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
                 <div class="flex items-center gap-2 flex-wrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
                     </svg>
-                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">My Shareables</h1>
+                    <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Platinum Cards</h1>
                     {% if total_platinums %}
                         <span class="badge badge-sm badge-ghost font-bold">{{ total_platinums }} platinum{{ total_platinums|pluralize }}</span>
                     {% endif %}
                 </div>
                 <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                    Create and share images of your platinum trophies.
+                    Pick any platinum trophy you've earned and generate a themed share image.
                 </p>
             </div>
-            <a href="{% url 'platinum_grid' %}"
-               class="btn btn-secondary btn-sm md:btn-md gap-2 shrink-0"
-               title="Build a shareable grid of your platinum trophies">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="7" height="7" rx="1"></rect>
-                    <rect x="14" y="3" width="7" height="7" rx="1"></rect>
-                    <rect x="3" y="14" width="7" height="7" rx="1"></rect>
-                    <rect x="14" y="14" width="7" height="7" rx="1"></rect>
-                </svg>
-                Platinum Grid
-            </a>
         </div>
     </div>
 </div>

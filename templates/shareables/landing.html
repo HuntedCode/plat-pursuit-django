@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+{% block title %}My Shareables{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% comment %}
+My Shareables landing page.
+
+A wayfinder grid that distributes users to the dedicated sub-pages for
+each share image type. Each card has icon + name + tagline + example
+image (or gradient fallback) + CTA button.
+
+The example images live at static/images/shareables/<slug>.png. The
+card uses CSS background-image with two layered values: the static
+PNG first, then a gradient as a fallback. If the PNG file doesn't
+exist (or fails to load), the gradient shows instead — no broken
+image icon, no JS error handling needed. Drop new asset PNGs into
+static/images/shareables/ to replace the placeholders.
+
+The landing itself queries no per-user data — sub-pages do the heavy
+lifting. This keeps the page fast and means new users with no
+platinums yet still see a useful "here's what's available" page
+instead of empty states for each share type.
+
+See docs/features/my-shareables.md for the design rationale.
+{% endcomment %}
+
+{% block content %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+{# Page Header #}
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        <div class="flex items-center gap-2 flex-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+            </svg>
+            <h1 class="text-xl md:text-2xl lg:text-3xl font-bold">My Shareables</h1>
+        </div>
+        <p class="text-sm md:text-base text-base-content/60 mt-1 max-w-2xl pr-1">
+            Generate share images of your trophy hunting accomplishments. Pick the type you want to create, customize it, and download.
+        </p>
+    </div>
+</div>
+
+{# Card Grid: 3-col on lg, 2-col on md, 1-col on mobile #}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+
+    {# ── 1. Platinum Cards ── #}
+    <a href="{% url 'my_shareables_platinums' %}"
+       class="group block card bg-base-200/90 border-2 border-base-300 hover:border-primary/50 shadow-lg shadow-neutral hover:shadow-primary/20 transition-all overflow-hidden">
+        <div class="card-image-wrapper aspect-video w-full bg-cover bg-center"
+             style="background-image: url('{% static 'images/shareables/landing-platinum-cards.png' %}'), linear-gradient(135deg, oklch(var(--p)) 0%, oklch(var(--s)) 100%);">
+            <div class="w-full h-full flex items-center justify-center bg-black/20 group-hover:bg-black/0 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 text-white/90 drop-shadow-lg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                </svg>
+            </div>
+        </div>
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-base md:text-lg font-bold text-primary">Platinum Cards</h2>
+            <p class="text-xs md:text-sm text-base-content/60 line-clamp-2 pr-1">
+                Generate a themed share image for any platinum trophy you've earned.
+            </p>
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-primary mt-1 group-hover:translate-x-0.5 transition-transform">
+                Browse Platinums
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </div>
+        </div>
+    </a>
+
+    {# ── 2. Platinum Grid ── #}
+    <a href="{% url 'platinum_grid' %}"
+       class="group block card bg-base-200/90 border-2 border-base-300 hover:border-secondary/50 shadow-lg shadow-neutral hover:shadow-secondary/20 transition-all overflow-hidden">
+        <div class="card-image-wrapper aspect-video w-full bg-cover bg-center"
+             style="background-image: url('{% static 'images/shareables/landing-platinum-grid.png' %}'), linear-gradient(135deg, oklch(var(--s)) 0%, oklch(var(--a)) 100%);">
+            <div class="w-full h-full flex items-center justify-center bg-black/20 group-hover:bg-black/0 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 text-white/90 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                    <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                </svg>
+            </div>
+        </div>
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-base md:text-lg font-bold text-secondary">Platinum Grid</h2>
+            <p class="text-xs md:text-sm text-base-content/60 line-clamp-2 pr-1">
+                Build a collage of your top platinum trophies in one share image.
+            </p>
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-secondary mt-1 group-hover:translate-x-0.5 transition-transform">
+                Open Wizard
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </div>
+        </div>
+    </a>
+
+    {# ── 3. Profile Card ── #}
+    <a href="{% url 'my_shareables_profile_card' %}"
+       class="group block card bg-base-200/90 border-2 border-base-300 hover:border-accent/50 shadow-lg shadow-neutral hover:shadow-accent/20 transition-all overflow-hidden">
+        <div class="card-image-wrapper aspect-video w-full bg-cover bg-center"
+             style="background-image: url('{% static 'images/shareables/landing-profile-card.png' %}'), linear-gradient(135deg, oklch(var(--a)) 0%, oklch(var(--p)) 100%);">
+            <div class="w-full h-full flex items-center justify-center bg-black/20 group-hover:bg-black/0 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 text-white/90 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+            </div>
+        </div>
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-base md:text-lg font-bold text-accent">Profile Card</h2>
+            <p class="text-xs md:text-sm text-base-content/60 line-clamp-2 pr-1">
+                Generate a share image showcasing your trophy profile, badges, and stats.
+            </p>
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-accent mt-1 group-hover:translate-x-0.5 transition-transform">
+                Build Card
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </div>
+        </div>
+    </a>
+
+    {# ── 4. Monthly Recap ── #}
+    <a href="{% url 'recap_index' %}"
+       class="group block card bg-base-200/90 border-2 border-base-300 hover:border-info/50 shadow-lg shadow-neutral hover:shadow-info/20 transition-all overflow-hidden">
+        <div class="card-image-wrapper aspect-video w-full bg-cover bg-center"
+             style="background-image: url('{% static 'images/shareables/landing-monthly-recap.png' %}'), linear-gradient(135deg, oklch(var(--in)) 0%, oklch(var(--s)) 100%);">
+            <div class="w-full h-full flex items-center justify-center bg-black/20 group-hover:bg-black/0 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 text-white/90 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+            </div>
+        </div>
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-base md:text-lg font-bold text-info">Monthly Recap</h2>
+            <p class="text-xs md:text-sm text-base-content/60 line-clamp-2 pr-1">
+                Year-in-review style summary card for any month you've been hunting.
+            </p>
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-info mt-1 group-hover:translate-x-0.5 transition-transform">
+                View Recap
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </div>
+        </div>
+    </a>
+
+    {# ── 5. Challenge Cards ── #}
+    <a href="{% url 'my_shareables_challenges' %}"
+       class="group block card bg-base-200/90 border-2 border-base-300 hover:border-success/50 shadow-lg shadow-neutral hover:shadow-success/20 transition-all overflow-hidden">
+        <div class="card-image-wrapper aspect-video w-full bg-cover bg-center"
+             style="background-image: url('{% static 'images/shareables/landing-challenge-cards.png' %}'), linear-gradient(135deg, oklch(var(--su)) 0%, oklch(var(--a)) 100%);">
+            <div class="w-full h-full flex items-center justify-center bg-black/20 group-hover:bg-black/0 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 text-white/90 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    <polyline points="16 6 12 2 8 6"></polyline>
+                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+            </div>
+        </div>
+        <div class="card-body p-3 md:p-4">
+            <h2 class="text-base md:text-lg font-bold text-success">Challenge Cards</h2>
+            <p class="text-xs md:text-sm text-base-content/60 line-clamp-2 pr-1">
+                Generate share images for your A-Z, Calendar, and Genre challenges.
+            </p>
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-success mt-1 group-hover:translate-x-0.5 transition-transform">
+                View Challenges
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </div>
+        </div>
+    </a>
+
+</div>
+
+{% endblock %}
