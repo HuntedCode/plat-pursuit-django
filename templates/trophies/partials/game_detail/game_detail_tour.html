@@ -1,0 +1,75 @@
+{% comment %}
+Game Detail coach-marks tour: a 5-step spotlight walk-through that dims the
+page and highlights individual UI sections with positioned tooltips. Teaches
+users to use community features (stats, flags, reviews, ratings, lists).
+
+Auto-triggers once on the first game detail page visit after the Welcome
+Tour has been completed. Re-triggerable via the "Page Guide" button.
+
+The overlay uses clip-path to cut a rectangular hole around the target
+element, so the target is visible through the dark overlay without any
+z-index manipulation. The tooltip is positioned by JS relative to the
+target's bounding rect.
+
+See docs/design/tutorial-system.md for design rationale.
+{% endcomment %}
+
+{# Dark overlay with clip-path cutout (JS manages the clip-path polygon) #}
+<div id="coach-overlay" class="coach-overlay" aria-hidden="true"></div>
+
+{# Tooltip (positioned by JS next to the target element) #}
+<div id="coach-tooltip" class="coach-tooltip" role="dialog" aria-label="Page guide">
+    <div class="coach-tooltip-inner">
+        {# Step icon + title #}
+        <div class="flex items-center gap-2 mb-2">
+            <div class="coach-tooltip-icon">
+                <svg id="coach-tooltip-svg" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                </svg>
+            </div>
+            <h3 id="coach-tooltip-title" class="text-sm font-bold"></h3>
+        </div>
+
+        {# Description #}
+        <p id="coach-tooltip-desc" class="text-xs text-base-content/70 mb-3 leading-relaxed"></p>
+
+        {# Controls #}
+        <div class="flex items-center justify-between relative">
+            <button type="button" id="coach-skip-btn"
+                    class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content"
+                    onclick="PlatPursuit.GameDetailTourManager.dismiss('skip')">
+                Skip
+            </button>
+
+            <span class="absolute left-1/2 -translate-x-1/2 text-[0.6rem] text-base-content/40 pointer-events-none" id="coach-step-counter"></span>
+
+            <div class="flex gap-1.5">
+                <button type="button" id="coach-prev-btn"
+                        class="btn btn-ghost btn-xs btn-circle invisible"
+                        aria-label="Previous step"
+                        onclick="PlatPursuit.GameDetailTourManager.prev()">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <button type="button" id="coach-next-btn"
+                        class="btn btn-primary btn-xs gap-1"
+                        onclick="PlatPursuit.GameDetailTourManager.next()">
+                    Next
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.PlatPursuit && window.PlatPursuit.GameDetailTourManager) {
+        var autoShow = {{ show_game_detail_tour|yesno:"true,false" }};
+        window.PlatPursuit.GameDetailTourManager.init(autoShow);
+    }
+});
+</script>

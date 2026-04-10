@@ -1010,6 +1010,14 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         track_page_view('game', game.id, self.request)
         context['view_count'] = game.view_count
 
+        # Game Detail Tour: auto-show once, only after Welcome Tour is done
+        if target_profile and getattr(target_profile, 'is_linked', False):
+            welcome_done = getattr(target_profile, 'tour_completed_at', None) is not None
+            game_tour_done = getattr(target_profile, 'game_detail_tour_completed_at', None) is not None
+            context['show_game_detail_tour'] = welcome_done and not game_tour_done
+        else:
+            context['show_game_detail_tour'] = False
+
         return context
 
 class GuideListView(ProfileHotbarMixin, ListView):

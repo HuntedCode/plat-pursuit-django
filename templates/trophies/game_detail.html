@@ -15,12 +15,12 @@
         </section>
 
     {# ── Community: Ratings + Roadmap (shared DLC tabs) ── #}
-    <div class="mt-4">
+    <div id="community-tabs-section" class="mt-4">
         {% include 'trophies/partials/game_detail/community_tabs_section.html' %}
     </div>
 
     {# ── Reviews (separate, links to Review Hub) ── #}
-    <div class="mt-3">
+    <div id="reviews-section" class="mt-3">
         {% include 'trophies/partials/game_detail/reviews_section.html' %}
     </div>
 
@@ -167,5 +167,7 @@
     {% endif %}
     {% if user.is_authenticated and user.profile and user.profile.is_linked %}
     <script src="{% static 'js/game-flag.js' %}"></script>
+    <script src="{% static 'js/game-detail-tour.js' %}"></script>
+    {% include 'trophies/partials/game_detail/game_detail_tour.html' %}
     {% endif %}
 {% endblock %}

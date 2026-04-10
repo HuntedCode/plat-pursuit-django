@@ -64,7 +64,7 @@ from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimSta
 from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, DashboardPreviewToggleView, StatsPageDataView
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
-from .tutorial_views import WelcomeTourDismissAPIView
+from .tutorial_views import WelcomeTourDismissAPIView, GameDetailTourDismissAPIView
 from .game_player_views import GamePlayersAPIView
 from .game_flag_views import GameFlagView
 from .mobile_profile_views import MobileProfileView, MobileMyProfileView
@@ -292,6 +292,7 @@ urlpatterns = [
 
     # Tutorial endpoints
     path('tutorial/welcome/dismiss/', WelcomeTourDismissAPIView.as_view(), name='tutorial-welcome-dismiss'),
+    path('tutorial/game-detail/dismiss/', GameDetailTourDismissAPIView.as_view(), name='tutorial-game-detail-dismiss'),
 
     # Profile Card endpoints
     path('profile-card/html/', ProfileCardHTMLView.as_view(), name='profile-card-html'),

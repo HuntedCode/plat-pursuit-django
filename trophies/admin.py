@@ -31,6 +31,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "total_trophies",
         "total_unearned",
         "tour_completed_at",
+        "game_detail_tour_completed_at",
     )
     list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium",)
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
@@ -47,7 +48,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "is_linked", "psn_history_public", "guidelines_agreed", "tour_completed_at", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "is_linked", "psn_history_public", "guidelines_agreed", "tour_completed_at", "game_detail_tour_completed_at", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
         ),
         (
             "Profile Details",

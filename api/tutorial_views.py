@@ -46,3 +46,35 @@ class WelcomeTourDismissAPIView(APIView):
         track_site_event(f'welcome_tour_{action}', f'step_{last_step}', request)
 
         return Response({'success': True})
+
+
+class GameDetailTourDismissAPIView(APIView):
+    """
+    POST /api/v1/tutorial/game-detail/dismiss/
+
+    Marks the Game Detail coach-marks tour as completed or skipped for
+    the authenticated user's profile.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication]
+
+    def post(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response(
+                {'error': 'No linked profile.'},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        action = request.data.get('action', 'complete')
+        if action not in ('complete', 'skip'):
+            action = 'complete'
+
+        last_step = request.data.get('last_step', 5)
+
+        profile.game_detail_tour_completed_at = timezone.now()
+        profile.save(update_fields=['game_detail_tour_completed_at'])
+
+        track_site_event(f'game_detail_tour_{action}', f'step_{last_step}', request)
+
+        return Response({'success': True})

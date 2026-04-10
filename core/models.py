@@ -142,6 +142,8 @@ class SiteEvent(models.Model):
         ('sync_search', 'Sync Search'),
         ('welcome_tour_complete', 'Welcome Tour Completed'),
         ('welcome_tour_skip', 'Welcome Tour Skipped'),
+        ('game_detail_tour_complete', 'Game Detail Tour Completed'),
+        ('game_detail_tour_skip', 'Game Detail Tour Skipped'),
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES, db_index=True)
