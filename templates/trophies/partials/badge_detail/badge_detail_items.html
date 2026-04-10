@@ -9,9 +9,11 @@
     {# Game Cover Image #}
     <div class="relative aspect-square overflow-hidden bg-base-300">
         {% if game.title_image and not game.force_title_icon %}
-            <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+            <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+        {% elif game.concept.cover_url %}
+            <img src="{{ game.concept.cover_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300" loading="lazy" />
         {% else %}
-            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+            <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300" loading="lazy" />
         {% endif %}
 
         {# Completion overlay #}

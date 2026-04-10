@@ -26,7 +26,9 @@
             <a href="{% url 'game_detail' game.np_communication_id %}" class="shrink-0">
                 <figure class="w-14 h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border border-base-content/5 group-hover:border-{{ game|platform_color }} transition-colors duration-200">
                     {% if game.title_image and not game.force_title_icon %}
-                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
+                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top" loading="lazy" />
+                    {% elif game.concept.cover_url %}
+                        <img src="{{ game.concept.cover_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top" loading="lazy" />
                     {% else %}
                         <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
                     {% endif %}

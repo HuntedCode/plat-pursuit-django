@@ -12,7 +12,10 @@
         <figure class="relative aspect-square bg-base-300/20 rounded-t-lg overflow-hidden">
             {% if game.title_image and not game.force_title_icon %}
                 <img src="{{ game.title_image }}" alt="{{ game.title_name }}"
-                     class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+                     class="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+            {% elif game.concept.cover_url %}
+                <img src="{{ game.concept.cover_url }}" alt="{{ game.title_name }}"
+                     class="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105" loading="lazy" />
             {% else %}
                 <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}"
                      class="w-full h-full object-contain p-3" loading="lazy" />
