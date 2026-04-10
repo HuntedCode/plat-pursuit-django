@@ -302,6 +302,23 @@ def format_date(value, arg=None):
     return formatted
 
 @register.filter
+def compact_number(value):
+    """Format large numbers compactly: 1234 -> 1.2k, 25000 -> 25k, 1500000 -> 1.5M."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return value
+    if n < 1000:
+        return str(n)
+    elif n < 1000000:
+        result = f"{n / 1000:.1f}k"
+        return result.replace('.0k', 'k')
+    else:
+        result = f"{n / 1000000:.1f}M"
+        return result.replace('.0M', 'M')
+
+
+@register.filter
 def sync_status_display(value):
     if value is None:
         return ''

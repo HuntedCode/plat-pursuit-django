@@ -236,6 +236,7 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             'profile': profile,
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
+                {'text': 'My Pursuit', 'url': reverse_lazy('my_pursuit_hub')},
                 {'text': 'My Titles'},
             ],
         })
