@@ -135,6 +135,7 @@ class Profile(models.Model):
     guidelines_agreed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user agreed to community guidelines.")
     tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Welcome Tour.")
     game_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Game Detail Tour.")
+    badge_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Badge Detail Tour.")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
 
     objects = ProfileManager()

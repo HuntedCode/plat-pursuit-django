@@ -759,6 +759,14 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     show_fundraiser_cta = True
         context['show_fundraiser_cta'] = show_fundraiser_cta
 
+        # Badge Detail Tour: auto-show once, only after Welcome Tour is done
+        if target_profile and getattr(target_profile, 'is_linked', False):
+            welcome_done = getattr(target_profile, 'tour_completed_at', None) is not None
+            badge_tour_done = getattr(target_profile, 'badge_detail_tour_completed_at', None) is not None
+            context['show_badge_detail_tour'] = welcome_done and not badge_tour_done
+        else:
+            context['show_badge_detail_tour'] = False
+
         return context
 
 

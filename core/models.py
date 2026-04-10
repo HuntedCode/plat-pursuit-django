@@ -144,6 +144,8 @@ class SiteEvent(models.Model):
         ('welcome_tour_skip', 'Welcome Tour Skipped'),
         ('game_detail_tour_complete', 'Game Detail Tour Completed'),
         ('game_detail_tour_skip', 'Game Detail Tour Skipped'),
+        ('badge_detail_tour_complete', 'Badge Detail Tour Completed'),
+        ('badge_detail_tour_skip', 'Badge Detail Tour Skipped'),
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES, db_index=True)

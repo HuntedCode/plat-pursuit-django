@@ -1,0 +1,62 @@
+{% comment %}
+Badge Detail coach-marks tour: a 4-step spotlight walk-through that teaches
+users how badge series work (tiers, stages, games, XP, leaderboards).
+
+Reuses the same .coach-overlay / .coach-tooltip CSS as the game detail tour.
+Element IDs are prefixed with "badge-coach-" to avoid collisions.
+{% endcomment %}
+
+<div id="badge-coach-overlay" class="coach-overlay" aria-hidden="true"></div>
+
+<div id="badge-coach-tooltip" class="coach-tooltip" role="dialog" aria-label="Page guide">
+    <div class="coach-tooltip-inner">
+        <div class="flex items-center gap-2 mb-2">
+            <div class="coach-tooltip-icon">
+                <svg id="badge-coach-svg" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                </svg>
+            </div>
+            <h3 id="badge-coach-title" class="text-sm font-bold"></h3>
+        </div>
+
+        <p id="badge-coach-desc" class="text-xs text-base-content/70 mb-3 leading-relaxed"></p>
+
+        <div class="flex items-center justify-between relative">
+            <button type="button" id="badge-coach-skip"
+                    class="btn btn-ghost btn-xs text-base-content/50 hover:text-base-content"
+                    onclick="PlatPursuit.BadgeDetailTourManager.dismiss('skip')">
+                Skip
+            </button>
+
+            <span class="absolute left-1/2 -translate-x-1/2 text-[0.6rem] text-base-content/40 pointer-events-none" id="badge-coach-counter"></span>
+
+            <div class="flex gap-1.5">
+                <button type="button" id="badge-coach-prev"
+                        class="btn btn-ghost btn-xs btn-circle invisible"
+                        aria-label="Previous step"
+                        onclick="PlatPursuit.BadgeDetailTourManager.prev()">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <button type="button" id="badge-coach-next"
+                        class="btn btn-primary btn-xs gap-1"
+                        onclick="PlatPursuit.BadgeDetailTourManager.next()">
+                    Next
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.PlatPursuit && window.PlatPursuit.BadgeDetailTourManager) {
+        var autoShow = {{ show_badge_detail_tour|yesno:"true,false" }};
+        window.PlatPursuit.BadgeDetailTourManager.init(autoShow);
+    }
+});
+</script>

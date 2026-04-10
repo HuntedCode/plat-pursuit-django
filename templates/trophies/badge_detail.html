@@ -38,7 +38,7 @@
     </div>
 
     {# Leaderboard #}
-    <div class="mt-3">
+    <div id="badge-leaderboard-section" class="mt-3">
         {% include 'trophies/partials/badge_detail/badge_leaderboard_section.html' %}
     </div>
 
@@ -330,4 +330,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 })();
 </script>
+{% if user.is_authenticated and user.profile and user.profile.is_linked %}
+<script src="{% static 'js/badge-detail-tour.js' %}"></script>
+{% include 'trophies/partials/badge_detail/badge_detail_tour.html' %}
+{% endif %}
 {% endblock %}
