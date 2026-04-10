@@ -140,6 +140,12 @@ class GameDetailTourManager {
             window.removeEventListener('resize', this._resizeHandler);
             this._resizeHandler = null;
         }
+        if (this._keydownHandler) {
+            document.removeEventListener('keydown', this._keydownHandler);
+        }
+        if (this._overlayClickHandler && this.overlay) {
+            this.overlay.removeEventListener('click', this._overlayClickHandler);
+        }
     }
 
     /**
@@ -189,17 +195,20 @@ class GameDetailTourManager {
      * Show a specific step: scroll to target, position overlay cutout, show tooltip.
      */
     _showStep(stepIndex) {
-        const step = COACH_STEPS[stepIndex];
+        let step = COACH_STEPS[stepIndex];
         if (!step) return;
 
-        const target = document.querySelector(step.target);
+        let target = document.querySelector(step.target);
+        // Skip missing targets (e.g. quick-add not rendered for anonymous).
+        // Loop instead of recurse to avoid stack growth if multiple
+        // consecutive targets are absent.
+        while (!target && stepIndex < this.totalSteps - 1) {
+            stepIndex++;
+            step = COACH_STEPS[stepIndex];
+            target = document.querySelector(step.target);
+        }
         if (!target) {
-            // Skip missing targets (e.g. quick-add not rendered for anonymous)
-            if (stepIndex < this.totalSteps - 1) {
-                this._showStep(stepIndex + 1);
-            } else {
-                this.dismiss('complete');
-            }
+            this.dismiss('complete');
             return;
         }
 
@@ -364,7 +373,7 @@ class GameDetailTourManager {
      * Keyboard navigation.
      */
     _setupKeyboardHandling() {
-        document.addEventListener('keydown', (e) => {
+        this._keydownHandler = (e) => {
             if (!this.isOpen) return;
 
             switch (e.key) {
@@ -381,12 +390,14 @@ class GameDetailTourManager {
                     this.dismiss('skip');
                     break;
             }
-        });
+        };
+        document.addEventListener('keydown', this._keydownHandler);
 
         // Clicking the overlay (outside the cutout) dismisses
-        this.overlay.addEventListener('click', () => {
+        this._overlayClickHandler = () => {
             if (this.isOpen) this.dismiss('skip');
-        });
+        };
+        this.overlay.addEventListener('click', this._overlayClickHandler);
     }
 }
 
