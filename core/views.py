@@ -205,7 +205,10 @@ class HomeView(ProfileHotbarMixin, TemplateView):
 
         if state == 'synced':
             # Render the dashboard exactly as DashboardView would.
-            context.update(build_dashboard_context(self.request, self.request.user.profile))
+            profile = self.request.user.profile
+            context.update(build_dashboard_context(self.request, profile))
+            # Welcome Tour: auto-show once for users who haven't completed it
+            context['show_welcome_tour'] = profile.tour_completed_at is None
             return context
 
         # All non-dashboard states share the cached site heartbeat for their

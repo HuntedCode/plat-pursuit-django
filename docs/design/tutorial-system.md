@@ -2,7 +2,7 @@
 
 A planned post-IA-redesign feature: a brief Welcome Tour that introduces new users to PlatPursuit's four hubs (Dashboard, Browse, Community, My Pursuit) on first PSN-link. The goal is to make the hub-of-hubs IA accessible to new users without forcing power users to read tooltips on every page.
 
-> **Status**: design only. Not implemented. The IA collapse it complements landed in the Community Hub initiative; this tutorial system is the planned next branch after that initiative merges.
+> **Status**: Implemented. Shipped on the `feature/welcome-tour` branch. See the Key Files section below for the implementation locations.
 
 ## Why this exists
 
@@ -84,14 +84,30 @@ Future expansions worth keeping in mind, but explicitly OUT OF SCOPE for v1:
 
 Each of these is a real improvement, but each is also its own scope of work. Ship the simple Welcome Tour first; revisit when we have actual usage data from the post-IA launch.
 
-## Open Questions
+## Resolved Questions
 
-- **Tour copy**: needs a copywriting pass. The pitch lines above are placeholders.
-- **Modal vs full-screen**: the tour could be a small centered modal (less intrusive) or a full-screen overlay (more cinematic). I lean modal — full-screen feels heavyweight for a 4-step tour.
-- **Animation/transitions**: minimal? Slide between steps? Fade? Should be cheap to build either way.
-- **Mobile experience**: the sub-nav strip is the main thing the tour teaches, and the strip is fine on mobile. The tour modal needs a mobile-friendly layout but otherwise works the same.
-- **Analytics**: do we want to track who completes the tour vs skips? Would inform future iteration but adds scope. Probably yes — we already have `track_page_view` infrastructure that could be extended.
-- **A/B variants**: probably not for v1. Ship one good version, measure, iterate.
+- **Tour copy**: drafted during implementation. Each step has a title, pitch, and 3-4 feature cards.
+- **Modal vs full-screen**: modal (`max-w-3xl`). Centered, with backdrop blur.
+- **Animation/transitions**: slide transitions between steps (translateX + opacity, 300ms), stagger-in for feature cards (60ms offset), glow pulse on hub icons (2.5s infinite).
+- **Mobile experience**: feature cards stack to 1-column on `<md`. Sub-nav preview wraps. Modal responsive via daisyUI.
+- **Analytics**: yes. `SiteEvent` tracks `welcome_tour_complete` and `welcome_tour_skip` with the last step reached.
+- **A/B variants**: not in v1.
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `trophies/models.py` | `Profile.tour_completed_at` field |
+| `trophies/migrations/0189_add_tour_completed_at.py` | Schema migration |
+| `templates/partials/welcome_tour_modal.html` | Tour modal template (4 steps) |
+| `static/js/welcome-tour.js` | `WelcomeTourManager` class |
+| `static/css/input.css` | Tour-specific styles (search for "Welcome Tour") |
+| `api/tutorial_views.py` | `WelcomeTourDismissAPIView` |
+| `api/urls.py` | `POST /api/v1/tutorial/welcome/dismiss/` |
+| `core/views.py` | `show_welcome_tour` context injection in `HomeView` |
+| `templates/base.html` | Modal include + JS load |
+| `templates/partials/navbar.html` | "Replay Tour" in avatar dropdown |
+| `core/models.py` | `SiteEvent` choices for analytics |
 
 ## Related Docs
 

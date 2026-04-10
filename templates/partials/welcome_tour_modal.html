@@ -1,0 +1,432 @@
+{% comment %}
+Welcome Tour modal: a 4-step carousel introducing PlatPursuit's hub-of-hubs
+navigation. Auto-shows once on first dashboard load after PSN link + sync,
+then only re-appears via the avatar dropdown "Replay Tour" button.
+
+Included in base.html for all authenticated+linked users so the re-trigger
+path always has the modal in the DOM. The show_welcome_tour context var
+tells JS whether to auto-open on page load.
+
+Each step has two sections:
+  1. A "navigation path" showing the navbar buttons with the current hub
+     highlighted, flowing into the sub-nav strip. This directly teaches
+     users WHERE to find things in the real UI.
+  2. Feature preview cards showing WHAT they'll find there.
+
+See docs/design/tutorial-system.md for design rationale.
+{% endcomment %}
+
+<dialog id="welcome-tour-modal" class="modal" data-auto-show="{{ show_welcome_tour|yesno:'true,false' }}">
+    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300 shadow-xl p-0 overflow-hidden tour-modal-box">
+        {# Close button #}
+        <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3 z-10 text-base-content/60 hover:text-base-content"
+                onclick="PlatPursuit.WelcomeTourManager.dismiss('skip')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+
+        {# ================================================================ #}
+        {# Step 1: Dashboard (Primary / Cyan)                               #}
+        {# ================================================================ #}
+        <div class="tour-step" data-step="1" data-accent="var(--color-primary)">
+            <div class="p-5 md:p-8">
+                {# Hub icon + title #}
+                <div class="text-center mb-5">
+                    <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-primary)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold mb-1">Your Trophy Hunting HQ</h2>
+                    <p class="text-sm text-base-content/50 italic pr-1 mb-3">Everything about your journey, all in one place.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">The Dashboard is your personal cockpit. Check your trophy stats, create shareable images of your platinums, and relive each month in your Wrapped-style Monthly Recap.</p>
+                </div>
+
+                {# Navigation path: navbar -> sub-nav #}
+                <div class="tour-nav-path mb-5" style="--path-accent: var(--color-primary)">
+                    <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">How to get here</p>
+                    {# Navbar mockup #}
+                    <div class="tour-navbar-mockup mb-1">
+                        <span class="tour-navbar-btn active">Dashboard</span>
+                        <span class="tour-navbar-btn">Browse</span>
+                        <span class="tour-navbar-btn">Community</span>
+                        <span class="tour-navbar-btn">My Pursuit</span>
+                    </div>
+                    {# Arrow connector #}
+                    <div class="flex justify-center my-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7l7 7 7-7"/>
+                        </svg>
+                    </div>
+                    {# Sub-nav strip mockup #}
+                    <div class="tour-subnav-preview" style="--nav-accent: var(--color-primary)">
+                        <span class="tour-subnav-item active">Dashboard</span>
+                        <span class="tour-subnav-item">My Stats</span>
+                        <span class="tour-subnav-item">Shareables</span>
+                        <span class="tour-subnav-item">Recap</span>
+                    </div>
+                </div>
+
+                {# Feature cards: what you'll find #}
+                <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">What you'll find</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div class="tour-feature-card" style="--card-accent: var(--color-primary)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">My Stats</div>
+                            <div class="text-xs text-base-content/50">120+ stats across your entire library</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-primary)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">My Shareables</div>
+                            <div class="text-xs text-base-content/50">Platinum cards, grids, and profile cards</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-primary)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Monthly Recap</div>
+                            <div class="text-xs text-base-content/50">Your month in trophies, Wrapped-style</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Step 2: Browse (Accent / Orange)                                 #}
+        {# ================================================================ #}
+        <div class="tour-step hidden" data-step="2" data-accent="var(--color-accent)">
+            <div class="p-5 md:p-8">
+                <div class="text-center mb-5">
+                    <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-accent)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold mb-1">Find Your Next Platinum</h2>
+                    <p class="text-sm text-base-content/50 italic pr-1 mb-3">Thousands of games with advanced filters and detailed trophy data.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">Browse is your discovery hub. Filter games by genre, platform, difficulty, and more. Dive into trophy lists, explore what your favorite studios have made, and find hidden gems.</p>
+                </div>
+
+                <div class="tour-nav-path mb-5" style="--path-accent: var(--color-accent)">
+                    <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">How to get here</p>
+                    <div class="tour-navbar-mockup mb-1">
+                        <span class="tour-navbar-btn">Dashboard</span>
+                        <span class="tour-navbar-btn active" style="--path-accent: var(--color-accent)">Browse</span>
+                        <span class="tour-navbar-btn">Community</span>
+                        <span class="tour-navbar-btn">My Pursuit</span>
+                    </div>
+                    <div class="flex justify-center my-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7l7 7 7-7"/>
+                        </svg>
+                    </div>
+                    <div class="tour-subnav-preview" style="--nav-accent: var(--color-accent)">
+                        <span class="tour-subnav-item active">Games</span>
+                        <span class="tour-subnav-item">Trophies</span>
+                        <span class="tour-subnav-item">Companies</span>
+                        <span class="tour-subnav-item">Genres</span>
+                        <span class="tour-subnav-item hidden md:inline-flex">Flagged</span>
+                    </div>
+                </div>
+
+                <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">What you'll find</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="6" y1="11" x2="10" y2="11"/><line x1="8" y1="9" x2="8" y2="13"/><line x1="15" y1="12" x2="15.01" y2="12"/><line x1="18" y1="10" x2="18.01" y2="10"/>
+                                <path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Games</div>
+                            <div class="text-xs text-base-content/50">Browse and discover new titles</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/>
+                                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Trophies</div>
+                            <div class="text-xs text-base-content/50">Search every PlayStation trophy</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Companies</div>
+                            <div class="text-xs text-base-content/50">Games by your favorite studios</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Flagged Games</div>
+                            <div class="text-xs text-base-content/50">Shovelware, delisted, VR, and buggy trophies</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Step 3: Community (Success / Green)                              #}
+        {# ================================================================ #}
+        <div class="tour-step hidden" data-step="3" data-accent="var(--color-success)">
+            <div class="p-5 md:p-8">
+                <div class="text-center mb-5">
+                    <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-success)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold mb-1">Hunt Together</h2>
+                    <p class="text-sm text-base-content/50 italic pr-1 mb-3">Reviews, challenges, curated lists, leaderboards, and a Discord full of hunters.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">Community is where the hunters gather. Read and write game reviews, take on A-Z and calendar challenges, curate lists of your favorites, and compete on the leaderboards.</p>
+                </div>
+
+                <div class="tour-nav-path mb-5" style="--path-accent: var(--color-success)">
+                    <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">How to get here</p>
+                    <div class="tour-navbar-mockup mb-1">
+                        <span class="tour-navbar-btn">Dashboard</span>
+                        <span class="tour-navbar-btn">Browse</span>
+                        <span class="tour-navbar-btn active" style="--path-accent: var(--color-success)">Community</span>
+                        <span class="tour-navbar-btn">My Pursuit</span>
+                    </div>
+                    <div class="flex justify-center my-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7l7 7 7-7"/>
+                        </svg>
+                    </div>
+                    <div class="tour-subnav-preview" style="--nav-accent: var(--color-success)">
+                        <span class="tour-subnav-item active">Hub</span>
+                        <span class="tour-subnav-item">Profiles</span>
+                        <span class="tour-subnav-item">Reviews</span>
+                        <span class="tour-subnav-item">Challenges</span>
+                        <span class="tour-subnav-item hidden md:inline-flex">Lists</span>
+                        <span class="tour-subnav-item hidden md:inline-flex">Leaderboards</span>
+                    </div>
+                </div>
+
+                <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">What you'll find</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <div class="tour-feature-card" style="--card-accent: var(--color-success)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Reviews</div>
+                            <div class="text-xs text-base-content/50">Rate games and read hunter opinions</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-success)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Challenges</div>
+                            <div class="text-xs text-base-content/50">A-Z, Calendar, and Genre challenges</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-success)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Lists</div>
+                            <div class="text-xs text-base-content/50">Community-curated game collections</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-success)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Leaderboards</div>
+                            <div class="text-xs text-base-content/50">Climb the ranks with every badge</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Step 4: My Pursuit (Secondary / Purple)                          #}
+        {# ================================================================ #}
+        <div class="tour-step hidden" data-step="4" data-accent="var(--color-secondary)">
+            <div class="p-5 md:p-8">
+                <div class="text-center mb-5">
+                    <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-secondary)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/>
+                            <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                            <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                            <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold mb-1">Your Trophy Hunting Identity</h2>
+                    <p class="text-sm text-base-content/50 italic pr-1 mb-3">Every platinum you earn progresses your badges, milestones, and titles.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">My Pursuit tracks your growth as a hunter. Complete badge challenges based on your trophy hunting activity, hit milestone counts, and unlock titles that show off your specialties to the community.</p>
+                </div>
+
+                <div class="tour-nav-path mb-5" style="--path-accent: var(--color-secondary)">
+                    <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">How to get here</p>
+                    <div class="tour-navbar-mockup mb-1">
+                        <span class="tour-navbar-btn">Dashboard</span>
+                        <span class="tour-navbar-btn">Browse</span>
+                        <span class="tour-navbar-btn">Community</span>
+                        <span class="tour-navbar-btn active" style="--path-accent: var(--color-secondary)">My Pursuit</span>
+                    </div>
+                    <div class="flex justify-center my-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7l7 7 7-7"/>
+                        </svg>
+                    </div>
+                    <div class="tour-subnav-preview" style="--nav-accent: var(--color-secondary)">
+                        <span class="tour-subnav-item active">Badges</span>
+                        <span class="tour-subnav-item">Milestones</span>
+                        <span class="tour-subnav-item">Titles</span>
+                    </div>
+                </div>
+
+                <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">What you'll find</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div class="tour-feature-card" style="--card-accent: var(--color-secondary)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Badges</div>
+                            <div class="text-xs text-base-content/50">Custom challenges earned by trophy hunting</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-secondary)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Milestones</div>
+                            <div class="text-xs text-base-content/50">Hit milestone counts and get recognized</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-secondary)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Titles</div>
+                            <div class="text-xs text-base-content/50">Unlock titles that show off your specialties</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Navigation controls (shared across all steps)                    #}
+        {# ================================================================ #}
+        <div class="border-t border-base-300 bg-base-200/80 px-5 md:px-8 py-4">
+            {# Progress dots #}
+            <div class="flex justify-center gap-2 mb-4" id="tour-progress-dots">
+                <button type="button" class="tour-dot active" data-dot="1" aria-label="Go to step 1" onclick="PlatPursuit.WelcomeTourManager.goToStep(1)"></button>
+                <button type="button" class="tour-dot" data-dot="2" aria-label="Go to step 2" onclick="PlatPursuit.WelcomeTourManager.goToStep(2)"></button>
+                <button type="button" class="tour-dot" data-dot="3" aria-label="Go to step 3" onclick="PlatPursuit.WelcomeTourManager.goToStep(3)"></button>
+                <button type="button" class="tour-dot" data-dot="4" aria-label="Go to step 4" onclick="PlatPursuit.WelcomeTourManager.goToStep(4)"></button>
+            </div>
+
+            {# Step counter + buttons #}
+            <div class="flex items-center justify-between relative">
+                <button type="button" id="tour-skip-btn"
+                        class="btn btn-ghost btn-sm text-base-content/50 hover:text-base-content"
+                        onclick="PlatPursuit.WelcomeTourManager.dismiss('skip')">
+                    Skip
+                </button>
+
+                {# Absolute-centered counter: immune to layout shifts from buttons #}
+                <span class="absolute left-1/2 -translate-x-1/2 text-xs text-base-content/40 pointer-events-none" id="tour-step-counter">Step 1 of 4</span>
+
+                <div class="flex gap-2">
+                    <button type="button" id="tour-prev-btn"
+                            class="btn btn-ghost btn-sm btn-circle invisible"
+                            aria-label="Previous step"
+                            onclick="PlatPursuit.WelcomeTourManager.prev()">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                        </svg>
+                    </button>
+                    <button type="button" id="tour-next-btn"
+                            class="btn btn-primary btn-sm gap-1"
+                            onclick="PlatPursuit.WelcomeTourManager.next()">
+                        Next
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Backdrop: clicking anywhere dismisses the tour.                         #}
+    {# The form method="dialog" closes the native dialog; the close event      #}
+    {# handler in WelcomeTourManager persists the dismissal via the API.        #}
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('welcome-tour-modal');
+    if (modal && window.PlatPursuit && window.PlatPursuit.WelcomeTourManager) {
+        var autoShow = modal.dataset.autoShow === 'true';
+        window.PlatPursuit.WelcomeTourManager.init(autoShow);
+    }
+});
+</script>

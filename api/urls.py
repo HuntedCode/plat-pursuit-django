@@ -64,6 +64,7 @@ from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimSta
 from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, DashboardPreviewToggleView, StatsPageDataView
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
+from .tutorial_views import WelcomeTourDismissAPIView
 from .game_player_views import GamePlayersAPIView
 from .game_flag_views import GameFlagView
 from .mobile_profile_views import MobileProfileView, MobileMyProfileView
@@ -288,6 +289,9 @@ urlpatterns = [
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),
     path('user/quick-settings/', UpdateQuickSettingsAPIView.as_view(), name='user-quick-settings'),
+
+    # Tutorial endpoints
+    path('tutorial/welcome/dismiss/', WelcomeTourDismissAPIView.as_view(), name='tutorial-welcome-dismiss'),
 
     # Profile Card endpoints
     path('profile-card/html/', ProfileCardHTMLView.as_view(), name='profile-card-html'),

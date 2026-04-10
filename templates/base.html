@@ -154,6 +154,11 @@
     <!-- Unsaved Changes Modal (shared across pages) -->
     {% include 'partials/unsaved_changes_modal.html' %}
 
+    <!-- Welcome Tour Modal (authenticated + linked users only) -->
+    {% if user.is_authenticated and user.profile and user.profile.is_linked %}
+        {% include 'partials/welcome_tour_modal.html' %}
+    {% endif %}
+
     <!-- Load shared utilities first -->
     <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
     <script src="{% static 'js/vendor/Sortable.min.js' %}"></script>
@@ -161,6 +166,7 @@
     <script src="{% static 'js/celebrations.js' %}"></script>
     <script src="{% static 'js/notifications.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>
+    <script src="{% static 'js/welcome-tour.js' %}"></script>
     <script src="{% static 'js/easter-eggs.js' %}"></script>
     {% block js_scripts %}{% endblock %}
   </body>

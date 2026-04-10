@@ -160,6 +160,13 @@
                     {% endif %}
                     <div class="divider my-0"></div>
                     <li><a href="{% url 'settings' %}">Settings</a></li>
+                    {% if user.profile and user.profile.is_linked %}
+                        <li>
+                            <button type="button" onclick="if(window.PlatPursuit?.WelcomeTourManager?.open) PlatPursuit.WelcomeTourManager.open();">
+                                Welcome Tour
+                            </button>
+                        </li>
+                    {% endif %}
                     {% if user.is_staff %}
                         <li>
                             <a href="{% url 'comment_moderation' %}" class="flex items-center">

@@ -140,6 +140,8 @@ class SiteEvent(models.Model):
         ('challenge_complete', 'Challenge Completed'),
         ('easter_egg', 'Easter Egg'),
         ('sync_search', 'Sync Search'),
+        ('welcome_tour_complete', 'Welcome Tour Completed'),
+        ('welcome_tour_skip', 'Welcome Tour Skipped'),
     ]
 
     event_type = models.CharField(max_length=30, choices=EVENT_TYPE_CHOICES, db_index=True)
