@@ -26,7 +26,7 @@ The 5 sub-pages and their purposes:
 |---|---|---|
 | **Platinum Cards** | `/dashboard/shareables/platinums/` | Browse every platinum trophy you've earned, click any one to generate a themed share image. The original "My Shareables" experience before the landing-page restructure. |
 | **Platinum Grid** | `/dashboard/shareables/platinum-grid/` | Multi-platinum collage wizard. Pick platinums and a theme, generate a single combined image. |
-| **Profile Card** | `/dashboard/shareables/profile-card/` | Generate a share image showcasing your trophy profile, badges, and stats. Theme picker is premium-gated. |
+| **Profile Card** | `/dashboard/shareables/profile-card/` | Generate a share image showcasing your trophy profile, badges, and stats. All users have access to the full theme picker. |
 | **Monthly Recap** | `/dashboard/recap/` | Spotify-Wrapped style summary card for any month you've been hunting. (Lives in the recap feature, not under shareables, but the My Shareables landing card still surfaces it.) |
 | **Challenge Cards** | `/dashboard/shareables/challenges/` | Generate share images for your A-Z, Calendar, and Genre challenges. Lists all your non-deleted challenges grouped by type with inline previews and download buttons. |
 

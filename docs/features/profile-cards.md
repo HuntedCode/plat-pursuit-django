@@ -111,7 +111,7 @@ JS init: `_initProfileCardPreview()` in `static/js/dashboard.js` (registered via
 
 - **Social card**: Auth required (IsAuthenticated). Rate limited per user.
 - **Forum sig**: Public (no auth). Rate limited per IP (120/min). Only serves files if `public_sig_enabled=True`.
-- **Theme customization**: Free users get default theme. Premium users get full theme selection.
+- **Theme customization**: All authenticated users have access to the full theme picker (not premium-gated).
 - **Sig URL security**: UUID tokens (non-enumerable). Users can regenerate to invalidate old URLs.
 
 ## Caching Strategy

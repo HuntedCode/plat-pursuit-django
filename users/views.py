@@ -252,7 +252,11 @@ def subscribe(request):
         {'name': 'Machine Hunter', 'css': clean(GRADIENT_THEMES['machineHunter']['background'])},
         {'name': 'Cosmic Nebula', 'css': clean(GRADIENT_THEMES['cosmicNebula']['background'])},
         {'name': 'PlayStation Blue', 'css': clean(GRADIENT_THEMES['playstationBlue']['background'])},
-        {'name': 'Game Art', 'image': 'https://image.api.playstation.com/vulcan/ap/rnd/202101/2921/x64hEmgvhgxpXc9z9hpyLAyQ.jpg'},
+    ]
+
+    context['breadcrumb'] = [
+        {'text': 'Home', 'url': '/'},
+        {'text': 'Premium'},
     ]
 
     return render(request, 'users/subscribe.html', context)
@@ -481,6 +485,12 @@ class SubscriptionManagementView(LoginRequiredMixin, TemplateView):
         else:
             context['tier'] = 'None'
             context['status'] = 'No Subscription'
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': '/'},
+            {'text': 'Settings', 'url': reverse('settings')},
+            {'text': 'My Premium'},
+        ]
 
         track_page_view('subscription', 'user', self.request)
         return context
