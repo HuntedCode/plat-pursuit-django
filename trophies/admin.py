@@ -30,6 +30,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "is_plus",
         "total_trophies",
         "total_unearned",
+        "tour_completed_at",
     )
     list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium",)
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
