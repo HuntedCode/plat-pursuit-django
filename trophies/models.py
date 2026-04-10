@@ -726,6 +726,23 @@ class Concept(models.Model):
             self.slug = slug
         super().save(*args, **kwargs)
 
+    def get_cover_url(self, size='cover_big'):
+        """Return cover art URL: PSN bg_url if available, else IGDB cover for trusted matches."""
+        if self.bg_url:
+            return self.bg_url
+        try:
+            match = self.igdb_match
+        except IGDBMatch.DoesNotExist:
+            return None
+        if match.is_trusted:
+            return match.cover_url(size)
+        return None
+
+    @property
+    def cover_url(self):
+        """Template-friendly cover art URL (default size)."""
+        return self.get_cover_url()
+
     @classmethod
     def create_default_concept(cls, game):
         """Create a stub Concept for games that couldn't be looked up via PSN API.
@@ -4145,6 +4162,11 @@ class IGDBMatch(models.Model):
     def is_trusted(self):
         """True if the match has been accepted (manually or automatically)."""
         return self.status in ('accepted', 'auto_accepted')
+
+    def cover_url(self, size='cover_big'):
+        if not self.igdb_cover_image_id:
+            return None
+        return f'https://images.igdb.com/igdb/image/upload/t_{size}/{self.igdb_cover_image_id}.png'
 
     EXTERNAL_LINK_META = [
         ('official', 'Official Site'),

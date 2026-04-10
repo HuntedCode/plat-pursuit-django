@@ -17,7 +17,9 @@
                 <div class="hover-3d max-w-2/5 xl:max-w-3/5 overflow-visible">
                     <figure class="relative h-fit shadow-md shadow-neutral border-2 border-base-300 rounded-box">
                         {% if game.title_image and not game.force_title_icon %}
-                            <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" loading="lazy" decoding="async" class="w-full object-cover" />
+                            <img src="{{ game.title_image }}" alt="{{ game.title_name }} cover" loading="lazy" decoding="async" class="w-full object-cover object-top" />
+                        {% elif game.concept.cover_url %}
+                            <img src="{{ game.concept.cover_url }}" alt="{{ game.title_name }} cover" loading="lazy" decoding="async" class="w-full object-cover object-top" />
                         {% else %}
                             <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }} icon" loading="lazy" decoding="async" class="w-full object-cover" />
                         {% endif %}
@@ -212,7 +214,7 @@
                             aria-label="Create Share Card"
                             data-earned-trophy-id="{{ earned_trophy_id }}"
                             data-game-name="{{ game.title_name }}"
-                            data-game-image="{{ game.title_image|default:game.title_icon_url|default:'' }}"
+                            data-game-image="{{ game.title_image|default:game.concept.cover_url|default:game.title_icon_url|default:'' }}"
                             data-concept-bg-url="{{ concept_bg_url }}"
                             data-concept-id="{{ game.concept.id|default:'' }}"
                             data-is-shovelware="{{ game.is_shovelware|yesno:'true,false' }}">

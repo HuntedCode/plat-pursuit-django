@@ -23,9 +23,9 @@
         {% if slot.game %}
             {# Game icon #}
             <div class="w-full aspect-square rounded-lg overflow-hidden bg-base-200">
-                <img src="{{ slot.game.title_icon_url|default:slot.game.title_image }}"
+                <img src="{{ slot.game.title_icon_url|default:slot.game.concept.cover_url|default:slot.game.title_image }}"
                      alt="{{ slot.game.title_name }}"
-                     class="w-full h-full object-cover"
+                     class="w-full h-full object-cover object-top"
                      loading="lazy" />
             </div>
 

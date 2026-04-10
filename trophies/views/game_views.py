@@ -256,7 +256,9 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             elif sort_val == 'oldest':
                 order = ['created_at', 'is_ascii_name', Lower('title_name')]
 
-        qs = qs.prefetch_related(
+        qs = qs.select_related(
+            'concept', 'concept__igdb_match',
+        ).prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
         )
         return qs.order_by(*order)
@@ -595,7 +597,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
             image_urls = {
                 'bg_url': None,  # Disabled on body during redesign
-                'header_bg_url': game.concept.bg_url,  # Used for frosted glass header only
+                'header_bg_url': game.concept.get_cover_url(),  # Used for frosted glass header only
                 'screenshot_urls': screenshot_urls,
                 'content_rating_url': content_rating_url
             }
@@ -862,7 +864,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         if earned_trophy_id:
             result['earned_trophy_id'] = earned_trophy_id
-            result['concept_bg_url'] = game.concept.bg_url or ''
+            result['concept_bg_url'] = game.concept.get_cover_url() or ''
 
         return result
 
@@ -1311,7 +1313,9 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
             elif sort_val == 'oldest':
                 order = ['created_at', 'is_ascii_name', Lower('title_name')]
 
-        qs = qs.prefetch_related(
+        qs = qs.select_related(
+            'concept', 'concept__igdb_match',
+        ).prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
         )
         return qs.order_by(*order)

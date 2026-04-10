@@ -46,7 +46,11 @@ class ShareableImageHTMLView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
         earned_trophy = get_object_or_404(
-            EarnedTrophy.objects.select_related('trophy__game__concept', 'profile'),
+            EarnedTrophy.objects.select_related(
+                'trophy__game__concept',
+                'trophy__game__concept__igdb_match',
+                'profile',
+            ),
             id=earned_trophy_id,
             profile=profile,
             earned=True,
@@ -215,7 +219,11 @@ class ShareableImagePNGView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
         earned_trophy = get_object_or_404(
-            EarnedTrophy.objects.select_related('trophy__game__concept', 'profile'),
+            EarnedTrophy.objects.select_related(
+                'trophy__game__concept',
+                'trophy__game__concept__igdb_match',
+                'profile',
+            ),
             id=earned_trophy_id,
             profile=profile,
             earned=True,

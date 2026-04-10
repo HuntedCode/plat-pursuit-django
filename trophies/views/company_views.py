@@ -97,7 +97,9 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
         all_concept_companies = list(
             ConceptCompany.objects.filter(company=company)
             .select_related('concept')
-            .prefetch_related('concept__games')
+            .prefetch_related(
+                Prefetch('concept__games', queryset=Game.objects.select_related('concept__igdb_match'))
+            )
         )
 
         role_games = {'developed': [], 'published': [], 'ported': [], 'supported': []}

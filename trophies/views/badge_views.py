@@ -413,7 +413,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['selected_tier_is_plat'] = selected_tier in [1, 3]
 
         stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=Game.objects.select_related('concept').order_by(Lower('title_name')))
+            Prefetch('concepts__games', queryset=Game.objects.select_related('concept', 'concept__igdb_match').order_by(Lower('title_name')))
         ))
         context['stage_count'] = len(stages)
 

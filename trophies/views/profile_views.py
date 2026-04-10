@@ -267,7 +267,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         showcase_entries = (
             ProfileBadgeShowcase.objects
             .filter(profile=profile)
-            .select_related('badge', 'badge__base_badge', 'badge__most_recent_concept')
+            .select_related('badge', 'badge__base_badge', 'badge__most_recent_concept', 'badge__most_recent_concept__igdb_match')
             .order_by('display_order')
         )
 
@@ -282,7 +282,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             if not layers.get('has_custom_image'):
                 continue
             concept = badge.most_recent_concept
-            bg_url = concept.bg_url if concept else ''
+            bg_url = concept.get_cover_url() if concept else ''
             badges.append({
                     'layers': layers,
                     'name': badge.effective_display_series or badge.series_slug,

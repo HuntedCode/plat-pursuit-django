@@ -115,6 +115,7 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
         ).select_related(
             'trophy__game',
             'trophy__game__concept',
+            'trophy__game__concept__igdb_match',
         ).order_by('-earned_date_time')
 
         # Calculate platinum number for each trophy (for milestone display).
