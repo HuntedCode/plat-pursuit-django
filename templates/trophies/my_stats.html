@@ -112,6 +112,8 @@
                     </svg>
                     <span class="hidden md:inline">Hidden</span>
                 </button>
+                {% endif %}
+                {% if request.user.is_staff %}
                 <div class="w-px h-4 bg-base-content/10 hidden md:block"></div>
                 <button id="replay-intro-btn"
                         class="btn btn-xs btn-ghost border border-base-300 gap-1"
@@ -411,6 +413,18 @@
             return new Promise(resolve => setTimeout(resolve, ms));
         }
 
+        // -- Silent load (skip intro on repeat visits) --
+
+        async function silentLoad() {
+            if (overlay) overlay.style.display = 'none';
+            await fetchPremiumStats();
+            markSectionsForReveal();
+            // Reveal all sections immediately (no stagger)
+            contentEl.querySelectorAll('.stats-section-reveal').forEach(el => {
+                el.classList.add('revealed');
+            });
+        }
+
         // -- Animation orchestrator (premium only) --
 
         async function runIntro() {
@@ -496,10 +510,17 @@
             await sleep(500);
             overlay.style.display = 'none';
             progressEl.style.transition = '';
+
+            // Mark intro as played for this session
+            sessionStorage.setItem('stats_intro_played', '1');
         }
 
-        // Run on page load
-        runIntro();
+        // Run on page load: full intro on first visit, silent load on repeat
+        if (IS_PREMIUM && sessionStorage.getItem('stats_intro_played')) {
+            silentLoad();
+        } else {
+            runIntro();
+        }
 
         // Replay button
         document.getElementById('replay-intro-btn')?.addEventListener('click', () => {
