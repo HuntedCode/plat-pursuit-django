@@ -402,6 +402,19 @@
   backdrop-filter: blur(4px);
 }
 
+/* ===== Global modal mobile sizing ===== */
+/* DaisyUI 5 modal-box defaults to padding: 1.5rem and no max-height cap.
+   On small phones (375px × 667px) larger modals overflow the viewport and
+   the user can't reach controls at the bottom. This caps height at 90vh
+   with scroll, and tightens padding on mobile. */
+@media (max-width: 767px) {
+  .modal-box {
+    padding: 1rem;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+}
+
 /* ===== Welcome Tour ===== */
 
 /* Modal entrance: scale up from 95% */
@@ -488,9 +501,11 @@
   padding: 0.75rem;
 }
 
-/* Navbar mockup (the 4 hub buttons) */
+/* Navbar mockup (the 4 hub buttons) — nowrap + scroll as fallback */
 .tour-navbar-mockup {
   display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   justify-content: center;
   gap: 0.375rem;
   padding: 0.375rem;
@@ -516,10 +531,12 @@
   box-shadow: 0 0 12px color-mix(in oklab, var(--path-accent, var(--color-primary)), transparent 60%);
 }
 
-/* Mini sub-nav preview strip */
+/* Mini sub-nav preview strip — nowrap + scroll so it never wraps on
+   narrow viewports (hidden on <lg anyway, but protects tablet sizes). */
 .tour-subnav-preview {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   justify-content: center;
   gap: 0.25rem;
   padding: 0.375rem;
@@ -647,6 +664,90 @@
 
 [data-theme="plat-pursuit-light"] .tour-dot:hover {
   background: rgba(0, 0, 0, 0.3);
+}
+
+/* Welcome Tour mobile: tighten spacing so all content fits within the
+   85vh-capped modal on small phones. The description paragraph and the
+   navbar mockup ("How to get here") are hidden entirely. Instead, JS
+   highlights the *actual* mobile tab bar item for the current step,
+   which is more authentic and saves ~120px of vertical space. */
+@media (max-width: 1023px) {
+  .tour-modal-box .tour-step > div {
+    padding: 1rem;
+  }
+  .tour-icon-glow {
+    width: 56px;
+    height: 56px;
+  }
+  .tour-icon-glow svg {
+    width: 28px;
+    height: 28px;
+  }
+  .tour-step-description {
+    display: none;
+  }
+  /* Hide the entire nav path on mobile — JS clones the real mobile tab
+     bar and sub-nav into the modal's stacking context instead. */
+  .tour-nav-path {
+    display: none;
+  }
+  .tour-modal-box .border-t {
+    padding: 0.75rem 1rem;
+  }
+  .tour-modal-box .tour-dot {
+    width: 8px;
+    height: 8px;
+  }
+}
+
+/* Tour tab bar clone: lives inside the modal's stacking context so it
+   renders above the backdrop blur. Positioned fixed at the bottom to
+   overlap the real tab bar exactly. Hidden by default, shown by JS. */
+.tour-tabbar-clone {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tour-tabbar-clone.visible {
+  display: block;
+}
+
+/* Tour sub-nav clone: same approach, positioned fixed at the top to
+   overlap the real sub-nav. Rebuilt per step with that hub's items.
+   Includes a pulsing highlight ring and a tooltip popover. */
+.tour-subnav-clone {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+}
+.tour-subnav-clone.visible {
+  display: block;
+}
+
+/* Highlight ring on the real mobile tab bar item during the tour */
+.mobile-tabbar-item.tour-highlight {
+  color: var(--tour-tab-color, var(--color-primary));
+  position: relative;
+}
+.mobile-tabbar-item.tour-highlight::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 0.5rem;
+  border: 2px solid var(--tour-tab-color, var(--color-primary));
+  animation: tour-tab-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes tour-tab-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
 /* ===== Game Detail Coach Marks ===== */

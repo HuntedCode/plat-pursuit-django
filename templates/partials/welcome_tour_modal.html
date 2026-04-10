@@ -41,7 +41,7 @@ See docs/design/tutorial-system.md for design rationale.
                     </div>
                     <h2 class="text-xl md:text-2xl font-bold mb-1">Your Trophy Hunting HQ</h2>
                     <p class="text-sm text-base-content/50 italic pr-1 mb-3">Everything about your journey, all in one place.</p>
-                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">The Dashboard is your personal cockpit. Check your trophy stats, create shareable images of your platinums, and relive each month in your Wrapped-style Monthly Recap.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto tour-step-description">The Dashboard is your personal cockpit. Check your trophy stats, create shareable images of your platinums, and relive each month in your Wrapped-style Monthly Recap.</p>
                 </div>
 
                 {# Navigation path: navbar -> sub-nav #}
@@ -122,7 +122,7 @@ See docs/design/tutorial-system.md for design rationale.
                     </div>
                     <h2 class="text-xl md:text-2xl font-bold mb-1">Find Your Next Platinum</h2>
                     <p class="text-sm text-base-content/50 italic pr-1 mb-3">Thousands of games with advanced filters and detailed trophy data.</p>
-                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">Browse is your discovery hub. Filter games by genre, platform, difficulty, and more. Dive into trophy lists, explore what your favorite studios have made, and find hidden gems.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto tour-step-description">Browse is your discovery hub. Filter games by genre, platform, difficulty, and more. Dive into trophy lists, explore what your favorite studios have made, and find hidden gems.</p>
                 </div>
 
                 <div class="tour-nav-path mb-5" style="--path-accent: var(--color-accent)">
@@ -214,7 +214,7 @@ See docs/design/tutorial-system.md for design rationale.
                     </div>
                     <h2 class="text-xl md:text-2xl font-bold mb-1">Hunt Together</h2>
                     <p class="text-sm text-base-content/50 italic pr-1 mb-3">Reviews, challenges, curated lists, leaderboards, and a Discord full of hunters.</p>
-                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">Community is where the hunters gather. Read and write game reviews, take on A-Z and calendar challenges, curate lists of your favorites, and compete on the leaderboards.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto tour-step-description">Community is where the hunters gather. Read and write game reviews, take on A-Z and calendar challenges, curate lists of your favorites, and compete on the leaderboards.</p>
                 </div>
 
                 <div class="tour-nav-path mb-5" style="--path-accent: var(--color-success)">
@@ -307,7 +307,7 @@ See docs/design/tutorial-system.md for design rationale.
                     </div>
                     <h2 class="text-xl md:text-2xl font-bold mb-1">Your Trophy Hunting Identity</h2>
                     <p class="text-sm text-base-content/50 italic pr-1 mb-3">Every platinum you earn progresses your badges, milestones, and titles.</p>
-                    <p class="text-sm text-base-content/70 max-w-lg mx-auto">My Pursuit tracks your growth as a hunter. Complete badge challenges based on your trophy hunting activity, hit milestone counts, and unlock titles that show off your specialties to the community.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto tour-step-description">My Pursuit tracks your growth as a hunter. Complete badge challenges based on your trophy hunting activity, hit milestone counts, and unlock titles that show off your specialties to the community.</p>
                 </div>
 
                 <div class="tour-nav-path mb-5" style="--path-accent: var(--color-secondary)">
@@ -381,16 +381,18 @@ See docs/design/tutorial-system.md for design rationale.
                 <button type="button" class="tour-dot" data-dot="4" aria-label="Go to step 4" onclick="PlatPursuit.WelcomeTourManager.goToStep(4)"></button>
             </div>
 
-            {# Step counter + buttons #}
-            <div class="flex items-center justify-between relative">
+            {# Step counter (own line so it doesn't overlap buttons on mobile) #}
+            <div class="text-center mb-2">
+                <span class="text-xs text-base-content/40" id="tour-step-counter">Step 1 of 4</span>
+            </div>
+
+            {# Skip + prev/next buttons #}
+            <div class="flex items-center justify-between">
                 <button type="button" id="tour-skip-btn"
                         class="btn btn-ghost btn-sm text-base-content/50 hover:text-base-content"
                         onclick="PlatPursuit.WelcomeTourManager.dismiss('skip')">
                     Skip
                 </button>
-
-                {# Absolute-centered counter: immune to layout shifts from buttons #}
-                <span class="absolute left-1/2 -translate-x-1/2 text-xs text-base-content/40 pointer-events-none" id="tour-step-counter">Step 1 of 4</span>
 
                 <div class="flex gap-2">
                     <button type="button" id="tour-prev-btn"

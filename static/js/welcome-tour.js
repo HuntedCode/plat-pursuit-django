@@ -6,6 +6,15 @@
  *
  * Depends on: PlatPursuit.API (utils.js)
  */
+// Sub-nav items per hub step (matches the mockup in the template).
+// Used to rebuild the sub-nav clone when transitioning between steps.
+const TOUR_SUBNAV_ITEMS = {
+    1: ['Dashboard', 'My Stats', 'Shareables', 'Recap'],
+    2: ['Games', 'Trophies', 'Companies', 'Genres'],
+    3: ['Hub', 'Profiles', 'Reviews', 'Challenges'],
+    4: ['Badges', 'Milestones', 'Titles'],
+};
+
 class WelcomeTourManager {
     constructor() {
         this.modal = null;
@@ -16,6 +25,8 @@ class WelcomeTourManager {
         this.isOpen = false;
         this.isTransitioning = false;
         this._initialized = false;
+        this._tabBarClone = null;
+        this._subnavClone = null;
     }
 
     /**
@@ -36,6 +47,7 @@ class WelcomeTourManager {
         this.stepCounter = document.getElementById('tour-step-counter');
 
         this._setupKeyboardHandling();
+        this._setupSwipeHandling();
         this._initialized = true;
 
         if (autoShow) {
@@ -56,6 +68,14 @@ class WelcomeTourManager {
         this.modal.showModal();
         this.isOpen = true;
 
+        // Clone the mobile tab bar and sub-nav into the modal so they render
+        // inside the modal's stacking context (above the backdrop blur).
+        // Must happen after _renderStep so _updateControls can find the clones.
+        const accent = this.steps[0]?.dataset.accent || 'var(--color-primary)';
+        this._createTabBarClone();
+        this._highlightTabBarItem(1, accent);
+        this._createSubnavClone(1, accent);
+
         // Trigger entrance animation on cards
         requestAnimationFrame(() => {
             this._animateCardsIn(1);
@@ -69,6 +89,8 @@ class WelcomeTourManager {
         if (!this.modal) return;
         this.modal.close();
         this.isOpen = false;
+        this._removeTabBarClone();
+        this._removeSubnavClone();
     }
 
     /**
@@ -251,6 +273,11 @@ class WelcomeTourManager {
         if (this.skipBtn) {
             this.skipBtn.textContent = step === this.totalSteps ? 'Close' : 'Skip';
         }
+
+        // On mobile (<lg), highlight the real tab bar item and update the
+        // sub-nav clone for this step's hub.
+        this._highlightTabBarItem(step, accent);
+        this._createSubnavClone(step, accent);
     }
 
     /**
@@ -289,6 +316,149 @@ class WelcomeTourManager {
                 card.style.transform = 'translateY(0)';
             }, delay + i * 60);
         });
+    }
+
+    /**
+     * Clone the mobile tab bar into the modal element so it renders inside
+     * the modal's stacking context (above the backdrop blur). Only on <lg
+     * viewports where the real tab bar is visible.
+     */
+    _createTabBarClone() {
+        this._removeTabBarClone();
+        if (window.innerWidth >= 1024) return;
+
+        const realTabbar = document.querySelector('.mobile-tabbar');
+        if (!realTabbar) return;
+
+        const clone = realTabbar.cloneNode(true);
+        clone.classList.add('tour-tabbar-clone', 'visible');
+        clone.classList.remove('lg:hidden');
+        clone.removeAttribute('role');
+        clone.removeAttribute('aria-label');
+
+        // Strip the page's active state so only the tour highlight shows,
+        // and disable link clicks (the clone is for display only).
+        clone.querySelectorAll('.mobile-tabbar-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        clone.querySelectorAll('a').forEach(a => {
+            a.addEventListener('click', e => e.preventDefault());
+            a.removeAttribute('href');
+            a.style.cursor = 'default';
+        });
+
+        this.modal.appendChild(clone);
+        this._tabBarClone = clone;
+    }
+
+    /**
+     * Highlight the cloned tab bar item matching the current step.
+     * Step 1=Dashboard(0), 2=Browse(1), 3=Community(2), 4=My Pursuit(3).
+     */
+    _highlightTabBarItem(step, accent) {
+        if (!this._tabBarClone || window.innerWidth >= 1024) return;
+
+        // Clear previous highlights
+        this._tabBarClone.querySelectorAll('.mobile-tabbar-item').forEach(el => {
+            el.classList.remove('tour-highlight');
+            el.style.removeProperty('--tour-tab-color');
+        });
+
+        const tabItems = this._tabBarClone.querySelectorAll('.mobile-tabbar-item');
+        const tabIndex = step - 1;
+        if (tabItems[tabIndex]) {
+            tabItems[tabIndex].classList.add('tour-highlight');
+            tabItems[tabIndex].style.setProperty('--tour-tab-color', accent);
+        }
+    }
+
+    /**
+     * Remove the cloned tab bar from the modal.
+     */
+    _removeTabBarClone() {
+        if (this._tabBarClone) {
+            this._tabBarClone.remove();
+            this._tabBarClone = null;
+        }
+    }
+
+    /**
+     * Clone the real sub-nav into the modal, replacing its items with
+     * the current step's hub sub-pages. Positioned fixed at top to
+     * overlap the real sub-nav exactly.
+     */
+    _createSubnavClone(step, accent) {
+        this._removeSubnavClone();
+        if (window.innerWidth >= 1024) return;
+
+        const realSubnav = document.querySelector('.hub-subnav');
+        if (!realSubnav) return;
+
+        const clone = realSubnav.cloneNode(true);
+        clone.classList.add('tour-subnav-clone', 'visible');
+        clone.classList.remove('sticky');
+        clone.removeAttribute('aria-label');
+
+        // Replace the sub-nav items with this step's hub items
+        const ul = clone.querySelector('ul');
+        if (ul) {
+            const items = TOUR_SUBNAV_ITEMS[step] || [];
+            ul.innerHTML = items.map((label, i) =>
+                `<li class="shrink-0">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-all ${i === 0 ? 'bg-primary/15 border border-primary/30 shadow-sm' : 'text-base-content/70 border border-transparent'}"
+                          style="${i === 0 ? 'color: ' + accent + ';' : ''}">${label}</span>
+                </li>`
+            ).join('');
+        }
+
+        // Disable link clicks
+        clone.querySelectorAll('a').forEach(a => {
+            a.addEventListener('click', e => e.preventDefault());
+            a.removeAttribute('href');
+        });
+
+        this.modal.appendChild(clone);
+        this._subnavClone = clone;
+    }
+
+    /**
+     * Remove the cloned sub-nav from the modal.
+     */
+    _removeSubnavClone() {
+        if (this._subnavClone) {
+            this._subnavClone.remove();
+            this._subnavClone = null;
+        }
+    }
+
+    /**
+     * Swipe left/right to navigate between steps on touch devices.
+     * Uses a 50px threshold to distinguish swipes from taps/scrolls.
+     */
+    _setupSwipeHandling() {
+        let startX = 0;
+        let startY = 0;
+
+        this.modal.addEventListener('touchstart', (e) => {
+            if (!this.isOpen) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+
+        this.modal.addEventListener('touchend', (e) => {
+            if (!this.isOpen) return;
+            const deltaX = e.changedTouches[0].clientX - startX;
+            const deltaY = e.changedTouches[0].clientY - startY;
+
+            // Only count horizontal swipes (ignore vertical scrolling)
+            if (Math.abs(deltaX) < 50 || Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+            if (deltaX < 0) {
+                this.next();
+            } else {
+                this.prev();
+            }
+        }, { passive: true });
     }
 
     /**
