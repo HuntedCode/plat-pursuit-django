@@ -44,31 +44,22 @@
             this._debouncedSaveActiveTab = PlatPursuit.debounce(() => this._saveActiveTab(), 1000);
             this._pendingOrder = null;
             this._settingsDirty = false;
+
+            // Register all built-in module inits up front so external callers
+            // can invoke them via `_moduleInits[slug](el)` even when they
+            // bypass `init()` (e.g. the My Shareables sub-pages reuse this
+            // class for share-card and profile-card preview wiring without
+            // wanting the tab/customize/lazy-load machinery).
+            this._registerBuiltInModuleInits();
         }
 
-        init() {
-            this._bindTabs();
-            this._bindCustomizePanel();
-
-            // Find and load the active tab
-            for (const [slug, tabConfig] of Object.entries(this.tabsConfig)) {
-                if (tabConfig.isActive) {
-                    this.activeTab = slug;
-                    break;
-                }
-            }
-            if (!this.activeTab && Object.keys(this.tabsConfig).length > 0) {
-                this.activeTab = Object.keys(this.tabsConfig)[0];
-            }
-
-            // Load active tab's lazy modules
-            if (this.activeTab) {
-                this._loadTabModules(this.activeTab);
-            }
-
-            // Quick Settings module: bind auto-save controls (server-rendered, already in DOM)
-            this._initQuickSettings();
-
+        /**
+         * Register all known module init functions in `_moduleInits`. Pure
+         * setup — depends on no other state — so it runs from the constructor.
+         * `init()` no longer needs to call these (they're already registered
+         * by the time it runs); this method is idempotent if called again.
+         */
+        _registerBuiltInModuleInits() {
             // Calendar Challenge module: paginated month navigation
             this.registerModuleInit('calendar_challenge', (el) => this._initCalendarPagination(el));
 
@@ -111,6 +102,30 @@
 
             // Profile Badge Showcase Editor (premium): drag-reorder 5 slots
             this.registerModuleInit('profile_badge_showcase_editor', (el) => this._initProfileShowcaseEditor(el));
+        }
+
+        init() {
+            this._bindTabs();
+            this._bindCustomizePanel();
+
+            // Find and load the active tab
+            for (const [slug, tabConfig] of Object.entries(this.tabsConfig)) {
+                if (tabConfig.isActive) {
+                    this.activeTab = slug;
+                    break;
+                }
+            }
+            if (!this.activeTab && Object.keys(this.tabsConfig).length > 0) {
+                this.activeTab = Object.keys(this.tabsConfig)[0];
+            }
+
+            // Load active tab's lazy modules
+            if (this.activeTab) {
+                this._loadTabModules(this.activeTab);
+            }
+
+            // Quick Settings module: bind auto-save controls (server-rendered, already in DOM)
+            this._initQuickSettings();
         }
 
         // -----------------------------------------------------------------
@@ -2062,7 +2077,6 @@
         _initProfileCardPreview(el) {
             const card = el.querySelector('[data-card-theme]');
             let currentTheme = card ? card.dataset.cardTheme : 'default';
-            const isPremium = card && card.dataset.isPremium === 'true';
             const themes = window.GRADIENT_THEMES || {};
             const container = el.querySelector('.profile-card-module-preview');
             const content = el.querySelector('.profile-card-module-content');
@@ -2152,10 +2166,6 @@
 
                 const openPicker = function(e) {
                     e.stopPropagation();
-                    if (!isPremium) {
-                        PlatPursuit.ToastManager.show('Premium required for custom themes.', 'warning');
-                        return;
-                    }
                     const colorModal = PlatPursuit.getColorGridModal?.();
                     if (!colorModal) return;
                     colorModal.open(currentTheme, function(themeKey) {

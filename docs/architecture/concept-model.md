@@ -47,7 +47,7 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 | `concept_icon_url` | URLField (nullable) | Icon image URL |
 | `guide_slug` | CharField(50, nullable) | Link to external guide |
 | `guide_created_at` | DateTimeField (nullable) | Guide creation timestamp |
-| `slug` | SlugField(300), unique, nullable | URL-friendly slug for Community Hub pages. Auto-generated from `unified_title` on first save, with collision handling via counter suffix |
+| `slug` | SlugField(300), unique, nullable | URL-friendly slug for Review Hub pages. Auto-generated from `unified_title` on first save, with collision handling via counter suffix |
 
 **Indexes**: `concept_id`, `unified_title`, `publisher_name`, `release_date`, `slug`
 
@@ -187,7 +187,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 - **Challenge System**: `GenreChallengeSlot` and `GenreBonusSlot` reference Concept for genre challenge game picks.
 - **GameFamily Service** (`core/services/game_family_service.py`): Matches related Concepts into families via name-based and trophy-based algorithms. Runs daily via management command.
 - **Profile Backgrounds**: Premium users select a Concept for their profile background via `Profile.selected_background`. Re-pointed during `absorb()`.
-- **Community Hub**: Uses `Concept.slug` for URL routing to game pages (ratings, reviews, discussions).
+- **Review Hub**: Uses `Concept.slug` for URL routing to game pages (ratings, reviews, discussions).
 
 ## Gotchas and Pitfalls
 
@@ -219,6 +219,6 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 ## Related Docs
 
 - [Gamification](gamification.md): Badge stages reference Concepts via `Stage.concepts` M2M
-- [Community Hub](../features/community-hub.md): Uses `Concept.slug` for game-scoped ratings, reviews, and discussions
+- [Review Hub](../features/review-hub.md): Uses `Concept.slug` for game-scoped ratings, reviews, and discussions
 - [IGDB Integration](igdb-integration.md): Per-concept enrichment via `IGDBMatch`, `ConceptCompany`, `ConceptGenre`, `ConceptTheme`, and `ConceptEngine`
 - [Roadmap System](../features/roadmap-system.md): 1:1 with Concept; replaced the legacy checklist system on game detail pages

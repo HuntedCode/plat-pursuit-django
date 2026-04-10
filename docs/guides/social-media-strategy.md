@@ -151,7 +151,7 @@ A comprehensive, actionable social media playbook for Platinum Pursuit. This doc
 **Example posts**:
 - "Spent the weekend redesigning the Monthly Recap share cards. Here's the before and after. Small details matter."
 - "Building a trophy tracking platform as a solo dev: the story of how PlatPursuit started and where it's going. [Thread]"
-- "Sneak peek: the Community Hub is coming. Reviews and ratings for every game, powered by the trophy hunting community. [Preview screenshot]"
+- "Sneak peek: the Review Hub is coming. Reviews and ratings for every game, powered by the trophy hunting community. [Preview screenshot]"
 
 **Posting rhythm**: 1 time per week.
 

@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap,
@@ -36,7 +36,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView
+from trophies.views import GamesListView, TrophiesListView, ProfilesListView, SearchView, GameDetailView, ProfileDetailView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, CompanyListView, CompanyDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -55,6 +55,22 @@ urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     # Legacy alias - keep old /dashboard/ links working
     path('dashboard/', RedirectView.as_view(pattern_name='home', permanent=True), name='dashboard'),
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Community Hub initiative (Phase 10 IA + URL audit)
+    # ─────────────────────────────────────────────────────────────────────
+    # The Community Hub destination at /community/ and the standalone
+    # /community/feed/ page (Phases 7-8). Below this, the URL audit moves
+    # community-shaped content under /community/ and personal-progression
+    # content under /achievements/. Public-facing tools moved to /tools/.
+    #
+    # Backward compatibility: every renamed URL keeps a 301 RedirectView
+    # at the old path, so external links and bookmarks survive. The
+    # `name=` parameter stays bound to the NEW canonical path so existing
+    # `{% url %}` and `reverse()` calls in templates and Python code
+    # continue to resolve to the right place without changes.
+    path('community/', CommunityHubView.as_view(), name='community_hub'),
+
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/flagged/', FlaggedGamesView.as_view(), name='flagged_games'),
     path('games/<str:np_communication_id>/roadmap/edit/', RoadmapEditorView.as_view(), name='roadmap_edit'),
@@ -70,20 +86,53 @@ urlpatterns = [
     path('games/<str:np_communication_id>/', GameDetailView.as_view(), name='game_detail'),
     path('games/<str:np_communication_id>/<str:psn_username>/', GameDetailView.as_view(), name='game_detail_with_profile'),
     path('trophies/', TrophiesListView.as_view(), name='trophies_list'),
-    path('profiles/', ProfilesListView.as_view(), name='profiles_list'),
-    path('profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
-    path('badges/', BadgeListView.as_view(), name='badges_list'),
-    path('badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
-    path('badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
 
-    path('milestones/', MilestoneListView.as_view(), name='milestones_list'),
-    path('my-titles/', MyTitlesView.as_view(), name='my_titles'),
-    path('my-stats/', MyStatsView.as_view(), name='my_stats'),
+    # Profiles (canonical paths under /community/, legacy redirects below)
+    path('community/profiles/', ProfilesListView.as_view(), name='profiles_list'),
+    path('community/profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
+    path('community/profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
+
+    # My Pursuit hub: badges, milestones, titles (canonical paths under /my-pursuit/)
+    # The original Phase 10 commit had these under /achievements/. The Phase 10a
+    # rework relocates them to /my-pursuit/ to align with the renamed hub
+    # (see docs/features/my-pursuit-hub.md for the rationale). Both the legacy
+    # /badges/, /milestones/, /my-titles/ paths AND the previous /achievements/*
+    # paths now redirect here via the legacy redirect block below.
+    #
+    # The bare /my-pursuit/ path is a 301 redirect to the headline sub-page
+    # (Badges). My Pursuit deliberately does NOT have its own landing page;
+    # the Badges page IS the landing, and the sub-nav strip handles wayfinding
+    # to Milestones and Titles. This mirrors how /games/ is the Browse hub
+    # landing rather than building a separate Browse landing page. Once the
+    # gamification initiative ships and the section grows to 8+ sub-items,
+    # a dedicated /my-pursuit/ landing page may make sense.
+    path('my-pursuit/', RedirectView.as_view(pattern_name='badges_list', permanent=True), name='my_pursuit_hub'),
+    path('my-pursuit/badges/', BadgeListView.as_view(), name='badges_list'),
+    path('my-pursuit/badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
+    path('my-pursuit/badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
+    path('my-pursuit/milestones/', MilestoneListView.as_view(), name='milestones_list'),
+    path('my-pursuit/titles/', MyTitlesView.as_view(), name='my_titles'),
+
+    # Dashboard hub: personal-utility pages live under /dashboard/.
+    # The original Phase 10 commit put these under /tools/. The Phase 10a
+    # rework relocates them to /dashboard/ because they're personal-cockpit
+    # features that belong in the Dashboard hub (see ia-and-subnav.md). The
+    # Platinum Grid wizard lives nested inside Shareables since it generates
+    # one of the shareable image types.
+    path('dashboard/stats/', MyStatsView.as_view(), name='my_stats'),
+    # Shareables hub: landing page + dedicated sub-pages for each share type.
+    # See trophies/views/shareables_views.py for the per-view docstrings.
+    path('dashboard/shareables/', MyShareablesView.as_view(), name='my_shareables'),
+    path('dashboard/shareables/platinums/', MyPlatinumSharesView.as_view(), name='my_shareables_platinums'),
+    path('dashboard/shareables/profile-card/', MyProfileCardView.as_view(), name='my_shareables_profile_card'),
+    path('dashboard/shareables/challenges/', MyChallengeSharesView.as_view(), name='my_shareables_challenges'),
+    path('dashboard/shareables/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
 
     path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),
 
-    path('leaderboard/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
-    path('leaderboard/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards' ),
+    # Leaderboards (canonical paths under /community/leaderboards/)
+    path('community/leaderboards/badges/', OverallBadgeLeaderboardsView.as_view(), name='overall_badge_leaderboards'),
+    path('community/leaderboards/badges/<str:series_slug>/', BadgeLeaderboardsView.as_view(), name='badge_leaderboards'),
 
     # Guide/checklist URLs - all redirected to home (system removed, replaced by roadmaps)
     path('guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='guides_browse'),
@@ -91,40 +140,115 @@ urlpatterns = [
     path('guides/<int:guide_id>/edit/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_edit'),
     path('guides/create/<int:concept_id>/<str:np_communication_id>/', RedirectView.as_view(pattern_name='home', permanent=False), name='guide_create'),
     path('my-guides/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_guides'),
-    path('my-shareables/', RedirectView.as_view(pattern_name='home', permanent=False), name='my_shareables'),
 
-    # Game List URLs
-    path('lists/', BrowseListsView.as_view(), name='lists_browse'),
-    path('lists/create/', GameListCreateView.as_view(), name='list_create'),
-    path('lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
-    path('lists/<int:list_id>/edit/', GameListEditView.as_view(), name='list_edit'),
+    # Game Lists (canonical paths under /community/lists/)
+    path('community/lists/', BrowseListsView.as_view(), name='lists_browse'),
+    path('community/lists/create/', GameListCreateView.as_view(), name='list_create'),
+    path('community/lists/<int:list_id>/', GameListDetailView.as_view(), name='list_detail'),
+    path('community/lists/<int:list_id>/edit/', GameListEditView.as_view(), name='list_edit'),
     path('my-lists/', MyListsView.as_view(), name='my_lists'),
 
-    # Challenge URLs
-    path('challenges/', ChallengeHubView.as_view(), name='challenges_browse'),
-    path('challenges/az/create/', AZChallengeCreateView.as_view(), name='az_challenge_create'),
-    path('challenges/az/<int:challenge_id>/', AZChallengeDetailView.as_view(), name='az_challenge_detail'),
-    path('challenges/az/<int:challenge_id>/setup/', AZChallengeSetupView.as_view(), name='az_challenge_setup'),
-    path('challenges/az/<int:challenge_id>/edit/', AZChallengeEditView.as_view(), name='az_challenge_edit'),
-    path('challenges/calendar/create/', CalendarChallengeCreateView.as_view(), name='calendar_challenge_create'),
-    path('challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailView.as_view(), name='calendar_challenge_detail'),
-    path('challenges/genre/create/', GenreChallengeCreateView.as_view(), name='genre_challenge_create'),
-    path('challenges/genre/<int:challenge_id>/', GenreChallengeDetailView.as_view(), name='genre_challenge_detail'),
-    path('challenges/genre/<int:challenge_id>/setup/', GenreChallengeSetupView.as_view(), name='genre_challenge_setup'),
-    path('challenges/genre/<int:challenge_id>/edit/', GenreChallengeEditView.as_view(), name='genre_challenge_edit'),
+    # Challenges (canonical paths under /community/challenges/)
+    path('community/challenges/', ChallengeHubView.as_view(), name='challenges_browse'),
+    path('community/challenges/az/create/', AZChallengeCreateView.as_view(), name='az_challenge_create'),
+    path('community/challenges/az/<int:challenge_id>/', AZChallengeDetailView.as_view(), name='az_challenge_detail'),
+    path('community/challenges/az/<int:challenge_id>/setup/', AZChallengeSetupView.as_view(), name='az_challenge_setup'),
+    path('community/challenges/az/<int:challenge_id>/edit/', AZChallengeEditView.as_view(), name='az_challenge_edit'),
+    path('community/challenges/calendar/create/', CalendarChallengeCreateView.as_view(), name='calendar_challenge_create'),
+    path('community/challenges/calendar/<int:challenge_id>/', CalendarChallengeDetailView.as_view(), name='calendar_challenge_detail'),
+    path('community/challenges/genre/create/', GenreChallengeCreateView.as_view(), name='genre_challenge_create'),
+    path('community/challenges/genre/<int:challenge_id>/', GenreChallengeDetailView.as_view(), name='genre_challenge_detail'),
+    path('community/challenges/genre/<int:challenge_id>/setup/', GenreChallengeSetupView.as_view(), name='genre_challenge_setup'),
+    path('community/challenges/genre/<int:challenge_id>/edit/', GenreChallengeEditView.as_view(), name='genre_challenge_edit'),
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
 
-    # Review Hub
-    path('reviews/', ReviewHubLandingView.as_view(), name='reviews_landing'),
-    path('reviews/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
-    path('reviews/<slug:slug>/', ReviewHubDetailView.as_view(), name='review_hub'),
+    # Review Hub (canonical paths under /community/reviews/)
+    path('community/reviews/', ReviewHubLandingView.as_view(), name='reviews_landing'),
+    path('community/reviews/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
+    path('community/reviews/<slug:slug>/', ReviewHubDetailView.as_view(), name='review_hub'),
 
-    # Monthly Recap URLs
-    path('recap/', RecapIndexView.as_view(), name='recap_index'),
-    path('recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
+    # Monthly Recap URLs (canonical paths under /dashboard/recap/)
+    # Recap is a Dashboard hub citizen — see docs/architecture/ia-and-subnav.md.
+    # Legacy /recap/ paths redirect here via the redirect block below.
+    path('dashboard/recap/', RecapIndexView.as_view(), name='recap_index'),
+    path('dashboard/recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
 
-    path('profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Phase 10 legacy redirects: 301 from old paths to new canonical names.
+    # ─────────────────────────────────────────────────────────────────────
+    # These keep external links, bookmarks, and search engine indices alive
+    # as the URL audit reshuffles paths into the cleaner /community/,
+    # /my-pursuit/, and /dashboard/ namespaces. RedirectView with
+    # `pattern_name=` resolves the redirect target via the new canonical
+    # `name=`, so any future rename requires updating only the canonical
+    # path above (this section keeps working unchanged).
+    #
+    # `query_string=True` propagates query strings (?tab=, ?page=, etc.)
+    # through the redirect so deep links survive intact.
+    #
+    # The Phase 10a rework added a SECOND wave of redirects: the original
+    # Phase 10 had moved badges/milestones/titles to /achievements/* and
+    # Stats/Grid to /tools/*. Phase 10a re-renamed those to /my-pursuit/*
+    # and /dashboard/*, so the previously-canonical paths now also need
+    # redirect entries here alongside the original legacy paths.
+
+    # Profiles → /community/profiles/
+    path('profiles/', RedirectView.as_view(pattern_name='profiles_list', permanent=True, query_string=True)),
+    path('profiles/<str:psn_username>/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
+    path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='trophy_case', permanent=True, query_string=True)),
+
+    # My Pursuit hub: badges, milestones, titles
+    # Two waves: pre-Phase-10 legacy paths AND the intermediate /achievements/* paths
+    path('badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
+    path('badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
+    path('badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
+    path('milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
+    path('my-titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
+    path('achievements/badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
+    path('achievements/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
+    path('achievements/badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
+    path('achievements/milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
+    path('achievements/titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
+
+    # Dashboard hub: My Stats, My Shareables, Platinum Grid, Recap
+    # Two waves: pre-Phase-10 legacy paths AND the intermediate /tools/* paths
+    path('my-stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
+    path('my-shareables/', RedirectView.as_view(pattern_name='my_shareables', permanent=True, query_string=True)),
+    path('staff/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
+    path('tools/stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
+    path('tools/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
+    path('recap/', RedirectView.as_view(pattern_name='recap_index', permanent=True, query_string=True)),
+    path('recap/<int:year>/<int:month>/', RedirectView.as_view(pattern_name='recap_view', permanent=True, query_string=True)),
+
+    # Leaderboards
+    path('leaderboard/badges/', RedirectView.as_view(pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),
+    path('leaderboard/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_leaderboards', permanent=True, query_string=True)),
+
+    # Game Lists
+    path('lists/', RedirectView.as_view(pattern_name='lists_browse', permanent=True, query_string=True)),
+    path('lists/create/', RedirectView.as_view(pattern_name='list_create', permanent=True, query_string=True)),
+    path('lists/<int:list_id>/', RedirectView.as_view(pattern_name='list_detail', permanent=True, query_string=True)),
+    path('lists/<int:list_id>/edit/', RedirectView.as_view(pattern_name='list_edit', permanent=True, query_string=True)),
+
+    # Challenges
+    path('challenges/', RedirectView.as_view(pattern_name='challenges_browse', permanent=True, query_string=True)),
+    path('challenges/az/create/', RedirectView.as_view(pattern_name='az_challenge_create', permanent=True, query_string=True)),
+    path('challenges/az/<int:challenge_id>/', RedirectView.as_view(pattern_name='az_challenge_detail', permanent=True, query_string=True)),
+    path('challenges/az/<int:challenge_id>/setup/', RedirectView.as_view(pattern_name='az_challenge_setup', permanent=True, query_string=True)),
+    path('challenges/az/<int:challenge_id>/edit/', RedirectView.as_view(pattern_name='az_challenge_edit', permanent=True, query_string=True)),
+    path('challenges/calendar/create/', RedirectView.as_view(pattern_name='calendar_challenge_create', permanent=True, query_string=True)),
+    path('challenges/calendar/<int:challenge_id>/', RedirectView.as_view(pattern_name='calendar_challenge_detail', permanent=True, query_string=True)),
+    path('challenges/genre/create/', RedirectView.as_view(pattern_name='genre_challenge_create', permanent=True, query_string=True)),
+    path('challenges/genre/<int:challenge_id>/', RedirectView.as_view(pattern_name='genre_challenge_detail', permanent=True, query_string=True)),
+    path('challenges/genre/<int:challenge_id>/setup/', RedirectView.as_view(pattern_name='genre_challenge_setup', permanent=True, query_string=True)),
+    path('challenges/genre/<int:challenge_id>/edit/', RedirectView.as_view(pattern_name='genre_challenge_edit', permanent=True, query_string=True)),
+
+    # Reviews
+    path('reviews/', RedirectView.as_view(pattern_name='reviews_landing', permanent=True, query_string=True)),
+    path('reviews/rate-my-games/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True)),
+    path('reviews/<slug:slug>/', RedirectView.as_view(pattern_name='review_hub', permanent=True, query_string=True)),
 
     path('search/', SearchView.as_view(), name='search'),
     path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
@@ -144,7 +268,9 @@ urlpatterns = [
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
-    path('staff/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
+    # NOTE: PlatinumGridView's canonical path is now /tools/platinum-grid/
+    # (registered above in the Tools section). The legacy /staff/platinum-grid/
+    # path is a 301 redirect, registered in the Phase 10 legacy redirects block.
 
     # Fundraiser
     path('fundraiser/<slug:slug>/', FundraiserView.as_view(), name='fundraiser'),

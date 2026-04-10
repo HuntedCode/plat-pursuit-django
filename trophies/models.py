@@ -3577,13 +3577,13 @@ class DashboardConfig(models.Model):
     Per-user dashboard preferences: visible modules, ordering, and per-module settings.
 
     module_order: ordered list of module slugs (premium-only to customize).
-        ["trophy_summary", "active_challenges", "recent_platinums", ...]
+        ["trophy_summary", "active_challenges", "recent_activity", ...]
 
     hidden_modules: slugs the user has toggled off (free users: max 3).
         ["community_engagement", "quick_links"]
 
     module_settings: per-module config overrides (premium-only).
-        {"games_in_progress": {"limit": 10}, "recent_platinums": {"limit": 5}}
+        {"games_in_progress": {"limit": 10}, "recent_activity": {"limit": 12}}
     """
     profile = models.OneToOneField(
         Profile,
@@ -4223,3 +4223,5 @@ class GameFlag(models.Model):
 
     def __str__(self):
         return f"{self.get_flag_type_display()} on {self.game.title_name} by {self.reporter.psn_username}"
+
+

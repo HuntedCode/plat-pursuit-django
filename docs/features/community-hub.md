@@ -1,262 +1,168 @@
-# Community Reviews & Ratings Hub
+# Community Hub
 
-A Steam-inspired community review system for PlatPursuit. Users can write thumbs-up/thumbs-down reviews with markdown text, vote reviews as helpful/funny, reply to reviews, and rate DLC packs independently. The system spans three pages: a discovery landing at `/reviews/`, per-game detail pages at `/reviews/<slug>/`, and a Rate My Games wizard at `/reviews/rate-my-games/`.
+The Community Hub is PlatPursuit's site-wide community destination at `/community/`. Where the dashboard at `/` is "your personal cockpit", the Community Hub is "the front door to everything PlatPursuit's community has to offer". It is a wayfinder + marketing surface that introduces each community feature (Reviews, Challenges, Game Lists, Leaderboards, Discord) with a tagline, a small slice of real signal, and a CTA to its dedicated page.
 
-**Status**: All phases complete and public. Admin moderation views remain staff-only.
+> **Naming history**: this doc describes the **new** Community Hub feature added during the Community Hub initiative. The pre-existing system that was previously documented as "Community Hub" is the reviews/ratings system, now correctly named the [Review Hub](review-hub.md). The Review Hub is one of the destinations the Community Hub links out to.
+
+> **Pursuit Feed deferral**: an earlier iteration of this initiative shipped a Pursuit Feed feature on the hub (a marquee promo block), a standalone `/community/feed/` page, an Activity tab on profile pages, and a hybrid `pursuit_activity` dashboard module powered by a polymorphic `Event` model. All of that was rolled back before reaching production. The architectural design is preserved at [Event System (Deferred)](../architecture/event-system-deferred.md) for future revival; the deferral rationale is documented in that doc's status header.
+
+## Why this exists
+
+The site redesign made the dashboard the universal landing page, leaning hard into personal stats and per-user customization. This was deliberate, but it left community-shaped content scattered: leaderboards, reviews, challenges, lists, and the Discord/fundraiser/badge hub all lived in disconnected pages with no shared destination. The Community Hub consolidates them.
+
+The split principle: **dashboard = your stuff, community hub = everyone's stuff**. They serve different mental modes, so they take different shapes. The dashboard is a modular cockpit with per-user customization; the hub is a curated destination page that markets community features and points users at the dedicated page for each one.
+
+## Design Philosophy: Feature Spotlight + personal hook, NOT aggregator
+
+The hub is deliberately NOT a feed-of-feeds. The original Phase 7 commit took an aggregator approach (dump full top-25 leaderboards, full top-10 reviewers, all inline), and that approach was rejected after design review for two reasons:
+
+1. **It dilutes the marketing intent.** A page that exists to *introduce* community features should not also be the canonical surface for *consuming* them. If the full top-25 leaderboard is on the hub, users have no reason to visit the dedicated leaderboard page.
+2. **It feels like a feed-of-feeds.** Visitors get walls of data but no clear "what is this place" framing. The hub should sell features, not aggregate them.
+
+The Feature Spotlight design threads the needle: each community feature gets a card that combines marketing (icon, tagline, CTA) with a small data preview. Repeat visitors still see fresh data so the page never feels dead, but the page never devolves into raw aggregation.
+
+### Split cards (community pulse + personal hook)
+
+Each Feature Grid card is split into **two halves divided by a horizontal rule**:
+
+- **Top half (community pulse)**: a small slice of fresh community signal — 5 most recently reviewed titles, 5 most recent public lists, 5 most recently active challenges, top 5 badge XP. These rows are always padded to 5 slots via `_pad_to_limit` in the service layer; missing rows render as greyed-out placeholders so cards stay the same height regardless of how much real data exists.
+- **Bottom half (personal hook)**: viewer-specific stats that connect the community pulse to "what does this mean for me." For authenticated linked viewers it's compact stat tiles (Reviews, Game Lists), a per-type slot grid (Challenges), or a rank + 4 neighbors strip (Leaderboards). For anonymous viewers and authenticated-but-unlinked viewers it's the shared `personal_half_empty.html` partial with a sign-in or link-PSN CTA, sized to match the populated bottom half so the card height stays consistent.
+
+The personal halves do NOT violate the "wayfinder, not aggregator" rule. They answer "how does the community pulse relate to me," which is a *different question* from anything the dashboard surfaces in isolation. The dashboard tells you "your stats." The community hub tells you "your stats *next to* the community pulse." If a future contributor wants to add a card whose personal half just reproduces a dashboard module verbatim, that's a sign the personal half should stay on the dashboard instead.
 
 ## Architecture Overview
 
-The Community Hub extends the existing rating system with full-text reviews, voting, and DLC-aware grouping. The key architectural addition is `ConceptTrophyGroup`, which bridges game-level `TrophyGroup` records to concept-level groups. This enables per-DLC ratings and reviews without modifying the trophy sync pipeline.
+The Community Hub is a single fixed-layout page (no drag-and-drop, no module library, no per-user customization) composed of feature spotlight cards plus a hero, an optional fundraiser banner, and a permanent Discord callout. All four feature cards are read-only aggregations that pull from existing services (no new data layer was needed).
 
-Reviews are separate from ratings by design. Ratings keep the platinum requirement (high barrier, numeric scores). Reviews have a lower barrier (just own the game for base, 1+ earned trophy for DLC) and use thumbs up/down plus markdown text. This separation means a user can rate without reviewing and vice versa.
-
-The review feed uses **client-side rendering** from JSON API responses (not server-rendered partials) for infinite scroll performance. All write operations go through `ReviewService` which returns `(result, error)` tuples following the established service pattern.
+`CommunityHubView` lives in `core/views.py` next to `HomeView` for symmetry. It is a `TemplateView` with `ProfileHotbarMixin`. The page-data assembler is `core/services/community_hub_service.py`, which orchestrates calls to the underlying services (`ReviewHubService`, `redis_leaderboard_service`, the `Challenge` and `GameList` models directly) and assembles a single context dict.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `trophies/models.py` | 6 new models: ConceptTrophyGroup, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog |
-| `trophies/services/review_service.py` | Full CRUD + voting + replies + reporting + stats (641 lines) |
-| `trophies/services/concept_trophy_group_service.py` | Sync, access checks, mismatch detection (346 lines) |
-| `trophies/services/rating_service.py` | Extended with DLC group rating methods (232 lines) |
-| `trophies/services/review_hub_service.py` | Hub landing page queries: stats, most-reviewed, trending, search, unrated/unreviewed counts |
-| `trophies/management/commands/backfill_concept_slugs.py` | One-time slug generation for all Concepts (88 lines) |
-| `trophies/management/commands/backfill_concept_trophy_groups.py` | Trophy group sync + mismatch auditing (292 lines) |
-| `notifications/models.py` | `review_reply` and `review_milestone` notification types |
-| `trophies/token_keeper.py` | Sync hook for `ConceptTrophyGroupService.sync_for_concept()` |
+| `core/views.py` | `CommunityHubView` (TemplateView, ProfileHotbarMixin). Resolves the viewer profile and collapses anonymous / unlinked into a single None signal so the personal-half helpers all branch on one thing. |
+| `core/services/community_hub_service.py` | Page-data assembler. Houses the four community-pulse helpers, the four personal-hook helpers, and `_pad_to_limit` (which right-pads each list to `SPOTLIGHT_LIMIT` rows so cards stay visually balanced). |
+| `templates/community/hub.html` | Community Hub page template |
+| `templates/community/partials/personal_half_empty.html` | Shared empty-state for the personal half of every feature card. Renders a "Sign in" CTA for anonymous viewers and a "Link your PSN" CTA for authenticated-but-unlinked viewers, in a dashed box that matches the populated bottom half's vertical space. |
+| `templates/community/partials/roadmap_recruitment_strip.html` | Roadmap Team recruitment strip rendered between the feature grid and the Discord callout. Hidden for staff (gated at the call site in `hub.html` via `{% if not request.user.is_staff %}`). See [Roadmap System](roadmap-system.md) Discoverability Surfaces. |
+| `templates/trophies/partials/dashboard/built_for_hunters.html` | Site heartbeat ribbon — lifted as-is from the dashboard, used as the hub's hero. Already fully community-flavored. |
+| `plat_pursuit/urls.py` | Route: `/community/` (community_hub) |
+| `core/sitemaps.py` | Entry in `StaticViewSitemap.items()` at priority 0.7 |
 
-| `api/review_views.py` | 11 view classes covering 15 API endpoints |
-| `trophies/views/review_hub_views.py` | `ReviewHubLandingView`, `ReviewHubDetailView`, `RateMyGamesView` |
-| `static/js/review-hub.js` | Detail page logic (ReviewHub class) |
-| `static/js/review-hub-landing.js` | Landing page logic (game search typeahead, recent feed with infinite scroll) |
-| `static/js/rate-my-games.js` | Wizard logic (RateMyGamesWizard class) |
-| `templates/trophies/review_hub.html` | Landing page template |
-| `templates/trophies/review_hub_detail.html` | Detail page template |
-| `templates/trophies/rate_my_games.html` | Rate My Games wizard template |
-| `templates/trophies/partials/reviews/` | 8 partial templates (header, tabs, banner, ratings, form, your review, feed, trophy strip, user rating panel) |
+## Page Anatomy
 
-| `trophies/views/game_views.py` | `_build_concept_context()` provides review/recommendation context for game detail community section |
-| `templates/trophies/partials/game_detail/community_section.html` | Unified community card: recommendation banner, ratings grid, user review, Review Hub CTA |
-| `trophies/views/admin_views.py` | `ReviewModerationView`, `ReviewModerationActionView`, `ReviewModerationLogView` |
-| `templates/trophies/moderation/review_moderation.html` | Review moderation dashboard |
-| `templates/trophies/moderation/review_moderation_log.html` | Review moderation action log |
+The hub renders these modules in order, top to bottom. Width: **full site container** (the `container mx-auto` that every other page inherits from `base.html`). The dashboard's `max-w-4xl` wrapper is unique to the dashboard because it's modular/customizable; the hub is a destination page and should match the rest of the site (Review Hub, browse pages, etc.).
 
-## Data Model
+### 1. Hero — Site Heartbeat
 
-### Concept.slug
-- `SlugField(max_length=300, unique, nullable)`: URL-safe identifier for hub pages
-- Backfilled via `backfill_concept_slugs` command (1,614 concepts slugged on prod)
-- Falls back to `concept-{id}` for untitled concepts
+Copy of `built_for_hunters.html`. Site-wide stats: total trophies, total games, total profiles, 24-hour activity, plus expanded second-tier stats (platinums, badges, XP, hours hunted). Already cached hourly by the existing `refresh_homepage_hourly` cron. Sets the tone, shows the site is alive.
 
-### ConceptTrophyGroup
-- FK to `Concept`, stores `trophy_group_id` (integer from PSN API)
-- `unique_together(concept, trophy_group_id)`: One CTG per DLC per concept
-- `name`, `icon_url`: Display data grabbed from first game stack during sync
-- `is_base_game` (bool): Marks the default base game group
-- Created/updated by `ConceptTrophyGroupService.sync_for_concept()` during trophy sync
+### 2. Active Fundraiser Banner *(conditional)*
 
-### Review
-- FK to `Profile` (author), `Concept`, nullable FK to `ConceptTrophyGroup`
-- `body` (50-8000 chars, markdown), `recommended` (bool: thumbs up/down)
-- Denormalized counts: `helpful_count`, `funny_count`, `reply_count`
-- `is_deleted` (soft delete), `created_at`, `updated_at`
+When an active fundraiser exists, render a prominent banner here above the feature grid. Urgency + emotional weight justify the high placement. When no fundraiser is active, this section is omitted entirely. Reuses the existing fundraiser context.
 
-### ReviewVote
-- FK to `Review` + `Profile`, `vote_type` (helpful/funny)
-- `unique_together(review, profile, vote_type)`
+### 3. Feature Grid *(2x2 on `lg:`, 1-col on mobile)*
 
-### ReviewReply
-- FK to `Review` + `Profile` (author)
-- Plain text only (max 2000 chars), no nesting (single-level)
-- `is_deleted` (soft delete)
+Each card has the same anatomy:
 
-### ReviewReport / ReviewModerationLog
-- Follow existing `CommentReport` / `ModerationLog` patterns
-- `ReviewModerationLog` includes `internal_notes` (private staff notes) and `ip_address` fields
-- When a review is deleted via moderation, all other pending reports for that review are auto-resolved to `action_taken`
+```
+[icon + title + tagline]
+[5 community rows (padded with placeholders)]
+─── divider ───
+[personal section (varies per card) OR sign-in/link-PSN empty CTA]
+[hero CTA button — pinned to bottom via flex-col + mt-auto]
+```
 
-### UserConceptRating Extension
-- Added nullable FK to `ConceptTrophyGroup` for DLC-specific ratings
-- `unique_together` now includes `concept_trophy_group`
-- Base game ratings: `concept_trophy_group__isnull=True` (backward compatible)
+The 2x2 ordering pairs cards by visual shape so each row reads as balanced: row 1 is *title-shaped* cards (concept icons + game titles on the left, a small score on the right) and row 2 is *people-shaped* cards (avatars + usernames on the left, a percentage on the right).
 
-## Key Flows
+| Row | Card | Tagline | Top half (community) | Bottom half (personal) | CTA |
+|-----|------|---------|----------------------|------------------------|-----|
+| 1 (left)  | **Review Hub**   | "See what hunters are saying about your next platinum." | 5 most recently reviewed titles (icon + title + review count + recommendation %) | 3 stat tiles: Written / Helpful / Recommend % | "Visit Review Hub" |
+| 1 (right) | **Game Lists**   | "Curated by the community. Your next obsession is in here." | 5 most recent published lists (icon + title + author + game count) | 3 stat tiles: Lists / Public / Games | "Browse Lists" |
+| 2 (left)  | **Challenges**   | "Push yourself further. A-Z, Calendar, Genre, and more." | 5 active challenges (avatar + author — challenge name + progress %) | Per-type slot grid (A-Z / Calendar / Genre — each row is your latest challenge of that type with progress %, OR a "Start →" placeholder if you haven't started one) | "Browse Challenges" |
+| 2 (right) | **Leaderboards** | "Climb the ranks. Compete with hunters worldwide." | Top 5 badge XP (rank + avatar + name + XP) | Your rank + 2 above + 2 below (5 ranked rows, your row highlighted) | "View Leaderboards" |
 
-### Trophy Group Sync
+The leaderboard card top half shows top 5, NOT top 25. The full top-25 leaderboard lives on `/community/leaderboards/badges/` — the hub just teases it. The bottom half shows your rank with 2 neighbors above and below, padded with greyed-out placeholders if you're near the top or bottom of the leaderboard.
 
-1. Token Keeper completes trophy sync for a game
-2. If `game.concept` exists, calls `ConceptTrophyGroupService.sync_for_concept(concept)`
-3. Service iterates all games in the concept, discovers `TrophyGroup` records
-4. Deduplicates by `trophy_group_id` (first name/icon wins across stacks)
-5. Creates/updates `ConceptTrophyGroup` via `update_or_create`
+All four cards stay the same height regardless of how much real data exists, because both halves are padded to a fixed slot count. The Challenges card's per-type slot grid is the most opinionated bottom half — it ensures all 3 challenge types are always visible to the viewer (with a "Start →" affordance for empty types) instead of the natural-but-uneven shape of "show only the types you've started."
 
-### Review Creation (Phase 4+)
+### 4. Roadmap Team Recruitment Strip *(full-width slim strip)*
 
-1. User submits review via POST to `/api/v1/reviews/<concept_id>/group/<group_id>/create/`
-2. API validates: concept not shovelware, user meets access requirement
-3. `ReviewService.create_review()`: validates body length, banned words, creates Review
-4. Returns review data as JSON for client-side rendering
+A top-of-funnel recruitment surface for the PlatPursuit Roadmap Team, the small curated group of trophy hunters who write the site's platinum roadmaps. Mirrors the Discord callout's full-width slim-strip anatomy (gradient shell + icon + headline + body + CTA button) but in the primary accent color since the Team is a PlatPursuit-branded thing rather than a Discord-branded one.
 
-### Vote Toggle
+- **Audience**: everyone. There was an earlier `is_staff`-hide gate (the rationale being "team members shouldn't see the recruitment ask"), but it was removed because the Roadmap Team is being built from zero and `is_staff` was a poor proxy for "already on the team." When real Roadmap Team membership exists as its own concept (a `Profile.is_roadmap_author` flag, most likely), the gate should come back wired to *that* signal — not to `is_staff`. See the gotcha below.
+- **Framing**: aspirational and identity-driven, NOT transactional. The copy positions roadmap writing as joining a small curated team rather than filling out a content form. This matches the closed-shop product model — the publisher personally onboards each author and the Team is intentionally small.
+- **CTA**: routes to `https://discord.gg/PlatPursuit`. The recruitment conversation happens in Discord rather than via a form, which keeps the inbound funnel narrow (high signal, low triage cost).
 
-1. User clicks helpful/funny button
-2. POST to `/api/v1/reviews/<review_id>/vote/`
-3. `ReviewService.toggle_vote()`: creates or deletes ReviewVote
-4. Updates denormalized count via `F()` expression
-5. Milestone notification at thresholds [5, 10, 25, 50] helpful votes
+The strip is paired with the per-game **"Join the Team" CTA** on the no-roadmap empty state on game detail pages — the two surfaces capture potential authors at different moments. The hub strip catches users who are browsing the site as a whole; the per-game CTA catches them at the specific moment they realize a game they care about doesn't have a roadmap. See [Roadmap System Discoverability Surfaces](roadmap-system.md#discoverability-surfaces) for the full funnel design.
 
-### Access Requirements
+### 5. Discord Callout *(full-width strip, always shown)*
 
-| Action | Base Game | DLC |
-|--------|-----------|-----|
-| Rate | Platinum earned | 100% DLC trophies |
-| Review | ProfileGame exists | 1+ earned trophy in group |
-| Vote/Reply | Authenticated | Authenticated |
+Invite-style banner with Discord branding, member count if available, and a "Join the Discord" CTA. Treated as a permanent fixture, not feature-gated. Even if Discord member count fetching fails, the callout still renders without the count.
 
-## API Endpoints
+## Personal vs Community Leaderboard Split
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/api/v1/reviews/recent/` | No | Recent reviews feed (paginated, for landing page) |
-| GET | `/api/v1/reviews/search/?q=<query>&limit=8` | No | Concept search by title for landing page typeahead (excludes shovelware, PP_ stubs) |
-| GET | `/api/v1/reviews/wizard/queue/` | Yes | Rate My Games queue (filters: unrated/unreviewed/both, queue_type: base/dlc) |
-| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/` | No | List reviews (paginated, sortable) |
-| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/create/` | Yes | Create review |
-| POST | `/api/v1/reviews/<concept_id>/group/<group_id>/rate/` | Yes | Submit/update rating |
-| GET | `/api/v1/reviews/<concept_id>/group/<group_id>/trophies/` | No | Condensed trophy list with earned status |
-| GET | `/api/v1/reviews/<review_id>/` | No | Single review detail |
-| PUT | `/api/v1/reviews/<review_id>/` | Yes | Edit own review |
-| DELETE | `/api/v1/reviews/<review_id>/` | Yes | Delete own review |
-| POST | `/api/v1/reviews/<review_id>/vote/` | Yes | Toggle helpful/funny |
-| POST | `/api/v1/reviews/<review_id>/report/` | Yes | Report review |
-| GET | `/api/v1/reviews/<review_id>/replies/` | No | List replies |
-| POST | `/api/v1/reviews/<review_id>/replies/` | Yes | Create reply |
-| PUT | `/api/v1/reviews/replies/<reply_id>/` | Yes | Edit reply |
-| DELETE | `/api/v1/reviews/replies/<reply_id>/` | Yes | Delete reply |
+The dashboard's `badge_xp_leaderboard` and `country_xp_leaderboard` modules and the Community Hub's leaderboard card **share the same Redis data source** (`redis_leaderboard_service`) but render different views:
 
-## Page Views (Phase 5, Implemented)
+| Surface | What it shows | Audience framing |
+|---------|---------------|------------------|
+| **Dashboard** `badge_xp_leaderboard` (personal slim) | Your rank + neighbors above and below + "View Community Leaderboard" link | "Where do you stand?" |
+| **Dashboard** `country_xp_leaderboard` (personal slim) | Same pattern, scoped to your country | "Where do you stand in your country?" |
+| **Community Hub** Leaderboards feature card | Top 5 badge XP + "View Leaderboards" CTA to the dedicated page | "Climb the ranks." (marketing) |
+| **Existing** `/community/leaderboards/badges/<slug>/` page | Full paginated leaderboard for a specific series | The deep-dive surface |
 
-### Landing Page
-
-**Route**: `/reviews/` (public, no auth required)
-
-**ReviewHubLandingView** extends `ProfileHotbarMixin` + `TemplateView`. Shows a game search typeahead (searches concepts via `ConceptReviewSearchView` API), community stats (total reviews, ratings, reviewers, helpful votes), most-reviewed games sidebar, trending reviews sidebar, and an infinite-scroll recent reviews feed (sortable by newest/most helpful) via `RecentReviewsView` API. Authenticated users see a CTA card with unrated/unreviewed platinum counts. Accessible via "Review Hub" link in both desktop navbar (Community dropdown) and mobile tabbar (More drawer, Community section).
-
-### Detail Page
-
-**Route**: `/reviews/<slug>/` with optional `?group=<trophy_group_id>` query param (public, no auth required).
-
-**ReviewHubDetailView** extends `ProfileHotbarMixin` + `BackgroundContextMixin` + `DetailView`. Uses Concept slug for URL lookup. Shovelware gate returns 404 if all games in concept are flagged. Games queryset is cached in `get_object()` to avoid redundant queries.
-
-**Layout**: Two-column on desktop (sidebar 33%, main 67%), stacked on tablet. Tab bar for trophy groups (hidden if only base game).
-
-**Sidebar**: Recommendation banner (Steam-style percentage) + community ratings panel + collapsible user rating form + collapsible trophy list strip.
-
-**Main content**: Review form (if user can review), "Your Review" section (server-rendered with `render_markdown`), review feed (client-rendered from JSON API via ZoomAwareObserver-based infinite scroll).
-
-### Rate My Games Wizard
-
-**Route**: `/reviews/rate-my-games/` (requires login)
-
-**RateMyGamesView** extends `LoginRequiredMixin` + `ProfileHotbarMixin` + `TemplateView`. Side-by-side wizard for quickly rating and reviewing platinumed games. Left panel shows game queue (base games and 100%-completed DLC), right panel shows rating form + review form with progress bar. Fetches game queue via `WizardQueueView` API.
-
-**Split submit buttons**: Two distinct submit actions: "Submit Rating" (or "Submit Rating & Review" when review is ready) submits the rating and optionally the review. "Submit Review Only" submits just the review without touching the rating. The review-only button is hidden when the game already has a review.
-
-**Hours-to-platinum validation**: All rating submissions (wizard, Review Hub detail page, notification inbox) require `hours_to_platinum > 0`. Enforced both client-side (disabled button / toast error) and server-side (`UserConceptRatingForm.clean_hours_to_platinum()`).
-
-**DLC filtering**: Only DLC groups where the user has 100% trophy completion appear in the wizard queue. This is enforced server-side in `_get_dlc_queue()` via bulk Trophy/EarnedTrophy aggregate queries.
-
-### Key Design Decisions
-
-- Review feed is **client-rendered** from JSON. API returns `body_html` (server-rendered markdown via `ChecklistService.process_markdown()`), so no client-side markdown library needed.
-- Tab switching uses **full page reload** with `?group=<id>` query param for simplicity and bookmarkability.
-- Rating form is **collapsible** (collapsed by default) in the sidebar.
-- User's own review is a **separate section** above the feed (server-rendered), not part of the paginated feed.
-- Game detail page shows a unified "Community" card with recommendation stats, ratings grid, user review preview, and Review Hub CTA.
-- Review word-count progress bars use the shared `ReviewProgressTiers.updateWordProgress()` utility from `utils.js` across all three locations (new review form, edit review, inline edit).
+This split means the user gets community context on the hub AND personal context on the dashboard, without duplicating modules or splitting the data source. `top_developers` (which is already personal — "developers in YOUR library") stays where it is and is NOT split.
 
 ## Integration Points
 
-- [Concept Model](../architecture/concept-model.md): `Concept.absorb()` updated to handle Reviews, CTGs, and DLC ratings. CTGs merged before reviews so FK references survive.
-- [Token Keeper](../architecture/token-keeper.md): Sync hook at ~line 1374 calls `sync_for_concept()` after trophy sync
-- [Notification System](../architecture/notification-system.md): `review_reply` and `review_milestone` types with metadata (concept title/slug/icon, helpful count, replier username, reply snippet). Detail renderers in `notification-inbox.js`.
-- [Comment System](comment-system.md): ReviewService follows CommentService patterns (CRUD, voting, reporting, sanitization)
-- [Badge System](../architecture/badge-system.md): Recommendation stats cached at `review:recommend:{concept_id}:{group_id}` (30min TTL)
-
-## Admin Moderation (Phase 6)
-
-Three staff-only views mirror the comment moderation system:
-
-| Route | View | Purpose |
-|-------|------|---------|
-| `/staff/review-moderation/` | `ReviewModerationView` | Dashboard with pending reports, status tabs, search/filter |
-| `/staff/review-moderation/action/<report_id>/` | `ReviewModerationActionView` | POST handler for delete/dismiss/review actions |
-| `/staff/review-moderation/log/` | `ReviewModerationLogView` | Full audit log with moderator/action/date filters |
-
-### Moderation Actions
-- **Delete Review**: Calls `ReviewService.delete_review()` (soft delete + cache invalidation + milestone recheck). Auto-resolves all sibling pending reports for the same review.
-- **Dismiss Report**: Creates `ReviewModerationLog` entry, marks report as dismissed.
-- **Mark Reviewed**: Creates `ReviewModerationLog` entry, marks report as reviewed (no action on the review itself).
-
-All actions record `reason` and optional `internal_notes` (staff-only, not visible to users).
-
-### Cross-links
-Comment and review moderation pages cross-link to each other via header buttons.
-
-## Game Detail Integration
-
-The game detail page shows a single unified "Community" card (`community_section.html`) with a two-column layout: ratings grid (left, 2/5 width) and reviews section (right, 3/5 width).
-
-| File | Purpose |
-|------|---------|
-| `trophies/views/game_views.py` | `_build_concept_context()` fetches `recommendation_stats`, `review_count`, `user_review`, `can_review` for the base game CTG |
-| `templates/trophies/partials/game_detail/community_section.html` | Unified community card with all sections |
-
-**Left column (Ratings):**
-- 2x2 grid showing Difficulty, Grindiness, Hours, Fun with color-coded progress bars
-- Full-width Overall Rating row
-- "Based on X community ratings" footer
-
-**Right column (Reviews):** Shown when concept has a slug.
-- Recommendation banner: thumbs up/down percentage with visual bar (inlined from `recommendation_banner.html` pattern to avoid card-within-card nesting)
-- User review: truncated preview with recommendation badge, or CTA to write a review if eligible
-- "Explore the Review Hub" button linking to the detail page
-
-**Rating form**: Removed from the game detail page. Users submit ratings via the Review Hub's rating panel instead. The `post()` method on `GameDetailView` has been removed.
+- [Review Hub](review-hub.md): the dedicated Reviews destination linked from the hub's Reviews feature card. The card itself shows the 3 most-recently-reviewed titles (deduped by concept, with recommendation %) via `_get_recently_reviewed_titles_spotlight()` in `core/services/community_hub_service.py`. The recommendation percentage math reuses the same formula as `ReviewHubService.get_most_reviewed_games` so the score on the spotlight matches the score on the Review Hub
+- [Dashboard](dashboard.md): the hub is the community-side counterpart to the dashboard's personal-cockpit role
+- [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA design that puts Community as one of three top-level destinations + the sub-nav infrastructure that surfaces sub-pages on every Community page
+- [Navigation](navigation.md): the navbar/footer/mobile structure, profile tabs, cross-link inventory
+- [Badge System](../architecture/badge-system.md): the badge XP leaderboard powers the hub leaderboard card
+- [Roadmap System](roadmap-system.md): the hub's Roadmap Team recruitment strip is one of four discoverability surfaces in the broader roadmap funnel. The strip captures top-of-funnel interest; the per-game empty-state CTAs on game detail pages capture in-context interest at the moment a hunter realizes a specific game has no roadmap.
+- [Event System (Deferred)](../architecture/event-system-deferred.md): the rolled-back Pursuit Feed feature that an earlier iteration of this initiative built; preserved as a reference for future revival
 
 ## Gotchas and Pitfalls
 
-- **Base game rating filter**: Use `concept_trophy_group__isnull=True`, NOT FK lookup by trophy_group_id. Existing ratings have NULL for backward compatibility.
-- **Do NOT backfill existing ratings**: Old `UserConceptRating` rows have `concept_trophy_group=NULL` for base game by design. Backfilling would break the filter logic.
-- **Markdown for reviews, plain text for replies**: Reviews use `ChecklistService.process_markdown()` + `render_markdown` filter. Replies use `CommentService.sanitize_text()`.
-- **Shovelware exclusion**: All games in a concept must be non-shovelware for the hub to be accessible. Enforced at both view and API level.
-- **CTG deduplication across stacks**: `sync_for_concept()` uses a `seen` dict keyed by `trophy_group_id`. First name/icon found wins. The mismatch checker (`detect_mismatches()`) flags structural issues.
-- **Reply count decrement**: Uses `Greatest(F('reply_count') - 1, Value(0))` for safe clamping (prevents negative counts).
-- **Client-side rendering**: Review feed is JSON from API, not server-rendered partials. This is intentional for infinite scroll performance.
-- **ZoomAwareObserver**: Infinite scroll sentinels use `ZoomAwareObserver` (not raw `IntersectionObserver`) to work correctly when the page is scaled via `ZoomScaler` on sub-768px screens.
-- **Admin moderation remains staff-only**: `ReviewModerationView`, `ReviewModerationActionView`, and `ReviewModerationLogView` use `StaffRequiredMixin`. All other Review Hub pages are public.
-- **Rating form removed from game detail**: The `GameDetailView.post()` method and `UserConceptRatingForm` usage were removed. Ratings are submitted exclusively via the Review Hub's rating panel.
-- **Hours-to-platinum must be > 0**: Enforced by `UserConceptRatingForm.clean_hours_to_platinum()` on the backend and client-side validation in all 3 JS files (rate-my-games.js, review-hub.js, notification-inbox.js). The wizard disables the rating button until hours is set; the other two forms show a toast error.
+- **Community Hub vs Review Hub**: these are two distinct features. The Review Hub (formerly the doc named `community-hub.md`) handles per-game ratings and reviews at `/community/reviews/`. The Community Hub is the new site-wide destination at `/community/` that aggregates many community surfaces, the Review Hub being one of the destinations it links out to. Do not conflate them.
 
-## Management Commands
+- **The hub is a wayfinder, not an aggregator.** Resist the urge to "just show one more thing" inline. Every additional inline item dilutes the marketing intent and pushes traffic away from the canonical pages each feature already has. Each card should show 3-5 items maximum as a teaser. If a future contributor wants to expand a hub card, they should ask "does this belong on the dedicated page instead?"
 
-| Command | Purpose | Usage |
-|---------|---------|-------|
-| `backfill_concept_slugs` | Generate URL slugs for all Concepts | `python manage.py backfill_concept_slugs [--dry-run] [--batch-size 100]` |
-| `backfill_concept_trophy_groups` | Sync CTGs + audit mismatches | `python manage.py backfill_concept_trophy_groups [--dry-run] [--check-mismatches] [--collections-only]` |
-| `redis_admin --flush-community` | Clear review/rating caches | `python manage.py redis_admin --flush-community` |
+- **The hub uses full site container width.** Do not wrap hub sections in `max-w-4xl`. The dashboard does that because it's modular/customizable; the hub is a destination page and should match the rest of the site (Review Hub, browse pages, etc.).
 
-## Cache Keys
+- **The hub is not customizable.** Unlike the dashboard, the Community Hub has a fixed module layout. Resist the urge to add "let users hide modules" or drag-and-drop. The hub is curated; the dashboard is personal. This separation is a deliberate product decision.
 
-| Key Pattern | TTL | Purpose |
-|-------------|-----|---------|
-| `review_hub:stats` | 15m | Hub landing page aggregate stats (total reviews, ratings, reviewers, helpful votes) |
-| `review:recommend:{concept_id}:{group_id}` | 30m | Recommendation percentage stats |
-| `concept:averages:{concept_id}:group:{group_id}` | varies | DLC-specific rating averages |
+- **The Roadmap recruitment strip is currently visible to everyone, including staff.** The earlier `is_staff`-hide gate was removed because (a) the Roadmap Team is being built from zero so "hide from team members" was hiding from nobody, and (b) `is_staff` is a poor proxy for "already on the Roadmap Team" — not all staff are authors and (in the long run) not all authors will be staff. When real team membership exists as its own concept, add the gate back at the call site (`templates/community/hub.html`, NOT inside the partial — the partial stays a pure render so the visibility logic is co-located with the rest of the page composition) and wire it to the new signal. The most likely shape is a `Profile.is_roadmap_author` boolean with a default of False, flipped manually in the admin for actual team members.
+
+- **`built_for_hunters.html` is shared between dashboard, home shells, and the Community Hub.** It is cached hourly via the existing `refresh_homepage_hourly` cron and silently hides if its cache is empty. If the cron breaks, the entire heartbeat ribbon disappears from all surfaces; check the cron and the `site_heartbeat_*` Redis keys before assuming the hub is broken.
+
+- **The Reviews card shows recently-reviewed titles, not top reviewers and not raw recent reviews.** An earlier iteration sourced this card from `ReviewHubService.get_top_reviewers()`, which filters `total_helpful__gt=0` and excluded any reviewer whose reviews hadn't accumulated helpful votes yet — so the card frequently rendered its empty state on a live site even when fresh reviews existed. A second iteration switched to a raw "most recent reviews" list, but that approach failed two structural tests: it would let three different people reviewing the same hot game take all 3 slots (no deduplication), and it forced reading paragraph excerpts in a card that's meant to be skimmed. The card now groups reviews by concept, orders concepts by `Max(reviews.created_at)`, and shows a recommendation percentage as the at-a-glance score — matching the pattern of every other Feature Spotlight card (`recent_lists`, `active_challenges`) which all show *things* not *people* or *paragraphs*.
+
+- **Each card has BOTH a community half and a personal half.** The personal halves are not aggregator scope creep — they exist because the hub is supposed to answer "how does the community pulse relate to me," which is a different question from anything the dashboard surfaces. If you find yourself wanting to add a personal stat to a card that just reproduces a dashboard module verbatim, that's a sign the stat belongs on the dashboard instead.
+
+- **The viewer profile gate collapses three states into one.** `CommunityHubView` only passes `viewer_profile` to `build_community_hub_context` if the user is authenticated AND has a linked profile. Anonymous viewers, authenticated users with no profile, and authenticated users with an unlinked profile all get `viewer_profile=None`, which propagates to every personal-half helper and triggers the empty CTA. The template separately reads `viewer_is_authenticated` so the CTA partial can pick the right copy ("Sign in" vs "Link your PSN"). If you add a new personal-half helper, follow the same `viewer_profile is None → return None` pattern so the template branching stays uniform.
+
+- **`_pad_to_limit` keeps cards visually balanced.** Every community-pulse helper and the personal XP neighborhood helper pad their return value to `SPOTLIGHT_LIMIT` (5) rows by appending `None` entries. The template iterates the padded list and uses `{% if entry %}` to render either a live row or a greyed-out dashed-border placeholder. This is mostly a dev-machine affordance (placeholders mean fresh installs and design work aren't obscured by partial data); on prod the lists fill naturally. If you bump `SPOTLIGHT_LIMIT`, you don't need to touch the templates — they iterate whatever the helper returns.
+
+- **The Challenges personal half is a fixed 3-row grid, not a list.** Unlike the other personal halves, which are stat tiles or padded leaderboard rows, the Challenges card's personal half always renders ALL THREE challenge types (A-Z / Calendar / Genre) as separate rows with placeholder "Start →" affordances for the types the viewer hasn't started. This is opinionated: it nudges the viewer toward the types they're missing. If you change the challenge type list, update `_get_personal_challenge_slots` in `community_hub_service.py` to match — it carries the type-key, label, and detail-URL-name on each row so the template doesn't hardcode the type list anywhere.
+
+- **Discord callout is permanent**, not feature-gated. Even if the Discord member count fetch fails, the callout still renders (without the count). Do not gate the callout behind "is the Discord widget API healthy"; the callout's job is to point users at Discord, and the link works regardless of whether we know the member count.
+
+- **The hub used to render top 25 leaderboards inline** (the original Phase 7 aggregator commit). The Feature Spotlight rework drops that to top 5 and makes the dedicated leaderboard page the canonical full-list surface. Do not re-introduce the top 25 inline view.
+
+- **SEO meta tags must be set** via the standard `{% block title %}`, `{% block meta_description %}`, `{% block og_title %}`, `{% block twitter_title %}` patterns from `templates/base.html`. Use the existing `jsonld_breadcrumbs` templatetag with a `breadcrumb` context list. See [SEO Meta Tags](../reference/seo-meta-tags.md).
+
+- **No dedicated Pursuit Feed surface.** An earlier iteration of this initiative built one and rolled it back. If you find yourself wanting to add a "live activity feed" to the hub, read [Event System (Deferred)](../architecture/event-system-deferred.md) first to understand the design space and the reasons for the deferral. A revived feed feature should be its own initiative, not a hub addition.
 
 ## Related Docs
 
-- [Concept Model](../architecture/concept-model.md): Concept.absorb() handles review/CTG migration
-- [Comment System](comment-system.md): Pattern reference for CRUD, voting, reporting
-- [Data Model](../architecture/data-model.md): Core model relationships
+- [Review Hub](review-hub.md): the reviews/ratings system that the hub's Review Hub feature card teases
+- [My Pursuit Hub](my-pursuit-hub.md): the personal-progression hub at `/my-pursuit/` (Badges, Milestones, Titles), forward-compatible with the gamification initiative
+- [Dashboard](dashboard.md): the personal cockpit at `/`
+- [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA structure that puts Community as one of three top-level destinations
+- [Navigation](navigation.md): the navbar, footer, mobile drawer, profile tabs, cross-link inventory
+- [Badge System](../architecture/badge-system.md): the source of badge XP leaderboards
+- [Leaderboard System](../architecture/leaderboard-system.md): the Redis-backed leaderboard data source shared between dashboard and hub
+- [Event System (Deferred)](../architecture/event-system-deferred.md): the rolled-back Pursuit Feed design, preserved for future revival
+- [SEO Meta Tags](../reference/seo-meta-tags.md): the meta tag block conventions for the new pages

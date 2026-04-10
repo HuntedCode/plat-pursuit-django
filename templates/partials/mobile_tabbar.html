@@ -1,185 +1,73 @@
 {% load static %}
 
-<!-- Mobile Search Overlay -->
-<div id="mobile-search-overlay" class="mobile-search-overlay lg:hidden" aria-hidden="true">
-    <div class="flex items-center gap-2">
-        <form action="{% url 'search' %}" method="GET" class="join flex-1">
-            <select name="type" class="select select-sm select-primary join-item w-auto">
-                <option value="game">Game</option>
-                <option value="trophy">Trophy</option>
-                <option value="user">Profile</option>
-            </select>
-            <input id="mobile-search-input" type="text" name="query" placeholder="Search..." class="input input-primary input-sm join-item flex-1" />
-            <button type="submit" class="btn btn-sm btn-primary join-item">Go</button>
-        </form>
-        <button id="mobile-search-close" class="btn btn-ghost btn-sm btn-circle" aria-label="Close search">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        </button>
-    </div>
-</div>
+{% comment %}
+Mobile bottom tab bar — the 4-hub navigation for <lg: viewports.
 
-<!-- More Drawer Backdrop -->
-<div id="more-drawer-backdrop" class="more-drawer-backdrop hidden lg:!hidden" aria-hidden="true"></div>
+Mirrors the desktop navbar's hub buttons (Dashboard / Browse / Community /
+My Pursuit) at the bottom of the viewport so mobile users have one-tap
+access to every hub at all scroll positions. The desktop navbar's hub
+buttons are hidden on <lg: precisely because this bar takes over.
 
-<!-- More Drawer (Bottom Sheet) -->
-<div id="more-drawer" class="more-drawer lg:!hidden" role="dialog" aria-label="Navigation menu" aria-hidden="true">
-    <div class="more-drawer-handle"></div>
+The previous mobile chrome (search button + overlay, More drawer) was
+removed in the navbar consolidation: search was dropped site-wide because
+the IA wayfinding handles content discovery, and the More drawer became
+redundant once the bottom tab bar surfaced the 4 hubs directly. The hubs'
+sub-pages are reachable via the hub_subnav strip pinned at top-16.
 
-    <!-- Browse -->
-    <div class="more-drawer-section-title">Browse</div>
-    <ul class="menu menu-sm px-2">
-        <li><a href="{% url 'games_list' %}">Games</a></li>
-        <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
-        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
-    </ul>
+Active state: each tab compares hub_section (from the hub_subnav context
+processor) and renders with text-primary when active. The Dashboard tab
+is also active when hub_section is None (e.g. settings, notifications)
+because tapping the Dashboard tab on a non-hub page should always feel
+correct — settings is "your account" which conceptually belongs under
+Dashboard.
 
-    <!-- Discover -->
-    <div class="more-drawer-section-title">Discover</div>
-    <ul class="menu menu-sm px-2">
-        <li><a href="{% url 'companies_list' %}">Companies</a></li>
-        <li><a href="{% url 'genres_list' %}">Genres & Themes</a></li>
-        <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
-    </ul>
+See docs/architecture/ia-and-subnav.md for the design rationale.
+{% endcomment %}
 
-    <!-- Community -->
-    <div class="more-drawer-section-title">Community</div>
-    <ul class="menu menu-sm px-2">
-        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
-        <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
-        <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
-        <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
-        {% if active_fundraiser %}
-            <li>
-                <a href="{% url 'fundraiser' active_fundraiser.slug %}">
-                    <span class="flex flex-row gap-2 items-center">
-                        Fundraiser
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    </span>
-                </a>
-            </li>
-        {% endif %}
-    </ul>
-
-    <!-- Earn -->
-    <div class="more-drawer-section-title">Earn</div>
-    <ul class="menu menu-sm px-2">
-        <li><a href="{% url 'badges_list' %}">Badges</a></li>
-        <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
-        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
-        {% if user.is_authenticated and user.profile %}
-            <li><a href="{% url 'my_titles' %}">Titles</a></li>
-        {% endif %}
-    </ul>
-
-    {# Guides section hidden during redesign #}
-
-    <!-- My Pursuit -->
-    {% if user.is_authenticated and user.profile %}
-    <div class="more-drawer-section-title">My Pursuit</div>
-    <ul class="menu menu-sm px-2">
-        {% if user.is_staff %}
-        <li><a href="{% url 'dashboard' %}">My Dashboard (Staff Only)</a></li>
-        {% endif %}
-        <li><a href="{% url 'settings' %}">Customization</a></li>
-        <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-        <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
-        <li><a href="{% url 'my_lists' %}">My Lists</a></li>
-        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
-        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-    </ul>
-    {% endif %}
-
-    <!-- Account -->
-    <div class="more-drawer-section-title">Account</div>
-    <ul class="menu menu-sm px-2">
-        <li>
-            <button id="more-drawer-theme-toggle" type="button" class="flex items-center gap-2 w-full">
-                <svg id="drawer-theme-icon-sun" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="5"/>
-                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                </svg>
-                <svg id="drawer-theme-icon-moon" class="w-4 h-4 hidden" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-                <span id="drawer-theme-toggle-label">Dark Mode</span>
-            </button>
-        </li>
-    </ul>
-
-    <!-- Footer links -->
-    <div class="flex items-center justify-center gap-4 text-xs text-base-content/40 py-4 px-4">
-        <a href="{% url 'privacy' %}" class="hover:text-base-content/70">Privacy</a>
-        <span>&middot;</span>
-        <a href="{% url 'terms' %}" class="hover:text-base-content/70">Terms</a>
-        <span>&middot;</span>
-        <a href="{% url 'about' %}" class="hover:text-base-content/70">About</a>
-    </div>
-</div>
-
-<!-- Bottom Tab Bar -->
 <nav class="mobile-tabbar lg:hidden" role="navigation" aria-label="Mobile navigation">
     <div class="mobile-tabbar-inner">
-        <!-- Home -->
-        <a href="/" class="mobile-tabbar-item" aria-label="Home">
+        <!-- Dashboard -->
+        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'dashboard' %}active{% endif %}" aria-label="Dashboard">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                <rect x="3" y="3" width="7" height="9"/>
+                <rect x="14" y="3" width="7" height="5"/>
+                <rect x="14" y="12" width="7" height="9"/>
+                <rect x="3" y="16" width="7" height="5"/>
             </svg>
-            <span>Home</span>
+            <span>Dashboard</span>
         </a>
 
-        <!-- Games -->
-        <a href="{% url 'games_list' %}" class="mobile-tabbar-item" aria-label="Games">
+        <!-- Browse -->
+        <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" aria-label="Browse">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                <line x1="6" y1="12" x2="6" y2="12"></line>
-                <line x1="10" y1="12" x2="10" y2="12"></line>
-                <circle cx="17" cy="10" r="1"></circle>
-                <circle cx="15" cy="13" r="1"></circle>
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
             </svg>
-            <span>Games</span>
+            <span>Browse</span>
         </a>
 
-        <!-- Search -->
-        <button id="mobile-search-btn" class="mobile-tabbar-item" aria-label="Search">
+        <!-- Community -->
+        <a href="{% url 'community_hub' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" aria-label="Community">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
-            <span>Search</span>
-        </button>
-
-        <!-- Notifications (auth) / Login (guest) -->
-        {% if user.is_authenticated %}
-        <a href="{% url 'notification_inbox' %}" class="mobile-tabbar-item relative" aria-label="Notifications">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-            <span id="mobile-notification-badge" class="absolute top-0 right-1/4 badge badge-error badge-xs hidden" aria-live="polite">0</span>
-            <span>Notifs</span>
+            <span>Community</span>
         </a>
-        {% else %}
-        <a href="{% url 'account_login' %}" class="mobile-tabbar-item" aria-label="Login">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-            <span>Login</span>
-        </a>
-        {% endif %}
 
-        <!-- More -->
-        <button id="mobile-more-btn" class="mobile-tabbar-item" aria-label="More menu">
+        <!-- My Pursuit -->
+        <a href="{% url 'my_pursuit_hub' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" aria-label="My Pursuit">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                <path d="M4 22h16"/>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
             </svg>
-            <span>More</span>
-        </button>
+            <span>My Pursuit</span>
+        </a>
     </div>
 </nav>

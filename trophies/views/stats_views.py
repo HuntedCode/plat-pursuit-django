@@ -4,7 +4,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import TemplateView
 
-from trophies.mixins import StaffRequiredMixin, ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin
 from trophies.services.dashboard_service import get_effective_premium
 from trophies.services.stats_service import (
     get_career_overview,
@@ -12,7 +12,13 @@ from trophies.services.stats_service import (
 )
 
 
-class MyStatsView(StaffRequiredMixin, ProfileHotbarMixin, TemplateView):
+class MyStatsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+    """Personal stats page at /my-stats/.
+
+    Public to all logged-in users (Phase 9 of the Community Hub initiative
+    ungated this view from staff-only). Users without a linked profile are
+    redirected to the PSN linking flow.
+    """
     template_name = 'trophies/my_stats.html'
 
     def dispatch(self, request, *args, **kwargs):

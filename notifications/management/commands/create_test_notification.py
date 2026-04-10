@@ -107,13 +107,14 @@ class Command(BaseCommand):
 
     def _create_challenge(self, user):
         """Create a test challenge completed notification."""
+        from django.urls import reverse
         notification = NotificationService.create_notification(
             recipient=user,
             notification_type='challenge_completed',
             title='A-Z Challenge Complete!',
             message=f'You completed your A-Z Challenge "My Epic A-Z Challenge"! Welcome to the Hall of Fame!',
             icon='\U0001f3c6',
-            action_url='/challenges/',
+            action_url=reverse('challenges_browse'),
             action_text='View Challenge',
             metadata={
                 'challenge_id': 1,

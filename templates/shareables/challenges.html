@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static custom_filters %}
+{% block title %}Challenge Cards - My Shareables{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% comment %}
+Challenge share cards page.
+
+Lists every non-deleted challenge for the user (A-Z, Calendar, Genre)
+grouped by type. Each challenge gets its own preview card with the
+same share-card-preview / share-card-content / share-card-swatches /
+share-card-download markup the dashboard challenge_share_cards module
+uses, so the existing dashboard.js _initShareCards routine handles
+HTML preview fetching, theme picking, and PNG download for free.
+
+The init runs via PlatPursuit.DashboardManager._moduleInits['challenge_share_cards']
+called manually from the inline script at the bottom of this template.
+This pattern lifts the same wiring used by the dashboard preview
+toggle (templates/trophies/dashboard.html lines 258-265) so we don't
+have to extract the share-card init into a standalone JS file.
+
+The existing per-challenge share buttons on each challenge detail
+page are unchanged — this page is additive, not a replacement.
+
+See trophies/views/shareables_views.py:MyChallengeSharesView for the
+context shape (challenges_sections list of dicts with type_key,
+type_label, and challenges).
+{% endcomment %}
+
+{% block content %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+{# Page Header #}
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-success shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <div class="flex items-center gap-2 flex-wrap">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-success shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                <polyline points="16 6 12 2 8 6"></polyline>
+                <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+            <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Challenge Cards</h1>
+        </div>
+        <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+            Generate share images for your A-Z, Calendar, and Genre challenges. Pick a theme and download.
+        </p>
+    </div>
+</div>
+
+{% if has_challenges %}
+    {# One section per challenge type, only rendered when the user has challenges of that type #}
+    {% for section in challenges_sections %}
+        {% if section.challenges %}
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+                <div class="card-body p-3 md:p-5 lg:p-7">
+                    <h2 class="text-base md:text-lg font-bold mb-3 flex items-center gap-2">
+                        <span class="text-success">{{ section.type_label }}</span>
+                        <span class="badge badge-sm badge-ghost font-bold">{{ section.challenges|length }}</span>
+                    </h2>
+
+                    {# Module wrapper: gives dashboard.js _initShareCards a single root to scope to.    #}
+                    {# data-module-slug must be 'challenge_share_cards' so the init dispatcher matches. #}
+                    <div data-module-slug="challenge_share_cards"
+                         class="dashboard-module relative grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+                        {% for challenge in section.challenges %}
+                            <div class="card bg-white/[0.03] border border-base-content/10 shadow-sm">
+                                <div class="card-body p-3 md:p-4">
+                                    {# Challenge label #}
+                                    <div class="flex items-center justify-between gap-2 mb-1.5">
+                                        <span class="text-sm font-bold line-clamp-1 pr-1">{{ challenge.name }}</span>
+                                        {% if challenge.is_complete %}
+                                            <span class="badge badge-success badge-xs shrink-0">Complete</span>
+                                        {% else %}
+                                            <span class="badge badge-ghost badge-xs shrink-0">{{ challenge.progress_percentage }}%</span>
+                                        {% endif %}
+                                    </div>
+
+                                    {# Preview container — dashboard.js wires this up #}
+                                    <div class="share-card-preview relative w-full rounded-lg overflow-hidden border border-base-content/10 bg-white/[0.03]"
+                                         data-share-html-url="/api/v1/challenges/{{ section.type_key }}/{{ challenge.id }}/share/html/"
+                                         data-share-png-url="/api/v1/challenges/{{ section.type_key }}/{{ challenge.id }}/share/png/"
+                                         style="aspect-ratio: 1200/630;">
+                                        <div class="share-card-loading absolute inset-0 flex items-center justify-center">
+                                            <span class="loading loading-spinner loading-sm text-success"></span>
+                                        </div>
+                                        <div class="share-card-content absolute inset-0 origin-top-left" style="display: none;"></div>
+                                    </div>
+
+                                    {# Theme picker + download button #}
+                                    <div class="flex items-center gap-2 mt-2">
+                                        <div class="share-card-swatches flex-1"></div>
+                                        <button type="button"
+                                                class="btn btn-success btn-xs shrink-0 gap-1 share-card-download"
+                                                data-png-url="/api/v1/challenges/{{ section.type_key }}/{{ challenge.id }}/share/png/">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="7 10 12 15 17 10"></polyline>
+                                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                                            </svg>
+                                            Download
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    {% endfor %}
+{% else %}
+    {# Empty state #}
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-6 md:p-10 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 md:w-16 md:h-16 mx-auto text-success/30 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                <polyline points="16 6 12 2 8 6"></polyline>
+                <line x1="12" y1="2" x2="12" y2="15"></line>
+            </svg>
+            <h2 class="text-base md:text-lg font-bold mb-1">No challenges yet</h2>
+            <p class="text-sm text-base-content/60 mb-4">Start an A-Z, Calendar, or Genre challenge to unlock challenge share cards.</p>
+            <a href="{% url 'challenges_browse' %}" class="btn btn-success btn-sm gap-1">
+                Browse Challenges
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+        </div>
+    </div>
+{% endif %}
+
+{% endblock %}
+
+{% block js_scripts %}
+{# Bootstrap dashboard.js + the supporting scripts so we can reuse           #}
+{# DashboardManager._initShareCards on this page without duplicating code.   #}
+{# The DashboardManager is instantiated with a minimal config (no real tabs) #}
+{# and we manually invoke the share-cards init for every module element.    #}
+<script>window.GRADIENT_THEMES = {% gradient_themes_json %};</script>
+<script src="{% static 'js/dashboard.js' %}"></script>
+<script src="{% static 'js/color-grid-modal.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const dashboard = new PlatPursuit.DashboardManager({
+        moduleDataUrl: '/api/v1/dashboard/module/',
+        configUrl: '/api/v1/dashboard/config/',
+        reorderUrl: '/api/v1/dashboard/reorder/',
+        isPremium: false,
+        maxFreeHidden: 0,
+        hiddenModules: [],
+        moduleSettings: {},
+        tabConfig: {},
+        tabs: {},
+    });
+    // Init the share cards for every challenge_share_cards module on the page.
+    // We bypass dashboard.init() because there's no tab system here — we only
+    // want the per-module init to fire.
+    document.querySelectorAll('[data-module-slug="challenge_share_cards"]').forEach(moduleEl => {
+        if (dashboard._moduleInits && dashboard._moduleInits['challenge_share_cards']) {
+            dashboard._moduleInits['challenge_share_cards'](moduleEl);
+        }
+    });
+});
+</script>
+{# Theme picker and rate-prompt modals expected by dashboard.js #}
+{% include 'partials/color_grid_modal.html' with available_themes=available_themes %}
+{% include 'partials/rate_before_download_modal.html' %}
+{% include 'partials/theme_nudge_modal.html' %}
+{% endblock %}

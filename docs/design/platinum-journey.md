@@ -489,7 +489,7 @@ These are the things still TBD that need to be resolved before or during Phase 1
 - [Stats Page](stats-page.md): the source of truth for the kinds of stats the Context Builder will surface
 - [Gamification Vision](gamification-vision.md): a future system the Journey will eventually read from
 - [Dashboard Module Catalog](dashboard-module-catalog.md): where the Journey teaser module will live
-- [Community Hub](../features/community-hub.md): ratings and reviews are a key signal source
+- [Review Hub](../features/review-hub.md): ratings and reviews are a key signal source
 - [Challenge Systems](../features/challenge-systems.md): challenge state is read by the Context Builder
 - [IGDB Integration](../architecture/igdb-integration.md): genre/theme/engine metadata for content-based recommendations
 - [Subscription Lifecycle](../features/subscription-lifecycle.md): premium gating

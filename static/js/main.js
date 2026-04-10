@@ -1,4 +1,56 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // ===== Sticky chrome alignment =====
+    // The pinned chrome stack (navbar → sub-nav → hotbar) uses Tailwind sticky
+    // offsets like top-16 (64px) and top-[7.25rem] (116px) as good first guesses,
+    // but the actual rendered navbar height varies by 1-2px depending on font
+    // metrics, avatar dimensions, and DPI rounding. Hardcoded offsets cause a
+    // visible shift on first scroll because the sub-nav's natural position and
+    // its sticky position don't match exactly.
+    //
+    // This function measures the real heights and inline-styles `top:` on the
+    // sub-nav and hotbar so they always sit flush against whatever is above
+    // them. The Tailwind classes remain as the pre-JS fallback (avoids FOUC on
+    // slow loads) and the JS overrides them once the layout is known.
+    function alignStickyChrome() {
+        const navbar = document.querySelector('nav.navbar');
+        if (!navbar) return;
+        const navH = Math.round(navbar.getBoundingClientRect().height);
+
+        const subnav = document.querySelector('.hub-subnav');
+        let subnavH = 0;
+        if (subnav) {
+            subnav.style.top = navH + 'px';
+            subnavH = Math.round(subnav.getBoundingClientRect().height);
+        }
+
+        const hotbar = document.getElementById('hotbar-wrapper');
+        if (hotbar) {
+            // When the hotbar is expanded, leave 8px breathing room between it
+            // and whatever pins above. When collapsed, drop the gap to 0 so the
+            // toggle "tab" attaches flush against the bottom of the sub-nav (or
+            // navbar on non-hub pages), reading as a tab handle of the chrome
+            // above rather than a floating element.
+            const isCollapsed = localStorage.getItem('hotbar_hidden') === 'true';
+            const gap = isCollapsed ? 0 : 8;
+            const top = subnav ? (navH + subnavH + gap) : (navH + gap);
+            hotbar.style.top = top + 'px';
+        }
+    }
+
+    alignStickyChrome();
+    // Re-measure on resize because font scaling, orientation changes, and
+    // viewport width can all change the navbar's actual height.
+    window.addEventListener('resize', alignStickyChrome);
+    // Re-measure after web fonts finish loading (font swap can change line
+    // heights and therefore navbar height).
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(alignStickyChrome);
+    }
+    // Re-measure when the hotbar is toggled so the gap above it shrinks to 0
+    // when collapsed (toggle becomes flush with sub-nav) and grows back to 8px
+    // when expanded. hotbar.js dispatches this event from toggleHotbar().
+    document.addEventListener('hotbar:toggle', alignStickyChrome);
+
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');
     if (backToTop) {
@@ -81,170 +133,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Bind theme toggle to More drawer items
-    document.querySelectorAll('#more-drawer-theme-toggle').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleTheme();
-        });
-    });
-
     // Initialize theme icons on load
     updateAllThemeIcons();
 
-    // ===== Expandable Search Bar (Desktop) =====
-    const searchToggleBtn = document.getElementById('search-toggle-btn');
-    const searchExpandable = document.getElementById('search-expandable');
-    const searchInput = document.getElementById('search-input');
-
-    if (searchToggleBtn && searchExpandable) {
-        searchToggleBtn.addEventListener('click', () => {
-            const isActive = searchExpandable.classList.toggle('active');
-            searchToggleBtn.setAttribute('aria-expanded', isActive);
-            if (isActive && searchInput) {
-                setTimeout(() => searchInput.focus(), 300);
-            }
-        });
-
-        // Close on click outside
-        document.addEventListener('click', (e) => {
-            if (searchExpandable.classList.contains('active') &&
-                !searchExpandable.contains(e.target) &&
-                !searchToggleBtn.contains(e.target)) {
-                searchExpandable.classList.remove('active');
-                searchToggleBtn.setAttribute('aria-expanded', 'false');
-            }
-        });
-
-        // Close on Escape
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && searchExpandable.classList.contains('active')) {
-                searchExpandable.classList.remove('active');
-                searchToggleBtn.setAttribute('aria-expanded', 'false');
-                searchToggleBtn.focus();
-            }
-        });
-    }
-
-    // ===== Mobile Search Overlay =====
-    const mobileSearchBtn = document.getElementById('mobile-search-btn');
-    const mobileSearchOverlay = document.getElementById('mobile-search-overlay');
-    const mobileSearchClose = document.getElementById('mobile-search-close');
-    const mobileSearchInput = document.getElementById('mobile-search-input');
-
-    if (mobileSearchBtn && mobileSearchOverlay) {
-        mobileSearchBtn.addEventListener('click', () => {
-            mobileSearchOverlay.classList.add('open');
-            mobileSearchOverlay.setAttribute('aria-hidden', 'false');
-            if (mobileSearchInput) {
-                setTimeout(() => mobileSearchInput.focus(), 300);
-            }
-        });
-
-        if (mobileSearchClose) {
-            mobileSearchClose.addEventListener('click', () => {
-                mobileSearchOverlay.classList.remove('open');
-                mobileSearchOverlay.setAttribute('aria-hidden', 'true');
-            });
-        }
-
-        // Close mobile search on Escape
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && mobileSearchOverlay.classList.contains('open')) {
-                mobileSearchOverlay.classList.remove('open');
-                mobileSearchOverlay.setAttribute('aria-hidden', 'true');
-                mobileSearchBtn.focus();
-            }
-        });
-    }
-
-    // ===== More Drawer (Mobile) =====
-    const moreBtn = document.getElementById('mobile-more-btn');
-    const moreDrawer = document.getElementById('more-drawer');
-    const moreBackdrop = document.getElementById('more-drawer-backdrop');
-
-    function openMoreDrawer() {
-        if (!moreDrawer || !moreBackdrop) return;
-        moreBackdrop.classList.remove('hidden');
-        moreDrawer.setAttribute('aria-hidden', 'false');
-        // Trigger reflow for animation
-        void moreDrawer.offsetHeight;
-        moreDrawer.classList.add('open');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeMoreDrawer() {
-        if (!moreDrawer || !moreBackdrop) return;
-        moreDrawer.classList.remove('open');
-        moreDrawer.setAttribute('aria-hidden', 'true');
-        document.body.style.overflow = '';
-        // Wait for animation to finish before hiding backdrop
-        setTimeout(() => {
-            moreBackdrop.classList.add('hidden');
-        }, 300);
-    }
-
-    if (moreBtn) {
-        moreBtn.addEventListener('click', () => {
-            if (moreDrawer && moreDrawer.classList.contains('open')) {
-                closeMoreDrawer();
-            } else {
-                openMoreDrawer();
-            }
-        });
-    }
-
-    if (moreBackdrop) {
-        moreBackdrop.addEventListener('click', closeMoreDrawer);
-    }
-
-    // Close More drawer on Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && moreDrawer && moreDrawer.classList.contains('open')) {
-            closeMoreDrawer();
-            if (moreBtn) moreBtn.focus();
-        }
-    });
-
-    // ===== Mega Menu Close Behavior (Desktop) =====
-    // Ensure only one mega menu is open at a time
-    const megaMenus = document.querySelectorAll('.mega-menu-dropdown');
-
-    megaMenus.forEach(menu => {
-        menu.addEventListener('toggle', () => {
-            if (menu.open) {
-                // Close all other mega menus
-                megaMenus.forEach(other => {
-                    if (other !== menu && other.open) {
-                        other.removeAttribute('open');
-                    }
-                });
-            }
-        });
-    });
-
-    // Close mega menus on Escape
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            megaMenus.forEach(menu => {
-                if (menu.open) {
-                    menu.removeAttribute('open');
-                }
-            });
-        }
-    });
-
-    // ===== Mobile Tab Bar Active State =====
-    const currentPath = window.location.pathname;
-    const tabItems = document.querySelectorAll('.mobile-tabbar-item[href]');
-
-    tabItems.forEach(item => {
-        const href = item.getAttribute('href');
-        if (href === '/' && currentPath === '/') {
-            item.classList.add('active');
-        } else if (href !== '/' && currentPath.startsWith(href)) {
-            item.classList.add('active');
-        }
-    });
+    // Note: legacy mega-menu dropdown handlers and the path-based mobile
+    // tab bar active-state setter were removed when the navbar was
+    // collapsed to direct-link buttons (Community Hub initiative). The
+    // mobile tab bar now uses hub_section template logic for the active
+    // state, and the navbar has no dropdowns to coordinate.
 });

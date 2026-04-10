@@ -599,7 +599,7 @@ Notification
 ## Related Docs
 
 - `CLAUDE.md`: Project instructions including the Concept.absorb() contract, responsive design standards, and quality workflow
-- `docs/community-hub.md`: Community reviews and ratings hub design
+- `docs/features/review-hub.md`: Community reviews and ratings hub design (formerly `community-hub.md`; renamed because the new `community-hub.md` describes the site-wide Community Hub destination)
 - `docs/dashboard.md`: Dashboard module system design
 - `docs/features/`: Feature-specific design documents
 - `docs/minigames/`: Mini-game system ("The Arcade") documentation

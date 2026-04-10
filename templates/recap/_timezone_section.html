@@ -1,22 +1,24 @@
 <!-- Timezone Setting -->
-<div class="card bg-base-200 shadow-xl p-4 mb-6 text-left" id="timezone-section">
-    <div class="flex flex-col lg:flex-row items-start lg:items-center gap-3 lg:gap-4">
-        <div class="flex items-center gap-3 w-full lg:w-auto">
-            <div class="flex items-center gap-2 shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span class="font-semibold text-sm">Timezone</span>
+<div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral" id="timezone-section">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+        <div class="flex flex-col lg:flex-row items-start lg:items-center gap-3 lg:gap-4">
+            <div class="flex items-center gap-3 w-full lg:w-auto">
+                <div class="flex items-center gap-2 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span class="font-semibold text-sm">Timezone</span>
+                </div>
+                <select id="recap-timezone-select"
+                        class="select select-bordered select-sm flex-1 lg:w-72 lg:flex-none"
+                        data-current="{{ user_timezone }}">
+                </select>
             </div>
-            <select id="recap-timezone-select"
-                    class="select select-bordered select-sm flex-1 lg:w-72 lg:flex-none"
-                    data-current="{{ user_timezone }}">
-            </select>
+            <p class="text-xs text-base-content/60 lg:ml-auto max-w-md pr-1">
+                Your timezone determines which month trophies fall into. Changing it will regenerate your recaps.
+                <a href="{% url 'settings' %}" class="link link-primary text-xs">Manage in Settings</a>
+            </p>
         </div>
-        <p class="text-xs text-base-content/60 lg:ml-auto max-w-md">
-            Your timezone determines which month trophies fall into. Changing it will regenerate your recaps.
-            <a href="{% url 'settings' %}" class="link link-primary text-xs">Manage in Settings</a>
-        </p>
+        <div id="tz-hint-container"></div>
     </div>
-    <div id="tz-hint-container"></div>
 </div>

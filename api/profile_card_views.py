@@ -240,12 +240,6 @@ class ProfileCardSettingsView(APIView):
                     {'error': 'Invalid theme'},
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
-            # Check premium for non-default themes
-            if theme_key != 'default' and not profile.user_is_premium:
-                return Response(
-                    {'error': 'Premium required for custom themes'},
-                    status=http_status.HTTP_403_FORBIDDEN,
-                )
             settings_obj.card_theme = theme_key
             update_fields.append('card_theme')
 

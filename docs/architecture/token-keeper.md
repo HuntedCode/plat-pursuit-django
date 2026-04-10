@@ -115,7 +115,7 @@ Sync operations use a two-tier orchestrator pattern:
    - Checks if trophy groups need syncing (new game or trophy count changed)
    - Two-phase: first pass counts jobs and sets the progress target, second pass queues the jobs
    - Stores `pending_sync_complete` data in Redis with the list of touched ProfileGame IDs
-5. **sync_trophy_groups** (per game, if needed): Fetches DLC/group structure, creates `TrophyGroup` records, syncs concept-level trophy groups for the Community Hub.
+5. **sync_trophy_groups** (per game, if needed): Fetches DLC/group structure, creates `TrophyGroup` records, syncs concept-level trophy groups for the Review Hub.
 6. **sync_trophies** (per game): Fetches all trophies with earned status. Processes in batches of 50 within `transaction.atomic()` and `sync_signal_suppressor()`. Creates/updates `Trophy` and `EarnedTrophy` records. Triggers shovelware detection for platinums. Creates deferred platinum notifications.
 7. **sync_title_stats** (paginated): Fetches play statistics (play time, play count). Maps title IDs to games. For unresolved title IDs, calls `trophy_titles_for_title` to discover the np_communication_id mapping, then queues `sync_title_id` jobs. **Limitation**: this path can only resolve games whose `title_ids` (PPSA/CUSA SKUs) are present in PSN's `title_stats` response. Modern games whose `trophy_titles` entry never returned a `title_id` are unreachable here and must be handled by the inline default-concept fallback in the health check (see "Concept Assignment Fallback Chain" below).
 8. **sync_title_id** (per title ID): Calls `game_title` to get concept details (publisher, genres, media, release date). Creates or updates `Concept` records. Assigns concepts to games via `Game.add_concept()`. Detects Asian-language regional titles. Falls back to `Concept.create_default_concept()` on any failure.
@@ -262,7 +262,7 @@ When a platinum trophy is created or updated, `ShovelwareDetectionService.evalua
 
 ### ConceptTrophyGroup Sync
 
-During `sync_trophy_groups`, after creating TrophyGroup records for a game, `ConceptTrophyGroupService.sync_for_concept()` is called to create/update concept-level trophy group mappings used by the Community Hub rating system.
+During `sync_trophy_groups`, after creating TrophyGroup records for a game, `ConceptTrophyGroupService.sync_for_concept()` is called to create/update concept-level trophy group mappings used by the Review Hub rating system.
 
 ### High Sync Volume Banner
 
@@ -358,7 +358,7 @@ The health check in `sync_complete` is the entry gate that decides whether a con
 - **Modern platform (PS4/PS5) AND `game.title_ids` non-empty**: queued through `sync_title_stats` → `trophy_titles_for_title` → `sync_title_id` for full concept resolution.
 - **Everything else** (legacy PS3/PSVITA/PSVR/PSVR2, OR modern games whose `title_ids` is empty): the health check creates a `PP_N` default concept inline via `Concept.create_default_concept()` and best-effort enriches via IGDB. These games skip the `sync_title_stats` path entirely because there is no PSN endpoint that can map them back to a real concept.
 
-This defensive approach ensures no game is left without a concept, which would break downstream features (badges, Community Hub, etc.). The empty-`title_ids` carve-out also breaks a sync loop where modern games unreachable by `sync_title_stats` would re-trigger the full `sync_title_stats → sync_complete → health_check` cycle on every iteration.
+This defensive approach ensures no game is left without a concept, which would break downstream features (badges, Review Hub, etc.). The empty-`title_ids` carve-out also breaks a sync loop where modern games unreachable by `sync_title_stats` would re-trigger the full `sync_title_stats → sync_complete → health_check` cycle on every iteration.
 
 ### Token Instance Selection and Locking
 
@@ -489,5 +489,6 @@ python manage.py redis_admin --move-whale-jobs
 ## Related Docs
 
 - [Dashboard System](../features/dashboard.md)
+- [Review Hub](../features/review-hub.md)
 - [Community Hub](../features/community-hub.md)
 - [IGDB Integration](igdb-integration.md): the enrichment hook that runs after new concepts are created

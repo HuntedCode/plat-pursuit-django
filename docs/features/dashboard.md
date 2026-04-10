@@ -4,6 +4,23 @@ The dashboard is the personal trophy hunting command center. It is rendered at t
 
 `/dashboard/` is preserved as a permanent redirect to `/` so legacy bookmarks keep working. The standalone `DashboardView` class is now a thin wrapper around `build_dashboard_context()` (in `trophies/views/dashboard_views.py`) which is the single source of truth for dashboard context. `HomeView` calls the same helper directly for synced users without going through view inheritance.
 
+## Place in the Hub-of-Hubs IA
+
+The dashboard is the landing page of the **Dashboard hub** (one of the four hubs in the [hub-of-hubs IA](../architecture/ia-and-subnav.md): Dashboard / Browse / Community / My Pursuit). When a user lands on `/`, the global sub-navigation strip rendered by [`templates/partials/hub_subnav.html`](../../templates/partials/hub_subnav.html) appears below the main navbar with four pill-tab items:
+
+| Sub-nav Item | URL | What it surfaces |
+|--------------|-----|------------------|
+| Dashboard | `/` | The cockpit you're already on (active state) |
+| My Stats | `/dashboard/stats/` | The 120+ stat data dump page |
+| My Shareables | `/dashboard/shareables/` | Share-image generation, Platinum Grid wizard |
+| Recap | `/dashboard/recap/` | Spotify-Wrapped style monthly recap |
+
+This is the discoverability mechanism for personal-utility pages that used to live in the legacy "My Pursuit" navbar dropdown. The dropdown is gone (see [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the rationale); the sub-nav strip is now the canonical way to navigate between the dashboard cockpit and its companion utility pages. The strip is sticky on `lg:+` so it stays accessible during long scrolls, and collapses to a horizontal scroll strip on mobile.
+
+The strip is the *only* required navigation for personal-utility pages — the dashboard cockpit itself is *not* required to surface dedicated cards or modules for Stats/Shareables/Recap. Module-level shortcuts to those pages can exist as dashboard modules if they make sense (and several already do — Recap has its own module, for example), but they aren't load-bearing for discoverability.
+
+The planned [Tutorial System](../design/tutorial-system.md) Welcome Tour will explicitly point at the sub-nav strip on the Dashboard tour step so new users notice it on first visit.
+
 ## Architecture Overview
 
 The dashboard uses a **Module Registry** pattern with a **Tabbed Carousel** layout. Modules are declared in `DASHBOARD_MODULES` in `dashboard_service.py`. Each module belongs to a category that maps to a default system tab. Premium users can create custom tabs and move modules between tabs.
@@ -42,11 +59,11 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | Slug | Name | Category | Strategy | Cache | Premium |
 |------|------|----------|----------|-------|---------|
 | `trophy_snapshot` | Trophy Snapshot | at_a_glance | Server | None | No |
+| `recent_activity` | Recent Activity | at_a_glance | Lazy | 5m | No |
 | `recent_platinums` | Recent Platinums | at_a_glance | Lazy | 5m | No |
 | `challenge_hub` | Challenge Hub | progress | Lazy | 5m | No |
 | `badge_progress` | Badge Progress | badges | Lazy | 10m | No |
 | `recent_badges` | Recent Badges | badges | Lazy | 10m | No |
-| `recent_activity` | Recent Activity | at_a_glance | Lazy | 5m | No |
 | `monthly_recap_preview` | Monthly Recap Preview | highlights | Lazy | 30m | No |
 | `quick_settings` | Quick Settings | at_a_glance | Server | None | No |
 | `badge_stats` | Badge Stats | badges | Lazy | 10m | No |

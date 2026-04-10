@@ -12,6 +12,7 @@ class StaticViewSitemap(Sitemap):
             'home', 'privacy', 'terms', 'about', 'contact',
             'games_list', 'profiles_list', 'badges_list',
             'challenges_browse', 'lists_browse',
+            'community_hub',
         ]
 
     def location(self, item):

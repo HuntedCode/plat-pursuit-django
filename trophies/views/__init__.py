@@ -29,6 +29,7 @@ from .dashboard_views import DashboardView
 from .title_views import MyTitlesView
 from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapEditorView
+from .shareables_views import MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView
 from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
@@ -68,6 +69,8 @@ __all__ = [
     'PlatinumGridView',
     # Roadmap views
     'RoadmapEditorView',
+    # Shareables views
+    'MyShareablesView', 'MyPlatinumSharesView', 'MyChallengeSharesView', 'MyProfileCardView',
     # Stats views
     'MyStatsView',
     # Company views

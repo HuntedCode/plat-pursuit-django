@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import connection, transaction, OperationalError
-from django.db.models import Sum
+from django.db.models import Sum, Max
 from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder

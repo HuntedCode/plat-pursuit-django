@@ -1,0 +1,556 @@
+{% extends "base.html" %}
+{% load static humanize custom_filters %}
+
+{% block title %}Community Hub{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% comment %}
+Community Hub: Feature Spotlight design.
+
+Composition (top to bottom):
+  1. Hero — site heartbeat ribbon (built_for_hunters partial, lifted as-is)
+  2. Active fundraiser banner (conditional)
+  3. 2x2 Feature Grid — Reviews / Challenges / Lists / Leaderboards
+  4. Discord callout — permanent fixture
+
+The page uses the full site container width (no max-w-4xl wrapper) to
+match the Review Hub and the rest of the site. The dashboard's narrower
+wrapper is unique to the dashboard because it's modular/customizable.
+
+Each card on the grid is part-marketing (icon, tagline, CTA) and
+part-preview (3 items of real signal). Resist the urge to expand the
+inline data — every additional inline item dilutes the wayfinder intent
+and pushes traffic away from each feature's dedicated page.
+
+See docs/features/community-hub.md for the design rationale.
+{% endcomment %}
+
+{% block content %}
+
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Page header ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4">
+            <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Community Hub</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        Your front door to everything PlatPursuit's community has to offer.
+                    </p>
+                </div>
+                <a href="{% url 'reviews_landing' %}" class="btn btn-primary btn-sm md:btn-md gap-2 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span class="hidden md:inline">Browse Reviews</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {# ── Hero: site heartbeat (built_for_hunters partial) ── #}
+    {# The partial uses its own max-w-4xl wrapper, which creates a focal #}
+    {# hero-card effect against the full-width sections below it.       #}
+    {% include 'trophies/partials/dashboard/built_for_hunters.html' %}
+
+    {# ── Active fundraiser banner (conditional) ── #}
+    {# When an active fundraiser exists, render a prominent banner here #}
+    {# above the feature grid. Urgency + emotional weight justify the   #}
+    {# high placement. When no fundraiser is active, the if-block below #}
+    {# skips the entire section.                                         #}
+    {% if active_fundraiser %}
+    <section class="mt-3">
+        <div class="card bg-accent/10 border-2 border-accent/30 shadow-md shadow-neutral hover:shadow-lg hover:shadow-accent/30 transition-all">
+            <a href="{% url 'fundraiser' active_fundraiser.slug %}" class="card-body p-3 md:p-5 lg:p-7 flex flex-row items-center gap-3 md:gap-4">
+                <div class="w-12 h-12 md:w-16 md:h-16 rounded-lg bg-accent/20 ring-1 ring-accent shrink-0 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-8 md:h-8 text-accent" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-base md:text-lg font-bold text-accent line-clamp-1 pr-1">{{ active_fundraiser.title|default:"Community Fundraiser" }}</h3>
+                    <p class="text-xs md:text-sm text-base-content/70 line-clamp-2">Support the community and unlock badge artwork.</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </a>
+        </div>
+    </section>
+    {% endif %}
+
+    {# ─────────────────────────────────────────────────────────────────── #}
+    {# Feature Grid — 2x2 on lg, 1-col on mobile                           #}
+    {# Each card: icon + title + tagline + 3-item preview + hero CTA       #}
+    {# ─────────────────────────────────────────────────────────────────── #}
+    <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+
+        {# ── Reviews feature card ── #}
+        {# Anatomy (shared by all 4 cards):                                    #}
+        {#   Header (icon + title + tagline)                                   #}
+        {#   Top half: 5 padded community rows (placeholder if no live data)   #}
+        {#   Divider                                                            #}
+        {#   Bottom half: viewer-specific stats OR sign-in/link-PSN empty CTA   #}
+        {#   Hero CTA button                                                    #}
+        {# The padded-row pattern (from _pad_to_limit in the service) keeps    #}
+        {# every card the same height regardless of how much real data exists. #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-success/40 shadow-lg shadow-neutral hover:shadow-success/10 transition-all h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
+                    {# Header: icon + title + tagline #}
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-success/15 ring-2 ring-success/30 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Reviews</h2>
+                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">See what hunters are saying about your next platinum.</p>
+                        </div>
+                    </div>
+
+                    {# ── Top half: 5 most-recently-reviewed titles ── #}
+                    <div class="space-y-1 mb-3">
+                        {% for title in recently_reviewed_titles %}
+                            {% if title %}
+                                <a href="{% url 'review_hub' title.slug %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-success/30 transition-colors">
+                                    <div class="w-6 h-6 rounded overflow-hidden shrink-0 ring-1 ring-base-300">
+                                        {% if title.concept_icon_url %}
+                                            <img src="{{ title.concept_icon_url }}" alt="{{ title.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-semibold line-clamp-1 pr-1">{{ title.unified_title }}</div>
+                                        <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ title.review_count }} review{{ title.review_count|pluralize }}</div>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        {% if title.recommendation_pct >= 50 %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                                            </svg>
+                                            <span class="text-xs font-bold text-success">{{ title.recommendation_pct }}%</span>
+                                        {% else %}
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                                            </svg>
+                                            <span class="text-xs font-bold text-error">{{ title.recommendation_pct }}%</span>
+                                        {% endif %}
+                                    </div>
+                                </a>
+                            {% else %}
+                                {# Placeholder row — keeps the card the same height as a fully-populated one #}
+                                <div class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-6 rounded shrink-0 bg-base-300/40"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
+                                        <div class="h-2 w-1/3 rounded bg-base-300/30 mt-1"></div>
+                                    </div>
+                                    <div class="h-2.5 w-8 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-success/15 after:bg-success/15">Your reviews</div>
+
+                    {# ── Bottom half: personal review stats ── #}
+                    <div class="mb-3">
+                        {% if personal_review_stats %}
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.review_count|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Written</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.helpful_received|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Helpful</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.recommend_pct }}%</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Recommend</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-success' accent_border_class='border-success/30' prompt_text='See how your reviews stack up against the community.' %}
+                        {% endif %}
+                    </div>
+
+                    {# Hero CTA — pinned to the bottom via flex-col + mt-auto so cards stay aligned #}
+                    <a href="{% url 'reviews_landing' %}" class="btn btn-success btn-sm gap-2 w-full mt-auto">
+                        Visit Review Hub
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {# ── Game Lists feature card ── #}
+        {# Paired with Reviews on row 1 — both are title-shaped cards (concept   #}
+        {# icons + game titles), so they read as a balanced row. Challenges and  #}
+        {# Leaderboards are paired on row 2 because both are people-shaped       #}
+        {# (avatars + usernames + a percentage/score on the right).              #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-primary/40 shadow-lg shadow-neutral hover:shadow-primary/10 transition-all h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
+                    {# Header: icon + title + tagline #}
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-primary/15 ring-2 ring-primary/30 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Game Lists</h2>
+                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">Curated by the community. Your next obsession is in here.</p>
+                        </div>
+                    </div>
+
+                    {# ── Top half: 5 most recent public lists ── #}
+                    {# Both the live anchor and the placeholder div use `min-h-12` so   #}
+                    {# the row height is pinned at 48px regardless of which children it #}
+                    {# contains. Without it, live rows render at ~48px (text-sm 20px + #}
+                    {# text-xs 16px line-heights + py-1.5 padding) and placeholder rows #}
+                    {# render at ~36px (h-2.5 + h-2 skeleton bars + same padding), so   #}
+                    {# the empty-state and populated cards looked uneven on dev.        #}
+                    <div class="space-y-1 mb-3">
+                        {% for list in recent_lists %}
+                            {% if list %}
+                                <a href="{% url 'list_detail' list.id %}" class="flex items-center gap-2 p-1.5 min-h-12 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-primary/30 transition-colors">
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
+                                        {% if list.profile.avatar_url %}
+                                            <img src="{{ list.profile.avatar_url }}" alt="{{ list.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm font-semibold line-clamp-1 pr-1">{{ list.name }}</div>
+                                        <div class="text-xs text-base-content/50 line-clamp-1 pr-1">by {{ list.profile.display_psn_username }}</div>
+                                    </div>
+                                    {# Right-side cluster mirrors the Reviews row's icon + text shape so #}
+                                    {# Game Lists rows have the same visual weight (and rendered height) #}
+                                    {# as Reviews rows. Without the icon the right column was just text  #}
+                                    {# and the row read as slightly thinner than its Reviews counterpart.#}
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-base-content/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                            <polyline points="2 17 12 22 22 17"></polyline>
+                                            <polyline points="2 12 12 17 22 12"></polyline>
+                                        </svg>
+                                        <span class="text-xs text-base-content/50 font-medium">{{ list.game_count }} game{{ list.game_count|pluralize }}</span>
+                                    </div>
+                                </a>
+                            {% else %}
+                                <div class="flex items-center gap-2 p-1.5 min-h-12 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
+                                        <div class="h-2 w-1/3 rounded bg-base-300/30 mt-1"></div>
+                                    </div>
+                                    {# Two-element placeholder mirrors the live row's icon + text right cluster #}
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <div class="w-3.5 h-3.5 rounded bg-base-300/30"></div>
+                                        <div class="h-2.5 w-12 rounded bg-base-300/30"></div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-primary/15 after:bg-primary/15">Your lists</div>
+
+                    {# ── Bottom half: personal list stats ── #}
+                    <div class="mb-3">
+                        {% if personal_list_stats %}
+                            <div class="grid grid-cols-3 gap-2">
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-primary">{{ personal_list_stats.total_lists|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Lists</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-primary">{{ personal_list_stats.public_lists|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Public</div>
+                                </div>
+                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
+                                    <div class="text-base md:text-lg font-bold text-primary">{{ personal_list_stats.total_games|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Games</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-primary' accent_border_class='border-primary/30' prompt_text='Build your own lists and share them with the community.' %}
+                        {% endif %}
+                    </div>
+
+                    {# Hero CTA #}
+                    <a href="{% url 'lists_browse' %}" class="btn btn-primary btn-sm gap-2 w-full mt-auto">
+                        Browse Lists
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {# ── Challenges feature card ── #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-secondary/40 shadow-lg shadow-neutral hover:shadow-secondary/10 transition-all h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
+                    {# Header: icon + title + tagline #}
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-secondary/15 ring-2 ring-secondary/30 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                                <line x1="4" y1="22" x2="4" y2="15"></line>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Challenges</h2>
+                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">Push yourself further. A-Z, Calendar, Genre, and more.</p>
+                        </div>
+                    </div>
+
+                    {# ── Top half: 5 most recent active challenges ── #}
+                    {# `min-h-10` (40px) is shared across all four row types in the    #}
+                    {# Challenges + Leaderboards cards (top + bottom, live + placeholder)#}
+                    {# so every row in row 2 of the grid renders at exactly the same    #}
+                    {# height. The natural height (24px avatar + 12px padding + 2px     #}
+                    {# border = 38px) is JUST under 40px, so the floor wins consistently#}
+                    {# instead of the avatar driving height in some rows but not others.#}
+                    <div class="space-y-1 mb-3">
+                        {% for challenge in active_challenges %}
+                            {% if challenge %}
+                                {# Challenge type → detail URL name. Inline ladder is fine for 3 cases — #}
+                                {# the assembler doesn't enrich top-half rows (only the personal half).  #}
+                                {% if challenge.challenge_type == 'az' %}{% url 'az_challenge_detail' challenge_id=challenge.id as ch_url %}
+                                {% elif challenge.challenge_type == 'calendar' %}{% url 'calendar_challenge_detail' challenge_id=challenge.id as ch_url %}
+                                {% elif challenge.challenge_type == 'genre' %}{% url 'genre_challenge_detail' challenge_id=challenge.id as ch_url %}
+                                {% endif %}
+                                <a href="{{ ch_url }}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 ring-base-300">
+                                        {% if challenge.profile.avatar_url %}
+                                            <img src="{{ challenge.profile.avatar_url }}" alt="{{ challenge.profile.display_psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-sm line-clamp-1 pr-1">
+                                            <span class="font-semibold">{{ challenge.profile.display_psn_username }}</span>
+                                            <span class="text-base-content/70">— {{ challenge.name }}</span>
+                                        </div>
+                                    </div>
+                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ challenge.progress_percentage }}%</span>
+                                </a>
+                            {% else %}
+                                <div class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="h-2.5 w-3/4 rounded bg-base-300/40"></div>
+                                    </div>
+                                    <div class="h-2.5 w-8 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-secondary/15 after:bg-secondary/15">Your challenges</div>
+
+                    {# ── Bottom half: per-type slot rows ── #}
+                    {# 3 fixed rows (A-Z, Calendar, Genre). Each row shows your most  #}
+                    {# recent challenge of that type with progress %, OR a "start one"#}
+                    {# placeholder routed to the matching browse page when empty. The #}
+                    {# always-3-rows shape keeps the bottom half the same height as   #}
+                    {# the top half (which has 5 slimmer rows), giving the card a    #}
+                    {# balanced look in both auth states.                              #}
+                    <div class="mb-3">
+                        {% if personal_challenge_slots %}
+                            <div class="space-y-1">
+                                {% for row in personal_challenge_slots %}
+                                    {# `min-h-10` (40px) — the shared row-height floor used by every row #}
+                                    {# in row 2 of the grid (Challenges + Leaderboards, top + bottom).   #}
+                                    {# The Leaderboards rows are naturally ~38px from the avatar; we pin #}
+                                    {# everything to 40px so all 8 row types render at exactly the same  #}
+                                    {# height regardless of which children they hold.                    #}
+                                    {% if row.challenge %}
+                                        <a href="{% url row.detail_url_name challenge_id=row.challenge.id %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors">
+                                            {# w-20 (80px) to fit "CALENDAR" — w-14 was too tight and ran into the title #}
+                                            <span class="text-xs font-bold w-20 shrink-0 text-secondary uppercase tracking-wide">{{ row.type_label }}</span>
+                                            <span class="text-sm font-medium line-clamp-1 pr-1 flex-1">{{ row.challenge.name }}</span>
+                                            <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ row.challenge.progress_percentage }}%</span>
+                                        </a>
+                                    {% else %}
+                                        <a href="{% url 'challenges_browse' %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/10 hover:border-secondary/30 transition-colors">
+                                            <span class="text-xs font-bold w-20 shrink-0 text-base-content/40 uppercase tracking-wide">{{ row.type_label }}</span>
+                                            <span class="text-xs text-base-content/40 italic flex-1 line-clamp-1 pr-1">No challenge started</span>
+                                            <span class="text-xs text-secondary shrink-0 font-medium">Start →</span>
+                                        </a>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-secondary' accent_border_class='border-secondary/30' prompt_text='Track your A-Z, Calendar, and Genre challenges in one place.' %}
+                        {% endif %}
+                    </div>
+
+                    {# Hero CTA #}
+                    <a href="{% url 'challenges_browse' %}" class="btn btn-secondary btn-sm gap-2 w-full mt-auto">
+                        Browse Challenges
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        {# ── Leaderboards feature card ── #}
+        <section>
+            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-accent/40 shadow-lg shadow-neutral hover:shadow-accent/10 transition-all h-full">
+                <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
+                    {# Header: icon + title + tagline + viewer rank if logged in #}
+                    <div class="flex items-start gap-3 mb-3">
+                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-accent/15 ring-2 ring-accent/30 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2">
+                                <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Leaderboards</h2>
+                                {% if xp_leaderboard.viewer_rank %}
+                                    <span class="text-xs text-accent font-bold shrink-0">You: #{{ xp_leaderboard.viewer_rank }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">Climb the ranks. Compete with hunters worldwide.</p>
+                        </div>
+                    </div>
+
+                    {# ── Top half: top 5 badge XP ── #}
+                    {# Same `min-h-10` (40px) floor as the Challenges card so all row 2 #}
+                    {# rows in both cards render at exactly the same height.            #}
+                    <div class="space-y-1 mb-3">
+                        {% for entry in xp_leaderboard.entries %}
+                            {% if entry %}
+                                <a href="{% url 'profile_detail' entry.psn_username %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg transition-colors {% if entry.is_self %}bg-accent/10 border border-accent/30 hover:bg-accent/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-accent/30{% endif %}">
+                                    <span class="text-xs font-bold w-6 text-center text-base-content/50">#{{ entry.rank }}</span>
+                                    <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
+                                        {% if entry.avatar_url %}
+                                            <img src="{{ entry.avatar_url }}" alt="{{ entry.psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% else %}
+                                            <div class="w-full h-full bg-base-300"></div>
+                                        {% endif %}
+                                    </div>
+                                    <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}">{{ entry.psn_username }}</span>
+                                    {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
+                                    <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
+                                </a>
+                            {% else %}
+                                <div class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                    <div class="w-6 h-2.5 rounded bg-base-300/30 shrink-0"></div>
+                                    <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                    <div class="h-2.5 flex-1 rounded bg-base-300/40"></div>
+                                    <div class="h-2.5 w-12 rounded bg-base-300/30 shrink-0"></div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {# ── Divider ── #}
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-accent/15 after:bg-accent/15">Your neighborhood</div>
+
+                    {# ── Bottom half: viewer rank + 2 above + 2 below ── #}
+                    <div class="mb-3">
+                        {% if personal_xp_neighborhood is not None %}
+                            <div class="space-y-1">
+                                {% for entry in personal_xp_neighborhood %}
+                                    {% if entry %}
+                                        <a href="{% url 'profile_detail' entry.psn_username %}" class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg transition-colors {% if entry.is_self %}bg-accent/10 border border-accent/30 hover:bg-accent/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-accent/30{% endif %}">
+                                            <span class="text-xs font-bold w-6 text-center {% if entry.is_self %}text-accent{% else %}text-base-content/50{% endif %}">#{{ entry.rank }}</span>
+                                            <div class="w-6 h-6 rounded-full overflow-hidden shrink-0 ring-1 {% if entry.is_self %}ring-accent{% else %}ring-base-300{% endif %}">
+                                                {% if entry.avatar_url %}
+                                                    <img src="{{ entry.avatar_url }}" alt="{{ entry.psn_username }}" class="w-full h-full object-cover" loading="lazy" />
+                                                {% else %}
+                                                    <div class="w-full h-full bg-base-300"></div>
+                                                {% endif %}
+                                            </div>
+                                            <span class="text-sm font-medium line-clamp-1 pr-1 flex-1 {% if entry.is_self %}text-accent{% endif %}">{{ entry.psn_username }}</span>
+                                            {% if entry.flag %}<span class="text-xs">{{ entry.flag }}</span>{% endif %}
+                                            <span class="text-xs text-base-content/50 shrink-0 font-medium">{{ entry.total_xp_formatted }} XP</span>
+                                        </a>
+                                    {% else %}
+                                        <div class="flex items-center gap-2 p-1.5 min-h-10 rounded-lg bg-white/[0.02] border border-dashed border-base-content/5">
+                                            <div class="w-6 h-2.5 rounded bg-base-300/30 shrink-0"></div>
+                                            <div class="w-6 h-6 rounded-full shrink-0 bg-base-300/40"></div>
+                                            <div class="h-2.5 flex-1 rounded bg-base-300/40"></div>
+                                            <div class="h-2.5 w-12 rounded bg-base-300/30 shrink-0"></div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-accent' accent_border_class='border-accent/30' prompt_text='See where you sit on the global badge XP leaderboard.' %}
+                        {% endif %}
+                    </div>
+
+                    {# Hero CTA #}
+                    <a href="{% url 'overall_badge_leaderboards' %}" class="btn btn-accent btn-sm gap-2 w-full mt-auto">
+                        View Leaderboards
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    {# ─────────────────────────────────────────────────────────────────── #}
+    {# 5. Roadmap Team recruitment strip                                   #}
+    {# Visible to everyone for now. The earlier `is_staff`-hide gate was  #}
+    {# a proxy for "already on the team," which is a problem we don't yet #}
+    {# have (the team is being built from zero). When real Roadmap Team   #}
+    {# membership exists, gate this on a `Profile.is_roadmap_author` flag #}
+    {# instead of `is_staff` — see the gotcha in community-hub.md.        #}
+    {% include 'community/partials/roadmap_recruitment_strip.html' %}
+
+    {# ─────────────────────────────────────────────────────────────────── #}
+    {# 6. Discord callout — permanent fixture, full-width strip            #}
+    {# ─────────────────────────────────────────────────────────────────── #}
+    <section class="mt-3">
+        <div class="card bg-gradient-to-r from-[#5865F2]/15 via-base-200/90 to-[#5865F2]/15 border-2 border-[#5865F2]/40 shadow-lg shadow-[#5865F2]/10 hover:shadow-[#5865F2]/20 transition-all">
+            <a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer" class="card-body p-3 md:p-5 lg:p-7 flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
+                <div class="shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-lg bg-[#5865F2]/20 ring-2 ring-[#5865F2]/40 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-7 md:h-7 text-[#5865F2]" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M13.545 2.907a13.2 13.2 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.2 12.2 0 0 0-3.658 0 8 8 0 0 0-.412-.833.05.05 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.04.04 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032q.003.022.021.037a13.3 13.3 0 0 0 3.995 2.02.05.05 0 0 0 .056-.019q.463-.63.818-1.329a.05.05 0 0 0-.01-.059l-.018-.011a9 9 0 0 1-1.248-.595.05.05 0 0 1-.02-.066l.015-.019q.127-.095.248-.195a.05.05 0 0 1 .051-.007c2.619 1.196 5.454 1.196 8.041 0a.05.05 0 0 1 .053.007q.121.1.248.195a.05.05 0 0 1-.004.085 8 8 0 0 1-1.249.594.05.05 0 0 0-.03.03.05.05 0 0 0 .003.041c.24.465.515.909.817 1.329a.05.05 0 0 0 .056.019 13.2 13.2 0 0 0 4.001-2.02.05.05 0 0 0 .021-.037c.334-3.451-.559-6.449-2.366-9.106a.03.03 0 0 0-.02-.019m-8.198 7.307c-.789 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.45.73 1.438 1.613 0 .888-.637 1.612-1.438 1.612m5.316 0c-.788 0-1.438-.724-1.438-1.612s.637-1.613 1.438-1.613c.807 0 1.451.73 1.438 1.613 0 .888-.631 1.612-1.438 1.612"/>
+                    </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-base md:text-lg lg:text-xl font-bold text-base-content line-clamp-1 pr-1">Join the PlatPursuit Discord</h3>
+                    <p class="text-xs md:text-sm text-base-content/60 italic pr-1">
+                        Chat with hunters, share screenshots, get help, and find the rest of the community.
+                        {% if discord_member_count %}{{ discord_member_count|intcomma }} members and counting.{% endif %}
+                    </p>
+                </div>
+                <div class="btn btn-sm md:btn-md gap-2 shrink-0 text-white border-0" style="background-color: #5865F2;">
+                    Join Discord
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </div>
+            </a>
+        </div>
+    </section>
+
+{% endblock %}

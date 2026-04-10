@@ -439,8 +439,14 @@ document.addEventListener('DOMContentLoaded', () => {
         void container.offsetHeight;
         container.style.maxHeight = '0';
         container.style.borderWidth = '0';
-        // Pull toggle flush against navbar (negate main's py-2 padding)
-        wrapper.style.top = '0px';
+        // Pull the wrapper up by 8px in normal flow to negate main's `py-2`
+        // padding. This closes the visible gap between the sub-nav and the
+        // toggle when the page is at the top (sticky is inactive in flow,
+        // so without this nudge the toggle would sit 8px below the sub-nav).
+        // Crucially, marginTop only affects the natural-flow position — it
+        // does NOT affect the sticky position once scrolling kicks in. Do
+        // NOT touch wrapper.style.top, which would override the JS-managed
+        // sticky offset and jam the toggle behind the navbar/sub-nav.
         wrapper.style.marginTop = '-8px';
         wrapper.style.marginBottom = '0.5rem';
         toggleIcon?.classList.remove('rotate-180');
@@ -449,8 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function expandHotbar() {
-        // Restore sticky gap from viewport top
-        wrapper.style.top = '';
+        // Restore the natural-flow position (clear the collapse-state nudge)
         wrapper.style.marginTop = '';
         wrapper.style.marginBottom = '0.5rem';
         container.style.borderWidth = '';
@@ -482,7 +487,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isHotbarHidden()) {
         container.style.maxHeight = '0';
         container.style.borderWidth = '0';
-        wrapper.style.top = '0px';
+        // Same -8px nudge as collapseHotbar() so the toggle is flush with the
+        // sub-nav even before the user has scrolled (when sticky is inactive).
         wrapper.style.marginTop = '-8px';
         wrapper.style.marginBottom = '0.5rem';
         toggleIcon?.classList.remove('rotate-180');

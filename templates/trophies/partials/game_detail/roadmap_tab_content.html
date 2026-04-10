@@ -22,6 +22,10 @@
                         {{ steps|length }} step{{ steps|length|pluralize }}{% if guides %}, {{ guides|length }} trophy guide{{ guides|length|pluralize }}{% endif %}{% if tab.youtube_url %}, video walkthrough{% endif %}.
                         {% endwith %}
                     </p>
+                    {# Brand-building byline. Free, but anchors the "this is a curated #}
+                    {# product made by a small team" framing that the recruitment       #}
+                    {# strip on the community hub leans into.                           #}
+                    <p class="text-xs text-base-content/35 italic mt-0.5">Written by the PlatPursuit Roadmap Team</p>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     {% if request.user.is_staff %}

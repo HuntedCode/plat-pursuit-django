@@ -3,40 +3,40 @@ Recap Slide: Quiz - Which Was Your Rarest Trophy
 Variables: correct_trophy_id, options (list of {id, name, icon_url, game, trophy_type})
 {% endcomment %}
 <div class="flex items-center justify-center w-full h-full">
-    <div class="card bg-base-300/50 border border-base-content/10 shadow-xl px-6 py-8 md:px-10 md:py-10 text-center max-w-lg"
+    <div class="card bg-white/[0.03] border border-base-content/5 shadow-md px-4 py-6 md:px-8 md:py-8 text-center max-w-lg"
          data-quiz-correct="{{ correct_trophy_id }}">
         <!-- Question Icon -->
-        <div class="text-4xl mb-3">💎</div>
+        <div class="text-3xl mb-2">💎</div>
 
         <!-- Question -->
-        <h3 class="text-xl md:text-2xl font-bold text-primary mb-2">Which was your rarest?</h3>
-        <p class="text-base text-base-content/70 mb-6">Tap the trophy with the lowest earn rate</p>
+        <h3 class="text-xl md:text-2xl font-bold text-primary mb-1">Which was your rarest?</h3>
+        <p class="text-sm text-base-content/70 mb-4">Tap the trophy with the lowest earn rate</p>
 
         <!-- Trophy Options -->
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-2">
             {% for trophy in options %}
             <div data-quiz-option="{{ trophy.id }}"
-                 class="card bg-base-200 border border-base-content/10 p-3 cursor-pointer hover:border-primary transition-all">
+                 class="card bg-base-200 border border-base-content/10 p-2 cursor-pointer hover:border-primary transition-all">
                 <!-- Trophy Icon -->
-                <div class="flex justify-center mb-2">
+                <div class="flex justify-center mb-1">
                     {% if trophy.icon_url %}
-                    <img src="{{ trophy.icon_url }}" alt="{{ trophy.name }}" class="w-12 h-12 rounded object-cover" />
+                    <img src="{{ trophy.icon_url }}" alt="{{ trophy.name }}" class="w-10 h-10 rounded object-cover" />
                     {% else %}
-                    <div class="w-12 h-12 rounded bg-base-300 flex items-center justify-center">
-                        <span class="text-2xl">🏆</span>
+                    <div class="w-10 h-10 rounded bg-base-300 flex items-center justify-center">
+                        <span class="text-xl">🏆</span>
                     </div>
                     {% endif %}
                 </div>
 
                 <!-- Trophy Name -->
-                <p class="text-sm font-semibold text-base-content line-clamp-2 mb-1">{{ trophy.name }}</p>
+                <p class="text-xs font-semibold text-base-content line-clamp-2 mb-0.5 pr-1">{{ trophy.name }}</p>
 
                 <!-- Game Name -->
-                <p class="text-xs text-base-content/50 line-clamp-1">{{ trophy.game }}</p>
+                <p class="text-[0.65rem] text-base-content/50 line-clamp-1 pr-1">{{ trophy.game }}</p>
 
                 <!-- Trophy Type Badge -->
-                <div class="mt-2">
-                    <span class="badge badge-sm {% if trophy.trophy_type == 'platinum' %}badge-primary{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">
+                <div class="mt-1">
+                    <span class="badge badge-xs {% if trophy.trophy_type == 'platinum' %}badge-primary{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">
                         {{ trophy.trophy_type|title }}
                     </span>
                 </div>

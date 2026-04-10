@@ -5,8 +5,10 @@ import time
 from django.contrib.staticfiles.finders import find
 from django.http import HttpResponse
 from django.shortcuts import render
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
+from core.services.community_hub_service import build_community_hub_context
 from trophies.mixins import ProfileHotbarMixin
 from trophies.util_modules.cache import redis_client
 from trophies.views.dashboard_views import build_dashboard_context, _get_site_heartbeat
@@ -83,6 +85,71 @@ class AboutView(TemplateView):
 
 class ContactView(TemplateView):
     template_name = 'pages/contact.html'
+
+
+class CommunityHubView(ProfileHotbarMixin, TemplateView):
+    """The Community Hub destination page at /community/.
+
+    A fixed-layout **Feature Spotlight** page (NOT an aggregator) composed
+    of: site heartbeat hero, conditional active fundraiser banner, Pursuit
+    Feed Spotlight promo block (3 sample events + CTA), 2x2 feature grid
+    (Reviews / Challenges / Lists / Leaderboards), and a permanent Discord
+    callout. Each card is part-marketing (icon, tagline, CTA) and
+    part-preview (3-5 items of real signal); the hub is a wayfinder, not
+    a feed-of-feeds.
+
+    Unlike the dashboard, this page is NOT customizable: no drag-and-drop,
+    no module library, no per-user hidden modules. The hub is curated;
+    the dashboard is personal. See docs/features/community-hub.md for the
+    page anatomy and the rationale for the Feature Spotlight design.
+
+    Public access — no auth required. Anonymous visitors get the same
+    layout; the only viewer-specific touch is the rank highlight on the
+    Leaderboards card when logged in.
+    """
+    template_name = 'community/hub.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Pull viewer profile if logged in AND linked. Personal-section
+        # helpers in build_community_hub_context all branch on a None
+        # `viewer_profile` to render the sign-in / link-PSN CTA, so we
+        # collapse "anonymous", "logged in but no profile", and "logged
+        # in with an unlinked profile" into a single None signal here.
+        # Authenticated unlinked users get a "Link your PSN to see your
+        # stats" CTA in each card's bottom half via the same template
+        # branch as anonymous users — both states see the same CTA copy
+        # because both fixes route through `link_psn`.
+        viewer_profile = None
+        if self.request.user.is_authenticated:
+            profile = getattr(self.request.user, 'profile', None)
+            if profile is not None and profile.is_linked:
+                viewer_profile = profile
+
+        # Pass the auth + linked-state signals through to the template so
+        # it can pick the right CTA copy for the personal half empty state
+        # ("sign in" vs. "link your PSN").
+        context['viewer_is_authenticated'] = self.request.user.is_authenticated
+        context['viewer_has_linked_profile'] = viewer_profile is not None
+
+        # All module data lives under top-level context keys keyed by module
+        # slug. Each module's template can render or skip independently.
+        context.update(build_community_hub_context(viewer_profile=viewer_profile))
+
+        # SEO + breadcrumb context. The base.html blocks pick these up via
+        # the seo_title / seo_description / breadcrumb context vars and the
+        # jsonld_breadcrumbs templatetag.
+        context['seo_title'] = 'Community Hub - Platinum Pursuit'
+        context['seo_description'] = (
+            "What's happening across PlatPursuit right now: the Pursuit Feed, "
+            "global leaderboards, top reviewers, active challenges, and more."
+        )
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Community Hub'},
+        ]
+        return context
 
 
 class HomeView(ProfileHotbarMixin, TemplateView):

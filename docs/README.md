@@ -21,7 +21,9 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 | [Payment & Webhooks](architecture/payment-webhooks.md) | Stripe + PayPal, subscriptions, donations, webhook routing |
 | [Concept Model](architecture/concept-model.md) | Concept sync, absorb(), default concepts, concept lock |
 | [Data Model](architecture/data-model.md) | Core model relationships and entity overview |
+| [Event System (Deferred)](architecture/event-system-deferred.md) | DEFERRED. Polymorphic Event model and Pursuit Feed design, rolled back before reaching production. Preserved for future revival. |
 | [Gamification](architecture/gamification.md) | P.L.A.T.I.N.U.M. stats, XP system, ProfileGamification |
+| [IA and Sub-Nav](architecture/ia-and-subnav.md) | Hub-of-hubs IA, sub-navigation infrastructure, URL prefix matching, hub configuration |
 
 ## Design
 
@@ -33,6 +35,7 @@ Long-form vision documents for systems not yet fully implemented.
 | [Gamification Vision](design/gamification-vision.md) | Full RPG system design: stats, jobs, quests, currency, star chart, avatar frames |
 | [Platinum Journey](design/platinum-journey.md) | Premium "patient companion" feature: synthesis layer that knows the user and helps plan their next pursuits |
 | [Stats Page](design/stats-page.md) | Premium `/my-stats/` page: video game stats screen with 100+ trophy hunting stats |
+| [Tutorial System](design/tutorial-system.md) | Brief 4-step Welcome Tour that introduces new users to the four hubs on first PSN-link |
 
 ## Features
 
@@ -43,15 +46,17 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Challenge Systems](features/challenge-systems.md) | A-Z, Calendar, and Genre platinum challenges |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
 | [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |
-| [Community Hub](features/community-hub.md) | Reviews, ratings, concept trophy groups |
+| [Community Hub](features/community-hub.md) | Site-wide community destination: Pursuit Feed, leaderboards, top reviewers, active challenges |
 | [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
 | [Easter Eggs](features/easter-eggs.md) | Hidden milestones, titles, and the claim API |
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
 | [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |
 | [Monthly Recap](features/monthly-recap.md) | Recap generation, slides, email, share cards |
-| [Navigation & Site Organization](features/navigation.md) | Navbar, footer, cross-links, profile tabs |
+| [My Pursuit Hub](features/my-pursuit-hub.md) | Personal-progression hub at `/my-pursuit/`: badges, milestones, titles (forward-compatible with gamification) |
+| [Navigation & Site Organization](features/navigation.md) | Navbar, footer, sub-nav, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
+| [Review Hub](features/review-hub.md) | Reviews, ratings, concept trophy groups (formerly "Community Hub") |
 | [Roadmap System](features/roadmap-system.md) | Staff-authored platinum guides on game detail (replaces the legacy checklist system) |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |

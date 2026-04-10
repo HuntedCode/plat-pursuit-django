@@ -1,7 +1,18 @@
 {% load custom_filters %}
 {% load static %}
 {% load humanize %}
-<div id="hotbar-wrapper" class="sticky top-2 z-40 xl:w-3/4 mx-auto transition-all duration-300 ease-in-out">
+{# The Tailwind sticky offsets here (top-[7.25rem] inside a hub, top-[4.5rem]    #}
+{# on non-hub pages) are good first guesses but `alignStickyChrome()` in         #}
+{# main.js measures the actual rendered navbar + sub-nav heights on load and     #}
+{# inline-styles `top:` to match exactly, insulating the layout from font        #}
+{# metrics, avatar size, and DPI rounding. The function also drops the 8px gap   #}
+{# above the hotbar to 0 when the user collapses it (localStorage `hotbar_hidden #}
+{# = true`) so the toggle "tab" attaches flush against the sub-nav's bottom edge #}
+{# instead of floating below it. z-30 keeps the hotbar under the navbar (z-50)   #}
+{# and the sub-nav (z-40) so they layer correctly when scrolled. Note: hotbar.js #}
+{# MUST NOT set `wrapper.style.top` inline — that overrides the JS-managed       #}
+{# offset and jams the toggle behind the navbar/sub-nav.                         #}
+<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section %}top-[7.25rem]{% else %}top-[4.5rem]{% endif %} z-30 transition-all duration-300 ease-in-out">
     <div id="hotbar-container"
          class="hotbar-loading bg-base-200/95 backdrop-blur-md border-2 border-primary rounded-box shadow-lg shadow-primary/25 w-full overflow-hidden transition-all duration-300 ease-in-out"
          data-url-sync="{% url 'profile_sync_status' %}"
@@ -16,7 +27,7 @@
                 <div class="flex flex-row items-center gap-1.5 md:gap-2 xl:gap-3 min-w-0">
                     {% if hotbar.profile %}
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar shrink-0">
-                            <div class="w-5 md:w-7 xl:w-8 rounded-full ring-1 md:ring-2 ring-primary hover:scale-105 transition-transform">
+                            <div class="w-5 md:w-7 xl:w-8 rounded-full ring-1 md:ring-2 ring-primary">
                                 <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                             </div>
                         </a>
@@ -85,7 +96,7 @@
     <button id="hotbar-toggle"
             class="block mx-auto bg-base-300 border-2 border-primary border-t-0 rounded-b-lg px-4 py-1 shadow-md shadow-primary/25 cursor-pointer transition-all duration-300 hover:bg-base-200 hover:shadow-primary/40 group"
             aria-label="Toggle hotbar">
-        <svg id="toggle-icon" class="w-5 h-5 text-primary rotate-180 transition-transform duration-300 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-labelledby="hotbar-toggle-icon">
+        <svg id="toggle-icon" class="w-5 h-5 text-primary rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-labelledby="hotbar-toggle-icon">
             <title id="hotbar-toggle-icon">Toggle hotbar visibility</title>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7" />
         </svg>

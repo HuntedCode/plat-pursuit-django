@@ -100,6 +100,43 @@ class ReviewHubService:
         return result
 
     @staticmethod
+    def get_top_reviewers(limit=10):
+        """Top reviewers by total helpful votes received across all their reviews.
+
+        Aggregates `helpful_count` (denormalized on Review) per profile and
+        returns the top N. Excludes deleted reviews and profiles whose total
+        is zero (newcomers don't surface even if they have a review with no
+        votes yet). Used by the Community Hub `top_reviewers` module.
+
+        Returns a list of dicts: profile (Profile instance), total_helpful,
+        review_count. Profile is included so the template can render avatar +
+        psn_username + flag without an extra query.
+        """
+        from django.db.models import Count, Sum
+        from trophies.models import Profile
+
+        return list(
+            Profile.objects
+            .annotate(
+                total_helpful=Sum(
+                    'reviews__helpful_count',
+                    filter=Q(reviews__is_deleted=False),
+                ),
+                review_count=Count(
+                    'reviews',
+                    filter=Q(reviews__is_deleted=False),
+                ),
+            )
+            .filter(total_helpful__gt=0)
+            .order_by('-total_helpful', '-review_count')[:limit]
+            .values(
+                'id', 'psn_username', 'display_psn_username',
+                'avatar_url', 'flag', 'user_is_premium',
+                'total_helpful', 'review_count',
+            )
+        )
+
+    @staticmethod
     def get_trending_reviews(days=7, limit=5):
         """Reviews with most helpful votes created in the last N days.
 

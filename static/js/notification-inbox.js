@@ -1251,7 +1251,7 @@ class NotificationInboxManager {
                 ` : ''}
 
                 ${conceptSlug ? `
-                    <a href="/reviews/${conceptSlug}/" class="btn btn-sm btn-accent w-full">
+                    <a href="/community/reviews/${conceptSlug}/" class="btn btn-sm btn-accent w-full">
                         View in Review Hub
                     </a>
                 ` : ''}
@@ -1302,7 +1302,7 @@ class NotificationInboxManager {
                 </div>
 
                 ${conceptSlug ? `
-                    <a href="/reviews/${conceptSlug}/" class="btn btn-sm btn-accent w-full">
+                    <a href="/community/reviews/${conceptSlug}/" class="btn btn-sm btn-accent w-full">
                         View Your Review
                     </a>
                 ` : ''}

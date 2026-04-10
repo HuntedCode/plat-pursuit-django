@@ -293,6 +293,7 @@ class ReviewService:
             return
 
         concept_title = review.concept.unified_title or "a game"
+        from django.urls import reverse
         NotificationService.create_notification(
             recipient=user,
             notification_type='review_milestone',
@@ -302,7 +303,7 @@ class ReviewService:
                 f"by {count} people. Keep sharing your insights!"
             ),
             icon='👍',
-            action_url=f"/reviews/{review.concept.slug}/",
+            action_url=reverse('review_hub', kwargs={'slug': review.concept.slug}),
             action_text='View Review',
             metadata={
                 'concept_title': concept_title,
@@ -371,13 +372,14 @@ class ReviewService:
                 from notifications.services.notification_service import NotificationService
 
                 concept_title = review.concept.unified_title or "a game"
+                from django.urls import reverse
                 NotificationService.create_notification(
                     recipient=review.profile.user,
                     notification_type='review_reply',
                     title=f"{profile.display_psn_username or profile.psn_username} replied to your review",
                     message=f"New reply on your review of {concept_title}.",
                     icon='💬',
-                    action_url=f"/reviews/{review.concept.slug}/",
+                    action_url=reverse('review_hub', kwargs={'slug': review.concept.slug}),
                     action_text='View Reply',
                     metadata={
                         'concept_title': concept_title,

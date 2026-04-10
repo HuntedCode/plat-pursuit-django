@@ -1,5 +1,5 @@
 {% load static %}
-<nav class="navbar bg-base-200 shadow-lg border-b-2 border-primary/30" role="navigation" aria-label="Main navigation">
+<nav class="navbar sticky top-0 z-50 bg-base-200 shadow-lg border-b-2 border-primary/30" role="navigation" aria-label="Main navigation">
 
     <!-- navbar-start: Logo -->
     <div class="navbar-start flex items-center">
@@ -17,130 +17,58 @@
         </a>
     </div>
 
+    {# ── Hub-of-Hubs navigation: 4 direct-link hub destinations ──                          #}
+    {# 4 buttons: Dashboard / Browse / Community / My Pursuit. Each has its own sub-nav     #}
+    {# strip rendered globally below this navbar (templates/partials/hub_subnav.html) which #}
+    {# surfaces sub-pages on every URL in the hub's family. Customization is killed —       #}
+    {# Settings (avatar dropdown) + the dashboard's Edit Layout controls cover all the      #}
+    {# old customization touchpoints.                                                        #}
+    {#                                                                                       #}
+    {# Active state: hub_section comes from the hub_subnav context processor (always set    #}
+    {# for hub-family URLs, None for settings/auth/staff pages). The matching button         #}
+    {# highlights as btn-primary; the others use btn-ghost. Mobile uses the bottom tab bar  #}
+    {# for the same 4-hub navigation; the navbar's hub buttons are hidden on <lg:.          #}
+    {# See docs/architecture/ia-and-subnav.md for the design rationale.                      #}
     <div class="navbar-center hidden lg:flex">
-        <ul class="menu menu-horizontal px-1">
-            <!-- Browse -->
+        <ul class="menu menu-horizontal px-1 gap-1">
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Browse</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'games_list' %}">Games</a></li>
-                        <li><a href="{% url 'profiles_list' %}">Profiles</a></li>
-                        <li><a href="{% url 'trophies_list' %}">Trophies</a></li>
-                    </ul>
-                </details>
+                <a href="{% url 'home' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'dashboard' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    Dashboard
+                </a>
             </li>
-            <!-- Discover -->
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Discover</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'companies_list' %}">Companies</a></li>
-                        <li><a href="{% url 'genres_list' %}">Genres & Themes</a></li>
-                        <li><a href="{% url 'flagged_games' %}">Flagged Games</a></li>
-                    </ul>
-                </details>
+                <a href="{% url 'games_list' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'browse' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    Browse
+                </a>
             </li>
-            <!-- Community -->
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Community</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="https://discord.gg/platpursuit" target="_blank" rel="noopener noreferrer">Discord</a></li>
-                        <li><a href="{% url 'challenges_browse' %}">Challenges</a></li>
-                        <li><a href="{% url 'lists_browse' %}">Game Lists</a></li>
-                        <li><a href="{% url 'reviews_landing' %}">Review Hub</a></li>
-                        {% if active_fundraiser %}
-                            <li>
-                                <a href="{% url 'fundraiser' active_fundraiser.slug %}">
-                                    <span class="flex flex-row gap-2 items-center">
-                                        Fundraiser
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-accent" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                                    </span>
-                                </a>
-                            </li>
-                        {% endif %}
-                    </ul>
-                </details>
+                <a href="{% url 'community_hub' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'community' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    Community
+                </a>
             </li>
-            <!-- Earn -->
             <li>
-                <details class="mega-menu-dropdown">
-                    <summary>Earn</summary>
-                    <ul class="mega-menu-content">
-                        <li><a href="{% url 'badges_list' %}">Badges</a></li>
-                        <li><a href="{% url 'milestones_list' %}">Milestones</a></li>
-                        <li><a href="{% url 'overall_badge_leaderboards' %}">Leaderboards</a></li>
-                        {% if user.is_authenticated and user.profile %}
-                            <li><a href="{% url 'my_titles' %}">Titles</a></li>
-                        {% endif %}
-                    </ul>
-                </details>
+                {# /my-pursuit/ is a 301 redirect to /my-pursuit/badges/. The     #}
+                {# Badges page IS the hub landing — there is no separate landing  #}
+                {# page. See docs/features/my-pursuit-hub.md for the rationale.   #}
+                <a href="{% url 'my_pursuit_hub' %}"
+                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    My Pursuit
+                </a>
             </li>
-            {# Guides section hidden during redesign - will be reintroduced later #}
-            <!-- My Pursuit -->
-            {% if user.is_authenticated and user.profile %}
-            <li>
-                <details class="mega-menu-dropdown">
-                    <summary>My Pursuit</summary>
-                    <ul class="mega-menu-content">
-                        {% if user.is_staff %}
-                        <li><a href="{% url 'dashboard' %}">My Dashboard (Staff Only)</a></li>
-                        {% endif %}
-                        <li><a href="{% url 'settings' %}">Customization</a></li>
-                        <li><a href="{% url 'recap_index' %}">Monthly Recap</a></li>
-                        <li><a href="{% url 'my_challenges' %}">My Challenges</a></li>
-                        <li><a href="{% url 'my_lists' %}">My Lists</a></li>
-                        <li><a href="{% url 'profile_detail' user.profile.psn_username %}">My Profile</a></li>
-                        <li><a href="{% url 'my_shareables' %}">My Shareables</a></li>
-                    </ul>
-                </details>
-            </li>
-            {% endif %}
         </ul>
     </div>
 
-    <!-- navbar-end: Recap icon, Search, Notifications, User dropdown -->
+    <!-- navbar-end: Notifications, User dropdown -->
     <div class="navbar-end flex items-center gap-0 md:gap-2 md:mr-2">
 
-        <!-- Monthly Recap Icon (auth only, hidden on mobile) -->
+        <!-- Notification Bell (auth only). Visible at all breakpoints — mobile previously
+             had its own bell in the bottom tab bar, but the bottom tab bar is now the 4
+             hub buttons, so notifications live exclusively in the navbar. -->
         {% if user.is_authenticated %}
-        <a href="{% url 'recap_index' %}" class="btn btn-ghost btn-sm btn-circle hidden md:flex" aria-label="Monthly Recap">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <title>Monthly Recap</title>
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-        </a>
-        {% endif %}
-
-        <!-- Expandable Search (hidden on mobile) -->
-        <div class="hidden md:flex items-center">
-            <button id="search-toggle-btn" class="btn btn-ghost btn-sm btn-circle" aria-label="Toggle search" aria-expanded="false">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <title>Search</title>
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                </svg>
-            </button>
-            <div id="search-expandable" class="search-expandable">
-                <form action="{% url 'search' %}" method="GET" class="join">
-                    <select name="type" class="select select-sm select-primary join-item w-auto">
-                        <option value="game">Game</option>
-                        <option value="trophy">Trophy</option>
-                        <option value="user">Profile</option>
-                    </select>
-                    <input id="search-input" type="text" name="query" placeholder="Search..." class="input input-primary input-sm join-item w-32 lg:w-40" />
-                    <button type="submit" class="btn btn-sm btn-primary join-item">Go</button>
-                </form>
-            </div>
-        </div>
-
-        <!-- Notification Bell (auth only, hidden on mobile — mobile uses tab bar) -->
-        {% if user.is_authenticated %}
-        <div class="dropdown dropdown-end hidden lg:block" id="notification-dropdown">
+        <div class="dropdown dropdown-end" id="notification-dropdown">
             <button
                 tabindex="0"
                 class="btn btn-ghost btn-sm btn-circle relative"
@@ -207,7 +135,7 @@
                         </div>
                     </div>
                 </div>
-                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200 min-w-48 w-fit">
+                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-200 border-2 border-base-300 min-w-48 w-fit">
                     <!-- Theme Toggle -->
                     <li>
                         <button id="theme-toggle-item" type="button" class="flex items-center gap-2 w-full">
@@ -273,7 +201,7 @@
                         </svg>
                     </div>
                 </div>
-                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-100 border-2 border-base-200 w-fit">
+                <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-200 border-2 border-base-300 w-fit">
                     <li><a href="{% url 'account_login' %}">Login</a></li>
                     <li><a href="{% url 'account_signup' %}">Register</a></li>
                 </ul>

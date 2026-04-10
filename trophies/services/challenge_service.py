@@ -55,6 +55,7 @@ def create_az_challenge(profile, name='My A-Z Challenge'):
 
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
+
     return challenge
 
 
@@ -234,8 +235,12 @@ def get_excluded_game_ids(profile):
 def _create_completion_notification(challenge):
     """Create in-app notification for challenge completion (type-aware)."""
     try:
+        from django.urls import reverse
         from notifications.services.notification_service import NotificationService
 
+        # Resolve action URLs via reverse() so the Phase 10 URL audit (and any
+        # future renames) only need to update plat_pursuit/urls.py — this
+        # function picks up the new path automatically.
         if challenge.challenge_type == 'calendar':
             title = 'Platinum Calendar Complete!'
             message = (
@@ -243,7 +248,7 @@ def _create_completion_notification(challenge):
                 f'"{challenge.name}"! {challenge.total_items}/{challenge.total_items}: '
                 f'welcome to the Hall of Fame!'
             )
-            action_url = f'/challenges/calendar/{challenge.id}/'
+            action_url = reverse('calendar_challenge_detail', kwargs={'challenge_id': challenge.id})
         elif challenge.challenge_type == 'genre':
             title = 'Genre Challenge Complete!'
             message = (
@@ -251,14 +256,14 @@ def _create_completion_notification(challenge):
                 f'{challenge.completed_count}/{challenge.total_items} genres mastered. '
                 f'Welcome to the Hall of Fame!'
             )
-            action_url = f'/challenges/genre/{challenge.id}/'
+            action_url = reverse('genre_challenge_detail', kwargs={'challenge_id': challenge.id})
         else:
             title = 'A-Z Challenge Complete!'
             message = (
                 f'You completed your A-Z Challenge "{challenge.name}"! '
                 f'Welcome to the Hall of Fame!'
             )
-            action_url = f'/challenges/az/{challenge.id}/'
+            action_url = reverse('az_challenge_detail', kwargs={'challenge_id': challenge.id})
 
         NotificationService.create_notification(
             recipient=challenge.profile.user,
@@ -329,6 +334,7 @@ def create_calendar_challenge(profile, name='My Platinum Calendar'):
 
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
+
     return challenge
 
 
@@ -342,7 +348,12 @@ def _reconcile_calendar_days(challenge, user_tz=None):
     Updates plat_count, game_id, and platinum_earned_at on all days.
 
     Returns:
-        tuple: (newly_filled_count, newly_unfilled_count, to_update_list)
+        tuple: (newly_filled_count, newly_unfilled_count, to_update_list, newly_filled_days)
+        where `newly_filled_days` is the list of CalendarChallengeDay objects
+        that flipped from is_filled=False to True during this reconciliation.
+        Used by sync-path callers to emit Pursuit Feed challenge_progress
+        events. The backfill caller (which runs at challenge creation, before
+        any user activity) ignores it.
     """
     if user_tz is None:
         user_tz = _get_user_tz(challenge.profile)
@@ -380,6 +391,7 @@ def _reconcile_calendar_days(challenge, user_tz=None):
     to_update = []
     newly_filled = 0
     newly_unfilled = 0
+    newly_filled_days = []
 
     for key, day_obj in all_days.items():
         changed = False
@@ -396,6 +408,7 @@ def _reconcile_calendar_days(challenge, user_tz=None):
                 day_obj.game_id = et.trophy.game_id
                 changed = True
                 newly_filled += 1
+                newly_filled_days.append(day_obj)
             else:
                 # Already filled: ensure earliest platinum is still correct
                 if day_obj.platinum_earned_at != et.earned_date_time:
@@ -421,7 +434,7 @@ def _reconcile_calendar_days(challenge, user_tz=None):
         if changed:
             to_update.append(day_obj)
 
-    return newly_filled, newly_unfilled, to_update
+    return newly_filled, newly_unfilled, to_update, newly_filled_days
 
 
 def backfill_calendar_from_history(challenge):
@@ -429,10 +442,15 @@ def backfill_calendar_from_history(challenge):
     Full reconciliation of a calendar challenge against the user's platinum history.
     Fills matching days, unfills phantom days, and corrects plat_count values.
     Respects user timezone. Excludes shovelware and hidden games.
+
+    Backfill runs at challenge creation time, before any user activity, so
+    it does not emit Pursuit Feed events even if it fills many days. The
+    challenge_started event from create_calendar_challenge already covers
+    the "this user just started" signal in the feed.
     """
     now = timezone.now()
 
-    newly_filled, newly_unfilled, to_update = _reconcile_calendar_days(challenge)
+    newly_filled, newly_unfilled, to_update, _ = _reconcile_calendar_days(challenge)
 
     if to_update:
         CalendarChallengeDay.objects.bulk_update(
@@ -479,7 +497,7 @@ def check_calendar_challenge_progress(profile):
         user_tz = _get_user_tz(profile)
         now = timezone.now()
 
-        newly_filled, newly_unfilled, to_update = _reconcile_calendar_days(
+        newly_filled, newly_unfilled, to_update, newly_filled_days = _reconcile_calendar_days(
             challenge, user_tz,
         )
 
@@ -675,6 +693,7 @@ def create_genre_challenge(profile, name='My Genre Challenge'):
 
     from trophies.services.dashboard_service import invalidate_dashboard_cache
     invalidate_dashboard_cache(profile.id)
+
     return challenge
 
 
