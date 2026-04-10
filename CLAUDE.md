@@ -111,16 +111,21 @@ Currently handled by `absorb()`:
 
 ## Image Styling Conventions
 
-### Game and Trophy Icons
-- **Always** use `object-cover` with square aspect ratio (`w-N h-N` pairs or `w-full aspect-square`)
+### Game Cover Art and Title Images
+- **Always** use `object-cover object-top` for game art (`title_image`, IGDB cover, PSN cover art). The `object-top` anchors to the top of the image, preserving game logos/titles when portrait images are cropped into square containers
 - **Never** use `object-fill`, it stretches/distorts images
 - In inline-style contexts (share cards), use `object-fit: cover`
+- **Image fallback chain**: `title_image` (PSN store art) > `concept.cover_url` (PSN `bg_url` or IGDB cover) > `title_icon_url` (generic icon). Use `{% if %}` / `{% elif %}` blocks in templates, or `|default:` chaining for inline contexts
+- IGDB cover art is constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size)` / `Concept.cover_url` property. Only used for trusted matches (`is_trusted`)
+
+### Trophy Icons
+- Use `object-cover` with square aspect ratio (`w-N h-N` pairs or `w-full aspect-square`)
 
 ### Badge Images
 - Use `object-contain`, badges have transparent backgrounds and custom shapes
 
 ### Exceptions
-- Generic PS placeholder icons (no `title_image`): `object-contain p-3`
+- Generic PS placeholder icons (no `title_image`, no IGDB cover): `object-contain p-3`
 - Content rating icons: `object-contain`
 - Banner/hero images: `object-cover` but not necessarily square
 - User-uploaded content images (guide screenshots): `object-contain h-auto`

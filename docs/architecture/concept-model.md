@@ -43,7 +43,7 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 | `descriptions` | JSONField (dict) | `{"short": "...", "long": "..."}` from PSN API |
 | `content_rating` | JSONField (dict) | ESRB/PEGI rating data |
 | `media` | JSONField (dict) | Screenshots and video URLs from PSN API |
-| `bg_url` | URLField (nullable) | Background image URL for profile customization |
+| `bg_url` | URLField (nullable) | PSN cover art URL (`GAMEHUB_COVER_ART` or `BACKGROUND_LAYER_ART`). Only available for modern titles (PS4/PS5) that go through the `sync_title_stats` pipeline |
 | `concept_icon_url` | URLField (nullable) | Icon image URL |
 | `guide_slug` | CharField(50, nullable) | Link to external guide |
 | `guide_created_at` | DateTimeField (nullable) | Guide creation timestamp |
@@ -182,7 +182,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 - **Rating System** (`trophies/services/rating_service.py`): `UserConceptRating` is scoped to Concept + ConceptTrophyGroup. Cache invalidation is triggered after `absorb()`.
 - **Review System**: `Review` model has FK to Concept. Reviews are migrated during `absorb()` with deduplication by `(profile_id, concept_trophy_group_id)`.
 - **Roadmap System**: `Roadmap` is 1:1 with Concept (staff-authored platinum guides). Migrated as part of the Checklist legacy data preservation since roadmaps replaced checklists as the user-facing guide surface.
-- **IGDB Integration**: `IGDBMatch` is 1:1 with Concept and is transferred during `absorb()` if the surviving concept lacks one. `ConceptCompany`, `ConceptGenre`, `ConceptTheme`, and `ConceptEngine` M2M-through rows are migrated with role merging and de-duplication.
+- **IGDB Integration**: `IGDBMatch` is 1:1 with Concept and is transferred during `absorb()` if the surviving concept lacks one. `ConceptCompany`, `ConceptGenre`, `ConceptTheme`, and `ConceptEngine` M2M-through rows are migrated with role merging and de-duplication. `Concept.get_cover_url(size)` / `Concept.cover_url` property provides cover art with IGDB fallback: returns `bg_url` if available, else constructs an IGDB cover URL from the matched game's `igdb_cover_image_id` (trusted matches only).
 - **Badge System**: `Stage.concepts` (M2M) defines which concepts count toward badge completion. `Badge.most_recent_concept` tracks the newest game in a badge series. Both are handled by `absorb()`.
 - **Challenge System**: `GenreChallengeSlot` and `GenreBonusSlot` reference Concept for genre challenge game picks.
 - **GameFamily Service** (`core/services/game_family_service.py`): Matches related Concepts into families via name-based and trophy-based algorithms. Runs daily via management command.

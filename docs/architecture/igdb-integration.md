@@ -87,6 +87,8 @@ M2M through table. Links Concept to Company with role flags: `is_developer`, `is
 ### IGDBMatch
 OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method`, `status`), parsed Tier 1 data, and the full raw IGDB response (`raw_response`) for future Tier 2 parsing.
 
+**`cover_url(size='cover_big')`** method: Constructs an IGDB Cloudinary image URL from `igdb_cover_image_id`. Returns `f'https://images.igdb.com/igdb/image/upload/t_{size}/{igdb_cover_image_id}.png'`, or `None` if no image ID is stored. Same pattern as `Company.logo_url()`. Available sizes include `cover_small` (90x128), `cover_big` (264x374), `720p` (1280x720), `1080p` (1920x1080).
+
 `status` values:
 - `auto_accepted`: Matched at >= 85% confidence and enrichment applied automatically.
 - `pending_review`: Matched at 50-84% confidence, awaiting staff approval.
@@ -164,6 +166,7 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 
 ## Integration Points
 
+- **Cover Art Fallback**: `Concept.get_cover_url(size)` returns PSN `bg_url` if available, else constructs an IGDB cover URL from `igdb_cover_image_id` for trusted matches. `Concept.cover_url` property provides no-arg access for templates. Used across all game card templates (browse, detail, badge, company, profile, shareables) as a fallback when `title_image` is missing. Requires `select_related('concept__igdb_match')` on querysets
 - **Shovelware Detection** (`trophies/services/shovelware_detection_service.py`): Company `company_size` and `game_engine_name` can be used as additional shovelware signals
 - **Stats Service** (`trophies/services/stats_service.py`): Developer aggregation (top developers, unique developer count) alongside existing publisher stats, via bulk ConceptCompany query
 - **SEO Tags** (`core/templatetags/seo_tags.py`): Developer as `author` Organization, `timeRequired` ISO 8601 duration, IGDB genres with PSN fallback

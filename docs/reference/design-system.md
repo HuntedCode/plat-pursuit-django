@@ -563,14 +563,27 @@ When a chart (e.g., radar) stacks to full width on mobile, constrain and center 
 
 ---
 
-## Image Styling (unchanged)
+## Image Styling
 
 These conventions apply site-wide and are not affected by the redesign:
 
-- Game/trophy icons: `object-cover` with square aspect ratio
+- Game cover art / title images: `object-cover object-top` with square aspect ratio. The `object-top` anchors to the top of the image so game logos and titles remain visible when portrait images are cropped into square containers
+- Trophy icons: `object-cover` with square aspect ratio
 - Badge images: `object-contain` (transparent backgrounds)
 - Never use `object-fill`
 - See CLAUDE.md "Image Styling Conventions" for full rules
+
+### Game Image Fallback Chain
+
+Templates should use this priority order for game images:
+
+1. `title_image` (PSN store art, if available and not `force_title_icon`)
+2. `concept.cover_url` (PSN `bg_url` if available, else IGDB cover art for trusted matches)
+3. `title_icon_url` (generic PS icon, displayed with `object-contain p-3`)
+
+Use `{% if %}` / `{% elif %}` blocks for the three-way check, or `|default:` chaining for inline contexts (e.g., `{{ game.title_image|default:game.concept.cover_url|default:game.title_icon_url }}`).
+
+IGDB cover URLs are constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size='cover_big')`. The `Concept.cover_url` property provides no-arg access for templates. Ensure `select_related('concept__igdb_match')` is present on querysets that render game images.
 
 ---
 
