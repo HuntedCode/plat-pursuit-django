@@ -207,8 +207,21 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 - **`PlatPursuit.API.request()` throws an `Error` with a `.response` property** (raw Response object) on non-ok status. Extract messages with `await error.response?.json().catch(() => null)`. Pass `{}` as body for no-body POSTs.
 - **Don't migrate binary fetches** (blob/image downloads) to `PlatPursuit.API`. It's designed for JSON APIs.
 
+## Page-Specific Modules
+
+These are standalone JS files loaded only on their respective pages. They follow the same `window.PlatPursuit.*` namespace pattern but are not part of `utils.js`.
+
+| File | Class | Page | Purpose |
+|------|-------|------|---------|
+| `static/js/welcome-tour.js` | `WelcomeTourManager` | All (via `base.html`) | 4-step modal carousel teaching hub navigation |
+| `static/js/game-detail-tour.js` | `GameDetailTourManager` | Game detail | 5-step coach marks (stats, flags, reviews, ratings, lists) |
+| `static/js/badge-detail-tour.js` | `BadgeDetailTourManager` | Badge detail | 4-step coach marks (overview, tiers, stages, leaderboards) |
+
+All three tour managers share the same architecture: singleton instance, `init(autoShow)` entry point, `open()`/`dismiss(action)` lifecycle, keyboard navigation (arrow keys + Escape), and a dismiss guard to prevent double API calls. The coach marks tours use a box-shadow spotlight overlay (`coach-overlay` CSS class) that positions a transparent window over the target element with `box-shadow: 0 0 0 9999px` to darken everything else. See [Tutorial System](../design/tutorial-system.md) for full design details.
+
 ## Related Docs
 
 - [Template Architecture](template-architecture.md): Where utils.js is included and how the zoom wrapper works
 - [Dashboard](../features/dashboard.md): Uses DragReorderManager for module reordering
 - [Roadmap System](../features/roadmap-system.md): Uses API, UnsavedChangesManager, DragReorderManager in the staff editor
+- [Tutorial System](../design/tutorial-system.md): Welcome Tour, Game Detail Tour, Badge Detail Tour

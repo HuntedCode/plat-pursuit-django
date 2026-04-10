@@ -202,9 +202,14 @@ Profile pages live under `/community/profiles/<u>/`, so they show the Community 
 
 - **My Shareables is a landing-page-with-sub-pages distributor.** `/dashboard/shareables/` is the index page that shows 5 sub-feature cards (Platinum Cards, Platinum Grid, Profile Card, Monthly Recap, Challenge Cards). Each sub-page has its own URL and they all map back to `my_shareables` in the sub-nav active-state via `_URL_NAME_TO_SLUG_OVERRIDES` in `core/hub_subnav.py`. New shareable sub-pages must be added to that override map.
 
+## Onboarding
+
+The hub-of-hubs IA is a power-user design that prioritizes cleanliness over first-visit discoverability. The [Tutorial System](../design/tutorial-system.md) compensates: a 4-step Welcome Tour runs once after PSN linking, walking new users through each hub and its sub-nav strip. Page-level coach marks on the Game Detail and Badge Detail pages teach feature-specific interactions. The "Welcome Tour" button in the avatar dropdown and "Page Guide" buttons on individual pages allow re-triggering.
+
 ## Related Docs
 
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA structure, sub-nav infrastructure, URL prefix matching
+- [Tutorial System](../design/tutorial-system.md): Welcome Tour, Game Detail Tour, Badge Detail Tour
 - [Community Hub](community-hub.md): the Community hub destination at `/community/`
 - [My Pursuit Hub](my-pursuit-hub.md): the My Pursuit hub destination at `/my-pursuit/`
 - [Dashboard](dashboard.md): the personal cockpit at `/`

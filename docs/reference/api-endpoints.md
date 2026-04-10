@@ -253,6 +253,14 @@ Review responses include a `body_html` field containing server-rendered markdown
 | PUT | `/api/v1/reviews/replies/<reply_id>/` | Login | Edit own reply |
 | DELETE | `/api/v1/reviews/replies/<reply_id>/` | Login | Delete own reply |
 
+### Tutorial System
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/v1/tutorial/welcome/dismiss/` | Login | Dismiss Welcome Tour (skip or complete). Body: `{action: 'complete'|'skip', last_step: 1-4}` |
+| POST | `/api/v1/tutorial/game-detail/dismiss/` | Login | Dismiss Game Detail coach marks tour. Body: `{action: 'complete'|'skip', last_step: 1-5}` |
+| POST | `/api/v1/tutorial/badge-detail/dismiss/` | Login | Dismiss Badge Detail coach marks tour. Body: `{action: 'complete'|'skip', last_step: 1-4}` |
+
 ### Misc
 
 | Method | Path | Auth | Purpose |

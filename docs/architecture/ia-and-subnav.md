@@ -2,7 +2,7 @@
 
 PlatPursuit uses a **hub-of-hubs IA**: the global navbar contains exactly three direct-link hub destinations (Browse, Community, My Pursuit) plus the Dashboard logo, with zero dropdowns at the global-nav level. Each of the four hubs has a dedicated landing page and a persistent sub-navigation strip that surfaces its sub-pages on every URL in the hub's family. This doc describes the design, the URL prefix matching rules, the sub-nav infrastructure, and the rationale behind the decisions.
 
-> **Status**: planned. The current navbar is the legacy 4-dropdown form (Browse / Community / Achievements / My Pursuit). Phase 10a of the Community Hub initiative implements the hub-of-hubs collapse + sub-nav infrastructure described in this doc.
+> **Status**: Implemented. Shipped in the Community Hub initiative.
 
 ## Why this design
 
@@ -13,6 +13,8 @@ The hub-of-hubs design solves both:
 - **Menus expose the few. Hubs expose the many.** The global nav has 3 buttons. Each is a direct link to a hub. The hub does the heavy lifting of "introduce the user to what's in this section." The sub-nav handles "I know what I want, take me to the page."
 - **Sub-navs scale per-section.** Browse's sub-nav has 6 items. Community's has 7. My Pursuit's has 3 today, growing to 8 after gamification. Dashboard's has 4. Each sub-nav is comfortable inside its own context, and users only see the items relevant to where they are.
 - **Each section has a real front door.** The hub landing page is a destination, not a redirect. New users get a wayfinder; power users skip straight to the sub-nav. Both audiences are served.
+
+The trade-off is a higher first-time-user discoverability cost. The [Tutorial System](../design/tutorial-system.md) fills this gap: a 4-step Welcome Tour runs once after PSN linking, introducing each hub and its sub-nav strip. Page-level coach marks on the Game Detail and Badge Detail pages teach feature-specific interactions. The result: a clean IA for power users, with just enough guided onboarding for new users.
 
 The pattern is well-established: GitHub's repository nav, Steam's hub strips, Stripe's docs, Notion's workspaces, Apple's product pages all use a sticky sub-nav strip below the main nav for section-specific wayfinding. PlatPursuit is adopting the same primitive.
 

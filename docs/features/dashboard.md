@@ -19,7 +19,7 @@ This is the discoverability mechanism for personal-utility pages that used to li
 
 The strip is the *only* required navigation for personal-utility pages — the dashboard cockpit itself is *not* required to surface dedicated cards or modules for Stats/Shareables/Recap. Module-level shortcuts to those pages can exist as dashboard modules if they make sense (and several already do — Recap has its own module, for example), but they aren't load-bearing for discoverability.
 
-The planned [Tutorial System](../design/tutorial-system.md) Welcome Tour will explicitly point at the sub-nav strip on the Dashboard tour step so new users notice it on first visit.
+The [Tutorial System](../design/tutorial-system.md) Welcome Tour explicitly points at the sub-nav strip on the Dashboard tour step so new users notice it on first visit. The tour auto-triggers once on the first dashboard load after PSN linking + sync via a `show_welcome_tour` context flag injected in `HomeView` (true when `profile.tour_completed_at` is null). After completion or skip, the flag is set and the tour never auto-shows again. Users can replay it from the avatar dropdown.
 
 ## Architecture Overview
 
