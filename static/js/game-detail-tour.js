@@ -58,7 +58,10 @@ class GameDetailTourManager {
         this.isOpen = false;
         this._dismissing = false;
         this._initialized = false;
+        this._currentTarget = null;
         this._resizeHandler = null;
+        this._keydownHandler = null;
+        this._overlayClickHandler = null;
     }
 
     /**
