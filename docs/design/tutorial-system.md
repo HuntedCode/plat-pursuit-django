@@ -126,6 +126,20 @@ Each of these is a real improvement, but each is also its own scope of work. Shi
 | `templates/trophies/game_detail.html` | Tour include + section IDs |
 | `templates/trophies/partials/game_detail/game_detail_header.html` | "Page Guide" button + target IDs |
 
+### Badge Detail Tour (page coach marks)
+
+| File | Purpose |
+|------|---------|
+| `trophies/models.py` | `Profile.badge_detail_tour_completed_at` field |
+| `trophies/migrations/0191_add_badge_detail_tour_completed_at.py` | Schema migration |
+| `templates/trophies/partials/badge_detail/badge_detail_tour.html` | Coach marks overlay + tooltip template |
+| `static/js/badge-detail-tour.js` | `BadgeDetailTourManager` class |
+| `api/tutorial_views.py` | `BadgeDetailTourDismissAPIView` |
+| `api/urls.py` | `POST /api/v1/tutorial/badge-detail/dismiss/` |
+| `trophies/views/badge_views.py` | `show_badge_detail_tour` context injection in `BadgeDetailView` |
+| `templates/trophies/badge_detail.html` | Tour include + section IDs |
+| `templates/trophies/partials/badge_detail/badge_detail_header.html` | "Page Guide" button + header ID |
+
 ## Related Docs
 
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): the hub-of-hubs IA structure that the Welcome Tour teaches
