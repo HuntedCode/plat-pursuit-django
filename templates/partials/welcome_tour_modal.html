@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}
 Welcome Tour modal: a 4-step carousel introducing PlatPursuit's hub-of-hubs
 navigation. Auto-shows once on first dashboard load after PSN link + sync,
@@ -28,9 +29,62 @@ See docs/design/tutorial-system.md for design rationale.
         </button>
 
         {# ================================================================ #}
-        {# Step 1: Dashboard (Primary / Cyan)                               #}
+        {# Step 1: Welcome splash                                           #}
         {# ================================================================ #}
-        <div class="tour-step" data-step="1" data-accent="var(--color-primary)">
+        <div class="tour-step" data-step="1" data-accent="var(--color-primary)" data-intro="welcome">
+            <div class="p-5 md:p-8 text-center">
+                <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit" class="w-20 h-20 md:w-24 md:h-24 mx-auto rounded-full mb-4" />
+                <h2 class="text-2xl md:text-3xl font-bold mb-2">Welcome to <span class="text-primary">Platinum Pursuit</span></h2>
+                <p class="text-sm text-base-content/50 italic pr-1 mb-4">No trophy can hide from us.</p>
+                <p class="text-sm text-base-content/70 max-w-md mx-auto tour-step-description pr-1">Let's take a quick look at how the site is organized so you can find everything you need.</p>
+                <div class="mt-5 flex items-center justify-center gap-2 text-xs text-base-content/40">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    <span class="hidden lg:inline">Use the buttons below or arrow keys to navigate</span>
+                    <span class="lg:hidden">Swipe or use the buttons below</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Step 2: Navigation intro (highlights real nav chrome)             #}
+        {# ================================================================ #}
+        <div class="tour-step hidden" data-step="2" data-accent="var(--color-primary)" data-intro="navigation">
+            <div class="p-5 md:p-8 text-center">
+                <div class="tour-icon-glow mx-auto mb-4" style="--glow-color: var(--color-primary)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+                    </svg>
+                </div>
+                <h2 class="text-xl md:text-2xl font-bold mb-1">How to Get Around</h2>
+                <p class="text-sm text-base-content/50 italic pr-1 mb-3">PlatPursuit is organized into four hubs, each with its own sub-pages.</p>
+                <p class="text-sm text-base-content/70 max-w-md mx-auto tour-step-description pr-1 mb-4">The <strong>navbar</strong> at the top lets you jump between the four main sections. Each section has a <strong>sub-nav strip</strong> below it with its sub-pages. Let's walk through them.</p>
+                <div class="tour-nav-path" style="--path-accent: var(--color-primary)">
+                    <div class="tour-navbar-mockup mb-1">
+                        <span class="tour-navbar-btn active">Dashboard</span>
+                        <span class="tour-navbar-btn">Browse</span>
+                        <span class="tour-navbar-btn">Community</span>
+                        <span class="tour-navbar-btn">My Pursuit</span>
+                    </div>
+                    <div class="flex justify-center my-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-7-7l7 7 7-7"/>
+                        </svg>
+                    </div>
+                    <div class="tour-subnav-preview" style="--nav-accent: var(--color-primary)">
+                        <span class="tour-subnav-item active">Dashboard</span>
+                        <span class="tour-subnav-item">My Stats</span>
+                        <span class="tour-subnav-item">Shareables</span>
+                        <span class="tour-subnav-item">Recap</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Step 3: Dashboard (Primary / Cyan)                               #}
+        {# ================================================================ #}
+        <div class="tour-step hidden" data-step="3" data-accent="var(--color-primary)">
             <div class="p-5 md:p-8">
                 {# Hub icon + title #}
                 <div class="text-center mb-5">
@@ -112,7 +166,7 @@ See docs/design/tutorial-system.md for design rationale.
         {# ================================================================ #}
         {# Step 2: Browse (Accent / Orange)                                 #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="2" data-accent="var(--color-accent)">
+        <div class="tour-step hidden" data-step="4" data-accent="var(--color-accent)">
             <div class="p-5 md:p-8">
                 <div class="text-center mb-5">
                     <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-accent)">
@@ -203,7 +257,7 @@ See docs/design/tutorial-system.md for design rationale.
         {# ================================================================ #}
         {# Step 3: Community (Success / Green)                              #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="3" data-accent="var(--color-success)">
+        <div class="tour-step hidden" data-step="5" data-accent="var(--color-success)">
             <div class="p-5 md:p-8">
                 <div class="text-center mb-5">
                     <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-success)">
@@ -294,7 +348,7 @@ See docs/design/tutorial-system.md for design rationale.
         {# ================================================================ #}
         {# Step 4: My Pursuit (Secondary / Purple)                          #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="4" data-accent="var(--color-secondary)">
+        <div class="tour-step hidden" data-step="6" data-accent="var(--color-secondary)">
             <div class="p-5 md:p-8">
                 <div class="text-center mb-5">
                     <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-secondary)">
@@ -379,6 +433,8 @@ See docs/design/tutorial-system.md for design rationale.
                 <button type="button" class="tour-dot" data-dot="2" aria-label="Go to step 2" onclick="PlatPursuit.WelcomeTourManager.goToStep(2)"></button>
                 <button type="button" class="tour-dot" data-dot="3" aria-label="Go to step 3" onclick="PlatPursuit.WelcomeTourManager.goToStep(3)"></button>
                 <button type="button" class="tour-dot" data-dot="4" aria-label="Go to step 4" onclick="PlatPursuit.WelcomeTourManager.goToStep(4)"></button>
+                <button type="button" class="tour-dot" data-dot="5" aria-label="Go to step 5" onclick="PlatPursuit.WelcomeTourManager.goToStep(5)"></button>
+                <button type="button" class="tour-dot" data-dot="6" aria-label="Go to step 6" onclick="PlatPursuit.WelcomeTourManager.goToStep(6)"></button>
             </div>
 
             {# Step counter (own line so it doesn't overlap buttons on mobile) #}
