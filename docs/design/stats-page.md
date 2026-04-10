@@ -23,7 +23,7 @@
 - **No dashboard overlap:** Dedicated `stats_service.py` rather than sharing with `dashboard_service.py`. Different data shapes (all-time vs date-range), different caching profiles (4h vs 30m), different rendering strategy.
 - **Sync-only updates:** Stats only change when a profile sync completes, so we cache aggressively and invalidate via a single `invalidate_stats_cache()` call in `token_keeper.py`.
 - **Free user experience:** Career Overview (free, instant) + 3-4 Personal Records teaser with gradient fade + a dedicated CTA card listing all 11 locked sections by name. No animation for free users. No premium stat queries triggered.
-- **Premium intro animation:** 4-second "stat scanner" sequence with PlatPursuit logo, cycling status messages, trophy counter, and staggered section reveal. Runs during the AJAX fetch so animation time = computation time. Replayable via button.
+- **Premium intro animation:** 4-second "stat scanner" sequence with PlatPursuit logo, cycling status messages, trophy counter, and staggered section reveal. Runs during the AJAX fetch so animation time = computation time. Plays once per browser session (tracked via `sessionStorage`); repeat visits silently fetch and reveal content instantly. Replay button is staff-only.
 - **Milestone stats (not showcase):** Aggregate milestone data (earned/available counts, per-category progress bars, most recent + next closest). No individual milestone grid. Calendar month milestones use `CALENDAR_DAYS_PER_MONTH` for correct progress display.
 - **Community ratings crossover:** Game Library section includes community rating averages for the user's library (difficulty, grindiness, fun, hours) plus extremes (hardest, easiest, most fun, most grindy).
 - **Region handling:** Non-regional games count as "Global" instead of being split by region tags. Only `is_regional=True` games use specific region codes.
@@ -83,5 +83,5 @@ Two shared fetches power multiple sections (avoiding redundant queries):
 - **Calendar milestones:** Progress is filled-day count, required value is `CALENDAR_DAYS_PER_MONTH[month]`, not `milestone.required_value`.
 - **Region logic:** `is_regional=False` games count as "Global", not by their region tags.
 - **Badge images:** Use `object-contain` (transparent backgrounds).
-- **Animation:** Only runs for premium users. Free users get instant page load.
+- **Animation:** Only runs for premium users on their first visit per session. Repeat visits in the same session skip the intro. Free users get instant page load.
 - **AJAX dependency:** Premium stats render requires the API endpoint. If it fails, an error card is shown.
