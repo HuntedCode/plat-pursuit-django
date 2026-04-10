@@ -95,6 +95,8 @@ Each of these is a real improvement, but each is also its own scope of work. Shi
 
 ## Key Files
 
+### Welcome Tour (hub navigation)
+
 | File | Purpose |
 |------|---------|
 | `trophies/models.py` | `Profile.tour_completed_at` field |
@@ -106,8 +108,23 @@ Each of these is a real improvement, but each is also its own scope of work. Shi
 | `api/urls.py` | `POST /api/v1/tutorial/welcome/dismiss/` |
 | `core/views.py` | `show_welcome_tour` context injection in `HomeView` |
 | `templates/base.html` | Modal include + JS load |
-| `templates/partials/navbar.html` | "Replay Tour" in avatar dropdown |
+| `templates/partials/navbar.html` | "Welcome Tour" in avatar dropdown |
 | `core/models.py` | `SiteEvent` choices for analytics |
+
+### Game Detail Tour (page coach marks)
+
+| File | Purpose |
+|------|---------|
+| `trophies/models.py` | `Profile.game_detail_tour_completed_at` field |
+| `trophies/migrations/0190_add_game_detail_tour_completed_at.py` | Schema migration |
+| `templates/trophies/partials/game_detail/game_detail_tour.html` | Coach marks overlay + tooltip template |
+| `static/js/game-detail-tour.js` | `GameDetailTourManager` class |
+| `static/css/input.css` | Coach mark styles (search for "Game Detail Coach Marks") |
+| `api/tutorial_views.py` | `GameDetailTourDismissAPIView` |
+| `api/urls.py` | `POST /api/v1/tutorial/game-detail/dismiss/` |
+| `trophies/views/game_views.py` | `show_game_detail_tour` context injection in `GameDetailView` |
+| `templates/trophies/game_detail.html` | Tour include + section IDs |
+| `templates/trophies/partials/game_detail/game_detail_header.html` | "Page Guide" button + target IDs |
 
 ## Related Docs
 
