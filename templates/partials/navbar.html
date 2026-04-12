@@ -117,10 +117,6 @@
         <!-- User Avatar Dropdown -->
         {% if user.is_authenticated %}
             <div class="dropdown dropdown-end">
-                <div class="indicator">
-                    {% if not user.profile %}
-                        <span class="indicator-item border-2 border-base-300 rounded-full w-3 h-3 bg-error animate-pulse" aria-label="Link your PSN account"></span>
-                    {% endif %}
                     <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar" aria-label="User menu" aria-haspopup="true" aria-expanded="false">
                         <div class="w-15 rounded-full ring-2 ring-primary">
                             {% if user.profile %}
@@ -134,7 +130,6 @@
                             {% endif %}
                         </div>
                     </div>
-                </div>
                 <ul tabindex="0" class="menu menu-sm dropdown-content mt-2 z-50 p-2 shadow-lg bg-base-200 border-2 border-base-300 min-w-48 w-fit">
                     <!-- Theme Toggle -->
                     <li>

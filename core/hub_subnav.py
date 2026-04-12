@@ -70,10 +70,10 @@ DASHBOARD_HUB = HubSubnavConfig(
     # /dashboard/recap/, plus their nested children.
     prefixes=('/dashboard/',),
     items=(
-        HubSubnavItem('home', 'Dashboard', 'home', 'home'),
-        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3'),
-        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image'),
-        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar'),
+        HubSubnavItem('home', 'Dashboard', 'home', 'home', auth_required=True),
+        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True),
+        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True),
+        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True),
     ),
 )
 

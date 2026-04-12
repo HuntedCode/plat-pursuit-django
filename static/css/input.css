@@ -1222,3 +1222,165 @@ html {
   animation-play-state: paused;
 }
 
+/* ─── Landing Page Animations ──────────────────────────────────────── */
+
+/* Hero entrance: staggered fade-up on page load */
+@keyframes hero-enter {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-enter { opacity: 0; animation: hero-enter 0.8s ease-out both; }
+.hero-enter-1 { animation-delay: 0.1s; }
+.hero-enter-2 { animation-delay: 0.3s; }
+.hero-enter-3 { animation-delay: 0.5s; }
+.hero-enter-4 { animation-delay: 0.7s; }
+
+/* Scroll reveal: elements start invisible, JS adds .revealed */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+.reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-40px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+.reveal-left.revealed {
+  opacity: 1;
+  transform: translateX(0);
+}
+.reveal-right {
+  opacity: 0;
+  transform: translateX(40px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+.reveal-right.revealed {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Stagger delays for grouped reveals */
+.reveal-stagger-1 { transition-delay: 0.1s; }
+.reveal-stagger-2 { transition-delay: 0.2s; }
+.reveal-stagger-3 { transition-delay: 0.3s; }
+.reveal-stagger-4 { transition-delay: 0.4s; }
+.reveal-stagger-5 { transition-delay: 0.5s; }
+.reveal-stagger-6 { transition-delay: 0.6s; }
+
+/* Animated gradient background for hero and CTA sections */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.landing-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--color-secondary),
+    var(--color-accent),
+    var(--color-primary)
+  );
+  background-size: 300% 300%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+/* Floating decorative elements */
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  33% { transform: translateY(-15px) rotate(3deg); }
+  66% { transform: translateY(5px) rotate(-2deg); }
+}
+.float-slow { animation: gentle-float 8s ease-in-out infinite; }
+.float-medium { animation: gentle-float 6s ease-in-out infinite; }
+.float-fast { animation: gentle-float 4s ease-in-out infinite; }
+
+/* Screenshot frame glow */
+@keyframes screenshot-glow {
+  0%, 100% { box-shadow: 0 0 30px color-mix(in oklch, var(--color-primary) 15%, transparent); }
+  50% { box-shadow: 0 0 50px color-mix(in oklch, var(--color-primary) 30%, transparent); }
+}
+.screenshot-glow {
+  animation: screenshot-glow 4s ease-in-out infinite;
+}
+
+/* Gradient text */
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+}
+
+/* Scroll indicator bounce */
+@keyframes scroll-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(8px); opacity: 1; }
+}
+.scroll-indicator {
+  animation: scroll-bounce 2s ease-in-out infinite;
+}
+
+/* Shimmer sweep: one-shot diagonal light sweep on cards */
+.shimmer-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.06) 45%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.06) 55%,
+    transparent 60%
+  );
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.shimmer-sweep.revealed::after {
+  animation: shimmer-sweep-move 1.2s ease-out 0.3s both;
+}
+@keyframes shimmer-sweep-move {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* Reduced motion: disable all landing animations */
+@media (prefers-reduced-motion: reduce) {
+  .hero-enter {
+    opacity: 1;
+    animation: none;
+  }
+  .reveal, .reveal-left, .reveal-right {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .landing-gradient {
+    animation: none;
+  }
+  .float-slow, .float-medium, .float-fast {
+    animation: none;
+  }
+  .screenshot-glow {
+    animation: none;
+  }
+  .scroll-indicator {
+    animation: none;
+    opacity: 0.5;
+  }
+  .shimmer-sweep::after {
+    animation: none;
+    display: none;
+  }
+}
+

@@ -1,108 +1,126 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static humanize %}
 
 {% block title %}Welcome to Platinum Pursuit{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 {% block meta_description %}Link your PSN to PlatPursuit and let us catch up on every trophy you've already earned.{% endblock %}
 
-{% block content %}
-<div class="mt-4 mb-12">
+{% block main_layout %}
+<main id="main-content" class="flex-grow" role="main">
 
-{# ─── Welcome Hero Card ──────────────────────────────────────────────── #}
-<section class="max-w-4xl mx-auto">
-    {% include 'partials/breadcrumb.html' %}
+{% comment %}SECTION 1: WELCOME HERO{% endcomment %}
+<section class="relative min-h-[60vh] md:min-h-[70vh] flex items-center justify-center overflow-hidden">
+    {# Animated gradient background #}
+    <div class="absolute inset-0 landing-gradient opacity-12"></div>
 
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-3 md:p-5 lg:p-7">
-            <div class="flex flex-col md:flex-row items-center gap-4 md:gap-6 text-center md:text-left">
-                <img src="{% static 'images/logo.png' %}"
-                     alt="Platinum Pursuit logo"
-                     class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 object-contain shrink-0"
-                     loading="eager" decoding="async" />
-                <div class="flex-1 min-w-0">
-                    <h1 class="text-xl md:text-2xl lg:text-3xl font-bold">
-                        Welcome aboard, <span class="text-primary">{{ user.username }}</span>!
-                    </h1>
-                    <p class="text-sm md:text-base text-base-content/60 mt-1 italic pr-1">
-                        One quick step before your dashboard fills in: link your PSN so we can catch up on the grind you've already put in.
-                    </p>
-                    <div class="flex flex-col sm:flex-row gap-2 md:gap-3 mt-3 md:mt-4 justify-center md:justify-start">
-                        <a href="{% url 'link_psn' %}" class="btn btn-primary btn-md md:btn-lg gap-2 shadow-md shadow-primary/30 hover:shadow-lg hover:shadow-primary/50 transition-all">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                            </svg>
-                            Link My PSN Account
-                        </a>
-                        <a href="{% url 'games_list' %}" class="btn btn-ghost btn-md md:btn-lg border border-base-300">
-                            Browse Around First
-                        </a>
-                    </div>
-                </div>
-            </div>
+    {# Floating decorative stars #}
+    <div class="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <svg class="absolute top-[12%] left-[10%] w-4 h-4 text-primary/[0.07] float-slow" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg class="absolute top-[25%] right-[15%] w-5 h-5 text-secondary/[0.06] float-medium" style="animation-delay: -2s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg class="absolute bottom-[30%] left-[8%] w-3 h-3 text-accent/[0.05] float-fast" style="animation-delay: -4s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <svg class="absolute bottom-[20%] right-[12%] w-4 h-4 text-warning/[0.06] float-slow" style="animation-delay: -3s" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    </div>
+
+    <div class="relative z-10 max-w-3xl mx-auto px-4 md:px-6 text-center flex flex-col items-center gap-4 md:gap-5">
+        <img src="{% static 'images/logo.png' %}"
+             alt="Platinum Pursuit"
+             class="w-20 h-20 md:w-24 md:h-24 object-contain hero-enter hero-enter-1"
+             loading="eager" decoding="async" />
+
+        <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight hero-enter hero-enter-2">
+            Welcome aboard, <span class="text-gradient">{{ user.username }}</span>!
+        </h1>
+
+        <p class="text-sm md:text-base lg:text-lg text-base-content/70 max-w-xl hero-enter hero-enter-3">
+            One quick step before your dashboard fills in: link your PSN so we can catch up on the grind you've already put in.
+        </p>
+
+        <div class="flex flex-col sm:flex-row gap-3 mt-1 hero-enter hero-enter-4">
+            <a href="{% url 'link_psn' %}"
+               class="btn btn-primary btn-md md:btn-lg gap-2 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transition-all shimmer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+                Link My PSN Account
+            </a>
+            <a href="{% url 'games_list' %}"
+               class="btn btn-ghost btn-md md:btn-lg border border-base-content/20 hover:border-base-content/40">
+                Browse Around First
+            </a>
         </div>
     </div>
 </section>
 
-{# ─── How It Works (3-step preview) ──────────────────────────────────── #}
-<section class="max-w-4xl mx-auto">
-    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-3 md:p-5 lg:p-7">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="9 11 12 14 22 4"></polyline>
-                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+
+{% comment %}SECTION 2: HOW IT WORKS{% endcomment %}
+<section class="py-10 md:py-14 lg:py-16 bg-base-300/40 border-y border-base-content/5">
+    <div class="max-w-4xl mx-auto px-4 md:px-6 lg:px-8">
+
+        <div class="text-center mb-8 md:mb-10">
+            <span class="text-xs font-bold uppercase tracking-widest text-primary/70 reveal">Quick Setup</span>
+            <h2 class="text-2xl md:text-3xl font-bold mt-2 reveal reveal-stagger-1">How Linking Works</h2>
+            <p class="text-sm text-base-content/50 mt-2 reveal reveal-stagger-2">Takes about a minute.</p>
+        </div>
+
+        {# Timeline steps #}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 relative">
+            {# Connecting line (desktop only) #}
+            <div class="hidden md:block absolute top-[40px] left-[calc(16.67%+20px)] right-[calc(16.67%+20px)] h-0.5 bg-gradient-to-r from-primary/30 via-primary/50 to-primary/30" aria-hidden="true"></div>
+
+            {# Step 1 #}
+            <div class="flex flex-col items-center text-center reveal reveal-stagger-1">
+                <div class="relative z-10 w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-200 border-2 border-primary/30 flex items-center justify-center mb-4 shadow-lg shadow-primary/10">
+                    <div class="absolute inset-0 rounded-full bg-primary/15"></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="relative w-7 h-7 md:w-8 md:h-8 text-primary" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/>
+                        <path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773a11 11 0 0 1-.739-.808c-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335z"/>
                     </svg>
-                    How Linking Works
-                </h2>
-                <span class="text-xs text-base-content/40 italic pr-1 hidden md:inline">Takes about a minute.</span>
+                </div>
+                <div class="text-xs font-bold text-primary uppercase tracking-wider mb-1">Step 1</div>
+                <h3 class="font-bold text-base md:text-lg mb-1">Enter Your PSN ID</h3>
+                <p class="text-xs md:text-sm text-base-content/60 max-w-xs">
+                    Hand over your PSN ID so we know whose library we're looking up.
+                </p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3">
-
-                {# Step 1 #}
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex md:flex-col items-start md:items-center gap-3 md:gap-2 md:text-center">
-                    <div class="shrink-0 w-10 h-10 rounded-full bg-primary/15 border-2 border-primary/30 flex items-center justify-center font-bold text-primary text-base">
-                        1
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <h3 class="font-bold text-sm md:text-base">Enter Your PSN ID</h3>
-                        <p class="text-xs text-base-content/60 mt-1">
-                            Hand over your PSN ID so we know whose library we're looking up.
-                        </p>
-                    </div>
+            {# Step 2 #}
+            <div class="flex flex-col items-center text-center reveal reveal-stagger-2">
+                <div class="relative z-10 w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-200 border-2 border-primary/30 flex items-center justify-center mb-4 shadow-lg shadow-primary/10">
+                    <div class="absolute inset-0 rounded-full bg-primary/15"></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="relative w-7 h-7 md:w-8 md:h-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                        <polyline points="9 12 12 15 16 10"></polyline>
+                    </svg>
                 </div>
-
-                {# Step 2 #}
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex md:flex-col items-start md:items-center gap-3 md:gap-2 md:text-center">
-                    <div class="shrink-0 w-10 h-10 rounded-full bg-primary/15 border-2 border-primary/30 flex items-center justify-center font-bold text-primary text-base">
-                        2
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <h3 class="font-bold text-sm md:text-base">Verify with a Code</h3>
-                        <p class="text-xs text-base-content/60 mt-1">
-                            Drop a six-digit code into your PSN "About Me". It's how we prove the account is yours.
-                        </p>
-                    </div>
-                </div>
-
-                {# Step 3 #}
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 flex md:flex-col items-start md:items-center gap-3 md:gap-2 md:text-center">
-                    <div class="shrink-0 w-10 h-10 rounded-full bg-primary/15 border-2 border-primary/30 flex items-center justify-center font-bold text-primary text-base">
-                        3
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <h3 class="font-bold text-sm md:text-base">Sit Back and Sync</h3>
-                        <p class="text-xs text-base-content/60 mt-1">
-                            We pull every game, every trophy, every platinum. Sit back. Your dashboard takes shape on its own.
-                        </p>
-                    </div>
-                </div>
+                <div class="text-xs font-bold text-primary uppercase tracking-wider mb-1">Step 2</div>
+                <h3 class="font-bold text-base md:text-lg mb-1">Verify with a Code</h3>
+                <p class="text-xs md:text-sm text-base-content/60 max-w-xs">
+                    Drop a six-digit code into your PSN "About Me". It proves the account is yours.
+                </p>
             </div>
 
-            <div class="mt-3 md:mt-4 p-2 md:p-3 bg-warning/10 border border-warning/30 rounded-lg flex items-start gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-warning shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            {# Step 3 #}
+            <div class="flex flex-col items-center text-center reveal reveal-stagger-3">
+                <div class="relative z-10 w-16 h-16 md:w-20 md:h-20 rounded-full bg-base-200 border-2 border-primary/30 flex items-center justify-center mb-4 shadow-lg shadow-primary/10">
+                    <div class="absolute inset-0 rounded-full bg-primary/15"></div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="relative w-7 h-7 md:w-8 md:h-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                </div>
+                <div class="text-xs font-bold text-primary uppercase tracking-wider mb-1">Step 3</div>
+                <h3 class="font-bold text-base md:text-lg mb-1">Sit Back and Sync</h3>
+                <p class="text-xs md:text-sm text-base-content/60 max-w-xs">
+                    We pull every game, every trophy, every platinum. Your dashboard takes shape on its own.
+                </p>
+            </div>
+        </div>
+
+        {# Privacy setting warning #}
+        <div class="mt-8 reveal reveal-stagger-4">
+            <div class="max-w-2xl mx-auto p-3 md:p-4 bg-warning/10 border-2 border-warning/30 rounded-xl flex items-start gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                     <line x1="12" y1="9" x2="12" y2="13"></line>
                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -115,121 +133,185 @@
     </div>
 </section>
 
-{# ─── What You'll Unlock ─────────────────────────────────────────────── #}
-<section class="max-w-4xl mx-auto mt-3">
-    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-3 md:p-5 lg:p-7">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="currentColor">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                    </svg>
-                    What You'll Unlock
-                </h2>
-                <span class="text-xs text-base-content/40 italic pr-1 hidden md:inline">All free, no card needed.</span>
+
+{% comment %}SECTION 3: WHAT YOU'LL UNLOCK{% endcomment %}
+<section class="py-10 md:py-14 lg:py-16">
+    <div class="max-w-5xl mx-auto px-4 md:px-6 lg:px-8">
+
+        <div class="text-center mb-8 md:mb-10">
+            <span class="text-xs font-bold uppercase tracking-widest text-accent/70 reveal">What's Waiting</span>
+            <h2 class="text-2xl md:text-3xl font-bold mt-2 reveal reveal-stagger-1">These Are Yours the Moment You Link</h2>
+            <p class="text-sm text-base-content/50 mt-2 reveal reveal-stagger-2">All free. No card needed.</p>
+        </div>
+
+        {# Share card examples #}
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
+            <div class="reveal reveal-stagger-1">
+                <div class="rounded-xl overflow-hidden border-2 border-base-300 shadow-lg hover:shadow-primary/20 hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 shimmer-sweep">
+                    <img src="{% static 'images/showcase/plat_card_example.png' %}"
+                         alt="Example platinum share card"
+                         class="w-full h-auto"
+                         loading="lazy" decoding="async" />
+                </div>
+                <p class="text-center text-xs md:text-sm font-semibold mt-2 text-base-content/70">Platinum Cards</p>
             </div>
+            <div class="reveal reveal-stagger-2">
+                <div class="rounded-xl overflow-hidden border-2 border-base-300 shadow-lg hover:shadow-accent/20 hover:border-accent/30 transition-all duration-300 hover:-translate-y-1 shimmer-sweep">
+                    <img src="{% static 'images/showcase/challenge_card_example.png' %}"
+                         alt="Example challenge share card"
+                         class="w-full h-auto"
+                         loading="lazy" decoding="async" />
+                </div>
+                <p class="text-center text-xs md:text-sm font-semibold mt-2 text-base-content/70">Challenge Cards</p>
+            </div>
+            <div class="reveal reveal-stagger-3">
+                <div class="rounded-xl overflow-hidden border-2 border-base-300 shadow-lg hover:shadow-secondary/20 hover:border-secondary/30 transition-all duration-300 hover:-translate-y-1 shimmer-sweep">
+                    <img src="{% static 'images/showcase/recap_card_example.png' %}"
+                         alt="Example monthly recap card"
+                         class="w-full h-auto"
+                         loading="lazy" decoding="async" />
+                </div>
+                <p class="text-center text-xs md:text-sm font-semibold mt-2 text-base-content/70">Monthly Recap</p>
+            </div>
+        </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-primary/15 border border-primary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="3" width="7" height="9"></rect>
-                            <rect x="14" y="3" width="7" height="5"></rect>
-                            <rect x="14" y="12" width="7" height="9"></rect>
-                            <rect x="3" y="16" width="7" height="5"></rect>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Personal Dashboard</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">Your stats, your way. Drag, hide, and pin until it feels like home.</p>
+        {# Quick feature grid #}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 reveal reveal-stagger-4">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center">
+                <div class="flex justify-center mb-2">
+                    <div class="w-9 h-9 rounded-md bg-primary/15 border border-primary/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
                     </div>
                 </div>
-
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-warning/15 border border-warning/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="8" r="7"></circle>
-                            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Auto-Earned Badges</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">100+ series, awarded the second your sync catches up. No claim buttons.</p>
+                <div class="font-bold text-xs md:text-sm">Dashboard</div>
+                <div class="text-[10px] text-base-content/50 mt-0.5">30+ modules</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center">
+                <div class="flex justify-center mb-2">
+                    <div class="w-9 h-9 rounded-md bg-warning/15 border border-warning/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
                     </div>
                 </div>
-
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Themed Challenges</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">Turn your backlog into A-to-Z, Calendar, or Genre runs. Pick the games. We track the rest.</p>
+                <div class="font-bold text-xs md:text-sm">Badges</div>
+                <div class="text-[10px] text-base-content/50 mt-0.5">100+ series</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center">
+                <div class="flex justify-center mb-2">
+                    <div class="w-9 h-9 rounded-md bg-accent/15 border border-accent/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                     </div>
                 </div>
-
-                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 flex items-start gap-3">
-                    <div class="shrink-0 w-9 h-9 rounded-md bg-secondary/15 border border-secondary/20 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="18" y1="20" x2="18" y2="10"></line>
-                            <line x1="12" y1="20" x2="12" y2="4"></line>
-                            <line x1="6" y1="20" x2="6" y2="14"></line>
-                        </svg>
-                    </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-sm">Deep Stats & Recap</h3>
-                        <p class="text-xs text-base-content/60 mt-0.5">120+ stats, a Spotify-style monthly recap, and a year in review built from games you actually played.</p>
+                <div class="font-bold text-xs md:text-sm">Challenges</div>
+                <div class="text-[10px] text-base-content/50 mt-0.5">3 types</div>
+            </div>
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 md:p-4 text-center">
+                <div class="flex justify-center mb-2">
+                    <div class="w-9 h-9 rounded-md bg-secondary/15 border border-secondary/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
                     </div>
                 </div>
+                <div class="font-bold text-xs md:text-sm">Stats</div>
+                <div class="text-[10px] text-base-content/50 mt-0.5">120+ tracked</div>
             </div>
         </div>
     </div>
 </section>
 
-{# ─── Live Community Pulse (reuses dashboard partial) ──────────────────── #}
-{% include 'trophies/partials/dashboard/built_for_hunters.html' %}
 
-{# ─── Browse Without Linking ─────────────────────────────────────────── #}
-<section class="max-w-4xl mx-auto mt-3">
-    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
-        <div class="card-body p-3 md:p-5 lg:p-7">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="card-title text-base lg:text-lg font-bold flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    Take a Look Around
-                </h2>
-                <span class="text-xs text-base-content/40 italic pr-1 hidden md:inline">No PSN required.</span>
-            </div>
-            <p class="text-xs md:text-sm text-base-content/60 mb-3">
-                Not ready to link yet? No problem. Have a look at the catalog, scope out the badges you could be chasing, or see what other hunters are running.
+{% comment %}SECTION 4: COMMUNITY PULSE{% endcomment %}
+{% if site_heartbeat %}
+<section class="py-8 md:py-10 bg-base-300/60 border-y border-base-content/5">
+    <div class="max-w-5xl mx-auto px-4 md:px-6 lg:px-8">
+
+        <div class="text-center mb-4 reveal">
+            <p class="text-sm md:text-base font-semibold text-base-content/70">
+                Join
+                <span class="text-secondary font-bold" data-count-target="{{ site_heartbeat.always.profiles_total.value|default:'0' }}">0</span>
+                hunters already tracking their grind.
             </p>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 md:gap-2">
-                <a href="{% url 'games_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 flex items-center gap-2 hover:bg-white/[0.06] hover:border-primary/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-primary shrink-0" viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/><path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773-.245-.232-.496-.526-.739-.808-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335z"/></svg>
-                    <span class="text-xs md:text-sm font-semibold truncate group-hover:text-primary transition-colors">Games</span>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 reveal reveal-stagger-1">
+            {% with stat=site_heartbeat.always.trophies_total %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
+                <div class="text-lg md:text-xl font-bold text-primary leading-none"
+                     data-count-target="{{ stat.value|default:'0' }}">0</div>
+                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
+            </div>
+            {% endwith %}
+            {% with stat=site_heartbeat.expanded.platinums_total %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
+                <div class="text-lg md:text-xl font-bold text-warning leading-none"
+                     data-count-target="{{ stat.value|default:'0' }}">0</div>
+                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
+            </div>
+            {% endwith %}
+            {% with stat=site_heartbeat.expanded.badges_total %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
+                <div class="text-lg md:text-xl font-bold text-info leading-none"
+                     data-count-target="{{ stat.value|default:'0' }}">0</div>
+                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
+            </div>
+            {% endwith %}
+            {% with stat=site_heartbeat.always.trophies_24h %}
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3 text-center">
+                <div class="flex items-center justify-center gap-1">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                    <span class="text-lg md:text-xl font-bold text-success leading-none"
+                          data-count-target="{{ stat.value|default:'0' }}">0</span>
+                </div>
+                <div class="text-[10px] md:text-xs text-base-content/50 mt-1">{{ stat.label }}</div>
+            </div>
+            {% endwith %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+
+{% comment %}SECTION 5: FINAL CTA{% endcomment %}
+<section class="relative py-12 md:py-16 overflow-hidden">
+    <div class="absolute inset-0 landing-gradient opacity-8"></div>
+
+    <div class="relative z-10 max-w-3xl mx-auto px-4 md:px-6 text-center flex flex-col items-center gap-4 reveal">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12 text-primary" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+
+        <h2 class="text-xl md:text-2xl lg:text-3xl font-bold">Ready, {{ user.username }}?</h2>
+
+        <a href="{% url 'link_psn' %}"
+           class="btn btn-primary btn-lg gap-2 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transition-all shimmer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            Link My PSN Account
+        </a>
+
+        <div class="mt-4 w-full max-w-lg">
+            <p class="text-xs text-base-content/40 mb-3">Or take a look around first:</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <a href="{% url 'games_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 flex items-center justify-center gap-1.5 hover:bg-white/[0.06] hover:border-primary/30 transition-colors text-xs font-semibold text-base-content/60 hover:text-primary">
+                    Games
                 </a>
-                <a href="{% url 'profiles_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 flex items-center gap-2 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-secondary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span class="text-xs md:text-sm font-semibold truncate group-hover:text-secondary transition-colors">Profiles</span>
+                <a href="{% url 'profiles_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 flex items-center justify-center gap-1.5 hover:bg-white/[0.06] hover:border-secondary/30 transition-colors text-xs font-semibold text-base-content/60 hover:text-secondary">
+                    Profiles
                 </a>
-                <a href="{% url 'badges_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 flex items-center gap-2 hover:bg-white/[0.06] hover:border-warning/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-warning shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
-                    <span class="text-xs md:text-sm font-semibold truncate group-hover:text-warning transition-colors">Badges</span>
+                <a href="{% url 'badges_list' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 flex items-center justify-center gap-1.5 hover:bg-white/[0.06] hover:border-warning/30 transition-colors text-xs font-semibold text-base-content/60 hover:text-warning">
+                    Badges
                 </a>
-                <a href="{% url 'overall_badge_leaderboards' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 flex items-center gap-2 hover:bg-white/[0.06] hover:border-accent/30 transition-colors group">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                    <span class="text-xs md:text-sm font-semibold truncate group-hover:text-accent transition-colors">Leaderboards</span>
+                <a href="{% url 'overall_badge_leaderboards' %}" class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 flex items-center justify-center gap-1.5 hover:bg-white/[0.06] hover:border-accent/30 transition-colors text-xs font-semibold text-base-content/60 hover:text-accent">
+                    Leaderboards
                 </a>
             </div>
         </div>
     </div>
 </section>
 
-</div>
+</main>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/landing.js' %}" defer></script>
 {% endblock %}
