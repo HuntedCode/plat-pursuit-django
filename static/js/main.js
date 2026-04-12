@@ -23,6 +23,15 @@ document.addEventListener('DOMContentLoaded', function() {
             subnavH = Math.round(subnav.getBoundingClientRect().height);
         }
 
+        // --chrome-height: navbar + sub-nav only. Used by elements outside the
+        // main content column (sidebar ads) that don't overlap the hotbar.
+        const chromeH = navH + subnavH;
+        document.documentElement.style.setProperty('--chrome-height', chromeH + 'px');
+
+        // --sticky-top: the full pinned-chrome stack including the hotbar
+        // (when present). Elements inside main that need to clear the entire
+        // stack use this property for their sticky `top` offset.
+        let stickyTop = chromeH;
         const hotbar = document.getElementById('hotbar-wrapper');
         if (hotbar) {
             // When the hotbar is expanded, leave 8px breathing room between it
@@ -32,9 +41,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // above rather than a floating element.
             const isCollapsed = localStorage.getItem('hotbar_hidden') === 'true';
             const gap = isCollapsed ? 0 : 8;
-            const top = subnav ? (navH + subnavH + gap) : (navH + gap);
-            hotbar.style.top = top + 'px';
+            const hotbarTop = chromeH + gap;
+            hotbar.style.top = hotbarTop + 'px';
+            stickyTop = hotbarTop + Math.round(hotbar.getBoundingClientRect().height);
         }
+        document.documentElement.style.setProperty('--sticky-top', stickyTop + 'px');
     }
 
     alignStickyChrome();
@@ -46,10 +57,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(alignStickyChrome);
     }
-    // Re-measure when the hotbar is toggled so the gap above it shrinks to 0
-    // when collapsed (toggle becomes flush with sub-nav) and grows back to 8px
-    // when expanded. hotbar.js dispatches this event from toggleHotbar().
-    document.addEventListener('hotbar:toggle', alignStickyChrome);
+    // Re-measure when the hotbar is toggled. A rAF loop runs during the
+    // collapse/expand transition so --sticky-top tracks the hotbar's
+    // changing height in real-time, keeping dependent sticky elements
+    // smooth. The loop stops on transitionend (or a 500ms safety timeout).
+    document.addEventListener('hotbar:toggle', function() {
+        const container = document.getElementById('hotbar-container');
+        if (!container) { alignStickyChrome(); return; }
+        let frame;
+        function tick() {
+            alignStickyChrome();
+            frame = requestAnimationFrame(tick);
+        }
+        tick();
+        container.addEventListener('transitionend', function handler() {
+            cancelAnimationFrame(frame);
+            alignStickyChrome();
+            container.removeEventListener('transitionend', handler);
+        });
+        setTimeout(function() { cancelAnimationFrame(frame); alignStickyChrome(); }, 500);
+    });
 
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');

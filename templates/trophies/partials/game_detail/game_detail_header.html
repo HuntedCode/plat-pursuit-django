@@ -4,7 +4,7 @@
 
     {# ── LEFT COLUMN: Game Art + Metadata + Carousel (sticky on desktop) ── #}
     <div class="xl:col-span-1 xl:self-stretch">
-    <div id="game-art-card" class="xl:sticky xl:top-4 card relative overflow-hidden border-2 border-base-300 shadow-md shadow-neutral w-full transition-[top] duration-300 ease-in-out">
+    <div id="game-art-card" class="xl:sticky card relative overflow-hidden border-2 border-base-300 shadow-md shadow-neutral w-full" style="top: calc(var(--sticky-top, 7rem) + 0.5rem)">
         {% if image_urls.header_bg_url %}
             <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ image_urls.header_bg_url }}');"></div>
             <div class="absolute inset-0 bg-base-100/70 backdrop-blur-md"></div>
@@ -520,36 +520,9 @@
             });
         }
 
-        // Adjust sticky card top offset based on hotbar visibility
-        const artCard = document.getElementById('game-art-card');
-        const hotbarWrapper = document.getElementById('hotbar-wrapper');
-        if (artCard && hotbarWrapper) {
-            function updateStickyOffset() {
-                const hotbarH = hotbarWrapper.offsetHeight;
-                if (hotbarH > 10) {
-                    artCard.style.top = (hotbarH + 8) + 'px';
-                } else {
-                    artCard.style.top = '';
-                }
-            }
-            updateStickyOffset();
-            document.addEventListener('hotbar:toggle', function() {
-                let frame;
-                const hotbarContainer = document.getElementById('hotbar-container');
-                function tick() {
-                    updateStickyOffset();
-                    frame = requestAnimationFrame(tick);
-                }
-                tick();
-                hotbarContainer?.addEventListener('transitionend', function handler() {
-                    cancelAnimationFrame(frame);
-                    updateStickyOffset();
-                    hotbarContainer.removeEventListener('transitionend', handler);
-                });
-                // Safety fallback in case transitionend doesn't fire
-                setTimeout(function() { cancelAnimationFrame(frame); updateStickyOffset(); }, 500);
-            });
-        }
+        // Sticky card offset is now driven entirely by --sticky-top, which
+        // alignStickyChrome() in main.js keeps in sync with the full pinned
+        // chrome stack (navbar + sub-nav + hotbar). No per-page JS needed.
 
     })
 </script>
