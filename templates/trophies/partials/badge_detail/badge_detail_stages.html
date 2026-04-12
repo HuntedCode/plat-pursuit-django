@@ -39,7 +39,7 @@
                 {% with stage.stage_number as num %}
                 {% with comp|dict_get:num as earned %}
                 <figure class="relative w-4 h-4 md:w-5 md:h-5">
-                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" class="absolute inset-0 w-full {% if not earned %}grayscale opacity-40{% endif %}" loading="lazy" />
+                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" class="absolute inset-0 w-full {% if earned %}grayscale{% endif %}" loading="lazy" />
                     {% if earned %}
                     <svg xmlns="http://www.w3.org/2000/svg" class="absolute inset-0 w-full text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     {% endif %}
@@ -53,7 +53,7 @@
                 {% with comp|dict_get:num as earned %}
                 <figure class="relative w-4 h-4 md:w-5 md:h-5">
                     {% with i|stringformat:'s' as i_str %}
-                    <img src="{% static 'images/badges/backdrops/'|add:i_str|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" class="absolute inset-0 w-full {% if not earned %}grayscale opacity-40{% endif %}" loading="lazy" />
+                    <img src="{% static 'images/badges/backdrops/'|add:i_str|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" class="absolute inset-0 w-full {% if earned %}grayscale{% endif %}" loading="lazy" />
                     {% endwith %}
                     {% if earned %}
                     <svg xmlns="http://www.w3.org/2000/svg" class="absolute inset-0 w-full text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
