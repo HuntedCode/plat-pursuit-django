@@ -158,6 +158,8 @@ The companion will be a **named character** with a distinct visual design, perso
 
 ### Character details: TBD
 
+**Working name:** F.R.I.E.N.D. (Fully Responsive Interactive Entertainment Navigation Device). A little robot companion built to help you hunt trophies. The acronym frames the character as a purpose-built device with heart, not a generic AI assistant.
+
 The specific character is to be designed in collaboration with the artist. Open questions for the artist conversation:
 
 - **Form**: humanoid, creature, abstract, object-based (e.g. a sentient trophy)?
@@ -433,7 +435,7 @@ As future PP systems come online (gamification, etc.), the Context Builder gets 
 
 These are the things still TBD that need to be resolved before or during Phase 1.
 
-1. **Character design.** Form, name, visual style, animation potential. Requires artist collaboration.
+1. **Character design.** Form, visual style, animation potential. Requires artist collaboration. Working name is F.R.I.E.N.D. (Fully Responsive Interactive Entertainment Navigation Device); final name pending artist input.
 2. **Voice tone exact calibration.** The "humorous, aloof, never therapist" line is clear in principle but needs example dialogue to lock in. Some sample greetings, observations, and follow-ups should be written before the voice service is built.
 3. **Free tier exact boundaries.** How many free observations? Does the free user keep the same companion forever or does the companion forget them between visits? (Leaning toward: free users always meet a fresh companion who remembers nothing, premium unlocks the relationship.)
 4. **Premium price point implications.** Does Journey justify a higher tier than current premium, or is it included in the existing premium? Probably the latter for simplicity, but worth revisiting closer to launch.
