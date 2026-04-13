@@ -44,22 +44,67 @@ class GameSearchForm(forms.Form):
     themes = forms.MultipleChoiceField(required=False, label='Themes')
     engine = forms.ChoiceField(choices=[('', 'Any Engine')], required=False, label='Game Engine')
 
-    sort = forms.ChoiceField(
-        choices=[
+    SORT_CHOICES = [
+        ('alpha', 'Alphabetical'),
+        ('played', 'Most Played'),
+        ('played_inv', 'Least Played'),
+        ('trending', 'Trending'),
+        ('plat_earned', 'Most Platinums Earned'),
+        ('plat_earned_inv', 'Least Platinums Earned'),
+        ('plat_rate', 'Highest Plat Earn Rate'),
+        ('plat_rate_inv', 'Lowest Plat Earn Rate'),
+        ('trophy_count', 'Most Trophies'),
+        ('trophy_count_inv', 'Fewest Trophies'),
+        ('rating', 'Highest Rated'),
+        ('rating_inv', 'Lowest Rated'),
+        ('difficulty', 'Hardest'),
+        ('difficulty_inv', 'Easiest'),
+        ('fun', 'Most Fun'),
+        ('fun_inv', 'Least Fun'),
+        ('time_to_beat', 'Shortest Time-to-Beat'),
+        ('time_to_beat_inv', 'Longest Time-to-Beat'),
+        ('release_date', 'Newest Release'),
+        ('release_date_inv', 'Oldest Release'),
+        ('newest', 'Recently Added'),
+        ('oldest', 'First Added'),
+    ]
+
+    # Grouped choices for template <optgroup> rendering
+    SORT_GROUPS = [
+        ('Popularity', [
             ('alpha', 'Alphabetical'),
             ('played', 'Most Played'),
             ('played_inv', 'Least Played'),
+            ('trending', 'Trending'),
+        ]),
+        ('Trophies', [
             ('plat_earned', 'Most Platinums Earned'),
             ('plat_earned_inv', 'Least Platinums Earned'),
             ('plat_rate', 'Highest Plat Earn Rate'),
             ('plat_rate_inv', 'Lowest Plat Earn Rate'),
+            ('trophy_count', 'Most Trophies'),
+            ('trophy_count_inv', 'Fewest Trophies'),
+        ]),
+        ('Ratings', [
             ('rating', 'Highest Rated'),
             ('rating_inv', 'Lowest Rated'),
             ('difficulty', 'Hardest'),
             ('difficulty_inv', 'Easiest'),
-            ('newest', 'Newest'),
-            ('oldest', 'Oldest'),
-        ],
+            ('fun', 'Most Fun'),
+            ('fun_inv', 'Least Fun'),
+        ]),
+        ('Time', [
+            ('time_to_beat', 'Shortest Time-to-Beat'),
+            ('time_to_beat_inv', 'Longest Time-to-Beat'),
+            ('release_date', 'Newest Release'),
+            ('release_date_inv', 'Oldest Release'),
+            ('newest', 'Recently Added'),
+            ('oldest', 'First Added'),
+        ]),
+    ]
+
+    sort = forms.ChoiceField(
+        choices=SORT_CHOICES,
         required=False,
         label='Sort By'
     )

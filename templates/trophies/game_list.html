@@ -94,11 +94,15 @@
                                placeholder="Search for a game..." />
                     </div>
 
-                    {# Sort dropdown (auto-submits on change via browse-filters.js) #}
+                    {# Sort dropdown with optgroups (auto-submits on change via browse-filters.js) #}
                     <select name="sort"
                             class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
-                        {% for value, display in form.sort.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% for group_label, group_choices in form.SORT_GROUPS %}
+                            <optgroup label="{{ group_label }}">
+                                {% for value, display in group_choices %}
+                                    <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'alpha' %}selected{% endif %}>{{ display }}</option>
+                                {% endfor %}
+                            </optgroup>
                         {% endfor %}
                     </select>
 
@@ -110,6 +114,21 @@
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
                         <span class="hidden md:inline">Feel The Power</span>
+                    </button>
+
+                    {# I'm Feeling Lucky button (random game redirect) #}
+                    <button type="button" data-lucky-btn
+                            class="btn btn-sm md:btn-md btn-accent w-full md:w-auto gap-1.5"
+                            title="Open a random game matching your filters">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                            <circle cx="9" cy="9" r="1" fill="currentColor"></circle>
+                            <circle cx="15" cy="9" r="1" fill="currentColor"></circle>
+                            <circle cx="9" cy="15" r="1" fill="currentColor"></circle>
+                            <circle cx="15" cy="15" r="1" fill="currentColor"></circle>
+                            <circle cx="12" cy="12" r="1" fill="currentColor"></circle>
+                        </svg>
+                        <span class="hidden md:inline">I'm Feeling Lucky</span>
                     </button>
                 </div>
 
