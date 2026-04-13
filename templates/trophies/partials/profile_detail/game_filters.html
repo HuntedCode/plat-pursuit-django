@@ -1,34 +1,14 @@
 <form id="games-form" method="get">
     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3">
+        {# Top row: Sort + Search + Submit #}
         <div class="flex flex-col md:flex-row gap-2 md:gap-3">
             <select name="sort" id="id_sort"
-                    class="select select-bordered select-sm md:select-md w-full md:w-40 lg:w-48">
+                    class="select select-bordered select-sm md:select-md w-full md:w-48 lg:w-56">
                 {% for value, display in form.sort.field.choices %}
-                    <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
+                    <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'recent' %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
             </select>
 
-            <div class="flex flex-wrap gap-1.5 items-center flex-1">
-                {% for value, display in form.platform.field.choices %}
-                    <label class="cursor-pointer">
-                        <input type="checkbox" name="platform" value="{{ value }}"
-                               class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
-                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                            {{ display }}
-                        </span>
-                    </label>
-                {% endfor %}
-            </div>
-
-            <select name="plat_status" id="id_plat_status"
-                    class="select select-bordered select-sm md:select-md w-full md:w-40 lg:w-48">
-                {% for value, display in form.plat_status.field.choices %}
-                    <option value="{{ value }}" {% if request.GET.plat_status == value %}selected{% endif %}>{{ display }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="flex flex-col md:flex-row gap-2 mt-2">
             <div class="relative flex-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8"></circle>
@@ -38,6 +18,7 @@
                        class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
                        placeholder="Search games..." />
             </div>
+
             <button id="submit-btn" type="submit"
                     class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -47,6 +28,162 @@
                 <span class="hidden md:inline">Filter</span>
             </button>
         </div>
+
+        {# Collapsible advanced filters #}
+        <details class="mt-2">
+            <summary class="text-xs font-semibold text-base-content/50 cursor-pointer hover:text-base-content/70 transition-colors py-1">
+                Advanced Filters
+            </summary>
+            <div class="space-y-3 pt-2 border-t border-base-content/5">
+                {# Platform chips #}
+                <div>
+                    <label class="text-xs text-base-content/50 block mb-1">Platform</label>
+                    <div class="flex flex-wrap gap-1.5 items-center">
+                        {% for value, display in form.platform.field.choices %}
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="platform" value="{{ value }}"
+                                       class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
+                                <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                    {{ display }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {# Plat status dropdown #}
+                <div>
+                    <label class="text-xs text-base-content/50 block mb-1">Platinum Status</label>
+                    <select name="plat_status" id="id_plat_status"
+                            class="select select-bordered select-sm w-full max-w-xs">
+                        {% for value, display in form.plat_status.field.choices %}
+                            <option value="{{ value }}" {% if request.GET.plat_status == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {# Genre chips #}
+                {% if form.genres.field.choices %}
+                <div>
+                    <label class="text-xs text-base-content/50 block mb-1">Genres</label>
+                    <div class="flex flex-wrap gap-1.5 items-center max-h-24 overflow-y-auto">
+                        {% for value, display in form.genres.field.choices %}
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="genres" value="{{ value }}"
+                                       class="sr-only peer" {% if value|stringformat:"s" in selected_genres %}checked{% endif %} />
+                                <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                    {{ display }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Theme chips #}
+                {% if form.themes.field.choices %}
+                <div>
+                    <label class="text-xs text-base-content/50 block mb-1">Themes</label>
+                    <div class="flex flex-wrap gap-1.5 items-center max-h-24 overflow-y-auto">
+                        {% for value, display in form.themes.field.choices %}
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="themes" value="{{ value }}"
+                                       class="sr-only peer" {% if value|stringformat:"s" in selected_themes %}checked{% endif %} />
+                                <span class="btn btn-xs peer-checked:btn-accent peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                    {{ display }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Community flag chips #}
+                <div>
+                    <label class="text-xs text-base-content/50 block mb-1">Flags</label>
+                    <div class="flex flex-wrap gap-1.5 items-center">
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="show_delisted" value="on"
+                                   class="sr-only peer" {% if request.GET.show_delisted %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">Delisted</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="show_unobtainable" value="on"
+                                   class="sr-only peer" {% if request.GET.show_unobtainable %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">Unobtainable</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="show_online" value="on"
+                                   class="sr-only peer" {% if request.GET.show_online %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">Online</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="show_buggy" value="on"
+                                   class="sr-only peer" {% if request.GET.show_buggy %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">Buggy</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="filter_shovelware" value="on"
+                                   class="sr-only peer" {% if request.GET.filter_shovelware %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-info peer-checked:font-bold btn-ghost border border-base-300 transition-all">Hide Shovelware</span>
+                        </label>
+                    </div>
+                </div>
+
+                {# Dual-range sliders: Completion, Rating, Difficulty, Fun, Time-to-Beat #}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {# Completion range (0-100%) #}
+                    <div class="max-w-xs">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="text-xs text-base-content/50">Completion</label>
+                            <span class="text-xs font-semibold tabular-nums" data-dual-range-label="completion">
+                                {% if request.GET.completion_min and request.GET.completion_min != '0' or request.GET.completion_max and request.GET.completion_max != '100' %}
+                                    {{ request.GET.completion_min|default:'0' }}% - {{ request.GET.completion_max|default:'100' }}%
+                                {% else %}Any{% endif %}
+                            </span>
+                        </div>
+                        <div class="dual-range relative h-5" data-dual-range data-dual-range-name="completion" data-range-unit="%">
+                            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
+                            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-primary" data-dual-range-fill></div>
+                            <input type="range" name="completion_min" min="0" max="100" step="5"
+                                   value="{{ request.GET.completion_min|default:'0' }}"
+                                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                                   data-dual-range-lo />
+                            <input type="range" name="completion_max" min="0" max="100" step="5"
+                                   value="{{ request.GET.completion_max|default:'100' }}"
+                                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                                   data-dual-range-hi />
+                        </div>
+                    </div>
+
+                    {% include 'partials/browse/rating_filters.html' %}
+                </div>
+
+                {# Time-to-beat (IGDB only for profile games) #}
+                <div class="max-w-xs">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="text-xs text-base-content/50">Time-to-Beat (IGDB)</label>
+                        <span class="text-xs font-semibold tabular-nums" data-dual-range-label="igdb_time">
+                            {% if request.GET.igdb_time_min and request.GET.igdb_time_min != '0' or request.GET.igdb_time_max and request.GET.igdb_time_max != '1000' %}
+                                {{ request.GET.igdb_time_min|default:'0' }}h - {{ request.GET.igdb_time_max|default:'1000' }}h
+                            {% else %}Any{% endif %}
+                        </span>
+                    </div>
+                    <div class="dual-range relative h-5" data-dual-range data-dual-range-name="igdb_time" data-range-unit="h">
+                        <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
+                        <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-accent" data-dual-range-fill></div>
+                        <input type="range" name="igdb_time_min" min="0" max="1000" step="5"
+                               value="{{ request.GET.igdb_time_min|default:'0' }}"
+                               class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                               data-dual-range-lo />
+                        <input type="range" name="igdb_time_max" min="0" max="1000" step="5"
+                               value="{{ request.GET.igdb_time_max|default:'1000' }}"
+                               class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                               data-dual-range-hi />
+                    </div>
+                </div>
+            </div>
+        </details>
     </div>
     <input type="hidden" name="tab" value="games">
 </form>

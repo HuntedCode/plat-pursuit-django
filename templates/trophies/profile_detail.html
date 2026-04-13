@@ -173,6 +173,12 @@
             formSelector: `#${currentTab}-form`,
             scrollKey: 'profileScrollPos'
         });
+
+        // Initialize dual-range sliders on profile tab forms (visual only, no HTMX)
+        const tabForm = document.getElementById(`${currentTab}-form`);
+        if (tabForm && PlatPursuit.initDualRangeSliders) {
+            PlatPursuit.initDualRangeSliders(tabForm);
+        }
     });
     </script>
     {% if is_own_profile and profile.user_is_premium %}

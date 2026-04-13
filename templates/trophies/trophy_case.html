@@ -50,17 +50,16 @@
                                class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
                                placeholder="Search by game name..." />
                     </div>
-                    <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-40">
-                        <option value="recent" {% if request.GET.sort == 'recent' or not request.GET.sort %}selected{% endif %}>Recently Earned</option>
-                        <option value="oldest" {% if request.GET.sort == 'oldest' %}selected{% endif %}>Oldest Earned</option>
-                        <option value="rarest_psn" {% if request.GET.sort == 'rarest_psn' %}selected{% endif %}>Rarest (PSN)</option>
-                        <option value="rarest_pp" {% if request.GET.sort == 'rarest_pp' %}selected{% endif %}>Rarest (PP)</option>
-                        <option value="alpha" {% if request.GET.sort == 'alpha' %}selected{% endif %}>Alphabetical</option>
+                    <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-48">
+                        {% for value, display in form.sort.field.choices %}
+                            <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'recent' %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
                     </select>
                     {% if request.user == profile.user %}
                     <select name="filter" class="select select-bordered select-sm md:select-md w-full md:w-36">
-                        <option value="" {% if not request.GET.filter %}selected{% endif %}>All Platinums</option>
-                        <option value="selected" {% if request.GET.filter == 'selected' %}selected{% endif %}>Selected Only</option>
+                        {% for value, display in form.filter.field.choices %}
+                            <option value="{{ value }}" {% if request.GET.filter == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
                     </select>
                     {% endif %}
                     <button id="submit-btn" type="submit"
@@ -77,6 +76,20 @@
                         <span class="text-xs text-base-content/50">selected</span>
                     </div>
                     {% endif %}
+                </div>
+
+                {# Platform chips #}
+                <div class="flex flex-wrap gap-1.5 items-center mt-2 pt-2 border-t border-base-content/5">
+                    <span class="text-xs text-base-content/40 mr-1">Platform:</span>
+                    {% for value, display in form.platform.field.choices %}
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="platform" value="{{ value }}"
+                                   class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                {{ display }}
+                            </span>
+                        </label>
+                    {% endfor %}
                 </div>
             </div>
         </div>

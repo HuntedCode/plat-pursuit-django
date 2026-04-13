@@ -584,6 +584,71 @@
     });
   }
 
+  // ── Visual-only dual-range slider init (for non-HTMX pages) ────────
+  // Exposes slider visual behavior (fill, label, clamping) without
+  // HTMX auto-submit. Profile detail and trophy case pages call this
+  // directly on their forms.
+  window.PlatPursuit = window.PlatPursuit || {};
+  PlatPursuit.initDualRangeSliders = function (container) {
+    var ranges = container.querySelectorAll('[data-dual-range]');
+    if (!ranges.length) return;
+
+    ranges.forEach(function (el) {
+      var lo = el.querySelector('[data-dual-range-lo]');
+      var hi = el.querySelector('[data-dual-range-hi]');
+      var fill = el.querySelector('[data-dual-range-fill]');
+      var name = el.dataset.dualRangeName;
+      var unit = el.dataset.rangeUnit || '';
+      var label = container.querySelector('[data-dual-range-label="' + name + '"]');
+
+      if (!lo || !hi) return;
+
+      function updateFill() {
+        var min = parseFloat(lo.min);
+        var max = parseFloat(lo.max);
+        var loVal = parseFloat(lo.value);
+        var hiVal = parseFloat(hi.value);
+        var range = max - min;
+        if (fill && range > 0) {
+          fill.style.left = ((loVal - min) / range * 100) + '%';
+          fill.style.right = ((max - hiVal) / range * 100) + '%';
+        }
+      }
+
+      function updateLabel() {
+        if (!label) return;
+        var loVal = parseFloat(lo.value);
+        var hiVal = parseFloat(hi.value);
+        var min = parseFloat(lo.min);
+        var max = parseFloat(lo.max);
+        if (loVal <= min && hiVal >= max) {
+          label.textContent = 'Any';
+        } else {
+          label.textContent = lo.value + unit + ' \u2013 ' + hi.value + unit;
+        }
+      }
+
+      function clamp() {
+        if (parseFloat(lo.value) > parseFloat(hi.value)) {
+          lo.value = hi.value;
+        }
+      }
+
+      function onInput() {
+        clamp();
+        updateFill();
+        updateLabel();
+      }
+
+      lo.addEventListener('input', onInput);
+      hi.addEventListener('input', onInput);
+      lo.addEventListener('change', onInput);
+      hi.addEventListener('change', onInput);
+
+      updateFill();
+    });
+  };
+
   // ── Initialize on DOMContentLoaded and after HTMX history restore ───
   document.addEventListener('DOMContentLoaded', function () {
     init();

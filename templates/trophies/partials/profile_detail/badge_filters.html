@@ -1,14 +1,41 @@
 <form id="badges-form" method="get">
     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3">
-        <div class="flex flex-col md:flex-row gap-2">
+        <div class="flex flex-col md:flex-row gap-2 md:gap-3">
             <select name="sort" id="id_sort"
                     class="select select-bordered select-sm md:select-md w-full md:w-48">
                 {% for value, display in form.sort.field.choices %}
                     <option value="{{ value }}" {% if request.GET.sort == value %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
             </select>
+
+            {# Badge type filter chips #}
+            <div class="flex flex-wrap gap-1.5 items-center">
+                {% for value, display in form.badge_type.field.choices %}
+                    <label class="cursor-pointer">
+                        <input type="checkbox" name="badge_type" value="{{ value }}"
+                               class="sr-only peer" {% if value in selected_badge_types %}checked{% endif %} />
+                        <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                            {{ display }}
+                        </span>
+                    </label>
+                {% endfor %}
+            </div>
+
+            {# Tier filter chips #}
+            <div class="flex flex-wrap gap-1.5 items-center">
+                {% for value, display in form.tier.field.choices %}
+                    <label class="cursor-pointer">
+                        <input type="checkbox" name="tier" value="{{ value }}"
+                               class="sr-only peer" {% if value in selected_tiers %}checked{% endif %} />
+                        <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                            {{ display }}
+                        </span>
+                    </label>
+                {% endfor %}
+            </div>
+
             <button type="submit" class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
-                Sort
+                Apply
             </button>
         </div>
     </div>

@@ -217,7 +217,7 @@ class ProfileGamesForm(forms.Form):
             ('plats_no_100s', 'Platinum Earned, Not 100%'),
         ],
         required=False,
-        label='Filter'
+        label='Filter',
     )
     sort = forms.ChoiceField(
         choices=[
@@ -229,15 +229,71 @@ class ProfileGamesForm(forms.Form):
             ('trophies', 'Most Trophies'),
             ('earned', 'Most Earned'),
             ('unearned', 'Most Unearned'),
+            ('rating', 'Highest Rated'),
+            ('rating_inv', 'Lowest Rated'),
+            ('time_to_beat', 'Shortest Time-to-Beat'),
+            ('time_to_beat_inv', 'Longest Time-to-Beat'),
+            ('plat_rarest', 'Rarest Platinum'),
+            ('plat_common', 'Most Common Platinum'),
+            ('trophy_count', 'Most Trophies (Defined)'),
+            ('trophy_count_inv', 'Fewest Trophies (Defined)'),
         ],
         required=False,
-        label='Sort By'
+        label='Sort By',
     )
+
+    # New filter fields
+    genres = forms.MultipleChoiceField(required=False, label='Genres')
+    themes = forms.MultipleChoiceField(required=False, label='Themes')
+    completion_min = forms.IntegerField(required=False, min_value=0, max_value=100)
+    completion_max = forms.IntegerField(required=False, min_value=0, max_value=100)
+    rating_min = forms.FloatField(required=False, min_value=0, max_value=5)
+    rating_max = forms.FloatField(required=False, min_value=0, max_value=5)
+    difficulty_min = forms.IntegerField(required=False, min_value=1, max_value=10)
+    difficulty_max = forms.IntegerField(required=False, min_value=1, max_value=10)
+    fun_min = forms.IntegerField(required=False, min_value=1, max_value=10)
+    fun_max = forms.IntegerField(required=False, min_value=1, max_value=10)
+    igdb_time_min = forms.IntegerField(required=False, min_value=0, max_value=1000)
+    igdb_time_max = forms.IntegerField(required=False, min_value=0, max_value=1000)
+    show_delisted = forms.BooleanField(required=False, label='Delisted')
+    show_unobtainable = forms.BooleanField(required=False, label='Unobtainable')
+    show_online = forms.BooleanField(required=False, label='Online Trophies')
+    show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
+    filter_shovelware = forms.BooleanField(required=False, label='Hide Shovelware')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import Genre, Theme
+        try:
+            self.fields['genres'].choices = list(
+                Genre.objects.values_list('id', 'name').order_by('name')
+            )
+            self.fields['themes'].choices = list(
+                Theme.objects.values_list('id', 'name').order_by('name')
+            )
+        except Exception:
+            pass
 
 class ProfileTrophiesForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
     platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
-    type = forms.ChoiceField(choices=[('', 'All'),('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
+    type = forms.ChoiceField(choices=[('', 'All'), ('bronze', 'Bronze'), ('silver', 'Silver'), ('gold', 'Gold'), ('platinum', 'Platinum')], required=False, label='Type')
+    sort = forms.ChoiceField(
+        choices=[
+            ('recent', 'Recently Earned'),
+            ('oldest', 'Oldest Earned'),
+            ('alpha', 'Alphabetical'),
+            ('rarest_psn', 'Rarest (PSN)'),
+            ('common_psn', 'Most Common (PSN)'),
+            ('rarest_pp', 'Rarest (PP)'),
+            ('common_pp', 'Most Common (PP)'),
+            ('type', 'Trophy Type'),
+        ],
+        required=False,
+        label='Sort By',
+    )
+    rarity_min = forms.FloatField(required=False, min_value=0, max_value=100)
+    rarity_max = forms.FloatField(required=False, min_value=0, max_value=100)
 
 class ProfileBadgesForm(forms.Form):
     sort = forms.ChoiceField(
@@ -246,10 +302,83 @@ class ProfileBadgesForm(forms.Form):
             ('name', 'Alphabetical'),
             ('tier', 'Tier Ascending'),
             ('tier_desc', 'Tier Descending'),
+            ('stages', 'Most Stages'),
+            ('stages_inv', 'Fewest Stages'),
+            ('xp', 'Most XP'),
+            ('xp_inv', 'Least XP'),
+            ('recent', 'Recently Earned'),
         ],
         required=False,
-        label='Sort By'
+        label='Sort By',
     )
+    badge_type = forms.MultipleChoiceField(
+        choices=[
+            ('series', 'Series'),
+            ('collection', 'Collection'),
+            ('developer', 'Developer'),
+            ('user', 'User'),
+            ('genre', 'Genre'),
+            ('megamix', 'Megamix'),
+        ],
+        required=False,
+        label='Badge Type',
+    )
+    tier = forms.MultipleChoiceField(
+        choices=[
+            ('1', 'Bronze'),
+            ('2', 'Silver'),
+            ('3', 'Gold'),
+            ('4', 'Platinum'),
+        ],
+        required=False,
+        label='Tier',
+    )
+
+class TrophyCaseForm(forms.Form):
+    query = forms.CharField(required=False, label='Search by game name')
+    sort = forms.ChoiceField(
+        choices=[
+            ('recent', 'Recently Earned'),
+            ('oldest', 'Oldest Earned'),
+            ('rarest_psn', 'Rarest (PSN)'),
+            ('rarest_pp', 'Rarest (PP)'),
+            ('alpha', 'Alphabetical'),
+            ('rating', 'Highest Rated'),
+            ('rating_inv', 'Lowest Rated'),
+            ('played', 'Most Played'),
+            ('played_inv', 'Least Played'),
+            ('time_to_beat', 'Shortest Time-to-Beat'),
+            ('time_to_beat_inv', 'Longest Time-to-Beat'),
+        ],
+        required=False,
+        label='Sort By',
+    )
+    filter = forms.ChoiceField(
+        choices=[('', 'All Platinums'), ('selected', 'Selected Only')],
+        required=False,
+        label='Filter',
+    )
+    platform = forms.MultipleChoiceField(
+        choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')],
+        required=False,
+        label='Platforms',
+    )
+    genres = forms.MultipleChoiceField(required=False, label='Genres')
+    themes = forms.MultipleChoiceField(required=False, label='Themes')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import Genre, Theme
+        try:
+            self.fields['genres'].choices = list(
+                Genre.objects.values_list('id', 'name').order_by('name')
+            )
+            self.fields['themes'].choices = list(
+                Theme.objects.values_list('id', 'name').order_by('name')
+            )
+        except Exception:
+            pass
+
 
 class UserConceptRatingForm(forms.ModelForm):
     class Meta:
@@ -345,9 +474,6 @@ class GameDetailForm(forms.Form):
         required=False,
         label='Sort By',
     )
-
-class TrophyCaseForm(forms.Form):
-    query = forms.CharField(required=False, label='Search by game name')
 
 class PremiumSettingsForm(forms.ModelForm):
     """Premium-only settings: background and site theme."""

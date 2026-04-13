@@ -1,16 +1,17 @@
 import logging
 from core.services.tracking import track_page_view
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, F, Case, When, Value, IntegerField
-from django.db.models.functions import Lower
+from django.db.models import Q, F, Case, When, Value, IntegerField, OrderBy, FloatField, Subquery, OuterRef, Avg
+from django.db.models.functions import Lower, Coalesce
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.views.generic import ListView, View
 from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from .browse_helpers import annotate_community_ratings
 from ..models import Trophy, EarnedTrophy, Profile, UserTrophySelection
-from ..forms import TrophySearchForm
+from ..forms import TrophySearchForm, TrophyCaseForm
 from trophies.util_modules.constants import MODERN_PLATFORMS
 
 logger = logging.getLogger("psn_api")
@@ -180,25 +181,53 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
     context_object_name = 'platinums'
     paginate_by = 25
 
+    def get_filter_form(self):
+        if not hasattr(self, '_filter_form'):
+            self._filter_form = TrophyCaseForm(self.request.GET)
+        return self._filter_form
+
     def get_queryset(self):
         profile = get_object_or_404(Profile, psn_username=self.kwargs['psn_username'].lower())
+        self._profile = profile
         qs = EarnedTrophy.objects.filter(
-            profile=profile, earned=True, trophy__trophy_type='platinum'
-        ).select_related('trophy', 'trophy__game')
+            profile=profile, earned=True, trophy__trophy_type='platinum',
+        ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match')
 
-        # Search
-        query = self.request.GET.get('query', '').strip()
+        form = self.get_filter_form()
+        if not form.is_valid():
+            return qs.order_by(F('earned_date_time').desc(nulls_last=True))
+
+        # --- Filters ---
+        query = form.cleaned_data.get('query', '').strip()
         if query:
             qs = qs.filter(trophy__game__title_name__icontains=query)
 
-        # Filter
-        filter_val = self.request.GET.get('filter', '')
+        filter_val = form.cleaned_data.get('filter', '')
         if filter_val == 'selected':
             selected_ids = list(profile.trophy_selections.values_list('earned_trophy_id', flat=True))
             qs = qs.filter(id__in=selected_ids)
 
-        # Sort
-        sort_val = self.request.GET.get('sort', 'recent')
+        platforms = form.cleaned_data.get('platform')
+        if platforms:
+            platform_filter = Q()
+            for plat in platforms:
+                platform_filter |= Q(trophy__game__title_platform__contains=plat)
+            qs = qs.filter(platform_filter)
+
+        genres = form.cleaned_data.get('genres')
+        if genres:
+            qs = qs.filter(
+                trophy__game__concept__concept_genres__genre_id__in=genres,
+            ).distinct()
+        themes = form.cleaned_data.get('themes')
+        if themes:
+            qs = qs.filter(
+                trophy__game__concept__concept_themes__theme_id__in=themes,
+            ).distinct()
+
+        # --- Sort ---
+        sort_val = form.cleaned_data.get('sort', 'recent')
+
         if sort_val == 'oldest':
             qs = qs.order_by(F('earned_date_time').asc(nulls_last=True))
         elif sort_val == 'rarest_psn':
@@ -207,15 +236,41 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
             qs = qs.order_by('trophy__earn_rate', F('earned_date_time').desc(nulls_last=True))
         elif sort_val == 'alpha':
             qs = qs.order_by(Lower('trophy__game__title_name'))
-        else:
+        elif sort_val == 'rating':
+            qs = annotate_community_ratings(qs, 'trophy__game__concept_id')
+            qs = qs.filter(_avg_rating__isnull=False)
+            qs = qs.order_by('-_avg_rating', Lower('trophy__game__title_name'))
+        elif sort_val == 'rating_inv':
+            qs = annotate_community_ratings(qs, 'trophy__game__concept_id')
+            qs = qs.filter(_avg_rating__isnull=False)
+            qs = qs.order_by('_avg_rating', Lower('trophy__game__title_name'))
+        elif sort_val == 'played':
+            qs = qs.order_by('-trophy__game__played_count', Lower('trophy__game__title_name'))
+        elif sort_val == 'played_inv':
+            qs = qs.order_by('trophy__game__played_count', Lower('trophy__game__title_name'))
+        elif sort_val == 'time_to_beat':
+            qs = qs.annotate(
+                _time_to_beat=F('trophy__game__concept__igdb_match__time_to_beat_completely'),
+            )
+            qs = qs.order_by(OrderBy(F('_time_to_beat'), nulls_last=True))
+        elif sort_val == 'time_to_beat_inv':
+            qs = qs.annotate(
+                _time_to_beat=F('trophy__game__concept__igdb_match__time_to_beat_completely'),
+            )
+            qs = qs.order_by(OrderBy(F('_time_to_beat'), descending=True, nulls_last=True))
+        else:  # 'recent' (default)
             qs = qs.order_by(F('earned_date_time').desc(nulls_last=True))
 
         return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        profile = Profile.objects.get(psn_username=self.kwargs['psn_username'].lower())
+        profile = self._profile
         selected_ids = list(profile.trophy_selections.values_list('earned_trophy_id', flat=True))
+        context['form'] = self.get_filter_form()
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['selected_genres'] = self.request.GET.getlist('genres')
+        context['selected_themes'] = self.request.GET.getlist('themes')
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

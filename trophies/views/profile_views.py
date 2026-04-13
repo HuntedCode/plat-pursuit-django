@@ -5,8 +5,11 @@ from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import Q, F, Prefetch, Max
-from django.db.models.functions import Lower
+from django.db.models import (
+    Q, F, Prefetch, Max, Case, When, Value, IntegerField, FloatField,
+    Subquery, OuterRef, Avg, OrderBy,
+)
+from django.db.models.functions import Lower, Coalesce, Cast
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
@@ -35,8 +38,11 @@ from ..models import (
     GameList,
     Challenge,
     Review,
+    Trophy,
+    UserConceptRating,
 )
 from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
+from .browse_helpers import annotate_community_ratings
 from trophies.psn_manager import PSNManager
 
 logger = logging.getLogger("psn_api")
@@ -368,7 +374,81 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             if plat_status == 'plats_no_100s':
                 games_qs = games_qs.exclude(progress=100)
 
-        # Apply sorting
+        # --- Genre / Theme filters ---
+        genres = form.cleaned_data.get('genres')
+        if genres:
+            games_qs = games_qs.filter(
+                game__concept__concept_genres__genre_id__in=genres,
+            ).distinct()
+        themes = form.cleaned_data.get('themes')
+        if themes:
+            games_qs = games_qs.filter(
+                game__concept__concept_themes__theme_id__in=themes,
+            ).distinct()
+
+        # --- Completion range ---
+        comp_min = form.cleaned_data.get('completion_min') or 0
+        comp_max = form.cleaned_data.get('completion_max') or 100
+        if comp_min > 0:
+            games_qs = games_qs.filter(progress__gte=comp_min)
+        if comp_max < 100:
+            games_qs = games_qs.filter(progress__lte=comp_max)
+
+        # --- Community flag filters ---
+        if form.cleaned_data.get('show_delisted'):
+            games_qs = games_qs.filter(game__is_delisted=True)
+        if form.cleaned_data.get('show_unobtainable'):
+            games_qs = games_qs.filter(game__is_obtainable=False)
+        if form.cleaned_data.get('show_online'):
+            games_qs = games_qs.filter(game__has_online_trophies=True)
+        if form.cleaned_data.get('show_buggy'):
+            games_qs = games_qs.filter(game__has_buggy_trophies=True)
+        if form.cleaned_data.get('filter_shovelware'):
+            games_qs = games_qs.exclude(
+                game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            )
+
+        # --- Community rating filters (dual-range) ---
+        rating_min = form.cleaned_data.get('rating_min') or 0
+        rating_max = form.cleaned_data.get('rating_max') or 5
+        diff_min = form.cleaned_data.get('difficulty_min') or 1
+        diff_max = form.cleaned_data.get('difficulty_max') or 10
+        fun_lo = form.cleaned_data.get('fun_min') or 1
+        fun_hi = form.cleaned_data.get('fun_max') or 10
+        has_rating_filter = (
+            rating_min > 0 or rating_max < 5
+            or diff_min > 1 or diff_max < 10
+            or fun_lo > 1 or fun_hi < 10
+        )
+        needs_rating = has_rating_filter or sort_val in ('rating', 'rating_inv')
+
+        if needs_rating:
+            games_qs = annotate_community_ratings(games_qs, 'game__concept_id')
+            if rating_min > 0:
+                games_qs = games_qs.filter(_avg_rating__gte=float(rating_min))
+            if rating_max < 5:
+                games_qs = games_qs.filter(_avg_rating__lte=float(rating_max))
+            if diff_min > 1:
+                games_qs = games_qs.filter(_avg_difficulty__gte=float(diff_min))
+            if diff_max < 10:
+                games_qs = games_qs.filter(_avg_difficulty__lte=float(diff_max))
+            if fun_lo > 1:
+                games_qs = games_qs.filter(_avg_fun__gte=float(fun_lo))
+            if fun_hi < 10:
+                games_qs = games_qs.filter(_avg_fun__lte=float(fun_hi))
+
+        # --- Time-to-beat filter (dual-range, in hours) ---
+        igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
+        igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
+        if igdb_lo > 0 or igdb_hi < 1000:
+            time_q = Q(game__concept__igdb_match__time_to_beat_completely__isnull=False)
+            if igdb_lo > 0:
+                time_q &= Q(game__concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
+            if igdb_hi < 1000:
+                time_q &= Q(game__concept__igdb_match__time_to_beat_completely__lte=int(igdb_hi) * 3600)
+            games_qs = games_qs.filter(time_q)
+
+        # --- Sort ---
         order = ['-last_updated_datetime']
         if sort_val == 'oldest':
             order = ['last_updated_datetime']
@@ -384,6 +464,47 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             order = ['-earned_trophies_count', Lower('game__title_name')]
         elif sort_val == 'unearned':
             order = ['-unearned_trophies_count', Lower('game__title_name')]
+        elif sort_val == 'rating' and needs_rating:
+            games_qs = games_qs.filter(_avg_rating__isnull=False)
+            order = ['-_avg_rating', Lower('game__title_name')]
+        elif sort_val == 'rating_inv' and needs_rating:
+            games_qs = games_qs.filter(_avg_rating__isnull=False)
+            order = ['_avg_rating', Lower('game__title_name')]
+        elif sort_val in ('time_to_beat', 'time_to_beat_inv'):
+            games_qs = games_qs.annotate(
+                _time_to_beat=F('game__concept__igdb_match__time_to_beat_completely'),
+            )
+            if sort_val == 'time_to_beat':
+                order = [OrderBy(F('_time_to_beat'), nulls_last=True)]
+            else:
+                order = [OrderBy(F('_time_to_beat'), descending=True, nulls_last=True)]
+        elif sort_val in ('plat_rarest', 'plat_common'):
+            plat_rate = Subquery(
+                Trophy.objects.filter(
+                    game_id=OuterRef('game_id'), trophy_type='platinum',
+                ).values('earn_rate')[:1],
+                output_field=FloatField(),
+            )
+            games_qs = games_qs.annotate(
+                _plat_rate=Coalesce(plat_rate, Value(0.0), output_field=FloatField()),
+            )
+            if sort_val == 'plat_rarest':
+                order = ['_plat_rate', Lower('game__title_name')]
+            else:
+                order = ['-_plat_rate', Lower('game__title_name')]
+        elif sort_val in ('trophy_count', 'trophy_count_inv'):
+            games_qs = games_qs.annotate(
+                _defined_trophy_count=(
+                    Coalesce(Cast(F('game__defined_trophies__bronze'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__silver'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__gold'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__platinum'), IntegerField()), Value(0))
+                ),
+            )
+            if sort_val == 'trophy_count':
+                order = ['-_defined_trophy_count', Lower('game__title_name')]
+            else:
+                order = ['_defined_trophy_count', Lower('game__title_name')]
 
         games_qs = games_qs.order_by(*order)
 
@@ -396,6 +517,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
 
         context['profile_games'] = game_page_obj
         context['form'] = form
+        context['selected_genres'] = self.request.GET.getlist('genres')
+        context['selected_themes'] = self.request.GET.getlist('themes')
         return context
 
     def _build_trophies_tab_context(self, profile, per_page, page_number):
@@ -421,12 +544,13 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Get form data
         query = form.cleaned_data.get('query')
         platforms = form.cleaned_data.get('platform')
-        type = form.cleaned_data.get('type')
+        trophy_type = form.cleaned_data.get('type')
+        sort_val = form.cleaned_data.get('sort', 'recent')
 
         # Build queryset
         trophies_qs = profile.earned_trophy_entries.filter(earned=True).select_related(
-            'trophy', 'trophy__game'
-        ).order_by(F('earned_date_time').desc(nulls_last=True))
+            'trophy', 'trophy__game',
+        )
 
         # Apply filters
         if query:
@@ -439,8 +563,64 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 platform_filter |= Q(trophy__game__title_platform__contains=plat)
             trophies_qs = trophies_qs.filter(platform_filter)
             context['selected_platforms'] = platforms
-        if type:
-            trophies_qs = trophies_qs.filter(trophy__trophy_type=type)
+        if trophy_type:
+            trophies_qs = trophies_qs.filter(trophy__trophy_type=trophy_type)
+
+        # Rarity range filter (PSN earn rate, 0-100%)
+        rarity_min = form.cleaned_data.get('rarity_min') or 0
+        rarity_max = form.cleaned_data.get('rarity_max') or 100
+        if rarity_min > 0:
+            trophies_qs = trophies_qs.filter(trophy__trophy_earn_rate__gte=float(rarity_min))
+        if rarity_max < 100:
+            trophies_qs = trophies_qs.filter(trophy__trophy_earn_rate__lte=float(rarity_max))
+
+        # Sort
+        if sort_val == 'oldest':
+            trophies_qs = trophies_qs.order_by(
+                F('earned_date_time').asc(nulls_last=True),
+            )
+        elif sort_val == 'alpha':
+            trophies_qs = trophies_qs.order_by(
+                Lower('trophy__trophy_name'),
+            )
+        elif sort_val == 'rarest_psn':
+            trophies_qs = trophies_qs.order_by(
+                'trophy__trophy_earn_rate',
+                F('earned_date_time').desc(nulls_last=True),
+            )
+        elif sort_val == 'common_psn':
+            trophies_qs = trophies_qs.order_by(
+                '-trophy__trophy_earn_rate',
+                F('earned_date_time').desc(nulls_last=True),
+            )
+        elif sort_val == 'rarest_pp':
+            trophies_qs = trophies_qs.order_by(
+                'trophy__earn_rate',
+                F('earned_date_time').desc(nulls_last=True),
+            )
+        elif sort_val == 'common_pp':
+            trophies_qs = trophies_qs.order_by(
+                '-trophy__earn_rate',
+                F('earned_date_time').desc(nulls_last=True),
+            )
+        elif sort_val == 'type':
+            trophies_qs = trophies_qs.annotate(
+                _type_order=Case(
+                    When(trophy__trophy_type='platinum', then=Value(0)),
+                    When(trophy__trophy_type='gold', then=Value(1)),
+                    When(trophy__trophy_type='silver', then=Value(2)),
+                    When(trophy__trophy_type='bronze', then=Value(3)),
+                    default=Value(4),
+                    output_field=IntegerField(),
+                ),
+            ).order_by(
+                '_type_order',
+                Lower('trophy__trophy_name'),
+            )
+        else:  # 'recent' (default)
+            trophies_qs = trophies_qs.order_by(
+                F('earned_date_time').desc(nulls_last=True),
+            )
 
         # Paginate
         trophy_paginator = Paginator(trophies_qs, per_page)
@@ -453,15 +633,38 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         context['form'] = form
         return context
 
+    @staticmethod
+    def _compute_badge_xp(badge_group):
+        """Compute total XP value for a badge group's highest earned tier."""
+        from trophies.services.xp_service import get_tier_xp
+        from trophies.util_modules.constants import BADGE_TIER_XP
+        badge = badge_group['highest_badge']
+        return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
+
     def _sort_badge_groups(self, badge_list, sort_val):
         """Apply consistent sorting to a list of badge group dicts."""
+        _title = lambda d: (d['highest_badge'].effective_display_title or '').lower()
         if sort_val == 'name':
-            badge_list.sort(key=lambda d: (d['highest_badge'].effective_display_title or '').lower())
+            badge_list.sort(key=lambda d: _title(d))
         elif sort_val == 'tier':
-            badge_list.sort(key=lambda d: (d['max_tier'], (d['highest_badge'].effective_display_title or '').lower()))
+            badge_list.sort(key=lambda d: (d['max_tier'], _title(d)))
         elif sort_val == 'tier_desc':
-            badge_list.sort(key=lambda d: (-d['max_tier'], (d['highest_badge'].effective_display_title or '').lower()))
-        else:
+            badge_list.sort(key=lambda d: (-d['max_tier'], _title(d)))
+        elif sort_val == 'stages':
+            badge_list.sort(key=lambda d: (-d['highest_badge'].required_stages, _title(d)))
+        elif sort_val == 'stages_inv':
+            badge_list.sort(key=lambda d: (d['highest_badge'].required_stages, _title(d)))
+        elif sort_val == 'xp':
+            badge_list.sort(key=lambda d: (-self._compute_badge_xp(d), _title(d)))
+        elif sort_val == 'xp_inv':
+            badge_list.sort(key=lambda d: (self._compute_badge_xp(d), _title(d)))
+        elif sort_val == 'recent':
+            from datetime import datetime
+            badge_list.sort(
+                key=lambda d: d.get('earned_at') or datetime.min,
+                reverse=True,
+            )
+        else:  # 'series' (default)
             badge_list.sort(key=lambda d: (d['highest_badge'].effective_display_series or '').lower())
 
     def _build_badges_tab_context(self, profile):
@@ -484,6 +687,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             return context
 
         sort_val = form.cleaned_data.get('sort')
+        badge_type_filter = form.cleaned_data.get('badge_type')
+        tier_filter = form.cleaned_data.get('tier')
 
         # Get earned badge series with max tier per series
         earned_badges_qs = UserBadge.objects.filter(profile=profile).values(
@@ -518,6 +723,14 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             for p in UserBadgeProgress.objects.filter(profile=profile).select_related('badge')
         }
 
+        # Bulk fetch earned_at per series (for "Recently Earned" sort)
+        earned_at_lookup = {}
+        if sort_val == 'recent':
+            for ub in UserBadge.objects.filter(profile=profile).values(
+                'badge__series_slug',
+            ).annotate(latest_earned=Max('earned_at')):
+                earned_at_lookup[ub['badge__series_slug']] = ub['latest_earned']
+
         # Build earned badges list using lookups instead of per-item queries
         grouped_earned = []
         for entry in earned_badges_qs:
@@ -546,7 +759,21 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 'progress': progress_entry,
                 'percentage': progress_percentage,
                 'max_tier': max_tier,
+                'earned_at': earned_at_lookup.get(series_slug),
             })
+
+        # In-memory filters
+        if badge_type_filter:
+            grouped_earned = [
+                g for g in grouped_earned
+                if g['highest_badge'].badge_type in badge_type_filter
+            ]
+        if tier_filter:
+            tier_ints = [int(t) for t in tier_filter]
+            grouped_earned = [
+                g for g in grouped_earned
+                if g['max_tier'] in tier_ints
+            ]
 
         self._sort_badge_groups(grouped_earned, sort_val)
         context['grouped_earned_badges'] = grouped_earned
@@ -584,6 +811,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         in_progress_badges.sort(key=lambda d: (-d['percentage'], (d['highest_badge'].effective_display_title or '').lower()))
         context['in_progress_badges'] = in_progress_badges
         context['form'] = form
+        context['selected_badge_types'] = self.request.GET.getlist('badge_type')
+        context['selected_tiers'] = self.request.GET.getlist('tier')
         return context
 
     def _build_lists_tab_context(self, public_lists_qs):

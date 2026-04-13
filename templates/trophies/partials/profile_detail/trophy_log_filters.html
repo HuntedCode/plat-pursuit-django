@@ -1,6 +1,13 @@
 <form id="trophies-form" method="get">
     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3">
         <div class="flex flex-col md:flex-row gap-2 md:gap-3">
+            <select name="sort" id="id_trophy_sort"
+                    class="select select-bordered select-sm md:select-md w-full md:w-44 lg:w-48">
+                {% for value, display in form.sort.field.choices %}
+                    <option value="{{ value }}" {% if request.GET.sort == value or not request.GET.sort and value == 'recent' %}selected{% endif %}>{{ display }}</option>
+                {% endfor %}
+            </select>
+
             <select name="type" id="id_type"
                     class="select select-bordered select-sm md:select-md w-full md:w-40 lg:w-48">
                 {% for value, display in form.type.field.choices %}
@@ -38,6 +45,32 @@
                 </svg>
                 <span class="hidden md:inline">Filter</span>
             </button>
+        </div>
+
+        {# Rarity range filter #}
+        <div class="mt-2 pt-2 border-t border-base-content/5">
+            <div class="max-w-xs">
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="text-xs text-base-content/50">PSN Rarity</label>
+                    <span class="text-xs font-semibold tabular-nums" data-dual-range-label="rarity">
+                        {% if request.GET.rarity_min and request.GET.rarity_min != '0' or request.GET.rarity_max and request.GET.rarity_max != '100' %}
+                            {{ request.GET.rarity_min|default:'0' }}% - {{ request.GET.rarity_max|default:'100' }}%
+                        {% else %}Any{% endif %}
+                    </span>
+                </div>
+                <div class="dual-range relative h-5" data-dual-range data-dual-range-name="rarity" data-range-unit="%">
+                    <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
+                    <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-secondary" data-dual-range-fill></div>
+                    <input type="range" name="rarity_min" min="0" max="100" step="1"
+                           value="{{ request.GET.rarity_min|default:'0' }}"
+                           class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                           data-dual-range-lo />
+                    <input type="range" name="rarity_max" min="0" max="100" step="1"
+                           value="{{ request.GET.rarity_max|default:'100' }}"
+                           class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                           data-dual-range-hi />
+                </div>
+            </div>
         </div>
     </div>
     <input type="hidden" name="tab" value="trophies">
