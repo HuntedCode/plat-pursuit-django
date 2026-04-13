@@ -1,0 +1,124 @@
+{% comment %}
+Badge picker modal for browse page filters.
+Provides search, type filtering, sorting, and visual badge grid.
+Expects context: picker_badges (list of dicts with series_slug, name, display_series,
+badge_type, earned_count, required_stages, layers)
+{% endcomment %}
+{% load static %}
+{% load humanize %}
+
+{% if picker_badges %}
+<dialog id="browse-badge-picker" class="modal">
+    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300 flex flex-col max-h-[85vh]">
+        {# Close button #}
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 z-10" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </form>
+
+        {# Header #}
+        <h3 class="font-bold text-base md:text-lg mb-0.5 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="7"></circle>
+                <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+            </svg>
+            Pick a Badge
+        </h3>
+        <p class="text-xs md:text-sm text-base-content/50 italic mb-3 pr-1">
+            Filter games to a specific badge series. Browse, search, or explore by type.
+        </p>
+
+        {# Search bar #}
+        <div class="relative mb-3 flex-shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.3-4.3"></path>
+            </svg>
+            <input type="text" id="badge-picker-search" autofocus
+                   class="input input-bordered input-sm w-full pl-9"
+                   placeholder="Search badges by name...">
+        </div>
+
+        {# Type filter chips + sort + count #}
+        <div class="flex flex-wrap items-center gap-1.5 mb-3 flex-shrink-0">
+            <button type="button" class="badge-type-chip btn btn-xs btn-secondary rounded-full" data-badge-type="">
+                All
+            </button>
+            <button type="button" class="badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300" data-badge-type="series">
+                Series
+            </button>
+            <button type="button" class="badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300" data-badge-type="collection">
+                Collection
+            </button>
+            <button type="button" class="badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300" data-badge-type="developer">
+                Developer
+            </button>
+            <button type="button" class="badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300" data-badge-type="user">
+                User
+            </button>
+            <button type="button" class="badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300" data-badge-type="genre">
+                Genre
+            </button>
+            <button type="button" class="badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300" data-badge-type="megamix">
+                Megamix
+            </button>
+
+            <span class="text-base-content/20 mx-0.5 hidden md:inline">|</span>
+
+            {# Sort dropdown #}
+            <select id="badge-picker-sort" class="select select-bordered select-xs w-auto">
+                <option value="alpha">A-Z</option>
+                <option value="earned">Most Earned</option>
+                <option value="stages">Most Stages</option>
+            </select>
+
+            {# Visible count #}
+            <span id="badge-picker-count" class="text-xs text-base-content/40 ml-auto">
+                {{ picker_badges|length }} badge{{ picker_badges|length|pluralize }}
+            </span>
+        </div>
+
+        {# Scrollable badge grid #}
+        <div id="badge-picker-grid" class="grid grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto flex-1 pr-1 min-h-0">
+            {% for badge in picker_badges %}
+            <button type="button"
+                    class="badge-pick-item card bg-base-100/50 border border-base-content/10 hover:border-secondary hover:shadow-md hover:shadow-secondary/20 transition-all duration-200 cursor-pointer text-left group"
+                    data-series-slug="{{ badge.series_slug }}"
+                    data-badge-name="{{ badge.display_series|default:badge.name }}"
+                    data-badge-type="{{ badge.badge_type }}"
+                    data-badge-earned="{{ badge.earned_count }}"
+                    data-badge-stages="{{ badge.required_stages }}">
+                <div class="card-body p-2 md:p-2.5 flex flex-row items-center gap-2 md:gap-3">
+                    {# Badge icon (3-layer rendering) #}
+                    <div class="w-10 h-10 md:w-12 md:h-12 shrink-0 relative">
+                        {% include 'partials/badge.html' with layers=badge.layers %}
+                    </div>
+                    {# Badge info #}
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold text-xs md:text-sm line-clamp-1 pr-1 group-hover:text-secondary transition-colors">
+                            {{ badge.display_series|default:badge.name }}
+                        </p>
+                        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span class="badge badge-xs badge-ghost capitalize">{{ badge.badge_type }}</span>
+                            <span class="text-[0.6rem] text-base-content/40">{{ badge.earned_count|intcomma }} earned</span>
+                        </div>
+                        <p class="text-[0.6rem] text-base-content/30 mt-0.5">{{ badge.required_stages }} stage{{ badge.required_stages|pluralize }}</p>
+                    </div>
+                </div>
+            </button>
+            {% endfor %}
+        </div>
+
+        {# Empty state #}
+        <div id="badge-picker-empty" class="hidden text-center py-8 text-base-content/50 italic">
+            No badges match your search.
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop">
+        <button>close</button>
+    </form>
+</dialog>
+{% endif %}

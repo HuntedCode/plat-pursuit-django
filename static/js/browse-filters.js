@@ -123,11 +123,294 @@
         htmx.trigger(form, 'submit');
       });
     }
+
+    // ── Range sliders (ratings + time-to-beat) ────────────────────────────
+    initBrowseSliders(form);
+
+    // ── Badge picker modal ──────────────────────────────────────────────
+    initBadgePicker(form);
+  }
+
+  // ── Dual-range slider logic ──────────────────────────────────────────────
+  function initBrowseSliders(form) {
+    var ranges = form.querySelectorAll('[data-dual-range]');
+    if (!ranges.length) return;
+
+    var submitTimer = null;
+
+    ranges.forEach(function (container) {
+      var lo = container.querySelector('[data-dual-range-lo]');
+      var hi = container.querySelector('[data-dual-range-hi]');
+      var fill = container.querySelector('[data-dual-range-fill]');
+      var name = container.dataset.dualRangeName;
+      var unit = container.dataset.rangeUnit || '';
+      var label = form.querySelector('[data-dual-range-label="' + name + '"]');
+
+      if (!lo || !hi) return;
+
+      function updateFill() {
+        var min = parseFloat(lo.min);
+        var max = parseFloat(lo.max);
+        var loVal = parseFloat(lo.value);
+        var hiVal = parseFloat(hi.value);
+        var range = max - min;
+        if (fill && range > 0) {
+          fill.style.left = ((loVal - min) / range * 100) + '%';
+          fill.style.right = ((max - hiVal) / range * 100) + '%';
+        }
+      }
+
+      function updateLabel() {
+        if (!label) return;
+        var loVal = parseFloat(lo.value);
+        var hiVal = parseFloat(hi.value);
+        var min = parseFloat(lo.min);
+        var max = parseFloat(lo.max);
+        if (loVal <= min && hiVal >= max) {
+          label.textContent = 'Any';
+        } else {
+          label.textContent = lo.value + unit + ' \u2013 ' + hi.value + unit;
+        }
+      }
+
+      function clamp() {
+        if (parseFloat(lo.value) > parseFloat(hi.value)) {
+          lo.value = hi.value;
+        }
+      }
+
+      function onInput() {
+        clamp();
+        updateFill();
+        updateLabel();
+      }
+
+      function onCommit() {
+        clamp();
+        updateFill();
+        updateLabel();
+
+        var pageInput = form.querySelector('input[name="page"]');
+        if (pageInput) pageInput.value = '1';
+        clearTimeout(submitTimer);
+        submitTimer = setTimeout(function () {
+          htmx.trigger(form, 'submit');
+        }, 250);
+      }
+
+      lo.addEventListener('input', onInput);
+      hi.addEventListener('input', onInput);
+      lo.addEventListener('change', onCommit);
+      hi.addEventListener('change', onCommit);
+
+      // Set initial fill position
+      updateFill();
+    });
+  }
+
+  // ── Badge picker modal logic ────────────────────────────────────────────
+  function initBadgePicker(form) {
+    var modal = document.getElementById('browse-badge-picker');
+    if (!modal) return;
+
+    var searchInput = modal.querySelector('#badge-picker-search');
+    var grid = modal.querySelector('#badge-picker-grid');
+    var emptyState = modal.querySelector('#badge-picker-empty');
+    var countLabel = modal.querySelector('#badge-picker-count');
+    var sortSelect = modal.querySelector('#badge-picker-sort');
+    var typeChips = modal.querySelectorAll('.badge-type-chip');
+    var items = grid.querySelectorAll('.badge-pick-item');
+
+    var activeType = '';
+    var debounceTimer = null;
+
+    // Trigger button opens modal
+    var triggerBtn = document.getElementById('badge-picker-trigger');
+    if (triggerBtn) {
+      triggerBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        modal.showModal();
+      });
+    }
+
+    // Search: debounced filtering
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(filterBadgeGrid, 150);
+      });
+    }
+
+    // Type chip selection
+    typeChips.forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        activeType = chip.dataset.badgeType;
+        typeChips.forEach(function (c) {
+          if (c.dataset.badgeType === activeType) {
+            c.className = 'badge-type-chip btn btn-xs btn-secondary rounded-full';
+          } else {
+            c.className = 'badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300';
+          }
+        });
+        filterBadgeGrid();
+      });
+    });
+
+    // Sort
+    if (sortSelect) {
+      sortSelect.addEventListener('change', function () {
+        sortBadgeGrid();
+      });
+    }
+
+    // Badge card selection (event delegation on grid)
+    grid.addEventListener('click', function (e) {
+      var card = e.target.closest('.badge-pick-item');
+      if (!card) return;
+
+      var slug = card.dataset.seriesSlug;
+      var name = card.dataset.badgeName;
+
+      // Update hidden input
+      var hiddenInput = form.querySelector('#badge-series-input');
+      if (hiddenInput) hiddenInput.value = slug;
+
+      // Update trigger button
+      var trigger = document.getElementById('badge-picker-trigger');
+      var label = document.getElementById('badge-picker-label');
+      if (trigger) {
+        trigger.classList.remove('btn-ghost', 'border', 'border-dashed', 'border-base-300');
+        trigger.classList.add('btn-secondary', 'font-bold');
+      }
+      if (label) label.textContent = name;
+
+      // Ensure clear button exists (create if needed after HTMX restore)
+      ensureClearButton();
+
+      // Close modal
+      modal.close();
+
+      // Submit form with page reset
+      var pageInput = form.querySelector('input[name="page"]');
+      if (pageInput) pageInput.value = '1';
+      htmx.trigger(form, 'submit');
+    });
+
+    // Clear button
+    bindClearButton(form);
+
+    // Reset modal state when closed (so it's fresh on next open)
+    modal.addEventListener('close', function () {
+      if (searchInput) searchInput.value = '';
+      activeType = '';
+      typeChips.forEach(function (c) {
+        if (c.dataset.badgeType === '') {
+          c.className = 'badge-type-chip btn btn-xs btn-secondary rounded-full';
+        } else {
+          c.className = 'badge-type-chip btn btn-xs btn-ghost rounded-full border border-base-300';
+        }
+      });
+      filterBadgeGrid();
+      if (sortSelect) sortSelect.value = 'alpha';
+      sortBadgeGrid();
+    });
+
+    function filterBadgeGrid() {
+      var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+      var visibleCount = 0;
+
+      items.forEach(function (item) {
+        var nameMatch = !query || (item.dataset.badgeName || '').toLowerCase().indexOf(query) !== -1;
+        var typeMatch = !activeType || item.dataset.badgeType === activeType;
+        var visible = nameMatch && typeMatch;
+
+        item.style.display = visible ? '' : 'none';
+        if (visible) visibleCount++;
+      });
+
+      if (emptyState) {
+        emptyState.classList.toggle('hidden', visibleCount > 0);
+      }
+      if (grid) {
+        grid.classList.toggle('hidden', visibleCount === 0);
+      }
+      if (countLabel) {
+        countLabel.textContent = visibleCount + ' badge' + (visibleCount !== 1 ? 's' : '');
+      }
+    }
+
+    function sortBadgeGrid() {
+      var sortVal = sortSelect ? sortSelect.value : 'alpha';
+      var arr = Array.from(items);
+
+      arr.sort(function (a, b) {
+        if (sortVal === 'earned') {
+          return (parseInt(b.dataset.badgeEarned, 10) || 0) - (parseInt(a.dataset.badgeEarned, 10) || 0);
+        }
+        if (sortVal === 'stages') {
+          return (parseInt(b.dataset.badgeStages, 10) || 0) - (parseInt(a.dataset.badgeStages, 10) || 0);
+        }
+        // alpha (default)
+        return a.dataset.badgeName.localeCompare(b.dataset.badgeName);
+      });
+
+      var fragment = document.createDocumentFragment();
+      arr.forEach(function (item) {
+        fragment.appendChild(item);
+      });
+      grid.appendChild(fragment);
+    }
+
+    function ensureClearButton() {
+      if (document.getElementById('badge-picker-clear')) return;
+      var trigger = document.getElementById('badge-picker-trigger');
+      if (!trigger) return;
+
+      var clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.id = 'badge-picker-clear';
+      clearBtn.className = 'btn btn-xs btn-ghost border border-base-300 text-error/70 hover:text-error hover:border-error/30 transition-all';
+      clearBtn.title = 'Clear badge filter';
+      clearBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+      trigger.parentNode.insertBefore(clearBtn, trigger.nextSibling);
+      bindClearButton(form);
+    }
+
+    function bindClearButton(browseForm) {
+      var clearBtn = document.getElementById('badge-picker-clear');
+      if (!clearBtn || clearBtn.dataset.bound) return;
+      clearBtn.dataset.bound = 'true';
+
+      clearBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+
+        // Clear hidden input
+        var hiddenInput = browseForm.querySelector('#badge-series-input');
+        if (hiddenInput) hiddenInput.value = '';
+
+        // Reset trigger button
+        var trigger = document.getElementById('badge-picker-trigger');
+        var label = document.getElementById('badge-picker-label');
+        if (trigger) {
+          trigger.classList.remove('btn-secondary', 'font-bold');
+          trigger.classList.add('btn-ghost', 'border', 'border-base-300', 'border-dashed');
+        }
+        if (label) label.textContent = 'Pick a Badge';
+
+        // Remove clear button
+        clearBtn.remove();
+
+        // Submit form
+        var pageInput = browseForm.querySelector('input[name="page"]');
+        if (pageInput) pageInput.value = '1';
+        htmx.trigger(browseForm, 'submit');
+      });
+    }
   }
 
   // ── Active filter badge on drawer summary ──────────────────────────────
   // Keys that don't count as "active filters" (display/pagination state only)
-  var IGNORED_KEYS = {'page': 1, 'view': 1};
+  var IGNORED_KEYS = {'page': 1, 'view': 1, 'category': 1};
 
   function updateFilterBadge() {
     var form = document.querySelector('[data-browse-form]');
@@ -141,9 +424,16 @@
 
     var formData = new FormData(form);
     formData.forEach(function (value, key) {
-      if (!IGNORED_KEYS[key] && value) {
-        hasActive = true;
+      if (IGNORED_KEYS[key] || !value) return;
+
+      // Dual-range sliders at default (min or max) don't count as active
+      var el = form.querySelector('[name="' + key + '"]');
+      if (el && el.type === 'range') {
+        if (el.dataset.dualRangeLo !== undefined && el.value === el.min) return;
+        if (el.dataset.dualRangeHi !== undefined && el.value === el.max) return;
       }
+
+      hasActive = true;
     });
 
     if (hasActive && !badge) {

@@ -94,99 +94,20 @@
                                        class="sr-only peer" {% if filter_shovelware == 'on' %}checked{% endif %} />
                                 <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">Hide Shovelware</span>
                             </label>
-                            <label class="cursor-pointer">
-                                <input type="checkbox" name="in_badge" value="on"
-                                       class="sr-only peer" {% if request.GET.in_badge == 'on' %}checked{% endif %} />
-                                <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="8" r="7"></circle>
-                                        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-                                    </svg>
-                                    In a Badge
-                                </span>
-                            </label>
-                            {% if form.badge_series.field.choices|length > 1 %}
-                                <select name="badge_series" class="select select-bordered select-xs w-auto max-w-40">
-                                    {% for value, display in form.badge_series.field.choices %}
-                                        <option value="{{ value }}" {% if request.GET.badge_series == value %}selected{% endif %}>{{ display }}</option>
-                                    {% endfor %}
-                                </select>
-                            {% endif %}
+                            {% include 'partials/browse/badge_filter.html' %}
                         </div>
                     </div>
 
                     {# ── Ratings ── #}
                     <div class="border-t border-base-content/10 pt-3 mb-3">
                         <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Community Ratings</h4>
-                        <div class="flex flex-wrap gap-2">
-                            <div class="flex items-center gap-1.5">
-                                <label class="text-xs text-base-content/50 whitespace-nowrap">Min Rating:</label>
-                                <select name="min_rating" class="select select-bordered select-xs">
-                                    {% for value, display in form.min_rating.field.choices %}
-                                        <option value="{{ value }}" {% if request.GET.min_rating == value %}selected{% endif %}>{{ display }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-1.5">
-                                <label class="text-xs text-base-content/50 whitespace-nowrap">Max Difficulty:</label>
-                                <select name="difficulty_max" class="select select-bordered select-xs">
-                                    {% for value, display in form.difficulty_max.field.choices %}
-                                        <option value="{{ value }}" {% if request.GET.difficulty_max == value %}selected{% endif %}>{{ display }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-1.5">
-                                <label class="text-xs text-base-content/50 whitespace-nowrap">Min Fun:</label>
-                                <select name="fun_min" class="select select-bordered select-xs">
-                                    {% for value, display in form.fun_min.field.choices %}
-                                        <option value="{{ value }}" {% if request.GET.fun_min == value %}selected{% endif %}>{{ display }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                        </div>
+                        {% include 'partials/browse/rating_filters.html' %}
                     </div>
 
                     {# ── Time to Beat ── #}
                     <div class="border-t border-base-content/10 pt-3 mb-3">
                         <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Time to Beat</h4>
-                        <div class="space-y-2">
-                            <div>
-                                <span class="text-xs text-base-content/50 block mb-1">IGDB Estimate (completionist)</span>
-                                <div class="flex flex-wrap gap-1.5">
-                                    {% for value, display in form.igdb_time.field.choices %}
-                                        {% if value %}
-                                            <label class="cursor-pointer">
-                                                <input type="radio" name="igdb_time" value="{{ value }}"
-                                                       class="sr-only peer" {% if request.GET.igdb_time == value %}checked{% endif %} />
-                                                <span class="btn btn-xs peer-checked:btn-accent peer-checked:font-bold btn-ghost border border-base-300 transition-all">{{ display }}</span>
-                                            </label>
-                                        {% endif %}
-                                    {% endfor %}
-                                    <label class="cursor-pointer">
-                                        <input type="radio" name="igdb_time" value="" class="sr-only peer" {% if not request.GET.igdb_time %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-ghost peer-checked:font-bold btn-ghost border border-base-300 transition-all text-base-content/40">Any</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div>
-                                <span class="text-xs text-base-content/50 block mb-1">Community Reported (hours to platinum)</span>
-                                <div class="flex flex-wrap gap-1.5">
-                                    {% for value, display in form.community_time.field.choices %}
-                                        {% if value %}
-                                            <label class="cursor-pointer">
-                                                <input type="radio" name="community_time" value="{{ value }}"
-                                                       class="sr-only peer" {% if request.GET.community_time == value %}checked{% endif %} />
-                                                <span class="btn btn-xs peer-checked:btn-info peer-checked:font-bold btn-ghost border border-base-300 transition-all">{{ display }}</span>
-                                            </label>
-                                        {% endif %}
-                                    {% endfor %}
-                                    <label class="cursor-pointer">
-                                        <input type="radio" name="community_time" value="" class="sr-only peer" {% if not request.GET.community_time %}checked{% endif %} />
-                                        <span class="btn btn-xs peer-checked:btn-ghost peer-checked:font-bold btn-ghost border border-base-300 transition-all text-base-content/40">Any</span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
+                        {% include 'partials/browse/time_filters.html' %}
                     </div>
 
                     {# ── Genres ── #}

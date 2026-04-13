@@ -21,6 +21,7 @@ from ..constants import CACHE_TIMEOUT_IMAGES
 from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
+from .browse_helpers import get_badge_picker_context
 
 logger = logging.getLogger("psn_api")
 
@@ -44,23 +45,6 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     template_name = 'trophies/game_list.html'
     partial_template_name = 'trophies/partials/game_list/browse_results.html'
     paginate_by = 30
-
-    # IGDB time-to-beat stored in seconds
-    TIME_BUCKETS = {
-        'under10': (None, 36000),
-        '10to25': (36000, 90000),
-        '25to50': (90000, 180000),
-        '50to100': (180000, 360000),
-        '100plus': (360000, None),
-    }
-    # Community hours_to_platinum stored as integer hours
-    COMMUNITY_TIME_BUCKETS = {
-        'under10': (None, 10),
-        '10to25': (10, 25),
-        '25to50': (25, 50),
-        '50to100': (50, 100),
-        '100plus': (100, None),
-    }
 
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
@@ -157,11 +141,15 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             if form.cleaned_data.get('show_buggy'):
                 qs = qs.filter(has_buggy_trophies=True)
 
-            # --- Community rating filters (conditional Subquery) ---
-            min_rating = form.cleaned_data.get('min_rating')
-            difficulty_max = form.cleaned_data.get('difficulty_max')
-            fun_min = form.cleaned_data.get('fun_min')
-            needs_rating_annotation = min_rating or difficulty_max or fun_min or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
+            # --- Community rating filters (dual-range sliders) ---
+            rating_min = form.cleaned_data.get('rating_min') or 0
+            rating_max = form.cleaned_data.get('rating_max') or 5
+            diff_min = form.cleaned_data.get('difficulty_min') or 1
+            diff_max = form.cleaned_data.get('difficulty_max') or 10
+            fun_lo = form.cleaned_data.get('fun_min') or 1
+            fun_hi = form.cleaned_data.get('fun_max') or 10
+            has_rating_filter = rating_min > 0 or rating_max < 5 or diff_min > 1 or diff_max < 10 or fun_lo > 1 or fun_hi < 10
+            needs_rating_annotation = has_rating_filter or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
 
             if needs_rating_annotation:
                 base_ratings = UserConceptRating.objects.filter(
@@ -182,37 +170,43 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                         output_field=FloatField(),
                     ),
                 )
-                if min_rating:
-                    qs = qs.filter(_avg_rating__gte=float(min_rating))
-                if difficulty_max:
-                    qs = qs.filter(_avg_difficulty__lte=float(difficulty_max))
-                if fun_min:
-                    qs = qs.filter(_avg_fun__gte=float(fun_min))
+                if rating_min > 0:
+                    qs = qs.filter(_avg_rating__gte=float(rating_min))
+                if rating_max < 5:
+                    qs = qs.filter(_avg_rating__lte=float(rating_max))
+                if diff_min > 1:
+                    qs = qs.filter(_avg_difficulty__gte=float(diff_min))
+                if diff_max < 10:
+                    qs = qs.filter(_avg_difficulty__lte=float(diff_max))
+                if fun_lo > 1:
+                    qs = qs.filter(_avg_fun__gte=float(fun_lo))
+                if fun_hi < 10:
+                    qs = qs.filter(_avg_fun__lte=float(fun_hi))
 
-            # --- Time-to-beat filters ---
-            igdb_time = form.cleaned_data.get('igdb_time')
-            if igdb_time and igdb_time in self.TIME_BUCKETS:
-                lo, hi = self.TIME_BUCKETS[igdb_time]
+            # --- Time-to-beat filters (dual-range sliders, in hours) ---
+            igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
+            igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
+            if igdb_lo > 0 or igdb_hi < 1000:
                 time_q = Q(concept__igdb_match__time_to_beat_completely__isnull=False)
-                if lo is not None:
-                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=lo)
-                if hi is not None:
-                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lt=hi)
+                if igdb_lo > 0:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
+                if igdb_hi < 1000:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lte=int(igdb_hi) * 3600)
                 qs = qs.filter(time_q)
 
-            community_time = form.cleaned_data.get('community_time')
-            if community_time and community_time in self.COMMUNITY_TIME_BUCKETS:
-                lo, hi = self.COMMUNITY_TIME_BUCKETS[community_time]
+            comm_lo = form.cleaned_data.get('community_time_min') or 0
+            comm_hi = form.cleaned_data.get('community_time_max') or 1000
+            if comm_lo > 0 or comm_hi < 1000:
                 avg_hours_sq = UserConceptRating.objects.filter(
                     concept_id=OuterRef('concept_id'),
                     concept_trophy_group__isnull=True,
                 ).values('concept_id').annotate(val=Avg('hours_to_platinum')).values('val')[:1]
                 qs = qs.annotate(_community_hours=Subquery(avg_hours_sq, output_field=FloatField()))
                 hours_q = Q(_community_hours__isnull=False)
-                if lo is not None:
-                    hours_q &= Q(_community_hours__gte=lo)
-                if hi is not None:
-                    hours_q &= Q(_community_hours__lt=hi)
+                if comm_lo > 0:
+                    hours_q &= Q(_community_hours__gte=float(comm_lo))
+                if comm_hi < 1000:
+                    hours_q &= Q(_community_hours__lte=float(comm_hi))
                 qs = qs.filter(hours_q)
 
             # --- Genre / Theme / Engine filters ---
@@ -291,6 +285,9 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             v for k, v in self.request.GET.lists()
             if k not in ('page', 'view') and any(v)
         )
+
+        # Badge picker modal data
+        context.update(get_badge_picker_context(self.request))
 
         context['seo_description'] = (
             "Browse PlayStation games on Platinum Pursuit. "
@@ -1142,22 +1139,6 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
         },
     }
 
-    # IGDB time-to-beat stored in seconds
-    TIME_BUCKETS = {
-        'under10': (None, 36000),
-        '10to25': (36000, 90000),
-        '25to50': (90000, 180000),
-        '50to100': (180000, 360000),
-        '100plus': (360000, None),
-    }
-    COMMUNITY_TIME_BUCKETS = {
-        'under10': (None, 10),
-        '10to25': (10, 25),
-        '25to50': (25, 50),
-        '50to100': (50, 100),
-        '100plus': (100, None),
-    }
-
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
             self._filter_form = GameSearchForm(self.request.GET)
@@ -1222,11 +1203,15 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
                 live_slugs = Badge.objects.filter(is_live=True).values_list('series_slug', flat=True)
                 qs = qs.filter(concept__stages__series_slug__in=live_slugs).distinct()
 
-            # Rating filters
-            min_rating = form.cleaned_data.get('min_rating')
-            difficulty_max = form.cleaned_data.get('difficulty_max')
-            fun_min = form.cleaned_data.get('fun_min')
-            needs_rating_annotation = min_rating or difficulty_max or fun_min or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
+            # Rating filters (dual-range sliders)
+            rating_min = form.cleaned_data.get('rating_min') or 0
+            rating_max = form.cleaned_data.get('rating_max') or 5
+            diff_min = form.cleaned_data.get('difficulty_min') or 1
+            diff_max = form.cleaned_data.get('difficulty_max') or 10
+            fun_lo = form.cleaned_data.get('fun_min') or 1
+            fun_hi = form.cleaned_data.get('fun_max') or 10
+            has_rating_filter = rating_min > 0 or rating_max < 5 or diff_min > 1 or diff_max < 10 or fun_lo > 1 or fun_hi < 10
+            needs_rating_annotation = has_rating_filter or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
 
             if needs_rating_annotation:
                 base_ratings = UserConceptRating.objects.filter(
@@ -1242,42 +1227,48 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
                         base_ratings.values('concept_id').annotate(val=Avg('difficulty')).values('val')[:1],
                         output_field=FloatField(),
                     ),
-                )
-                if min_rating:
-                    qs = qs.filter(_avg_rating__gte=float(min_rating))
-                if difficulty_max:
-                    qs = qs.filter(_avg_difficulty__lte=float(difficulty_max))
-                if fun_min:
-                    fun_sq = Subquery(
+                    _avg_fun=Subquery(
                         base_ratings.values('concept_id').annotate(val=Avg('fun_ranking')).values('val')[:1],
                         output_field=FloatField(),
-                    )
-                    qs = qs.annotate(_avg_fun=fun_sq).filter(_avg_fun__gte=float(fun_min))
+                    ),
+                )
+                if rating_min > 0:
+                    qs = qs.filter(_avg_rating__gte=float(rating_min))
+                if rating_max < 5:
+                    qs = qs.filter(_avg_rating__lte=float(rating_max))
+                if diff_min > 1:
+                    qs = qs.filter(_avg_difficulty__gte=float(diff_min))
+                if diff_max < 10:
+                    qs = qs.filter(_avg_difficulty__lte=float(diff_max))
+                if fun_lo > 1:
+                    qs = qs.filter(_avg_fun__gte=float(fun_lo))
+                if fun_hi < 10:
+                    qs = qs.filter(_avg_fun__lte=float(fun_hi))
 
-            # Time-to-beat
-            igdb_time = form.cleaned_data.get('igdb_time')
-            if igdb_time and igdb_time in self.TIME_BUCKETS:
-                lo, hi = self.TIME_BUCKETS[igdb_time]
+            # Time-to-beat (dual-range sliders, in hours)
+            igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
+            igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
+            if igdb_lo > 0 or igdb_hi < 1000:
                 time_q = Q(concept__igdb_match__time_to_beat_completely__isnull=False)
-                if lo is not None:
-                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=lo)
-                if hi is not None:
-                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lt=hi)
+                if igdb_lo > 0:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
+                if igdb_hi < 1000:
+                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lte=int(igdb_hi) * 3600)
                 qs = qs.filter(time_q)
 
-            community_time = form.cleaned_data.get('community_time')
-            if community_time and community_time in self.COMMUNITY_TIME_BUCKETS:
-                lo, hi = self.COMMUNITY_TIME_BUCKETS[community_time]
+            comm_lo = form.cleaned_data.get('community_time_min') or 0
+            comm_hi = form.cleaned_data.get('community_time_max') or 1000
+            if comm_lo > 0 or comm_hi < 1000:
                 avg_hours_sq = UserConceptRating.objects.filter(
                     concept_id=OuterRef('concept_id'),
                     concept_trophy_group__isnull=True,
                 ).values('concept_id').annotate(val=Avg('hours_to_platinum')).values('val')[:1]
                 qs = qs.annotate(_community_hours=Subquery(avg_hours_sq, output_field=FloatField()))
                 hours_q = Q(_community_hours__isnull=False)
-                if lo is not None:
-                    hours_q &= Q(_community_hours__gte=lo)
-                if hi is not None:
-                    hours_q &= Q(_community_hours__lt=hi)
+                if comm_lo > 0:
+                    hours_q &= Q(_community_hours__gte=float(comm_lo))
+                if comm_hi < 1000:
+                    hours_q &= Q(_community_hours__lte=float(comm_hi))
                 qs = qs.filter(hours_q)
 
             # Genre / Theme / Engine
@@ -1349,6 +1340,11 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
             v for k, v in self.request.GET.lists()
             if k not in ('page', 'view', 'category') and any(v)
         )
+
+        # Badge picker modal data (only when a category is active, since the modal
+        # is conditionally rendered in the template)
+        if category:
+            context.update(get_badge_picker_context(self.request))
 
         # Counts for each category (cheap queries on indexed boolean fields)
         context['category_counts'] = {

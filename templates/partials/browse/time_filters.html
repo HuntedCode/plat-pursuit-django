@@ -1,0 +1,52 @@
+{# Time-to-beat dual-range sliders for browse page filters. #}
+{# Expects context: request #}
+
+<div class="space-y-3">
+    {# IGDB Estimate (0-1000h, step 5) #}
+    <div class="max-w-xs">
+        <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs text-base-content/50">IGDB Estimate (completionist)</label>
+            <span class="text-xs font-semibold tabular-nums" data-dual-range-label="igdb_time">
+                {% if request.GET.igdb_time_min and request.GET.igdb_time_min != '0' or request.GET.igdb_time_max and request.GET.igdb_time_max != '1000' %}
+                    {{ request.GET.igdb_time_min|default:'0' }}h - {{ request.GET.igdb_time_max|default:'1000' }}h
+                {% else %}Any{% endif %}
+            </span>
+        </div>
+        <div class="dual-range relative h-5" data-dual-range data-dual-range-name="igdb_time" data-range-unit="h">
+            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
+            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-accent" data-dual-range-fill></div>
+            <input type="range" name="igdb_time_min" min="0" max="1000" step="5"
+                   value="{{ request.GET.igdb_time_min|default:'0' }}"
+                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                   data-dual-range-lo />
+            <input type="range" name="igdb_time_max" min="0" max="1000" step="5"
+                   value="{{ request.GET.igdb_time_max|default:'1000' }}"
+                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                   data-dual-range-hi />
+        </div>
+    </div>
+
+    {# Community Reported (0-1000h, step 5) #}
+    <div class="max-w-xs">
+        <div class="flex items-center justify-between mb-1.5">
+            <label class="text-xs text-base-content/50">Community Reported (hours to plat)</label>
+            <span class="text-xs font-semibold tabular-nums" data-dual-range-label="community_time">
+                {% if request.GET.community_time_min and request.GET.community_time_min != '0' or request.GET.community_time_max and request.GET.community_time_max != '1000' %}
+                    {{ request.GET.community_time_min|default:'0' }}h - {{ request.GET.community_time_max|default:'1000' }}h
+                {% else %}Any{% endif %}
+            </span>
+        </div>
+        <div class="dual-range relative h-5" data-dual-range data-dual-range-name="community_time" data-range-unit="h">
+            <div class="dual-range-track absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full bg-base-300"></div>
+            <div class="dual-range-fill absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-info" data-dual-range-fill></div>
+            <input type="range" name="community_time_min" min="0" max="1000" step="5"
+                   value="{{ request.GET.community_time_min|default:'0' }}"
+                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                   data-dual-range-lo />
+            <input type="range" name="community_time_max" min="0" max="1000" step="5"
+                   value="{{ request.GET.community_time_max|default:'1000' }}"
+                   class="dual-range-input absolute w-full appearance-none bg-transparent pointer-events-none h-full"
+                   data-dual-range-hi />
+        </div>
+    </div>
+</div>

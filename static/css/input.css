@@ -1384,3 +1384,37 @@ html {
   }
 }
 
+/* ── Dual-range slider thumbs ─────────────────────────────────────────── */
+/* Inputs are pointer-events:none so the track doesn't intercept clicks,  */
+/* but the thumb itself must be interactive.                               */
+.dual-range-input::-webkit-slider-thumb {
+  pointer-events: auto;
+  cursor: grab;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: oklch(0.75 0.15 250);
+  border: 1.5px solid oklch(0.55 0.15 250);
+  position: relative;
+  z-index: 2;
+}
+.dual-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  cursor: grab;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: oklch(0.75 0.15 250);
+  border: 1.5px solid oklch(0.55 0.15 250);
+  position: relative;
+  z-index: 2;
+}
+.dual-range-input:active::-webkit-slider-thumb { cursor: grabbing; }
+.dual-range-input:active::-moz-range-thumb { cursor: grabbing; }
+/* Hide native track so only our custom fill/track shows */
+.dual-range-input::-webkit-slider-runnable-track { background: transparent; }
+.dual-range-input::-moz-range-track { background: transparent; }
+

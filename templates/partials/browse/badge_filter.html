@@ -1,0 +1,45 @@
+{% comment %}
+Badge filter controls for browse page Quick Filters section.
+Replaces the old "In a Badge" checkbox + badge_series dropdown.
+Expects context: request, selected_badge_name, picker_badges (for modal)
+{% endcomment %}
+
+{# "In a Badge" toggle (any badge) #}
+<label class="cursor-pointer">
+    <input type="checkbox" name="in_badge" value="on"
+           class="sr-only peer" {% if request.GET.in_badge == 'on' %}checked{% endif %} />
+    <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="7"></circle>
+            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+        </svg>
+        In a Badge
+    </span>
+</label>
+
+{# Hidden input carries the selected badge series slug (set by modal JS) #}
+<input type="hidden" name="badge_series" id="badge-series-input"
+       value="{{ request.GET.badge_series|default:'' }}" />
+
+{# Trigger button: opens badge picker modal #}
+{% if picker_badges %}
+<button type="button" id="badge-picker-trigger"
+        class="btn btn-xs gap-1 transition-all {% if selected_badge_name %}btn-secondary font-bold{% else %}btn-ghost border border-base-300 border-dashed{% endif %}"
+        aria-label="Open badge picker">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg>
+    <span id="badge-picker-label">{% if selected_badge_name %}{{ selected_badge_name }}{% else %}Pick a Badge{% endif %}</span>
+</button>
+{% if selected_badge_name %}
+<button type="button" id="badge-picker-clear"
+        class="btn btn-xs btn-ghost border border-base-300 text-error/70 hover:text-error hover:border-error/30 transition-all"
+        title="Clear badge filter">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+</button>
+{% endif %}
+{% endif %}

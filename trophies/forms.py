@@ -25,29 +25,19 @@ class GameSearchForm(forms.Form):
     show_online = forms.BooleanField(required=False, label='Online Trophies')
     show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
 
-    # Community rating filters
-    min_rating = forms.ChoiceField(
-        choices=[('', 'Any Rating'), ('3', '3+ Stars'), ('3.5', '3.5+ Stars'), ('4', '4+ Stars'), ('4.5', '4.5+ Stars')],
-        required=False, label='Min Rating',
-    )
-    difficulty_max = forms.ChoiceField(
-        choices=[('', 'Any Difficulty'), ('3', 'Easy (1-3)'), ('5', 'Medium (1-5)'), ('7', 'Hard (1-7)')],
-        required=False, label='Max Difficulty',
-    )
-    fun_min = forms.ChoiceField(
-        choices=[('', 'Any Fun'), ('5', '5+ Fun'), ('7', '7+ Fun'), ('9', '9+ Fun')],
-        required=False, label='Min Fun',
-    )
+    # Community rating filters (dual-range sliders)
+    rating_min = forms.FloatField(required=False, min_value=0, max_value=5)
+    rating_max = forms.FloatField(required=False, min_value=0, max_value=5)
+    difficulty_min = forms.IntegerField(required=False, min_value=1, max_value=10)
+    difficulty_max = forms.IntegerField(required=False, min_value=1, max_value=10)
+    fun_min = forms.IntegerField(required=False, min_value=1, max_value=10)
+    fun_max = forms.IntegerField(required=False, min_value=1, max_value=10)
 
-    # Time-to-beat filters
-    igdb_time = forms.ChoiceField(
-        choices=[('', 'Any'), ('under10', 'Under 10h'), ('10to25', '10-25h'), ('25to50', '25-50h'), ('50to100', '50-100h'), ('100plus', '100+ hours')],
-        required=False, label='IGDB Estimate',
-    )
-    community_time = forms.ChoiceField(
-        choices=[('', 'Any'), ('under10', 'Under 10h'), ('10to25', '10-25h'), ('25to50', '25-50h'), ('50to100', '50-100h'), ('100plus', '100+ hours')],
-        required=False, label='Community Reported',
-    )
+    # Time-to-beat filters (dual-range sliders, in hours)
+    igdb_time_min = forms.IntegerField(required=False, min_value=0, max_value=1000)
+    igdb_time_max = forms.IntegerField(required=False, min_value=0, max_value=1000)
+    community_time_min = forms.IntegerField(required=False, min_value=0, max_value=1000)
+    community_time_max = forms.IntegerField(required=False, min_value=0, max_value=1000)
 
     # Genre / Theme / Engine filters
     genres = forms.MultipleChoiceField(required=False, label='Genres')
