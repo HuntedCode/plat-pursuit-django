@@ -95,11 +95,17 @@ def update_gamification_on_badge_revoked(sender, instance, **kwargs):
 
     Removes the 3000 XP badge completion bonus and updates sorted set leaderboard.
     """
+    from trophies.models import ProfileGamification
     from trophies.services.xp_service import (
         update_profile_gamification,
         is_bulk_update_active,
         defer_profile_update
     )
+
+    # Skip if profile's gamification record was already cascade-deleted
+    # (happens when the Profile itself is being deleted)
+    if not ProfileGamification.objects.filter(profile_id=instance.profile_id).exists():
+        return
 
     # Defer update if bulk operation is active
     if is_bulk_update_active():
