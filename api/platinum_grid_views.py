@@ -2,7 +2,6 @@
 REST API views for Platinum Grid share image generation.
 
 Provides HTML preview and PNG download endpoints for the platinum grid wizard.
-Staff-only during testing phase.
 """
 import logging
 import math
@@ -17,7 +16,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.services.share_image_cache import ShareImageCache
-from trophies.mixins import StaffRequiredAPIMixin
+from trophies.mixins import LoginRequiredAPIMixin
 from trophies.models import EarnedTrophy
 from trophies.services.dashboard_service import get_effective_premium
 
@@ -160,7 +159,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
     return context, None
 
 
-class PlatinumGridHTMLView(StaffRequiredAPIMixin, APIView):
+class PlatinumGridHTMLView(LoginRequiredAPIMixin, APIView):
     """
     GET /api/v1/shareables/platinum-grid/html/
 
@@ -198,7 +197,7 @@ class PlatinumGridHTMLView(StaffRequiredAPIMixin, APIView):
         })
 
 
-class PlatinumGridPNGView(StaffRequiredAPIMixin, APIView):
+class PlatinumGridPNGView(LoginRequiredAPIMixin, APIView):
     """
     GET /api/v1/shareables/platinum-grid/png/
 

@@ -38,7 +38,19 @@ class StaffRequiredMixin(LoginRequiredMixin):
         return redirect('home')
 
 
-class StaffRequiredAPIMixin:
+class LoginRequiredAPIMixin:
+    """
+    Mixin for non-DRF API views that require authentication.
+    Returns JSON error responses instead of redirects.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required.'}, status=401)
+
+        return super().dispatch(request, *args, **kwargs)
+
+
+class StaffRequiredAPIMixin(LoginRequiredAPIMixin):
     """
     Mixin for non-DRF API views that require staff access.
     Returns JSON error responses instead of redirects.

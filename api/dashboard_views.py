@@ -10,7 +10,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django_ratelimit.decorators import ratelimit
 
-from trophies.mixins import StaffRequiredAPIMixin
+from trophies.mixins import LoginRequiredAPIMixin, StaffRequiredAPIMixin
 
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
@@ -26,7 +26,7 @@ from trophies.services.dashboard_service import (
 logger = logging.getLogger(__name__)
 
 
-class DashboardModuleDataView(StaffRequiredAPIMixin, View):
+class DashboardModuleDataView(LoginRequiredAPIMixin, View):
     """
     GET /api/v1/dashboard/module/<slug>/
 
@@ -90,7 +90,7 @@ class DashboardModuleDataView(StaffRequiredAPIMixin, View):
         return JsonResponse({'html': html})
 
 
-class DashboardConfigUpdateView(StaffRequiredAPIMixin, View):
+class DashboardConfigUpdateView(LoginRequiredAPIMixin, View):
     """
     POST /api/v1/dashboard/config/
 
@@ -233,7 +233,7 @@ class DashboardConfigUpdateView(StaffRequiredAPIMixin, View):
         })
 
 
-class DashboardModuleReorderView(StaffRequiredAPIMixin, View):
+class DashboardModuleReorderView(LoginRequiredAPIMixin, View):
     """
     POST /api/v1/dashboard/reorder/
 
@@ -295,7 +295,7 @@ class DashboardPreviewToggleView(StaffRequiredAPIMixin, View):
         })
 
 
-class StatsPageDataView(StaffRequiredAPIMixin, View):
+class StatsPageDataView(LoginRequiredAPIMixin, View):
     """
     GET /api/v1/stats/premium/
 

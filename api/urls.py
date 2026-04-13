@@ -172,7 +172,7 @@ urlpatterns = [
     path('shareables/platinum/<int:earned_trophy_id>/html/', ShareableImageHTMLView.as_view(), name='shareable-platinum-html'),
     path('shareables/platinum/<int:earned_trophy_id>/png/', ShareableImagePNGView.as_view(), name='shareable-platinum-png'),
 
-    # Platinum Grid share image endpoints (staff-only during testing)
+    # Platinum Grid share image endpoints
     path('shareables/platinum-grid/html/', PlatinumGridHTMLView.as_view(), name='platinum-grid-html'),
     path('shareables/platinum-grid/png/', PlatinumGridPNGView.as_view(), name='platinum-grid-png'),
 
