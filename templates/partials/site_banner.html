@@ -92,3 +92,40 @@
 })();
 </script>
 {% endif %}
+
+{% if hotbar.sync_status == 'syncing' and request.path != '/' %}
+<div id="site-banner-user-syncing"
+     class="bg-primary/10 border-b-2 border-primary"
+     role="status"
+     aria-live="polite">
+    <div class="mx-auto px-4 py-2 flex items-center justify-center gap-2">
+        <svg class="w-4 h-4 shrink-0 text-primary animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+        <p class="text-xs lg:text-sm font-medium text-base-content">
+            <span class="font-bold">Your trophies are syncing.</span>
+            Some data may be incomplete until this finishes.
+            <a href="{% url 'home' %}" class="link link-primary font-semibold">View progress</a>
+        </p>
+    </div>
+</div>
+<script>
+(function() {
+    var banner = document.getElementById('site-banner-user-syncing');
+    if (!banner) return;
+
+    document.addEventListener('platpursuit:sync-status-changed', function(e) {
+        if (e.detail && e.detail.status !== 'syncing') {
+            banner.style.transition = 'opacity 0.3s ease, max-height 0.3s ease';
+            banner.style.opacity = '0';
+            banner.style.maxHeight = '0';
+            banner.style.overflow = 'hidden';
+            banner.style.borderWidth = '0';
+            banner.style.padding = '0';
+            setTimeout(function() { banner.remove(); }, 350);
+        }
+    });
+})();
+</script>
+{% endif %}

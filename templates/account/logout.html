@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if user.is_authenticated %}Sign Out{% else %}Signed Out{% endif %}{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block main_layout %}
+<main id="main-content" class="flex-1 flex items-center justify-center px-4 py-6 md:py-10" role="main">
+    <div class="w-full max-w-lg">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-5 lg:p-7 text-center">
+                {% if user.is_authenticated %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-warning mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    <h2 class="text-xl md:text-2xl font-bold mb-2">Sign Out</h2>
+                    <p class="text-sm text-base-content/60 mb-4">Are you sure you want to sign out?</p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Yes, Sign Me Out</button>
+                    </form>
+                    <a href="{% url 'home' %}" class="btn btn-ghost btn-sm md:btn-md w-full mt-2 text-base-content/50">Never mind, take me back</a>
+                {% else %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-primary mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                    <h2 class="text-xl md:text-2xl font-bold mb-2">Signed Out</h2>
+                    <p class="text-sm text-base-content/60 mb-4" role="status">Your trophies will be here when you get back.</p>
+                    <a href="{% url 'account_login' %}" class="btn btn-primary btn-sm md:btn-md w-full">Sign Back In</a>
+                    <a href="{% url 'home' %}" class="btn btn-ghost btn-sm md:btn-md w-full mt-2 text-base-content/50">Go to Home</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}

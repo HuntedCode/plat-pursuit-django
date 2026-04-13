@@ -251,7 +251,7 @@ urlpatterns = [
     path('reviews/<slug:slug>/', RedirectView.as_view(pattern_name='review_hub', permanent=True, query_string=True)),
 
     path('search/', SearchView.as_view(), name='search'),
-    path('logout/', LogoutView.as_view(next_page='home'), name='logout'),
+    path('logout/', LogoutView.as_view(template_name='account/logout.html'), name='logout'),
 
     path('staff/badge-create/', BadgeCreationView.as_view(), name='badge_creation'),
     path('staff/moderation/', CommentModerationView.as_view(), name='comment_moderation'),

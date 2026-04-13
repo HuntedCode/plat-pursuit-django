@@ -3,80 +3,176 @@
 
 {% block title %}Link PSN{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
-{% block content %}
-<div class="container mx-auto p-4 max-w-lg">
-    <div class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral transition-all duration-300 hover:border-secondary hover:shadow-secondary">
-        <div class="card-body">
-            <figure class="w-20 h-20 mx-auto">
-                <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="w-full" loading="eager" decoding="async" />
-            </figure>
-            <h1 class="text-2xl text-base-content text-center font-semibold pr-1 italic mb-4">Link Your PSN Account</h1>
-            <p class="text-base text-base-content text-center mb-6">Link your PSN profile to your Platinum Pursuit account!</p>
-            <div class="border-2 border-base-300 shadow-md shadow-neutral rounded-box px-2 py-2 shimmer" role="region" aria-labelledby="important-notice">
-                <h2 id="important-notice" class="text-3xl text-warning text-center font-semibold mb-4">IMPORTANT:</h2>
-                <p class="text-base text-base-content text-center italic">Please make sure you set the following permission:</p>
-                <p class="text-success text-2xl text-center font-bold">"Gaming History" -> "Anyone"</p>
-            </div>
-            <p class="text-xs text-base-content/70 text-center italic mb-6">Failure to do this will result in us being unable to sync your account!</p>
-            {% if messages %}
-                <div aria-live="polite" aria-atomic="true">
-                    {% for message in messages %}
-                        <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} font-bold mb-4" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}">
-                            {{ message }}
+
+{% block main_layout %}
+<main id="main-content" class="flex-1 flex items-center justify-center px-4 py-6 md:py-10" role="main">
+    <div class="w-full max-w-lg">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+
+                {# ── Step Indicator ── #}
+                <div class="flex items-center mb-5" aria-label="Step {{ step }} of 3">
+                    {# Step 1 #}
+                    <div class="flex flex-col items-center gap-1 flex-1">
+                        <div class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold {% if step > 1 %}bg-success text-success-content{% elif step == 1 %}bg-primary text-primary-content{% else %}bg-base-content/20 text-base-content/50{% endif %}">
+                            {% if step > 1 %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            {% else %}1{% endif %}
                         </div>
+                        <span class="text-[10px] md:text-xs font-semibold {% if step == 1 %}text-base-content{% else %}text-base-content/50{% endif %}">Username</span>
+                    </div>
+                    {# Line 1-2 #}
+                    <div class="h-0.5 flex-1 -mt-4 mx-1 {% if step > 1 %}bg-success{% else %}bg-base-content/10{% endif %}"></div>
+                    {# Step 2 #}
+                    <div class="flex flex-col items-center gap-1 flex-1">
+                        <div class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold {% if step > 2 %}bg-success text-success-content{% elif step == 2 %}bg-primary text-primary-content{% else %}bg-base-content/20 text-base-content/50{% endif %}">
+                            {% if step > 2 %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            {% else %}2{% endif %}
+                        </div>
+                        <span class="text-[10px] md:text-xs font-semibold {% if step == 2 %}text-base-content{% else %}text-base-content/50{% endif %}">Verify</span>
+                    </div>
+                    {# Line 2-3 #}
+                    <div class="h-0.5 flex-1 -mt-4 mx-1 {% if step > 2 %}bg-success{% else %}bg-base-content/10{% endif %}"></div>
+                    {# Step 3 #}
+                    <div class="flex flex-col items-center gap-1 flex-1">
+                        <div class="w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold {% if step == 3 %}bg-primary text-primary-content{% else %}bg-base-content/20 text-base-content/50{% endif %}">3</div>
+                        <span class="text-[10px] md:text-xs font-semibold {% if step == 3 %}text-base-content{% else %}text-base-content/50{% endif %}">Confirm</span>
+                    </div>
+                </div>
+
+                {% if messages %}
+                <div aria-live="polite" aria-atomic="true" class="mb-3">
+                    {% for message in messages %}
+                    <div class="alert {% if message.tags == 'error' %}alert-error{% elif message.tags == 'success' %}alert-success{% else %}alert-info{% endif %} text-sm" role="{% if message.tags == 'error' %}alert{% else %}status{% endif %}">
+                        {{ message }}
+                    </div>
                     {% endfor %}
                 </div>
-            {% endif %}
+                {% endif %}
 
-            {% if step == 1 %}
-                <!-- Step 1: Enter Username -->
-                 <div class="space-y-4 w-full">
-                    <form method="post" class="flex flex-col">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="submit_username">
-                        <label for="id_psn_username" class="text-base text-base-content font-semibold mb-1">PSN Username:</label>
-                        <input id="id_psn_username" type="text" name="psn_username" class="input input-primary self-center w-7/8 mb-4" placeholder="Your PSN Username" maxlength="16" required />
-                        <button type="submit" class="btn btn-primary w-full">Submit PSN Username</button>
-                    </form>
-                 </div>
-            {% elif step == 2 %}
-                <!-- Step 2: Verification Instructions -->
-                <div class="alert alert-info text-center font-bold mb-4 mx-auto">Got it! Follow the steps below to verify your account!</div>
-                    <ul class="list list-disc pl-5 space-y-2">
-                        <li>Go to your PSN profile on the PlayStation app or website.</li>
-                        <li>Edit your <span class="font-bold italic">'About Me'</span> section and add this exact code:</li>
-                        <div id="copy-tooltip" class="tooltip my-4" data-tip="Click To Copy">
-                            <div id="copy-div" class="border-2 border-base-300 shadow-md shadow-neutral rounded-box w-fit p-4 mx-auto cursor-pointer hover:scale-105">
-                                <h1 id="verification-code" class="text-6xl font-bold text-warning/70 text-center">{{ verification_code }}</h1>
-                            </div>
+                {% if step == 1 %}
+                {# ── Step 1: Enter Username ── #}
+                <h2 class="text-xl md:text-2xl font-bold mb-1">Link Your PSN Account</h2>
+                <p class="text-sm text-base-content/60 mb-4">Connect your PlayStation profile to start tracking.</p>
+
+                <div class="bg-info/10 border border-info/30 rounded-lg p-3 mb-4">
+                    <div class="flex gap-2 items-start">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="16" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                        </svg>
+                        <div class="text-sm text-base-content/70">
+                            <p class="font-semibold mb-1">Before you begin</p>
+                            <p>Make sure your PSN privacy setting for <span class="font-semibold text-base-content">"Gaming History"</span> is set to <span class="font-semibold text-success">"Anyone"</span>. We need this to sync your trophies.</p>
                         </div>
-                        <li><span class="font-bold italic">Save your changes</span> on PSN.</li>
-                        <li>Come back here and click 'Verify Now' below. We'll check automatically.</li>
-                    </ul>
-                    <p class="mt-2 font-bold text-center italic mb-4">Tip: If you encounter issues, ensure your PSN profile is public or check for typos.</p>
+                    </div>
+                </div>
+
                 <form method="post" class="space-y-4">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="submit_username">
+                    <div class="form-control">
+                        <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_psn_username">PSN Username</label>
+                        <input id="id_psn_username"
+                               type="text"
+                               name="psn_username"
+                               class="input input-bordered input-sm md:input-md w-full"
+                               placeholder="Your PSN Online ID"
+                               maxlength="16"
+                               autocomplete="off"
+                               required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Continue</button>
+                </form>
+
+                {% elif step == 2 %}
+                {# ── Step 2: Verification Instructions ── #}
+                <h2 class="text-xl md:text-2xl font-bold mb-1">Verify Your Account</h2>
+                <p class="text-sm text-base-content/60 mb-4">Prove this PSN account is yours by adding a code to your profile.</p>
+
+                <ol class="space-y-3 mb-4">
+                    <li class="flex gap-3 items-start">
+                        <span class="w-6 h-6 rounded-full bg-primary text-primary-content flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                        <span class="text-sm text-base-content/80">Open your PSN profile on the <span class="font-semibold">PlayStation app</span> or website.</span>
+                    </li>
+                    <li class="flex gap-3 items-start">
+                        <span class="w-6 h-6 rounded-full bg-primary text-primary-content flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                        <span class="text-sm text-base-content/80">Edit your <span class="font-semibold">"About Me"</span> section and paste this code:</span>
+                    </li>
+                </ol>
+
+                <div class="bg-base-300/50 border-2 border-base-300 rounded-lg p-4 mb-4">
+                    <div class="flex items-center justify-center gap-3">
+                        <code id="verification-code" class="text-2xl md:text-3xl font-mono font-bold text-primary tracking-wider select-all">{{ verification_code }}</code>
+                        <button type="button"
+                                id="copy-btn"
+                                class="btn btn-ghost btn-sm btn-square text-base-content/50 hover:text-primary"
+                                aria-label="Copy verification code"
+                                data-copy-target="verification-code">
+                            <svg id="copy-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <svg id="check-icon" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 hidden text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <ol class="space-y-3 mb-4" start="3">
+                    <li class="flex gap-3 items-start">
+                        <span class="w-6 h-6 rounded-full bg-primary text-primary-content flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
+                        <span class="text-sm text-base-content/80"><span class="font-semibold">Save your changes</span> on PSN.</span>
+                    </li>
+                    <li class="flex gap-3 items-start">
+                        <span class="w-6 h-6 rounded-full bg-primary text-primary-content flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">4</span>
+                        <span class="text-sm text-base-content/80">Come back here and click <span class="font-semibold">"Verify Now"</span> below.</span>
+                    </li>
+                </ol>
+
+                <div class="bg-info/10 border border-info/30 rounded-lg p-3 mb-4">
+                    <p class="text-xs text-base-content/60"><span class="font-semibold">Tip:</span> Make sure your PSN profile is public and double-check for typos in the code.</p>
+                </div>
+
+                <form method="post" class="space-y-2">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="verify">
                     <input type="hidden" name="psn_username" value="{{ form.psn_username.value }}">
-                    <button type="submit" class="btn btn-primary w-full">Verify Now</button>
+                    <button type="submit" class="btn btn-primary btn-sm md:btn-md w-full">Verify Now</button>
                 </form>
-                <a href="{% url 'link_psn' %}" class="btn btn-ghost w-full mt-2">Start Over</a>
-            {% elif step == 3 %}
-                <div data-profile-id="{{ profile.id }}"
+                <a href="{% url 'link_psn' %}" class="btn btn-ghost btn-sm md:btn-md w-full mt-1 text-base-content/50">Start Over</a>
+
+                {% elif step == 3 %}
+                {# ── Step 3: Polling ── #}
+                <div id="poll-container"
+                     data-profile-id="{{ profile.id }}"
                      data-start-time="{{ start_time }}"
                      data-status-url="{% url 'profile_verify' %}"
                      data-link-psn-url="{% url 'link_psn' %}"
-                     data-profile-detail-url="{% url 'profile_detail' profile.psn_username %}">
-                    <div id="progress-container" class="mt-4">
-                        <progress id="poll-progress" class="progress progress-primary w-full" value="0" max="30" aria-label="Verification progress"></progress>
-                        <p class="text-center mt-2" role="status" aria-live="polite">Checking PSN... (up to 30 seconds)</p>
+                     data-profile-detail-url="{% url 'home' %}">
+
+                    <h2 class="text-xl md:text-2xl font-bold mb-1 text-center">Verifying</h2>
+                    <p id="poll-status" class="text-sm text-base-content/60 mb-4 text-center">Checking your PSN profile<span id="poll-dots" class="inline-block w-5 text-left"></span></p>
+
+                    <progress id="poll-progress" class="progress progress-primary w-full mb-2" value="0" max="30" aria-label="Verification progress"></progress>
+                    <p id="poll-elapsed" class="text-xs text-base-content/40 text-center mb-4">0 / 30s</p>
+
+                    <div id="poll-timeout" class="hidden text-center space-y-3">
+                        <p class="text-sm text-base-content/60">Verification timed out. Your PSN profile may still be syncing.</p>
+                        <a href="{% url 'link_psn' %}" class="btn btn-primary btn-sm md:btn-md w-full">Try Again</a>
                     </div>
                 </div>
-            {% endif %}
+
+                {% endif %}
+            </div>
         </div>
     </div>
-</div>
+</main>
 {% endblock %}
+
 {% block js_scripts %}
-    <script src="{% static 'js/link-psn.js' %}"></script>
+<script src="{% static 'js/link-psn.js' %}"></script>
 {% endblock %}
