@@ -13,7 +13,10 @@ from ..models import (
 )
 from ..forms import GameSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
-from .browse_helpers import get_badge_picker_context
+from .browse_helpers import (
+    get_badge_picker_context, annotate_ascii_name, apply_game_browse_filters,
+    apply_game_browse_sort,
+)
 
 logger = logging.getLogger("psn_api")
 
@@ -88,166 +91,19 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
     def get_queryset(self):
         qs = Game.objects.filter(self.get_tag_filter()).distinct()
-
         form = self.get_filter_form()
-        order = ['is_ascii_name', Lower('title_name')]
-
-        # Base annotations
-        qs = qs.annotate(
-            is_ascii_name=Case(
-                When(title_name__regex=r'^[A-Za-z0-9]', then=Value(0)),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-        )
 
         if form.is_valid():
-            query = form.cleaned_data.get('query')
-            platforms = form.cleaned_data.get('platform')
-            regions = form.cleaned_data.get('regions')
-            letter = form.cleaned_data.get('letter')
-            sort_val = form.cleaned_data.get('sort')
+            sort_val = form.cleaned_data.get('sort', '')
+            qs, annotations = apply_game_browse_filters(qs, form, sort_val)
+            qs, order = apply_game_browse_sort(qs, sort_val, annotations)
+        else:
+            qs = annotate_ascii_name(qs)
+            order = ['is_ascii_name', Lower('title_name')]
 
-            if query:
-                from trophies.util_modules.roman_numerals import expand_numeral_query
-                query_variants = expand_numeral_query(query)
-                q_filter = Q()
-                for variant in query_variants:
-                    q_filter |= Q(title_name__icontains=variant)
-                qs = qs.filter(q_filter)
-            if platforms:
-                qs = qs.for_platform(platforms)
-            if regions:
-                qs = qs.for_region(regions)
-            if letter:
-                if letter == '0-9':
-                    qs = qs.filter(title_name__regex=r'^[0-9]')
-                else:
-                    qs = qs.filter(title_name__istartswith=letter)
-
-            # Quick filters
-            if form.cleaned_data.get('show_only_platinum'):
-                qs = qs.filter(trophies__trophy_type='platinum').distinct()
-            if form.cleaned_data.get('filter_shovelware'):
-                qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
-            badge_series = form.cleaned_data.get('badge_series')
-            if badge_series:
-                qs = qs.filter(
-                    concept__stages__series_slug=badge_series,
-                    concept__stages__series_slug__in=Badge.objects.filter(
-                        is_live=True,
-                    ).values_list('series_slug', flat=True),
-                ).distinct()
-            elif form.cleaned_data.get('in_badge'):
-                live_slugs = Badge.objects.filter(is_live=True).values_list('series_slug', flat=True)
-                qs = qs.filter(concept__stages__series_slug__in=live_slugs).distinct()
-
-            # Community flags
-            if form.cleaned_data.get('show_delisted'):
-                qs = qs.filter(is_delisted=True)
-            if form.cleaned_data.get('show_unobtainable'):
-                qs = qs.filter(is_obtainable=False)
-            if form.cleaned_data.get('show_online'):
-                qs = qs.filter(has_online_trophies=True)
-            if form.cleaned_data.get('show_buggy'):
-                qs = qs.filter(has_buggy_trophies=True)
-
-            # Rating filters (dual-range sliders)
-            rating_min = form.cleaned_data.get('rating_min') or 0
-            rating_max = form.cleaned_data.get('rating_max') or 5
-            diff_min = form.cleaned_data.get('difficulty_min') or 1
-            diff_max = form.cleaned_data.get('difficulty_max') or 10
-            fun_lo = form.cleaned_data.get('fun_min') or 1
-            fun_hi = form.cleaned_data.get('fun_max') or 10
-            has_rating_filter = rating_min > 0 or rating_max < 5 or diff_min > 1 or diff_max < 10 or fun_lo > 1 or fun_hi < 10
-            needs_rating_annotation = has_rating_filter or sort_val in ('rating', 'rating_inv', 'difficulty', 'difficulty_inv')
-
-            if needs_rating_annotation:
-                base_ratings = UserConceptRating.objects.filter(
-                    concept_id=OuterRef('concept_id'),
-                    concept_trophy_group__isnull=True,
-                )
-                qs = qs.annotate(
-                    _avg_rating=Subquery(
-                        base_ratings.values('concept_id').annotate(val=Avg('overall_rating')).values('val')[:1],
-                        output_field=FloatField(),
-                    ),
-                    _avg_difficulty=Subquery(
-                        base_ratings.values('concept_id').annotate(val=Avg('difficulty')).values('val')[:1],
-                        output_field=FloatField(),
-                    ),
-                    _avg_fun=Subquery(
-                        base_ratings.values('concept_id').annotate(val=Avg('fun_ranking')).values('val')[:1],
-                        output_field=FloatField(),
-                    ),
-                )
-                if rating_min > 0:
-                    qs = qs.filter(_avg_rating__gte=float(rating_min))
-                if rating_max < 5:
-                    qs = qs.filter(_avg_rating__lte=float(rating_max))
-                if diff_min > 1:
-                    qs = qs.filter(_avg_difficulty__gte=float(diff_min))
-                if diff_max < 10:
-                    qs = qs.filter(_avg_difficulty__lte=float(diff_max))
-                if fun_lo > 1:
-                    qs = qs.filter(_avg_fun__gte=float(fun_lo))
-                if fun_hi < 10:
-                    qs = qs.filter(_avg_fun__lte=float(fun_hi))
-
-            # Time-to-beat (dual-range sliders, in hours)
-            igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
-            igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
-            if igdb_lo > 0 or igdb_hi < 1000:
-                time_q = Q(concept__igdb_match__time_to_beat_completely__isnull=False)
-                if igdb_lo > 0:
-                    time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
-                if igdb_hi < 1000:
-                    time_q &= Q(concept__igdb_match__time_to_beat_completely__lte=int(igdb_hi) * 3600)
-                qs = qs.filter(time_q)
-
-            comm_lo = form.cleaned_data.get('community_time_min') or 0
-            comm_hi = form.cleaned_data.get('community_time_max') or 1000
-            if comm_lo > 0 or comm_hi < 1000:
-                avg_hours_sq = UserConceptRating.objects.filter(
-                    concept_id=OuterRef('concept_id'),
-                    concept_trophy_group__isnull=True,
-                ).values('concept_id').annotate(val=Avg('hours_to_platinum')).values('val')[:1]
-                qs = qs.annotate(_community_hours=Subquery(avg_hours_sq, output_field=FloatField()))
-                hours_q = Q(_community_hours__isnull=False)
-                if comm_lo > 0:
-                    hours_q &= Q(_community_hours__gte=float(comm_lo))
-                if comm_hi < 1000:
-                    hours_q &= Q(_community_hours__lte=float(comm_hi))
-                qs = qs.filter(hours_q)
-
-            # Engine filter
-            engine = form.cleaned_data.get('engine')
-            if engine:
-                qs = qs.filter(concept__concept_engines__engine_id=engine).distinct()
-
-            # Sort
-            if sort_val == 'played':
-                order = ['-played_count', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'played_inv':
-                order = ['played_count', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'rating' and needs_rating_annotation:
-                qs = qs.filter(_avg_rating__isnull=False)
-                order = ['-_avg_rating', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'rating_inv' and needs_rating_annotation:
-                qs = qs.filter(_avg_rating__isnull=False)
-                order = ['_avg_rating', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'difficulty' and needs_rating_annotation:
-                qs = qs.filter(_avg_difficulty__isnull=False)
-                order = ['-_avg_difficulty', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'difficulty_inv' and needs_rating_annotation:
-                qs = qs.filter(_avg_difficulty__isnull=False)
-                order = ['_avg_difficulty', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'newest':
-                order = ['-created_at', 'is_ascii_name', Lower('title_name')]
-            elif sort_val == 'oldest':
-                order = ['created_at', 'is_ascii_name', Lower('title_name')]
-
-        qs = qs.prefetch_related(
+        qs = qs.select_related(
+            'concept', 'concept__igdb_match',
+        ).prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
         )
         return qs.order_by(*order)
