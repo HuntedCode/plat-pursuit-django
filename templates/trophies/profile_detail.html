@@ -147,6 +147,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const currentTab = new URLSearchParams(window.location.search).get('tab') || 'games';

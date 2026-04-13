@@ -688,7 +688,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
 
         sort_val = form.cleaned_data.get('sort')
         badge_type_filter = form.cleaned_data.get('badge_type')
-        tier_filter = form.cleaned_data.get('tier')
+        tier_filter_val = form.cleaned_data.get('tier')
 
         # Get earned badge series with max tier per series
         earned_badges_qs = UserBadge.objects.filter(profile=profile).values(
@@ -768,8 +768,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 g for g in grouped_earned
                 if g['highest_badge'].badge_type in badge_type_filter
             ]
-        if tier_filter:
-            tier_ints = [int(t) for t in tier_filter]
+        if tier_filter_val:
+            tier_ints = [int(t) for t in tier_filter_val]
             grouped_earned = [
                 g for g in grouped_earned
                 if g['max_tier'] in tier_ints
