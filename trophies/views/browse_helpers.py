@@ -69,6 +69,45 @@ def annotate_ascii_name(qs):
 _ALPHA_SECONDARY = ['is_ascii_name', Lower('title_name')]
 
 
+def annotate_community_ratings(qs, concept_ref_path='concept_id'):
+    """Add _avg_rating, _avg_difficulty, _avg_fun annotations to any queryset.
+
+    Args:
+        qs: Any Django queryset whose model has a path to ``Concept``.
+        concept_ref_path: The OuterRef path to the concept_id field.
+            - ``'concept_id'`` for Game querysets
+            - ``'game__concept_id'`` for ProfileGame querysets
+            - ``'trophy__game__concept_id'`` for EarnedTrophy querysets
+
+    Returns:
+        The queryset with the three rating annotations added.
+    """
+    base_ratings = UserConceptRating.objects.filter(
+        concept_id=OuterRef(concept_ref_path),
+        concept_trophy_group__isnull=True,
+    )
+    return qs.annotate(
+        _avg_rating=Subquery(
+            base_ratings.values('concept_id').annotate(
+                val=Avg('overall_rating'),
+            ).values('val')[:1],
+            output_field=FloatField(),
+        ),
+        _avg_difficulty=Subquery(
+            base_ratings.values('concept_id').annotate(
+                val=Avg('difficulty'),
+            ).values('val')[:1],
+            output_field=FloatField(),
+        ),
+        _avg_fun=Subquery(
+            base_ratings.values('concept_id').annotate(
+                val=Avg('fun_ranking'),
+            ).values('val')[:1],
+            output_field=FloatField(),
+        ),
+    )
+
+
 def apply_game_browse_filters(qs, form, sort_val=''):
     """Apply all GameSearchForm filters to a Game queryset.
 
@@ -159,30 +198,7 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     )
 
     if needs_rating_annotation:
-        base_ratings = UserConceptRating.objects.filter(
-            concept_id=OuterRef('concept_id'),
-            concept_trophy_group__isnull=True,
-        )
-        qs = qs.annotate(
-            _avg_rating=Subquery(
-                base_ratings.values('concept_id').annotate(
-                    val=Avg('overall_rating'),
-                ).values('val')[:1],
-                output_field=FloatField(),
-            ),
-            _avg_difficulty=Subquery(
-                base_ratings.values('concept_id').annotate(
-                    val=Avg('difficulty'),
-                ).values('val')[:1],
-                output_field=FloatField(),
-            ),
-            _avg_fun=Subquery(
-                base_ratings.values('concept_id').annotate(
-                    val=Avg('fun_ranking'),
-                ).values('val')[:1],
-                output_field=FloatField(),
-            ),
-        )
+        qs = annotate_community_ratings(qs, concept_ref_path='concept_id')
         annotations_applied.add('ratings')
 
         if rating_min > 0:
