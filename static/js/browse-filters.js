@@ -564,15 +564,37 @@
     });
   }
 
+  // ── "I'm Feeling Lucky" button (random game redirect) ──────────────
+  function bindLuckyButton() {
+    document.querySelectorAll('[data-lucky-btn]').forEach(function (btn) {
+      if (btn._luckyBound) return;
+      btn._luckyBound = true;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var form = document.querySelector('[data-browse-form]');
+        if (!form) return;
+        var formData = new FormData(form);
+        // Strip fields irrelevant to filtering
+        formData.delete('page');
+        formData.delete('sort');
+        formData.delete('view');
+        var params = new URLSearchParams(formData).toString();
+        window.location.href = '/games/lucky/' + (params ? '?' + params : '');
+      });
+    });
+  }
+
   // ── Initialize on DOMContentLoaded and after HTMX history restore ───
   document.addEventListener('DOMContentLoaded', function () {
     init();
     bindPageJumpForms();
     bindDefaultsButtons();
+    bindLuckyButton();
   });
 
   document.addEventListener('htmx:historyRestore', function () {
     init();
     bindPageJumpForms();
+    bindLuckyButton();
   });
 })();
