@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, date
 from django.core.cache import cache
 from django.contrib import messages
 from django.db.models import Q, F, Prefetch, Subquery, OuterRef, Value, IntegerField, FloatField, BooleanField, Avg, Case, When, Count
-from django.db.models.functions import Coalesce, Lower
+from django.db.models.functions import Coalesce, Lower, Cast
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse_lazy, reverse
@@ -23,8 +23,8 @@ from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGro
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
-    get_badge_picker_context, annotate_ascii_name, apply_game_browse_filters,
-    apply_game_browse_sort,
+    get_badge_picker_context, annotate_ascii_name, annotate_community_ratings,
+    apply_game_browse_filters, apply_game_browse_sort,
 )
 
 logger = logging.getLogger("psn_api")
@@ -1173,12 +1173,20 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
             return TrophyGroup
         return Game
 
+    POOL_SIZE = 200  # Cap to the N most recent entries per category
+
     def get_queryset(self):
         category = self.get_category()
+        sort_val = self.request.GET.get('sort', 'recent')
 
         if category == 'base_games':
-            return (
-                Game.objects
+            # Cap to the most recent POOL_SIZE base games
+            recent_ids = list(
+                Game.objects.order_by('-created_at')
+                .values_list('id', flat=True)[:self.POOL_SIZE]
+            )
+            qs = (
+                Game.objects.filter(id__in=recent_ids)
                 .select_related('concept', 'concept__igdb_match')
                 .prefetch_related(
                     Prefetch(
@@ -1187,16 +1195,78 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
                         to_attr='platinum_trophy',
                     )
                 )
-                .order_by('-created_at')
             )
 
+            # Filters
+            platforms = self.request.GET.getlist('platform')
+            if platforms:
+                platform_q = Q()
+                for plat in platforms:
+                    platform_q |= Q(title_platform__contains=plat)
+                qs = qs.filter(platform_q)
+
+            has_plat = self.request.GET.get('has_platinum')
+            if has_plat:
+                qs = qs.filter(trophies__trophy_type='platinum').distinct()
+
+            # Sort within the capped pool
+            if sort_val == 'alpha':
+                qs = annotate_ascii_name(qs)
+                return qs.order_by('is_ascii_name', Lower('title_name'))
+            elif sort_val == 'played':
+                return qs.order_by('-played_count', '-created_at')
+            elif sort_val == 'trophy_count':
+                qs = qs.annotate(
+                    _total_trophies=(
+                        Coalesce(Cast(F('defined_trophies__bronze'), IntegerField()), Value(0))
+                        + Coalesce(Cast(F('defined_trophies__silver'), IntegerField()), Value(0))
+                        + Coalesce(Cast(F('defined_trophies__gold'), IntegerField()), Value(0))
+                        + Coalesce(Cast(F('defined_trophies__platinum'), IntegerField()), Value(0))
+                    ),
+                )
+                return qs.order_by('-_total_trophies', '-created_at')
+            elif sort_val == 'rating':
+                qs = annotate_community_ratings(qs, 'concept_id')
+                return qs.order_by(F('_avg_rating').desc(nulls_last=True), '-created_at')
+            else:  # 'recent' (default)
+                return qs.order_by('-created_at')
+
         if category == 'dlc':
-            return (
-                TrophyGroup.objects
+            # Cap to the most recent POOL_SIZE DLC packs
+            recent_ids = list(
+                TrophyGroup.objects.exclude(trophy_group_id='default')
+                .order_by('-created_at')
+                .values_list('id', flat=True)[:self.POOL_SIZE]
+            )
+            qs = (
+                TrophyGroup.objects.filter(id__in=recent_ids)
                 .exclude(trophy_group_id='default')
                 .select_related('game', 'game__concept', 'game__concept__igdb_match')
-                .order_by('-created_at')
             )
+
+            # Filters
+            platforms = self.request.GET.getlist('platform')
+            if platforms:
+                platform_q = Q()
+                for plat in platforms:
+                    platform_q |= Q(game__title_platform__contains=plat)
+                qs = qs.filter(platform_q)
+
+            # Sort within the capped pool
+            if sort_val == 'alpha':
+                return qs.order_by(Lower('game__title_name'), 'trophy_group_name')
+            elif sort_val == 'trophy_count':
+                qs = qs.annotate(
+                    _dlc_trophies=(
+                        Coalesce(Cast(F('defined_trophies__bronze'), IntegerField()), Value(0))
+                        + Coalesce(Cast(F('defined_trophies__silver'), IntegerField()), Value(0))
+                        + Coalesce(Cast(F('defined_trophies__gold'), IntegerField()), Value(0))
+                        + Coalesce(Cast(F('defined_trophies__platinum'), IntegerField()), Value(0))
+                    ),
+                )
+                return qs.order_by('-_dlc_trophies', '-created_at')
+            else:  # 'recent' (default)
+                return qs.order_by('-created_at')
 
         return Game.objects.none()
 
@@ -1211,6 +1281,10 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
         category = self.get_category()
         context['active_category'] = category
         context['categories'] = self.CATEGORIES
+        context['current_sort'] = self.request.GET.get('sort', 'recent')
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['has_platinum_checked'] = bool(self.request.GET.get('has_platinum'))
+        context['platform_choices'] = ALL_PLATFORMS
 
         # 30-day counts for category cards
         thirty_days_ago = timezone.now() - timedelta(days=30)
