@@ -175,10 +175,32 @@
             scrollKey: 'profileScrollPos'
         });
 
-        // Initialize dual-range sliders on profile tab forms (visual only, no HTMX)
+        // Initialize dual-range sliders + auto-submit on profile tab forms
         const tabForm = document.getElementById(`${currentTab}-form`);
-        if (tabForm && PlatPursuit.initDualRangeSliders) {
-            PlatPursuit.initDualRangeSliders(tabForm);
+        if (tabForm) {
+            if (PlatPursuit.initDualRangeSliders) {
+                PlatPursuit.initDualRangeSliders(tabForm);
+            }
+
+            // Auto-submit on change for selects and checkboxes (mirrors browse page UX)
+            let sliderTimer = null;
+            tabForm.addEventListener('change', function(e) {
+                const el = e.target;
+                const isSlider = el.closest('[data-dual-range]');
+                if (isSlider) {
+                    // Debounce slider commits to avoid rapid reloads
+                    clearTimeout(sliderTimer);
+                    sliderTimer = setTimeout(function() { tabForm.submit(); }, 400);
+                    return;
+                }
+                const isAutoSubmit =
+                    el.type === 'checkbox' ||
+                    el.type === 'radio' ||
+                    el.tagName === 'SELECT';
+                if (isAutoSubmit) {
+                    tabForm.submit();
+                }
+            });
         }
     });
     </script>

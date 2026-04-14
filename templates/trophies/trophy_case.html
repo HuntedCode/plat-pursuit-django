@@ -108,6 +108,18 @@
 {% block js_scripts %}
     <script src="{% static 'js/submit_shimmer.js' %}"></script>
     <script src="{% static 'js/list_page_filters.js' %}"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var form = document.getElementById('filter-form');
+        if (!form) return;
+        form.addEventListener('change', function(e) {
+            var el = e.target;
+            if (el.type === 'checkbox' || el.type === 'radio' || el.tagName === 'SELECT') {
+                form.submit();
+            }
+        });
+    });
+    </script>
     {% if request.user == profile.user %}
     <script>
         const toggleSelectionUrl = "{{ toggle_selection_url|escapejs }}";
