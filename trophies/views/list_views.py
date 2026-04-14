@@ -8,8 +8,11 @@ import logging
 from core.services.tracking import track_page_view
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Prefetch
-from django.db.models.functions import Lower
+from django.db.models import (
+    Q, F, Prefetch, Subquery, OuterRef, Value, IntegerField, FloatField,
+    Avg, OrderBy,
+)
+from django.db.models.functions import Lower, Coalesce, Cast
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
@@ -17,9 +20,10 @@ from django.views.generic import ListView, DetailView, TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
 from ..models import (
-    GameList, GameListItem, GameListLike,
+    GameList, GameListItem, GameListLike, ProfileGame,
     GAME_LIST_FREE_MAX_LISTS, GAME_LIST_FREE_MAX_ITEMS,
 )
+from .browse_helpers import annotate_community_ratings
 
 logger = logging.getLogger("psn_api")
 
@@ -59,10 +63,24 @@ class BrowseListsView(ProfileHotbarMixin, ListView):
                 Q(profile__psn_username__icontains=query)
             )
 
+        # Min/max game count filter
+        min_games = self.request.GET.get('min_games', '')
+        max_games = self.request.GET.get('max_games', '')
+        if min_games and min_games.isdigit():
+            queryset = queryset.filter(game_count__gte=int(min_games))
+        if max_games and max_games.isdigit():
+            queryset = queryset.filter(game_count__lte=int(max_games))
+
         # Sort options
         sort = self.request.GET.get('sort', 'popular')
         if sort == 'recent':
             queryset = queryset.order_by('-created_at')
+        elif sort == 'most_games':
+            queryset = queryset.order_by('-game_count', '-like_count')
+        elif sort == 'updated':
+            queryset = queryset.order_by('-updated_at')
+        elif sort == 'alpha':
+            queryset = queryset.order_by(Lower('name'))
         else:
             queryset = queryset.order_by('-like_count', '-created_at')
 
@@ -149,6 +167,62 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
             items = items.order_by('-added_at')
         elif sort == 'platform':
             items = items.order_by('game__title_platform', 'game__title_name')
+        elif sort == 'rating':
+            items = annotate_community_ratings(items, 'game__concept_id')
+            items = items.filter(_avg_rating__isnull=False)
+            items = items.order_by('-_avg_rating', 'game__title_name')
+        elif sort == 'rating_inv':
+            items = annotate_community_ratings(items, 'game__concept_id')
+            items = items.filter(_avg_rating__isnull=False)
+            items = items.order_by('_avg_rating', 'game__title_name')
+        elif sort == 'played':
+            items = items.order_by('-game__played_count', 'game__title_name')
+        elif sort == 'played_inv':
+            items = items.order_by('game__played_count', 'game__title_name')
+        elif sort == 'time_to_beat':
+            items = items.annotate(
+                _time_to_beat=F('game__concept__igdb_match__time_to_beat_completely'),
+            )
+            items = items.order_by(OrderBy(F('_time_to_beat'), nulls_last=True))
+        elif sort == 'time_to_beat_inv':
+            items = items.annotate(
+                _time_to_beat=F('game__concept__igdb_match__time_to_beat_completely'),
+            )
+            items = items.order_by(OrderBy(F('_time_to_beat'), descending=True, nulls_last=True))
+        elif sort == 'completion' and profile:
+            items = items.annotate(
+                _completion=Coalesce(
+                    Subquery(
+                        ProfileGame.objects.filter(
+                            profile=profile, game_id=OuterRef('game_id'),
+                        ).values('progress')[:1],
+                        output_field=IntegerField(),
+                    ),
+                    Value(0),
+                    output_field=IntegerField(),
+                ),
+            )
+            items = items.order_by('-_completion', 'game__title_name')
+        elif sort == 'trophy_count':
+            items = items.annotate(
+                _trophy_count=(
+                    Coalesce(Cast(F('game__defined_trophies__bronze'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__silver'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__gold'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__platinum'), IntegerField()), Value(0))
+                ),
+            )
+            items = items.order_by('-_trophy_count', 'game__title_name')
+        elif sort == 'trophy_count_inv':
+            items = items.annotate(
+                _trophy_count=(
+                    Coalesce(Cast(F('game__defined_trophies__bronze'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__silver'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__gold'), IntegerField()), Value(0))
+                    + Coalesce(Cast(F('game__defined_trophies__platinum'), IntegerField()), Value(0))
+                ),
+            )
+            items = items.order_by('_trophy_count', 'game__title_name')
         # 'custom' keeps the default position ordering
 
         context['items'] = items
@@ -300,8 +374,15 @@ class MyListsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         profile = self.request.user.profile
 
         lists = GameList.objects.filter(
-            profile=profile, is_deleted=False
+            profile=profile, is_deleted=False,
         )
+
+        # Visibility filter
+        visibility = self.request.GET.get('visibility', '')
+        if visibility == 'public':
+            lists = lists.filter(is_public=True)
+        elif visibility == 'private':
+            lists = lists.filter(is_public=False)
 
         # Sort options
         sort = self.request.GET.get('sort', 'updated')
@@ -311,6 +392,10 @@ class MyListsView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             lists = lists.order_by(Lower('name'))
         elif sort == 'most_games':
             lists = lists.order_by('-game_count', '-updated_at')
+        elif sort == 'liked':
+            lists = lists.order_by('-like_count', '-updated_at')
+        elif sort == 'least_games':
+            lists = lists.order_by('game_count', '-updated_at')
         else:
             sort = 'updated'
             lists = lists.order_by('-updated_at')

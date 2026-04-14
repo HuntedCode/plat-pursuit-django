@@ -117,6 +117,13 @@
                     <a href="?sort=alpha" class="btn btn-xs {% if sort == 'alpha' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">A-Z</a>
                     <a href="?sort=added" class="btn btn-xs {% if sort == 'added' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Recent</a>
                     <a href="?sort=platform" class="btn btn-xs {% if sort == 'platform' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Platform</a>
+                    <a href="?sort=rating" class="btn btn-xs {% if sort == 'rating' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Top Rated</a>
+                    <a href="?sort=played" class="btn btn-xs {% if sort == 'played' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Most Played</a>
+                    <a href="?sort=time_to_beat" class="btn btn-xs {% if sort == 'time_to_beat' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Shortest</a>
+                    <a href="?sort=trophy_count" class="btn btn-xs {% if sort == 'trophy_count' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">Most Trophies</a>
+                    {% if user.is_authenticated %}
+                    <a href="?sort=completion" class="btn btn-xs {% if sort == 'completion' %}btn-primary{% else %}btn-ghost border border-base-300{% endif %}">My Progress</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
