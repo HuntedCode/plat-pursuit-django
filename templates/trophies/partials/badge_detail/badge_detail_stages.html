@@ -26,6 +26,12 @@
                 {% else %}
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 {% endif %}
+                {% if data.stage_progress %}
+                <span class="text-[0.6rem] font-bold shrink-0
+                             {% if data.stage_progress.completed == data.stage_progress.total %}text-success
+                             {% elif data.stage_progress.completed > 0 %}text-warning
+                             {% else %}text-base-content/30{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
+                {% endif %}
             {% endif %}
         </div>
     </div>

@@ -643,9 +643,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     for gid in stage_game_ids
                 )
                 has_any_plat = stage_plats > 0
-                if has_any_100:
+                # Tier-aware completion: plat tiers (1/3/megamix) require plat,
+                # 100% tiers (2/4) require full completion
+                stage_req_met = has_any_plat if is_plat_tier else has_any_100
+                if stage_req_met:
                     data['stage_completion_state'] = 'complete'
-                elif has_any_plat:
+                elif stage_played > 0:
                     data['stage_completion_state'] = 'partial'
                 else:
                     data['stage_completion_state'] = 'incomplete'
@@ -821,6 +824,14 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         else:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
             context['recent_concept_name'] = ''
+
+        # Header background: single hero image for blurred backdrop
+        header_bg_image = ''
+        if badge.most_recent_concept:
+            header_bg_image = badge.most_recent_concept.cover_url or badge.most_recent_concept.concept_icon_url or ''
+        if not header_bg_image and structured_data:
+            header_bg_image = structured_data[0]['stage'].stage_icon or ''
+        context['header_bg_image'] = header_bg_image
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},

@@ -8,23 +8,16 @@
 {% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Frosted Glass Mosaic Header #}
+    {# Header with blurred hero background + tier accent #}
     <div class="relative rounded-xl overflow-hidden mb-3">
-        <div class="absolute inset-0 grid grid-cols-4 md:grid-cols-8 lg:grid-cols-10" style="grid-auto-rows: minmax(0, 50px);">
-            {% for repeat in "12345" %}
-            {% for data in stage_data %}
-            <div class="overflow-hidden">
-                <img src="{{ data.stage.stage_icon }}" class="w-full h-full object-cover" loading="lazy" />
-            </div>
-            {% endfor %}
-            {% for data in stage_data %}{% for g in data.games %}
-            <div class="overflow-hidden">
-                <img src="{{ g.game.title_image|default:g.game.concept.cover_url|default:g.game.title_icon_url }}" class="w-full h-full object-cover" loading="lazy" />
-            </div>
-            {% endfor %}{% endfor %}
-            {% endfor %}
+        {% if header_bg_image %}
+        <div class="absolute inset-0 overflow-hidden">
+            <img src="{{ header_bg_image }}" alt="" class="w-full h-full object-cover scale-125 opacity-40" />
         </div>
-        <div class="absolute inset-0 bg-base-200/60 backdrop-blur-sm"></div>
+        {% endif %}
+        <div class="absolute inset-0 bg-base-200/65"></div>
+        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-current opacity-[0.1]"
+             style="color: var(--color-{{ badge.tier|badge_color }});"></div>
         <div class="relative z-10 p-3 md:p-4">
             {% include 'trophies/partials/badge_detail/badge_detail_header.html' %}
         </div>
@@ -123,22 +116,18 @@
                                 {# Obtainable games: visual grid cards #}
                                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-1">
                                     {% for games in data.obtainable_games %}
-                                    {% with games.game as game %}
-                                    {% with games.profile_game as pgame %}
-                                    {% with games.community_ratings as ratings %}
+                                    {% with game=games.game pgame=games.profile_game ratings=games.community_ratings has_guide=games.has_guide %}
                                         {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                                    {% endwith %}{% endwith %}{% endwith %}
+                                    {% endwith %}
                                     {% endfor %}
                                 </div>
                             {% else %}
                                 {# All games are unobtainable/delisted: show them in the grid #}
                                 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 p-1">
                                     {% for games in data.games %}
-                                    {% with games.game as game %}
-                                    {% with games.profile_game as pgame %}
-                                    {% with games.community_ratings as ratings %}
+                                    {% with game=games.game pgame=games.profile_game ratings=games.community_ratings has_guide=games.has_guide %}
                                         {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                                    {% endwith %}{% endwith %}{% endwith %}
+                                    {% endwith %}
                                     {% endfor %}
                                 </div>
                             {% endif %}
@@ -171,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {# Stage collapse/expand #}
 (function() {
-    const STORAGE_KEY = 'badge_stage_collapse_{{ badge.series_slug }}';
+    const STORAGE_KEY = 'badge_stage_collapse_{{ badge.series_slug }}_{{ selected_tier }}';
 
     function loadState() {
         try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
