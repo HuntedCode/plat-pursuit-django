@@ -71,6 +71,20 @@
                         </label>
                     {% endfor %}
                 </div>
+
+                {# Platform filter chips #}
+                <div class="flex flex-wrap gap-1.5 mt-1.5">
+                    <span class="text-xs text-base-content/40 self-center mr-0.5">Platform:</span>
+                    {% for value, display in form.platform.field.choices %}
+                        <label class="cursor-pointer">
+                            <input type="checkbox" name="platform" value="{{ value }}"
+                                   class="sr-only peer" {% if value in selected_platforms %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                {{ display }}
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
             </div>
         </div>
         <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />

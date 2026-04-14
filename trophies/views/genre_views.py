@@ -39,31 +39,46 @@ class GenreThemeListView(ProfileHotbarMixin, TemplateView):
         context['active_tab'] = active_tab
 
         if active_tab == 'themes':
+            games_path = 'theme_concepts__concept__games'
             items = Theme.objects.annotate(
-                game_count=Count('theme_concepts__concept__games', distinct=True),
+                game_count=Count(games_path, distinct=True),
             ).filter(game_count__gt=0)
-            if query:
-                items = items.filter(name__icontains=query)
-            if sort_val == 'games':
-                items = items.order_by('-game_count', 'name')
-            else:
-                items = items.order_by('name')
-            context['items'] = items
             context['item_type'] = 'theme'
             context['detail_url_name'] = 'theme_detail'
         else:
+            games_path = 'genre_concepts__concept__games'
             items = Genre.objects.annotate(
-                game_count=Count('genre_concepts__concept__games', distinct=True),
+                game_count=Count(games_path, distinct=True),
             ).filter(game_count__gt=0)
-            if query:
-                items = items.filter(name__icontains=query)
-            if sort_val == 'games':
-                items = items.order_by('-game_count', 'name')
-            else:
-                items = items.order_by('name')
-            context['items'] = items
             context['item_type'] = 'genre'
             context['detail_url_name'] = 'genre_detail'
+
+        if query:
+            items = items.filter(name__icontains=query)
+
+        # Sort
+        if sort_val == 'games':
+            items = items.order_by('-game_count', 'name')
+        elif sort_val == 'avg_rating':
+            items = items.annotate(
+                _avg_rating=Avg(games_path + '__concept__ratings__overall_rating'),
+            ).order_by(F('_avg_rating').desc(nulls_last=True), 'name')
+        elif sort_val == 'players':
+            items = items.annotate(
+                _total_players=Count(games_path + '__played_by', distinct=True),
+            ).order_by('-_total_players', 'name')
+        elif sort_val == 'plats_earned':
+            items = items.annotate(
+                _total_plats=Count(
+                    games_path + '__played_by',
+                    filter=Q(**{games_path + '__played_by__has_plat': True}),
+                    distinct=True,
+                ),
+            ).order_by('-_total_plats', 'name')
+        else:
+            items = items.order_by('name')
+
+        context['items'] = items
 
         context['seo_description'] = (
             "Browse PlayStation games by genre and theme. "

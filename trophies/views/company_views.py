@@ -1,8 +1,8 @@
 import logging
 
 from core.services.tracking import track_page_view
-from django.db.models import Q, Count, Avg, Sum, Prefetch, Value, IntegerField, Case, When
-from django.db.models.functions import Lower
+from django.db.models import Q, F, Count, Avg, Sum, Prefetch, Value, IntegerField, FloatField, Case, When, Subquery, OuterRef
+from django.db.models.functions import Lower, Coalesce
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
 
@@ -51,10 +51,55 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             if country:
                 qs = qs.filter(country__iexact=country)
 
+            # Platform filter (companies with games on selected platforms)
+            platforms = form.cleaned_data.get('platform')
+            if platforms:
+                platform_q = Q()
+                for plat in platforms:
+                    platform_q |= Q(company_concepts__concept__games__title_platform__contains=plat)
+                qs = qs.filter(platform_q).distinct()
+
+            # Genre filter
+            genres = form.cleaned_data.get('genres')
+            if genres:
+                qs = qs.filter(
+                    company_concepts__concept__concept_genres__genre_id__in=genres,
+                ).distinct()
+
+            # Badge series filter
+            badge_series = form.cleaned_data.get('badge_series')
+            if badge_series:
+                from ..models import Badge
+                qs = qs.filter(
+                    company_concepts__concept__stages__series_slug=badge_series,
+                    company_concepts__concept__stages__series_slug__in=Badge.objects.filter(
+                        is_live=True,
+                    ).values_list('series_slug', flat=True),
+                ).distinct()
+
             if sort_val == 'games':
                 order = ['-game_count', Lower('name')]
             elif sort_val == 'games_inv':
                 order = ['game_count', Lower('name')]
+            elif sort_val == 'avg_rating':
+                qs = qs.annotate(
+                    _avg_rating=Avg('company_concepts__concept__ratings__overall_rating'),
+                )
+                order = [F('_avg_rating').desc(nulls_last=True), Lower('name')]
+            elif sort_val == 'total_players':
+                qs = qs.annotate(
+                    _total_players=Sum('company_concepts__concept__games__played_count'),
+                )
+                order = [F('_total_players').desc(nulls_last=True), Lower('name')]
+            elif sort_val == 'plats_earned':
+                qs = qs.annotate(
+                    _total_plats=Count(
+                        'company_concepts__concept__games__played_by',
+                        filter=Q(company_concepts__concept__games__played_by__has_plat=True),
+                        distinct=True,
+                    ),
+                )
+                order = ['-_total_plats', Lower('name')]
 
         return qs.order_by(*order)
 
@@ -66,6 +111,8 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         ]
         context['form'] = CompanySearchForm(self.request.GET)
         context['selected_roles'] = self.request.GET.getlist('role')
+        context['selected_platforms'] = self.request.GET.getlist('platform')
+        context['selected_genres'] = self.request.GET.getlist('genres')
 
         context['seo_description'] = (
             "Browse PlayStation game developers and publishers on Platinum Pursuit. "

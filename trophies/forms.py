@@ -144,15 +144,41 @@ class CompanySearchForm(forms.Form):
         required=False, label='Roles',
     )
     country = forms.CharField(required=False, label='Country')
+    platform = forms.MultipleChoiceField(
+        choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')],
+        required=False, label='Platforms',
+    )
+    genres = forms.MultipleChoiceField(required=False, label='Genres')
+    badge_series = forms.ChoiceField(choices=[('', 'Any Badge')], required=False, label='Badge Series')
     sort = forms.ChoiceField(
         choices=[
             ('alpha', 'Alphabetical'),
             ('games', 'Most Games'),
             ('games_inv', 'Fewest Games'),
+            ('avg_rating', 'Highest Avg Rating'),
+            ('total_players', 'Most Popular'),
+            ('plats_earned', 'Most Platinums Earned'),
         ],
         required=False,
         label='Sort By',
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import Genre, Badge
+        try:
+            self.fields['genres'].choices = list(
+                Genre.objects.values_list('id', 'name').order_by('name')
+            )
+            badge_qs = Badge.objects.filter(
+                is_live=True, tier=1, series_slug__isnull=False,
+            ).exclude(series_slug='').order_by('display_series', 'name')
+            self.fields['badge_series'].choices = [('', 'Any Badge')] + [
+                (b.series_slug, b.display_series or b.name)
+                for b in badge_qs
+            ]
+        except Exception:
+            pass
 
 
 class TrophySearchForm(forms.Form):
@@ -188,9 +214,14 @@ class ProfileSearchForm(forms.Form):
             ('games', 'Most Games Played'),
             ('completes', 'Most 100% Completions'),
             ('avg_progress', 'Highest Avg. Progress'),
+            ('recently_active', 'Recently Active'),
+            ('badges_earned', 'Most Badges Earned'),
+            ('badge_xp', 'Highest Badge XP'),
+            ('rarest_avg_plat', 'Rarest Avg Platinum'),
+            ('recently_joined', 'Recently Joined'),
         ],
         required=False,
-        label='Sort By'
+        label='Sort By',
     )
 
     def __init__(self, *args, **kwargs):
@@ -415,9 +446,19 @@ class BadgeSearchForm(forms.Form):
             ('earned_inv', 'Least Earned (Tier 1)'),
             ('my_tier', 'My Progress Ascending'),
             ('my_tier_desc', 'My Progress Descending'),
+            ('stages', 'Most Stages'),
+            ('stages_inv', 'Fewest Stages'),
+            ('newest', 'Newest Added'),
+            ('oldest_added', 'Oldest Added'),
+            ('xp', 'Most XP'),
+            ('xp_inv', 'Least XP'),
+            ('closest', 'Closest to Next Tier'),
+            ('games_owned', 'Most Games Owned'),
+            ('games_owned_inv', 'Fewest Games Owned'),
+            ('recently_progressed', 'Recently Progressed'),
         ],
         required=False,
-        label='Sort By'
+        label='Sort By',
     )
     badge_type = forms.ChoiceField(
         choices=[
@@ -430,7 +471,17 @@ class BadgeSearchForm(forms.Form):
             ('megamix', 'Megamix'),
         ],
         required=False,
-        label='Badge Type'
+        label='Badge Type',
+    )
+    completion_status = forms.ChoiceField(
+        choices=[
+            ('', 'All'),
+            ('not_started', 'Not Started'),
+            ('in_progress', 'In Progress'),
+            ('completed', 'Completed'),
+        ],
+        required=False,
+        label='Status',
     )
 
 class GuideSearchForm(forms.Form):

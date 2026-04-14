@@ -1,13 +1,19 @@
 import logging
 from collections import defaultdict
+from datetime import datetime, timedelta
 
 from core.services.tracking import track_page_view
-from datetime import timedelta
 from trophies.constants import EVALUATABLE_BADGE_TYPES
+from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import (
     BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
     GOLD_STAGE_XP, PLAT_STAGE_XP,
 )
+
+
+def _badge_xp(badge):
+    """Compute total XP value for a badge tier."""
+    return badge.required_stages * get_tier_xp(badge.tier) + BADGE_TIER_XP
 
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -229,20 +235,98 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         profile = user.profile if user.is_authenticated and hasattr(user, 'profile') else None
         display_data = self._build_badge_display_data(grouped_badges, profile)
 
+        # Enrich with auth-only sort data (games owned, last progress date)
+        sort_val = self.request.GET.get('sort', 'name')
+        if profile and sort_val in ('games_owned', 'games_owned_inv', 'recently_progressed'):
+            if sort_val in ('games_owned', 'games_owned_inv'):
+                # Count how many games in each badge series the user owns
+                user_game_ids = set(
+                    ProfileGame.objects.filter(profile=profile).values_list('game_id', flat=True)
+                )
+                for d in display_data:
+                    slug = d['badge'].series_slug
+                    badge_concept_ids = set(
+                        Stage.objects.filter(series_slug=slug).values_list('concepts__id', flat=True)
+                    )
+                    badge_game_ids = set(
+                        Game.objects.filter(concept_id__in=badge_concept_ids).values_list('id', flat=True)
+                    ) if badge_concept_ids else set()
+                    d['games_owned_count'] = len(user_game_ids & badge_game_ids)
+            elif sort_val == 'recently_progressed':
+                # Last progress check date per badge
+                progress_dates = {
+                    p.badge.series_slug: p.last_checked
+                    for p in UserBadgeProgress.objects.filter(
+                        profile=profile,
+                    ).select_related('badge')
+                }
+                for d in display_data:
+                    d['last_progress_date'] = progress_dates.get(d['badge'].series_slug)
+
+        # Filter by completion status (auth-only)
+        completion_status = self.request.GET.get('completion_status', '')
+        if completion_status and profile:
+            max_tier_lookup = {}
+            for d in display_data:
+                slug = d['badge'].series_slug
+                max_possible = max(
+                    (b.tier for b in grouped_badges.get(slug, []) if b.is_live),
+                    default=0,
+                )
+                max_tier_lookup[slug] = max_possible
+
+            if completion_status == 'not_started':
+                display_data = [d for d in display_data if d['user_highest_tier'] == 0]
+            elif completion_status == 'in_progress':
+                display_data = [
+                    d for d in display_data
+                    if 0 < d['user_highest_tier'] < max_tier_lookup.get(d['badge'].series_slug, 0)
+                    or (d['user_highest_tier'] == 0 and d['progress_percentage'] > 0)
+                ]
+            elif completion_status == 'completed':
+                display_data = [
+                    d for d in display_data
+                    if d['user_highest_tier'] > 0
+                    and d['user_highest_tier'] >= max_tier_lookup.get(d['badge'].series_slug, 0)
+                ]
+
         # Sort data
         sort_val = self.request.GET.get('sort', 'name')
+        _title = lambda d: (d['badge'].effective_display_title or '').lower()
         if sort_val == 'earned':
-            display_data.sort(key=lambda d: (-d['tier1_earned_count'], (d['badge'].effective_display_title or '').lower()))
+            display_data.sort(key=lambda d: (-d['tier1_earned_count'], _title(d)))
         elif sort_val == 'earned_inv':
-            display_data.sort(key=lambda d: (d['tier1_earned_count'], (d['badge'].effective_display_title or '').lower()))
+            display_data.sort(key=lambda d: (d['tier1_earned_count'], _title(d)))
         elif sort_val == 'my_tier' and profile:
-            # Unearned (0) first, then earned ascending (1, 2, 3...)
-            display_data.sort(key=lambda d: (d['user_highest_tier'], (d['badge'].effective_display_title or '').lower()))
+            display_data.sort(key=lambda d: (d['user_highest_tier'], _title(d)))
         elif sort_val == 'my_tier_desc' and profile:
-            # Highest earned first, unearned (0) last
-            display_data.sort(key=lambda d: (-d['user_highest_tier'], (d['badge'].effective_display_title or '').lower()))
+            display_data.sort(key=lambda d: (-d['user_highest_tier'], _title(d)))
+        elif sort_val == 'stages':
+            display_data.sort(key=lambda d: (-d['badge'].required_stages, _title(d)))
+        elif sort_val == 'stages_inv':
+            display_data.sort(key=lambda d: (d['badge'].required_stages, _title(d)))
+        elif sort_val == 'newest':
+            display_data.sort(key=lambda d: d['badge'].created_at or datetime.min, reverse=True)
+        elif sort_val == 'oldest_added':
+            display_data.sort(key=lambda d: d['badge'].created_at or datetime.min)
+        elif sort_val == 'xp':
+            display_data.sort(key=lambda d: (-_badge_xp(d['badge']), _title(d)))
+        elif sort_val == 'xp_inv':
+            display_data.sort(key=lambda d: (_badge_xp(d['badge']), _title(d)))
+        elif sort_val == 'closest' and profile:
+            # Closest to completing next tier: highest progress_percentage first, exclude completed
+            display_data.sort(key=lambda d: (-d['progress_percentage'], _title(d)))
+        elif sort_val == 'games_owned' and profile:
+            display_data.sort(key=lambda d: (-d.get('games_owned_count', 0), _title(d)))
+        elif sort_val == 'games_owned_inv' and profile:
+            display_data.sort(key=lambda d: (d.get('games_owned_count', 0), _title(d)))
+        elif sort_val == 'recently_progressed' and profile:
+            display_data.sort(
+                key=lambda d: d.get('last_progress_date') or datetime.min,
+                reverse=True,
+            )
         else:
-            display_data.sort(key=lambda d: (d['badge'].effective_display_title or '').lower())
+            display_data.sort(key=lambda d: _title(d))
 
         # Paginate
         paginate_by = 30

@@ -52,6 +52,9 @@
             <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-48">
                 <option value="alpha" {% if request.GET.sort == 'alpha' or not request.GET.sort %}selected{% endif %}>Alphabetical</option>
                 <option value="games" {% if request.GET.sort == 'games' %}selected{% endif %}>Most Games</option>
+                <option value="avg_rating" {% if request.GET.sort == 'avg_rating' %}selected{% endif %}>Highest Avg Rating</option>
+                <option value="players" {% if request.GET.sort == 'players' %}selected{% endif %}>Most Players</option>
+                <option value="plats_earned" {% if request.GET.sort == 'plats_earned' %}selected{% endif %}>Most Platinums Earned</option>
             </select>
             <button type="submit" class="btn btn-sm md:btn-md btn-primary">Search</button>
         </div>

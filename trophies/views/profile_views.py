@@ -107,6 +107,40 @@ class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                 order = ['-total_completes', Lower('psn_username')]
             elif sort_val == 'avg_progress':
                 order = ['-avg_progress', Lower('psn_username')]
+            elif sort_val == 'recently_active':
+                order = [F('last_synced').desc(nulls_last=True), Lower('psn_username')]
+            elif sort_val == 'badges_earned':
+                qs = qs.annotate(
+                    _badges_earned=Coalesce(
+                        F('gamification__total_badges_earned'), Value(0),
+                        output_field=IntegerField(),
+                    ),
+                )
+                order = ['-_badges_earned', Lower('psn_username')]
+            elif sort_val == 'badge_xp':
+                qs = qs.annotate(
+                    _badge_xp=Coalesce(
+                        F('gamification__total_badge_xp'), Value(0),
+                        output_field=IntegerField(),
+                    ),
+                )
+                order = ['-_badge_xp', Lower('psn_username')]
+            elif sort_val == 'rarest_avg_plat':
+                plat_avg = Subquery(
+                    EarnedTrophy.objects.filter(
+                        profile_id=OuterRef('pk'),
+                        earned=True,
+                        trophy__trophy_type='platinum',
+                    ).values('profile_id').annotate(
+                        val=Avg('trophy__earn_rate'),
+                    ).values('val')[:1],
+                    output_field=FloatField(),
+                )
+                qs = qs.annotate(_avg_plat_rate=plat_avg)
+                qs = qs.filter(_avg_plat_rate__isnull=False)
+                order = ['_avg_plat_rate', Lower('psn_username')]
+            elif sort_val == 'recently_joined':
+                order = ['-created_at', Lower('psn_username')]
 
         return qs.order_by(*order)
 
