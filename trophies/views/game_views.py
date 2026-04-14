@@ -553,6 +553,32 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 elif earned_key == 'earned':
                     full_trophies = [t for t in full_trophies if profile_earned.get(t['trophy_id'], {}).get('earned', False)]
 
+            # Trophy type filter
+            trophy_type_filter = form.cleaned_data.get('trophy_type')
+            if trophy_type_filter:
+                full_trophies = [t for t in full_trophies if t['trophy_type'] in trophy_type_filter]
+
+            # Rarity bracket filter (PSN rarity tiers)
+            rarity_filter = form.cleaned_data.get('rarity_bracket')
+            if rarity_filter:
+                def _matches_rarity(rate, brackets):
+                    if rate <= 1:
+                        return 'ultra_rare' in brackets
+                    elif rate <= 5:
+                        return 'very_rare' in brackets
+                    elif rate <= 25:
+                        return 'rare' in brackets
+                    else:
+                        return 'common' in brackets
+                full_trophies = [t for t in full_trophies if _matches_rarity(t['trophy_earn_rate'], rarity_filter)]
+
+            # DLC / Base game filter
+            dlc_filter = form.cleaned_data.get('dlc_filter')
+            if dlc_filter == 'base':
+                full_trophies = [t for t in full_trophies if t['trophy_group_id'] == 'default']
+            elif dlc_filter == 'dlc':
+                full_trophies = [t for t in full_trophies if t['trophy_group_id'] != 'default']
+
             sort_key = form.cleaned_data['sort']
             if sort_key == 'earned_date':
                 full_trophies.sort(
@@ -567,6 +593,13 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 full_trophies.sort(key=lambda t: t['earn_rate'], reverse=False)
             elif sort_key == 'alpha':
                 full_trophies.sort(key=lambda t: t['trophy_name'].lower())
+            elif sort_key == 'earned_count':
+                full_trophies.sort(key=lambda t: (-t['earned_count'], t['trophy_name'].lower()))
+            elif sort_key == 'earned_count_inv':
+                full_trophies.sort(key=lambda t: (t['earned_count'], t['trophy_name'].lower()))
+            elif sort_key == 'type':
+                type_order = {'platinum': 0, 'gold': 1, 'silver': 2, 'bronze': 3}
+                full_trophies.sort(key=lambda t: (type_order.get(t['trophy_type'], 4), t['trophy_name'].lower()))
 
         # Get trophy groups
         trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
@@ -737,6 +770,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             {'text': f"{game.title_name}"}
         ]
 
+    def get_template_names(self):
+        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results':
+            return ['trophies/partials/game_detail/trophy_browse_results.html']
+        return super().get_template_names()
+
     def get_context_data(self, **kwargs):
         """
         Build context for game detail page.
@@ -788,6 +826,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Build trophy context with filtering/sorting
         form = GameDetailForm(self.request.GET)
         context['form'] = form
+        context['selected_trophy_types'] = self.request.GET.getlist('trophy_type')
+        context['selected_rarity_brackets'] = self.request.GET.getlist('rarity_bracket')
         profile_earned = context.get('profile_earned', {})
         full_trophies, trophy_groups, grouped_trophies, has_trophies = self._build_trophy_context(game, form, profile_earned)
 

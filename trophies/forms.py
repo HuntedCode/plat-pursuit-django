@@ -521,9 +521,41 @@ class GameDetailForm(forms.Form):
             ('psn_rarity', 'PSN Rarity'),
             ('pp_rarity', 'PP Rarity'),
             ('alpha', 'Alphabetical'),
+            ('earned_count', 'Most Earned'),
+            ('earned_count_inv', 'Least Earned'),
+            ('type', 'Trophy Type'),
         ],
         required=False,
         label='Sort By',
+    )
+    trophy_type = forms.MultipleChoiceField(
+        choices=[
+            ('bronze', 'Bronze'),
+            ('silver', 'Silver'),
+            ('gold', 'Gold'),
+            ('platinum', 'Platinum'),
+        ],
+        required=False,
+        label='Trophy Type',
+    )
+    rarity_bracket = forms.MultipleChoiceField(
+        choices=[
+            ('ultra_rare', 'Ultra Rare'),
+            ('very_rare', 'Very Rare'),
+            ('rare', 'Rare'),
+            ('common', 'Common'),
+        ],
+        required=False,
+        label='Rarity',
+    )
+    dlc_filter = forms.ChoiceField(
+        choices=[
+            ('', 'All Trophies'),
+            ('base', 'Base Game Only'),
+            ('dlc', 'DLC Only'),
+        ],
+        required=False,
+        label='DLC Filter',
     )
 
 class PremiumSettingsForm(forms.ModelForm):

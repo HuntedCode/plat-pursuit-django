@@ -17,6 +17,11 @@
         <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-auto">
             <option value="progress" {% if current_sort == 'progress' %}selected{% endif %}>Most Progress</option>
             <option value="recent" {% if current_sort == 'recent' %}selected{% endif %}>Most Recent</option>
+            <option value="alpha" {% if current_sort == 'alpha' %}selected{% endif %}>Alphabetical</option>
+            <option value="closest" {% if current_sort == 'closest' %}selected{% endif %}>Closest to Completion</option>
+            {% if current_tab == 'hall_of_fame' %}
+            <option value="fastest" {% if current_sort == 'fastest' %}selected{% endif %}>Fastest Completion</option>
+            {% endif %}
         </select>
         <button type="submit" class="btn btn-primary btn-sm md:btn-md">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

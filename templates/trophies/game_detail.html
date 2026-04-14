@@ -43,7 +43,9 @@
                 </h4>
 
                 {# Filter toolbar #}
-                <form id="filter-form" method="get">
+                <form id="filter-form" method="get" data-browse-form
+                      hx-get="{% url 'game_detail' np_communication_id=game.np_communication_id %}"
+                      hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 mb-3">
                         <div class="flex flex-col md:flex-row gap-2 md:gap-3">
                             <select name="sort" id="id_sort"
@@ -60,49 +62,45 @@
                                 {% endfor %}
                             </select>
 
-                            <button id="submit-btn" type="submit"
-                                    class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5" disabled>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <circle cx="11" cy="11" r="8"></circle>
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                </svg>
-                                <span class="hidden md:inline">Feel The Power</span>
-                            </button>
+                            <select name="dlc_filter" id="id_dlc_filter"
+                                    class="select select-bordered select-sm md:select-md w-full md:w-40">
+                                {% for value, display in form.dlc_filter.field.choices %}
+                                    <option value="{{ value }}" {% if request.GET.dlc_filter == value %}selected{% endif %}>{{ display }}</option>
+                                {% endfor %}
+                            </select>
+
+                        </div>
+
+                        {# Trophy type + rarity chips #}
+                        <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-base-content/5">
+                            <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
+                            {% for value, display in form.trophy_type.field.choices %}
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="trophy_type" value="{{ value }}"
+                                           class="sr-only peer" {% if value in selected_trophy_types %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                        {{ display }}
+                                    </span>
+                                </label>
+                            {% endfor %}
+
+                            <span class="text-xs text-base-content/40 self-center ml-2 mr-0.5">Rarity:</span>
+                            {% for value, display in form.rarity_bracket.field.choices %}
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="rarity_bracket" value="{{ value }}"
+                                           class="sr-only peer" {% if value in selected_rarity_brackets %}checked{% endif %} />
+                                    <span class="btn btn-xs peer-checked:btn-secondary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                        {{ display }}
+                                    </span>
+                                </label>
+                            {% endfor %}
                         </div>
                     </div>
                 </form>
 
-                {# Trophy groups nav #}
-                {% if game.has_trophy_groups %}
-                    <div class="bg-white/[0.03] border border-base-content/5 rounded-lg px-3 py-2 mb-3">
-                        <h5 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-1.5">Trophy Groups</h5>
-                        <div class="flex flex-row gap-1.5 overflow-x-auto pb-1">
-                            {% for group_id, trophies in grouped_trophies.items %}
-                                {% with trophy_groups|dict_get:group_id as group %}
-                                    <a href="#trophy-group-{{ group_id }}"
-                                       class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10 flex-shrink-0 gap-1.5 hover:border-primary"
-                                       onclick="event.preventDefault(); document.getElementById('trophy-group-{{ group_id }}').scrollIntoView({behavior:'smooth', block:'start'})">
-                                        <img src="{{ group.trophy_group_icon_url }}" class="w-4 h-4 md:w-5 md:h-5 rounded object-cover" alt="{{ group.trophy_group_name }}" />
-                                        <span class="text-xs whitespace-nowrap">{{ group.trophy_group_name }}</span>
-                                        <span class="badge badge-xs badge-ghost">{{ trophies|length }}</span>
-                                    </a>
-                                {% endwith %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                {% endif %}
-
-                {# Trophy groups + trophy lists #}
-                {% for group_id, trophies in grouped_trophies.items %}
-                    {% with trophy_groups|dict_get:group_id as group %}
-                        {% with profile_group_totals|dict_get:group_id as profile_group_total %}
-                            <div id="trophy-group-{{ group_id }}" class="{% if not forloop.first %}mt-4 pt-4 border-t border-base-content/10{% endif %}">
-                                {% include 'trophies/partials/game_detail/trophy_group_card.html' %}
-                                {% include 'trophies/partials/game_detail/trophy_list.html' %}
-                            </div>
-                        {% endwith %}
-                    {% endwith %}
-                {% endfor %}
+                <div id="browse-results">
+                    {% include 'trophies/partials/game_detail/trophy_browse_results.html' %}
+                </div>
             </div>
         </div>
     {% endif %}
@@ -142,6 +140,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
     <script src="{% static 'js/game-detail.js' %}"></script>
     <script src="{% static 'js/game-players-modal.js' %}"></script>
     <script src="{% static 'js/submit_shimmer.js' %}"></script>

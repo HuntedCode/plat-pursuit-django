@@ -12,6 +12,7 @@ from core.services.tracking import track_page_view, track_site_event
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, F, Q
+from django.db.models.functions import Lower
 from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
@@ -84,6 +85,14 @@ class ChallengeHubView(ProfileHotbarMixin, TemplateView):
 
         if sort == 'recent':
             qs = qs.order_by('-created_at')
+        elif sort == 'alpha':
+            qs = qs.order_by(Lower('name'))
+        elif sort == 'closest':
+            qs = qs.order_by('-completed_count', '-filled_count', 'name')
+        elif sort == 'fastest' and tab == 'hall_of_fame':
+            qs = qs.annotate(
+                _duration=F('completed_at') - F('created_at'),
+            ).order_by('_duration')
         elif tab == 'hall_of_fame':
             qs = qs.order_by('-completed_at')
         else:
