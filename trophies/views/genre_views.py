@@ -61,7 +61,7 @@ class GenreThemeListView(ProfileHotbarMixin, TemplateView):
             items = items.order_by('-game_count', 'name')
         elif sort_val == 'avg_rating':
             items = items.annotate(
-                _avg_rating=Avg(games_path + '__concept__ratings__overall_rating'),
+                _avg_rating=Avg(games_path + '__concept__user_ratings__overall_rating'),
             ).order_by(F('_avg_rating').desc(nulls_last=True), 'name')
         elif sort_val == 'players':
             items = items.annotate(

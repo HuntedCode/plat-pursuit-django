@@ -83,7 +83,7 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                 order = ['game_count', Lower('name')]
             elif sort_val == 'avg_rating':
                 qs = qs.annotate(
-                    _avg_rating=Avg('company_concepts__concept__ratings__overall_rating'),
+                    _avg_rating=Avg('company_concepts__concept__user_ratings__overall_rating'),
                 )
                 order = [F('_avg_rating').desc(nulls_last=True), Lower('name')]
             elif sort_val == 'total_players':
