@@ -61,6 +61,11 @@ class BadgeListView(ProfileHotbarMixin, ListView):
     context_object_name = 'display_data'
     paginate_by = None
 
+    def get_template_names(self):
+        if getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results':
+            return ['trophies/partials/badge_list/browse_results.html']
+        return super().get_template_names()
+
     def get_filter_form(self):
         if not hasattr(self, '_filter_form'):
             self._filter_form = BadgeSearchForm(self.request.GET)

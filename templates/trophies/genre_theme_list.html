@@ -37,7 +37,8 @@
     </div>
 
     {# ── Search + Sort ── #}
-    <form method="get" class="mb-3">
+    <form method="get" class="mb-3" data-browse-form
+          hx-get="{% url 'genres_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="outerHTML" hx-select="#browse-results" hx-trigger="submit">
         <input type="hidden" name="tab" value="{{ active_tab }}" />
         <div class="flex flex-col md:flex-row gap-2">
             <div class="relative flex-1">
@@ -56,14 +57,14 @@
                 <option value="players" {% if request.GET.sort == 'players' %}selected{% endif %}>Most Players</option>
                 <option value="plats_earned" {% if request.GET.sort == 'plats_earned' %}selected{% endif %}>Most Platinums Earned</option>
             </select>
-            <button type="submit" class="btn btn-sm md:btn-md btn-primary">Search</button>
+            <button type="button" data-submit-btn class="btn btn-sm md:btn-md btn-primary">Search</button>
         </div>
     </form>
 
     {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
 
     {# ── Tag Cards Grid ── #}
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-3">
+    <div id="browse-results" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-3">
         {% for item in items %}
             <a href="{% url detail_url_name slug=item.slug %}"
                class="card bg-base-200/90 border-2 border-base-300 shadow-md hover:shadow-lg hover:border-secondary/50 transition-all duration-200 group">
@@ -83,4 +84,8 @@
         {% endfor %}
     </div>
 
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
 {% endblock %}
