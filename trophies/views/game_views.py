@@ -1165,7 +1165,7 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
     }
 
     def get_category(self):
-        return self.request.GET.get('category', '')
+        return self.request.GET.get('category', 'base_games')
 
     @property
     def model(self):
