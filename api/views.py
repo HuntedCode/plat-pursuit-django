@@ -61,11 +61,17 @@ class GenerateCodeView(APIView):
             else:
                 profile.attempt_sync()
 
-            return Response({
+            response_data = {
                 "success": True,
                 "code": profile.verification_code,
-                "message": f"Add '{profile.verification_code}' to your PSN 'About Me' section and run the /verify command!"
-            })
+                "message": f"Add '{profile.verification_code}' to your PSN 'About Me' section and run the /verify command!",
+            }
+            if not created and not profile.psn_history_public:
+                response_data["privacy_warning"] = (
+                    "This PSN profile currently has its privacy settings enabled."
+                    " Please set your gaming history to public before verifying."
+                )
+            return Response(response_data)
         else:
             logger.error(f"Serializer errors: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -103,8 +109,20 @@ class VerifyView(APIView):
                     if profile.last_synced > start_time:
                         logger.info(f"Sync completed for profile {profile.id} after polling.")
                         break
+                    if not profile.psn_history_public:
+                        logger.warning(f"Privacy error detected for profile {profile.id} during verify.")
+                        return Response(
+                            {'success': False, 'message': 'This PSN profile has its privacy settings enabled. Please set your gaming history to public and try again.'},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                    if profile.sync_status == 'error':
+                        logger.warning(f"Sync error for profile {profile.id} during verify.")
+                        return Response(
+                            {'success': False, 'message': 'Sync failed. Please try again later.'},
+                            status=status.HTTP_502_BAD_GATEWAY,
+                        )
                     time.sleep(poll_interval_seconds)
-                
+
                 if profile.last_synced <= start_time:
                     logger.warning(f"Sync timeout for profile {profile.id} after {timeout_seconds}s.")
                     return Response({'success': False, 'message': 'Sync timed out. Try again later.'}, status=status.HTTP_408_REQUEST_TIMEOUT)
