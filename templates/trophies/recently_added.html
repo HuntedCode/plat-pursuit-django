@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}Recently Added{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# -- Header Card -- #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-info shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-info shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Recently Added</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Fresh trophy lists discovered by our scout network. Be among the first to hunt.
+            </p>
+        </div>
+    </div>
+
+    {# -- Category Selector (always visible) -- #}
+    <div class="mb-3">
+        {% include 'trophies/partials/recently_added/category_cards.html' %}
+    </div>
+
+    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+
+    {# -- Browse Results -- #}
+    <div id="browse-results">
+        {% if active_category == 'base_games' %}
+            {% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+            <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
+                {% include 'trophies/partials/game_list/game_cards.html' %}
+            </div>
+
+            {% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
+        {% elif active_category == 'dlc' %}
+            {% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+            <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
+                {% for tg in object_list %}
+                    {% include 'trophies/partials/recently_added/dlc_card.html' with trophy_group=tg %}
+                {% endfor %}
+            </div>
+
+            {% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
+        {% endif %}
+    </div>
+
+{% endblock %}

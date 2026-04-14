@@ -29,10 +29,10 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 - **Schedule**: Every 30 minutes
 - **Command**: `python manage.py refresh_profiles`
-- **What it does**: Scans all profiles and queues those whose data is stale for a PSN sync via TokenKeeper. Staleness thresholds vary by tier: premium (6h), basic (12h), Discord-verified (24h), unregistered (7d). The command only *queues* profiles; the actual sync work happens asynchronously in the TokenKeeper worker.
+- **What it does**: Scans all profiles and queues those whose data is stale for a PSN sync via TokenKeeper. Processes scouts first (per-scout configurable cadence, default 2h, capped at `--max-scouts` per run), then tier-based profiles: premium (6h), basic (12h), Discord-verified (24h), unregistered (7d). The command only *queues* profiles; the actual sync work happens asynchronously in the TokenKeeper worker.
 - **Dependencies**: TokenKeeper must be running to process the queued jobs. If TokenKeeper is down, profiles will queue up but not sync.
 - **Idempotency**: Fully safe to re-run. Profiles already queued or recently synced are skipped by the threshold check. Double-running causes no harm because `PSNManager.profile_refresh()` deduplicates.
-- **Failure impact**: Profiles stop getting updated. Premium users notice first (6h threshold). The site continues to serve cached data but it becomes increasingly stale.
+- **Failure impact**: Profiles stop getting updated. Scout discovery and premium users are affected first. The site continues to serve cached data but it becomes increasingly stale.
 
 ### refresh_homepage_hourly
 

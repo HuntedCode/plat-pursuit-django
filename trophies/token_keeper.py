@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import connection, transaction, OperationalError
-from django.db.models import Sum, Max
+from django.db.models import F, Sum, Max
 from django.db.models.functions import Coalesce
 from psnawp_api import PSNAWP as BasePSNAWP
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
@@ -23,7 +23,7 @@ from psnawp_api.models.trophies.trophy_constants import PlatformType
 from requests import HTTPError
 from requests.exceptions import ConnectionError, Timeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed
-from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, EarnedTrophy
+from .models import Profile, Game, Concept, TitleID, TrophyGroup, ProfileGame, EarnedTrophy, ScoutAccount
 from .services.psn_api_service import PsnApiService
 from .psn_manager import PSNManager
 from trophies.util_modules.cache import redis_client, log_api_call
@@ -2159,9 +2159,12 @@ class TokenKeeper:
         # FIRST PASS: Create/update games and calculate job count WITHOUT assigning jobs
         touched_profilegame_ids = []
         games_needing_groups = []
+        new_game_count = 0
 
         for title in trophy_titles_to_be_updated:
             game, created, _ = PsnApiService.create_or_update_game(title)
+            if created:
+                new_game_count += 1
             profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
             touched_profilegame_ids.append(profile_game.id)
             title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
@@ -2172,6 +2175,12 @@ class TokenKeeper:
                 games_needing_groups.append(game)
                 job_counter += 1  # sync_trophy_groups
             job_counter += 2  # sync_trophies (includes the +2 for include_progress)
+
+        # Increment scout games_discovered counter (no-op for non-scout profiles)
+        if new_game_count > 0:
+            ScoutAccount.objects.filter(
+                profile_id=profile_id, status='active',
+            ).update(games_discovered=F('games_discovered') + new_game_count)
 
         # Set target BEFORE assigning any jobs to prevent race condition
         profile.add_to_sync_target(job_counter)

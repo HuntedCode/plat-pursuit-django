@@ -1137,3 +1137,119 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
         track_page_view('flagged_games', 'list', self.request)
         return context
+
+
+class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
+    """Browse recently discovered base games and DLC trophy lists.
+
+    Landing state shows two category cards (base games, DLC) with 30-day counts.
+    Selecting a category displays a paginated grid sorted by discovery date.
+    """
+    template_name = 'trophies/recently_added.html'
+    partial_template_name = 'trophies/partials/recently_added/browse_results.html'
+    paginate_by = 30
+
+    CATEGORIES = {
+        'base_games': {
+            'label': 'New Games',
+            'description': 'Base game trophy lists recently added to the database.',
+            'color': 'info',
+            'icon': 'gamepad-2',
+        },
+        'dlc': {
+            'label': 'New DLC',
+            'description': 'DLC trophy packs recently discovered.',
+            'color': 'secondary',
+            'icon': 'puzzle',
+        },
+    }
+
+    def get_category(self):
+        return self.request.GET.get('category', '')
+
+    @property
+    def model(self):
+        if self.get_category() == 'dlc':
+            return TrophyGroup
+        return Game
+
+    def get_queryset(self):
+        category = self.get_category()
+
+        if category == 'base_games':
+            return (
+                Game.objects
+                .select_related('concept', 'concept__igdb_match')
+                .prefetch_related(
+                    Prefetch(
+                        'trophies',
+                        queryset=Trophy.objects.filter(trophy_type='platinum'),
+                        to_attr='platinum_trophy',
+                    )
+                )
+                .order_by('-created_at')
+            )
+
+        if category == 'dlc':
+            return (
+                TrophyGroup.objects
+                .exclude(trophy_group_id='default')
+                .select_related('game', 'game__concept', 'game__concept__igdb_match')
+                .order_by('-created_at')
+            )
+
+        return Game.objects.none()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse_lazy('home')},
+            {'text': 'Games', 'url': reverse_lazy('games_list')},
+            {'text': 'Recently Added'},
+        ]
+
+        category = self.get_category()
+        context['active_category'] = category
+        context['categories'] = self.CATEGORIES
+
+        # 30-day counts for category cards
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        context['category_counts'] = {
+            'base_games': Game.objects.filter(created_at__gte=thirty_days_ago).count(),
+            'dlc': TrophyGroup.objects.exclude(
+                trophy_group_id='default',
+            ).filter(created_at__gte=thirty_days_ago).count(),
+        }
+
+        # User game data for base games category
+        if category == 'base_games':
+            page_games = context['object_list']
+            game_ids = [g.id for g in page_games]
+
+            if self.request.user.is_authenticated and hasattr(self.request.user, 'profile'):
+                user_games = ProfileGame.objects.filter(
+                    profile=self.request.user.profile,
+                    game_id__in=game_ids,
+                ).values('game_id', 'progress', 'has_plat', 'earned_trophies_count')
+                context['user_game_map'] = {pg['game_id']: pg for pg in user_games}
+
+            concept_ids = [g.concept_id for g in page_games if g.concept_id]
+            if concept_ids:
+                ratings = UserConceptRating.objects.filter(
+                    concept_id__in=concept_ids,
+                    concept_trophy_group__isnull=True,
+                ).values('concept_id').annotate(
+                    avg_difficulty=Avg('difficulty'),
+                    avg_fun=Avg('fun_ranking'),
+                    avg_rating=Avg('overall_rating'),
+                    rating_count=Count('id'),
+                )
+                context['rating_map'] = {r['concept_id']: r for r in ratings}
+
+        context['seo_description'] = (
+            "Browse recently added PlayStation trophy lists: new games "
+            "and DLC packs discovered by the Platinum Pursuit scout network."
+        )
+
+        track_page_view('recently_added', 'list', self.request)
+        return context

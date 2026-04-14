@@ -195,14 +195,15 @@ See docs/design/tutorial-system.md for design rationale.
                     <div class="tour-subnav-preview" style="--nav-accent: var(--color-accent)">
                         <span class="tour-subnav-item active">Games</span>
                         <span class="tour-subnav-item">Trophies</span>
-                        <span class="tour-subnav-item">Companies</span>
-                        <span class="tour-subnav-item">Genres</span>
+                        <span class="tour-subnav-item">New</span>
+                        <span class="tour-subnav-item hidden md:inline-flex">Companies</span>
+                        <span class="tour-subnav-item hidden md:inline-flex">Genres</span>
                         <span class="tour-subnav-item hidden md:inline-flex">Flagged</span>
                     </div>
                 </div>
 
                 <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">What you'll find</p>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
                     <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
                         <div class="tour-feature-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -226,6 +227,17 @@ See docs/design/tutorial-system.md for design rationale.
                         <div class="min-w-0">
                             <div class="text-sm font-semibold">Trophies</div>
                             <div class="text-xs text-base-content/50">Search every PlayStation trophy</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Recently Added</div>
+                            <div class="text-xs text-base-content/50">Fresh trophy lists and DLC packs</div>
                         </div>
                     </div>
                     <div class="tour-feature-card" style="--card-accent: var(--color-accent)">

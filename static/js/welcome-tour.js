@@ -15,7 +15,7 @@
 // clone when transitioning between hub steps on mobile.
 const TOUR_SUBNAV_ITEMS = {
     3: ['Dashboard', 'My Stats', 'Shareables', 'Recap'],
-    4: ['Games', 'Trophies', 'Companies', 'Genres'],
+    4: ['Games', 'Trophies', 'New', 'Companies', 'Genres'],
     5: ['Hub', 'Profiles', 'Reviews', 'Challenges'],
     6: ['Badges', 'Milestones', 'Titles'],
 };

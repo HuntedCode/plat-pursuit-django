@@ -1183,11 +1183,13 @@ class TrophyGroup(models.Model):
     trophy_group_detail = models.TextField(blank=True, null=True)
     trophy_group_icon_url = models.URLField(blank=True, null=True)
     defined_trophies = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, help_text='When this trophy group was first added to the database.')
 
     class Meta:
         unique_together = ['game', 'trophy_group_id']
         indexes = [
             models.Index(fields=['trophy_group_id'], name='trophy_group_id_idx'),
+            models.Index(fields=['-created_at'], name='trophy_group_created_idx'),
         ]
         ordering = ['trophy_group_id']
     
@@ -4249,4 +4251,48 @@ class GameFlag(models.Model):
     def __str__(self):
         return f"{self.get_flag_type_display()} on {self.game.title_name} by {self.reporter.psn_username}"
 
+
+class ScoutAccount(models.Model):
+    """PSN accounts synced on a tighter cadence to discover new trophy lists.
+
+    Staff-curated via the Django admin. Scouts are regular Profile records with
+    a OneToOne ScoutAccount controlling their refresh frequency. The existing
+    PSNManager.profile_refresh() pipeline handles the actual sync; the only
+    difference is the management command ``refresh_scouts`` checks these records
+    on a shorter schedule than the standard tier-based ``refresh_profiles``.
+    """
+
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('paused', 'Paused'),
+        ('retired', 'Retired'),
+    ]
+
+    profile = models.OneToOneField(
+        Profile, on_delete=models.CASCADE, related_name='scout_account',
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    refresh_frequency_hours = models.PositiveSmallIntegerField(
+        default=2,
+        help_text='Hours between refresh syncs for this scout.',
+    )
+    games_discovered = models.PositiveIntegerField(
+        default=0,
+        help_text='Count of new games first seen via this scout.',
+    )
+    staff_notes = models.TextField(blank=True)
+    added_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='added_scouts',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status', 'created_at'], name='scout_status_idx'),
+        ]
+
+    def __str__(self):
+        return f"Scout: {self.profile.psn_username} ({self.get_status_display()})"
 

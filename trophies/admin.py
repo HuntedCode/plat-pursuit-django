@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, ScoutAccount
 
 
 # Register your models here.
@@ -2388,3 +2388,57 @@ class GameFlagAdmin(admin.ModelAdmin):
                 GameFlagService.dismiss_flag(flag, request.user)
                 count += 1
         messages.success(request, f'Dismissed {count} flag(s).')
+
+
+@admin.register(ScoutAccount)
+class ScoutAccountAdmin(admin.ModelAdmin):
+    list_display = [
+        'profile_psn', 'status', 'games_discovered',
+        'refresh_frequency_hours', 'last_synced', 'added_by', 'created_at',
+    ]
+    list_filter = ['status']
+    search_fields = ['profile__psn_username', 'staff_notes']
+    raw_id_fields = ['profile', 'added_by']
+    readonly_fields = ['created_at', 'updated_at', 'games_discovered']
+    ordering = ['-created_at']
+    actions = ['activate_selected', 'pause_selected', 'retire_selected', 'trigger_refresh']
+
+    fieldsets = (
+        ('Scout Info', {'fields': ('profile', 'status', 'added_by')}),
+        ('Configuration', {'fields': ('refresh_frequency_hours',)}),
+        ('Stats', {'fields': ('games_discovered',)}),
+        ('Notes', {'fields': ('staff_notes',)}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+    @admin.display(description='PSN Username')
+    def profile_psn(self, obj):
+        return obj.profile.psn_username
+
+    @admin.display(description='Last Synced')
+    def last_synced(self, obj):
+        return obj.profile.last_synced
+
+    @admin.action(description='Activate selected scouts')
+    def activate_selected(self, request, queryset):
+        updated = queryset.exclude(status='active').update(status='active')
+        messages.success(request, f'Activated {updated} scout(s).')
+
+    @admin.action(description='Pause selected scouts')
+    def pause_selected(self, request, queryset):
+        updated = queryset.exclude(status='paused').update(status='paused')
+        messages.success(request, f'Paused {updated} scout(s).')
+
+    @admin.action(description='Retire selected scouts')
+    def retire_selected(self, request, queryset):
+        updated = queryset.exclude(status='retired').update(status='retired')
+        messages.success(request, f'Retired {updated} scout(s).')
+
+    @admin.action(description='Trigger refresh now')
+    def trigger_refresh(self, request, queryset):
+        from trophies.psn_manager import PSNManager
+        count = 0
+        for scout in queryset.filter(status='active').select_related('profile'):
+            PSNManager.profile_refresh(scout.profile)
+            count += 1
+        messages.success(request, f'Queued {count} scout(s) for refresh.')

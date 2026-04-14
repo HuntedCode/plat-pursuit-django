@@ -1,0 +1,22 @@
+{# Recently Added browse results partial. Returned on HTMX requests. #}
+{% load humanize %}
+
+{% if active_category == 'base_games' %}
+    {% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+    <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
+        {% include 'trophies/partials/game_list/game_cards.html' %}
+    </div>
+
+    {% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
+{% elif active_category == 'dlc' %}
+    {% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+    <div id="items-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 md:gap-2.5">
+        {% for tg in object_list %}
+            {% include 'trophies/partials/recently_added/dlc_card.html' with trophy_group=tg %}
+        {% endfor %}
+    </div>
+
+    {% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}
+{% endif %}
