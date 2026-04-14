@@ -662,4 +662,14 @@
     bindPageJumpForms();
     bindLuckyButton();
   });
+
+  // Re-init when HTMX swaps in new content containing a browse form
+  document.addEventListener('htmx:afterSwap', function (e) {
+    var target = e.detail.target;
+    if (target && target.querySelector && target.querySelector('[data-browse-form]')) {
+      init();
+      bindPageJumpForms();
+      bindLuckyButton();
+    }
+  });
 })();

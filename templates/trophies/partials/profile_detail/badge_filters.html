@@ -1,4 +1,6 @@
-<form id="badges-form" method="get">
+<form id="badges-form" method="get" data-browse-form
+      hx-get="{% url 'profile_detail' psn_username=profile.psn_username %}"
+      hx-target="#tab-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3">
         <div class="flex flex-col md:flex-row gap-2 md:gap-3">
             <select name="sort" id="id_sort"

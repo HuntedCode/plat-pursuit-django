@@ -911,6 +911,17 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         ]
         context['current_tab'] = tab
 
+        # Tab template mapping for {% include %} and HTMX partial returns
+        tab_templates = {
+            'games': 'trophies/partials/profile_detail/tabs/games_tab.html',
+            'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
+            'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
+            'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
+            'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
+            'reviews': 'trophies/partials/profile_detail/tabs/reviews_tab.html',
+        }
+        context['tab_template'] = tab_templates.get(tab, tab_templates['games'])
+
         # Premium profile personalization
         if profile.user_is_premium:
             # Theme accent colors
@@ -951,15 +962,42 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
 
         return context
 
+    # Template maps for HTMX partial responses
+    _TAB_TEMPLATES = {
+        'games': 'trophies/partials/profile_detail/tabs/games_tab.html',
+        'trophies': 'trophies/partials/profile_detail/tabs/trophies_tab.html',
+        'badges': 'trophies/partials/profile_detail/tabs/badges_tab.html',
+        'lists': 'trophies/partials/profile_detail/tabs/lists_tab.html',
+        'challenges': 'trophies/partials/profile_detail/tabs/challenges_tab.html',
+        'reviews': 'trophies/partials/profile_detail/tabs/reviews_tab.html',
+    }
+    _RESULTS_TEMPLATES = {
+        'games': 'trophies/partials/profile_detail/tabs/games_results.html',
+        'trophies': 'trophies/partials/profile_detail/tabs/trophies_results.html',
+        'badges': 'trophies/partials/profile_detail/tabs/badges_results.html',
+    }
+    _INFINITE_SCROLL_TEMPLATES = {
+        'games': 'trophies/partials/profile_detail/game_list_items.html',
+        'trophies': 'trophies/partials/profile_detail/trophy_list_items.html',
+        'reviews': 'trophies/partials/profile_detail/review_list_items.html',
+    }
+
     def get_template_names(self):
+        tab = self.request.GET.get('tab', 'games')
+
+        # HTMX partial swap (tab switch or filter change)
+        if getattr(self.request, 'htmx', False):
+            target = self.request.htmx.target
+            if target == 'tab-results' and tab in self._RESULTS_TEMPLATES:
+                return [self._RESULTS_TEMPLATES[tab]]
+            if tab in self._TAB_TEMPLATES:
+                return [self._TAB_TEMPLATES[tab]]
+
+        # Infinite scroll (XMLHttpRequest from InfiniteScroller)
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            tab = self.request.GET.get('tab', 'games')
-            if tab == 'games':
-                return ['trophies/partials/profile_detail/game_list_items.html']
-            elif tab == 'trophies':
-                return ['trophies/partials/profile_detail/trophy_list_items.html']
-            elif tab == 'reviews':
-                return ['trophies/partials/profile_detail/review_list_items.html']
+            if tab in self._INFINITE_SCROLL_TEMPLATES:
+                return [self._INFINITE_SCROLL_TEMPLATES[tab]]
+
         return super().get_template_names()
 
 

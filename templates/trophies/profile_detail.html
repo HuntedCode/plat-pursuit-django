@@ -18,130 +18,59 @@
     {% include 'partials/ad_unit.html' with ad_slot="1939843878" %}
 
     {% if profile.psn_history_public %}
-        <div class="tabs tabs-box mt-4 bg-base-300/60" role="tablist" aria-label="Profile sections">
-            {# ── Games Tab ── #}
-            <a href="?tab=games" id="games-tab" class="tab {% if current_tab == 'games' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'games' %}true{% else %}false{% endif %}" aria-controls="games-panel">
+        {# Tab bar (stays in place during HTMX swaps) #}
+        {% with profile_url=profile.psn_username %}
+        <div class="tabs tabs-boxed mt-4 bg-base-300/60" role="tablist" aria-label="Profile sections" id="profile-tab-bar">
+            <a href="?tab=games" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=games" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
+               id="games-tab" class="tab {% if current_tab == 'games' %}tab-active{% endif %}" role="tab" data-tab="games">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="var(--color-accent)" viewBox="0 0 16 16" aria-hidden="true">
                     <path d="M11.5 6.027a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m2.5-.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0m-1.5 1.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1m-6.5-3h1v1h1v1h-1v1h-1v-1h-1v-1h1z"/>
                     <path d="M3.051 3.26a.5.5 0 0 1 .354-.613l1.932-.518a.5.5 0 0 1 .62.39c.655-.079 1.35-.117 2.043-.117.72 0 1.443.041 2.12.126a.5.5 0 0 1 .622-.399l1.932.518a.5.5 0 0 1 .306.729q.211.136.373.297c.408.408.78 1.05 1.095 1.772.32.733.599 1.591.805 2.466s.34 1.78.364 2.606c.024.816-.059 1.602-.328 2.21a1.42 1.42 0 0 1-1.445.83c-.636-.067-1.115-.394-1.513-.773-.245-.232-.496-.526-.739-.808-.126-.148-.25-.292-.368-.423-.728-.804-1.597-1.527-3.224-1.527s-2.496.723-3.224 1.527c-.119.131-.242.275-.368.423-.243.282-.494.575-.739.808-.398.38-.877.706-1.513.773a1.42 1.42 0 0 1-1.445-.83c-.27-.608-.352-1.395-.329-2.21.024-.826.16-1.73.365-2.606.206-.875.486-1.733.805-2.466.315-.722.687-1.364 1.094-1.772a2.3 2.3 0 0 1 .433-.335l-.028-.079z"/>
                 </svg>
                 <span class="text-xs md:text-sm">Games</span>
             </a>
-            <div id="games-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="games-tab">
-                {% if current_tab == 'games' %}
-                    {% include 'trophies/partials/profile_detail/game_filters.html' %}
-                    <div class="border-t border-base-content/10 mt-2 pt-2"></div>
-                    <div id="games-grid" class="flex flex-col gap-1.5 md:gap-2">
-                        {% include 'trophies/partials/profile_detail/game_list_items.html' %}
-                    </div>
-                    <div id="games-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
-                        <span class="loading loading-spinner loading-lg"></span>
-                        <span class="sr-only">Loading more games...</span>
-                    </div>
-                    <div id="games-sentinel" class="h-1"></div>
-                {% endif %}
-            </div>
-
-            {# ── Trophy Log Tab ── #}
-            <a href="?tab=trophies" id="trophies-tab" class="tab {% if current_tab == 'trophies' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'trophies' %}true{% else %}false{% endif %}" aria-controls="trophies-panel">
+            <a href="?tab=trophies" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=trophies" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
+               id="trophies-tab" class="tab {% if current_tab == 'trophies' %}tab-active{% endif %}" role="tab" data-tab="trophies">
                 {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-4 h-4 md:w-5 md:h-5' extra_class='mr-1 md:mr-2' %}
                 <span class="text-xs md:text-sm">Trophies</span>
             </a>
-            <div id="trophies-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="trophies-tab">
-                {% if current_tab == 'trophies' %}
-                    {% include 'trophies/partials/profile_detail/trophy_log_filters.html' %}
-                    <div class="border-t border-base-content/10 mt-2 pt-2"></div>
-                    <div id="trophies-grid" class="flex flex-col gap-1.5 md:gap-2">
-                        {% include 'trophies/partials/profile_detail/trophy_list_items.html' %}
-                    </div>
-                    <div id="trophies-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
-                        <span class="loading loading-spinner loading-lg"></span>
-                        <span class="sr-only">Loading more trophies...</span>
-                    </div>
-                    <div id="trophies-sentinel" class="h-1"></div>
-                {% endif %}
-            </div>
-
-            {# ── Badges Tab ── #}
-            <a href="?tab=badges" id="badges-tab" class="tab {% if current_tab == 'badges' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'badges' %}true{% else %}false{% endif %}" aria-controls="badges-panel">
+            <a href="?tab=badges" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=badges" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
+               id="badges-tab" class="tab {% if current_tab == 'badges' %}tab-active{% endif %}" role="tab" data-tab="badges">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="var(--color-error)" viewBox="0 0 24 24" stroke="none" aria-hidden="true">
                     <circle cx="12" cy="8" r="7" fill="none" stroke="var(--color-error)" stroke-width="2"></circle>
                     <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" fill="none" stroke="var(--color-error)" stroke-width="2"></polyline>
                 </svg>
                 <span class="text-xs md:text-sm">Badges</span>
             </a>
-            <div id="badges-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="badges-tab">
-                {% if current_tab == 'badges' %}
-                    {% include 'trophies/partials/profile_detail/badge_filters.html' %}
-                    <div class="border-t border-base-content/10 mt-2 pt-2"></div>
-                    <div id="badges-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 md:gap-3">
-                        {% include 'trophies/partials/profile_detail/badge_list_items.html' %}
-                    </div>
-                {% endif %}
-            </div>
-
-            {# ── Lists Tab ── #}
-            <a href="?tab=lists" id="lists-tab" class="tab {% if current_tab == 'lists' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'lists' %}true{% else %}false{% endif %}" aria-controls="lists-panel">
+            <a href="?tab=lists" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=lists" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
+               id="lists-tab" class="tab {% if current_tab == 'lists' %}tab-active{% endif %}" role="tab" data-tab="lists">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-info)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="8" y1="6" x2="21" y2="6"></line>
-                    <line x1="8" y1="12" x2="21" y2="12"></line>
-                    <line x1="8" y1="18" x2="21" y2="18"></line>
-                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                    <line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>
                 </svg>
                 <span class="text-xs md:text-sm">Lists{% if profile_lists_count %} <span class="badge badge-xs badge-ghost">{{ profile_lists_count }}</span>{% endif %}</span>
             </a>
-            <div id="lists-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="lists-tab">
-                {% if current_tab == 'lists' %}
-                    {% if profile_lists %}
-                        <div id="lists-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
-                            {% for game_list in profile_lists %}
-                                {% include 'partials/game_list_card.html' with game_list=game_list %}
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <div class="text-center py-8">
-                            <p class="text-base-content/50 italic text-sm">No public lists yet.</p>
-                        </div>
-                    {% endif %}
-                {% endif %}
-            </div>
-
-            {# ── Challenges Tab ── #}
-            <a href="?tab=challenges" id="challenges-tab" class="tab {% if current_tab == 'challenges' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'challenges' %}true{% else %}false{% endif %}" aria-controls="challenges-panel">
+            <a href="?tab=challenges" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=challenges" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
+               id="challenges-tab" class="tab {% if current_tab == 'challenges' %}tab-active{% endif %}" role="tab" data-tab="challenges">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
                     <line x1="4" y1="22" x2="4" y2="15"></line>
                 </svg>
                 <span class="text-xs md:text-sm">Challenges{% if profile_challenge_count %} <span class="badge badge-xs badge-ghost">{{ profile_challenge_count }}</span>{% endif %}</span>
             </a>
-            <div id="challenges-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="challenges-tab">
-                {% if current_tab == 'challenges' %}
-                    {% include 'trophies/partials/profile_detail/challenge_list_items.html' %}
-                {% endif %}
-            </div>
-
-            {# ── Reviews Tab ── #}
-            <a href="?tab=reviews" id="reviews-tab" class="tab {% if current_tab == 'reviews' %}tab-active{% endif %}" role="tab" aria-selected="{% if current_tab == 'reviews' %}true{% else %}false{% endif %}" aria-controls="reviews-panel">
+            <a href="?tab=reviews" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=reviews" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
+               id="reviews-tab" class="tab {% if current_tab == 'reviews' %}tab-active{% endif %}" role="tab" data-tab="reviews">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
                 <span class="text-xs md:text-sm">Reviews{% if profile_review_count %} <span class="badge badge-xs badge-ghost">{{ profile_review_count }}</span>{% endif %}</span>
             </a>
-            <div id="reviews-panel" class="tab-content bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4" role="tabpanel" aria-labelledby="reviews-tab">
-                {% if current_tab == 'reviews' %}
-                    <div id="reviews-grid" class="flex flex-col gap-2 md:gap-3">
-                        {% include 'trophies/partials/profile_detail/review_list_items.html' %}
-                    </div>
-                    <div id="reviews-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
-                        <span class="loading loading-spinner loading-lg"></span>
-                        <span class="sr-only">Loading more reviews...</span>
-                    </div>
-                    <div id="reviews-sentinel" class="h-1"></div>
-                {% endif %}
-            </div>
+        </div>
+        {% endwith %}
 
+        {# Tab content panel (swapped by HTMX on tab click and filter change) #}
+        <div id="tab-content" class="bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral p-3 md:p-4 rounded-b-2xl">
+            {% include tab_template %}
         </div>
     {% endif %}
 {% endblock %}
@@ -149,60 +78,63 @@
 {% block js_scripts %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const currentTab = new URLSearchParams(window.location.search).get('tab') || 'games';
-        const baseUrl = window.location.pathname;
-        const scrollKey = 'profileTabScrollPos';
+    (function() {
+        'use strict';
 
-        const savedScroll = sessionStorage.getItem(scrollKey);
-        if (savedScroll !== null) {
-            sessionStorage.removeItem(scrollKey);
-            window.scrollTo(0, parseInt(savedScroll, 10));
+        function getTabFromUrl() {
+            return new URLSearchParams(window.location.search).get('tab') || 'games';
         }
 
-        document.querySelectorAll('.tabs [role="tab"]').forEach(tab => {
-            tab.addEventListener('click', () => {
-                sessionStorage.setItem(scrollKey, window.scrollY);
-            });
-        });
+        function initTabContent() {
+            var tab = getTabFromUrl();
 
-        PlatPursuit.InfiniteScroller.create({
-            gridId: `${currentTab}-grid`,
-            sentinelId: `${currentTab}-sentinel`,
-            loadingId: `${currentTab}-loading`,
-            paginateBy: 50,
-            formSelector: `#${currentTab}-form`,
-            scrollKey: 'profileScrollPos'
-        });
-
-        // Initialize dual-range sliders + auto-submit on profile tab forms
-        const tabForm = document.getElementById(`${currentTab}-form`);
-        if (tabForm) {
-            if (PlatPursuit.initDualRangeSliders) {
-                PlatPursuit.initDualRangeSliders(tabForm);
+            // InfiniteScroller for paginated tabs
+            var gridEl = document.getElementById(tab + '-grid');
+            var sentinelEl = document.getElementById(tab + '-sentinel');
+            if (gridEl && sentinelEl) {
+                PlatPursuit.InfiniteScroller.create({
+                    gridId: tab + '-grid',
+                    sentinelId: tab + '-sentinel',
+                    loadingId: tab + '-loading',
+                    paginateBy: 50,
+                    formSelector: '#' + tab + '-form',
+                    scrollKey: 'profileScrollPos'
+                });
             }
 
-            // Auto-submit on change for selects and checkboxes (mirrors browse page UX)
-            let sliderTimer = null;
-            tabForm.addEventListener('change', function(e) {
-                const el = e.target;
-                const isSlider = el.closest('[data-dual-range]');
-                if (isSlider) {
-                    // Debounce slider commits to avoid rapid reloads
-                    clearTimeout(sliderTimer);
-                    sliderTimer = setTimeout(function() { tabForm.submit(); }, 400);
-                    return;
-                }
-                const isAutoSubmit =
-                    el.type === 'checkbox' ||
-                    el.type === 'radio' ||
-                    el.tagName === 'SELECT';
-                if (isAutoSubmit) {
-                    tabForm.submit();
+            // Dual-range sliders (visual init)
+            var form = document.getElementById(tab + '-form');
+            if (form && PlatPursuit.initDualRangeSliders) {
+                PlatPursuit.initDualRangeSliders(form);
+            }
+        }
+
+        function updateActiveTab() {
+            var tab = getTabFromUrl();
+            document.querySelectorAll('#profile-tab-bar .tab').forEach(function(el) {
+                if (el.dataset.tab === tab) {
+                    el.classList.add('tab-active');
+                } else {
+                    el.classList.remove('tab-active');
                 }
             });
         }
-    });
+
+        // Initial setup
+        document.addEventListener('DOMContentLoaded', function() {
+            initTabContent();
+        });
+
+        // Re-init after HTMX swaps tab content or filter results
+        document.addEventListener('htmx:afterSwap', function(e) {
+            if (e.detail.target.id === 'tab-content') {
+                updateActiveTab();
+                initTabContent();
+            } else if (e.detail.target.id === 'tab-results') {
+                initTabContent();
+            }
+        });
+    })();
     </script>
     {% if is_own_profile and profile.user_is_premium %}
     <script src="{% static 'js/game-background-picker.js' %}"></script>

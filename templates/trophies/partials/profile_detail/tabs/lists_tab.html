@@ -1,0 +1,14 @@
+{% load custom_filters humanize %}
+<div id="tab-results">
+    {% if profile_lists %}
+        <div id="lists-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-3">
+            {% for game_list in profile_lists %}
+                {% include 'partials/game_list_card.html' with game_list=game_list %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-8">
+            <p class="text-base-content/50 italic text-sm">No public lists yet.</p>
+        </div>
+    {% endif %}
+</div>

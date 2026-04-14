@@ -1,0 +1,11 @@
+{% load custom_filters humanize %}
+<div id="tab-results">
+    <div id="reviews-grid" class="flex flex-col gap-2 md:gap-3">
+        {% include 'trophies/partials/profile_detail/review_list_items.html' %}
+    </div>
+    <div id="reviews-loading" class="hidden mt-4 text-center" role="status" aria-live="polite">
+        <span class="loading loading-spinner loading-lg"></span>
+        <span class="sr-only">Loading more reviews...</span>
+    </div>
+    <div id="reviews-sentinel" class="h-1"></div>
+</div>
