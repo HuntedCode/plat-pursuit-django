@@ -80,7 +80,7 @@ class GameListSitemap(Sitemap):
     priority = 0.4
 
     def items(self):
-        return GameList.objects.filter(is_public=True).order_by('-id')
+        return GameList.objects.filter(is_public=True, is_deleted=False).order_by('-id')
 
     def location(self, obj):
         return reverse('list_detail', kwargs={'list_id': obj.id})
