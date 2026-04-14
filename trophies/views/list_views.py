@@ -169,12 +169,10 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
             items = items.order_by('game__title_platform', 'game__title_name')
         elif sort == 'rating':
             items = annotate_community_ratings(items, 'game__concept_id')
-            items = items.filter(_avg_rating__isnull=False)
-            items = items.order_by('-_avg_rating', 'game__title_name')
+            items = items.order_by(F('_avg_rating').desc(nulls_last=True), 'game__title_name')
         elif sort == 'rating_inv':
             items = annotate_community_ratings(items, 'game__concept_id')
-            items = items.filter(_avg_rating__isnull=False)
-            items = items.order_by('_avg_rating', 'game__title_name')
+            items = items.order_by(F('_avg_rating').asc(nulls_last=True), 'game__title_name')
         elif sort == 'played':
             items = items.order_by('-game__played_count', 'game__title_name')
         elif sort == 'played_inv':
