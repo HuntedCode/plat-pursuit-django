@@ -8,7 +8,7 @@ import logging
 import re
 
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 
 logger = logging.getLogger('psn_api')
 
@@ -159,12 +159,171 @@ class RoadmapService:
         )
 
     # ------------------------------------------------------------------ #
+    #  Detail Page Retrieval
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _build_tab_prefetch():
+        """Shared prefetch chain for a single RoadmapTab's children."""
+        from trophies.models import RoadmapStep, RoadmapStepTrophy, TrophyGuide
+
+        return [
+            Prefetch(
+                'steps',
+                queryset=RoadmapStep.objects.prefetch_related(
+                    Prefetch(
+                        'step_trophies',
+                        queryset=RoadmapStepTrophy.objects.order_by('order'),
+                    )
+                ).order_by('order'),
+            ),
+            Prefetch(
+                'trophy_guides',
+                queryset=TrophyGuide.objects.order_by('trophy_id'),
+            ),
+        ]
+
+    @staticmethod
+    def get_tab_for_display(concept, trophy_group_id='default'):
+        """Get a single published roadmap tab with full prefetch for the detail page.
+
+        Returns:
+            tuple: (RoadmapTab or None, Roadmap or None)
+        """
+        from trophies.models import Roadmap, RoadmapTab
+
+        roadmap = (
+            Roadmap.objects
+            .filter(concept=concept, status='published')
+            .first()
+        )
+        if not roadmap:
+            return None, None
+
+        tab = (
+            RoadmapTab.objects
+            .filter(
+                roadmap=roadmap,
+                concept_trophy_group__trophy_group_id=trophy_group_id,
+            )
+            .select_related('concept_trophy_group')
+            .prefetch_related(*RoadmapService._build_tab_prefetch())
+            .first()
+        )
+        return tab, roadmap
+
+    @staticmethod
+    def get_tab_for_preview(concept, trophy_group_id='default'):
+        """Get a roadmap tab for staff preview regardless of publish status.
+
+        Returns:
+            tuple: (RoadmapTab or None, Roadmap or None)
+        """
+        from trophies.models import Roadmap, RoadmapTab
+
+        roadmap = Roadmap.objects.filter(concept=concept).first()
+        if not roadmap:
+            return None, None
+
+        tab = (
+            RoadmapTab.objects
+            .filter(
+                roadmap=roadmap,
+                concept_trophy_group__trophy_group_id=trophy_group_id,
+            )
+            .select_related('concept_trophy_group')
+            .prefetch_related(*RoadmapService._build_tab_prefetch())
+            .first()
+        )
+        return tab, roadmap
+
+    @staticmethod
+    def get_available_tabs(concept, include_drafts=False):
+        """Get all CTGs with roadmap tab presence info for DLC navigation.
+
+        Returns a list of dicts with 'ctg', 'has_content', 'trophy_group_id',
+        'step_count', and 'guide_count' for each tab.
+        """
+        from trophies.models import Roadmap, RoadmapTab
+
+        filters = {'concept': concept}
+        if not include_drafts:
+            filters['status'] = 'published'
+        roadmap = Roadmap.objects.filter(**filters).first()
+        if not roadmap:
+            return []
+
+        tabs = (
+            RoadmapTab.objects
+            .filter(roadmap=roadmap)
+            .select_related('concept_trophy_group')
+            .annotate(
+                step_count=Count('steps'),
+                guide_count=Count('trophy_guides'),
+            )
+            .order_by(
+                'concept_trophy_group__sort_order',
+                'concept_trophy_group__trophy_group_id',
+            )
+        )
+        return [
+            {
+                'ctg': t.concept_trophy_group,
+                'has_content': (t.step_count + t.guide_count) > 0,
+                'trophy_group_id': t.concept_trophy_group.trophy_group_id,
+                'step_count': t.step_count,
+                'guide_count': t.guide_count,
+            }
+            for t in tabs
+        ]
+
+    @staticmethod
+    def compute_progress(tab, profile_earned):
+        """Compute per-step and overall progress from prefetched tab data.
+
+        Args:
+            tab: A RoadmapTab with prefetched steps -> step_trophies
+            profile_earned: Dict of trophy_id -> {'earned': bool, ...}
+
+        Returns:
+            dict with 'steps' list, 'total_earned', 'total_trophies', 'percentage'
+        """
+        steps_progress = []
+        total_trophies = 0
+        total_earned = 0
+
+        for step in tab.steps.all():
+            step_trophy_ids = [st.trophy_id for st in step.step_trophies.all()]
+            step_total = len(step_trophy_ids)
+            step_earned = sum(
+                1 for tid in step_trophy_ids
+                if profile_earned.get(tid, {}).get('earned', False)
+            )
+            total_trophies += step_total
+            total_earned += step_earned
+            steps_progress.append({
+                'step_id': step.id,
+                'earned': step_earned,
+                'total': step_total,
+                'complete': step_earned == step_total and step_total > 0,
+            })
+
+        return {
+            'steps': {sp['step_id']: sp for sp in steps_progress},
+            'total_earned': total_earned,
+            'total_trophies': total_trophies,
+            'percentage': round(total_earned / total_trophies * 100) if total_trophies else 0,
+        }
+
+    # ------------------------------------------------------------------ #
     #  Tab Operations
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def update_tab(tab_id, general_tips=None, youtube_url=None):
-        """Update a roadmap tab's general tips and/or YouTube URL.
+    def update_tab(tab_id, general_tips=None, youtube_url=None,
+                   difficulty=None, estimated_hours=None, missable_count=None,
+                   online_required=None, min_playthroughs=None):
+        """Update a roadmap tab's content and/or metadata fields.
 
         Returns:
             tuple: (RoadmapTab instance, error_message or None)
@@ -188,6 +347,28 @@ class RoadmapService:
                 return None, 'Invalid YouTube URL. Must be a youtube.com or youtu.be link.'
             tab.youtube_url = youtube_url
             update_fields.append('youtube_url')
+
+        # Guide metadata fields
+        if difficulty is not None:
+            # Allow clearing by passing empty string or None-like value
+            tab.difficulty = int(difficulty) if difficulty != '' else None
+            update_fields.append('difficulty')
+
+        if estimated_hours is not None:
+            tab.estimated_hours = int(estimated_hours) if estimated_hours != '' else None
+            update_fields.append('estimated_hours')
+
+        if missable_count is not None:
+            tab.missable_count = int(missable_count) if missable_count != '' else 0
+            update_fields.append('missable_count')
+
+        if online_required is not None:
+            tab.online_required = bool(online_required)
+            update_fields.append('online_required')
+
+        if min_playthroughs is not None:
+            tab.min_playthroughs = int(min_playthroughs) if min_playthroughs != '' else 1
+            update_fields.append('min_playthroughs')
 
         if update_fields:
             tab.save(update_fields=update_fields)
@@ -348,7 +529,9 @@ class RoadmapService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def create_or_update_trophy_guide(tab_id, trophy_id, body):
+    def create_or_update_trophy_guide(tab_id, trophy_id, body,
+                                      is_missable=None, is_online=None,
+                                      is_unobtainable=None):
         """Create or update a trophy guide within a tab.
 
         Returns:
@@ -361,9 +544,17 @@ class RoadmapService:
         except RoadmapTab.DoesNotExist:
             return None, 'Tab not found.'
 
+        defaults = {'body': body}
+        if is_missable is not None:
+            defaults['is_missable'] = is_missable
+        if is_online is not None:
+            defaults['is_online'] = is_online
+        if is_unobtainable is not None:
+            defaults['is_unobtainable'] = is_unobtainable
+
         guide, created = TrophyGuide.objects.update_or_create(
             tab=tab, trophy_id=trophy_id,
-            defaults={'body': body}
+            defaults=defaults,
         )
 
         if not created and not body.strip():

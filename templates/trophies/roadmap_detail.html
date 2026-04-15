@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% load static custom_filters markdown_filters humanize %}
+
+{% block title %}Trophy Roadmap: {{ game.title_name }} - {{ tab.concept_trophy_group.display_name }}{% endblock %}
+{% block meta_description %}{{ seo_description }}{% endblock %}
+
+{% block content %}
+<div id="roadmap-detail">
+
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ═══ Preview Banner ═══ #}
+    {% if roadmap_preview_mode %}
+    <div class="alert alert-warning mb-3 text-sm py-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        <span>Preview Mode: This roadmap is <strong>{{ roadmap.status }}</strong> and only visible to staff.</span>
+    </div>
+    {% endif %}
+
+    {# ═══ Page Header Card ═══ #}
+    {% include 'trophies/partials/roadmap/detail_header.html' %}
+
+    {# ═══ DLC Navigation Strip ═══ #}
+    {% if available_tabs|length > 1 %}
+        {% include 'trophies/partials/roadmap/dlc_nav_strip.html' %}
+    {% endif %}
+
+    {# ═══ Metrics Badge Strip ═══ #}
+    {% include 'trophies/partials/roadmap/metrics_strip.html' %}
+
+    {# ═══ Main Content + Sidebar Layout ═══ #}
+    <div class="lg:flex lg:gap-6 mt-3 md:mt-4">
+
+        {# ── Mobile TOC (below lg) ── #}
+        <div class="lg:hidden mb-3">
+            {% include 'trophies/partials/roadmap/toc_mobile.html' with progress=progress profile_earned=profile_earned %}
+        </div>
+
+        {# ── Main Content Column ── #}
+        <div class="lg:w-3/4 min-w-0">
+
+            {% with steps=tab.steps.all guides=tab.trophy_guides.all %}
+
+            {# ══ Overview Section ══ #}
+            {% if tab.general_tips or tab.youtube_url %}
+            <section id="overview" data-toc-section class="mb-4 md:mb-6">
+                {% if tab.general_tips %}
+                <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+                    <div class="card-body p-3 md:p-5 lg:p-6">
+                        <div class="rounded-lg border border-base-content/5 border-l-4 border-l-warning/30 bg-white/[0.03] p-3 md:p-4">
+                            <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                                General Tips
+                            </h2>
+                            <div class="text-sm md:text-base text-base-content/75 leading-relaxed lg:leading-[1.75] max-w-3xl
+                                        [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:space-y-1
+                                        [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
+                                        [&_strong]:text-base-content/90 [&_strong]:font-semibold
+                                        [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
+                                        [&_blockquote]:border-l-4 [&_blockquote]:border-warning/30 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:my-3 [&_blockquote]:italic [&_blockquote]:text-base-content/60
+                                        [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ tab.general_tips|render_markdown }}</div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if tab.youtube_url %}
+                <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+                    <div class="card-body p-3 md:p-5 lg:p-6">
+                        <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Video Guide
+                        </h2>
+                        <div class="aspect-video rounded-lg overflow-hidden border border-base-content/5 bg-black/20">
+                            {% with embed_url=tab.youtube_url|youtube_embed_url %}
+                            {% if embed_url %}
+                                <iframe src="{{ embed_url }}" class="w-full h-full" frameborder="0" referrerpolicy="origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+                            {% else %}
+                                <a href="{{ tab.youtube_url }}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2 w-full h-full bg-white/[0.03] text-base-content/60 hover:text-error transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <span class="text-sm font-medium">Watch on YouTube</span>
+                                </a>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            {# ══ Roadmap Steps ══ #}
+            {% if steps %}
+            <section id="roadmap-steps" data-toc-section class="mb-4 md:mb-6">
+                <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+                    <div class="card-body p-3 md:p-5 lg:p-6">
+                        <div class="flex items-center gap-2 mb-4">
+                            <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                Roadmap
+                            </h2>
+                            <span class="text-[0.6rem] text-base-content/30 font-medium">{{ steps|length }} step{{ steps|length|pluralize }}</span>
+                            <button class="roadmap-expand-toggle text-xs text-base-content/40 hover:text-base-content/70 transition-colors font-medium ml-auto" data-target="roadmap-steps">Collapse All</button>
+                        </div>
+                        <div class="space-y-3">
+                            {% for step in steps %}
+                            {% include 'trophies/partials/roadmap/step_card.html' with step=step step_number=forloop.counter step_progress=progress.steps|get_item:step.id %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            {# ══ Trophy Guides ══ #}
+            {% if guides %}
+            <section id="trophy-guides" data-toc-section class="mb-4 md:mb-6">
+                <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+                    <div class="card-body p-3 md:p-5 lg:p-6">
+                        <div class="flex items-center flex-wrap gap-2 mb-3">
+                            <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                                Trophy Guides
+                            </h2>
+                            <span class="text-[0.6rem] text-base-content/30 font-medium">{{ guides|length }} troph{{ guides|length|pluralize:"y,ies" }}</span>
+                            <div class="flex items-center gap-1.5 ml-auto flex-wrap">
+                                <button class="roadmap-expand-toggle text-xs text-base-content/40 hover:text-base-content/70 transition-colors font-medium" data-target="guides">Collapse All</button>
+                                <span class="text-base-content/15">|</span>
+                                <div class="trophy-guide-flag-filters flex items-center gap-1">
+                                    <button class="trophy-flag-filter btn btn-xs btn-ghost border border-base-300 gap-0.5 transition-all" data-flag="missable" title="Show only missable trophies">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                        <span class="hidden md:inline">Missable</span>
+                                    </button>
+                                    <button class="trophy-flag-filter btn btn-xs btn-ghost border border-base-300 gap-0.5 transition-all" data-flag="online" title="Show only online trophies">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0"/></svg>
+                                        <span class="hidden md:inline">Online</span>
+                                    </button>
+                                    <button class="trophy-flag-filter btn btn-xs btn-ghost border border-base-300 gap-0.5 transition-all" data-flag="unobtainable" title="Show only unobtainable trophies">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                                        <span class="hidden md:inline">Unobtainable</span>
+                                    </button>
+                                </div>
+                                <span class="text-base-content/15">|</span>
+                                <select class="trophy-guide-sort select select-bordered select-xs text-xs w-auto">
+                                    <option value="default">Default Order</option>
+                                    <option value="type">Trophy Type</option>
+                                    <option value="rarity">Rarity</option>
+                                    <option value="earned">Earned First</option>
+                                    <option value="unearned">Unearned First</option>
+                                </select>
+                                <label class="trophy-guide-earned-filter flex items-center gap-1 cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
+                                    <input type="checkbox" class="checkbox checkbox-xs">
+                                    <span class="hidden md:inline">Hide earned</span>
+                                    <span class="md:hidden">Hide</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="trophy-guides-list space-y-2">
+                            {% for guide in guides %}
+                            {% include 'trophies/partials/roadmap/trophy_guide_card.html' with guide=guide %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            {% endwith %}
+        </div>
+
+        {# ── Desktop Sidebar TOC (lg+) ── #}
+        <aside class="hidden lg:block lg:w-1/4">
+            {% include 'trophies/partials/roadmap/toc_sidebar.html' with progress=progress profile_earned=profile_earned %}
+        </aside>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/roadmap-detail.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.PlatPursuit && window.PlatPursuit.RoadmapDetail) {
+            window.PlatPursuit.RoadmapDetail.init();
+        }
+    });
+</script>
+{% endblock %}

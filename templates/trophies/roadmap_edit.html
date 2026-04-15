@@ -26,7 +26,7 @@
                     </span>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <a href="{% url 'game_detail' game.np_communication_id %}?preview=true" class="btn btn-sm btn-ghost border border-base-300 gap-1" target="_blank">
+                    <a href="{% url 'roadmap_detail' game.np_communication_id %}?preview=true" class="btn btn-sm btn-ghost border border-base-300 gap-1" target="_blank">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -103,6 +103,57 @@
 
                 <div class="steps-empty-state hidden text-center py-8">
                     <p class="text-base-content/40 text-sm">No steps yet. Add your first step to start building the roadmap.</p>
+                </div>
+            </div>
+        </div>
+
+        {# ─── Guide Metadata ─── #}
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Guide Metadata
+                    <span class="badge badge-xs badge-ghost font-normal">Author Assessment</span>
+                </h2>
+                <p class="text-xs text-base-content/40 mb-3">Displayed at the top of the roadmap page. These are separate from community ratings.</p>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div>
+                        <label class="text-xs text-base-content/50 font-medium mb-1 block">Difficulty (1-10)</label>
+                        <input type="number" min="1" max="10"
+                               class="input input-bordered input-sm w-full metadata-input"
+                               data-tab-id="{{ tab.id }}" data-field="difficulty"
+                               placeholder="-">
+                    </div>
+                    <div>
+                        <label class="text-xs text-base-content/50 font-medium mb-1 block">Est. Hours</label>
+                        <input type="number" min="1" max="9999"
+                               class="input input-bordered input-sm w-full metadata-input"
+                               data-tab-id="{{ tab.id }}" data-field="estimated_hours"
+                               placeholder="-">
+                    </div>
+                    <div>
+                        <label class="text-xs text-base-content/50 font-medium mb-1 block">Missable Trophies</label>
+                        <input type="number" min="0" max="999"
+                               class="input input-bordered input-sm w-full metadata-input"
+                               data-tab-id="{{ tab.id }}" data-field="missable_count"
+                               placeholder="0">
+                    </div>
+                    <div>
+                        <label class="text-xs text-base-content/50 font-medium mb-1 block">Min Playthroughs</label>
+                        <input type="number" min="1" max="99"
+                               class="input input-bordered input-sm w-full metadata-input"
+                               data-tab-id="{{ tab.id }}" data-field="min_playthroughs"
+                               placeholder="1">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-xs text-base-content/50 font-medium mb-1">Online Required</label>
+                        <label class="label cursor-pointer justify-start gap-2 p-0 mt-1">
+                            <input type="checkbox"
+                                   class="toggle toggle-sm toggle-primary metadata-toggle"
+                                   data-tab-id="{{ tab.id }}" data-field="online_required">
+                            <span class="label-text text-xs online-required-label">No</span>
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -212,6 +263,21 @@
             <span class="trophy-guide-status badge badge-xs badge-ghost ml-auto shrink-0"></span>
         </summary>
         <div class="collapse-content px-3 pb-3">
+            <div class="flex items-center gap-3 mb-2 py-1.5 px-2 rounded bg-white/[0.03] border border-base-content/5">
+                <span class="text-[0.6rem] text-base-content/40 uppercase tracking-wider font-semibold shrink-0">Flags</span>
+                <label class="flex items-center gap-1 cursor-pointer text-xs">
+                    <input type="checkbox" class="checkbox checkbox-xs checkbox-warning trophy-guide-flag" data-flag="is_missable">
+                    <span class="text-base-content/60">Missable</span>
+                </label>
+                <label class="flex items-center gap-1 cursor-pointer text-xs">
+                    <input type="checkbox" class="checkbox checkbox-xs checkbox-info trophy-guide-flag" data-flag="is_online">
+                    <span class="text-base-content/60">Online</span>
+                </label>
+                <label class="flex items-center gap-1 cursor-pointer text-xs">
+                    <input type="checkbox" class="checkbox checkbox-xs checkbox-error trophy-guide-flag" data-flag="is_unobtainable">
+                    <span class="text-base-content/60">Unobtainable</span>
+                </label>
+            </div>
             {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
             <textarea class="textarea textarea-bordered w-full text-sm trophy-guide-body auto-resize" rows="3" placeholder="Tips and walkthrough for this trophy..."></textarea>
         </div>

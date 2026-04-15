@@ -3738,6 +3738,29 @@ class RoadmapTab(models.Model):
     general_tips = models.TextField(blank=True)
     youtube_url = models.URLField(blank=True)
 
+    # Guide metadata -- staff/author assessment, distinct from community ratings
+    difficulty = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text="Author-assessed difficulty (1-10). Distinct from community ratings."
+    )
+    estimated_hours = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Author-estimated hours to complete this trophy group."
+    )
+    missable_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Number of missable trophies in this group."
+    )
+    online_required = models.BooleanField(
+        default=False,
+        help_text="Whether online play is required for trophies in this group."
+    )
+    min_playthroughs = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Minimum playthroughs required for all trophies."
+    )
+
     class Meta:
         unique_together = ['roadmap', 'concept_trophy_group']
         ordering = ['concept_trophy_group__sort_order', 'concept_trophy_group__trophy_group_id']
@@ -3800,6 +3823,9 @@ class TrophyGuide(models.Model):
     trophy_id = models.IntegerField()
     body = models.TextField()
     order = models.PositiveIntegerField(default=0)
+    is_missable = models.BooleanField(default=False)
+    is_online = models.BooleanField(default=False)
+    is_unobtainable = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ['tab', 'trophy_id']

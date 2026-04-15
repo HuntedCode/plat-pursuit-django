@@ -55,9 +55,18 @@ class ChecklistService:
                 strip=True
             )
 
+            # Style links: external get target="_blank", internal anchors stay on-page
+            def _style_link(m):
+                pre, href, post = m.group(1), m.group(2), m.group(3)
+                if href.startswith('#trophy-guide-'):
+                    return f'<a {pre}href="{href}"{post} class="trophy-mention">'
+                if href.startswith('#'):
+                    return f'<a {pre}href="{href}"{post} class="link link-primary">'
+                return f'<a {pre}href="{href}"{post} class="link link-primary" target="_blank" rel="noopener noreferrer">'
+
             clean_html = re.sub(
                 r'<a\s+([^>]*?)href="([^"]*)"([^>]*?)>',
-                r'<a \1href="\2"\3 class="link link-primary" target="_blank" rel="noopener noreferrer">',
+                _style_link,
                 clean_html
             )
             clean_html = re.sub(
@@ -70,7 +79,7 @@ class ChecklistService:
             clean_html = re.sub(r'<p>', r'<p class="my-2">', clean_html)
             clean_html = re.sub(
                 r'<img ',
-                r'<img class="rounded-lg border border-base-content/10 max-w-[75%] h-auto my-3 mx-auto block" loading="lazy" ',
+                r'<img class="rounded-lg border border-base-content/10 max-w-full md:max-w-[75%] h-auto my-3 mx-auto block" ',
                 clean_html
             )
 

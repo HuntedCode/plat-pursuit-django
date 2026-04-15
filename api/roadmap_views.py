@@ -57,7 +57,7 @@ def _get_roadmap_and_tab(roadmap_id, tab_id):
 # ------------------------------------------------------------------ #
 
 class RoadmapTabUpdateView(APIView):
-    """PATCH: Update a tab's general tips and/or YouTube URL."""
+    """PATCH: Update a tab's content fields and/or guide metadata."""
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAdminUser]
 
@@ -66,11 +66,15 @@ class RoadmapTabUpdateView(APIView):
         if err:
             return err
 
-        general_tips = request.data.get('general_tips')
-        youtube_url = request.data.get('youtube_url')
-
         tab, error = RoadmapService.update_tab(
-            tab.id, general_tips=general_tips, youtube_url=youtube_url
+            tab.id,
+            general_tips=request.data.get('general_tips'),
+            youtube_url=request.data.get('youtube_url'),
+            difficulty=request.data.get('difficulty'),
+            estimated_hours=request.data.get('estimated_hours'),
+            missable_count=request.data.get('missable_count'),
+            online_required=request.data.get('online_required'),
+            min_playthroughs=request.data.get('min_playthroughs'),
         )
         if error:
             return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
@@ -78,6 +82,11 @@ class RoadmapTabUpdateView(APIView):
         return Response({
             'general_tips': tab.general_tips,
             'youtube_url': tab.youtube_url,
+            'difficulty': tab.difficulty,
+            'estimated_hours': tab.estimated_hours,
+            'missable_count': tab.missable_count,
+            'online_required': tab.online_required,
+            'min_playthroughs': tab.min_playthroughs,
         })
 
 
@@ -266,7 +275,10 @@ class RoadmapTrophyGuideView(APIView):
         body = request.data.get('body', '')
 
         guide, error = RoadmapService.create_or_update_trophy_guide(
-            tab.id, trophy_id, body
+            tab.id, trophy_id, body,
+            is_missable=request.data.get('is_missable'),
+            is_online=request.data.get('is_online'),
+            is_unobtainable=request.data.get('is_unobtainable'),
         )
         if error:
             return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
@@ -278,6 +290,9 @@ class RoadmapTrophyGuideView(APIView):
         return Response({
             'trophy_id': guide.trophy_id,
             'body': guide.body,
+            'is_missable': guide.is_missable,
+            'is_online': guide.is_online,
+            'is_unobtainable': guide.is_unobtainable,
         })
 
     def delete(self, request, roadmap_id, tab_id, trophy_id):

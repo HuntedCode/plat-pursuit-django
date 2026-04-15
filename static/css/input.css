@@ -1611,6 +1611,63 @@ html {
   background-image: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
 }
 
+/* Trophy mention: inline pill for cross-references to trophy guides.
+   Doubled selector for specificity to override prose [&_a] utilities. */
+.trophy-mention.trophy-mention {
+  --trophy-mention-color: var(--color-accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.8125em;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--trophy-mention-color);
+  background: color-mix(in oklch, var(--trophy-mention-color) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--trophy-mention-color) 20%, transparent);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  vertical-align: baseline;
+}
+.trophy-mention.trophy-mention::before {
+  content: '';
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath fill-rule='evenodd' d='M5.166 2.621v.858c-1.035.148-2.059.33-3.071.543a.75.75 0 00-.584.859 6.753 6.753 0 006.138 5.6 6.73 6.73 0 002.743 1.346A6.707 6.707 0 019.279 15H8.54c-1.036 0-1.875.84-1.875 1.875V19.5h-.375a.75.75 0 000 1.5h11.43a.75.75 0 000-1.5h-.376v-2.625c0-1.036-.84-1.875-1.875-1.875h-.739a6.707 6.707 0 01-1.112-3.173 6.73 6.73 0 002.743-1.347 6.753 6.753 0 006.139-5.6.75.75 0 00-.585-.858 47.077 47.077 0 00-3.07-.543V2.62a.75.75 0 00-.658-.744 49.22 49.22 0 00-6.093-.377c-2.063 0-4.096.128-6.093.377a.75.75 0 00-.657.744zm0 2.629c0 3.042 2.339 5.534 5.334 5.784a5.252 5.252 0 01-.347-1.153 4.5 4.5 0 01-3.487-3.873c-.51.065-1.01.143-1.5.23V5.25zm13.668 0v-.758c-.49-.074-.995-.14-1.5-.2a4.5 4.5 0 01-3.487 3.873 5.252 5.252 0 01-.347 1.153c2.995-.25 5.334-2.742 5.334-5.784v-.004z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath fill-rule='evenodd' d='M5.166 2.621v.858c-1.035.148-2.059.33-3.071.543a.75.75 0 00-.584.859 6.753 6.753 0 006.138 5.6 6.73 6.73 0 002.743 1.346A6.707 6.707 0 019.279 15H8.54c-1.036 0-1.875.84-1.875 1.875V19.5h-.375a.75.75 0 000 1.5h11.43a.75.75 0 000-1.5h-.376v-2.625c0-1.036-.84-1.875-1.875-1.875h-.739a6.707 6.707 0 01-1.112-3.173 6.73 6.73 0 002.743-1.347 6.753 6.753 0 006.139-5.6.75.75 0 00-.585-.858 47.077 47.077 0 00-3.07-.543V2.62a.75.75 0 00-.658-.744 49.22 49.22 0 00-6.093-.377c-2.063 0-4.096.128-6.093.377a.75.75 0 00-.657.744zm0 2.629c0 3.042 2.339 5.534 5.334 5.784a5.252 5.252 0 01-.347-1.153 4.5 4.5 0 01-3.487-3.873c-.51.065-1.01.143-1.5.23V5.25zm13.668 0v-.758c-.49-.074-.995-.14-1.5-.2a4.5 4.5 0 01-3.487 3.873 5.252 5.252 0 01-.347 1.153c2.995-.25 5.334-2.742 5.334-5.784v-.004z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.trophy-mention.trophy-mention:hover {
+  background: color-mix(in oklch, var(--trophy-mention-color, var(--color-accent)) 18%, transparent);
+  border-color: color-mix(in oklch, var(--trophy-mention-color, var(--color-accent)) 35%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--trophy-mention-color, var(--color-accent)) 15%, transparent);
+  text-decoration: none;
+}
+.trophy-mention-type {
+  opacity: 0.7;
+  font-weight: 500;
+  margin-left: 0.125rem;
+}
+.trophy-mention-type::before {
+  content: '\2022';
+  margin-right: 0.25rem;
+  opacity: 0.4;
+}
+
+/* Trophy type color variants */
+.trophy-mention[data-trophy-type="platinum"] { --trophy-mention-color: var(--color-info); }
+.trophy-mention[data-trophy-type="gold"]     { --trophy-mention-color: var(--color-warning); }
+.trophy-mention[data-trophy-type="silver"]   { --trophy-mention-color: #9ca3af; }
+.trophy-mention[data-trophy-type="bronze"]   { --trophy-mention-color: var(--color-accent); }
+
 /* Scroll indicator bounce */
 @keyframes scroll-bounce {
   0%, 100% { transform: translateY(0); opacity: 0.5; }

@@ -1,0 +1,24 @@
+{# DLC navigation strip for switching between trophy groups. Expects: available_tabs, active_trophy_group_id, game #}
+
+<div class="flex items-center gap-2 overflow-x-auto pb-1 mb-1 scrollbar-thin">
+    {% for tab_info in available_tabs %}
+        {% if tab_info.has_content %}
+            {% if tab_info.trophy_group_id == 'default' %}
+                <a href="{% url 'roadmap_detail' game.np_communication_id %}"
+            {% else %}
+                <a href="{% url 'roadmap_detail_dlc' game.np_communication_id tab_info.trophy_group_id %}"
+            {% endif %}
+               class="btn btn-sm gap-1.5 shrink-0 {% if tab_info.trophy_group_id == active_trophy_group_id %}btn-primary shadow-md shadow-primary/20{% else %}btn-ghost border border-base-300 text-base-content/60 hover:text-base-content{% endif %}">
+                {% if tab_info.ctg.icon_url %}
+                    <img src="{{ tab_info.ctg.icon_url }}" alt="" class="w-4 h-4 rounded object-cover">
+                {% endif %}
+                <span class="text-xs">{{ tab_info.ctg.display_name }}</span>
+            </a>
+        {% else %}
+            <span class="btn btn-sm btn-ghost border border-base-300 shrink-0 opacity-40 cursor-not-allowed">
+                <span class="text-xs">{{ tab_info.ctg.display_name }}</span>
+                <span class="text-[0.6rem] text-base-content/30">(empty)</span>
+            </span>
+        {% endif %}
+    {% endfor %}
+</div>

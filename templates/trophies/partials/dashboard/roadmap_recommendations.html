@@ -20,7 +20,7 @@
         {% if data.has_data %}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 lg:gap-3">
                 {% for rm in data.roadmaps %}
-                    <a href="{% url 'game_detail' rm.np_communication_id %}#roadmap" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group relative">
+                    <a href="{% url 'roadmap_detail' rm.np_communication_id %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group relative">
                         {# Game icon #}
                         <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-lg overflow-hidden shrink-0 ring-1 ring-base-300">
                             {% if rm.icon_url %}

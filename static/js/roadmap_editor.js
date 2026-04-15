@@ -370,6 +370,57 @@
     }
 
     // ------------------------------------------------------------------ //
+    //  Metadata Fields
+    // ------------------------------------------------------------------ //
+
+    function initMetadataFields() {
+        // Populate initial values from tabsData
+        tabsData.forEach(tab => {
+            document.querySelectorAll(`.metadata-input[data-tab-id="${tab.id}"]`).forEach(input => {
+                const field = input.dataset.field;
+                const val = tab[field];
+                if (val !== null && val !== undefined) input.value = val;
+            });
+            document.querySelectorAll(`.metadata-toggle[data-tab-id="${tab.id}"]`).forEach(toggle => {
+                const field = toggle.dataset.field;
+                toggle.checked = !!tab[field];
+                const label = toggle.closest('label')?.querySelector('.online-required-label');
+                if (label) label.textContent = toggle.checked ? 'Yes' : 'No';
+            });
+        });
+
+        // Debounced save for number inputs
+        document.querySelectorAll('.metadata-input').forEach(input => {
+            const tabId = parseInt(input.dataset.tabId, 10);
+            const field = input.dataset.field;
+            const debouncedSave = debounce(async () => {
+                const body = {};
+                body[field] = input.value;
+                await apiCall('patch', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/`, body);
+            }, 1000);
+
+            input.addEventListener('input', () => {
+                setSaveStatus('unsaved');
+                debouncedSave();
+            });
+        });
+
+        // Immediate save for toggle
+        document.querySelectorAll('.metadata-toggle').forEach(toggle => {
+            const tabId = parseInt(toggle.dataset.tabId, 10);
+            const field = toggle.dataset.field;
+
+            toggle.addEventListener('change', async () => {
+                const label = toggle.closest('label')?.querySelector('.online-required-label');
+                if (label) label.textContent = toggle.checked ? 'Yes' : 'No';
+                const body = {};
+                body[field] = toggle.checked;
+                await apiCall('patch', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/`, body);
+            });
+        });
+    }
+
+    // ------------------------------------------------------------------ //
     //  Trophy Guides
     // ------------------------------------------------------------------ //
 
@@ -403,9 +454,19 @@
             typeBadge.classList.add(TROPHY_TYPE_COLORS[t.type] || 'badge-ghost');
 
             const statusBadge = el.querySelector('.trophy-guide-status');
-            const body = guides[t.trophy_id] || '';
+            const guideData = guides[t.trophy_id] || {};
+            const body = typeof guideData === 'string' ? guideData : (guideData.body || '');
             const textarea = el.querySelector('.trophy-guide-body');
             textarea.value = body;
+
+            // Load flag checkboxes
+            const flagCheckboxes = el.querySelectorAll('.trophy-guide-flag');
+            flagCheckboxes.forEach(cb => {
+                const flag = cb.dataset.flag;
+                if (typeof guideData === 'object' && guideData[flag]) {
+                    cb.checked = true;
+                }
+            });
 
             if (body) {
                 statusBadge.textContent = 'Written';
@@ -419,18 +480,27 @@
                 el.setAttribute('open', '');
             }
 
+            // Collect current flags from checkboxes
+            function getFlags() {
+                const flags = {};
+                flagCheckboxes.forEach(cb => { flags[cb.dataset.flag] = cb.checked; });
+                return flags;
+            }
+
             // Debounced autosave
             const debouncedSave = debounce(async () => {
                 const currentBody = textarea.value;
+                const flags = getFlags();
                 await apiCall('put', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/trophy-guides/${t.trophy_id}/`, {
-                    body: currentBody
+                    body: currentBody,
+                    ...flags,
                 });
 
                 // Update status badge and local state
                 const tabData = tabsData.find(td => td.id === tabId);
                 if (tabData) {
                     if (currentBody.trim()) {
-                        tabData.trophy_guides[t.trophy_id] = currentBody;
+                        tabData.trophy_guides[t.trophy_id] = { body: currentBody, ...flags };
                     } else {
                         delete tabData.trophy_guides[t.trophy_id];
                     }
@@ -448,6 +518,13 @@
             textarea.addEventListener('input', () => {
                 setSaveStatus('unsaved');
                 debouncedSave();
+            });
+
+            flagCheckboxes.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    setSaveStatus('unsaved');
+                    debouncedSave();
+                });
             });
 
             container.appendChild(el);
@@ -835,7 +912,11 @@
         const groupId = document.querySelector(`.trophy-guides-container[data-tab-id="${tabId}"]`)?.dataset.groupId;
         const totalTrophies = (trophiesByGroup[groupId] || []).length;
         const writtenGuides = Object.keys(tabData.trophy_guides || {}).filter(
-            k => tabData.trophy_guides[k]?.trim()
+            k => {
+                const v = tabData.trophy_guides[k];
+                const body = typeof v === 'string' ? v : (v?.body || '');
+                return body.trim();
+            }
         ).length;
 
         const counter = document.querySelector(`.trophy-guide-counter[data-tab-id="${tabId}"]`);
@@ -852,6 +933,7 @@
         initTabs();
         initAddStepButtons();
         initTabFields();
+        initMetadataFields();
         initPublishButtons();
         initFormattingToolbars();
         initKeyboardShortcuts();

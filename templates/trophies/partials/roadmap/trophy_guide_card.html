@@ -1,0 +1,55 @@
+{% load custom_filters markdown_filters %}
+{# Single trophy guide entry. Expects: guide (TrophyGuide), roadmap_trophies, profile_earned #}
+
+{% with trophy=roadmap_trophies|get_item:guide.trophy_id earned_data=profile_earned|get_item:guide.trophy_id %}
+<details id="trophy-guide-{{ guide.trophy_id }}" open
+        data-order="{{ guide.trophy_id }}"
+        data-type="{% if trophy %}{{ trophy.trophy_type }}{% endif %}"
+        data-rarity="{% if trophy %}{{ trophy.trophy_earn_rate }}{% else %}100{% endif %}"
+        data-earned="{% if earned_data.earned %}1{% else %}0{% endif %}"
+        data-missable="{% if guide.is_missable %}1{% else %}0{% endif %}"
+        data-online="{% if guide.is_online %}1{% else %}0{% endif %}"
+        data-unobtainable="{% if guide.is_unobtainable %}1{% else %}0{% endif %}"
+        class="trophy-guide-item group rounded-lg border overflow-hidden transition-[border-color,box-shadow] duration-200
+               {% if earned_data.earned %}border-success/20 border-l-4 border-l-success/50 bg-success/[0.03] hover:border-success/30 hover:shadow-md hover:shadow-success/5{% else %}border-base-content/5 bg-white/[0.03] hover:border-primary/20 hover:shadow-md hover:shadow-primary/5{% endif %}">
+    <summary class="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden">
+        {% if trophy %}
+        <div class="relative shrink-0">
+            <img src="{{ trophy.trophy_icon_url }}" alt="{{ trophy.trophy_name }}" class="w-8 h-8 md:w-9 md:h-9 rounded object-cover border border-base-content/10 {% if not earned_data.earned %}opacity-60 grayscale-[30%]{% endif %}" loading="lazy">
+            {% if earned_data.earned %}
+            <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-success rounded-full flex items-center justify-center ring-2 ring-base-200">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            {% endif %}
+        </div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+                <span class="text-sm md:text-base font-semibold truncate {% if not earned_data.earned %}text-base-content/70{% endif %}">{{ trophy.trophy_name }}</span>
+                <span class="badge badge-xs shrink-0 {% if trophy.trophy_type == 'platinum' %}badge-info{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">{{ trophy.trophy_type|title }}</span>
+                {% if guide.is_missable or guide.is_online or guide.is_unobtainable %}<span class="w-px h-3 bg-base-content/15 shrink-0"></span>{% endif %}
+                {% if guide.is_missable %}<span class="badge badge-xs badge-warning shrink-0 gap-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>Missable</span>{% endif %}
+                {% if guide.is_online %}<span class="badge badge-xs badge-info shrink-0 gap-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0"/></svg>Online</span>{% endif %}
+                {% if guide.is_unobtainable %}<span class="badge badge-xs badge-error shrink-0 gap-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>Unobtainable</span>{% endif %}
+            </div>
+            {% if trophy.trophy_detail %}
+            <p class="text-xs text-base-content/35 italic mt-0.5 line-clamp-2 pr-1">{{ trophy.trophy_detail }}</p>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="w-8 h-8 md:w-9 md:h-9 rounded bg-base-300/30 shrink-0"></div>
+        <div class="flex-1 min-w-0">
+            <span class="text-sm md:text-base font-semibold">Trophy #{{ guide.trophy_id }}</span>
+        </div>
+        {% endif %}
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-base-content/30 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+    </summary>
+    <div class="bg-black/[0.06] border-t border-base-content/5 rounded-b-lg px-3 pb-3 pt-2">
+        <div class="text-sm md:text-base text-base-content/75 leading-relaxed lg:leading-[1.75] max-w-3xl
+                    [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-2 [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:space-y-1
+                    [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
+                    [&_strong]:text-base-content/90 [&_strong]:font-semibold
+                    [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
+                    [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ guide.body|render_markdown }}</div>
+    </div>
+</details>
+{% endwith %}
