@@ -1,24 +1,40 @@
 {% load static %}
 {% comment %}
-Welcome Tour modal: a 4-step carousel introducing PlatPursuit's hub-of-hubs
-navigation. Auto-shows once on first dashboard load after PSN link + sync,
+Welcome Tour modal: a 7-step carousel introducing PlatPursuit's navigation
+and features. Auto-shows once on first dashboard load after PSN link + sync,
 then only re-appears via the avatar dropdown "Replay Tour" button.
 
 Included in base.html for all authenticated+linked users so the re-trigger
 path always has the modal in the DOM. The show_welcome_tour context var
 tells JS whether to auto-open on page load.
 
-Each step has two sections:
-  1. A "navigation path" showing the navbar buttons with the current hub
-     highlighted, flowing into the sub-nav strip. This directly teaches
-     users WHERE to find things in the real UI.
-  2. Feature preview cards showing WHAT they'll find there.
+Steps:
+  1. Welcome splash (shimmer logo + ambient particles)
+  2. Navigation intro (how to get around)
+  3. Avatar menu (profile & settings)
+  4-7. Hub walkthroughs (Dashboard, Browse, Community, My Pursuit)
 
-See docs/design/tutorial-system.md for design rationale.
+On desktop (>=1024px), the real navbar is cloned into the modal and
+highlighted per step. On mobile (<1024px), the real tab bar and sub-nav
+are cloned instead. See docs/design/tutorial-system.md for design rationale.
 {% endcomment %}
 
-<dialog id="welcome-tour-modal" class="modal" data-auto-show="{{ show_welcome_tour|yesno:'true,false' }}">
+<dialog id="welcome-tour-modal" class="modal" data-auto-show="{{ show_welcome_tour|yesno:'true,false' }}" data-psn-username="{{ user.profile.display_psn_username|default:'' }}">
     <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300 shadow-xl p-0 overflow-hidden tour-modal-box">
+        {# Ambient particle drift behind all step content #}
+        <div class="tour-particles" aria-hidden="true">
+            <div class="tour-particle" style="--p-x: 8%; --p-delay: 0s; --p-size: 5px; --p-duration: 7s;"></div>
+            <div class="tour-particle" style="--p-x: 22%; --p-delay: 1.2s; --p-size: 4px; --p-duration: 9s;"></div>
+            <div class="tour-particle" style="--p-x: 35%; --p-delay: 2.5s; --p-size: 6px; --p-duration: 6.5s;"></div>
+            <div class="tour-particle" style="--p-x: 48%; --p-delay: 0.5s; --p-size: 4px; --p-duration: 11s;"></div>
+            <div class="tour-particle" style="--p-x: 62%; --p-delay: 3s; --p-size: 5px; --p-duration: 8s;"></div>
+            <div class="tour-particle" style="--p-x: 75%; --p-delay: 1.8s; --p-size: 3px; --p-duration: 10s;"></div>
+            <div class="tour-particle" style="--p-x: 88%; --p-delay: 4s; --p-size: 5px; --p-duration: 7.5s;"></div>
+            <div class="tour-particle" style="--p-x: 15%; --p-delay: 3.5s; --p-size: 3px; --p-duration: 9.5s;"></div>
+            <div class="tour-particle" style="--p-x: 55%; --p-delay: 2s; --p-size: 6px; --p-duration: 8.5s;"></div>
+            <div class="tour-particle" style="--p-x: 92%; --p-delay: 0.8s; --p-size: 4px; --p-duration: 12s;"></div>
+        </div>
+
         {# Close button #}
         <button type="button" class="btn btn-sm btn-circle btn-ghost absolute right-3 top-3 z-10 text-base-content/60 hover:text-base-content"
                 aria-label="Close welcome tour"
@@ -82,9 +98,75 @@ See docs/design/tutorial-system.md for design rationale.
         </div>
 
         {# ================================================================ #}
-        {# Step 3: Dashboard (Primary / Cyan)                               #}
+        {# Step 3: Avatar Menu (Info / Blue)                                #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="3" data-accent="var(--color-primary)">
+        <div class="tour-step hidden" data-step="3" data-accent="var(--color-info)" data-intro="avatar">
+            <div class="p-5 md:p-8">
+                <div class="text-center mb-5">
+                    <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-info)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold mb-1">Your Profile & Settings</h2>
+                    <p class="text-sm text-base-content/50 italic pr-1 mb-3">Everything about your account, one click away.</p>
+                    <p class="text-sm text-base-content/70 max-w-lg mx-auto tour-step-description">Your avatar in the top-right corner opens a dropdown with quick links to your profile, theme toggle, site settings, and more. You can also replay this tour anytime from there.</p>
+                </div>
+
+                <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">Quick access to</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <div class="tour-feature-card" style="--card-accent: var(--color-info)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Profile</div>
+                            <div class="text-xs text-base-content/50">Your public trophy hunter profile</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-info)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Theme Toggle</div>
+                            <div class="text-xs text-base-content/50">Switch between dark and light mode</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-info)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Settings</div>
+                            <div class="text-xs text-base-content/50">Notification and account preferences</div>
+                        </div>
+                    </div>
+                    <div class="tour-feature-card" style="--card-accent: var(--color-info)">
+                        <div class="tour-feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                            </svg>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold">Replay Tour</div>
+                            <div class="text-xs text-base-content/50">Revisit this walkthrough anytime</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ================================================================ #}
+        {# Step 4: Dashboard (Primary / Cyan)                               #}
+        {# ================================================================ #}
+        <div class="tour-step hidden" data-step="4" data-accent="var(--color-primary)">
             <div class="p-5 md:p-8">
                 {# Hub icon + title #}
                 <div class="text-center mb-5">
@@ -164,9 +246,9 @@ See docs/design/tutorial-system.md for design rationale.
         </div>
 
         {# ================================================================ #}
-        {# Step 2: Browse (Accent / Orange)                                 #}
+        {# Step 5: Browse (Accent / Orange)                                 #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="4" data-accent="var(--color-accent)">
+        <div class="tour-step hidden" data-step="5" data-accent="var(--color-accent)">
             <div class="p-5 md:p-8">
                 <div class="text-center mb-5">
                     <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-accent)">
@@ -203,7 +285,7 @@ See docs/design/tutorial-system.md for design rationale.
                 </div>
 
                 <p class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2">What you'll find</p>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
                     <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
                         <div class="tour-feature-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -243,17 +325,6 @@ See docs/design/tutorial-system.md for design rationale.
                     <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
                         <div class="tour-feature-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/>
-                            </svg>
-                        </div>
-                        <div class="min-w-0">
-                            <div class="text-sm font-semibold">Companies</div>
-                            <div class="text-xs text-base-content/50">Games by your favorite studios</div>
-                        </div>
-                    </div>
-                    <div class="tour-feature-card" style="--card-accent: var(--color-accent)">
-                        <div class="tour-feature-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
                             </svg>
                         </div>
@@ -267,9 +338,9 @@ See docs/design/tutorial-system.md for design rationale.
         </div>
 
         {# ================================================================ #}
-        {# Step 3: Community (Success / Green)                              #}
+        {# Step 6: Community (Success / Green)                              #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="5" data-accent="var(--color-success)">
+        <div class="tour-step hidden" data-step="6" data-accent="var(--color-success)">
             <div class="p-5 md:p-8">
                 <div class="text-center mb-5">
                     <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-success)">
@@ -358,9 +429,9 @@ See docs/design/tutorial-system.md for design rationale.
         </div>
 
         {# ================================================================ #}
-        {# Step 4: My Pursuit (Secondary / Purple)                          #}
+        {# Step 7: My Pursuit (Secondary / Purple)                          #}
         {# ================================================================ #}
-        <div class="tour-step hidden" data-step="6" data-accent="var(--color-secondary)">
+        <div class="tour-step hidden" data-step="7" data-accent="var(--color-secondary)">
             <div class="p-5 md:p-8">
                 <div class="text-center mb-5">
                     <div class="tour-icon-glow mx-auto mb-3" style="--glow-color: var(--color-secondary)">
@@ -439,19 +510,21 @@ See docs/design/tutorial-system.md for design rationale.
         {# Navigation controls (shared across all steps)                    #}
         {# ================================================================ #}
         <div class="border-t border-base-300 bg-base-200/80 px-5 md:px-8 py-4">
-            {# Progress dots #}
-            <div class="flex justify-center gap-2 mb-4" id="tour-progress-dots">
+            {# Progress dots with connected bar #}
+            <div class="tour-progress-container" id="tour-progress-dots">
+                <div class="tour-progress-bar" id="tour-progress-bar"></div>
                 <button type="button" class="tour-dot active" data-dot="1" aria-label="Go to step 1" onclick="PlatPursuit.WelcomeTourManager.goToStep(1)"></button>
                 <button type="button" class="tour-dot" data-dot="2" aria-label="Go to step 2" onclick="PlatPursuit.WelcomeTourManager.goToStep(2)"></button>
                 <button type="button" class="tour-dot" data-dot="3" aria-label="Go to step 3" onclick="PlatPursuit.WelcomeTourManager.goToStep(3)"></button>
                 <button type="button" class="tour-dot" data-dot="4" aria-label="Go to step 4" onclick="PlatPursuit.WelcomeTourManager.goToStep(4)"></button>
                 <button type="button" class="tour-dot" data-dot="5" aria-label="Go to step 5" onclick="PlatPursuit.WelcomeTourManager.goToStep(5)"></button>
                 <button type="button" class="tour-dot" data-dot="6" aria-label="Go to step 6" onclick="PlatPursuit.WelcomeTourManager.goToStep(6)"></button>
+                <button type="button" class="tour-dot" data-dot="7" aria-label="Go to step 7" onclick="PlatPursuit.WelcomeTourManager.goToStep(7)"></button>
             </div>
 
             {# Step counter (own line so it doesn't overlap buttons on mobile) #}
             <div class="text-center mb-2">
-                <span class="text-xs text-base-content/40" id="tour-step-counter">Step 1 of 4</span>
+                <span class="text-xs text-base-content/40" id="tour-step-counter">Step 1 of 7</span>
             </div>
 
             {# Skip + prev/next buttons #}

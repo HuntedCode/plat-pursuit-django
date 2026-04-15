@@ -419,7 +419,23 @@
 
 /* Modal entrance: scale up from 95% */
 .tour-modal-box {
+  position: relative;
   animation: tour-entrance 0.3s ease-out;
+}
+
+/* All step content sits above the particles. The close button is excluded
+   because it uses position:absolute (right-3 top-3) and overriding that
+   with relative would break its placement. */
+.tour-modal-box > .tour-step,
+.tour-modal-box > .border-t {
+  position: relative;
+  z-index: 1;
+}
+
+/* Min-height for step content so shorter steps don't shrink the modal.
+   Taller steps can still grow naturally without scrollbars. */
+.tour-modal-box > .tour-step > div {
+  min-height: 380px;
 }
 
 @keyframes tour-entrance {
@@ -493,12 +509,11 @@
   color: var(--card-accent);
 }
 
-/* Navigation path container */
+/* Navigation path container: hidden on all viewports (replaced by real
+   navbar/tab-bar clones highlighted per step). Kept in the DOM for
+   backwards compatibility but never displayed. */
 .tour-nav-path {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 0.75rem;
-  padding: 0.75rem;
+  display: none;
 }
 
 /* Navbar mockup (the 4 hub buttons) — nowrap + scroll as fallback */
@@ -562,82 +577,237 @@
   font-weight: 600;
 }
 
-/* Progress dots */
-.tour-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  background: rgba(255, 255, 255, 0.2);
-  transition: all 0.3s ease;
+/* Progress dots with connected bar */
+.tour-progress-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem 0;
 }
 
-.tour-dot:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-.tour-dot.active {
-  background: var(--dot-color, var(--color-primary));
-  transform: scale(1.3);
-}
-
-/* Post-tour spotlight overlay: sits below the navbar (z-50) and sub-nav
-   (z-40) so both remain visible without z-index manipulation. The glow
-   class adds the attention-grabbing box-shadow. */
-.tour-spotlight-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  z-index: 39;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  cursor: pointer;
-}
-
-.tour-spotlight-overlay.visible {
-  opacity: 1;
-}
-
-/* Glow effect on the real navbar + sub-nav (no z-index change needed) */
-.tour-spotlight-target {
-  box-shadow: 0 0 30px 8px color-mix(in oklab, var(--color-primary), transparent 40%) !important;
-  transition: box-shadow 0.3s ease;
-}
-
-/* Floating callout below the nav chrome */
-.tour-spotlight-callout {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 41;
-  opacity: 0;
-  transition: opacity 0.3s ease 0.2s;
+.tour-progress-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
   pointer-events: none;
 }
 
-.tour-spotlight-callout.visible {
+.tour-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  height: 4px;
+  border-radius: 9999px;
+  width: var(--progress-fill, 0%);
+  background: var(--dot-color, var(--color-primary));
+  box-shadow: 0 0 8px color-mix(in oklab, var(--dot-color, var(--color-primary)), transparent 50%);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease;
+}
+
+.tour-dot {
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tour-dot:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tour-dot.active {
+  width: 10px;
+  height: 10px;
+  background: var(--dot-color, var(--color-primary));
+  border-color: var(--dot-color, var(--color-primary));
+  box-shadow: 0 0 8px color-mix(in oklab, var(--dot-color, var(--color-primary)), transparent 40%);
+  transform: none;
+}
+
+/* ===== Post-Tour Completion Celebration ===== */
+
+.tour-completion-overlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.92) 100%);
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  cursor: pointer;
+}
+.tour-completion-overlay.visible {
   opacity: 1;
 }
 
-.tour-spotlight-callout-inner {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
-  border-radius: 0.75rem;
-  background: var(--color-primary);
-  color: var(--color-base-100, #1a1d23);
-  font-weight: 700;
-  font-size: 0.9375rem;
-  box-shadow: 0 4px 20px color-mix(in oklab, var(--color-primary), transparent 40%);
-  animation: tour-callout-bounce 1.5s ease-in-out infinite;
+.tour-completion-card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.85);
+  z-index: 10000;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.6s ease 0.2s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
+  pointer-events: none;
+}
+.tour-completion-card.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 
-@keyframes tour-callout-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+/* Full-screen rising ember/cinder particles */
+.tour-completion-embers {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.tour-completion-embers.visible {
+  opacity: 1;
+}
+.tour-ember {
+  position: absolute;
+  bottom: -10px;
+  left: var(--e-x, 50%);
+  width: var(--e-size, 4px);
+  height: var(--e-size, 4px);
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 6px 2px rgba(245, 158, 11, 0.6),
+              0 0 14px 4px rgba(239, 68, 68, 0.3);
+  animation: tour-ember-rise var(--e-dur, 3s) ease-out var(--e-delay, 0s) infinite;
+}
+.tour-ember:nth-child(odd) {
+  background: #ef4444;
+  box-shadow: 0 0 6px 2px rgba(239, 68, 68, 0.6),
+              0 0 14px 4px rgba(245, 158, 11, 0.3);
+}
+.tour-ember:nth-child(3n) {
+  background: #fb923c;
+  box-shadow: 0 0 6px 2px rgba(251, 146, 60, 0.6),
+              0 0 12px 3px rgba(245, 158, 11, 0.3);
+}
+@keyframes tour-ember-rise {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.9;
+  }
+  25% {
+    opacity: 0.7;
+    transform: translateY(-25vh) translateX(var(--e-drift, 10px)) scale(0.85);
+  }
+  55% {
+    opacity: 0.35;
+    transform: translateY(-55vh) translateX(calc(var(--e-drift, 10px) * -0.6)) scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-100vh) translateX(var(--e-drift, 10px)) scale(0.15);
+  }
+}
+
+/* Logo with glow pulse */
+.tour-completion-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin: 0 auto 1.5rem;
+  position: relative;
+  z-index: 1;
+  animation: tour-logo-glow 2.5s ease-in-out infinite;
+}
+@keyframes tour-logo-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px color-mix(in oklab, var(--color-primary), transparent 50%),
+                0 0 60px color-mix(in oklab, var(--color-primary), transparent 80%);
+  }
+  50% {
+    box-shadow: 0 0 30px color-mix(in oklab, var(--color-primary), transparent 30%),
+                0 0 80px color-mix(in oklab, var(--color-primary), transparent 60%);
+  }
+}
+
+.tour-completion-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.3;
+}
+
+.tour-completion-username {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  margin-top: 0.25rem;
+  animation: tour-username-glow 2.5s ease-in-out infinite;
+}
+@keyframes tour-username-glow {
+  0%, 100% { text-shadow: 0 0 20px color-mix(in oklab, var(--color-primary), transparent 50%); }
+  50% { text-shadow: 0 0 50px color-mix(in oklab, var(--color-primary), transparent 20%); }
+}
+
+.tour-completion-subtitle {
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 1.25rem;
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* Scale up the celebration on larger screens */
+@media (min-width: 768px) {
+  .tour-completion-logo {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 2rem;
+  }
+  .tour-completion-title {
+    font-size: 2rem;
+  }
+  .tour-completion-username {
+    font-size: 3rem;
+  }
+  .tour-completion-subtitle {
+    font-size: 1.125rem;
+    margin-top: 1.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .tour-completion-logo {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 2.5rem;
+  }
+  .tour-completion-title {
+    font-size: 2.5rem;
+  }
+  .tour-completion-username {
+    font-size: 4rem;
+  }
+  .tour-completion-subtitle {
+    font-size: 1.25rem;
+    margin-top: 2rem;
+  }
 }
 
 /* Light theme adjustments */
@@ -659,21 +829,27 @@
 }
 
 [data-theme="plat-pursuit-light"] .tour-dot {
-  background: rgba(0, 0, 0, 0.15);
+  border-color: rgba(0, 0, 0, 0.12);
+  background: transparent;
 }
 
 [data-theme="plat-pursuit-light"] .tour-dot:hover {
-  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="plat-pursuit-light"] .tour-progress-bar {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 /* Welcome Tour mobile: tighten spacing so all content fits within the
-   85vh-capped modal on small phones. The description paragraph and the
-   navbar mockup ("How to get here") are hidden entirely. Instead, JS
-   highlights the *actual* mobile tab bar item for the current step,
-   which is more authentic and saves ~120px of vertical space. */
+   85vh-capped modal on small phones. JS highlights the actual mobile tab
+   bar and sub-nav for each step (same approach is now used on desktop
+   too, with the real navbar cloned into the modal). */
 @media (max-width: 1023px) {
   .tour-modal-box .tour-step > div {
     padding: 1rem;
+    min-height: 280px;
   }
   .tour-icon-glow {
     width: 56px;
@@ -683,18 +859,18 @@
     width: 28px;
     height: 28px;
   }
+  /* Hide description paragraphs on mobile to keep cards compact */
   .tour-step-description {
-    display: none;
-  }
-  /* Hide the entire nav path on mobile — JS clones the real mobile tab
-     bar and sub-nav into the modal's stacking context instead. */
-  .tour-nav-path {
     display: none;
   }
   .tour-modal-box .border-t {
     padding: 0.75rem 1rem;
   }
   .tour-modal-box .tour-dot {
+    width: 6px;
+    height: 6px;
+  }
+  .tour-modal-box .tour-dot.active {
     width: 8px;
     height: 8px;
   }
@@ -788,6 +964,102 @@
   50% { opacity: 1; }
 }
 
+/* ===== Desktop Navbar Clone ===== */
+
+/* Positioned fixed at viewport top inside the dialog's stacking context.
+   Mirrors the real navbar exactly but with tour highlights instead of
+   active states. Hidden by default, shown by JS on steps 2+. */
+.tour-navbar-clone {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+}
+.tour-navbar-clone.visible {
+  display: flex;
+}
+
+/* Hub button highlight in the cloned navbar (pulsing ring) */
+.tour-hub-highlight {
+  position: relative;
+}
+.tour-hub-highlight::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 0.5rem;
+  border: 2px solid var(--tour-highlight-color, var(--color-primary));
+  box-shadow: 0 0 12px color-mix(in oklab, var(--tour-highlight-color, var(--color-primary)), transparent 60%);
+  animation: tour-tab-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Avatar button highlight in the cloned navbar (pulsing ring) */
+.tour-avatar-highlight {
+  position: relative;
+}
+.tour-avatar-highlight::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--color-info);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-info), transparent 60%);
+  animation: tour-tab-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ===== Ambient Particle Drift ===== */
+
+.tour-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.tour-particle {
+  position: absolute;
+  bottom: -10px;
+  left: var(--p-x, 50%);
+  width: var(--p-size, 5px);
+  height: var(--p-size, 5px);
+  border-radius: 50%;
+  background: var(--color-primary);
+  opacity: 0;
+  animation: tour-particle-drift var(--p-duration, 8s) ease-in-out var(--p-delay, 0s) infinite;
+}
+@keyframes tour-particle-drift {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.5);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.35;
+    transform: translateY(-5vh) translateX(3px) scale(1);
+  }
+  40% {
+    opacity: 0.25;
+    transform: translateY(-35vh) translateX(18px) scale(0.9);
+  }
+  70% {
+    opacity: 0.15;
+    transform: translateY(-55vh) translateX(-8px) scale(0.7);
+  }
+  100% {
+    transform: translateY(-80vh) translateX(-15px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+[data-theme="plat-pursuit-light"] .tour-particle {
+  background: var(--color-primary);
+}
+
+/* Light theme progress bar override is in the main dot section above */
+
 /* ===== Game Detail Coach Marks ===== */
 
 /* Spotlight overlay: a transparent "window" element positioned over the
@@ -809,6 +1081,28 @@
 .coach-overlay.visible {
   opacity: 1;
   visibility: visible;
+}
+
+/* Pulsing ring around the coach mark cutout for visual emphasis */
+.coach-overlay.visible::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 12px;
+  border: 2px solid var(--color-primary);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--color-primary), transparent 60%);
+  animation: coach-ring-pulse 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes coach-ring-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    box-shadow: 0 0 8px color-mix(in oklab, var(--color-primary), transparent 70%);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 20px color-mix(in oklab, var(--color-primary), transparent 40%);
+  }
 }
 
 /* Tooltip positioned by JS next to the highlighted target */

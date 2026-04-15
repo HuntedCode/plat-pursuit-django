@@ -176,6 +176,10 @@ CONTENT_SECURITY_POLICY = {
             "'self'",
             "https://pagead2.googlesyndication.com",   # AdSense reporting
         ],
+        "worker-src": [
+            "'self'",
+            "blob:",                                 # canvas-confetti Web Worker
+        ],
         "frame-ancestors": ["'none'"],
     },
 }

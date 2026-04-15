@@ -32,20 +32,23 @@ It also surfaces **features that are otherwise hard to discover**: the Platinum 
 - **Manual re-trigger** via a button in the avatar dropdown (or a small "?" icon somewhere stable). Users who skipped the first time, or users who want a refresher, can re-run on demand.
 - **Per-user, persistent dismissal.** Once a user has either completed or skipped the tour, the auto-trigger is suppressed forever. Only the manual re-trigger can resurface it.
 
-## Tour content (4-step Welcome Tour)
+## Tour content (7-step Welcome Tour)
 
-The tour walks through each of the four hubs in IA order. Each step is a single modal slide with a screenshot/icon, a one-sentence description, and Next/Skip buttons. The whole thing should be completable in under a minute.
+The tour has 7 steps: two intro slides, one avatar/settings slide, and four hub walkthroughs. Each step is a single modal slide with an icon, description, and feature cards. Completable in under a minute.
 
-| Step | Hub | Pitch (one sentence) | Highlights |
+| Step | Section | Title | Highlights |
 |---|---|---|---|
-| 1 | **Dashboard** | "Your personal cockpit — track your stats, manage your hunts, customize your view." | Sub-nav strip (Stats, Shareables, Recap) |
-| 2 | **Browse** | "Find your next platinum — browse games, trophies, companies, genres, and themes." | Sub-nav strip + filter system on game pages |
-| 3 | **Community** | "See what other hunters are up to — reviews, challenges, lists, leaderboards, and our Discord." | Discord callout |
-| 4 | **My Pursuit** | "Track your trophy hunting goals — earn badges, hit milestones, and unlock titles." | Sub-nav strip (Badges, Milestones, Titles) |
+| 1 | Welcome splash | "Welcome to Platinum Pursuit" | Logo shimmer, ambient particles, text cascade |
+| 2 | Navigation intro | "How to Get Around" | Real navbar/tab bar highlighted with per-hub colors |
+| 3 | Avatar menu | "Your Profile & Settings" | Avatar button highlighted, feature cards for Profile/Theme/Settings/Replay |
+| 4 | Dashboard | "Your Trophy Hunting HQ" | Dashboard hub highlighted, sub-nav shown |
+| 5 | Browse | "Find Your Next Platinum" | Browse hub highlighted, sub-nav shown |
+| 6 | Community | "Hunt Together" | Community hub highlighted, sub-nav shown |
+| 7 | My Pursuit | "Your Trophy Hunting Identity" | My Pursuit hub highlighted, sub-nav shown |
 
-The exact wording is a copywriting exercise for implementation time. The structure is the load-bearing thing.
+On desktop, the real `.navbar` is cloned into the `<dialog>` and elements are highlighted per step. On mobile, the real `.mobile-tabbar` and `.hub-subnav` are cloned instead. No static mockups are used on any viewport.
 
-**Optional 5th step**: a "you're ready" screen with cards pointing at 2-3 hidden gems (Platinum Grid wizard, Profile Cards, Monthly Recap). Skippable, but a nice exit ramp that surfaces features the 4-step tour didn't get to.
+On tour completion, confetti fires via `CelebrationManager.fireSideConfetti()` and the real navbar/sub-nav are spotlighted with a bouncing "Start your journey here!" callout.
 
 ## Where the re-trigger button lives
 
@@ -88,8 +91,9 @@ Each of these is a real improvement, but each is also its own scope of work. Shi
 
 - **Tour copy**: drafted during implementation. Each step has a title, pitch, and 3-4 feature cards.
 - **Modal vs full-screen**: modal (`max-w-3xl`). Centered, with backdrop blur.
-- **Animation/transitions**: slide transitions between steps (translateX + opacity, 300ms), stagger-in for feature cards (60ms offset), glow pulse on hub icons (2.5s infinite).
-- **Mobile experience**: feature cards stack to 1-column on `<md`. Sub-nav preview wraps. Modal responsive via daisyUI.
+- **Animation/transitions**: slide transitions with scale (cubic-bezier ease-out-expo), spring-scale feature cards (overshoot easing), text cascade on step 1, platinum shimmer on logo, ambient particle drift, connected progress bar, confetti burst on completion. Coach mark cutouts pulse with a glowing ring.
+- **Mobile experience**: feature cards stack to 1-column on `<md`. Real tab bar and sub-nav cloned into the modal (no static mockups). Modal responsive via daisyUI.
+- **Desktop experience**: Real navbar cloned into the modal and highlighted per step. Hub buttons, avatar, and sub-nav all get pulsing-ring highlights.
 - **Analytics**: yes. `SiteEvent` tracks `welcome_tour_complete` and `welcome_tour_skip` with the last step reached.
 - **A/B variants**: not in v1.
 
@@ -101,9 +105,10 @@ Each of these is a real improvement, but each is also its own scope of work. Shi
 |------|---------|
 | `trophies/models.py` | `Profile.tour_completed_at` field |
 | `trophies/migrations/0189_add_tour_completed_at.py` | Schema migration |
-| `templates/partials/welcome_tour_modal.html` | Tour modal template (4 steps) |
-| `static/js/welcome-tour.js` | `WelcomeTourManager` class |
-| `static/css/input.css` | Tour-specific styles (search for "Welcome Tour") |
+| `templates/partials/welcome_tour_modal.html` | Tour modal template (7 steps, particles, shimmer, progress bar) |
+| `static/js/welcome-tour.js` | `WelcomeTourManager` class (nav cloning, animations, confetti) |
+| `static/js/celebrations.js` | `CelebrationManager` (confetti on tour completion) |
+| `static/css/input.css` | Tour styles: nav clones, highlights, shimmer, particles, progress bar, coach ring |
 | `api/tutorial_views.py` | `WelcomeTourDismissAPIView` |
 | `api/urls.py` | `POST /api/v1/tutorial/welcome/dismiss/` |
 | `core/views.py` | `show_welcome_tour` context injection in `HomeView` |
