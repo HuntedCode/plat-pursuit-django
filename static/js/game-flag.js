@@ -54,6 +54,9 @@ const GameFlag = (() => {
                                     <optgroup label="Regional Info">
                                         <option value="region_incorrect">Regional info is incorrect</option>
                                     </optgroup>
+                                    <optgroup label="Other">
+                                        <option value="other">Other (please describe below)</option>
+                                    </optgroup>
                                 </select>
                             </div>
 
@@ -95,8 +98,21 @@ const GameFlag = (() => {
 
             const textarea = modalElement.querySelector('textarea[name="details"]');
             const counter = modalElement.querySelector('.flag-details-count');
+            const detailsLabel = textarea?.closest('.form-control')?.querySelector('.label-text');
+            const flagSelect = modalElement.querySelector('select[name="flag_type"]');
+
             textarea.addEventListener('input', () => {
                 counter.textContent = `${textarea.value.length}/500`;
+            });
+
+            flagSelect.addEventListener('change', () => {
+                const isOther = flagSelect.value === 'other';
+                textarea.required = isOther;
+                if (detailsLabel) {
+                    detailsLabel.textContent = isOther
+                        ? 'Please describe the issue (required)'
+                        : 'Additional details (optional)';
+                }
             });
         }
 

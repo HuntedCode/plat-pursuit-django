@@ -57,6 +57,12 @@ PlatPursuit.RateMyGames = {
             });
         }
 
+        // Check URL for queue_type deep-link (e.g. ?queue_type=dlc)
+        var urlQueue = new URLSearchParams(window.location.search).get('queue_type');
+        if (urlQueue === 'dlc') {
+            this.queueType = 'dlc';
+        }
+
         this.initFilterButtons();
         this.initQueueTabs();
         this.initRecommendButtons();
@@ -66,6 +72,16 @@ PlatPursuit.RateMyGames = {
         this.initActionButtons();
         this.initEditReviewButton();
         this.initTrophyToggle();
+
+        // Sync tab button styles with active queue type
+        document.querySelectorAll('.wizard-queue-tab').forEach(b => {
+            var isActive = b.dataset.queue === this.queueType;
+            b.classList.toggle('btn-primary', isActive);
+            b.classList.toggle('btn-ghost', !isActive);
+            b.classList.toggle('border', !isActive);
+            b.classList.toggle('border-base-300', !isActive);
+        });
+
         this.loadQueue();
     },
 

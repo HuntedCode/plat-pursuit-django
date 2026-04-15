@@ -261,7 +261,36 @@ class ConceptTrophyGroupService:
             # Base game: must have platinum
             if concept.has_user_earned_platinum(profile):
                 return True, None
-            return False, "Earn the platinum in this game to submit ratings."
+
+            # If this concept has no platinum trophy, allow rating at 100%
+            has_plat_trophy = Trophy.objects.filter(
+                game__concept=concept, trophy_type='platinum'
+            ).exists()
+
+            if has_plat_trophy:
+                return False, "Earn the platinum in this game to submit ratings."
+
+            # No platinum exists: check if user has 100% of base game trophies
+            base_totals = dict(
+                Trophy.objects.filter(
+                    game__concept=concept,
+                    trophy_group_id='default',
+                ).values('game_id').annotate(total=Count('id')).values_list('game_id', 'total')
+            )
+            if base_totals:
+                base_earned = dict(
+                    EarnedTrophy.objects.filter(
+                        profile=profile,
+                        trophy__game_id__in=base_totals.keys(),
+                        trophy__trophy_group_id='default',
+                        earned=True,
+                    ).values('trophy__game_id').annotate(cnt=Count('id')).values_list('trophy__game_id', 'cnt')
+                )
+                for game_id, total in base_totals.items():
+                    if total > 0 and base_earned.get(game_id, 0) >= total:
+                        return True, None
+
+            return False, "Earn 100% of trophies in this game to submit ratings."
 
         # DLC: must have 100% of that group's trophies in at least one stack.
         # Two bulk queries instead of 2N (one per game stack).

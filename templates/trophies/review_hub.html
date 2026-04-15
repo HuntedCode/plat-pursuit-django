@@ -82,8 +82,8 @@
 </div>
 {% endif %}
 
-{# CTA Card (authenticated, has unrated/unreviewed games) #}
-{% if unrated_count > 0 or unreviewed_count > 0 %}
+{# CTA Card (authenticated, has unrated/unreviewed games or DLC to rate) #}
+{% if unrated_count > 0 or unreviewed_count > 0 or unrated_dlc_count > 0 %}
 <div class="card bg-base-200/90 border-2 border-primary/20 shadow-lg shadow-neutral mb-3">
     <div class="card-body p-3 md:p-4 flex flex-col md:flex-row items-center gap-3 md:gap-4">
         <div class="shrink-0 text-primary">
@@ -102,9 +102,19 @@
                 <span class="text-accent">{{ unreviewed_count }}</span> platinum{{ unreviewed_count|pluralize }} {{ unreviewed_count|pluralize:"is,are" }} waiting for your review.
             </p>
             {% endif %}
+            {% if unrated_dlc_count > 0 %}
+            <p class="font-bold text-sm{% if unrated_count > 0 or unreviewed_count > 0 %} mt-1{% endif %}">
+                <span class="text-secondary">{{ unrated_dlc_count }}</span> DLC group{{ unrated_dlc_count|pluralize }} ready for rating.
+            </p>
+            {% endif %}
             <p class="text-xs text-base-content/50 mt-1">Help the community by sharing your thoughts on the games you've conquered.</p>
         </div>
-        <a href="{% url 'rate_my_games' %}" class="btn btn-sm btn-primary shrink-0">Rate My Games</a>
+        <div class="flex flex-col gap-1.5 shrink-0">
+            <a href="{% url 'rate_my_games' %}" class="btn btn-sm btn-primary">Rate My Games</a>
+            {% if unrated_dlc_count > 0 %}
+            <a href="{% url 'rate_my_games' %}?queue_type=dlc" class="btn btn-sm btn-secondary btn-outline">Rate DLC</a>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endif %}

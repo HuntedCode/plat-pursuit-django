@@ -222,60 +222,140 @@ class ReviewHubService:
         return result
 
     @staticmethod
-    def get_unrated_platinum_count(profile):
-        """Count of platinumed concepts (non-shovelware) not yet base-game rated."""
-        from trophies.models import EarnedTrophy, UserConceptRating
+    def get_ratable_concept_ids(profile):
+        """Concept IDs where user is eligible to rate the base game.
 
-        # Get concept IDs where user has a platinum (as a subquery)
-        plat_concept_qs = (
-            EarnedTrophy.objects
-            .filter(
+        Includes:
+        - Concepts where user has earned a platinum (non-shovelware)
+        - Concepts where user has 100% progress but no platinum trophy exists
+
+        Returns a list of distinct concept IDs (evaluated, not a queryset).
+        """
+        from trophies.models import EarnedTrophy, ProfileGame, Trophy
+
+        # 1. Platinumed concepts (non-shovelware)
+        plat_concept_ids = set(
+            EarnedTrophy.objects.filter(
                 profile=profile,
                 earned=True,
                 trophy__trophy_type='platinum',
-            )
-            .exclude(
+            ).exclude(
                 trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            )
-            .values_list('trophy__game__concept_id', flat=True)
-            .distinct()
+            ).values_list('trophy__game__concept_id', flat=True).distinct()
         )
+
+        # 2. Non-plat 100% concepts: games at 100% progress where the concept
+        #    has NO platinum trophy at all (non-shovelware)
+        full_completion_concept_ids = set(
+            ProfileGame.objects.filter(
+                profile=profile,
+                progress=100,
+                has_plat=False,
+            ).exclude(
+                game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            ).values_list('game__concept_id', flat=True).distinct()
+        )
+        if full_completion_concept_ids:
+            # Exclude any concept that actually has a platinum trophy
+            # (has_plat=False on ProfileGame means the user hasn't earned it,
+            #  but the trophy might still exist)
+            concepts_with_plat = set(
+                Trophy.objects.filter(
+                    game__concept_id__in=full_completion_concept_ids,
+                    trophy_type='platinum',
+                ).values_list('game__concept_id', flat=True).distinct()
+            )
+            full_completion_concept_ids -= concepts_with_plat
+
+        return list(plat_concept_ids | full_completion_concept_ids)
+
+    @staticmethod
+    def get_unrated_platinum_count(profile):
+        """Count of ratable concepts (non-shovelware) not yet base-game rated."""
+        from trophies.models import UserConceptRating
+
+        ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
+        if not ratable_ids:
+            return 0
 
         # Rated concept IDs (base game = null concept_trophy_group)
         rated_concept_ids = set(
             UserConceptRating.objects
             .filter(
                 profile=profile,
+                concept_id__in=ratable_ids,
                 concept_trophy_group__isnull=True,
             )
             .values_list('concept_id', flat=True)
         )
 
-        # Use DB count with exclude for efficiency
-        return (
-            plat_concept_qs
-            .exclude(trophy__game__concept_id__in=rated_concept_ids)
-            .count()
+        return len(set(ratable_ids) - rated_concept_ids)
+
+    @staticmethod
+    def get_unrated_dlc_count(profile):
+        """Count of DLC groups where user has 100% completion but no rating.
+
+        Considers DLC groups belonging to any ratable concept (platinumed or
+        100%-completed non-plat).
+        """
+        from trophies.models import (
+            ConceptTrophyGroup, EarnedTrophy, Trophy, UserConceptRating,
         )
+
+        ratable_concept_ids = ReviewHubService.get_ratable_concept_ids(profile)
+        if not ratable_concept_ids:
+            return 0
+
+        # DLC groups for those concepts (exclude base game)
+        dlc_groups = ConceptTrophyGroup.objects.filter(
+            concept_id__in=ratable_concept_ids,
+        ).exclude(trophy_group_id='default')
+
+        # Already-rated DLC group IDs for this profile
+        rated_group_ids = set(
+            UserConceptRating.objects.filter(
+                profile=profile,
+                concept_trophy_group__isnull=False,
+            ).values_list('concept_trophy_group_id', flat=True)
+        )
+
+        unrated_count = 0
+        for ctg in dlc_groups.exclude(id__in=rated_group_ids):
+            totals = dict(
+                Trophy.objects.filter(
+                    game__concept_id=ctg.concept_id,
+                    trophy_group_id=ctg.trophy_group_id,
+                ).values('game_id').annotate(
+                    total=Count('id')
+                ).values_list('game_id', 'total')
+            )
+            if not totals:
+                continue
+            earned = dict(
+                EarnedTrophy.objects.filter(
+                    profile=profile,
+                    trophy__game_id__in=totals.keys(),
+                    trophy__trophy_group_id=ctg.trophy_group_id,
+                    earned=True,
+                ).values('trophy__game_id').annotate(
+                    cnt=Count('id')
+                ).values_list('trophy__game_id', 'cnt')
+            )
+            for game_id, total in totals.items():
+                if total > 0 and earned.get(game_id, 0) >= total:
+                    unrated_count += 1
+                    break
+
+        return unrated_count
 
     @staticmethod
     def get_unreviewed_platinum_count(profile):
-        """Count of platinumed concepts (non-shovelware) not yet base-game reviewed."""
-        from trophies.models import EarnedTrophy, Review
+        """Count of ratable concepts (non-shovelware) not yet base-game reviewed."""
+        from trophies.models import Review
 
-        plat_concept_qs = (
-            EarnedTrophy.objects
-            .filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum',
-            )
-            .exclude(
-                trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            )
-            .values_list('trophy__game__concept_id', flat=True)
-            .distinct()
-        )
+        ratable_ids = ReviewHubService.get_ratable_concept_ids(profile)
+        if not ratable_ids:
+            return 0
 
         reviewed_concept_ids = set(
             Review.objects
@@ -287,8 +367,4 @@ class ReviewHubService:
             .values_list('concept_id', flat=True)
         )
 
-        return (
-            plat_concept_qs
-            .exclude(trophy__game__concept_id__in=reviewed_concept_ids)
-            .count()
-        )
+        return len(set(ratable_ids) - reviewed_concept_ids)

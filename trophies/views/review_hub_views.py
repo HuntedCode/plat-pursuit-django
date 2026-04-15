@@ -50,6 +50,7 @@ class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
             profile = self.request.user.profile
             context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
             context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
+            context['unrated_dlc_count'] = ReviewHubService.get_unrated_dlc_count(profile)
 
         context['seo_description'] = (
             "Community reviews and ratings for PlayStation games on Platinum Pursuit."
@@ -76,10 +77,12 @@ class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         if profile:
             context['unrated_count'] = ReviewHubService.get_unrated_platinum_count(profile)
             context['unreviewed_count'] = ReviewHubService.get_unreviewed_platinum_count(profile)
+            context['unrated_dlc_count'] = ReviewHubService.get_unrated_dlc_count(profile)
             context['guidelines_agreed'] = profile.guidelines_agreed
         else:
             context['unrated_count'] = 0
             context['unreviewed_count'] = 0
+            context['unrated_dlc_count'] = 0
             context['guidelines_agreed'] = False
 
         return context

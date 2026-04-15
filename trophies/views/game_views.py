@@ -656,9 +656,10 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # Community averages (base game, for backward compat)
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
 
-        # Per-CTG community data for tabbed display
+        # Per-CTG community data for tabbed display (ratings + reviews)
         from trophies.models import ConceptTrophyGroup, Review
         from trophies.services.review_service import ReviewService
+        from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
 
         ctgs = list(
             ConceptTrophyGroup.objects.filter(concept=game.concept)
@@ -666,42 +667,46 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         )
         context['concept_trophy_groups'] = ctgs
 
+        user = self.request.user
+        profile = getattr(user, 'profile', None) if user.is_authenticated else None
+
         community_tabs = []
         for ctg in ctgs:
-            community_tabs.append({
+            tab_data = {
                 'ctg': ctg,
                 'averages': RatingService.get_cached_community_averages_for_group(game.concept, ctg),
-            })
-        context['community_tabs'] = community_tabs
-
-        base_ctg = next((c for c in ctgs if c.trophy_group_id == 'default'), None)
-        if base_ctg:
-            context['recommendation_stats'] = ReviewService.get_recommendation_stats(
-                game.concept, base_ctg
-            )
-            context['review_count'] = Review.objects.filter(
-                concept=game.concept,
-                concept_trophy_group=base_ctg,
-                is_deleted=False,
-            ).count()
-
-            # User review context
-            user = self.request.user
-            profile = getattr(user, 'profile', None)
-            if user.is_authenticated and profile and profile.is_linked:
-                context['user_review'] = Review.objects.filter(
-                    concept=game.concept,
-                    concept_trophy_group=base_ctg,
-                    profile=profile,
-                    is_deleted=False,
+                'recommendation_stats': ReviewService.get_recommendation_stats(game.concept, ctg),
+                'review_count': Review.objects.filter(
+                    concept=game.concept, concept_trophy_group=ctg, is_deleted=False,
+                ).count(),
+                'user_review': None,
+                'can_review': False,
+                'can_review_reason': None,
+            }
+            if profile and profile.is_linked:
+                tab_data['user_review'] = Review.objects.filter(
+                    concept=game.concept, concept_trophy_group=ctg,
+                    profile=profile, is_deleted=False,
                 ).first()
-
-                from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
-                can_review, can_review_reason = ConceptTrophyGroupService.can_review_group(
-                    profile, game.concept, base_ctg
+                can_review, reason = ConceptTrophyGroupService.can_review_group(
+                    profile, game.concept, ctg
                 )
-                context['can_review'] = can_review
-                context['can_review_reason'] = can_review_reason
+                tab_data['can_review'] = can_review
+                tab_data['can_review_reason'] = reason
+
+            # Top helpful reviews (exclude user's own)
+            top_reviews_qs = Review.objects.filter(
+                concept=game.concept, concept_trophy_group=ctg, is_deleted=False,
+            ).select_related('profile').order_by('-helpful_count', '-created_at')
+
+            if tab_data['user_review']:
+                top_reviews_qs = top_reviews_qs.exclude(pk=tab_data['user_review'].pk)
+                tab_data['top_reviews'] = list(top_reviews_qs[:1])
+            else:
+                tab_data['top_reviews'] = list(top_reviews_qs[:2])
+
+            community_tabs.append(tab_data)
+        context['community_tabs'] = community_tabs
 
         # Related badges
         series_slugs = Stage.objects.filter(concepts__games=game).values_list('series_slug', flat=True).distinct()

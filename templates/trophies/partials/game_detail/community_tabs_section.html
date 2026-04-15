@@ -34,7 +34,15 @@
             {# ══ Ratings Grid ══ #}
             {% include 'trophies/partials/game_detail/ratings_grid.html' with averages=ct.averages %}
 
+            {# ══ Reviews ══ #}
+            {% if game.concept and game.concept.slug %}
+            <div class="border-t border-base-content/5 pt-3 mt-3">
+                {% include 'trophies/partials/game_detail/reviews_section.html' with recommendation_stats=ct.recommendation_stats review_count=ct.review_count user_review=ct.user_review can_review=ct.can_review review_hub_group=ct.ctg.trophy_group_id top_reviews=ct.top_reviews %}
+            </div>
+            {% endif %}
+
             {# ══ Roadmap ══ #}
+            <div class="border-t border-base-content/5 pt-3 mt-3">
             {% with rdm_tab=roadmap_tabs_by_ctg|get_item:ct.ctg.id %}
                 {% if rdm_tab and rdm_tab.steps.all %}
                     {% include 'trophies/partials/game_detail/roadmap_tab_content.html' with tab=rdm_tab %}
@@ -92,6 +100,7 @@
                     </div>
                 {% endif %}
             {% endwith %}
+            </div>{# end roadmap divider #}
         </div>
         {% endfor %}
 

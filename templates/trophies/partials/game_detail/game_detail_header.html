@@ -409,10 +409,28 @@
 {# Screenshot modal #}
 <input type="checkbox" id="screenshot-modal" class="modal-toggle" />
 <div class="modal backdrop-blur-lg">
-    <div class="modal-box border-2 border-base-300 shadow-lg shadow-neutral w-11/12 max-w-5xl h-fit">
+    <div class="modal-box border-2 border-base-300 shadow-lg shadow-neutral w-11/12 max-w-5xl h-fit relative p-0">
         <figure class="w-full">
             <img id="modal-image" src="{{ image_urls.screenshot_urls.0 }}" class="w-full object-cover" />
         </figure>
+        {# Navigation arrows (hidden when <= 1 screenshot) #}
+        {% if image_urls.screenshot_urls|length > 1 %}
+        <button type="button" id="screenshot-prev"
+                class="absolute left-2 top-1/2 -translate-y-1/2 btn btn-circle btn-sm bg-base-100/70 hover:bg-base-100/90 border-none shadow-lg"
+                aria-label="Previous screenshot">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </button>
+        <button type="button" id="screenshot-next"
+                class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-circle btn-sm bg-base-100/70 hover:bg-base-100/90 border-none shadow-lg"
+                aria-label="Next screenshot">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+            </svg>
+        </button>
+        <div class="absolute bottom-2 left-1/2 -translate-x-1/2 bg-base-100/70 rounded-full px-2.5 py-0.5 text-xs font-medium" id="screenshot-counter"></div>
+        {% endif %}
     </div>
     <label class="modal-backdrop" for="screenshot-modal">Close</label>
 </div>
@@ -509,13 +527,59 @@
     document.addEventListener('DOMContentLoaded', function() {
         const carousel = document.getElementById('screenshot-carousel');
         const modalImage = document.getElementById('modal-image');
+        const modalToggle = document.getElementById('screenshot-modal');
+        const prevBtn = document.getElementById('screenshot-prev');
+        const nextBtn = document.getElementById('screenshot-next');
+        const counter = document.getElementById('screenshot-counter');
+
+        // Build screenshot URL array from carousel items
+        var screenshotUrls = [];
+        var screenshotIndex = 0;
+        if (carousel) {
+            carousel.querySelectorAll('.carousel-item').forEach(function(item) {
+                screenshotUrls.push(item.dataset.src);
+            });
+        }
+
+        function updateModalImage(index) {
+            if (!modalImage || screenshotUrls.length === 0) return;
+            screenshotIndex = (index + screenshotUrls.length) % screenshotUrls.length;
+            modalImage.src = screenshotUrls[screenshotIndex];
+            if (counter) counter.textContent = (screenshotIndex + 1) + ' / ' + screenshotUrls.length;
+        }
 
         if (carousel && modalImage) {
             carousel.addEventListener('click', function(e) {
-                const item = e.target.closest('.carousel-item');
+                var item = e.target.closest('.carousel-item');
                 if (item) {
-                    const src = item.dataset.src;
-                    modalImage.src = src;
+                    var idx = Array.from(carousel.querySelectorAll('.carousel-item')).indexOf(item);
+                    updateModalImage(idx);
+                }
+            });
+        }
+
+        if (prevBtn) prevBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            updateModalImage(screenshotIndex - 1);
+        });
+        if (nextBtn) nextBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            updateModalImage(screenshotIndex + 1);
+        });
+
+        // Keyboard navigation when modal is open
+        if (modalToggle) {
+            document.addEventListener('keydown', function(e) {
+                if (!modalToggle.checked) return;
+                if (e.key === 'ArrowLeft') { updateModalImage(screenshotIndex - 1); }
+                else if (e.key === 'ArrowRight') { updateModalImage(screenshotIndex + 1); }
+                else if (e.key === 'Escape') { modalToggle.checked = false; }
+            });
+
+            // Update counter when modal opens via carousel click
+            modalToggle.addEventListener('change', function() {
+                if (modalToggle.checked && counter) {
+                    counter.textContent = (screenshotIndex + 1) + ' / ' + screenshotUrls.length;
                 }
             });
         }

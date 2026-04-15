@@ -1,6 +1,6 @@
 # Community Game Flags
 
-Community game flags let users report data quality issues on individual games. Each flag is reviewed by staff via Django admin before any changes are applied. This helps catch delisted games, unobtainable platinums, shovelware misclassifications, missing VR tags, online trophy requirements, buggy trophies, and regional errors that automated systems miss.
+Community game flags let users report data quality issues on individual games. Each flag is reviewed by staff via Django admin before any changes are applied. This helps catch delisted games, unobtainable platinums, shovelware misclassifications, missing VR tags, online trophy requirements, buggy trophies, regional errors, and other issues that automated systems miss.
 
 ## Architecture Overview
 
@@ -14,7 +14,7 @@ The system follows a simple submit-then-review pattern. Users submit flags throu
 
 | File | Purpose |
 |------|---------|
-| `trophies/models.py` (GameFlag) | Model with 12 flag types and pending/approved/dismissed status |
+| `trophies/models.py` (GameFlag) | Model with 13 flag types and pending/approved/dismissed status |
 | `trophies/services/game_flag_service.py` | submit_flag, approve_flag, dismiss_flag logic |
 | `api/game_flag_views.py` | POST endpoint for flag submission |
 | `api/urls.py` | URL registration |
@@ -31,7 +31,7 @@ The system follows a simple submit-then-review pattern. Users submit flags throu
 |-------|------|-------|
 | game | FK(Game) | CASCADE. The specific game being flagged |
 | reporter | FK(Profile) | CASCADE. The user who submitted the flag |
-| flag_type | CharField(30) | One of 12 types (see Flag Types below) |
+| flag_type | CharField(30) | One of 13 types (see Flag Types below) |
 | details | TextField(500) | Optional user-provided context |
 | status | CharField(20) | pending, approved, dismissed |
 | reviewed_by | FK(CustomUser) | SET_NULL. Staff who reviewed |
@@ -54,6 +54,7 @@ The system follows a simple submit-then-review pattern. Users submit flags throu
 | `has_buggy_trophies` | Buggy/broken trophies | `Game.has_buggy_trophies = True` |
 | `buggy_trophies_resolved` | Buggy trophies fixed | `Game.has_buggy_trophies = False` |
 | `region_incorrect` | Regional info is wrong | None (staff fixes manually) |
+| `other` | Other issue (details required) | None (staff handles manually) |
 
 ## Key Flows
 
@@ -96,7 +97,7 @@ The system follows a simple submit-then-review pattern. Users submit flags throu
 ## Gotchas and Pitfalls
 
 - **No unique constraint**: Duplicate prevention is in the service layer, not the database. This is intentional: the "allow re-flagging after approval/dismissal" requirement means a DB unique constraint would be too restrictive.
-- **`missing_vr` and `region_incorrect` require manual action**: Approving these flags marks them as approved but does NOT automatically change any Game fields. Staff must manually edit the Game in admin to add VR platforms or fix region data.
+- **`missing_vr`, `region_incorrect`, and `other` require manual action**: Approving these flags marks them as approved but does NOT automatically change any Game fields. Staff must manually handle the reported issue. The `other` flag type requires the user to provide details describing the issue.
 - **Shovelware lock**: Approving shovelware flags sets `shovelware_lock=True`, which prevents the automated shovelware detection service from overwriting the manual decision. This is the correct behavior.
 - **Rate limit is per-minute, not per-hour**: Flags use 5/min (vs 5/hour for comment reports) because users may flag multiple games in one session.
 

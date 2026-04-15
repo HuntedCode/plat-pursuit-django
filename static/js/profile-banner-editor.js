@@ -89,17 +89,15 @@ class ProfileBannerEditor {
         }
 
         try {
-            // Save background selection
-            if (this.selectedConcept && this.selectedConcept.concept_id) {
-                await PlatPursuit.API.request('/api/v1/user/quick-settings/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        setting: 'selected_background',
-                        value: this.selectedConcept.concept_id
-                    })
-                });
-            }
+            // Always save background (clear if deselected)
+            await PlatPursuit.API.request('/api/v1/user/quick-settings/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    setting: 'selected_background',
+                    value: this.selectedConcept?.concept_id || ''
+                })
+            });
 
             // Save position
             await PlatPursuit.API.request('/api/v1/user/quick-settings/', {

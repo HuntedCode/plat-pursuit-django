@@ -4215,6 +4215,7 @@ class GameFlag(models.Model):
         ('has_buggy_trophies', 'Game has buggy/broken trophies'),
         ('buggy_trophies_resolved', 'Buggy trophies have been fixed'),
         ('region_incorrect', 'Regional info is incorrect'),
+        ('other', 'Other (please describe)'),
     ]
 
     FLAG_STATUS = [

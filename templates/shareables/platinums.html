@@ -86,7 +86,7 @@
                                 cursor-pointer group p-1 md:p-1.5 platinum-card"
                          data-earned-trophy-id="{{ et.id }}"
                          data-game-name="{{ et.trophy.game.title_name }}"
-                         data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.title_icon_url }}"
+                         data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.concept.cover_url|default:et.trophy.game.title_icon_url }}"
                          data-concept-bg-url="{{ et.trophy.game.concept.cover_url|default:'' }}"
                          data-concept-id="{{ et.trophy.game.concept.id|default:'' }}"
                          data-search-name="{{ et.trophy.game.title_name|lower }}"
@@ -94,11 +94,11 @@
                          onclick="openShareModal(this)">
                         <figure class="px-2 pt-2 md:px-3 md:pt-3">
                             <div class="relative w-full aspect-square">
-                                <img src="{{ et.trophy.game.title_icon_url }}"
+                                <img src="{{ et.trophy.game.title_image|default:et.trophy.game.concept.cover_url|default:et.trophy.game.title_icon_url }}"
                                      alt="{{ et.trophy.game.title_name }}"
                                      loading="lazy"
                                      decoding="async"
-                                     class="rounded-lg w-full h-full object-cover border border-base-content/5">
+                                     class="rounded-lg w-full h-full object-cover object-top border border-base-content/5">
                                 {# Milestone number badge #}
                                 {% if et.is_milestone %}
                                 <div class="absolute -top-2 -left-2 bg-gradient-to-br from-primary to-secondary text-primary-content rounded-full min-w-8 h-8 flex items-center justify-center text-xs font-bold shadow-lg border-2 border-base-200 z-10">

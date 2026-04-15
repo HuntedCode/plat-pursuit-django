@@ -431,7 +431,7 @@ class TrophyListView(APIView):
 # ------------------------------------------------------------------ #
 
 class WizardQueueView(APIView):
-    """Queue of platinumed games waiting to be rated/reviewed for the wizard."""
+    """Queue of ratable games waiting to be rated/reviewed for the wizard."""
     authentication_classes = [SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
@@ -452,6 +452,7 @@ class WizardQueueView(APIView):
                 EarnedTrophy, UserConceptRating,
             )
             from django.db.models.functions import Lower
+            from trophies.services.review_hub_service import ReviewHubService
 
             filter_mode = request.query_params.get('filter', 'unrated')
             if filter_mode not in ('unrated', 'unreviewed', 'both'):
@@ -462,32 +463,24 @@ class WizardQueueView(APIView):
             limit = min(safe_int(request.query_params.get('limit', 20), 20), 50)
             offset = max(safe_int(request.query_params.get('offset', 0), 0), 0)
 
-            # Get all concept IDs where user has a platinum (non-shovelware)
-            plat_concept_ids = list(
-                EarnedTrophy.objects.filter(
-                    profile=profile,
-                    earned=True,
-                    trophy__trophy_type='platinum',
-                ).exclude(
-                    trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-                ).values_list('trophy__game__concept_id', flat=True).distinct()
-            )
+            # Get all ratable concept IDs (platinumed + 100% non-plat)
+            ratable_concept_ids = ReviewHubService.get_ratable_concept_ids(profile)
 
-            if not plat_concept_ids:
+            if not ratable_concept_ids:
                 if queue_type == 'dlc':
                     return Response({'groups': [], 'total_items': 0, 'has_more': False})
                 return Response({'queue': [], 'count': 0, 'has_more': False})
 
             if queue_type == 'dlc':
                 return self._get_dlc_queue(
-                    profile, plat_concept_ids, filter_mode, limit, offset,
+                    profile, ratable_concept_ids, filter_mode, limit, offset,
                 )
 
             # ── Base game queue ──────────────────────────────────────── #
             rated_concept_ids = set(
                 UserConceptRating.objects.filter(
                     profile=profile,
-                    concept_id__in=plat_concept_ids,
+                    concept_id__in=ratable_concept_ids,
                     concept_trophy_group__isnull=True,
                 ).values_list('concept_id', flat=True)
             )
@@ -495,7 +488,7 @@ class WizardQueueView(APIView):
             reviewed_concept_ids = set(
                 Review.objects.filter(
                     profile=profile,
-                    concept_id__in=plat_concept_ids,
+                    concept_id__in=ratable_concept_ids,
                     is_deleted=False,
                     concept_trophy_group__trophy_group_id='default',
                 ).values_list('concept_id', flat=True)
@@ -503,12 +496,12 @@ class WizardQueueView(APIView):
 
             # Filter based on mode
             if filter_mode == 'unrated':
-                wanted_ids = [cid for cid in plat_concept_ids if cid not in rated_concept_ids]
+                wanted_ids = [cid for cid in ratable_concept_ids if cid not in rated_concept_ids]
             elif filter_mode == 'unreviewed':
-                wanted_ids = [cid for cid in plat_concept_ids if cid not in reviewed_concept_ids]
+                wanted_ids = [cid for cid in ratable_concept_ids if cid not in reviewed_concept_ids]
             else:  # both: missing EITHER rating OR review
                 wanted_ids = [
-                    cid for cid in plat_concept_ids
+                    cid for cid in ratable_concept_ids
                     if cid not in rated_concept_ids or cid not in reviewed_concept_ids
                 ]
 
@@ -635,7 +628,7 @@ class WizardQueueView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _get_dlc_queue(self, profile, plat_concept_ids, filter_mode, limit, offset):
+    def _get_dlc_queue(self, profile, ratable_concept_ids, filter_mode, limit, offset):
         """Build DLC queue grouped by parent concept."""
         from trophies.models import Trophy, EarnedTrophy, UserConceptRating
         from django.db.models import Count
@@ -644,7 +637,7 @@ class WizardQueueView(APIView):
         # Find all DLC groups for user's platinumed concepts
         all_dlc_groups = list(
             ConceptTrophyGroup.objects.filter(
-                concept_id__in=plat_concept_ids,
+                concept_id__in=ratable_concept_ids,
             ).exclude(
                 trophy_group_id='default',
             ).select_related('concept')

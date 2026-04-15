@@ -194,7 +194,7 @@
             {# Platinum highlights (4 in a row on desktop, 2x2 on mobile) #}
             {% if profile.psn_history_public %}
             <div class="border-t border-base-content/10 mt-2 pt-2">
-                <h4 class="text-[0.55rem] font-semibold text-base-content/40 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                <h4 class="text-[0.55rem] font-semibold text-base-content/50 uppercase tracking-wider mb-1.5 flex items-center gap-1">
                     {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}
                     Platinum Highlights
                 </h4>
@@ -203,14 +203,14 @@
                     {% with header_stats.recent_platinum as plat %}
                     {% if profile.sync_status != 'syncing' and plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-primary shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.concept.cover_url|default:plat.game.title_icon_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Latest</div>
+                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Latest</div>
                                 <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/40">{{ plat.earned_date|date:"M j, Y" }}</div>
+                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
                             </div>
                         </a>
                     {% else %}
@@ -230,14 +230,14 @@
                     {% with header_stats.rarest_platinum as plat %}
                     {% if profile.sync_status != 'syncing' and plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-accent shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.concept.cover_url|default:plat.game.title_icon_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Rarest &middot; {{ plat.trophy.trophy_earn_rate }}%</div>
+                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Rarest &middot; {{ plat.trophy.trophy_earn_rate }}%</div>
                                 <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-accent transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/40">{{ plat.earned_date|date:"M j, Y" }}</div>
+                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
                             </div>
                         </a>
                     {% else %}
@@ -257,14 +257,14 @@
                     {% with header_stats.fastest_platinum as plat %}
                     {% if plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-success shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.concept.cover_url|default:plat.game.title_icon_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Fastest &middot; {{ plat.play_duration|timedelta_hours }}</div>
+                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Fastest &middot; {{ plat.play_duration|timedelta_hours }}</div>
                                 <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-success transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/40">{{ plat.earned_date|date:"M j, Y" }}</div>
+                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
                             </div>
                         </a>
                     {% else %}
@@ -284,14 +284,14 @@
                     {% with header_stats.milestone_platinum as plat %}
                     {% if plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
-                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
+                           class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
                             <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-warning shrink-0">
                                 <img src="{{ plat.game.title_image|default:plat.game.concept.cover_url|default:plat.game.title_icon_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
-                                <div class="text-[0.55rem] text-base-content/40 uppercase font-medium">Plat #{{ plat.milestone_number }}</div>
+                                <div class="text-[0.55rem] text-base-content/50 uppercase font-medium">Plat #{{ plat.milestone_number }}</div>
                                 <div class="font-semibold text-xs line-clamp-1 pr-1 group-hover:text-warning transition-colors">{{ plat.game.title_name }}</div>
-                                <div class="text-[0.5rem] text-base-content/40">{{ plat.earned_date|date:"M j, Y" }}</div>
+                                <div class="text-[0.5rem] text-base-content/50">{{ plat.earned_date|date:"M j, Y" }}</div>
                             </div>
                         </a>
                     {% else %}

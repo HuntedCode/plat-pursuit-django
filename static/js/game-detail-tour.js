@@ -25,16 +25,9 @@ const COACH_STEPS = [
         position: 'bottom',
     },
     {
-        target: '#reviews-section',
-        title: 'Rate This Game',
-        description: 'Share your experience and help other hunters decide what to play next. Your review counts toward the community recommendation score.',
-        icon: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-        position: 'top',
-    },
-    {
         target: '#community-tabs-section',
-        title: 'Ratings & Roadmaps',
-        description: 'Rate the difficulty, time-to-beat, and fun factor. If a platinum roadmap exists, you\'ll find the step-by-step guide here too.',
+        title: 'Ratings, Reviews & Roadmaps',
+        description: 'Rate the difficulty, time-to-beat, and fun factor. Share your experience and help other hunters. If a platinum roadmap exists, the step-by-step guide lives here too.',
         icon: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
         position: 'bottom',
     },

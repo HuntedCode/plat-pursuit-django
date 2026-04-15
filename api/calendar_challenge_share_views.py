@@ -283,20 +283,30 @@ class GameBackgroundSearchView(APIView):
             Q(has_plat=True) | Q(progress=100)
         ).exclude(
             game__concept__bg_url=''
-        ).select_related('game__concept').order_by(
-            Lower('game__concept__unified_title')
+        ).select_related('game__concept')
+
+        if query:
+            qs = qs.filter(
+                game__concept__unified_title__icontains=query
+            ).order_by(Lower('game__concept__unified_title'))
+            limit = 20
+        else:
+            # No query: show most recently played games first for browsing
+            qs = qs.order_by('-last_played_date_time')
+            limit = 24
+
+        # Deduplicate by concept at the DB level
+        concept_ids = list(
+            qs.values_list('game__concept_id', flat=True)
+            .distinct()[:limit]
         )
 
         if query:
-            qs = qs.filter(game__concept__unified_title__icontains=query)
-
-        # Deduplicate by concept at the DB level, then limit to 20
-        concept_ids = list(
-            qs.values_list('game__concept_id', flat=True)
-            .distinct()[:20]
-        )
-
-        concepts = Concept.objects.filter(id__in=concept_ids).order_by(Lower('unified_title'))
+            concepts = Concept.objects.filter(id__in=concept_ids).order_by(Lower('unified_title'))
+        else:
+            # Preserve the recency order from ProfileGame
+            concepts_map = {c.id: c for c in Concept.objects.filter(id__in=concept_ids)}
+            concepts = [concepts_map[cid] for cid in concept_ids if cid in concepts_map]
 
         results = [{
             'concept_id': c.id,
