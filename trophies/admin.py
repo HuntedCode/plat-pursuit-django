@@ -45,6 +45,7 @@ class ProfileAdmin(admin.ModelAdmin):
         'move_jobs_to_medium_priority',
         'move_jobs_to_low_priority',
         'move_jobs_to_bulk_priority',
+        'add_as_scout',
     ]
     fieldsets = (
         (
@@ -110,6 +111,26 @@ class ProfileAdmin(admin.ModelAdmin):
                 request,
                 f"Failed to recheck badges for: {', '.join(failed_profiles)}"
             )
+
+    @admin.action(description="Add selected profiles as scout accounts")
+    def add_as_scout(self, request, queryset):
+        created = 0
+        skipped = 0
+        for profile in queryset:
+            _, was_created = ScoutAccount.objects.get_or_create(
+                profile=profile,
+                defaults={'added_by': request.user},
+            )
+            if was_created:
+                created += 1
+            else:
+                skipped += 1
+        parts = []
+        if created:
+            parts.append(f"Created {created} scout account(s)")
+        if skipped:
+            parts.append(f"skipped {skipped} (already scouts)")
+        messages.success(request, '. '.join(parts) + '.')
 
     @admin.action(description="Move queued sync jobs to HIGH priority")
     def move_jobs_to_high_priority(self, request, queryset):
