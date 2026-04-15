@@ -657,7 +657,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
 
         # Per-CTG community data for tabbed display (ratings + reviews)
-        from trophies.models import ConceptTrophyGroup, Review
+        from trophies.models import ConceptTrophyGroup, Review, Trophy, UserConceptRating
         from trophies.services.review_service import ReviewService
         from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
 
@@ -670,8 +670,16 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         user = self.request.user
         profile = getattr(user, 'profile', None) if user.is_authenticated else None
 
+        # Check once whether this concept has a platinum trophy (for hours label)
+        concept_has_plat = Trophy.objects.filter(
+            game__concept=game.concept, trophy_type='platinum'
+        ).exists()
+
         community_tabs = []
         for ctg in ctgs:
+            is_base = ctg.trophy_group_id == 'default'
+            has_plat = is_base and concept_has_plat
+
             tab_data = {
                 'ctg': ctg,
                 'averages': RatingService.get_cached_community_averages_for_group(game.concept, ctg),
@@ -679,9 +687,14 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 'review_count': Review.objects.filter(
                     concept=game.concept, concept_trophy_group=ctg, is_deleted=False,
                 ).count(),
+                'hours_label': 'Hours to Plat' if has_plat else 'Hours to Complete',
+                'hours_label_long': 'Hours to Platinum' if has_plat else 'Hours to Complete',
                 'user_review': None,
                 'can_review': False,
                 'can_review_reason': None,
+                'can_rate': False,
+                'can_rate_reason': None,
+                'user_rating': None,
             }
             if profile and profile.is_linked:
                 tab_data['user_review'] = Review.objects.filter(
@@ -693,6 +706,18 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 )
                 tab_data['can_review'] = can_review
                 tab_data['can_review_reason'] = reason
+
+                can_rate, rate_reason = ConceptTrophyGroupService.can_rate_group(
+                    profile, game.concept, ctg
+                )
+                tab_data['can_rate'] = can_rate
+                tab_data['can_rate_reason'] = rate_reason
+
+                ctg_fk = ctg if not is_base else None
+                tab_data['user_rating'] = UserConceptRating.objects.filter(
+                    profile=profile, concept=game.concept,
+                    concept_trophy_group=ctg_fk,
+                ).first()
 
             # Top helpful reviews (exclude user's own)
             top_reviews_qs = Review.objects.filter(
@@ -848,7 +873,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         concept_context = self._build_concept_context(game)
         context.update(concept_context)
 
-        # Roadmap data for game detail page
+        # Roadmap data for game detail CTA card (content now on dedicated page)
         roadmap_preview = (
             self.request.GET.get('preview') == 'true'
             and user.is_authenticated
@@ -863,29 +888,20 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 roadmap = RoadmapService.get_roadmap_for_display(game.concept)
             context['roadmap'] = roadmap
             if roadmap:
-                # Map CTG ID -> roadmap tab for template lookup
                 context['roadmap_tabs_by_ctg'] = {
                     tab.concept_trophy_group_id: tab
                     for tab in roadmap.tabs.all()
                 }
-                roadmap_trophy_ids = set()
-                for tab in roadmap.tabs.all():
-                    for step in tab.steps.all():
-                        for st in step.step_trophies.all():
-                            roadmap_trophy_ids.add(st.trophy_id)
-                    for tg in tab.trophy_guides.all():
-                        roadmap_trophy_ids.add(tg.trophy_id)
-                context['roadmap_trophies'] = {
-                    t.trophy_id: t
-                    for t in game.trophies.filter(trophy_id__in=roadmap_trophy_ids)
-                } if roadmap_trophy_ids else {}
+                context['available_tabs'] = RoadmapService.get_available_tabs(
+                    game.concept, include_drafts=roadmap_preview
+                )
             else:
-                context['roadmap_trophies'] = {}
                 context['roadmap_tabs_by_ctg'] = {}
+                context['available_tabs'] = []
         else:
             context['roadmap'] = None
-            context['roadmap_trophies'] = {}
             context['roadmap_tabs_by_ctg'] = {}
+            context['available_tabs'] = []
 
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)

@@ -342,6 +342,10 @@ PlatPursuit.RateMyGames = {
             dlcBadge.classList.toggle('hidden', !isDlc);
         }
 
+        // Dynamic hours label
+        var hoursLabel = document.getElementById('wizard-hours-label');
+        if (hoursLabel) hoursLabel.textContent = game.hours_label || 'Hours to Platinum';
+
         // Status badges
         const ratingBadge = document.getElementById('wizard-has-rating');
         const reviewBadge = document.getElementById('wizard-has-review');

@@ -591,9 +591,19 @@ class WizardQueueView(APIView):
                 if dt and (cid not in plat_dates or dt > plat_dates[cid]):
                     plat_dates[cid] = dt
 
+            # Determine which concepts have a platinum trophy (for hours label)
+            from trophies.models import Trophy
+            concepts_with_plat = set(
+                Trophy.objects.filter(
+                    game__concept_id__in=paginated_ids,
+                    trophy_type='platinum',
+                ).values_list('game__concept_id', flat=True).distinct()
+            )
+
             queue = []
             for c in paginated:
                 cid = c['id']
+                has_plat = cid in concepts_with_plat
                 item = {
                     'concept_id': cid,
                     'unified_title': c['unified_title'],
@@ -603,6 +613,7 @@ class WizardQueueView(APIView):
                     'has_review': cid in reviewed_concept_ids,
                     'trophy_group_id': 'default',
                     'trophy_group_name': 'Base Game',
+                    'hours_label': 'Hours to Platinum' if has_plat else 'Hours to Complete',
                 }
                 if cid in existing_ratings:
                     item['existing_rating'] = existing_ratings[cid]
@@ -773,6 +784,7 @@ class WizardQueueView(APIView):
                 'has_rating': has_rating,
                 'has_review': has_review,
                 'is_dlc': True,
+                'hours_label': 'Hours to Complete',
             }
             if g.id in dlc_existing_ratings:
                 item['existing_rating'] = dlc_existing_ratings[g.id]

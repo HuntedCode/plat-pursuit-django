@@ -1,5 +1,6 @@
-{% load humanize %}
+{% load humanize custom_filters %}
 {# Reusable ratings grid. Expects `averages` variable (dict or None). #}
+{# Optional: can_rate, user_rating, concept_id, group_id, ctg_id, hours_label, hours_label_long for Quick Rate button. #}
 <div class="mb-4">
 {% if averages %}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-1.5" data-ratings-grid>
@@ -15,7 +16,7 @@
         </div>
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="hours">
             <div class="text-lg md:text-xl font-black {% if averages.avg_hours < 25 %}text-success{% elif averages.avg_hours < 75 %}text-warning{% elif averages.avg_hours < 100 %}text-accent{% else %}text-error{% endif %}" data-stat-value>{{ averages.avg_hours|floatformat:0|intcomma }}<span class="text-[0.6rem] text-base-content/40 font-normal">h</span></div>
-            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Hours to Plat</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">{{ hours_label|default:"Hours to Plat" }}</div>
             <progress class="progress progress-xs {% if averages.avg_hours < 25 %}progress-success{% elif averages.avg_hours < 75 %}progress-warning{% elif averages.avg_hours < 100 %}progress-accent{% else %}progress-error{% endif %} mt-1" value="{{ averages.avg_hours }}" max="100"></progress>
         </div>
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="fun">
@@ -29,7 +30,22 @@
             <progress class="progress progress-xs {% if averages.avg_rating < 2 %}progress-error{% elif averages.avg_rating < 4 %}progress-warning{% else %}progress-success{% endif %} mt-1" value="{{ averages.avg_rating }}" max="5"></progress>
         </div>
     </div>
-    <p class="text-xs text-base-content/50 text-center italic mt-2" data-ratings-count>Based on {{ averages.count|intcomma }} community rating{{ averages.count|pluralize }}.</p>
+    <div class="flex items-center mt-2 gap-2">
+        <p class="text-xs text-base-content/50 italic flex-1" data-ratings-count>Based on {{ averages.count|intcomma }} community rating{{ averages.count|pluralize }}.</p>
+        {% if can_rate %}
+        <button type="button"
+                class="btn btn-xs btn-primary gap-1 shrink-0 quick-rate-btn"
+                data-concept-id="{{ concept_id }}"
+                data-group-id="{{ group_id }}"
+                data-hours-label="{{ hours_label_long|default:'Hours to Platinum' }}"
+                {% if user_rating %}data-existing='{"difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            {% if user_rating %}Update Rating{% else %}Rate This Game{% endif %}
+        </button>
+        {% endif %}
+    </div>
 {% else %}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-1.5" data-ratings-grid>
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="difficulty">
@@ -44,7 +60,7 @@
         </div>
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="hours">
             <div class="text-lg md:text-xl font-black text-base-content/20" data-stat-value>&mdash;</div>
-            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">Hours to Plat</div>
+            <div class="text-[0.55rem] md:text-xs text-base-content/40 uppercase font-medium">{{ hours_label|default:"Hours to Plat" }}</div>
             <progress class="progress progress-xs mt-1" value="0" max="100"></progress>
         </div>
         <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center" data-stat="fun">
@@ -58,6 +74,21 @@
             <progress class="progress progress-xs mt-1" value="0" max="5"></progress>
         </div>
     </div>
-    <p class="text-xs text-base-content/50 text-center italic mt-2" data-ratings-count>No community ratings yet. Be the first to rate!</p>
+    <div class="flex items-center mt-2 gap-2">
+        <p class="text-xs text-base-content/50 italic flex-1" data-ratings-count>No community ratings yet. Be the first to rate!</p>
+        {% if can_rate %}
+        <button type="button"
+                class="btn btn-xs btn-primary gap-1 shrink-0 quick-rate-btn"
+                data-concept-id="{{ concept_id }}"
+                data-group-id="{{ group_id }}"
+                data-hours-label="{{ hours_label_long|default:'Hours to Platinum' }}"
+                {% if user_rating %}data-existing='{"difficulty":{{ user_rating.difficulty|default:5 }},"grindiness":{{ user_rating.grindiness|default:5 }},"hours_to_platinum":{{ user_rating.hours_to_platinum|default:0 }},"fun_ranking":{{ user_rating.fun_ranking|default:5 }},"overall_rating":{{ user_rating.overall_rating|default:"3.0" }}}'{% endif %}>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            {% if user_rating %}Update Rating{% else %}Rate This Game{% endif %}
+        </button>
+        {% endif %}
+    </div>
 {% endif %}
 </div>

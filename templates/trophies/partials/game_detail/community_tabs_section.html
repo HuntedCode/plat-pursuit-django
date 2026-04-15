@@ -32,7 +32,7 @@
              data-ctg-id="{{ ct.ctg.id }}">
 
             {# ══ Ratings Grid ══ #}
-            {% include 'trophies/partials/game_detail/ratings_grid.html' with averages=ct.averages %}
+            {% include 'trophies/partials/game_detail/ratings_grid.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating concept_id=game.concept.id group_id=ct.ctg.trophy_group_id ctg_id=ct.ctg.id hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
 
             {# ══ Reviews ══ #}
             {% if game.concept and game.concept.slug %}
@@ -44,7 +44,7 @@
             {# ══ Roadmap ══ #}
             <div class="border-t border-base-content/5 pt-3 mt-3">
             {% with rdm_tab=roadmap_tabs_by_ctg|get_item:ct.ctg.id %}
-                {% if rdm_tab and rdm_tab.steps.all %}
+                {% if rdm_tab and rdm_tab.steps.all or rdm_tab.trophy_guides.all %}
                     {% include 'trophies/partials/game_detail/roadmap_tab_content.html' with tab=rdm_tab %}
                 {% else %}
                     {% comment %}
@@ -107,9 +107,24 @@
     </div>
 </div>
 
+{# Quick Rate modal (shared, populated by JS) #}
+{% include 'trophies/partials/game_detail/quick_rate_modal.html' %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ── Roadmap CTA click-to-navigate (avoids nested <a> tags) ──
+    document.querySelectorAll('.roadmap-cta-link').forEach(function(el) {
+        el.addEventListener('click', function(e) {
+            if (e.target.closest('a')) return;
+            window.location.href = el.dataset.href;
+        });
+    });
+});
+</script>
+
+{% if community_tabs|length > 1 %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        {% if community_tabs|length > 1 %}
         // ── DLC Tab switching ──
         document.querySelectorAll('.community-tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -129,142 +144,6 @@
                 });
             });
         });
-        {% endif %}
-
-        {% if roadmap %}
-        // ── Slide animation helpers ──
-        function slideDown(el, duration) {
-            el.style.overflow = 'hidden';
-            el.style.maxHeight = '0';
-            el.style.opacity = '0';
-            el.classList.remove('hidden');
-            const height = el.scrollHeight;
-            el.style.transition = 'max-height ' + duration + 'ms ease-out, opacity ' + duration + 'ms ease-out';
-            requestAnimationFrame(function() { el.style.maxHeight = height + 'px'; el.style.opacity = '1'; });
-            el.addEventListener('transitionend', function handler() {
-                el.style.maxHeight = ''; el.style.overflow = ''; el.style.transition = '';
-                el.removeEventListener('transitionend', handler);
-            });
-        }
-        function slideUp(el, duration) {
-            el.style.overflow = 'hidden';
-            el.style.maxHeight = el.scrollHeight + 'px';
-            el.style.transition = 'max-height ' + duration + 'ms ease-in, opacity ' + duration + 'ms ease-in';
-            requestAnimationFrame(function() { el.style.maxHeight = '0'; el.style.opacity = '0'; });
-            el.addEventListener('transitionend', function handler() {
-                el.classList.add('hidden'); el.style.maxHeight = ''; el.style.overflow = ''; el.style.opacity = ''; el.style.transition = '';
-                el.removeEventListener('transitionend', handler);
-            });
-        }
-
-        // ── Roadmap expand/collapse (per tab) ──
-        document.querySelectorAll('.roadmap-expand-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var cta = btn.closest('.roadmap-cta');
-                var content = cta.parentElement.querySelector('.roadmap-content[data-tab-id="' + cta.dataset.tabId + '"]');
-                if (content) { cta.classList.add('hidden'); slideDown(content, 350); }
-            });
-        });
-        document.querySelectorAll('.roadmap-collapse-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var content = btn.closest('.roadmap-content');
-                var cta = content.parentElement.querySelector('.roadmap-cta[data-tab-id="' + content.dataset.tabId + '"]');
-                slideUp(content, 250);
-                setTimeout(function() { if (cta) { cta.classList.remove('hidden'); cta.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }, 260);
-            });
-        });
-
-        // ── Animated <details> ──
-        document.querySelectorAll('.roadmap-step-details, .trophy-guide-item, details.group').forEach(function(details) {
-            var summary = details.querySelector('summary');
-            var inner = details.querySelector('summary + div');
-            if (!summary || !inner) return;
-            var animating = false;
-            summary.addEventListener('click', function(e) {
-                e.preventDefault();
-                if (animating) return;
-                animating = true;
-                if (details.open) {
-                    inner.style.overflow = 'hidden'; inner.style.maxHeight = inner.scrollHeight + 'px';
-                    inner.style.transition = 'max-height 250ms ease-in, opacity 250ms ease-in';
-                    requestAnimationFrame(function() { inner.style.maxHeight = '0'; inner.style.opacity = '0'; });
-                    inner.addEventListener('transitionend', function handler() {
-                        details.open = false; inner.style.maxHeight = ''; inner.style.overflow = ''; inner.style.opacity = ''; inner.style.transition = ''; animating = false;
-                        inner.removeEventListener('transitionend', handler);
-                    });
-                } else {
-                    details.open = true; inner.style.overflow = 'hidden'; inner.style.maxHeight = '0'; inner.style.opacity = '0';
-                    var height = inner.scrollHeight;
-                    inner.style.transition = 'max-height 300ms ease-out, opacity 300ms ease-out';
-                    requestAnimationFrame(function() { inner.style.maxHeight = height + 'px'; inner.style.opacity = '1'; });
-                    inner.addEventListener('transitionend', function handler() {
-                        inner.style.maxHeight = ''; inner.style.overflow = ''; inner.style.transition = ''; animating = false;
-                        inner.removeEventListener('transitionend', handler);
-                    });
-                }
-            });
-        });
-
-        // ── Trophy link scroll ──
-        function scrollToTrophyGuide(targetId) {
-            var target = document.getElementById(targetId);
-            if (!target) return;
-            if (!target.open) target.open = true;
-            setTimeout(function() {
-                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                target.classList.add('ring-2', 'ring-primary/40');
-                setTimeout(function() { target.classList.remove('ring-2', 'ring-primary/40'); }, 1500);
-            }, 50);
-        }
-
-        document.querySelectorAll('.roadmap-trophy-link').forEach(function(link) {
-            link.addEventListener('click', function(e) { e.preventDefault(); scrollToTrophyGuide(link.getAttribute('href').substring(1)); });
-        });
-
-        // ── Trophy link styling (inline markdown links) ──
-        document.querySelectorAll('.roadmap-step-details a[href^="#trophy-guide-"]:not(.roadmap-trophy-link), .trophy-guide-item a[href^="#trophy-guide-"]').forEach(function(link) {
-            var targetId = link.getAttribute('href').substring(1);
-            var target = document.getElementById(targetId);
-            var iconSrc = target && target.querySelector('img') ? target.querySelector('img').src : null;
-            if (iconSrc) {
-                var img = document.createElement('img');
-                img.src = iconSrc; img.alt = ''; img.className = 'w-4 h-4 rounded-sm object-cover inline-block align-text-bottom';
-                link.insertBefore(img, link.firstChild);
-                link.insertBefore(document.createTextNode('\u00A0'), img.nextSibling);
-            }
-            link.classList.remove('link-primary');
-            link.classList.add('text-accent', 'decoration-accent/40', 'hover:decoration-accent');
-            link.addEventListener('click', function(e) { e.preventDefault(); scrollToTrophyGuide(targetId); });
-        });
-
-        // ── Trophy guide sort/filter ──
-        var TYPE_ORDER = { platinum: 0, gold: 1, silver: 2, bronze: 3 };
-        document.querySelectorAll('.trophy-guides-display-section').forEach(function(section) {
-            var list = section.querySelector('.trophy-guides-list');
-            var sortSelect = section.querySelector('.trophy-guide-sort');
-            var hideEarnedCb = section.querySelector('.trophy-guide-earned-filter input');
-            if (!list || !sortSelect) return;
-            function applySort() {
-                var items = Array.from(list.querySelectorAll('.trophy-guide-item'));
-                var sort = sortSelect.value;
-                var hideEarned = hideEarnedCb && hideEarnedCb.checked;
-                items.sort(function(a, b) {
-                    switch (sort) {
-                        case 'type': return (TYPE_ORDER[a.dataset.type] || 9) - (TYPE_ORDER[b.dataset.type] || 9);
-                        case 'rarity': return parseFloat(a.dataset.rarity) - parseFloat(b.dataset.rarity);
-                        case 'earned': return parseInt(b.dataset.earned) - parseInt(a.dataset.earned);
-                        case 'unearned': return parseInt(a.dataset.earned) - parseInt(b.dataset.earned);
-                        default: return parseInt(a.dataset.order) - parseInt(b.dataset.order);
-                    }
-                });
-                items.forEach(function(item) {
-                    item.classList.toggle('hidden', hideEarned && item.dataset.earned === '1');
-                    list.appendChild(item);
-                });
-            }
-            sortSelect.addEventListener('change', applySort);
-            if (hideEarnedCb) hideEarnedCb.addEventListener('change', applySort);
-        });
-        {% endif %}
     });
 </script>
+{% endif %}
