@@ -135,7 +135,9 @@ Browse page sort is simpler: alphabetical (default), reverse alphabetical, most 
 
 - **Detail page sorts operate on groups, not games**: Sorting is applied AFTER the IGDB-ID grouping, so "Most versions first" is groups-with-most-versions-first. Sorting individual games within a group would change the row order within each game card, which is a different (and less useful) behavior.
 
-- **Anonymous stats on franchise detail**: The aggregate stats row calculation is always computed, even for anonymous users — it's cheap and `user_franchise_stats` is the template's branching key. Don't guard the calculation itself with `if profile`, only the UI rendering.
+- **Anonymous stats on franchise detail**: The aggregate stats row calculation is always computed, even for anonymous users — it's cheap and `user_progress_stats` is the template's branching key. Don't guard the calculation itself with `if profile`, only the UI rendering.
+
+- **Grouping / stats logic is shared with the Company pages.** `trophies/services/game_grouping_service.py` owns `build_igdb_groups()`, `sort_groups()`, `pick_hero_cover()`, `compute_user_progress_stats()`, `fetch_user_progress_map()`, and the three cover-art Subquery factories. Both `FranchiseDetailView` and `CompanyDetailView` use these. Don't duplicate the logic inline in one view — update the service so both features stay in lockstep. The shared `templates/trophies/partials/franchise_detail/game_groups_list.html` partial (also used by company role sections) expects a generic `user_progress_stats` context key, not a franchise-specific one.
 
 ## Management Commands
 
@@ -149,5 +151,6 @@ See [IGDB Integration → Management Commands](../architecture/igdb-integration.
 ## Related Docs
 
 - [IGDB Integration](../architecture/igdb-integration.md): data models, enrichment logic, management commands, recovery procedures
+- [Company System](company-system.md): sibling feature using the same shared grouping service and games-list partial
 - [IA and Sub-Nav](../architecture/ia-and-subnav.md): Browse hub sub-nav placement
 - [Design System](../reference/design-system.md): card anatomy, responsive breakpoints, and the cover-art fallback chain used throughout

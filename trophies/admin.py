@@ -2137,7 +2137,7 @@ class CompanyConceptInline(admin.TabularInline):
 
 @admin.register(Company)
 class CompanyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'igdb_id', 'country_display', 'parent', 'company_size_display', 'concept_count')
+    list_display = ('name', 'igdb_id', 'country_column', 'parent', 'company_size_display', 'concept_count')
     list_filter = ('company_size',)
     search_fields = ('name', 'slug')
     raw_id_fields = ('parent', 'changed_company')
@@ -2154,10 +2154,12 @@ class CompanyAdmin(admin.ModelAdmin):
     concept_count.short_description = 'Games'
     concept_count.admin_order_field = '_concept_count'
 
-    def country_display(self, obj):
-        return obj.country or '-'
-    country_display.short_description = 'Country'
-    country_display.admin_order_field = 'country'
+    def country_column(self, obj):
+        # Fall back to raw numeric code when the ISO mapping doesn't recognise
+        # it (unknown/new country) so admin still sees SOMETHING useful.
+        return obj.country_display or (str(obj.country) if obj.country else '-')
+    country_column.short_description = 'Country'
+    country_column.admin_order_field = 'country'
 
     def company_size_display(self, obj):
         return obj.get_company_size_display() if obj.company_size else '-'

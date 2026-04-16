@@ -1,45 +1,69 @@
 {% extends 'base.html' %}
-{% load static %}
 {% load humanize %}
+{% load custom_filters %}
 {% block title %}{{ object.name }}{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ── Company Profile Card ── #}
+    {# -- Company Header (Poster Hero) -- #}
     <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
-        <div class="card-body p-4 md:p-6">
-            <div class="flex flex-col md:flex-row items-start gap-4">
-                {# Logo #}
-                <div class="w-20 h-20 md:w-24 md:h-24 shrink-0 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden border-2 border-base-content/10">
+        <div class="card-body p-4 md:p-6 lg:p-8">
+            <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6 lg:gap-8">
+                {% comment %}
+                    Poster-style logo panel matching the franchise hero
+                    dimensions. When a logo is present it sits inside a
+                    contrast-friendly white-ish plate so single-color logos
+                    pop against the dark theme. Fallback is a generic
+                    building icon when IGDB has no logo_image_id for the
+                    company.
+                {% endcomment %}
+                <div class="w-32 h-40 md:w-40 md:h-52 lg:w-48 lg:h-64 shrink-0 rounded-lg bg-base-300 overflow-hidden ring-2 ring-primary/30 ring-offset-2 ring-offset-base-200 shadow-xl shadow-primary/10 flex items-center justify-center">
                     {% if object.logo_url %}
-                        <img src="{{ object.logo_url }}" alt="{{ object.name }}"
-                             class="w-full h-full object-contain p-2" />
+                        <div class="w-full h-full bg-base-100/95 flex items-center justify-center p-4 md:p-5 lg:p-6">
+                            <img src="{{ object.logo_url }}" alt="{{ object.name }}"
+                                 class="max-w-full max-h-full object-contain" />
+                        </div>
+                    {% elif hero_cover %}
+                        {# Fallback when company has no logo but we do have
+                           representative cover art from one of their games. #}
+                        <img src="{{ hero_cover }}" alt="{{ object.name }}"
+                             class="w-full h-full object-cover object-top" />
                     {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                            <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5"></path>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 md:w-14 md:h-14 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4"></path>
                         </svg>
                     {% endif %}
                 </div>
 
-                <div class="flex-1 min-w-0">
-                    <h1 class="text-xl md:text-2xl lg:text-3xl font-bold">{{ object.name }}</h1>
-
-                    <div class="flex flex-wrap items-center gap-2 mt-1">
-                        {% if object.country %}
-                            <span class="badge badge-sm badge-ghost">{{ object.country }}</span>
-                        {% endif %}
-                        {% if object.start_date %}
-                            <span class="badge badge-sm badge-ghost">Est. {{ object.start_date.year }}</span>
-                        {% endif %}
-                        <span class="badge badge-sm badge-primary">{{ total_games|intcomma }} game{{ total_games|pluralize }}</span>
+                <div class="flex-1 min-w-0 text-center sm:text-left">
+                    <div class="flex items-center gap-2 justify-center sm:justify-start mb-1.5">
+                        <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-primary/80">
+                            Company
+                        </span>
+                        <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-primary/40 to-transparent"></div>
                     </div>
 
-                    {% if object.description %}
-                        <p class="text-sm text-base-content/70 mt-3 max-w-prose">{{ object.description }}</p>
+                    <h1 class="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black leading-tight">
+                        {{ object.name }}
+                    </h1>
+
+                    {# Secondary identity line: country + founding year (only when known). #}
+                    {% if object.country_display or object.start_date %}
+                        <div class="flex items-center gap-2 justify-center sm:justify-start text-xs md:text-sm text-base-content/60 mt-1.5 flex-wrap">
+                            {% if object.country_display %}
+                                <span>{{ object.country_display }}</span>
+                            {% endif %}
+                            {% if object.country_display and object.start_date %}
+                                <span class="text-base-content/30">&bull;</span>
+                            {% endif %}
+                            {% if object.start_date %}
+                                <span>Est. {{ object.start_date.year }}</span>
+                            {% endif %}
+                        </div>
                     {% endif %}
 
-                    {# Merger / Parent info #}
+                    {# Merger / Parent hints. #}
                     {% if parent_company %}
                         <p class="text-xs text-base-content/50 mt-2">
                             Subsidiary of
@@ -53,110 +77,153 @@
                         </p>
                     {% endif %}
 
-                    <p class="text-[10px] text-base-content/30 italic mt-2 pr-1">
-                        Company data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
-                    </p>
-                </div>
+                    {% if object.description %}
+                        <p class="text-xs md:text-sm text-base-content/70 mt-3 max-w-prose">{{ object.description }}</p>
+                    {% endif %}
 
-                {# Stats sidebar #}
-                <div class="shrink-0 bg-white/[0.03] border border-base-content/5 rounded-lg p-3 min-w-[160px]">
-                    <h4 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-2">Community Stats</h4>
-                    {% if company_rating_count %}
-                        <div class="space-y-1.5">
-                            {# Rating #}
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                                    </svg>
-                                    <span class="text-xs text-base-content/50">Rating</span>
+                    {% if user_progress_stats %}
+                        {# "Your Progress" stat cells: numerator/denominator format across all the company's games. #}
+                        <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4">
+                            <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Your Progress</span>
+                            <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">
+                                    {{ user_progress_stats.games_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_games|intcomma }}</span>
                                 </div>
-                                <span class="text-sm font-bold">{{ company_avg_rating|floatformat:1 }}/5</span>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Games Played</div>
                             </div>
-
-                            {# Difficulty #}
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                    </svg>
-                                    <span class="text-xs text-base-content/50">Difficulty</span>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black">
+                                    {{ user_progress_stats.versions_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_versions|intcomma }}</span>
                                 </div>
-                                <span class="text-sm font-bold">{{ company_avg_difficulty|floatformat:1 }}/10</span>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
                             </div>
-
-                            {# Fun #}
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
-                                        <line x1="9" y1="9" x2="9.01" y2="9"></line>
-                                        <line x1="15" y1="9" x2="15.01" y2="9"></line>
-                                    </svg>
-                                    <span class="text-xs text-base-content/50">Fun</span>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">
+                                    {{ user_progress_stats.trophies_earned|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_trophies|intcomma }}</span>
                                 </div>
-                                <span class="text-sm font-bold">{{ company_avg_fun|floatformat:1 }}/10</span>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
                             </div>
-
-                            {# Grindiness #}
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                                        <polyline points="17 6 23 6 23 12"></polyline>
-                                    </svg>
-                                    <span class="text-xs text-base-content/50">Grind</span>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">
+                                    {{ user_progress_stats.games_platinumed|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_platinums|intcomma }}</span>
                                 </div>
-                                <span class="text-sm font-bold">{{ company_avg_grindiness|floatformat:1 }}/10</span>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
                             </div>
+                        </div>
 
-                            {# Avg Hours #}
-                            {% if company_avg_hours %}
-                            <div class="flex items-center justify-between gap-2">
-                                <div class="flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <circle cx="12" cy="12" r="10"></circle>
-                                        <polyline points="12 6 12 12 16 14"></polyline>
-                                    </svg>
-                                    <span class="text-xs text-base-content/50">Avg Hours</span>
-                                </div>
-                                <span class="text-sm font-bold">{{ company_avg_hours|floatformat:0 }}h</span>
+                        {# Overall completion bar #}
+                        <div class="mt-3 md:mt-4">
+                            <div class="flex items-center justify-between text-xs mb-1">
+                                <span class="text-base-content/60 font-medium">Catalog Completion</span>
+                                <span class="font-bold text-primary">{{ user_progress_stats.completion_pct }}%</span>
                             </div>
-                            {% endif %}
-
-                            <div class="border-t border-base-content/10 pt-1.5 mt-1">
-                                {# Total Players #}
-                                {% if company_total_players %}
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="flex items-center gap-1">
-                                        {% include 'partials/icons/user.html' with size='w-3.5 h-3.5 text-base-content/50' %}
-                                        <span class="text-xs text-base-content/50">Players</span>
-                                    </div>
-                                    <span class="text-sm font-bold">{{ company_total_players|intcomma }}</span>
-                                </div>
-                                {% endif %}
-
+                            <div class="h-2 bg-base-300 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-primary to-accent rounded-full transition-all duration-500"
+                                     style="width: {{ user_progress_stats.completion_pct }}%"></div>
                             </div>
-
-                            <p class="text-[10px] text-base-content/30 italic mt-2 pr-1">
-                                Based on {{ company_rating_count|intcomma }} rating{{ company_rating_count|pluralize }} across {{ company_rated_games|intcomma }} game{{ company_rated_games|pluralize }}.
-                            </p>
                         </div>
                     {% else %}
-                        <p class="text-xs text-base-content/30 italic pr-1">No community ratings yet for this company's games.</p>
+                        {# Totals-only view (anonymous / unlinked) #}
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4 md:mt-5">
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary">{{ total_games|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Game{{ total_games|pluralize }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black">{{ total_versions|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">{{ total_trophies|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">{{ total_platinums|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
+                            </div>
+                        </div>
                     {% endif %}
+
+                    {% if company_rating_count %}
+                        {# Community stats strip. Matches the "Your Progress"
+                           visual rhythm — same eyebrow label + cell grid. #}
+                        <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4 md:mt-5">
+                            <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Community Stats</span>
+                            <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
+                                <div class="text-base md:text-lg lg:text-xl font-black text-warning">{{ company_avg_rating|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/5</span></div>
+                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Rating</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
+                                <div class="text-base md:text-lg lg:text-xl font-black text-error">{{ company_avg_difficulty|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/10</span></div>
+                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Difficulty</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
+                                <div class="text-base md:text-lg lg:text-xl font-black text-success">{{ company_avg_fun|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/10</span></div>
+                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Fun</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
+                                <div class="text-base md:text-lg lg:text-xl font-black text-info">{{ company_avg_grindiness|floatformat:1 }}<span class="text-base-content/40 text-xs md:text-sm">/10</span></div>
+                                <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Grind</div>
+                            </div>
+                            {% if company_avg_hours %}
+                                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
+                                    <div class="text-base md:text-lg lg:text-xl font-black text-accent">{{ company_avg_hours|floatformat:0 }}h</div>
+                                    <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Avg Hours</div>
+                                </div>
+                            {% endif %}
+                            {% if company_total_players %}
+                                <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
+                                    <div class="text-base md:text-lg lg:text-xl font-black">{{ company_total_players|intcomma }}</div>
+                                    <div class="text-[10px] text-base-content/50 font-medium uppercase tracking-wider">Players</div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <p class="text-[10px] text-base-content/30 italic mt-2 pr-1 text-center sm:text-left">
+                            Based on {{ company_rating_count|intcomma }} rating{{ company_rating_count|pluralize }} across {{ company_rated_games|intcomma }} game{{ company_rated_games|pluralize }}.
+                        </p>
+                    {% endif %}
+
+                    <p class="text-[10px] text-base-content/30 italic mt-3 pr-1 text-center sm:text-left">
+                        Company data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
+                    </p>
                 </div>
             </div>
         </div>
     </div>
 
+    {# -- Role Anchor Nav -- #}
+    {% if sections|length > 1 %}
+        <div class="flex flex-wrap gap-2 mb-3">
+            {% for section in sections %}
+                <a href="#role-{{ section.slug }}"
+                   class="btn btn-xs md:btn-sm btn-ghost border border-base-300 hover:border-primary/50 hover:bg-primary/10">
+                    {{ section.label }}
+                    <span class="badge badge-xs badge-ghost ml-1">{{ section.count }}</span>
+                </a>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
 
-    {# ── Games by Role ── #}
-    {% include 'trophies/partials/company_detail/game_section.html' with games=role_games.developed title="Developed" %}
-    {% include 'trophies/partials/company_detail/game_section.html' with games=role_games.published title="Published" %}
-    {% include 'trophies/partials/company_detail/game_section.html' with games=role_games.ported title="Ported" %}
-    {% include 'trophies/partials/company_detail/game_section.html' with games=role_games.supported title="Supporting Development" %}
+    {# -- Games by Role -- #}
+    {% for section in sections %}
+        {% include 'trophies/partials/company_detail/role_section.html' with section=section %}
+    {% empty %}
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg">
+            <div class="card-body items-center text-center py-12">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                </svg>
+                <p class="text-base-content/40 text-sm mt-2">No games found for this company yet.</p>
+            </div>
+        </div>
+    {% endfor %}
 
 {% endblock %}

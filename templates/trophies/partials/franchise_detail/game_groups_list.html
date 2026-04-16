@@ -7,7 +7,7 @@
 
     Required context:
       - groups: iterable of group dicts (see FranchiseDetailView.get_context_data)
-      - user_franchise_stats: truthy when viewer has a linked profile (toggles
+      - user_progress_stats: truthy when viewer has a linked profile (toggles
         per-row progress ring vs trophy count display)
       - empty_message: text shown when the list is empty
 {% endcomment %}
@@ -88,7 +88,7 @@
                                         {% endif %}
                                     </div>
 
-                                    {% if user_franchise_stats %}
+                                    {% if user_progress_stats %}
                                         {% if game.user_pg %}
                                             <div class="flex items-center gap-1.5 shrink-0">
                                                 <div class="relative w-7 h-7 rounded-full shrink-0"

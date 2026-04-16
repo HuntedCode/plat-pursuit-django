@@ -1,0 +1,315 @@
+"""
+ISO 3166-1 numeric country code utilities.
+
+IGDB supplies company country data as ISO 3166-1 numeric codes (e.g. 840 for
+the United States, 392 for Japan, 826 for the United Kingdom). This module
+converts those integers into display-ready (flag emoji, name) tuples.
+
+Only the numeric→(name, alpha2) table is maintained here. Flag emojis are
+derived at call time from the alpha-2 code via Unicode regional-indicator
+symbols (U+1F1E6..U+1F1FF), which render as flag glyphs on every modern OS
+without needing an asset bundle.
+
+Callers should use :func:`country_display` for a ready-to-render string, or
+:func:`country_info` for ``(flag, name)`` tuples when they want to arrange
+the parts independently in the template.
+"""
+from __future__ import annotations
+
+
+# ISO 3166-1 numeric → (English name, ISO 3166-1 alpha-2)
+# Subset covering every country/territory IGDB actually uses for company
+# records. If an unknown numeric code shows up, country_info returns None
+# and the template can fall back to hiding the country row.
+_ISO_3166_NUMERIC: dict[int, tuple[str, str]] = {
+    4: ('Afghanistan', 'AF'),
+    8: ('Albania', 'AL'),
+    10: ('Antarctica', 'AQ'),
+    12: ('Algeria', 'DZ'),
+    16: ('American Samoa', 'AS'),
+    20: ('Andorra', 'AD'),
+    24: ('Angola', 'AO'),
+    28: ('Antigua and Barbuda', 'AG'),
+    31: ('Azerbaijan', 'AZ'),
+    32: ('Argentina', 'AR'),
+    36: ('Australia', 'AU'),
+    40: ('Austria', 'AT'),
+    44: ('Bahamas', 'BS'),
+    48: ('Bahrain', 'BH'),
+    50: ('Bangladesh', 'BD'),
+    51: ('Armenia', 'AM'),
+    52: ('Barbados', 'BB'),
+    56: ('Belgium', 'BE'),
+    60: ('Bermuda', 'BM'),
+    64: ('Bhutan', 'BT'),
+    68: ('Bolivia', 'BO'),
+    70: ('Bosnia and Herzegovina', 'BA'),
+    72: ('Botswana', 'BW'),
+    74: ('Bouvet Island', 'BV'),
+    76: ('Brazil', 'BR'),
+    84: ('Belize', 'BZ'),
+    86: ('British Indian Ocean Territory', 'IO'),
+    90: ('Solomon Islands', 'SB'),
+    92: ('British Virgin Islands', 'VG'),
+    96: ('Brunei', 'BN'),
+    100: ('Bulgaria', 'BG'),
+    104: ('Myanmar', 'MM'),
+    108: ('Burundi', 'BI'),
+    112: ('Belarus', 'BY'),
+    116: ('Cambodia', 'KH'),
+    120: ('Cameroon', 'CM'),
+    124: ('Canada', 'CA'),
+    132: ('Cape Verde', 'CV'),
+    136: ('Cayman Islands', 'KY'),
+    140: ('Central African Republic', 'CF'),
+    144: ('Sri Lanka', 'LK'),
+    148: ('Chad', 'TD'),
+    152: ('Chile', 'CL'),
+    156: ('China', 'CN'),
+    158: ('Taiwan', 'TW'),
+    162: ('Christmas Island', 'CX'),
+    166: ('Cocos (Keeling) Islands', 'CC'),
+    170: ('Colombia', 'CO'),
+    174: ('Comoros', 'KM'),
+    175: ('Mayotte', 'YT'),
+    178: ('Republic of the Congo', 'CG'),
+    180: ('Democratic Republic of the Congo', 'CD'),
+    184: ('Cook Islands', 'CK'),
+    188: ('Costa Rica', 'CR'),
+    191: ('Croatia', 'HR'),
+    192: ('Cuba', 'CU'),
+    196: ('Cyprus', 'CY'),
+    203: ('Czech Republic', 'CZ'),
+    204: ('Benin', 'BJ'),
+    208: ('Denmark', 'DK'),
+    212: ('Dominica', 'DM'),
+    214: ('Dominican Republic', 'DO'),
+    218: ('Ecuador', 'EC'),
+    222: ('El Salvador', 'SV'),
+    226: ('Equatorial Guinea', 'GQ'),
+    231: ('Ethiopia', 'ET'),
+    232: ('Eritrea', 'ER'),
+    233: ('Estonia', 'EE'),
+    234: ('Faroe Islands', 'FO'),
+    238: ('Falkland Islands', 'FK'),
+    239: ('South Georgia', 'GS'),
+    242: ('Fiji', 'FJ'),
+    246: ('Finland', 'FI'),
+    248: ('Åland Islands', 'AX'),
+    250: ('France', 'FR'),
+    254: ('French Guiana', 'GF'),
+    258: ('French Polynesia', 'PF'),
+    260: ('French Southern Territories', 'TF'),
+    262: ('Djibouti', 'DJ'),
+    266: ('Gabon', 'GA'),
+    268: ('Georgia', 'GE'),
+    270: ('Gambia', 'GM'),
+    275: ('Palestine', 'PS'),
+    276: ('Germany', 'DE'),
+    288: ('Ghana', 'GH'),
+    292: ('Gibraltar', 'GI'),
+    296: ('Kiribati', 'KI'),
+    300: ('Greece', 'GR'),
+    304: ('Greenland', 'GL'),
+    308: ('Grenada', 'GD'),
+    312: ('Guadeloupe', 'GP'),
+    316: ('Guam', 'GU'),
+    320: ('Guatemala', 'GT'),
+    324: ('Guinea', 'GN'),
+    328: ('Guyana', 'GY'),
+    332: ('Haiti', 'HT'),
+    334: ('Heard Island and McDonald Islands', 'HM'),
+    336: ('Vatican City', 'VA'),
+    340: ('Honduras', 'HN'),
+    344: ('Hong Kong', 'HK'),
+    348: ('Hungary', 'HU'),
+    352: ('Iceland', 'IS'),
+    356: ('India', 'IN'),
+    360: ('Indonesia', 'ID'),
+    364: ('Iran', 'IR'),
+    368: ('Iraq', 'IQ'),
+    372: ('Ireland', 'IE'),
+    376: ('Israel', 'IL'),
+    380: ('Italy', 'IT'),
+    384: ("Côte d'Ivoire", 'CI'),
+    388: ('Jamaica', 'JM'),
+    392: ('Japan', 'JP'),
+    398: ('Kazakhstan', 'KZ'),
+    400: ('Jordan', 'JO'),
+    404: ('Kenya', 'KE'),
+    408: ('North Korea', 'KP'),
+    410: ('South Korea', 'KR'),
+    414: ('Kuwait', 'KW'),
+    417: ('Kyrgyzstan', 'KG'),
+    418: ('Laos', 'LA'),
+    422: ('Lebanon', 'LB'),
+    426: ('Lesotho', 'LS'),
+    428: ('Latvia', 'LV'),
+    430: ('Liberia', 'LR'),
+    434: ('Libya', 'LY'),
+    438: ('Liechtenstein', 'LI'),
+    440: ('Lithuania', 'LT'),
+    442: ('Luxembourg', 'LU'),
+    446: ('Macau', 'MO'),
+    450: ('Madagascar', 'MG'),
+    454: ('Malawi', 'MW'),
+    458: ('Malaysia', 'MY'),
+    462: ('Maldives', 'MV'),
+    466: ('Mali', 'ML'),
+    470: ('Malta', 'MT'),
+    474: ('Martinique', 'MQ'),
+    478: ('Mauritania', 'MR'),
+    480: ('Mauritius', 'MU'),
+    484: ('Mexico', 'MX'),
+    492: ('Monaco', 'MC'),
+    496: ('Mongolia', 'MN'),
+    498: ('Moldova', 'MD'),
+    499: ('Montenegro', 'ME'),
+    500: ('Montserrat', 'MS'),
+    504: ('Morocco', 'MA'),
+    508: ('Mozambique', 'MZ'),
+    512: ('Oman', 'OM'),
+    516: ('Namibia', 'NA'),
+    520: ('Nauru', 'NR'),
+    524: ('Nepal', 'NP'),
+    528: ('Netherlands', 'NL'),
+    531: ('Curaçao', 'CW'),
+    533: ('Aruba', 'AW'),
+    534: ('Sint Maarten', 'SX'),
+    535: ('Caribbean Netherlands', 'BQ'),
+    540: ('New Caledonia', 'NC'),
+    548: ('Vanuatu', 'VU'),
+    554: ('New Zealand', 'NZ'),
+    558: ('Nicaragua', 'NI'),
+    562: ('Niger', 'NE'),
+    566: ('Nigeria', 'NG'),
+    570: ('Niue', 'NU'),
+    574: ('Norfolk Island', 'NF'),
+    578: ('Norway', 'NO'),
+    580: ('Northern Mariana Islands', 'MP'),
+    581: ('United States Minor Outlying Islands', 'UM'),
+    583: ('Micronesia', 'FM'),
+    584: ('Marshall Islands', 'MH'),
+    585: ('Palau', 'PW'),
+    586: ('Pakistan', 'PK'),
+    591: ('Panama', 'PA'),
+    598: ('Papua New Guinea', 'PG'),
+    600: ('Paraguay', 'PY'),
+    604: ('Peru', 'PE'),
+    608: ('Philippines', 'PH'),
+    612: ('Pitcairn Islands', 'PN'),
+    616: ('Poland', 'PL'),
+    620: ('Portugal', 'PT'),
+    624: ('Guinea-Bissau', 'GW'),
+    626: ('Timor-Leste', 'TL'),
+    630: ('Puerto Rico', 'PR'),
+    634: ('Qatar', 'QA'),
+    638: ('Réunion', 'RE'),
+    642: ('Romania', 'RO'),
+    643: ('Russia', 'RU'),
+    646: ('Rwanda', 'RW'),
+    652: ('Saint Barthélemy', 'BL'),
+    654: ('Saint Helena', 'SH'),
+    659: ('Saint Kitts and Nevis', 'KN'),
+    660: ('Anguilla', 'AI'),
+    662: ('Saint Lucia', 'LC'),
+    663: ('Saint Martin', 'MF'),
+    666: ('Saint Pierre and Miquelon', 'PM'),
+    670: ('Saint Vincent and the Grenadines', 'VC'),
+    674: ('San Marino', 'SM'),
+    678: ('São Tomé and Príncipe', 'ST'),
+    682: ('Saudi Arabia', 'SA'),
+    686: ('Senegal', 'SN'),
+    688: ('Serbia', 'RS'),
+    690: ('Seychelles', 'SC'),
+    694: ('Sierra Leone', 'SL'),
+    702: ('Singapore', 'SG'),
+    703: ('Slovakia', 'SK'),
+    704: ('Vietnam', 'VN'),
+    705: ('Slovenia', 'SI'),
+    706: ('Somalia', 'SO'),
+    710: ('South Africa', 'ZA'),
+    716: ('Zimbabwe', 'ZW'),
+    724: ('Spain', 'ES'),
+    728: ('South Sudan', 'SS'),
+    729: ('Sudan', 'SD'),
+    732: ('Western Sahara', 'EH'),
+    740: ('Suriname', 'SR'),
+    744: ('Svalbard and Jan Mayen', 'SJ'),
+    748: ('Eswatini', 'SZ'),
+    752: ('Sweden', 'SE'),
+    756: ('Switzerland', 'CH'),
+    760: ('Syria', 'SY'),
+    762: ('Tajikistan', 'TJ'),
+    764: ('Thailand', 'TH'),
+    768: ('Togo', 'TG'),
+    772: ('Tokelau', 'TK'),
+    776: ('Tonga', 'TO'),
+    780: ('Trinidad and Tobago', 'TT'),
+    784: ('United Arab Emirates', 'AE'),
+    788: ('Tunisia', 'TN'),
+    792: ('Turkey', 'TR'),
+    795: ('Turkmenistan', 'TM'),
+    796: ('Turks and Caicos Islands', 'TC'),
+    798: ('Tuvalu', 'TV'),
+    800: ('Uganda', 'UG'),
+    804: ('Ukraine', 'UA'),
+    807: ('North Macedonia', 'MK'),
+    818: ('Egypt', 'EG'),
+    826: ('United Kingdom', 'GB'),
+    831: ('Guernsey', 'GG'),
+    832: ('Jersey', 'JE'),
+    833: ('Isle of Man', 'IM'),
+    834: ('Tanzania', 'TZ'),
+    840: ('United States', 'US'),
+    850: ('U.S. Virgin Islands', 'VI'),
+    854: ('Burkina Faso', 'BF'),
+    858: ('Uruguay', 'UY'),
+    860: ('Uzbekistan', 'UZ'),
+    862: ('Venezuela', 'VE'),
+    876: ('Wallis and Futuna', 'WF'),
+    882: ('Samoa', 'WS'),
+    887: ('Yemen', 'YE'),
+    894: ('Zambia', 'ZM'),
+}
+
+
+def _alpha2_to_flag(alpha2: str) -> str:
+    """Convert a 2-letter ISO 3166-1 alpha-2 code to a flag emoji.
+
+    Uses Unicode regional-indicator symbols (U+1F1E6..U+1F1FF) which render
+    as the country's flag on every modern OS and browser. Returns an empty
+    string if the input isn't exactly two ASCII letters.
+    """
+    if not alpha2 or len(alpha2) != 2 or not alpha2.isascii() or not alpha2.isalpha():
+        return ''
+    upper = alpha2.upper()
+    return ''.join(chr(0x1F1E6 + ord(c) - ord('A')) for c in upper)
+
+
+def country_info(numeric_code) -> tuple[str, str] | None:
+    """Return ``(flag_emoji, name)`` for an ISO 3166-1 numeric code, or None
+    if the code is unknown or falsy.
+
+    Accepts int or str (IGDB sometimes returns the code as a string).
+    """
+    if numeric_code in (None, '', 0):
+        return None
+    try:
+        code = int(numeric_code)
+    except (TypeError, ValueError):
+        return None
+    entry = _ISO_3166_NUMERIC.get(code)
+    if not entry:
+        return None
+    name, alpha2 = entry
+    return _alpha2_to_flag(alpha2), name
+
+
+def country_display(numeric_code) -> str:
+    """Return ``"🇺🇸 United States"`` for a known code, or empty string."""
+    info = country_info(numeric_code)
+    if not info:
+        return ''
+    flag, name = info
+    return f'{flag} {name}'.strip()

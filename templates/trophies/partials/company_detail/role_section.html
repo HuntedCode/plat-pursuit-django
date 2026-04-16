@@ -1,0 +1,27 @@
+{% load humanize %}
+{% comment %}
+    Renders a single role section on the company detail page (Developed,
+    Published, Ported, Supporting Development).
+
+    Delegates the per-group card list to the shared game_groups_list partial
+    used by franchise pages, so progress rings, trophy counts, flag badges,
+    platform chips, etc. stay identical across both features.
+
+    Required context:
+      section: {
+          slug: str     (e.g. 'developed')
+          label: str    (e.g. 'Developed')
+          groups: list  (IGDB-grouped dicts from build_igdb_groups)
+          count: int    (how many groups in the list)
+      }
+      user_progress_stats: truthy when viewer has a linked profile (toggles
+          the per-row progress ring vs. trophy-count display in the shared
+          partial)
+{% endcomment %}
+<section id="role-{{ section.slug }}" class="mb-6 scroll-mt-[7rem] md:scroll-mt-[8rem]">
+    <div class="flex items-center gap-2 mb-2 md:mb-3">
+        <h2 class="text-base md:text-lg lg:text-xl font-bold">{{ section.label }}</h2>
+        <span class="badge badge-sm badge-ghost">{{ section.count|intcomma }} game{{ section.count|pluralize }}</span>
+    </div>
+    {% include 'trophies/partials/franchise_detail/game_groups_list.html' with groups=section.groups empty_message='No games found for this role.' %}
+</section>

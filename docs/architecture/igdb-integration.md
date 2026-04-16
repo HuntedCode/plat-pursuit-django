@@ -89,6 +89,8 @@ Platform filter covers the full PlayStation family: PS1 (7), PS2 (8), PS3 (9), P
 ### Company
 Normalized game company from IGDB. Fields: `igdb_id` (unique), `name`, `slug`, `description`, `country` (ISO 3166-1 numeric), `logo_image_id`, `parent` (FK self for corporate hierarchy), `company_size` (1-9 scale), `start_date`, `changed_company` (FK self for mergers/renames), `change_date`.
 
+Country rendering: use `Company.country_display` (string like "🇺🇸 United States") or `Company.country_info` (`(flag_emoji, name)` tuple). Both delegate to `trophies/util_modules/countries.py`, which maps the ISO 3166-1 numeric code to a name and derives the flag emoji from the alpha-2 code at call time via Unicode regional indicators. Unknown codes return empty / None so templates must tolerate that gracefully.
+
 ### ConceptCompany
 M2M through table. Links Concept to Company with role flags: `is_developer`, `is_publisher`, `is_porting`, `is_supporting`. Multiple roles can be true simultaneously. Unique on (concept, company).
 
@@ -198,6 +200,7 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 - **SEO Tags** (`core/templatetags/seo_tags.py`): Developer as `author` Organization, `timeRequired` ISO 8601 duration, IGDB genres with PSN fallback
 - **Game Detail Template**: Developer display, estimated completion time
 - **Badge System**: Developer badge type already exists; Stages can group Concepts by developer via ConceptCompany queries
+- **Game Grouping Service** (`trophies/services/game_grouping_service.py`): The Franchise and Company detail pages both group games by IGDB id so multi-platform releases stack as "versions" of one card. `build_igdb_groups()`, `sort_groups()`, `pick_hero_cover()`, `compute_user_progress_stats()`, and parameterised cover-art Subquery factories live here. Both features' detail pages use the shared `templates/trophies/partials/franchise_detail/game_groups_list.html` partial to render per-group cards with identical per-version UI (progress rings, trophy counts, flag badges, etc.). See [Franchise System](../features/franchise-system.md) and [Company System](../features/company-system.md).
 
 ## Gotchas and Pitfalls
 
@@ -249,4 +252,5 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 
 - [Data Model](data-model.md): Concept, Game, and related models that IGDB enriches
 - [Franchise System](../features/franchise-system.md): user-facing franchise/collection browse + detail pages; how main / also-featured / collections surface to users
+- [Company System](../features/company-system.md): user-facing developer/publisher browse + detail pages; shares the game-grouping service with franchise pages
 - [Token Keeper](token-keeper.md): Where IGDB enrichment hooks into the PSN sync flow (after `create_concept_from_details()` and during the health-check default-concept fallback path)

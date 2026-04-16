@@ -3902,6 +3902,26 @@ class Company(models.Model):
         return f'https://images.igdb.com/igdb/image/upload/t_{size}/{self.logo_image_id}.png'
 
     @property
+    def country_info(self):
+        """``(flag_emoji, name)`` tuple for the company's country, or None.
+
+        Backed by ``trophies.util_modules.countries``. IGDB supplies country
+        as an ISO 3166-1 numeric code; the template-facing templates should
+        use ``country_display`` for the ready-to-render string, or this
+        property when they need to arrange the flag and name separately.
+        """
+        from trophies.util_modules.countries import country_info
+        return country_info(self.country)
+
+    @property
+    def country_display(self):
+        """``"🇺🇸 United States"`` style string, or empty string if the
+        country code is missing or unknown.
+        """
+        from trophies.util_modules.countries import country_display
+        return country_display(self.country)
+
+    @property
     def is_active(self):
         return self.changed_company is None
 
