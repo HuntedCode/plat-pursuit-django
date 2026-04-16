@@ -84,11 +84,14 @@
                     <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.game_engine_name }}</span>
                 </div>
                 {% endif %}
-                {% if igdb.franchise_names %}
-                <div class="flex items-center gap-1.5 text-xs">
-                    <span class="text-base-content/50 shrink-0">Franchise:</span>
-                    <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.franchise_names|join:", " }}</span>
-                </div>
+                {% if franchise_main or franchise_also_featured or franchise_collections %}
+                    {% include 'trophies/partials/game_detail/franchise_lines.html' %}
+                {% elif igdb.franchise_names %}
+                    {# Fallback for concepts not yet re-enriched after Franchise model rollout #}
+                    <div class="flex items-center gap-1.5 text-xs">
+                        <span class="text-base-content/50 shrink-0">Franchise:</span>
+                        <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.franchise_names|join:", " }}</span>
+                    </div>
                 {% endif %}
                 {% for cc in game.concept.concept_companies.all %}
                     {% if cc.is_porting %}

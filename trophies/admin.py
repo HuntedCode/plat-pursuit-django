@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, ScoutAccount
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, ScoutAccount, Franchise, ConceptFranchise
 
 
 # Register your models here.
@@ -653,12 +653,30 @@ class ConceptCompanyInline(admin.TabularInline):
         return False
 
 
+class ConceptFranchiseInline(admin.TabularInline):
+    """Manage franchise/collection links from inside the Concept admin page.
+
+    Defined here (not next to FranchiseAdmin) because ConceptAdmin is declared
+    before the franchise admin block in this file and Python name resolution
+    needs the inline class to exist at class-body evaluation time.
+    """
+    model = ConceptFranchise
+    fk_name = 'concept'
+    extra = 0
+    fields = ('franchise', 'is_main')
+    autocomplete_fields = ('franchise',)
+    can_delete = True
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('franchise')
+
+
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
     search_fields = ('concept_id', 'unified_title')
     actions = ['duplicate_concept', 'lock_games', 'unlock_games']
-    inlines = [ConceptGameInline, ConceptCompanyInline]
+    inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
 
     @admin.action(description="Lock concept on all games using selected concepts")
     def lock_games(self, request, queryset):
@@ -2189,6 +2207,85 @@ class GameEngineAdmin(admin.ModelAdmin):
         return obj._game_count
     game_count.short_description = 'Games'
     game_count.admin_order_field = '_game_count'
+
+
+# ---------------------------------------------------------------------------
+# Franchise admin
+# ---------------------------------------------------------------------------
+#
+# Franchises and collections (both stored in the same table, distinguished by
+# source_type) need light editorial controls so staff can rename, fix slugs,
+# or split bad merges. Surfaced via three admins:
+#   - FranchiseAdmin: the franchise/collection rows themselves
+#   - ConceptFranchiseAdmin: the through-table for raw link inspection
+#   - FranchiseConceptInline: shown inside FranchiseAdmin so you can see
+#     which concepts are attached without leaving the page
+# A second inline (ConceptFranchiseInline) is wired into ConceptAdmin
+# further up so you can manage franchises from the Concept side too.
+
+class FranchiseConceptInline(admin.TabularInline):
+    """Shows the concepts linked to a Franchise from the Franchise admin page."""
+    model = ConceptFranchise
+    fk_name = 'franchise'
+    extra = 0
+    fields = ('concept', 'is_main')
+    autocomplete_fields = ('concept',)
+    can_delete = True
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('concept')
+
+
+@admin.register(Franchise)
+class FranchiseAdmin(admin.ModelAdmin):
+    list_display = ('name', 'source_type', 'igdb_id', 'slug', 'concept_count', 'main_count')
+    list_filter = ('source_type',)
+    search_fields = ('name', 'slug')
+    # igdb_id and source_type compose the unique constraint — staff editing
+    # them by hand would risk colliding with an enrichment-managed row.
+    # Rename via `name` is fine; everything else is read-only.
+    readonly_fields = ('igdb_id', 'source_type')
+    inlines = [FranchiseConceptInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _concept_count=Count('franchise_concepts', distinct=True),
+            _main_count=Count(
+                'franchise_concepts',
+                filter=Q(franchise_concepts__is_main=True),
+                distinct=True,
+            ),
+        )
+
+    def concept_count(self, obj):
+        return obj._concept_count
+    concept_count.short_description = 'Concepts'
+    concept_count.admin_order_field = '_concept_count'
+
+    def main_count(self, obj):
+        return obj._main_count
+    main_count.short_description = 'As main'
+    main_count.admin_order_field = '_main_count'
+
+
+@admin.register(ConceptFranchise)
+class ConceptFranchiseAdmin(admin.ModelAdmin):
+    """Standalone listing of every concept↔franchise link.
+
+    Useful when triaging mis-linked games (e.g. cross-namespace ID
+    collisions) — list_filter on is_main + source_type lets you find
+    suspicious patterns quickly.
+    """
+    list_display = ('concept', 'franchise', 'franchise_source_type', 'is_main')
+    list_filter = ('is_main', 'franchise__source_type')
+    search_fields = ('concept__unified_title', 'concept__concept_id', 'franchise__name')
+    autocomplete_fields = ('concept', 'franchise')
+    list_select_related = ('concept', 'franchise')
+
+    def franchise_source_type(self, obj):
+        return obj.franchise.source_type
+    franchise_source_type.short_description = 'Type'
+    franchise_source_type.admin_order_field = 'franchise__source_type'
 
 
 class PlatformCoverageFilter(SimpleListFilter):

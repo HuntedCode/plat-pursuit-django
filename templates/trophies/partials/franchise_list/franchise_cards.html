@@ -1,0 +1,58 @@
+{# Franchise browse card grid #}
+{% load humanize %}
+{% for franchise in object_list %}
+    <a href="{% url 'franchise_detail' slug=franchise.slug %}"
+       class="card bg-base-200/90 border-2 border-base-300 shadow-md hover:shadow-lg hover:border-primary/50 transition-all duration-200 group overflow-hidden">
+        <div class="card-body p-3 md:p-4">
+            <div class="flex items-start gap-3">
+                {% comment %}
+                    Representative cover art (most recent game), with full fallback chain:
+                    title_image → IGDB cover → title_icon → icon placeholder.
+                {% endcomment %}
+                <div class="w-14 h-14 md:w-16 md:h-16 shrink-0 rounded-lg bg-base-300 flex items-center justify-center overflow-hidden">
+                    {% if franchise.representative_title_image %}
+                        <img src="{{ franchise.representative_title_image }}" alt="{{ franchise.name }}"
+                             class="w-full h-full object-cover object-top" loading="lazy" />
+                    {% elif franchise.representative_igdb_cover_id %}
+                        <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ franchise.representative_igdb_cover_id }}.png"
+                             alt="{{ franchise.name }}"
+                             class="w-full h-full object-cover object-top" loading="lazy" />
+                    {% elif franchise.representative_title_icon %}
+                        <img src="{{ franchise.representative_title_icon }}" alt="{{ franchise.name }}"
+                             class="w-full h-full object-contain p-2" loading="lazy" />
+                    {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-7 md:h-7 text-primary/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                            <path d="M12 11h4"></path>
+                            <path d="M12 16h4"></path>
+                            <path d="M8 11h.01"></path>
+                            <path d="M8 16h.01"></path>
+                        </svg>
+                    {% endif %}
+                </div>
+
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-sm md:text-base line-clamp-1 group-hover:text-primary transition-colors">
+                        {{ franchise.name }}
+                    </h3>
+                    <div class="mt-1">
+                        <span class="badge badge-sm badge-ghost">
+                            {{ franchise.game_count|intcomma }} game{{ franchise.game_count|pluralize }}{% if franchise.version_count != franchise.game_count %} &middot; {{ franchise.version_count|intcomma }} version{{ franchise.version_count|pluralize }}{% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </a>
+{% empty %}
+    <div class="col-span-full card bg-base-200/90 border-2 border-base-300 shadow-lg">
+        <div class="card-body items-center text-center py-12">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+            </svg>
+            <p class="text-base-content/40 text-sm mt-2">No franchises found matching your search.</p>
+        </div>
+    </div>
+{% endfor %}

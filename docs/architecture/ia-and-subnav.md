@@ -103,7 +103,7 @@ What used to live in the bottom tab bar (Home / Games / Search / Notifications /
 | Hub | Sub-nav items |
 |-----|---------------|
 | **Dashboard** | Dashboard \| Stats \| Shareables \| Recap |
-| **Browse** | Games \| Trophies \| Companies \| Genres & Themes \| Flagged Games |
+| **Browse** | Games \| Trophies \| Recently Added \| Companies \| Franchises \| Genres & Themes \| Flagged Games |
 | **Community** | Hub \| Profiles \| Reviews \| Challenges \| Lists \| Leaderboards |
 | **My Pursuit** *(today)* | Badges \| Milestones \| Titles |
 | **My Pursuit** *(after gamification)* | Logbook \| Star Chart \| Quests \| Arcade \| Market \| Badges \| Milestones \| Titles |
@@ -125,7 +125,7 @@ HUB_SUBNAV_CONFIG = {
         'items': [...],
     },
     'browse': {
-        'matches': ['/games/', '/trophies/', '/companies/', '/genres/', '/themes/'],
+        'matches': ['/games/', '/trophies/', '/companies/', '/franchises/', '/genres/', '/themes/'],
         'items': [...],
     },
     'dashboard': {
@@ -188,11 +188,13 @@ HUB_SUBNAV_CONFIG = {
     'browse': {
         'label': 'Browse',
         'icon': 'compass',
-        'matches': ['/games/', '/trophies/', '/companies/', '/genres/', '/themes/'],
+        'matches': ['/games/', '/trophies/', '/companies/', '/franchises/', '/genres/', '/themes/'],
         'items': [
             {'slug': 'games', 'label': 'Games', 'url_name': 'games_list', 'icon': 'gamepad-2'},
             {'slug': 'trophies', 'label': 'Trophies', 'url_name': 'trophies_list', 'icon': 'trophy'},
+            {'slug': 'recently-added', 'label': 'Recently Added', 'url_name': 'recently_added', 'icon': 'clock'},
             {'slug': 'companies', 'label': 'Companies', 'url_name': 'companies_list', 'icon': 'building'},
+            {'slug': 'franchises', 'label': 'Franchises', 'url_name': 'franchises_list', 'icon': 'layers'},
             {'slug': 'genres', 'label': 'Genres & Themes', 'url_name': 'genres_list', 'icon': 'tag'},
             {'slug': 'flagged', 'label': 'Flagged Games', 'url_name': 'flagged_games', 'icon': 'flag'},
         ],
@@ -284,10 +286,11 @@ The footer (`templates/partials/footer.html`) gets a 6-column refresh to match t
 |--------|-----------|------------|-----------|-------|---------|
 | Games | Hub | Badges | My Profile | Privacy | Social icons |
 | Trophies | Profiles | Milestones | My Stats | Terms | (X, YouTube, Discord) |
-| Companies | Reviews | Titles* | My Shareables | About | |
-| Genres & Themes | Challenges | | Recap | Contact | |
-| Flagged Games | Lists | | | | |
-| | Leaderboards | | | | |
+| Recently Added | Reviews | Titles* | My Shareables | About | |
+| Companies | Challenges | | Recap | Contact | |
+| Franchises | Lists | | | | |
+| Genres & Themes | Leaderboards | | | | |
+| Flagged Games | | | | | |
 
 - Titles link is auth-gated (only shown to authenticated users with a profile)
 - Dashboard column is auth-gated; guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always)

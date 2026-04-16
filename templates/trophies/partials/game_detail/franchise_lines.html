@@ -1,0 +1,67 @@
+{% comment %}
+    Renders Franchise / Also Featured / Collections lines on the game About card.
+
+    Three buckets, all derived from the same prefetched concept_franchises
+    queryset and partitioned by GameDetailView._build_concept_context:
+
+      1. franchise_main:        ConceptFranchise or None — IGDB's primary
+                                franchise for this game (singular `franchise`)
+      2. franchise_also_featured: list of ConceptFranchise — tie-ins / featured
+                                IPs (plural `franchises` array, is_main=False)
+      3. franchise_collections: list of ConceptFranchise — collection-type
+                                links (sub-series classification)
+
+    Tie-ins and collections each cap at 3 visible with a <details>/<summary>
+    "+ N more" disclosure (no JS, accessible by default).
+
+    Concepts not yet re-enriched (no link flagged is_main=True) fall back to
+    a single "Franchise(s):" line so the data is still useful pre-backfill.
+{% endcomment %}
+
+{% if franchise_main %}
+    <div class="flex items-center gap-1.5 text-xs">
+        <span class="text-base-content/50 shrink-0">Franchise:</span>
+        <a href="{% url 'franchise_detail' slug=franchise_main.franchise.slug %}"
+           class="font-medium text-accent hover:underline line-clamp-1 pr-1">{{ franchise_main.franchise.name }}</a>
+    </div>
+{% endif %}
+
+{% if franchise_also_featured %}
+    <div class="flex items-start gap-1.5 text-xs">
+        <span class="text-base-content/50 shrink-0">
+            {% if franchise_main %}Also Featured:{% else %}{% if franchise_also_featured|length == 1 %}Franchise{% else %}Franchises{% endif %}:{% endif %}
+        </span>
+        <span class="font-medium text-base-content/80 pr-1 min-w-0">
+            {% for cf in franchise_also_featured|slice:":3" %}<a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% if franchise_also_featured|length > 3 %}
+                <details class="inline group/tieins">
+                    <summary class="inline-block cursor-pointer text-base-content/50 hover:text-accent transition-colors list-none select-none ml-0.5">
+                        <span class="group-open/tieins:hidden">, +{{ franchise_also_featured|length|add:"-3" }} more</span>
+                        <span class="hidden group-open/tieins:inline">show less</span>
+                    </summary>
+                    <span class="hidden group-open/tieins:inline">{% for cf in franchise_also_featured|slice:"3:" %}, <a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% endfor %}</span>
+                </details>
+            {% endif %}
+        </span>
+    </div>
+{% endif %}
+
+{% if franchise_collections %}
+    <div class="flex items-start gap-1.5 text-xs">
+        <span class="text-base-content/50 shrink-0">
+            {% if franchise_collections|length == 1 %}Collection{% else %}Collections{% endif %}:
+        </span>
+        <span class="font-medium text-base-content/80 pr-1 min-w-0">
+            {% for cf in franchise_collections|slice:":3" %}<a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% if franchise_collections|length > 3 %}
+                <details class="inline group/cols">
+                    <summary class="inline-block cursor-pointer text-base-content/50 hover:text-accent transition-colors list-none select-none ml-0.5">
+                        <span class="group-open/cols:hidden">, +{{ franchise_collections|length|add:"-3" }} more</span>
+                        <span class="hidden group-open/cols:inline">show less</span>
+                    </summary>
+                    <span class="hidden group-open/cols:inline">{% for cf in franchise_collections|slice:"3:" %}, <a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% endfor %}</span>
+                </details>
+            {% endif %}
+        </span>
+    </div>
+{% endif %}

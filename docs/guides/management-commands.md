@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **65 custom management commands** spread across 5 Django apps: `trophies` (38), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **69 custom management commands** spread across 5 Django apps: `trophies` (42), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -45,6 +45,10 @@ PlatPursuit has **65 custom management commands** spread across 5 Django apps: `
 | `backfill_stage_completions` | Backfill historical `StageCompletionEvent` rows for users whose stage completions predate the event-tracking system. | `--dry-run`, `--username` | `python manage.py backfill_stage_completions --dry-run` |
 | `enrich_from_igdb` | Run the IGDB enrichment pipeline against concepts (developer/publisher, genres/themes, time-to-beat, engine, VR detection). Supports targeted, refresh, retry, search, manual-assign, review queue, and unmatched-queue modes. See [IGDB Integration](../architecture/igdb-integration.md). | `--concept-id`, `--refresh`, `--retry-no-match`, `--search`, `--manual`, `--review`, `--unmatched`, `--badge`, `--all`, `--force`, `--verbose`, `--dry-run` | `python manage.py enrich_from_igdb --review` |
 | `find_igdb_family_ties` | Find concepts that share an IGDB ID but are NOT in the same `GameFamily`. Used to discover missing family groupings (e.g. PS4/PS5 versions of the same game). | (none) | `python manage.py find_igdb_family_ties` |
+| `rebuild_franchises_from_cache` | Rebuild `Franchise` + `ConceptFranchise` rows from cached `IGDBMatch.raw_response` without hitting the IGDB API. Use after enrichment-logic changes or to recover from corrupted data. | `--wipe` (drop existing rows first), `--dry-run` | `python manage.py rebuild_franchises_from_cache --wipe` |
+| `backfill_franchise_main_flag` | Recompute `ConceptFranchise.is_main` from cached raw_response using the current precedence rules. Narrower than a full rebuild — only updates the flag. | `--dry-run`, `--batch-size` (default 500) | `python manage.py backfill_franchise_main_flag --dry-run` |
+| `franchise_stats` | Read-only diagnostic reporting franchise/collection totals, per-concept coverage, browse-page surfacing counts, and sample names. Useful for auditing enrichment coverage and deciding whether the collection-orphan rule is producing sensible results. | `--samples N` (default 10, 0 to skip names) | `python manage.py franchise_stats --samples 20` |
+| `inspect_franchise_data` | Read-only diagnostic: compare raw IGDB response to stored links for a concept or franchise. First stop when investigating mis-linked games. Shows drift detection (what's in IGDB but not the DB, or vice versa). | `--search`, `--concept-id`, `--franchise-name` (one required) | `python manage.py inspect_franchise_data --search "College Football"` |
 | `recalculate_calendars` | Recalculate Calendar Challenge fill state and platinum counts for all users, repairing drift between cached counts and the underlying data. | `--dry-run`, `--username` | `python manage.py recalculate_calendars --dry-run` |
 | `render_profile_sigs` | Pre-render forum-signature PNG and SVG variants of the profile card image. Used as a one-time backfill and as a periodic refresh after design changes. | `--username`, `--all` | `python manage.py render_profile_sigs --all` |
 | `trigger_concept_health_checks` | Queue `sync_title_stats` jobs for PS4/PS5 games whose concept is missing or stuck on a stub. Identifies users by `psn_username`, not `user.username`. | `--dry-run`, `--limit` | `python manage.py trigger_concept_health_checks --dry-run` |
@@ -143,6 +147,10 @@ Commands for staff to run manually as needed.
 | `create_test_notification` | Create test notifications for inbox development |
 | `enrich_from_igdb` | IGDB enrichment pipeline (review queue, manual assign, refresh) |
 | `find_igdb_family_ties` | Surface concepts that share IGDB ID but not GameFamily |
+| `rebuild_franchises_from_cache` | Rebuild Franchise/ConceptFranchise from cached IGDBMatch (no API calls) |
+| `backfill_franchise_main_flag` | Recompute ConceptFranchise.is_main from cached data |
+| `franchise_stats` | Diagnostic: franchise/collection coverage and browse surfacing |
+| `inspect_franchise_data` | Diagnostic: raw IGDB response vs. stored links for a concept |
 | `trigger_concept_health_checks` | Queue sync for PS4/PS5 games stuck on stub concepts |
 | `render_profile_sigs` | Pre-render forum-signature PNG/SVG variants of the profile card |
 

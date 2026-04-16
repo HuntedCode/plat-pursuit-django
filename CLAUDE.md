@@ -105,6 +105,7 @@ Currently handled by `absorb()`:
 - ConceptGenre (move to target, skip duplicates by genre_id)
 - ConceptTheme (move to target, skip duplicates by theme_id)
 - ConceptEngine (move to target, skip duplicates by engine_id)
+- ConceptFranchise (move to target, skip duplicates by franchise_id)
 - Concept.title_ids (merged/deduplicated)
 
 ---

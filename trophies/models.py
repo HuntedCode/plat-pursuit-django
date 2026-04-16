@@ -926,6 +926,15 @@ class Concept(models.Model):
                 ce.concept = self
                 ce.save(update_fields=['concept'])
 
+        # ConceptFranchise: move to target, skip duplicates
+        existing_franchise_ids = set(
+            self.concept_franchises.values_list('franchise_id', flat=True)
+        )
+        for cf in other.concept_franchises.all():
+            if cf.franchise_id not in existing_franchise_ids:
+                cf.concept = self
+                cf.save(update_fields=['concept'])
+
         # IGDBMatch: move to target if target lacks one, otherwise discard source's
         if hasattr(other, 'igdb_match'):
             if not hasattr(self, 'igdb_match'):
@@ -4051,6 +4060,73 @@ class ConceptEngine(models.Model):
 
     def __str__(self):
         return f"{self.concept} - {self.engine.name}"
+
+
+class Franchise(models.Model):
+    """Normalized IGDB franchise or collection (e.g. Resident Evil, Final Fantasy).
+
+    IGDB exposes franchises and collections as two SEPARATE resource types
+    with their own ID namespaces — franchise id 222 is "NCAA", collection
+    id 222 is "Army of Two". They are unrelated entities that happen to
+    share an integer. The composite unique constraint on (igdb_id,
+    source_type) enforces this.
+    """
+    SOURCE_TYPE_CHOICES = [
+        ('franchise', 'Franchise'),
+        ('collection', 'Collection'),
+    ]
+
+    igdb_id = models.IntegerField(db_index=True)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+    source_type = models.CharField(
+        max_length=20, choices=SOURCE_TYPE_CHOICES, default='franchise',
+    )
+
+    class Meta:
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['igdb_id', 'source_type'],
+                name='franchise_igdb_id_source_type_unique',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class ConceptFranchise(models.Model):
+    """Links a Concept to a Franchise (M2M through model).
+
+    `is_main` reflects IGDB's distinction between the singular ``franchise``
+    field (the primary identity of the game) and the plural ``franchises``
+    array (secondary tie-ins). Browse/detail pages filter on this to keep
+    franchise pages focused on titles that ARE that franchise rather than
+    titles that merely reference it.
+    """
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='concept_franchises'
+    )
+    franchise = models.ForeignKey(
+        Franchise, on_delete=models.CASCADE, related_name='franchise_concepts'
+    )
+    is_main = models.BooleanField(
+        default=False,
+        help_text="True when this is the concept's primary franchise (IGDB's "
+                  "singular `franchise` field). At most one is_main=True per concept.",
+    )
+
+    class Meta:
+        unique_together = ['concept', 'franchise']
+        indexes = [
+            models.Index(fields=['concept'], name='conceptfranchise_concept_idx'),
+            models.Index(fields=['franchise'], name='conceptfranchise_franchise_idx'),
+            models.Index(fields=['is_main'], name='conceptfranchise_main_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.concept} - {self.franchise.name}{' (main)' if self.is_main else ''}"
 
 
 class IGDBMatch(models.Model):

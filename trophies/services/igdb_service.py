@@ -83,7 +83,8 @@ GAME_FIELDS = (
     'involved_companies.publisher, '
     'involved_companies.porting, '
     'involved_companies.supporting, '
-    'franchises.name, collections.name, '
+    'franchise.id, franchise.name, '
+    'franchises.id, franchises.name, collections.id, collections.name, '
     'alternative_names.name, alternative_names.comment, '
     'external_games.uid, external_games.category, '
     'websites.url, websites.category, '
@@ -922,6 +923,9 @@ class IGDBService:
         # Create normalized Genre/Theme/Engine records
         cls._create_normalized_tags(concept, igdb_data)
 
+        # Create normalized Franchise records
+        cls._create_concept_franchises(concept, igdb_data)
+
         # Add VR platforms to Games that are missing them
         cls._apply_vr_platforms(concept, igdb_data)
 
@@ -1112,6 +1116,104 @@ class IGDBService:
             ConceptEngine.objects.get_or_create(concept=concept, engine=engine)
 
     @classmethod
+    def _create_concept_franchises(cls, concept, igdb_data):
+        """Create Franchise and ConceptFranchise records from IGDB franchise/collection data.
+
+        IGDB exposes ``franchise`` (singular = primary identity) AND ``franchises``
+        (plural = secondary tie-ins). The link to the singular franchise is
+        flagged ``is_main=True``; everything else is ``is_main=False``. This
+        powers the franchise browse page (only shows franchises that ARE
+        someone's main) and the detail page Games / Also Featured split.
+        Collections never get is_main set (different IGDB taxonomy entirely).
+        """
+        from trophies.models import Franchise, ConceptFranchise
+
+        # Determine which franchise should be flagged as main.
+        #
+        # Precedence (intentional — keep in sync with backfill_franchise_main_flag):
+        #   1. First entry of the plural `franchises` array.
+        #      The plural array is IGDB's modern field (singular `franchise`
+        #      is being phased out per their changelog), and is what IGDB's
+        #      own UI surfaces. Within the array, IGDB orders by curator
+        #      confidence, so the first entry is the umbrella IP.
+        #   2. Fall back to the singular `franchise` field only when the
+        #      plural array is empty. Covers older entries that were
+        #      curated before the plural field existed.
+        #   3. Otherwise no main franchise is set for this concept.
+        main_igdb_id = None
+        plural = [
+            f for f in igdb_data.get('franchises', [])
+            if f.get('id') and f.get('name')
+        ]
+        if plural:
+            main_igdb_id = plural[0]['id']
+        else:
+            singular = igdb_data.get('franchise') or {}
+            if singular.get('id'):
+                main_igdb_id = singular['id']
+
+        # Build the source list. The singular `franchise` is included as its
+        # own source (when present) so a Franchise record gets created for it
+        # even when it isn't in the plural array.
+        #
+        # Dedup key is (igdb_id, source_type) — NOT igdb_id alone — because
+        # IGDB franchises and collections live in separate ID namespaces.
+        # Franchise id 222 is "NCAA"; collection id 222 is "Army of Two".
+        # A bare-id dedup conflates them and corrupts links across the DB.
+        singular_obj = igdb_data.get('franchise') or {}
+        seen_keys = set()
+        sources = []
+        if singular_obj:
+            sources.append(([singular_obj], 'franchise'))
+        sources.append((igdb_data.get('franchises', []), 'franchise'))
+        sources.append((igdb_data.get('collections', []), 'collection'))
+
+        for items, source_type in sources:
+            for item in items:
+                igdb_id = item.get('id')
+                name = item.get('name', '')
+                key = (igdb_id, source_type)
+                if not igdb_id or not name or key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                slug = slugify(name) or f'{source_type}-{igdb_id}'
+                try:
+                    # The unique constraint on (igdb_id, source_type) makes
+                    # this lookup correct — same numeric ID in the franchise
+                    # namespace vs. collection namespace gets two distinct rows.
+                    franchise, _ = Franchise.objects.get_or_create(
+                        igdb_id=igdb_id,
+                        source_type=source_type,
+                        defaults={'name': name, 'slug': slug},
+                    )
+                except IntegrityError:
+                    # Slug collision (different IGDB entity, same slugified name)
+                    # or race condition. Fall back to lookup by the full
+                    # composite key, then by slug as last resort.
+                    franchise = (
+                        Franchise.objects.filter(
+                            igdb_id=igdb_id, source_type=source_type,
+                        ).first()
+                        or Franchise.objects.filter(slug=slug).first()
+                    )
+                    if not franchise:
+                        continue
+                # Only the franchise matching IGDB's primary franchise (per the
+                # precedence above) is main. Collections are never main.
+                desired_is_main = (
+                    source_type == 'franchise' and igdb_id == main_igdb_id
+                )
+                cf, created = ConceptFranchise.objects.get_or_create(
+                    concept=concept,
+                    franchise=franchise,
+                    defaults={'is_main': desired_is_main},
+                )
+                # If the row already existed with a stale is_main, fix it.
+                if not created and cf.is_main != desired_is_main:
+                    cf.is_main = desired_is_main
+                    cf.save(update_fields=['is_main'])
+
+    @classmethod
     def _apply_vr_platforms(cls, concept, igdb_data):
         """Add PSVR/PSVR2 to Game.title_platform for games IGDB identifies as VR.
 
@@ -1226,14 +1328,21 @@ class IGDBService:
 
         # Franchise names (from both franchises and collections)
         franchise_names = []
+        franchise_data = []
         for f in igdb_data.get('franchises', []):
+            fid = f.get('id')
             name = f.get('name', '')
             if name:
                 franchise_names.append(name)
+            if fid and name:
+                franchise_data.append({'igdb_id': fid, 'name': name, 'source_type': 'franchise'})
         for c in igdb_data.get('collections', []):
+            cid = c.get('id')
             name = c.get('name', '')
             if name and name not in franchise_names:
                 franchise_names.append(name)
+            if cid and name:
+                franchise_data.append({'igdb_id': cid, 'name': name, 'source_type': 'collection'})
 
         # Similar game IDs
         similar_ids = []
@@ -1264,6 +1373,7 @@ class IGDBService:
             'game_engine_name': engine_name,
             'cover_image_id': cover_image_id,
             'franchise_names': franchise_names,
+            'franchise_data': franchise_data,
             'similar_game_igdb_ids': similar_ids,
             'external_urls': external_urls,
         }

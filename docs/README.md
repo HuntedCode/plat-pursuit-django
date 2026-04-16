@@ -49,6 +49,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Community Hub](features/community-hub.md) | Site-wide community destination: Pursuit Feed, leaderboards, top reviewers, active challenges |
 | [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
 | [Easter Eggs](features/easter-eggs.md) | Hidden milestones, titles, and the claim API |
+| [Franchise System](features/franchise-system.md) | Franchise / collection browse + detail pages, main vs. tie-in partitioning, user progress summary |
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |
 | [Home Page Router](features/home-page.md) | Smart `/` router: anonymous, no-PSN, syncing, and synced shells |

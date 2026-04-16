@@ -10,6 +10,8 @@ The matching system uses a confidence-based approach with a 6-strategy pipeline.
 
 Company data is fully normalized. A single Company record represents a real-world studio (e.g. Naughty Dog), linked to Concepts via a ConceptCompany through table that tracks per-game roles (developer, publisher, porting, supporting). This supports developer badges, developer-based challenges, shovelware detection, and stats.
 
+Franchise and collection data follows the same normalization pattern. A single `Franchise` record represents either an IGDB franchise ("Resident Evil") or an IGDB collection ("Resident Evil Main Series"), distinguished by `source_type`. Links go through a `ConceptFranchise` table with an `is_main` flag marking the game's primary franchise. Franchises and collections are **separate IGDB namespaces** — franchise id 222 is "NCAA", collection id 222 is "Army of Two" — so the `Franchise` model uses a composite `(igdb_id, source_type)` unique constraint, never `igdb_id` alone. The franchise browse page at `/franchises/` surfaces franchises that are at least one game's main, plus collections that contain at least one game with no franchise-type link (so collection-only series like Astro Bot remain discoverable). See [Franchise System](../features/franchise-system.md) for the user-facing feature.
+
 Rate limiting is distributed across all workers via Redis, ensuring all 24 token_keeper processes collectively stay under IGDB's 4 req/sec limit.
 
 ## File Map
@@ -18,8 +20,13 @@ Rate limiting is distributed across all workers via Redis, ensuring all 24 token
 |------|---------|
 | `trophies/services/igdb_service.py` | Core service: auth, search, matching, confidence scoring, enrichment, VR detection |
 | `trophies/management/commands/enrich_from_igdb.py` | Management command for batch enrichment, search, manual matching, review, refresh |
-| `trophies/models.py` (Company, ConceptCompany, IGDBMatch) | Data models for IGDB integration |
-| `trophies/admin.py` (CompanyAdmin, IGDBMatchAdmin) | Django admin for match review and company browsing |
+| `trophies/models.py` (Company, ConceptCompany, Franchise, ConceptFranchise, IGDBMatch) | Data models for IGDB integration |
+| `trophies/admin.py` (CompanyAdmin, FranchiseAdmin, ConceptFranchiseAdmin, IGDBMatchAdmin) | Django admin for match review, company browsing, and franchise curation |
+| `trophies/views/franchise_views.py` | `FranchiseListView` (browse) + `FranchiseDetailView` (per-franchise page) |
+| `trophies/management/commands/rebuild_franchises_from_cache.py` | Rebuild Franchise/ConceptFranchise rows from cached IGDBMatch.raw_response (no API calls) |
+| `trophies/management/commands/backfill_franchise_main_flag.py` | Recompute `is_main` flags from cached raw_response without re-enriching |
+| `trophies/management/commands/franchise_stats.py` | Read-only diagnostic: taxonomy coverage, browse surfacing counts, orphan concepts |
+| `trophies/management/commands/inspect_franchise_data.py` | Read-only diagnostic: show raw IGDB response vs. stored links for a concept |
 | `trophies/token_keeper.py` | Sync pipeline hook (enriches new concepts on creation) |
 | `plat_pursuit/settings.py` | IGDB_CLIENT_ID, IGDB_CLIENT_SECRET, threshold settings |
 
@@ -45,7 +52,8 @@ Data we extract from the IGDB response and store in dedicated model fields:
 | **Release date** | IGDBMatch | `igdb_first_release_date` | First release date across all platforms |
 | **Game engine** | IGDBMatch | `game_engine_name` | "Creation Engine", "Unity", "Unreal Engine 5" |
 | **Cover art** | IGDBMatch | `igdb_cover_image_id` | IGDB image hash for URL construction |
-| **Franchise names** | IGDBMatch | `franchise_names` (JSONField) | ["Fallout"] (used for GameFamily suggestions) |
+| **Franchises / collections** | Franchise + ConceptFranchise | `name`, `slug`, `source_type`, `is_main` | Main franchise + tie-ins + collections, each as a linkable row |
+| **Franchise names (legacy)** | IGDBMatch | `franchise_names` (JSONField) | ["Fallout"] (kept for backwards compatibility; prefer the normalized `Franchise` model) |
 | **Similar games** | IGDBMatch | `similar_game_igdb_ids` (JSONField) | IGDB IDs for future recommendations |
 | **External links** | IGDBMatch | `external_urls` (JSONField) | {steam: url, wikipedia: url, official: url, ...} |
 | **VR platforms** | Game | `title_platform` (appended) | PSVR/PSVR2 added when IGDB identifies VR platforms |
@@ -83,6 +91,12 @@ Normalized game company from IGDB. Fields: `igdb_id` (unique), `name`, `slug`, `
 
 ### ConceptCompany
 M2M through table. Links Concept to Company with role flags: `is_developer`, `is_publisher`, `is_porting`, `is_supporting`. Multiple roles can be true simultaneously. Unique on (concept, company).
+
+### Franchise
+Normalized IGDB franchise or collection. Fields: `igdb_id` (indexed, NOT globally unique), `name`, `slug` (unique), `source_type` (choice: `'franchise'` or `'collection'`). The composite unique constraint `(igdb_id, source_type)` allows the same numeric ID to exist in both IGDB namespaces without collision — franchise id 222 ("NCAA") and collection id 222 ("Army of Two") get two distinct rows.
+
+### ConceptFranchise
+M2M through table. Links Concept to Franchise. `is_main` is true exactly when the Franchise is IGDB's primary franchise for this game (derived from the plural `franchises[0]` field at enrichment time, with the singular `franchise` field as a fallback). Collections never have `is_main=True`. Unique on (concept, franchise), indexed on `is_main` for browse-page queries.
 
 ### IGDBMatch
 OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method`, `status`), parsed Tier 1 data, and the full raw IGDB response (`raw_response`) for future Tier 2 parsing.
@@ -149,9 +163,21 @@ Thresholds: >= 85% auto-accepted, >= 50% pending review. There is no hard discar
 2. Match found with confidence 0.50-0.84: IGDBMatch created with `pending_review` status, enrichment deferred
 3. No match found by any of the 6 strategies: IGDBMatch created with `no_match` status (via `IGDBService.record_no_match`). Default enrichment runs skip these on subsequent passes; use `--retry-no-match` to re-attempt them or `--unmatched` to assign manually. `record_no_match` refuses to overwrite an existing accepted/pending/rejected row.
 4. Staff approves pending match via admin action or `--manual`: enrichment applied
-5. Enrichment creates Company records, ConceptCompany entries, updates Concept's `igdb_genres`/`igdb_themes`, and adds VR platforms to Games
+5. Enrichment creates Company records, ConceptCompany entries, Franchise + ConceptFranchise rows (see below), updates Concept's `igdb_genres`/`igdb_themes`, and adds VR platforms to Games
 
 Each Concept matches independently. Family-based propagation was removed because it caused regional/platform variants to inherit incorrect data when one sibling matched poorly. PS4 and PS5 versions of the same game now each get their own full IGDBMatch record, as do regional siblings, and each is matched and reviewed on its own merits.
+
+### Franchise Enrichment
+
+`IGDBService._create_concept_franchises` walks the IGDB response's `franchise` (singular), `franchises` (plural), and `collections` fields and creates normalized rows for each. Determining which franchise is `is_main`:
+
+1. First entry of the plural `franchises` array wins. IGDB is actively phasing out the singular `franchise` field (per their changelog), and the plural array is what IGDB's own UI surfaces. Within the array, curator-confidence ordering means the first entry is the umbrella IP.
+2. Fall back to the singular `franchise` field only when the plural array is empty. Covers older entries curated before the plural field existed.
+3. Otherwise no `is_main` flag is set. The concept's `Franchise` links exist but none is primary — typically a collection-only concept (e.g. Astro Bot).
+
+Collections never receive `is_main=True` regardless of how they appear in the response. IGDB's collection taxonomy explicitly does not designate a primary.
+
+Deduplication and identity lookups use the composite `(igdb_id, source_type)` key throughout. An earlier implementation dedup'd by `igdb_id` alone, which silently collapsed franchise id 222 ("NCAA") into collection id 222 ("Army of Two") and corrupted thousands of `ConceptFranchise` links across the database. The recovery was a schema migration (dropping the old global-unique constraint), an enrichment-code fix, and a full rebuild via `rebuild_franchises_from_cache --wipe`. If franchise data ever looks suspicious again, run `inspect_franchise_data` to check for drift between the raw IGDB response and the stored links.
 
 ### VR Platform Detection
 
@@ -175,7 +201,11 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 
 ## Gotchas and Pitfalls
 
-- **Concept.absorb() must handle ConceptCompany and IGDBMatch**: When concepts merge, ConceptCompany entries are moved with role merging (OR of flags), and IGDBMatch is transferred if the target lacks one. Already implemented.
+- **Concept.absorb() must handle ConceptCompany, ConceptFranchise, and IGDBMatch**: When concepts merge, ConceptCompany entries are moved with role merging (OR of flags), ConceptFranchise links are moved with dedup by `franchise_id`, and IGDBMatch is transferred if the target lacks one. Already implemented. Any NEW model with an FK to Concept must be added to `absorb()` too.
+
+- **Franchises and collections are separate IGDB namespaces**: The `Franchise` table stores both, distinguished by `source_type`. The composite `(igdb_id, source_type)` unique constraint is load-bearing — do NOT reinstate global unique on `igdb_id` alone or cross-namespace ID collisions (franchise id 222 vs. collection id 222) will silently corrupt links across the DB. An earlier version shipped with that bug; recovery required a full rebuild. Any code that does `Franchise.objects.get(igdb_id=x)` without also passing `source_type` is at risk.
+
+- **`Franchise.is_main` precedence**: Derived from the plural `franchises[0]` entry first, with the singular `franchise` field as fallback only when the plural array is empty. Mirrored exactly in both `_create_concept_franchises` (enrichment) and `backfill_franchise_main_flag` (recovery command). Changing the precedence requires touching both.
 - **Distributed rate limiting**: All workers share a Redis sorted set (`igdb_rate_limit`) as a sliding window counter. Set conservatively to 3 req/sec (IGDB allows 4). Do not bypass.
 - **IGDB tokens expire**: Access tokens last ~60 days. Cached in Redis (`igdb_access_token`). Auto-refreshes on expiry.
 - **IGDB does not return `category` field**: IGDB omits the game category from responses (even for DLC). The system uses a name-pattern heuristic to detect DLC instead.
@@ -203,6 +233,10 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 | `enrich_from_igdb --force` | Re-match all concepts (overwrites) | `python manage.py enrich_from_igdb --all --force` |
 | `enrich_from_igdb --verbose` | Enable detailed search/scoring logs | `python manage.py enrich_from_igdb --verbose` |
 | `enrich_from_igdb --dry-run` | Preview without saving | `python manage.py enrich_from_igdb --dry-run` |
+| `rebuild_franchises_from_cache` | Rebuild Franchise + ConceptFranchise rows from cached `IGDBMatch.raw_response`. No IGDB API calls. Use for schema/logic changes that don't require fresh data. | `python manage.py rebuild_franchises_from_cache --wipe` |
+| `backfill_franchise_main_flag` | Recompute `ConceptFranchise.is_main` from cached raw_response using the current precedence rules. Narrower than a full rebuild — only updates the flag, leaves rows otherwise untouched. | `python manage.py backfill_franchise_main_flag --dry-run` |
+| `franchise_stats` | Read-only diagnostic: franchise/collection totals, per-concept coverage, browse-page surfacing counts, sample names. Useful for auditing enrichment coverage. | `python manage.py franchise_stats --samples 20` |
+| `inspect_franchise_data` | Read-only diagnostic: compare raw IGDB response to stored links for a concept or franchise. First stop when mis-linked games appear. | `python manage.py inspect_franchise_data --search "College Football"` |
 
 ## Cache Keys
 
@@ -214,4 +248,5 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 ## Related Docs
 
 - [Data Model](data-model.md): Concept, Game, and related models that IGDB enriches
+- [Franchise System](../features/franchise-system.md): user-facing franchise/collection browse + detail pages; how main / also-featured / collections surface to users
 - [Token Keeper](token-keeper.md): Where IGDB enrichment hooks into the PSN sync flow (after `create_concept_from_details()` and during the health-check default-concept fallback path)

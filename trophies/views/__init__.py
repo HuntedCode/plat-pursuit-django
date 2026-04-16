@@ -32,6 +32,7 @@ from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView
 from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
+from .franchise_views import FranchiseListView, FranchiseDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
 
 __all__ = [
@@ -75,6 +76,8 @@ __all__ = [
     'MyStatsView',
     # Company views
     'CompanyListView', 'CompanyDetailView',
+    # Franchise views
+    'FranchiseListView', 'FranchiseDetailView',
     # Genre/Theme views
     'GenreThemeListView', 'GenreDetailView', 'ThemeDetailView',
 ]

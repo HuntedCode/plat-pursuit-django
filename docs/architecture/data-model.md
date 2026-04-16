@@ -599,7 +599,9 @@ Notification
 ## Related Docs
 
 - `CLAUDE.md`: Project instructions including the Concept.absorb() contract, responsive design standards, and quality workflow
+- `docs/architecture/igdb-integration.md`: IGDB-layer models (Company, ConceptCompany, Franchise, ConceptFranchise, IGDBMatch) are documented there rather than here, since they're a supplementary enrichment layer on top of the core PSN-sourced model chain
 - `docs/features/review-hub.md`: Community reviews and ratings hub design (formerly `community-hub.md`; renamed because the new `community-hub.md` describes the site-wide Community Hub destination)
+- `docs/features/franchise-system.md`: Franchise and collection browse + detail pages
 - `docs/dashboard.md`: Dashboard module system design
 - `docs/features/`: Feature-specific design documents
 - `docs/minigames/`: Mini-game system ("The Arcade") documentation

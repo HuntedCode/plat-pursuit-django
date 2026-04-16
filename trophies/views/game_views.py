@@ -19,7 +19,7 @@ from django.views.generic import ListView, DetailView
 from urllib.parse import urlencode
 from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from ..constants import CACHE_TIMEOUT_IMAGES
-from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating
+from ..models import Game, Trophy, Profile, EarnedTrophy, ProfileGame, TrophyGroup, Badge, Concept, FeaturedGuide, Stage, UserConceptRating, ConceptFranchise
 from ..forms import GameSearchForm, GameDetailForm, GuideSearchForm
 from trophies.util_modules.constants import MODERN_PLATFORMS, ALL_PLATFORMS
 from .browse_helpers import (
@@ -194,10 +194,19 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
     context_object_name = 'game'
 
     def get_queryset(self):
+        # Pre-sort by is_main DESC then name so the about-card view-side
+        # partition (see _partition_franchise_links) finds the main first.
+        franchise_prefetch = Prefetch(
+            'concept__concept_franchises',
+            queryset=ConceptFranchise.objects.select_related('franchise').order_by(
+                '-is_main', 'franchise__name',
+            ),
+        )
         return super().get_queryset().select_related('concept', 'concept__igdb_match').prefetch_related(
             'concept__concept_companies__company',
             'concept__concept_genres__genre',
             'concept__concept_themes__theme',
+            franchise_prefetch,
         )
 
     def _get_target_profile(self):
@@ -652,6 +661,31 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         from trophies.services.rating_service import RatingService
 
         context = {}
+
+        # Partition the prefetched franchise links into three buckets for the
+        # About card. Done in the view (not template) so the template stays
+        # declarative and the buckets are also available for any future code
+        # that wants them. The franchise_prefetch in get_queryset orders by
+        # is_main DESC then name, so the buckets come out pre-sorted.
+        main_franchise = None
+        also_featured = []
+        collections = []
+        for cf in game.concept.concept_franchises.all():
+            if cf.franchise.source_type == 'collection':
+                collections.append(cf)
+            elif cf.is_main:
+                # IGDB schema guarantees at most one is_main=True per concept,
+                # but be defensive: only the first one wins, others fall through
+                # to also_featured so the data isn't silently dropped.
+                if main_franchise is None:
+                    main_franchise = cf
+                else:
+                    also_featured.append(cf)
+            else:
+                also_featured.append(cf)
+        context['franchise_main'] = main_franchise
+        context['franchise_also_featured'] = also_featured
+        context['franchise_collections'] = collections
 
         # Community averages (base game, for backward compat)
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)
