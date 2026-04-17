@@ -408,7 +408,7 @@ const GameListEditor = {
             return `
                 <div class="flex items-center gap-3 p-3 border-b border-base-200 last:border-b-0 ${disabled} game-search-result"
                      data-game-id="${game.id}" data-game-name="${e(game.title_name)}">
-                    <img src="${game.title_icon_url || game.title_image}" alt=""
+                    <img src="${game.display_image_url || ''}" alt=""
                          class="w-10 h-10 rounded object-cover flex-shrink-0 border border-base-300" />
                     <div class="flex-1 min-w-0">
                         <p class="font-medium text-sm truncate">${e(game.title_name)}</p>
@@ -439,7 +439,7 @@ const GameListEditor = {
      */
     _buildGameItemCardHTML(item) {
         const e = PlatPursuit.HTMLUtils.escape;
-        const imageUrl = item.display_image || item.title_icon_url || item.title_image;
+        const imageUrl = item.display_image_url || '';
 
         const platforms = (item.title_platform || []).map(p =>
             `<span class="badge badge-ghost badge-xs font-bold">${e(p)}</span>`

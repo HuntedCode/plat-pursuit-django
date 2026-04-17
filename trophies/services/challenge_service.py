@@ -591,8 +591,7 @@ def get_calendar_month_data(challenge):
                 'is_filled': day_obj.is_filled if day_obj else False,
                 'game_name': day_obj.game.title_name if day_obj and day_obj.game else '',
                 'game_icon': (
-                    (day_obj.game.title_icon_url or day_obj.game.title_image or '')
-                    if day_obj and day_obj.game else ''
+                    day_obj.game.display_image_url if day_obj and day_obj.game else ''
                 ),
                 'plat_count': day_obj.plat_count if day_obj else 0,
             })

@@ -600,6 +600,44 @@ class Game(models.Model):
         return self.get_icon_url()
 
     @property
+    def display_image_url(self):
+        """Best cover-art URL for this game with the full fallback chain.
+
+        Normal path: title_image (PSN store art) -> concept.cover_url
+        (PSN MASTER -> PSN bg -> trusted IGDB cover) -> title_icon_url.
+
+        When force_title_icon is set (admin flag for games with bad PSN
+        store art), PSN sources are skipped entirely and we prefer a
+        trusted IGDB cover if available, falling back to title_icon_url.
+        """
+        if self.force_title_icon:
+            if self.concept_id:
+                igdb = self.concept.get_igdb_cover_url()
+                if igdb:
+                    return igdb
+            return self.title_icon_url or ''
+
+        if self.title_image:
+            return self.title_image
+        if self.concept_id:
+            cover = self.concept.cover_url
+            if cover:
+                return cover
+        return self.title_icon_url or ''
+
+    @property
+    def has_cover_art(self):
+        """True if display_image_url returns real cover art (PSN/IGDB), not
+        just the generic title_icon_url fallback. Templates use this to
+        choose object-cover vs object-contain styling.
+        """
+        if self.force_title_icon:
+            return bool(self.concept_id and self.concept.get_igdb_cover_url())
+        if self.title_image:
+            return True
+        return bool(self.concept_id and self.concept.cover_url)
+
+    @property
     def platforms_display(self):
         """Format platforms for display: 'PS5, PS4' or 'PS5'."""
         if not self.title_platform:
@@ -732,16 +770,8 @@ class Concept(models.Model):
             self.slug = slug
         super().save(*args, **kwargs)
 
-    def get_cover_url(self, size='cover_big'):
-        """Return portrait cover art URL for display in square/portrait containers.
-
-        Priority: PSN MASTER icon, then PSN landscape bg, then IGDB cover (trusted only).
-        Callers that specifically need the landscape background should use `bg_url` directly.
-        """
-        if self.concept_icon_url:
-            return self.concept_icon_url
-        if self.bg_url:
-            return self.bg_url
+    def get_igdb_cover_url(self, size='cover_big'):
+        """IGDB cover URL if this concept has a trusted IGDB match, else None."""
         try:
             match = self.igdb_match
         except IGDBMatch.DoesNotExist:
@@ -750,10 +780,35 @@ class Concept(models.Model):
             return match.cover_url(size)
         return None
 
+    def get_cover_url(self, size='cover_big'):
+        """Return portrait cover art URL for display in square/portrait containers.
+
+        Priority: PSN MASTER icon (portrait) -> trusted IGDB cover (portrait).
+        `bg_url` is deliberately excluded from this chain because it's
+        landscape art (GAMEHUB_COVER_ART) and crops badly in portrait/square
+        containers; callers that need the landscape image should use
+        `concept.bg_url` directly (e.g. share-card backdrops).
+
+        Stub concepts (PP_*) have `concept_icon_url` copied from the source
+        game's `title_icon_url` at creation, so returning it would be
+        equivalent to falling all the way through to the generic icon. Skip
+        that step for stubs and go straight to IGDB (which may exist if the
+        stub was later enriched).
+        """
+        is_stub = self.concept_id.startswith('PP_') if self.concept_id else False
+        if not is_stub and self.concept_icon_url:
+            return self.concept_icon_url
+        return self.get_igdb_cover_url(size)
+
     @property
     def cover_url(self):
         """Template-friendly cover art URL (default size)."""
         return self.get_cover_url()
+
+    @property
+    def igdb_cover_url(self):
+        """Template-friendly IGDB cover URL (trusted matches only, default size)."""
+        return self.get_igdb_cover_url()
 
     @classmethod
     def create_default_concept(cls, game):

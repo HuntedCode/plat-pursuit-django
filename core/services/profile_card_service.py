@@ -272,14 +272,10 @@ class ProfileCardDataService:
                 rp = profile.recent_plat
                 if rp and rp.trophy and rp.trophy.game:
                     game = rp.trophy.game
-                    concept = game.concept
                     result['recent_plat_name'] = (
-                        concept.unified_title if concept else game.title_name
+                        game.concept.unified_title if game.concept else game.title_name
                     )
-                    result['recent_plat_icon'] = (
-                        (concept.concept_icon_url if concept else None)
-                        or game.title_image or ''
-                    )
+                    result['recent_plat_icon'] = game.display_image_url
         except Exception:
             logger.exception('Error fetching recent plat for profile %s', profile.pk)
 
@@ -288,14 +284,10 @@ class ProfileCardDataService:
                 rp = profile.rarest_plat
                 if rp and rp.trophy and rp.trophy.game:
                     game = rp.trophy.game
-                    concept = game.concept
                     result['rarest_plat_name'] = (
-                        concept.unified_title if concept else game.title_name
+                        game.concept.unified_title if game.concept else game.title_name
                     )
-                    result['rarest_plat_icon'] = (
-                        (concept.concept_icon_url if concept else None)
-                        or game.title_image or ''
-                    )
+                    result['rarest_plat_icon'] = game.display_image_url
                     result['rarest_plat_earn_rate'] = rp.trophy.earn_rate
         except Exception:
             logger.exception('Error fetching rarest plat for profile %s', profile.pk)

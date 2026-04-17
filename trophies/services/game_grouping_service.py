@@ -40,20 +40,6 @@ def fetch_user_progress_map(profile, games):
     }
 
 
-def _best_cover_url(game):
-    """Cover art fallback chain for a single Game.
-
-    title_image (PSN) → concept.cover_url (PSN bg, or IGDB for trusted matches)
-    → title_icon_url (generic PS icon) → empty string.
-
-    See docs/reference/design-system.md (Image Handling) for the canonical
-    chain — this function mirrors it.
-    """
-    if game.title_image and not game.force_title_icon:
-        return game.title_image
-    if game.concept and game.concept.cover_url:
-        return game.concept.cover_url
-    return game.title_icon_url or ''
 
 
 def build_igdb_groups(
@@ -115,7 +101,7 @@ def build_igdb_groups(
                 igdb_groups[igdb_id] = {
                     'igdb_id': igdb_id,
                     'display_name': igdb_match.igdb_name or game.title_name,
-                    'cover_url': _best_cover_url(game),
+                    'cover_url': game.display_image_url,
                     'release_date': igdb_match.igdb_first_release_date,
                     'games': [],
                     **extras,
@@ -271,7 +257,7 @@ def _base_game_qs(*, outer_ref_pk: str, through_path: str, extra_filter: Q | Non
 def representative_title_image_subquery(
     *, outer_ref_pk: str = 'pk', through_path: str, extra_filter: Q | None = None,
 ):
-    """Tier 1: most-recent game's PSN ``title_image``."""
+    """Tier 1: most-recent game's PSN ``title_image`` (store art)."""
     return Subquery(
         _base_game_qs(
             outer_ref_pk=outer_ref_pk,
@@ -285,10 +271,29 @@ def representative_title_image_subquery(
     )
 
 
+def representative_concept_icon_subquery(
+    *, outer_ref_pk: str = 'pk', through_path: str, extra_filter: Q | None = None,
+):
+    """Tier 2: most-recent game's ``concept.concept_icon_url`` (PSN MASTER
+    portrait cover art). Populated at sync time for modern titles."""
+    return Subquery(
+        _base_game_qs(
+            outer_ref_pk=outer_ref_pk,
+            through_path=through_path,
+            extra_filter=extra_filter,
+        )
+        .filter(concept__isnull=False)
+        .exclude(concept__concept_icon_url__isnull=True)
+        .exclude(concept__concept_icon_url='')
+        .order_by(*_MOST_RECENT_RELEASE_ORDER)
+        .values('concept__concept_icon_url')[:1]
+    )
+
+
 def representative_igdb_cover_id_subquery(
     *, outer_ref_pk: str = 'pk', through_path: str, extra_filter: Q | None = None,
 ):
-    """Tier 2: most-recent game's ``igdb_cover_image_id`` (converted to a URL
+    """Tier 3: most-recent game's ``igdb_cover_image_id`` (converted to a URL
     in the template)."""
     return Subquery(
         _base_game_qs(
@@ -306,7 +311,7 @@ def representative_igdb_cover_id_subquery(
 def representative_title_icon_subquery(
     *, outer_ref_pk: str = 'pk', through_path: str, extra_filter: Q | None = None,
 ):
-    """Tier 3: most-recent game's ``title_icon_url`` (generic PS icon)."""
+    """Tier 4: most-recent game's ``title_icon_url`` (generic PS icon)."""
     return Subquery(
         _base_game_qs(
             outer_ref_pk=outer_ref_pk,

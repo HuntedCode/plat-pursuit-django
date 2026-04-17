@@ -370,7 +370,7 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                         'trophy_earn_rate': instance.trophy.trophy_earn_rate or 0,
                         'trophy_rarity': instance.trophy.trophy_rarity,
                         'trophy_icon_url': instance.trophy.trophy_icon_url or '',
-                        'game_image': instance.trophy.game.title_image or instance.trophy.game.title_icon_url or '',
+                        'game_image': instance.trophy.game.display_image_url,
                         'rarity_label': ShareableDataService.get_rarity_label(instance.trophy.trophy_rarity),
                         'title_platform': instance.trophy.game.title_platform,
                         'region': instance.trophy.game.region,

@@ -11,13 +11,7 @@
                 {# Game icon #}
                 <div class="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden shrink-0
                             ring-1 ring-base-300 group-hover:ring-{{ game|platform_color }}/50 transition-all">
-                    {% if game.title_image and not game.force_title_icon %}
-                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top" loading="lazy" />
-                    {% elif game.concept.cover_url %}
-                        <img src="{{ game.concept.cover_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top" loading="lazy" />
-                    {% else %}
-                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover" loading="lazy" />
-                    {% endif %}
+                    <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover {% if game.has_cover_art %}object-top{% endif %}" loading="lazy" />
                 </div>
 
                 {# Game info #}

@@ -179,6 +179,9 @@
                                 {% if entry.representative_title_image %}
                                     <img src="{{ entry.representative_title_image }}" alt="{{ entry.name }}"
                                          class="w-full h-full object-cover object-top" loading="lazy" />
+                                {% elif entry.representative_concept_icon %}
+                                    <img src="{{ entry.representative_concept_icon }}" alt="{{ entry.name }}"
+                                         class="w-full h-full object-cover object-top" loading="lazy" />
                                 {% elif entry.representative_igdb_cover_id %}
                                     <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ entry.representative_igdb_cover_id }}.png"
                                          alt="{{ entry.name }}"

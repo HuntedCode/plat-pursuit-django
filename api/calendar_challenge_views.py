@@ -273,7 +273,7 @@ class CalendarDayDetailAPIView(APIView):
                     platinums.append({
                         'game_id': game.id,
                         'title_name': game.title_name,
-                        'title_icon_url': game.title_icon_url or game.title_image or '',
+                        'title_icon_url': game.display_image_url,
                         'title_platform': game.title_platform or [],
                         'earned_date_time': et.earned_date_time.isoformat(),
                         'earned_year': local_dt.year,

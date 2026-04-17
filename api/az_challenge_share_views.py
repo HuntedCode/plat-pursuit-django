@@ -73,7 +73,7 @@ def _build_template_context(challenge, format_type, featured_letter=None):
     urls_to_cache = {}
     for slot in slots:
         if slot.game:
-            icon_url = slot.game.title_icon_url or slot.game.title_image or ''
+            icon_url = slot.game.display_image_url
             if icon_url:
                 urls_to_cache[f'slot_{slot.letter}'] = icon_url
     if challenge.profile.avatar_url:

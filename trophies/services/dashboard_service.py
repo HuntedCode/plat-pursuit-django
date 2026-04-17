@@ -2001,7 +2001,7 @@ def provide_platinum_grid_cta(profile):
         .order_by('-earned_date_time')[:12]
     )
     preview_icons = [
-        et.trophy.game.title_image or et.trophy.game.title_icon_url or ''
+        et.trophy.game.display_image_url
         for et in preview_ets
     ]
     # Pad to 12 for consistent 4x3 grid

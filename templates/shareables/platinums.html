@@ -86,15 +86,15 @@
                                 cursor-pointer group p-1 md:p-1.5 platinum-card"
                          data-earned-trophy-id="{{ et.id }}"
                          data-game-name="{{ et.trophy.game.title_name }}"
-                         data-game-image="{{ et.trophy.game.title_image|default:et.trophy.game.concept.cover_url|default:et.trophy.game.title_icon_url }}"
-                         data-concept-bg-url="{{ et.trophy.game.concept.cover_url|default:'' }}"
+                         data-game-image="{{ et.trophy.game.display_image_url }}"
+                         data-concept-bg-url="{{ et.trophy.game.concept.bg_url|default:'' }}"
                          data-concept-id="{{ et.trophy.game.concept.id|default:'' }}"
                          data-search-name="{{ et.trophy.game.title_name|lower }}"
                          data-is-shovelware="{{ et.is_shovelware|yesno:'true,false' }}"
                          onclick="openShareModal(this)">
                         <figure class="px-2 pt-2 md:px-3 md:pt-3">
                             <div class="relative w-full aspect-square">
-                                <img src="{{ et.trophy.game.title_image|default:et.trophy.game.concept.cover_url|default:et.trophy.game.title_icon_url }}"
+                                <img src="{{ et.trophy.game.display_image_url }}"
                                      alt="{{ et.trophy.game.title_name }}"
                                      loading="lazy"
                                      decoding="async"

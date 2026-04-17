@@ -99,7 +99,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
     Returns (context_dict, error_string). error_string is None on success.
     """
     is_premium = get_effective_premium(request)
-    max_icons = 200 if is_premium else 50
+    max_icons = 500 if is_premium else 100
     if len(icon_ids) > max_icons:
         return None, f'Maximum {max_icons} icons allowed.'
     if len(icon_ids) == 0:
@@ -109,7 +109,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
     earned_trophies = (
         EarnedTrophy.objects
         .filter(id__in=icon_ids, profile=profile, earned=True, trophy__trophy_type='platinum')
-        .select_related('trophy', 'trophy__game')
+        .select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match')
     )
     # Build lookup and preserve order
     et_map = {et.id: et for et in earned_trophies}
@@ -131,7 +131,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
         if icon_type == 'trophy':
             img_url = et.trophy.trophy_icon_url or ''
         else:
-            img_url = et.trophy.game.title_image or et.trophy.game.title_icon_url or ''
+            img_url = et.trophy.game.display_image_url
         # Cache external images as same-origin temp files
         cached_url = ShareImageCache.fetch_and_cache(img_url) if img_url else ''
         icons.append({

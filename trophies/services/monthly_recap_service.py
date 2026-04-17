@@ -329,7 +329,7 @@ class MonthlyRecapService:
             local_dt = earned.earned_date_time.astimezone(tz) if earned.earned_date_time else None
             result.append({
                 'game_name': game.title_name,
-                'game_image': game.title_image or game.title_icon_url or '',
+                'game_image': game.display_image_url,
                 'earned_date': local_dt.strftime('%b %d') if local_dt else '',
                 'earn_rate': earned.trophy.trophy_earn_rate or 0,
             })
@@ -1192,7 +1192,7 @@ class MonthlyRecapService:
                 options.append({
                     'id': str(game.id),
                     'name': game.title_name,
-                    'image': game.title_image or game.title_icon_url or '',
+                    'image': game.display_image_url,
                 })
 
         random.shuffle(options)

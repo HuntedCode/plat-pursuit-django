@@ -18,10 +18,13 @@ logger = logging.getLogger("psn_api")
 # (Game -> Concept -> ConceptCompany -> Company) is the same for all three
 # tiers so we factor it out once.
 def _company_cover_annotations():
-    """Returns the three cover-art Subquery annotations for Company rows."""
+    """Returns the four cover-art Subquery annotations for Company rows."""
     path = 'concept__concept_companies__company'
     return {
         'representative_title_image': grouping.representative_title_image_subquery(
+            through_path=path,
+        ),
+        'representative_concept_icon': grouping.representative_concept_icon_subquery(
             through_path=path,
         ),
         'representative_igdb_cover_id': grouping.representative_igdb_cover_id_subquery(

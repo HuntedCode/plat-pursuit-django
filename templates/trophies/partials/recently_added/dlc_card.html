@@ -11,15 +11,9 @@
         {% if trophy_group.trophy_group_icon_url %}
             <img src="{{ trophy_group.trophy_group_icon_url }}" alt="{{ trophy_group.trophy_group_name }}"
                  class="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-        {% elif trophy_group.game.title_image and not trophy_group.game.force_title_icon %}
-            <img src="{{ trophy_group.game.title_image }}" alt="{{ trophy_group.game.title_name }}"
-                 class="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-        {% elif trophy_group.game.concept.cover_url %}
-            <img src="{{ trophy_group.game.concept.cover_url }}" alt="{{ trophy_group.game.title_name }}"
-                 class="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105" loading="lazy" />
         {% else %}
-            <img src="{{ trophy_group.game.title_icon_url }}" alt="{{ trophy_group.game.title_name }}"
-                 class="w-full h-full object-contain p-3" loading="lazy" />
+            <img src="{{ trophy_group.game.display_image_url }}" alt="{{ trophy_group.game.title_name }}"
+                 class="w-full h-full {% if trophy_group.game.has_cover_art %}object-cover object-top transition-transform duration-300 group-hover:scale-105{% else %}object-contain p-3{% endif %}" loading="lazy" />
         {% endif %}
 
         {# DLC badge #}

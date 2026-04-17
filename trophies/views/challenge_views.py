@@ -42,9 +42,7 @@ def _attach_cover_images(challenges):
         if challenge.cover_letter:
             for slot in challenge.az_slots.all():
                 if slot.letter == challenge.cover_letter and slot.game:
-                    challenge.cover_image_url = (
-                        slot.game.title_icon_url or slot.game.title_image or ''
-                    )
+                    challenge.cover_image_url = slot.game.display_image_url
                     break
 
 
@@ -470,7 +468,7 @@ class AZChallengeDetailView(ProfileHotbarMixin, DetailView):
                     spinner_data.append({
                         'letter': slot.letter,
                         'game_name': slot.game.title_name,
-                        'game_icon': slot.game.title_icon_url or slot.game.title_image or '',
+                        'game_icon': slot.game.display_image_url,
                         'progress': progress.get('percentage', 0),
                     })
             context['spinner_slots_json'] = json.dumps(spinner_data)

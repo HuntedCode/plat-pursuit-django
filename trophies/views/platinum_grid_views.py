@@ -32,7 +32,7 @@ class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
     2. Select: checklist of platinums to include/exclude
     3. Preview & Download: layout, theme, generate PNG
 
-    Limits: 100 platinums (premium), 50 (free).
+    Limits: 500 platinums (premium), 100 (free).
 
     Public to all logged-in users. Users without a linked profile are
     redirected to the PSN linking flow before the view tries to read
@@ -56,9 +56,9 @@ class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             {'text': 'Platinum Grid'},
         ]
 
-        # Limits (respects staff preview toggle from dashboard)
+        # Limits (respects staff preview toggle from dashboard).
         is_premium = get_effective_premium(self.request)
-        max_icons = 200 if is_premium else 50
+        max_icons = 500 if is_premium else 100
         context['max_icons'] = max_icons
         context['is_premium'] = is_premium
 
@@ -66,7 +66,7 @@ class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         platinums = (
             EarnedTrophy.objects
             .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-            .select_related('trophy', 'trophy__game', 'trophy__game__concept')
+            .select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match')
             .order_by(F('earned_date_time').desc(nulls_last=True))
         )
 
@@ -87,7 +87,7 @@ class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             platinum_data.append({
                 'id': et.id,
                 'game_name': game.title_name,
-                'game_image': game.title_image or '',
+                'game_image': game.display_image_url,
                 'trophy_icon': trophy.trophy_icon_url or '',
                 'earned_date': et.earned_date_time.isoformat() if et.earned_date_time else '',
                 'psn_earn_rate': float(trophy.trophy_earn_rate or 0),

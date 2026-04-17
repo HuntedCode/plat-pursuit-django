@@ -74,8 +74,7 @@ def _serialize_slot(slot):
         data['game'] = {
             'id': slot.game.id,
             'title_name': slot.game.title_name,
-            'title_image': slot.game.title_image or '',
-            'title_icon_url': slot.game.title_icon_url or '',
+            'display_image_url': slot.game.display_image_url,
             'title_platform': slot.game.title_platform or [],
             'region': slot.game.region or [],
             'defined_trophies': slot.game.defined_trophies or {},
@@ -91,7 +90,7 @@ def _resolve_cover_image(challenge):
         # Use prefetched az_slots if available, otherwise query
         for slot in challenge.az_slots.all():
             if slot.letter == challenge.cover_letter and slot.game:
-                return slot.game.title_icon_url or slot.game.title_image or ''
+                return slot.game.display_image_url
     except Exception:
         pass
     return ''
@@ -595,8 +594,7 @@ class AZGameSearchAPIView(APIView):
                 results.append({
                     'id': g.id,
                     'title_name': g.title_name,
-                    'title_image': g.title_image or '',
-                    'title_icon_url': g.title_icon_url or '',
+                    'display_image_url': g.display_image_url,
                     'title_platform': g.title_platform or [],
                     'is_regional': g.is_regional,
                     'region': g.region or [],

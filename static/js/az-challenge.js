@@ -354,7 +354,7 @@ function _buildFilterParams(filterState) {
  */
 function _renderGameCard(game) {
     const e = PlatPursuit.HTMLUtils.escape;
-    const imgUrl = game.title_icon_url || game.title_image || '';
+    const imgUrl = game.display_image_url || '';
 
     // Platform badges
     const platforms = (game.title_platform || []).map(p =>
@@ -1270,7 +1270,7 @@ const AZChallengeEdit = {
         const letterClass = slot.is_completed ? 'text-success' : (slot.game ? 'text-primary' : 'text-base-content/30');
 
         if (slot.game) {
-            const imageUrl = slot.game.title_icon_url || slot.game.title_image || '';
+            const imageUrl = slot.game.display_image_url || '';
             const platforms = (slot.game.title_platform || []).map(p =>
                 `<span class="badge badge-xs badge-ghost font-mono">${e(p)}</span>`
             ).join('');

@@ -174,7 +174,7 @@ class DeferredNotificationService:
                 'trophy_earn_rate': trophy.trophy.trophy_earn_rate or 0,
                 'trophy_rarity': trophy.trophy.trophy_rarity,
                 'trophy_icon_url': trophy.trophy.trophy_icon_url or '',
-                'game_image': game.title_image or game.title_icon_url or '',
+                'game_image': game.display_image_url,
                 'rarity_label': ShareableDataService.get_rarity_label(trophy.trophy.trophy_rarity),
                 'title_platform': game.title_platform,
                 'region': game.region,

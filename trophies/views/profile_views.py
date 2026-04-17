@@ -84,7 +84,7 @@ class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         order = [Lower('psn_username')]
 
         # Always prefetch recent platinum (needed by template regardless of form state)
-        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
+        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
         qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
         if form.is_valid():
@@ -225,7 +225,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             has_plat=True,
             play_duration__isnull=False,
             play_duration__gt=timedelta(0),
-        ).select_related('game').order_by('play_duration').first()
+        ).select_related('game', 'game__concept', 'game__concept__igdb_match').order_by('play_duration').first()
 
         if fastest_plat_game:
             fastest_plat_trophy = EarnedTrophy.objects.filter(
@@ -233,7 +233,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 trophy__game=fastest_plat_game.game,
                 trophy__trophy_type='platinum',
                 earned=True,
-            ).select_related('trophy', 'trophy__game').first()
+            ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').first()
             if fastest_plat_trophy:
                 header_stats['fastest_platinum'] = {
                     'trophy': fastest_plat_trophy.trophy,
@@ -257,7 +257,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 trophy__trophy_type='platinum',
                 earned=True,
                 earned_date_time__isnull=False,
-            ).select_related('trophy', 'trophy__game').order_by('earned_date_time')
+            ).select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').order_by('earned_date_time')
 
             # Use array slicing to get the Nth item (0-indexed)
             try:

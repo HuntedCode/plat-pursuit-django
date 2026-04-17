@@ -44,6 +44,9 @@ def _franchise_cover_annotations(*, main_only: bool):
         'representative_title_image': grouping.representative_title_image_subquery(
             through_path=path, extra_filter=extra,
         ),
+        'representative_concept_icon': grouping.representative_concept_icon_subquery(
+            through_path=path, extra_filter=extra,
+        ),
         'representative_igdb_cover_id': grouping.representative_igdb_cover_id_subquery(
             through_path=path, extra_filter=extra,
         ),

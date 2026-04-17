@@ -13,13 +13,7 @@
             {# Game cover art #}
             <div class="shrink-0">
                 <a href="{% url 'game_detail' game.np_communication_id %}" class="block">
-                    {% if game.title_image and not game.force_title_icon %}
-                        <img src="{{ game.title_image }}" alt="{{ game.title_name }}" class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg object-cover object-top border-2 border-base-300 shadow-md">
-                    {% elif game.concept.cover_url %}
-                        <img src="{{ game.concept.cover_url }}" alt="{{ game.title_name }}" class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg object-cover object-top border-2 border-base-300 shadow-md">
-                    {% else %}
-                        <img src="{{ game.title_icon_url }}" alt="{{ game.title_name }}" class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg object-cover border-2 border-base-300 shadow-md">
-                    {% endif %}
+                    <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg object-cover {% if game.has_cover_art %}object-top{% endif %} border-2 border-base-300 shadow-md">
                 </a>
             </div>
 

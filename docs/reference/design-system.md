@@ -575,15 +575,18 @@ These conventions apply site-wide and are not affected by the redesign:
 
 ### Game Image Fallback Chain
 
-Templates should use this priority order for game images:
+Use `{{ game.display_image_url }}` — this is the single source of truth for the fallback chain. Pair it with `{% if game.has_cover_art %}` when the template needs to differentiate styling (real cover art gets `object-cover object-top`; the generic `title_icon_url` fallback gets `object-contain p-3`).
 
-1. `title_image` (PSN store art, if available and not `force_title_icon`)
-2. `concept.cover_url` (PSN `bg_url` if available, else IGDB cover art for trusted matches)
-3. `title_icon_url` (generic PS icon, displayed with `object-contain p-3`)
+The chain `Game.display_image_url` implements:
 
-Use `{% if %}` / `{% elif %}` blocks for the three-way check, or `|default:` chaining for inline contexts (e.g., `{{ game.title_image|default:game.concept.cover_url|default:game.title_icon_url }}`).
+- **Normal path** (not `force_title_icon`): `title_image` (PSN store art) → `concept.cover_url` → `title_icon_url`.
+- **force_title_icon**: admin flag for games with bad PSN store art. Skips PSN sources entirely and prefers a trusted IGDB cover, falling back to `title_icon_url`.
 
-IGDB cover URLs are constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size='cover_big')`. The `Concept.cover_url` property provides no-arg access for templates. Ensure `select_related('concept__igdb_match')` is present on querysets that render game images.
+`Concept.cover_url` itself chains: `concept_icon_url` (PSN MASTER portrait) → trusted IGDB cover. `bg_url` is **deliberately excluded** — it's landscape (`GAMEHUB_COVER_ART`) and crops badly in portrait containers. Use `concept.bg_url` directly if you actually want the landscape image (e.g., share-card backdrops).
+
+IGDB cover URLs are constructed on the fly from `IGDBMatch.igdb_cover_image_id`. Ensure querysets that render many games include `select_related('concept', 'concept__igdb_match')` so the trusted-IGDB fallback doesn't N+1. The new `Game.has_cover_art` property has the same access pattern.
+
+For franchise/company browse cards (aggregated cover art across many games), use the four `representative_*` Subquery annotations from `trophies/services/game_grouping_service.py`: `representative_title_image_subquery`, `representative_concept_icon_subquery`, `representative_igdb_cover_id_subquery`, `representative_title_icon_subquery` — checked in that order in the template.
 
 ---
 
