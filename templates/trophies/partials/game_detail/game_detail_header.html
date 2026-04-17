@@ -4,7 +4,7 @@
 
     {# ── LEFT COLUMN: Game Art + Metadata + Carousel (sticky on desktop) ── #}
     <div class="xl:col-span-1 xl:self-stretch">
-    <div id="game-art-card" class="xl:sticky card relative overflow-hidden border-2 border-base-300 shadow-md shadow-neutral w-full" style="top: calc(var(--sticky-top, 7rem) + 0.5rem)">
+    <div id="game-art-card" class="xl:sticky xl:top-[calc(var(--sticky-top,7rem)+0.5rem)] card relative overflow-hidden border-2 border-base-300 shadow-md shadow-neutral w-full">
         {% if image_urls.header_bg_url %}
             <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ image_urls.header_bg_url }}');"></div>
             <div class="absolute inset-0 bg-base-100/70 backdrop-blur-md"></div>
@@ -67,10 +67,10 @@
             {# Screenshot carousel #}
             {% if game.concept and image_urls.screenshot_urls %}
                 <label for="screenshot-modal" class="max-w-full lg:max-w-1/2 xl:max-w-full flex flex-col items-center cursor-pointer">
-                    <div class="carousel w-9/10 max-h-64 xl:max-h-48 border-2 border-base-300 shadow-md shadow-neutral rounded-box" id="screenshot-carousel" role="region" aria-label="Game screenshots carousel">
+                    <div class="carousel w-9/10 border-2 border-base-300 shadow-md shadow-neutral rounded-box" id="screenshot-carousel" role="region" aria-label="Game screenshots carousel">
                         {% for url in image_urls.screenshot_urls %}
-                            <div id="item{{ forloop.counter }}" class="carousel-item w-full" data-src="{{ url }}">
-                                <img src="{{ url }}" alt="{{ game.title_name }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full" />
+                            <div id="item{{ forloop.counter }}" class="carousel-item w-full aspect-video" data-src="{{ url }}">
+                                <img src="{{ url }}" alt="{{ game.title_name }} screenshot {{ forloop.counter }}" loading="lazy" decoding="async" class="w-full h-full object-cover" />
                             </div>
                         {% endfor %}
                     </div>
