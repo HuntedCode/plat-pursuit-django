@@ -103,27 +103,8 @@
                 {# Community flag chips #}
                 <div>
                     <label class="text-xs text-base-content/50 block mb-1">Flags</label>
-                    <div class="flex flex-wrap gap-1.5 items-center">
-                        <label class="cursor-pointer">
-                            <input type="checkbox" name="show_delisted" value="on"
-                                   class="sr-only peer" {% if request.GET.show_delisted %}checked{% endif %} />
-                            <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">Delisted</span>
-                        </label>
-                        <label class="cursor-pointer">
-                            <input type="checkbox" name="show_unobtainable" value="on"
-                                   class="sr-only peer" {% if request.GET.show_unobtainable %}checked{% endif %} />
-                            <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">Unobtainable</span>
-                        </label>
-                        <label class="cursor-pointer">
-                            <input type="checkbox" name="show_online" value="on"
-                                   class="sr-only peer" {% if request.GET.show_online %}checked{% endif %} />
-                            <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">Online</span>
-                        </label>
-                        <label class="cursor-pointer">
-                            <input type="checkbox" name="show_buggy" value="on"
-                                   class="sr-only peer" {% if request.GET.show_buggy %}checked{% endif %} />
-                            <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">Buggy</span>
-                        </label>
+                    {% include 'partials/browse/flag_filters.html' %}
+                    <div class="flex flex-wrap gap-1.5 items-center mt-1.5">
                         <label class="cursor-pointer">
                             <input type="checkbox" name="filter_shovelware" value="on"
                                    class="sr-only peer" {% if request.GET.filter_shovelware %}checked{% endif %} />

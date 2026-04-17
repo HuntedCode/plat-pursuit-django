@@ -19,11 +19,16 @@ class GameSearchForm(forms.Form):
     in_badge = forms.BooleanField(required=False, label='In a badge series')
     badge_series = forms.ChoiceField(choices=[('', 'Any Badge')], required=False, label='Badge Series')
 
-    # Community flag filters
+    # Community flag filters (3-state: any / show-only / hide).
+    # If both show_X and hide_X are submitted for the same flag, hide wins.
     show_delisted = forms.BooleanField(required=False, label='Delisted')
     show_unobtainable = forms.BooleanField(required=False, label='Unobtainable')
     show_online = forms.BooleanField(required=False, label='Online Trophies')
     show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
+    hide_delisted = forms.BooleanField(required=False, label='Hide Delisted')
+    hide_unobtainable = forms.BooleanField(required=False, label='Hide Unobtainable')
+    hide_online = forms.BooleanField(required=False, label='Hide Online Trophies')
+    hide_buggy = forms.BooleanField(required=False, label='Hide Buggy Trophies')
 
     # Community rating filters (dual-range sliders)
     rating_min = forms.FloatField(required=False, min_value=0, max_value=5)
@@ -290,6 +295,10 @@ class ProfileGamesForm(forms.Form):
     show_unobtainable = forms.BooleanField(required=False, label='Unobtainable')
     show_online = forms.BooleanField(required=False, label='Online Trophies')
     show_buggy = forms.BooleanField(required=False, label='Buggy Trophies')
+    hide_delisted = forms.BooleanField(required=False, label='Hide Delisted')
+    hide_unobtainable = forms.BooleanField(required=False, label='Hide Unobtainable')
+    hide_online = forms.BooleanField(required=False, label='Hide Online Trophies')
+    hide_buggy = forms.BooleanField(required=False, label='Hide Buggy Trophies')
     filter_shovelware = forms.BooleanField(required=False, label='Hide Shovelware')
 
     def __init__(self, *args, **kwargs):

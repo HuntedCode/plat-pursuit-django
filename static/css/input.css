@@ -396,6 +396,17 @@
   white-space: normal;
 }
 
+/* ===== Browse-page flag-filter pills ===== */
+/* daisyUI 5's `.btn:active:not(.btn-active)` rule applies `translate: 0 .5px`
+   on press, creating a subtle downward shift. Inside the dense flag-pill
+   join groups this reads as flicker rather than tactile feedback, so kill
+   the translate (and any transform) for these specific buttons. The bg
+   color shift is kept for normal click feedback. */
+[data-flag-pills] [data-flag-action]:active {
+  translate: none;
+  transform: none;
+}
+
 /* ===== Modal Backdrop Blur ===== */
 .modal[open] {
   -webkit-backdrop-filter: blur(4px);

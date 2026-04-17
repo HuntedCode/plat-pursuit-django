@@ -428,14 +428,22 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         if comp_max < 100:
             games_qs = games_qs.filter(progress__lte=comp_max)
 
-        # --- Community flag filters ---
-        if form.cleaned_data.get('show_delisted'):
+        # --- Community flag filters (hide wins on conflict) ---
+        if form.cleaned_data.get('hide_delisted'):
+            games_qs = games_qs.filter(game__is_delisted=False)
+        elif form.cleaned_data.get('show_delisted'):
             games_qs = games_qs.filter(game__is_delisted=True)
-        if form.cleaned_data.get('show_unobtainable'):
+        if form.cleaned_data.get('hide_unobtainable'):
+            games_qs = games_qs.filter(game__is_obtainable=True)
+        elif form.cleaned_data.get('show_unobtainable'):
             games_qs = games_qs.filter(game__is_obtainable=False)
-        if form.cleaned_data.get('show_online'):
+        if form.cleaned_data.get('hide_online'):
+            games_qs = games_qs.filter(game__has_online_trophies=False)
+        elif form.cleaned_data.get('show_online'):
             games_qs = games_qs.filter(game__has_online_trophies=True)
-        if form.cleaned_data.get('show_buggy'):
+        if form.cleaned_data.get('hide_buggy'):
+            games_qs = games_qs.filter(game__has_buggy_trophies=False)
+        elif form.cleaned_data.get('show_buggy'):
             games_qs = games_qs.filter(game__has_buggy_trophies=True)
         if form.cleaned_data.get('filter_shovelware'):
             games_qs = games_qs.exclude(

@@ -129,6 +129,91 @@
 
     // ── Badge picker modal ──────────────────────────────────────────────
     initBadgePicker(form);
+
+    // ── Community flag split-controls ([+ Label −]) ───────────────────
+    initFlagSplitControls(form);
+  }
+
+  // ── Community-flag split control ──────────────────────────────────────
+  // Each flag is a join group with three segments: [+ Label −]. The +
+  // and − buttons are single-click toggles for show-only / hide intent.
+  // Two hidden checkboxes per flag (show_X, hide_X) carry the form
+  // state. Show and Hide are mutually exclusive; activating one clears
+  // the other. Click an active button to clear back to "Any".
+  function initFlagSplitControls(form) {
+    form.querySelectorAll('[data-flag-group]').forEach(function (group) {
+      if (group.dataset.flagSplitBound) return;
+      group.dataset.flagSplitBound = 'true';
+
+      var flag = group.dataset.flagGroup;
+      var color = group.dataset.flagColor || 'error';
+      var showInput = group.querySelector('input[name="show_' + flag + '"]');
+      var hideInput = group.querySelector('input[name="hide_' + flag + '"]');
+      var showBtn = group.querySelector('[data-flag-action="show"]');
+      var hideBtn = group.querySelector('[data-flag-action="hide"]');
+      var label = group.querySelector('[data-flag-label]');
+      if (!showInput || !hideInput || !showBtn || !hideBtn || !label) return;
+
+      function applyVisual() {
+        // Indicate state via background color and line-through only.
+        // Never toggle font-weight: bold text is wider than regular and
+        // would shift neighboring pills on every click.
+        var resetBtn = [
+          'btn-ghost', 'border', 'border-base-300',
+          'text-base-content/40', 'hover:text-base-content',
+          'btn-error', 'btn-warning', 'btn-info', 'btn-primary', 'btn-secondary',
+          'btn-outline',
+        ];
+        resetBtn.forEach(function (c) {
+          showBtn.classList.remove(c);
+          hideBtn.classList.remove(c);
+        });
+        label.classList.remove('line-through', 'text-base-content/60');
+
+        if (showInput.checked) {
+          showBtn.classList.add('btn-' + color);
+          hideBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
+        } else if (hideInput.checked) {
+          hideBtn.classList.add('btn-' + color, 'btn-outline');
+          showBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
+          label.classList.add('line-through', 'text-base-content/60');
+        } else {
+          showBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
+          hideBtn.classList.add('btn-ghost', 'border', 'border-base-300', 'text-base-content/40', 'hover:text-base-content');
+        }
+      }
+
+      function submit() {
+        var pageInput = form.querySelector('input[name="page"]');
+        if (pageInput) pageInput.value = '1';
+        updateFilterBadge();
+        htmx.trigger(form, 'submit');
+      }
+
+      showBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (showInput.checked) {
+          showInput.checked = false;
+        } else {
+          showInput.checked = true;
+          hideInput.checked = false;
+        }
+        applyVisual();
+        submit();
+      });
+
+      hideBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (hideInput.checked) {
+          hideInput.checked = false;
+        } else {
+          hideInput.checked = true;
+          showInput.checked = false;
+        }
+        applyVisual();
+        submit();
+      });
+    });
   }
 
   // ── Dual-range slider logic ──────────────────────────────────────────────
@@ -578,8 +663,18 @@
         formData.delete('page');
         formData.delete('sort');
         formData.delete('view');
-        var params = new URLSearchParams(formData).toString();
-        window.location.href = '/games/lucky/' + (params ? '?' + params : '');
+        var params = new URLSearchParams(formData);
+        // Page-level scope carried by the button (e.g. genre/theme on tag-detail pages).
+        // Stored as a data attribute rather than a hidden form input so HTMX filter
+        // submits aren't polluted with it.
+        var extra = btn.getAttribute('data-lucky-extra');
+        if (extra) {
+          new URLSearchParams(extra).forEach(function (value, key) {
+            params.append(key, value);
+          });
+        }
+        var qs = params.toString();
+        window.location.href = '/games/lucky/' + (qs ? '?' + qs : '');
       });
     });
   }

@@ -171,14 +171,22 @@ def apply_game_browse_filters(qs, form, sort_val=''):
             concept__stages__series_slug__in=live_slugs,
         ).distinct()
 
-    # --- Community flag filters ---
-    if form.cleaned_data.get('show_delisted'):
+    # --- Community flag filters (hide wins on conflict) ---
+    if form.cleaned_data.get('hide_delisted'):
+        qs = qs.filter(is_delisted=False)
+    elif form.cleaned_data.get('show_delisted'):
         qs = qs.filter(is_delisted=True)
-    if form.cleaned_data.get('show_unobtainable'):
+    if form.cleaned_data.get('hide_unobtainable'):
+        qs = qs.filter(is_obtainable=True)
+    elif form.cleaned_data.get('show_unobtainable'):
         qs = qs.filter(is_obtainable=False)
-    if form.cleaned_data.get('show_online'):
+    if form.cleaned_data.get('hide_online'):
+        qs = qs.filter(has_online_trophies=False)
+    elif form.cleaned_data.get('show_online'):
         qs = qs.filter(has_online_trophies=True)
-    if form.cleaned_data.get('show_buggy'):
+    if form.cleaned_data.get('hide_buggy'):
+        qs = qs.filter(has_buggy_trophies=False)
+    elif form.cleaned_data.get('show_buggy'):
         qs = qs.filter(has_buggy_trophies=True)
 
     # --- Community rating filters (dual-range sliders) ---

@@ -231,36 +231,7 @@
                                 </svg>
                                 Community Flags
                             </h4>
-                            <div class="flex flex-wrap gap-1.5">
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="show_delisted" value="on"
-                                           class="sr-only peer" {% if show_delisted == 'on' %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                        Delisted
-                                    </span>
-                                </label>
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="show_unobtainable" value="on"
-                                           class="sr-only peer" {% if show_unobtainable == 'on' %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-error peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                        Unobtainable
-                                    </span>
-                                </label>
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="show_online" value="on"
-                                           class="sr-only peer" {% if show_online == 'on' %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                        Online Trophies
-                                    </span>
-                                </label>
-                                <label class="cursor-pointer">
-                                    <input type="checkbox" name="show_buggy" value="on"
-                                           class="sr-only peer" {% if show_buggy == 'on' %}checked{% endif %} />
-                                    <span class="btn btn-xs peer-checked:btn-warning peer-checked:font-bold btn-ghost border border-base-300 transition-all">
-                                        Buggy Trophies
-                                    </span>
-                                </label>
-                            </div>
+                            {% include 'partials/browse/flag_filters.html' %}
                         </div>
 
                         {# ── Ratings ── #}
