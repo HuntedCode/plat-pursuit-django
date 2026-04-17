@@ -54,12 +54,13 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     def get_queryset(self):
         qs = super().get_queryset().annotate(
             # game_count: distinct IGDB-unified games (one row per concept).
-            game_count=Count('company_concepts__concept', distinct=True),
-            # version_count: distinct Games, i.e. individual PSN trophy lists
-            # (a game on both PS4 and PS5 counts as 2 versions of 1 game).
+            # game_count: distinct IGDB game IDs (the true "game" count).
+            # Two concepts sharing the same igdb_id count as ONE game.
+            game_count=Count('company_concepts__concept__igdb_match__igdb_id', distinct=True),
+            # version_count: distinct Games (individual PSN trophy lists).
             version_count=Count('company_concepts__concept__games', distinct=True),
             **_company_cover_annotations(),
-        ).filter(game_count__gt=0)
+        ).filter(version_count__gt=0)
 
         form = CompanySearchForm(self.request.GET)
         order = [Lower('name')]

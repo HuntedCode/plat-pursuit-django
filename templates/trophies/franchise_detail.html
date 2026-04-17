@@ -200,7 +200,9 @@
                                 </h3>
                                 <div class="mt-1 flex flex-wrap gap-1">
                                     <span class="badge badge-xs badge-ghost italic">{{ entry.get_source_type_display }}</span>
-                                    <span class="badge badge-xs badge-ghost">{{ entry.related_game_count|intcomma }} game{{ entry.related_game_count|pluralize }}</span>
+                                    <span class="badge badge-xs badge-ghost">
+                                        {{ entry.related_game_count|intcomma }} game{{ entry.related_game_count|pluralize }}{% if entry.related_version_count != entry.related_game_count %} &middot; {{ entry.related_version_count|intcomma }} version{{ entry.related_version_count|pluralize }}{% endif %}
+                                    </span>
                                 </div>
                             </div>
                         </div>

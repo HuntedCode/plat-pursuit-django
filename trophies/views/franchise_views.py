@@ -98,11 +98,14 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             Q(source_type='franchise', franchise_concepts__is_main=True)
             | Q(source_type='collection')
         ).annotate(
-            # game_count: distinct concepts (IGDB-unified games — one per
-            # main entry regardless of platform/region). This is what the
-            # card label "X games" means to users.
+            # game_count: distinct IGDB game IDs (the true "game" count).
+            # Two concepts sharing the same igdb_id (e.g. PS3 and PS4
+            # Stick of Truth) count as ONE game. Concepts without an IGDB
+            # match are excluded (NULL igdb_id ignored by COUNT DISTINCT)
+            # which slightly undercounts, but in practice nearly all
+            # concepts in franchise/collection pages have IGDB matches.
             game_count=Count(
-                'franchise_concepts__concept',
+                'franchise_concepts__concept__igdb_match__igdb_id',
                 filter=main_link_filter,
                 distinct=True,
             ),
@@ -260,12 +263,15 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
             .exclude(pk=franchise.pk)
             .annotate(
                 related_game_count=Count(
+                    'franchise_concepts__concept', distinct=True,
+                ),
+                related_version_count=Count(
                     'franchise_concepts__concept__games', distinct=True,
                 ),
                 # Collections never have is_main=True, so allow any link.
                 **_franchise_cover_annotations(main_only=False),
             )
-            .filter(related_game_count__gt=0)
+            .filter(related_version_count__gt=0)
             .distinct()
             .order_by(Lower('name'))
         )

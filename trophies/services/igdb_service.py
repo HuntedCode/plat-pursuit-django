@@ -1187,17 +1187,35 @@ class IGDBService:
                         defaults={'name': name, 'slug': slug},
                     )
                 except IntegrityError:
-                    # Slug collision (different IGDB entity, same slugified name)
-                    # or race condition. Fall back to lookup by the full
-                    # composite key, then by slug as last resort.
-                    franchise = (
-                        Franchise.objects.filter(
-                            igdb_id=igdb_id, source_type=source_type,
-                        ).first()
-                        or Franchise.objects.filter(slug=slug).first()
-                    )
+                    # Most likely a slug collision (different IGDB entity with
+                    # the same slugified name, e.g. "South Park" exists as
+                    # both a franchise and a collection). Could also be a race
+                    # condition on the (igdb_id, source_type) constraint.
+                    franchise = Franchise.objects.filter(
+                        igdb_id=igdb_id, source_type=source_type,
+                    ).first()
                     if not franchise:
-                        continue
+                        # The (igdb_id, source_type) row doesn't exist yet —
+                        # the IntegrityError was a slug collision. Retry with
+                        # a disambiguated slug. Do NOT fall through to a bare
+                        # slug lookup: that returns the WRONG Franchise row
+                        # (e.g. the franchise-type "South Park" when we're
+                        # trying to create the collection-type "South Park"),
+                        # which then overwrites the correctly-set is_main flag
+                        # via the stale-fix logic below.
+                        dedup_slug = f'{slug}-{igdb_id}'
+                        try:
+                            franchise, _ = Franchise.objects.get_or_create(
+                                igdb_id=igdb_id,
+                                source_type=source_type,
+                                defaults={'name': name, 'slug': dedup_slug},
+                            )
+                        except IntegrityError:
+                            franchise = Franchise.objects.filter(
+                                igdb_id=igdb_id, source_type=source_type,
+                            ).first()
+                            if not franchise:
+                                continue
                 # Only the franchise matching IGDB's primary franchise (per the
                 # precedence above) is main. Collections are never main.
                 desired_is_main = (
