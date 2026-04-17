@@ -156,11 +156,26 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
 
 class RandomGameView(View):
-    """Redirect to a random game detail page, respecting active browse filters."""
+    """Redirect to a random game detail page, respecting active browse filters.
+
+    Also honors page-level scope that lives outside the standard filter form.
+    The Lucky button on scoped pages (genre/theme/flagged) carries that context
+    forward: `category` for flagged-games sub-pages, and `genres`/`themes` ids
+    injected by the Lucky button's `data-lucky-extra` attribute on tag-detail
+    pages (see browse-filters.js).
+    """
 
     def get(self, request):
         form = GameSearchForm(request.GET)
         qs = Game.objects.all()
+
+        category = request.GET.get('category', '')
+        if category:
+            flag_filter = FlaggedGamesView.FLAG_CATEGORIES.get(category, {}).get('filter')
+            if flag_filter:
+                qs = qs.filter(**flag_filter)
+            else:
+                qs = qs.none()
 
         if form.is_valid():
             qs, _ = apply_game_browse_filters(qs, form)
@@ -173,6 +188,9 @@ class RandomGameView(View):
             )
 
         messages.info(request, "No games match your current filters. Try broadening your search!")
+        referer = request.META.get('HTTP_REFERER')
+        if referer:
+            return HttpResponseRedirect(referer)
         referer_params = request.GET.urlencode()
         return HttpResponseRedirect(
             reverse('games_list') + ('?' + referer_params if referer_params else '')
