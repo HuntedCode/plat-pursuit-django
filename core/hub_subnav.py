@@ -95,11 +95,11 @@ BROWSE_HUB = HubSubnavConfig(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2'),
         HubSubnavItem('trophies', 'Trophies', 'trophies_list', 'trophy'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock'),
-        HubSubnavItem('companies', 'Companies', 'companies_list', 'building'),
+        HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag'),
+        HubSubnavItem('companies', 'Companies', 'companies_list', 'building'),
         HubSubnavItem('engines', 'Engines', 'engines_list', 'cpu'),
-        HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag'),
     ),
 )
 
