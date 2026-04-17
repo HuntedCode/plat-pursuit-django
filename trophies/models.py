@@ -733,7 +733,13 @@ class Concept(models.Model):
         super().save(*args, **kwargs)
 
     def get_cover_url(self, size='cover_big'):
-        """Return cover art URL: PSN bg_url if available, else IGDB cover for trusted matches."""
+        """Return portrait cover art URL for display in square/portrait containers.
+
+        Priority: PSN MASTER icon, then PSN landscape bg, then IGDB cover (trusted only).
+        Callers that specifically need the landscape background should use `bg_url` directly.
+        """
+        if self.concept_icon_url:
+            return self.concept_icon_url
         if self.bg_url:
             return self.bg_url
         try:

@@ -43,8 +43,8 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 | `descriptions` | JSONField (dict) | `{"short": "...", "long": "..."}` from PSN API |
 | `content_rating` | JSONField (dict) | ESRB/PEGI rating data |
 | `media` | JSONField (dict) | Screenshots and video URLs from PSN API |
-| `bg_url` | URLField (nullable) | PSN cover art URL (`GAMEHUB_COVER_ART` or `BACKGROUND_LAYER_ART`). Only available for modern titles (PS4/PS5) that go through the `sync_title_stats` pipeline |
-| `concept_icon_url` | URLField (nullable) | Icon image URL |
+| `bg_url` | URLField (nullable) | PSN landscape background URL (`GAMEHUB_COVER_ART` or `BACKGROUND_LAYER_ART`). Used as share-card backdrops. Only available for modern titles (PS4/PS5) that go through the `sync_title_stats` pipeline |
+| `concept_icon_url` | URLField (nullable) | PSN portrait cover art (`MASTER` media). Primary source for game cover images shown in browse cards, game detail headers, and all other portrait/square containers |
 | `guide_slug` | CharField(50, nullable) | Link to external guide |
 | `guide_created_at` | DateTimeField (nullable) | Guide creation timestamp |
 | `slug` | SlugField(300), unique, nullable | URL-friendly slug for Review Hub pages. Auto-generated from `unified_title` on first save, with collision handling via counter suffix |
@@ -206,6 +206,8 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 - **Redis counter for default concept IDs can drift.** If Redis is flushed or restarted, the `pp_concept_counter` key disappears. On next use, `create_default_concept()` re-initializes from the database max. The `SET NX` ensures only one worker initializes it, but there is a brief window where multiple workers could race on initialization.
 
 - **Slug collisions for Asian-character titles.** If `slugify()` produces an empty string (common for CJK titles), the fallback `"concept-{concept_id}"` is used. This means the URL is less human-readable but still functional and unique.
+
+- **`cover_url` vs `bg_url` are not interchangeable.** `Concept.get_cover_url()` (exposed as the `cover_url` property) returns a portrait image for display in square/portrait containers. Priority: `concept_icon_url` (PSN MASTER) > `bg_url` (PSN landscape, as a last-resort portrait fallback) > IGDB cover (trusted matches only). If you want the landscape background specifically (e.g. share-card backdrops), use `concept.bg_url` directly. Historically `get_cover_url()` returned `bg_url` first, which caused landscape art to be cropped awkwardly in square browse/detail containers; the priority was flipped after PSN's MASTER image turned out to be the right portrait source.
 
 - **`absorb()` calls `save()` multiple times.** The method saves `self` up to 2 times (for `family` and `title_ids`). Each is a targeted `save(update_fields=[...])` to avoid overwriting concurrent changes, but the method is not wrapped in an explicit transaction. The caller (`add_concept()`) also does not wrap the absorb-then-delete sequence in a transaction, relying on Django's ATOMIC_REQUESTS or the caller's context.
 
