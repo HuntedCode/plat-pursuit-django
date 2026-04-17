@@ -77,7 +77,6 @@ Badges are a flagship feature with dedicated real estate.
 
 | # | Module | Strategy | Status | Data Source |
 |---|--------|----------|--------|------------|
-| 16 | Badge Showcase | Lazy (10m) | **Done** | UserBadge selection, featured badge for profile card |
 | 17 | Profile Card | Lazy (none) | **Done** | Client-side HTML preview via `/api/v1/profile-card/html/`, PNG download |
 | S1 | Latest Platinum | Lazy (10m) | **Done** | Live share card preview via `/api/v1/shareables/platinum/<id>/html/` |
 | S2 | Challenge Cards | Lazy (10m) | **Done** | Up to 3 challenge share card previews (A-Z, Calendar, Genre) |
@@ -121,7 +120,7 @@ The premium dashboard should feel indispensable. Visualization modules are the p
 | 36b | Badge Visualizations | Lazy (30m) | **Done** | Date-filtered badge timeline with year/all selector: stages by series (stacked bar), XP growth, badges vs stages (dual cumulative line), stage completion rate. All stage data from StageCompletionEvent. |
 | 43 | Genre & Themes (theme_mastery) | Lazy (30m) | **Done** | Combined module: side-by-side IGDB genre and theme radars across earned trophies (`ConceptGenre` + `ConceptTheme`). All-time only. The year-aware genre radar lives nowhere now since the field was moved out of trophy_visualizations into engine_radar. |
 | 44 | Time-to-Beat | Lazy (30m) | **Done** | `IGDBMatch.time_to_beat_completely` to compute average plat duration, longest hunts, and currently-grinding remaining hours. IGDB-powered. |
-| 45 | Profile Showcase Editor | Lazy (none) | **Done** | Drag-reorder for the 5-slot `ProfileBadgeShowcase`. Persisted via `POST /api/v1/badges/showcase/reorder/`. Coexists with the existing `badge_showcase` module (which handles the share-card featured badge picker). |
+| 45 | Profile Showcase Editor | Lazy (none) | **Done** | Drag-reorder for the 5-slot `ProfileBadgeShowcase`. Persisted via `POST /api/v1/badges/showcase/reorder/`. |
 | 32 | Personal Records / Stats Page | - | **Done (off-dashboard)** | The `/my-stats/` page shipped (currently staff-gated). Not a dashboard module; the dashboard's `my_stats_teaser` (#37) is the on-dashboard surface that links to it. See [Stats Page](stats-page.md). |
 
 ### Visualization Module Details (Historical Sketches)
@@ -234,7 +233,7 @@ These are the crown jewels that make premium feel indispensable. The original sk
 | `progress` | Progress & Challenges | Challenge Hub, Almost There, Milestone Tracker, Roadmaps for Your Library, A-Z Challenge, Platinum Calendar, Genre Challenge, VR Trophy Hunter |
 | `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Stats, Badge XP & Leaderboard, Country XP Leaderboard |
 | `highlights` | Highlights & History | Monthly Recap Preview, Library Health, Top Studios, Earned Titles, Rarity Showcase, My Reviews, Rate My Games |
-| `share` | Share & Export | Profile Card, Latest Platinum, Recap Card, Platinum Grid CTA, Challenge Cards, Badge Showcase |
+| `share` | Share & Export | Profile Card, Latest Platinum, Recap Card, Platinum Grid CTA, Challenge Cards |
 
 The 6 system tabs are immutable. Premium users can additionally create up to 6 custom tabs and move modules between any tabs. See [Dashboard](../features/dashboard.md#tab-system) for the live tab system reference.
 

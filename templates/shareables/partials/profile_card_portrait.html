@@ -219,7 +219,7 @@ Variables: same as profile_card_landscape.html
             </div>
             {% endif %}
 
-            {# Featured badge #}
+            {# Latest earned badge #}
             <div style="width: 180px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(149, 128, 255, 0.03); padding: 12px;">
                 {% if badge_image_url %}
                 <img src="{{ badge_image_url }}" style="width: 64px; height: 64px; object-fit: contain; margin-bottom: 6px;" />
@@ -227,7 +227,7 @@ Variables: same as profile_card_landscape.html
                 {% if badge_series %}
                 <div style="font-size: 10px; color: rgba(245, 247, 252, 0.4); text-align: center;">{{ badge_series }}</div>
                 {% endif %}
-                <div style="font-size: 9px; color: rgba(149, 128, 255, 0.6); text-transform: uppercase; font-weight: 600; letter-spacing: 0.06em; margin-top: 4px;">Featured Badge</div>
+                <div style="font-size: 9px; color: rgba(149, 128, 255, 0.6); text-transform: uppercase; font-weight: 600; letter-spacing: 0.06em; margin-top: 4px;">Latest Badge</div>
                 {% else %}
                 <svg style="height: 48px; width: 48px; margin-bottom: 6px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="rgba(245, 247, 252, 0.15)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
                 <div style="font-size: 12px; color: rgba(245, 247, 252, 0.25); font-style: italic;">No badge yet</div>

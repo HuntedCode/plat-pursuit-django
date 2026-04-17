@@ -89,8 +89,8 @@ class ProfileCardDataService:
             logger.exception('Error fetching displayed title for profile %s', profile.pk)
         data['displayed_title'] = displayed_title
 
-        # ---- Displayed badge (or highest-tier fallback) ----
-        badge_data = ProfileCardDataService._get_displayed_badge(profile)
+        # ---- Latest earned badge (most recently unlocked, with custom art) ----
+        badge_data = ProfileCardDataService._get_latest_badge(profile)
         data.update(badge_data)
 
         # ---- Gamification / XP ----
@@ -219,10 +219,9 @@ class ProfileCardDataService:
             return ''
 
     @staticmethod
-    def _get_displayed_badge(profile):
+    def _get_latest_badge(profile):
         """
-        Get the user's displayed badge, falling back to the rarest badge
-        with custom artwork (by lowest earned_count).
+        Get the user's most recently earned badge with custom artwork.
         """
         from trophies.models import UserBadge
 
@@ -234,30 +233,11 @@ class ProfileCardDataService:
         }
 
         try:
-            # Try explicitly displayed badge first
-            ub = (
-                UserBadge.objects
-                .filter(profile=profile, is_displayed=True)
-                .select_related('badge', 'badge__base_badge')
-                .first()
-            )
-
-            if ub:
-                badge = ub.badge
-                image_url = ProfileCardDataService._get_badge_image_url(badge)
-                series_name = badge.effective_display_series or badge.series_slug
-                result['badge_name'] = series_name
-                result['badge_series'] = series_name
-                result['badge_tier'] = badge.tier
-                result['badge_image_url'] = image_url
-                return result
-
-            # Fallback: rarest badge with custom artwork (lowest earned_count)
             earned_badges = (
                 UserBadge.objects
                 .filter(profile=profile)
                 .select_related('badge', 'badge__base_badge')
-                .order_by('badge__earned_count', '-badge__tier')
+                .order_by('-earned_at')
             )
 
             for ub in earned_badges:
@@ -272,7 +252,7 @@ class ProfileCardDataService:
                     break
 
         except Exception:
-            logger.exception('Error fetching displayed badge for profile %s', profile.pk)
+            logger.exception('Error fetching latest badge for profile %s', profile.pk)
 
         return result
 

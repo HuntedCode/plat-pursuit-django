@@ -74,9 +74,6 @@
             this.registerModuleInit('challenge_share_cards', (el) => this._initShareCards(el));
             this.registerModuleInit('recap_share_card', (el) => this._initShareCards(el));
 
-            // Badge Showcase module: share card badge + profile showcase selection
-            this.registerModuleInit('badge_showcase', (el) => this._initBadgeShowcase(el));
-
             // Premium Settings module: theme picker + trophy case management
             this.registerModuleInit('premium_settings', (el) => this._initPremiumSettings(el));
 
@@ -1527,63 +1524,6 @@
                         },
                     });
                 }
-            }
-        }
-
-        // -----------------------------------------------------------------
-        // Badge Showcase (share card badge + profile showcase)
-        // -----------------------------------------------------------------
-
-        _initBadgeShowcase(el) {
-            const modeToggle = el.querySelector('#badge-mode-toggle');
-            const shareSection = el.querySelector('#share-card-section');
-            const showcaseSection = el.querySelector('#showcase-section');
-            const gridHint = el.querySelector('#badge-grid-hint');
-            const grid = el.querySelector('#badge-showcase-grid');
-            if (!grid) return;
-
-            // Mode toggle
-            if (modeToggle) {
-                modeToggle.querySelectorAll('.badge-mode-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const mode = btn.dataset.mode;
-                        PlatPursuit._badgeMode = mode;
-
-                        modeToggle.querySelectorAll('.badge-mode-btn').forEach(b => {
-                            b.classList.toggle('btn-primary', b.dataset.mode === mode);
-                            b.classList.toggle('btn-ghost', b.dataset.mode !== mode);
-                        });
-
-                        if (shareSection) shareSection.classList.toggle('hidden', mode !== 'share_card');
-                        if (showcaseSection) showcaseSection.classList.toggle('hidden', mode !== 'showcase');
-
-                        if (gridHint) {
-                            gridHint.textContent = mode === 'showcase'
-                                ? 'Tap a badge to add or remove it from your profile showcase.'
-                                : 'Tap a badge to feature it on your share cards.';
-                        }
-                    });
-                });
-            }
-
-            // Badge grid click routing
-            grid.querySelectorAll('.badge-showcase-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const badgeId = parseInt(item.dataset.badgeId);
-                    if (PlatPursuit._badgeMode === 'showcase') {
-                        PlatPursuit.toggleShowcaseBadge(badgeId);
-                    } else {
-                        PlatPursuit.setBadgeDisplayed(badgeId);
-                    }
-                });
-            });
-
-            // Initialize showcase slots from server-ordered data
-            const slotsEl = el.querySelector('#showcase-slots');
-            const orderedRaw = slotsEl?.dataset.orderedIds || '';
-            if (orderedRaw) {
-                const orderedIds = orderedRaw.split(',').map(Number).filter(Boolean);
-                PlatPursuit._updateShowcaseSlots(orderedIds);
             }
         }
 

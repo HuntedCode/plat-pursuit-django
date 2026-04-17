@@ -40,7 +40,7 @@ The dashboard uses a **Module Registry** pattern with a **Tabbed Carousel** layo
 | 3 | Chart | Progress | `progress` | Challenge Hub |
 | 4 | Medal | Badges | `badges` | Badge Progress |
 | 5 | Star | Highlights | `highlights` | My Reviews, Rate My Games |
-| 6 | Share | Share & Export | `share` | Badge Showcase, Profile Card, Latest Platinum, Challenge Cards, Recap Card |
+| 6 | Share | Share & Export | `share` | Profile Card, Latest Platinum, Challenge Cards, Recap Card |
 
 ### Custom Tabs (Premium only, max 6)
 
@@ -83,7 +83,6 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `advanced_badge_stats` | Advanced Badge Stats | premium | Lazy | 30m | Yes |
 | `badge_series_overview` | Badge Series Overview | premium | Lazy | 30m | Yes |
 | `badge_visualizations` | Badge Visualizations | premium | Lazy | 30m | Yes |
-| `badge_showcase` | Badge Showcase | share | Lazy | 10m | No |
 | `profile_card_preview` | Profile Card | share | Lazy | None | No |
 | `recent_platinum_card` | Latest Platinum | share | Lazy | 10m | No |
 | `challenge_share_cards` | Challenge Cards | share | Lazy | 10m | No |
@@ -124,7 +123,7 @@ Filters to games where the user has earned at least one trophy (`earned_trophies
 
 ## Profile Badge Showcase Editor
 
-Premium dedicated module for the 5-slot `ProfileBadgeShowcase`. Includes drag-reorder via `DragReorderManager` (SortableJS), persisted via the new `POST /api/v1/badges/showcase/reorder/` endpoint. Coexists with the existing `badge_showcase` module (which handles the share card featured badge picker).
+Premium dedicated module for the 5-slot `ProfileBadgeShowcase`. Includes drag-reorder via `DragReorderManager` (SortableJS), persisted via the `POST /api/v1/badges/showcase/reorder/` endpoint.
 
 ## Roadmaps for Your Library
 

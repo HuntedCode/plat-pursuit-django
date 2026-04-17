@@ -60,13 +60,11 @@ ProfileCardDataService  (collects all data)
 - `templates/shareables/partials/profile_sig_card.html` (728x120 for Playwright)
 - `templates/shareables/partials/profile_sig_card.svg` (728x120 self-contained SVG)
 - `templates/shareables/partials/profile_card_tab.html` (My Shareables UI)
-- `templates/trophies/partials/dashboard/badge_showcase.html` (dashboard module)
 
 ### JavaScript
 - `static/js/profile-card-share.js` : `ProfileCardShareManager extends ShareImageManager`
   - Social card: format toggle, theme, preview, download (inherited from base)
   - Forum sig: enable/disable toggle, URL copy (URL/BBCode/HTML/Markdown), token regeneration
-  - `PlatPursuit.setBadgeDisplayed(badgeId)`: Badge selection for dashboard module
 
 ### Management Commands
 - `python manage.py render_profile_sigs` : Batch render sigs
@@ -93,16 +91,8 @@ ProfileCardDataService  (collects all data)
 6. PNG is updated by the nightly `render_profile_sigs` batch command
 7. Public requests to `/sig/<token>.(png|svg)` serve pre-rendered files from disk
 
-### Badge Selection
-1. User opens Dashboard > Share tab > Badge Showcase module
-2. Clicks a badge to feature it
-3. `POST /api/v1/badges/displayed/` clears old `is_displayed`, sets new one
-4. Dashboard cache invalidated, profile card data reflects new badge
-
 ### Dashboard Integration
-The Dashboard "Share & Export" tab provides two modules for profile cards:
-- **Badge Showcase**: Select a featured badge (filtered to badges with custom artwork only). Selecting a badge dispatches a `platpursuit:badge-changed` custom event.
-- **Profile Card Preview**: Scaled-down landscape card preview with inline theme picker (swatch grid), full-size modal on click, and download button. Fetches HTML via `/api/v1/profile-card/html/` client-side. Listens for `platpursuit:badge-changed` to refresh the preview when the featured badge changes. Theme selection saves via `POST /api/v1/profile-card/settings/` and applies to the preview immediately.
+The Dashboard "Share & Export" tab surfaces the **Profile Card Preview** module: a scaled-down landscape card preview with inline theme picker (swatch grid), full-size modal on click, and download button. Fetches HTML via `/api/v1/profile-card/html/` client-side. Theme selection saves via `POST /api/v1/profile-card/settings/` and applies to the preview immediately.
 
 Template: `templates/trophies/partials/dashboard/profile_card_preview.html`
 JS init: `_initProfileCardPreview()` in `static/js/dashboard.js` (registered via `registerModuleInit`)
@@ -129,7 +119,7 @@ JS init: `_initProfileCardPreview()` in `static/js/dashboard.js` (registered via
 | No platinums | Shows total trophies instead |
 | No badges earned | Shows completion stats in badge slot |
 | No title equipped | Title line omitted, username gets more space |
-| No displayed badge | Auto-selects highest-tier earned badge |
+| No earned badges with custom art | Badge slot shows "No badge yet" placeholder |
 | No leaderboard rank | Rank display omitted |
 | User disables sig | `/sig/<token>` returns 404 |
 | Sig file missing but enabled | SVG: on-demand render. PNG: 404 (wait for batch). |

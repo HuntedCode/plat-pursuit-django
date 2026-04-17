@@ -1877,85 +1877,6 @@ def provide_rate_my_games(profile):
     }
 
 
-def provide_badge_showcase(profile, settings=None):
-    """
-    Badge showcase: shows the user's displayed badge and all earned badges
-    for selection. Allows users to pick which badge to feature on their profile.
-    """
-    from trophies.models import UserBadge
-
-    earned_badges = list(
-        UserBadge.objects
-        .filter(profile=profile)
-        .select_related('badge', 'badge__base_badge')
-        .order_by('-badge__tier', '-earned_at')
-    )
-
-    displayed_badge = None
-    badge_list = []
-    seen_series = set()
-
-    for ub in earned_badges:
-        badge = ub.badge
-
-        # Deduplicate by series: only show the highest tier per series
-        # (query is ordered by -badge__tier so first per series is highest)
-        if badge.series_slug in seen_series:
-            # Still check if this tier is the displayed one
-            if ub.is_displayed and not displayed_badge:
-                pass  # Fall through to build entry for displayed badge
-            else:
-                continue
-        seen_series.add(badge.series_slug)
-
-        try:
-            layers = badge.get_badge_layers()
-            image_url = layers.get('main', '')
-            has_custom = layers.get('has_custom_image', False)
-        except Exception:
-            image_url = ''
-            has_custom = False
-
-        # Only show badges with custom artwork
-        if not has_custom:
-            continue
-
-        entry = {
-            'id': badge.id,
-            'name': badge.effective_display_series or badge.series_slug,
-            'series': badge.effective_display_series or badge.series_slug,
-            'tier': badge.tier,
-            'tier_name': {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}.get(badge.tier, ''),
-            'image_url': image_url,
-            'is_displayed': ub.is_displayed,
-        }
-        badge_list.append(entry)
-
-        if ub.is_displayed:
-            displayed_badge = entry
-
-    # Fallback: auto-select highest tier badge if none is displayed
-    if not displayed_badge and badge_list:
-        displayed_badge = badge_list[0]  # Already sorted by -tier, -earned_at
-
-    # Fetch profile showcase selections (premium feature)
-    from trophies.models import ProfileBadgeShowcase
-    showcase_ids = list(
-        ProfileBadgeShowcase.objects.filter(profile=profile)
-        .order_by('display_order')
-        .values_list('badge_id', flat=True)
-    )
-
-    return {
-        'displayed_badge': displayed_badge,
-        'badges': badge_list,
-        'total_badges': len(badge_list),
-        'showcase_badge_ids': showcase_ids,
-        'showcase_count': len(showcase_ids),
-        'is_premium': profile.user_is_premium,
-    }
-
-
 def provide_profile_card_preview(profile, settings=None):
     """
     Profile card preview: provides theme, premium status, and available themes
@@ -5172,22 +5093,6 @@ DASHBOARD_MODULES = [
         'cache_ttl': 1800,
         'default_size': 'small',
         'allowed_sizes': ['small', 'medium'],
-    },
-    {
-        'slug': 'badge_showcase',
-        'name': 'Badge Showcase',
-        'description': 'Choose your featured badge. This badge appears on your profile card and public profile.',
-        'category': 'share',
-        'template': 'trophies/partials/dashboard/badge_showcase.html',
-        'provider': provide_badge_showcase,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 6,  # share #6
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 0,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
     },
     {
         'slug': 'profile_card_preview',
