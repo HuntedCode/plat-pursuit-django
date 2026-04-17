@@ -11,10 +11,10 @@
 
         {% if community_tabs|length > 1 %}
         {# ── DLC Tab Bar (only if multiple CTGs) ── #}
-        <div class="flex gap-1 p-1 bg-white/[0.03] rounded-lg border border-base-content/5 mb-4" role="tablist">
+        <div class="flex gap-1 p-1 bg-white/[0.03] rounded-lg border border-base-content/5 mb-4 overflow-x-auto" role="tablist">
             {% for ct in community_tabs %}
                 <button role="tab"
-                        class="community-tab-btn flex-1 text-center px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                        class="community-tab-btn flex-1 shrink-0 min-w-max whitespace-nowrap text-center px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200
                                {% if forloop.first %}bg-primary text-primary-content shadow-sm{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
                         data-ctg-id="{{ ct.ctg.id }}"
                         aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"

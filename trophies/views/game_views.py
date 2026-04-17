@@ -610,26 +610,14 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 type_order = {'platinum': 0, 'gold': 1, 'silver': 2, 'bronze': 3}
                 full_trophies.sort(key=lambda t: (type_order.get(t['trophy_type'], 4), t['trophy_name'].lower()))
 
-        # Get trophy groups
-        trophy_groups_cache_key = f"game:trophygroups:{game.np_communication_id}"
-        trophy_groups_timeout = 604800  # 1 week
-        try:
-            cached_trophy_groups = cache.get(trophy_groups_cache_key)
-            if cached_trophy_groups:
-                trophy_groups = json.loads(cached_trophy_groups)
-            else:
-                trophy_groups_qs = TrophyGroup.objects.filter(game=game)
-                trophy_groups = {
-                    g.trophy_group_id: {
-                        'trophy_group_name': g.trophy_group_name,
-                        'trophy_group_icon_url': g.trophy_group_icon_url,
-                        'defined_trophies': g.defined_trophies,
-                    } for g in trophy_groups_qs
-                }
-                cache.set(trophy_groups_cache_key, json.dumps(trophy_groups), timeout=trophy_groups_timeout)
-        except Exception as e:
-            logger.error(f"Trophy groups cache failed for {game.np_communication_id}: {e}")
-            trophy_groups = {}
+        # Get trophy groups (cheap indexed FK query, not worth caching)
+        trophy_groups = {
+            g.trophy_group_id: {
+                'trophy_group_name': g.trophy_group_name,
+                'trophy_group_icon_url': g.trophy_group_icon_url,
+                'defined_trophies': g.defined_trophies,
+            } for g in TrophyGroup.objects.filter(game=game)
+        }
 
         # Group trophies
         grouped_trophies = {}

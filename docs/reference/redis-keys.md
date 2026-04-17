@@ -164,7 +164,6 @@ All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Da
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
 | `game:imageurls:{np_communication_id}` | `CACHE_TIMEOUT_IMAGES` | Image URLs (background, screenshots, content rating) |
-| `game:trophygroups:{np_communication_id}` | 604800s (1 week) | Trophy group names and defined counts |
 | `game:stats:{np_communication_id}:{YYYY-MM-DD}:{HH}` | 3600s (1h) | Game stats (owners, completers, average progress) |
 
 **Files**: `trophies/views/game_views.py`, `trophies/models.py`
@@ -261,7 +260,7 @@ The `redis_admin.py` management command provides targeted flush operations for o
 | Flag | Keys Flushed |
 |------|-------------|
 | `--flush-index` | All homepage keys: `featured_games_*`, `playing_now_*`, `featured_badges_*`, `featured_checklists_*`, `whats_new_*`, `latest_badges_*` |
-| `--flush-game-page {np_id}` | `game:imageurls:{np_id}`, `game:trophygroups:{np_id}`, `game:stats:{np_id}:*` |
+| `--flush-game-page {np_id}` | `game:imageurls:{np_id}`, `game:stats:{np_id}:*` |
 | `--flush-token-keeper` | All 5 job queues + `profile_jobs:*`, `deferred_jobs:*`, `pending_sync_complete:*`, `sync_started_at:*`, `sync_trophies_lock:*`, `shovelware_concept_lock:*`, `sync_orchestrator_pending:*`, `sync_queued_games:*`, `sync_complete_in_progress:*`, `finalize_phase:*`, `active_profiles`, `site:high_sync_volume`, `site:psn_outage`, `psn:5xx_timestamps` |
 | `--clear-psn-outage` | `site:psn_outage`, `psn:5xx_timestamps` |
 | `--flush-complete-lock {profile_id}` | `pending_sync_complete:{id}`, `sync_started_at:{id}`, `sync_orchestrator_pending:{id}`, `sync_queued_games:{id}`, `sync_complete_in_progress:{id}`, `finalize_phase:{id}` |

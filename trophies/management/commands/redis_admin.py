@@ -167,7 +167,6 @@ class Command(BaseCommand):
 
         exact_keys = [
             f"{prefix}game:imageurls:{np_communication_id}",
-            f"{prefix}game:trophygroups:{np_communication_id}",
         ]
         stats_pattern = f"{prefix}game:stats:{np_communication_id}:*"
 
@@ -211,7 +210,6 @@ class Command(BaseCommand):
                     continue
                 deleted_count += redis_client.delete(
                     f"{prefix}game:imageurls:{np_id}",
-                    f"{prefix}game:trophygroups:{np_id}",
                 )
                 for key in redis_client.scan_iter(match=f"{prefix}game:stats:{np_id}:*"):
                     deleted_count += redis_client.delete(key)

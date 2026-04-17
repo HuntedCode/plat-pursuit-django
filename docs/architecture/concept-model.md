@@ -117,7 +117,7 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 2. If the game already has this same concept: clear `concept_stale` if set, then return
 3. Store reference to `old_concept`
 4. Update `self.concept` to the new concept, clear `concept_stale`, save
-5. Invalidate game page caches (`game:imageurls:*`, `game:trophygroups:*`)
+5. Invalidate game page caches (`game:imageurls:*`)
 6. Check if `old_concept` is now orphaned (has zero remaining games):
    - If orphaned: call `concept.absorb(old_concept)` then `old_concept.delete()`
    - Invalidate comment and rating caches on the surviving concept

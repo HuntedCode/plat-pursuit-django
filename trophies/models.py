@@ -530,7 +530,13 @@ class Game(models.Model):
         # Invalidate game page caches since concept data changed
         from django.core.cache import cache
         cache.delete(f"game:imageurls:{self.np_communication_id}")
-        cache.delete(f"game:trophygroups:{self.np_communication_id}")
+        # Self-heal CTGs: if trophy groups were synced before the concept was
+        # assigned (common for modern-platform games where sync_title_id runs
+        # after sync_trophy_groups), back-fill ConceptTrophyGroups now so the
+        # community section renders.
+        if self.trophy_groups.exists() and not concept.concept_trophy_groups.exists():
+            from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
+            ConceptTrophyGroupService.sync_for_concept(concept)
         if old_concept and old_concept.games.count() == 0:
             concept.absorb(old_concept)
             old_concept.delete()

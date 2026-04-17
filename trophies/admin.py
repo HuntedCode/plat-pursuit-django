@@ -470,7 +470,6 @@ class GameAdmin(admin.ModelAdmin):
             # Invalidate game page caches
             from django.core.cache import cache
             cache.delete(f"game:imageurls:{obj.np_communication_id}")
-            cache.delete(f"game:trophygroups:{obj.np_communication_id}")
             # Absorb orphaned old concept
             if old_concept and old_concept.games.count() == 0:
                 new_concept.absorb(old_concept)
