@@ -188,6 +188,20 @@ Wraps SortableJS with `forceFallback: true` for consistent cross-browser behavio
 
 Validates page number against min/max before navigation.
 
+### PlatPursuit.CoachMarks
+
+Factory for spotlight-style page tours. Dims the page with a dark overlay, cuts a transparent window around the current target, and positions a tooltip beside it with step controls (Prev/Next/Skip + counter).
+
+| Method | Parameters | Returns | Purpose |
+|--------|-----------|---------|---------|
+| `createTour(config)` | `{ steps, elementIds, dismissUrl }` | tour instance | Build a tour wired to the given overlay/tooltip DOM |
+
+The returned tour exposes `init(autoShow)`, `open()`, `close()`, `next()`, `prev()`, `dismiss(action)`. Step shape: `{ target (CSS selector), title, description, icon (inner SVG markup), position: 'top'|'bottom' }`. The dismiss endpoint receives `{ action, last_step }` as JSON.
+
+Tooltip positioning uses `window.visualViewport` when available (so mobile browser chrome and the virtual keyboard are respected) and always clamps the tooltip inside the visible viewport so its controls stay reachable, even when the target is taller than the screen. In that tall-target case the tooltip may overlap the highlighted section, which is preferable to the old behavior where Next/Skip could be pushed off-screen on mobile.
+
+Currently used by `badge-detail-tour.js` and `game-detail-tour.js`. Shared CSS: `.coach-overlay`, `.coach-tooltip`, `.coach-target-highlight` in `static/css/input.css`.
+
 ## Namespace Pattern
 
 All utilities are declared as `const` or `class` at module scope, then exported at the bottom:
@@ -211,13 +225,13 @@ To add a new utility: define it above the export block, then add a `window.PlatP
 
 These are standalone JS files loaded only on their respective pages. They follow the same `window.PlatPursuit.*` namespace pattern but are not part of `utils.js`.
 
-| File | Class | Page | Purpose |
-|------|-------|------|---------|
-| `static/js/welcome-tour.js` | `WelcomeTourManager` | All (via `base.html`) | 4-step modal carousel teaching hub navigation |
-| `static/js/game-detail-tour.js` | `GameDetailTourManager` | Game detail | 5-step coach marks (stats, flags, reviews, ratings, lists) |
-| `static/js/badge-detail-tour.js` | `BadgeDetailTourManager` | Badge detail | 4-step coach marks (overview, tiers, stages, leaderboards) |
+| File | Class / Instance | Page | Purpose |
+|------|------------------|------|---------|
+| `static/js/welcome-tour.js` | `WelcomeTourManager` | All (via `base.html`) | 7-step modal carousel teaching hub navigation |
+| `static/js/game-detail-tour.js` | `GameDetailTourManager` (CoachMarks) | Game detail | 4-step coach marks (stats, flags, reviews, lists) |
+| `static/js/badge-detail-tour.js` | `BadgeDetailTourManager` (CoachMarks) | Badge detail | 4-step coach marks (overview, tiers, stages, leaderboards) |
 
-All three tour managers share the same architecture: singleton instance, `init(autoShow)` entry point, `open()`/`dismiss(action)` lifecycle, keyboard navigation (arrow keys + Escape), and a dismiss guard to prevent double API calls. The coach marks tours use a box-shadow spotlight overlay (`coach-overlay` CSS class) that positions a transparent window over the target element with `box-shadow: 0 0 0 9999px` to darken everything else. See [Tutorial System](../design/tutorial-system.md) for full design details.
+The Welcome Tour is a daisyUI `<dialog>` carousel. The game and badge detail tours share a single implementation through `PlatPursuit.CoachMarks.createTour(config)` (above); each of those files is a thin wrapper supplying step copy, DOM ids, and the dismiss endpoint. All three tour managers expose the same public surface: `init(autoShow)` entry point, `open()`/`dismiss(action)` lifecycle, keyboard nav (arrow keys + Escape), and a dismiss guard to prevent double API calls. See [Tutorial System](../design/tutorial-system.md) for design details.
 
 ## Related Docs
 

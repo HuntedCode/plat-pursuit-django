@@ -1099,6 +1099,327 @@ const TrophyListRenderer = {
     },
 };
 
+/**
+ * CoachMarks - Spotlight-style page tour with a dark overlay cutout and a
+ * positioned tooltip. Used by the game detail and badge detail page guides.
+ *
+ * Create an instance with PlatPursuit.CoachMarks.createTour(config). The
+ * returned object exposes init(autoShow), open(), close(), next(), prev(),
+ * and dismiss(action). Steps are objects: { target, title, description,
+ * icon (inner SVG markup), position: 'top'|'bottom' }.
+ *
+ * The positioning logic clamps the tooltip to the visible viewport so the
+ * controls remain reachable even when the target is taller than the screen
+ * (common on mobile when a section expands tall content).
+ */
+const CoachMarks = (function() {
+    const CUTOUT_PADDING = 8;
+    const TOOLTIP_GAP = 12;
+    const VIEWPORT_MARGIN = 8;
+    const SETTLE_FRAMES = 3;
+
+    function viewport() {
+        const vv = window.visualViewport;
+        return {
+            width: vv ? vv.width : window.innerWidth,
+            height: vv ? vv.height : window.innerHeight,
+            offsetTop: vv ? vv.offsetTop : 0,
+        };
+    }
+
+    class CoachMarkTour {
+        constructor({ steps, elementIds, dismissUrl }) {
+            this._steps = steps;
+            this._ids = elementIds;
+            this._dismissUrl = dismissUrl;
+            this.totalSteps = steps.length;
+            this.currentStep = 0;
+            this.isOpen = false;
+            this._dismissing = false;
+            this._initialized = false;
+            this._currentTarget = null;
+            this._resizeHandler = null;
+            this._keydownHandler = null;
+            this._overlayClickHandler = null;
+            this.overlay = null;
+            this.tooltip = null;
+        }
+
+        init(autoShow = false) {
+            if (this._initialized) return;
+
+            const ids = this._ids;
+            this.overlay = document.getElementById(ids.overlay);
+            this.tooltip = document.getElementById(ids.tooltip);
+            if (!this.overlay || !this.tooltip) return;
+
+            this.titleEl = document.getElementById(ids.title);
+            this.descEl = document.getElementById(ids.desc);
+            this.svgEl = document.getElementById(ids.svg);
+            this.counterEl = document.getElementById(ids.counter);
+            this.prevBtn = document.getElementById(ids.prev);
+            this.nextBtn = document.getElementById(ids.next);
+            this.skipBtn = document.getElementById(ids.skip);
+
+            this._bindGlobalHandlers();
+            this._initialized = true;
+
+            if (autoShow) {
+                setTimeout(() => this.open(), 1000);
+            }
+        }
+
+        open() {
+            if (!this._initialized) this.init(false);
+            if (!this.overlay) return;
+
+            this.currentStep = 0;
+            this._dismissing = false;
+            this.isOpen = true;
+
+            this.overlay.classList.add('visible');
+            this.tooltip.classList.add('visible');
+
+            this._resizeHandler = () => {
+                if (this.isOpen) this._positionCurrentStep();
+            };
+            window.addEventListener('resize', this._resizeHandler);
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', this._resizeHandler);
+                window.visualViewport.addEventListener('scroll', this._resizeHandler);
+            }
+
+            this._showStep(0);
+        }
+
+        close() {
+            this.isOpen = false;
+            this.overlay.classList.remove('visible');
+            this.tooltip.classList.remove('visible');
+
+            if (this._currentTarget) {
+                this._currentTarget.classList.remove('coach-target-highlight');
+                this._currentTarget = null;
+            }
+
+            this.overlay.style.top = '';
+            this.overlay.style.left = '';
+            this.overlay.style.width = '';
+            this.overlay.style.height = '';
+            this.tooltip.classList.remove('positioned');
+
+            if (this._resizeHandler) {
+                window.removeEventListener('resize', this._resizeHandler);
+                if (window.visualViewport) {
+                    window.visualViewport.removeEventListener('resize', this._resizeHandler);
+                    window.visualViewport.removeEventListener('scroll', this._resizeHandler);
+                }
+                this._resizeHandler = null;
+            }
+        }
+
+        next() {
+            if (this.currentStep >= this.totalSteps - 1) {
+                this.dismiss('complete');
+                return;
+            }
+            this._showStep(this.currentStep + 1);
+        }
+
+        prev() {
+            if (this.currentStep <= 0) return;
+            this._showStep(this.currentStep - 1);
+        }
+
+        async dismiss(action = 'complete') {
+            if (this._dismissing) return;
+            this._dismissing = true;
+
+            const lastStep = this.currentStep + 1;
+            this.close();
+
+            try {
+                await API.post(this._dismissUrl, {
+                    action: action,
+                    last_step: lastStep,
+                });
+            } catch (err) {
+                console.warn('Coach-marks dismiss failed:', err);
+            }
+        }
+
+        // ------------------------------------------------------------------
+
+        _showStep(stepIndex) {
+            let step = this._steps[stepIndex];
+            if (!step) return;
+
+            let target = document.querySelector(step.target);
+            // Skip missing targets (e.g. quick-add not rendered for anonymous).
+            while (!target && stepIndex < this.totalSteps - 1) {
+                stepIndex++;
+                step = this._steps[stepIndex];
+                target = document.querySelector(step.target);
+            }
+            if (!target) {
+                this.dismiss('complete');
+                return;
+            }
+
+            if (this._currentTarget) {
+                this._currentTarget.classList.remove('coach-target-highlight');
+            }
+
+            this.currentStep = stepIndex;
+            this._currentTarget = target;
+
+            this._updateContent(step);
+            this._updateControls();
+
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Wait for scroll to settle (position stable for SETTLE_FRAMES frames).
+            let lastTop = -1;
+            let stableFrames = 0;
+            const settle = () => {
+                const currentTop = target.getBoundingClientRect().top;
+                if (Math.abs(currentTop - lastTop) < 1) {
+                    stableFrames++;
+                } else {
+                    stableFrames = 0;
+                }
+                lastTop = currentTop;
+
+                if (stableFrames >= SETTLE_FRAMES) {
+                    this._positionCutout(target);
+                    void this.tooltip.offsetHeight;
+                    this._positionTooltip(target, step.position);
+                    target.classList.add('coach-target-highlight');
+                } else {
+                    requestAnimationFrame(settle);
+                }
+            };
+            requestAnimationFrame(settle);
+        }
+
+        _positionCurrentStep() {
+            const step = this._steps[this.currentStep];
+            if (!step) return;
+            const target = document.querySelector(step.target);
+            if (!target) return;
+            this._positionCutout(target);
+            this._positionTooltip(target, step.position);
+        }
+
+        _positionCutout(target) {
+            const rect = target.getBoundingClientRect();
+            this.overlay.style.top = (rect.top - CUTOUT_PADDING) + 'px';
+            this.overlay.style.left = (rect.left - CUTOUT_PADDING) + 'px';
+            this.overlay.style.width = (rect.width + CUTOUT_PADDING * 2) + 'px';
+            this.overlay.style.height = (rect.height + CUTOUT_PADDING * 2) + 'px';
+        }
+
+        _positionTooltip(target, preferredPosition) {
+            const rect = target.getBoundingClientRect();
+            const tooltipRect = this.tooltip.getBoundingClientRect();
+            const vp = viewport();
+
+            let top;
+            if (preferredPosition === 'top') {
+                top = rect.top - CUTOUT_PADDING - TOOLTIP_GAP - tooltipRect.height;
+                if (top < vp.offsetTop + VIEWPORT_MARGIN) {
+                    top = rect.bottom + CUTOUT_PADDING + TOOLTIP_GAP;
+                }
+            } else {
+                top = rect.bottom + CUTOUT_PADDING + TOOLTIP_GAP;
+                if (top + tooltipRect.height > vp.offsetTop + vp.height - VIEWPORT_MARGIN) {
+                    top = rect.top - CUTOUT_PADDING - TOOLTIP_GAP - tooltipRect.height;
+                }
+            }
+
+            // Final viewport clamp: guarantees the tooltip (and its buttons) sit
+            // inside the visible area even when the target is taller than the
+            // viewport (mobile sections with expanded tall content). May overlap
+            // the highlighted target, which is preferable to unreachable controls.
+            const minTop = vp.offsetTop + VIEWPORT_MARGIN;
+            const maxTop = vp.offsetTop + vp.height - tooltipRect.height - VIEWPORT_MARGIN;
+            top = Math.max(minTop, Math.min(top, maxTop));
+
+            let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            left = Math.max(VIEWPORT_MARGIN, Math.min(left, vp.width - tooltipRect.width - VIEWPORT_MARGIN));
+
+            this.tooltip.style.top = top + 'px';
+            this.tooltip.style.left = left + 'px';
+
+            if (!this.tooltip.classList.contains('positioned')) {
+                requestAnimationFrame(() => this.tooltip.classList.add('positioned'));
+            }
+        }
+
+        _updateContent(step) {
+            if (this.titleEl) this.titleEl.textContent = step.title;
+            if (this.descEl) this.descEl.textContent = step.description;
+            if (this.svgEl) this.svgEl.innerHTML = step.icon;
+        }
+
+        _updateControls() {
+            const step = this.currentStep;
+            const isLast = step === this.totalSteps - 1;
+
+            if (this.counterEl) {
+                this.counterEl.textContent = `${step + 1} / ${this.totalSteps}`;
+            }
+            if (this.prevBtn) {
+                this.prevBtn.classList.toggle('invisible', step === 0);
+            }
+            if (this.nextBtn) {
+                const label = isLast ? 'Done' : 'Next';
+                const path = isLast ? 'M5 13l4 4L19 7' : 'M9 5l7 7-7 7';
+                this.nextBtn.innerHTML = `
+                    ${label}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="${path}"/>
+                    </svg>`;
+            }
+            if (this.skipBtn) {
+                this.skipBtn.textContent = isLast ? 'Close' : 'Skip';
+            }
+        }
+
+        _bindGlobalHandlers() {
+            this._keydownHandler = (e) => {
+                if (!this.isOpen) return;
+                switch (e.key) {
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        this.next();
+                        break;
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        this.prev();
+                        break;
+                    case 'Escape':
+                        e.preventDefault();
+                        this.dismiss('skip');
+                        break;
+                }
+            };
+            document.addEventListener('keydown', this._keydownHandler);
+
+            this._overlayClickHandler = () => {
+                if (this.isOpen) this.dismiss('skip');
+            };
+            this.overlay.addEventListener('click', this._overlayClickHandler);
+        }
+    }
+
+    return {
+        createTour(config) {
+            return new CoachMarkTour(config);
+        },
+    };
+})();
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1115,3 +1436,4 @@ window.PlatPursuit.ZoomAwareObserver = ZoomAwareObserver;
 window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;
 window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
 window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
+window.PlatPursuit.CoachMarks = CoachMarks;
