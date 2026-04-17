@@ -146,36 +146,17 @@
                 </div>
             </div>
 
-            {# 6. 105+ Site Themes (accent) #}
-            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:shadow-accent/30 hover:border-accent/50 transition-all">
+            {# 6. 105+ Site Themes with Try Me! (accent) #}
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:shadow-accent/30 hover:border-accent/50 transition-all relative">
+                <span class="absolute top-2 right-3 text-xs text-accent italic">Try Me!</span>
                 <div class="card-body items-center text-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r=".5" fill="var(--color-accent)"/><circle cx="17.5" cy="10.5" r=".5" fill="var(--color-accent)"/><circle cx="8.5" cy="7.5" r=".5" fill="var(--color-accent)"/><circle cx="6.5" cy="12.5" r=".5" fill="var(--color-accent)"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
                     <h3 class="card-title text-lg">105+ Site Themes</h3>
                     <p class="text-sm text-base-content/70 pr-1">Gradient themes across the entire site. Express your style everywhere you go.</p>
-                    <div class="flex items-center gap-1.5 mt-1">
-                        <div class="w-6 h-6 rounded-full" style="background: linear-gradient(135deg, #ff6b6b, #ee5a24);"></div>
-                        <div class="w-6 h-6 rounded-full" style="background: linear-gradient(135deg, #7c3aed, #a855f7);"></div>
-                        <div class="w-6 h-6 rounded-full" style="background: linear-gradient(135deg, #0ea5e9, #22d3ee);"></div>
-                        <div class="w-6 h-6 rounded-full" style="background: linear-gradient(135deg, #10b981, #34d399);"></div>
-                        <div class="w-6 h-6 rounded-full" style="background: linear-gradient(135deg, #f59e0b, #fbbf24);"></div>
-                    </div>
-                    <span class="text-xs text-base-content/40">... and 100+ more</span>
-                </div>
-            </div>
-
-            {# ── Row 3 ── #}
-
-            {# 7. Profile Customization with Try Me! (primary) #}
-            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:shadow-primary/30 hover:border-primary/50 transition-all relative">
-                <span class="absolute top-2 right-3 text-xs text-primary italic">Try Me!</span>
-                <div class="card-body items-center text-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <h3 class="card-title text-lg">Profile Customization</h3>
-                    <p class="text-sm text-base-content/70 pr-1">Custom backgrounds from your platinums, banner positioning, and display titles earned from badges.</p>
                     <div class="flex items-center gap-3 mt-1">
                         {% for theme in preview_themes %}
                         <button type="button"
-                                class="w-12 h-12 rounded-lg border-2 border-base-300 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+                                class="w-12 h-12 rounded-lg border-2 border-base-300 hover:ring-2 hover:ring-accent transition-all cursor-pointer"
                                 {% if theme.image %}
                                 style="background-image: url('{{ theme.image }}'); background-size: cover; background-position: center;"
                                 data-theme-image="{{ theme.image }}"
@@ -188,7 +169,25 @@
                         </button>
                         {% endfor %}
                     </div>
-                    <span class="text-xs text-base-content/40">... and many more!</span>
+                    <span class="text-xs text-base-content/40">... and 100+ more</span>
+                </div>
+            </div>
+
+            {# ── Row 3 ── #}
+
+            {# 7. Profile Showcases (primary) #}
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:shadow-primary/30 hover:border-primary/50 transition-all">
+                <div class="card-body items-center text-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+                    <h3 class="card-title text-lg">Profile Showcases</h3>
+                    <p class="text-sm text-base-content/70 pr-1">Unlock up to 5 showcase slots on your profile. Feature rarest trophies, badges, reviews, titles, and more. Drag to reorder, pick your picks.</p>
+                    <div class="flex flex-wrap justify-center gap-1 mt-1">
+                        <span class="badge badge-xs badge-primary badge-outline">Rarest Trophies</span>
+                        <span class="badge badge-xs badge-primary badge-outline">Recent Plats</span>
+                        <span class="badge badge-xs badge-primary badge-outline">Badges</span>
+                        <span class="badge badge-xs badge-primary badge-outline">Reviews</span>
+                        <span class="badge badge-xs badge-primary badge-outline">Titles</span>
+                    </div>
                 </div>
             </div>
 
