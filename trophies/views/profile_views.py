@@ -1007,6 +1007,7 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         # Build available + active lists with descriptor metadata
         available = []
+        inactive_types = {s.showcase_type for s in inactive}
         for slug, descriptor in SHOWCASE_REGISTRY.items():
             if slug in active_types:
                 continue
@@ -1014,6 +1015,7 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
                 'slug': slug,
                 'descriptor': descriptor,
                 'locked': descriptor['requires_premium'] and not is_premium,
+                'has_preserved_config': slug in inactive_types,
             })
 
         active_with_descriptors = []
@@ -1160,8 +1162,68 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         context['slots_remaining'] = max(0, context['slot_limit'] - context['slots_used'])
         context['free_slot_limit'] = FREE_SLOT_LIMIT
         context['premium_slot_limit'] = PREMIUM_SLOT_LIMIT
+        # Review picker data
+        review_showcase_entry = next(
+            (s for s in active if s.showcase_type == 'review_showcase'), None
+        )
+        review_showcase_data = None
+        if review_showcase_entry:
+            from trophies.models import Review
+
+            reviews = (
+                Review.objects.filter(profile=profile, is_deleted=False)
+                .select_related('concept', 'concept_trophy_group')
+                .order_by('-created_at')
+            )
+            review_showcase_data = {
+                'reviews': [
+                    {
+                        'review_id': r.id,
+                        'concept_title': r.concept.unified_title if r.concept else 'Unknown',
+                        'icon_url': r.concept.concept_icon_url if r.concept else '',
+                        'recommended': r.recommended,
+                        'body_preview': (r.body or '')[:200],
+                        'helpful_count': r.helpful_count,
+                        'group_label': (
+                            r.concept_trophy_group.display_name
+                            if r.concept_trophy_group and r.concept_trophy_group.trophy_group_id != 'default'
+                            else ''
+                        ),
+                    }
+                    for r in reviews
+                ],
+                'selected_ids': review_showcase_entry.config.get('review_ids', []),
+            }
+
+        # Title picker data
+        title_showcase_entry = next(
+            (s for s in active if s.showcase_type == 'title_showcase'), None
+        )
+        title_showcase_data = None
+        if title_showcase_entry:
+            from trophies.models import UserTitle
+
+            user_titles = (
+                UserTitle.objects.filter(profile=profile)
+                .select_related('title')
+                .order_by('-earned_at')
+            )
+            title_showcase_data = {
+                'titles': [
+                    {
+                        'user_title_id': ut.id,
+                        'name': ut.title.name,
+                        'source_type': ut.source_type,
+                    }
+                    for ut in user_titles
+                ],
+                'selected_ids': title_showcase_entry.config.get('user_title_ids', []),
+            }
+
         context['favorite_games_data'] = favorite_games_data
         context['badge_showcase_data'] = badge_showcase_data
+        context['review_showcase_data'] = review_showcase_data
+        context['title_showcase_data'] = title_showcase_data
         return context
 
 

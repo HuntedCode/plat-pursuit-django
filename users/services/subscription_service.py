@@ -220,6 +220,8 @@ class SubscriptionService:
         with transaction.atomic():
             user.save(update_fields=update_fields)
             if hasattr(user, 'profile'):
+                # A post_save signal on Profile handles cascading side effects
+                # of the premium transition (deactivates premium-only showcases).
                 user.profile.update_profile_premium(False)
 
             # Close any open SubscriptionPeriod (inside transaction so

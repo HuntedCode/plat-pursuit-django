@@ -1,10 +1,44 @@
 import logging
-from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Stage
+from trophies.models import UserBadge, UserBadgeProgress, Stage, Profile
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Profile premium transitions: keep profile showcases in sync with premium
+# tier. Runs for every path that changes user_is_premium (subscription
+# webhooks, admin toggles, management commands, shell edits).
+# ──────────────────────────────────────────────────────────────────────
+@receiver(pre_save, sender=Profile, dispatch_uid="track_profile_premium_transition")
+def _track_profile_premium_transition(sender, instance, **kwargs):
+    """Snapshot the old premium value so the post_save handler can detect the edge."""
+    if not instance.pk:
+        instance._old_user_is_premium = None
+        return
+    try:
+        old = Profile.objects.only('user_is_premium').get(pk=instance.pk)
+        instance._old_user_is_premium = old.user_is_premium
+    except Profile.DoesNotExist:
+        instance._old_user_is_premium = None
+
+
+@receiver(post_save, sender=Profile, dispatch_uid="handle_profile_premium_downgrade")
+def _handle_profile_premium_downgrade(sender, instance, created, **kwargs):
+    """Deactivate premium-only showcases when user_is_premium goes True -> False."""
+    if created:
+        return
+    old = getattr(instance, '_old_user_is_premium', None)
+    if old is True and instance.user_is_premium is False:
+        from trophies.services.showcase_service import ProfileShowcaseService
+        try:
+            ProfileShowcaseService.handle_premium_downgrade(instance)
+        except Exception:
+            logger.exception(
+                f"Failed to deactivate showcases on premium downgrade for profile {instance.pk}"
+            )
 
 @receiver(post_save, sender=UserBadge, dispatch_uid="update_badge_earned_count")
 def update_badge_earned_count_on_save(sender, instance, created, **kwargs):

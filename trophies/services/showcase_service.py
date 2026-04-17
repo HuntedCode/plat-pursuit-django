@@ -256,6 +256,56 @@ def provide_recent_platinums(profile, config):
     }
 
 
+def provide_review_showcase(profile, config):
+    """Review Showcase: up to 2 user-selected reviews.
+
+    Config schema: {"review_ids": [id1, id2]} - order preserved from JSON list.
+    """
+    from trophies.models import Review
+
+    max_items = 2
+    review_ids = (config or {}).get('review_ids', [])[:max_items]
+    if not review_ids:
+        return {'items': [], 'has_items': False, 'max_items': max_items}
+
+    reviews_map = {
+        r.id: r for r in Review.objects.filter(
+            id__in=review_ids, profile=profile, is_deleted=False,
+        ).select_related('concept', 'concept_trophy_group')
+    }
+    ordered = [reviews_map[rid] for rid in review_ids if rid in reviews_map]
+    return {
+        'items': ordered,
+        'has_items': bool(ordered),
+        'max_items': max_items,
+    }
+
+
+def provide_title_showcase(profile, config):
+    """Title Showcase: 4-6 user-selected earned titles.
+
+    Config schema: {"user_title_ids": [id1, id2, ...]} - order preserved.
+    """
+    from trophies.models import UserTitle
+
+    max_items = 6
+    user_title_ids = (config or {}).get('user_title_ids', [])[:max_items]
+    if not user_title_ids:
+        return {'items': [], 'has_items': False, 'max_items': max_items}
+
+    titles_map = {
+        ut.id: ut for ut in UserTitle.objects.filter(
+            id__in=user_title_ids, profile=profile,
+        ).select_related('title')
+    }
+    ordered = [titles_map[uid] for uid in user_title_ids if uid in titles_map]
+    return {
+        'items': ordered,
+        'has_items': bool(ordered),
+        'max_items': max_items,
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Config validation
 # ──────────────────────────────────────────────────────────────────────
@@ -266,6 +316,54 @@ def _validate_rarest_trophies_config(profile, config):
     if not isinstance(one_per_game, bool):
         raise ShowcaseInvalidConfig("one_per_game must be a boolean.")
     return {'one_per_game': one_per_game}
+
+
+def _validate_review_showcase_config(profile, config):
+    """Ensure review_ids belong to the profile and respect max_items (2)."""
+    from trophies.models import Review
+
+    review_ids = config.get('review_ids', [])
+    if not isinstance(review_ids, list):
+        raise ShowcaseInvalidConfig("review_ids must be a list.")
+    if len(review_ids) > 2:
+        raise ShowcaseInvalidConfig("Maximum 2 reviews allowed.")
+
+    if review_ids:
+        owned = set(
+            Review.objects.filter(
+                id__in=review_ids, profile=profile, is_deleted=False,
+            ).values_list('id', flat=True)
+        )
+        missing = [rid for rid in review_ids if rid not in owned]
+        if missing:
+            raise ShowcaseInvalidConfig(
+                f"Review IDs not found: {missing}"
+            )
+    return {'review_ids': review_ids}
+
+
+def _validate_title_showcase_config(profile, config):
+    """Ensure user_title_ids belong to the profile and respect max_items (6)."""
+    from trophies.models import UserTitle
+
+    user_title_ids = config.get('user_title_ids', [])
+    if not isinstance(user_title_ids, list):
+        raise ShowcaseInvalidConfig("user_title_ids must be a list.")
+    if len(user_title_ids) > 6:
+        raise ShowcaseInvalidConfig("Maximum 6 titles allowed.")
+
+    if user_title_ids:
+        owned = set(
+            UserTitle.objects.filter(
+                id__in=user_title_ids, profile=profile,
+            ).values_list('id', flat=True)
+        )
+        missing = [uid for uid in user_title_ids if uid not in owned]
+        if missing:
+            raise ShowcaseInvalidConfig(
+                f"UserTitle IDs not found: {missing}"
+            )
+    return {'user_title_ids': user_title_ids}
 
 
 def _validate_favorite_games_config(profile, config):
@@ -358,6 +456,30 @@ SHOWCASE_REGISTRY = {
         'is_automatic': True,
         'max_items': 6,
     },
+    ProfileShowcase.SHOWCASE_REVIEW: {
+        'slug': ProfileShowcase.SHOWCASE_REVIEW,
+        'name': 'Review Showcase',
+        'description': 'Feature 2 of your written game reviews.',
+        'template': 'trophies/partials/profile_showcases/showcase_reviews.html',
+        'editor_template': 'trophies/partials/profile_editor/picker_reviews.html',
+        'provider': provide_review_showcase,
+        'validator': _validate_review_showcase_config,
+        'requires_premium': True,
+        'is_automatic': False,
+        'max_items': 2,
+    },
+    ProfileShowcase.SHOWCASE_TITLE: {
+        'slug': ProfileShowcase.SHOWCASE_TITLE,
+        'name': 'Title Showcase',
+        'description': 'Show off up to 6 of your earned titles.',
+        'template': 'trophies/partials/profile_showcases/showcase_titles.html',
+        'editor_template': 'trophies/partials/profile_editor/picker_titles.html',
+        'provider': provide_title_showcase,
+        'validator': _validate_title_showcase_config,
+        'requires_premium': True,
+        'is_automatic': False,
+        'max_items': 6,
+    },
 }
 
 
@@ -420,19 +542,17 @@ class ProfileShowcaseService:
     @staticmethod
     @transaction.atomic
     def add_showcase(profile, showcase_type, *, is_premium):
-        """Add a showcase to the profile. Validates premium + slot limit + uniqueness."""
+        """Add a showcase to the profile. Validates premium + slot limit + uniqueness.
+
+        If an inactive row exists for this type (e.g. preserved from a previous
+        premium period), it is reactivated and its config is kept intact. This
+        gives re-subscribers a one-click restore.
+        """
         descriptor = get_descriptor(showcase_type)
 
         if descriptor['requires_premium'] and not is_premium:
             raise ShowcasePremiumRequired(
                 f"{descriptor['name']} requires a premium subscription."
-            )
-
-        if ProfileShowcase.objects.filter(
-            profile=profile, showcase_type=showcase_type
-        ).exists():
-            raise ShowcaseAlreadyActive(
-                f"{descriptor['name']} is already on your profile."
             )
 
         active_count = ProfileShowcase.objects.filter(
@@ -444,10 +564,24 @@ class ProfileShowcaseService:
                 f"You've reached your limit of {limit} showcases."
             )
 
-        # Append to end
+        existing = ProfileShowcase.objects.filter(
+            profile=profile, showcase_type=showcase_type,
+        ).first()
+
         from django.db.models import Max
         agg = ProfileShowcase.objects.filter(profile=profile).aggregate(m=Max('sort_order'))
         next_order = (agg['m'] or 0) + 1
+
+        if existing:
+            if existing.is_active:
+                raise ShowcaseAlreadyActive(
+                    f"{descriptor['name']} is already on your profile."
+                )
+            # Reactivate with preserved config, moved to the end of the list
+            existing.is_active = True
+            existing.sort_order = next_order
+            existing.save(update_fields=['is_active', 'sort_order', 'updated_at'])
+            return existing
 
         return ProfileShowcase.objects.create(
             profile=profile,

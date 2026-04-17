@@ -60,6 +60,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [My Pursuit Hub](features/my-pursuit-hub.md) | Personal-progression hub at `/my-pursuit/`: badges, milestones, titles (forward-compatible with gamification) |
 | [Navigation & Site Organization](features/navigation.md) | Navbar, footer, sub-nav, cross-links, profile tabs |
 | [Profile Cards](features/profile-cards.md) | Shareable profile cards, forum signatures, badge showcase |
+| [Profile Showcases](features/profile-showcases.md) | Steam-style customization: pick showcase types to feature on your profile |
 | [Review Hub](features/review-hub.md) | Reviews, ratings, concept trophy groups (formerly "Community Hub") |
 | [Roadmap System](features/roadmap-system.md) | Staff-authored platinum guides on game detail (replaces the legacy checklist system) |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |

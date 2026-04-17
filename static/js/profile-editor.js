@@ -19,6 +19,8 @@
         initFavoriteGamesPicker();
         initBadgePicker();
         initRarestTrophiesOptions();
+        initReviewPicker();
+        initTitlePicker();
     });
 
     // ──────────────────────────────────────────────────────────────
@@ -400,6 +402,203 @@
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
             }
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Shared batched picker helper: used for Reviews, Challenges, Titles.
+    // Wires search + optional filter toggles + checkbox selection + Save button.
+    //
+    // opts: {
+    //   slug, max, dataId, modalId, resultsId, counterId, searchId, saveId,
+    //   configKey, idField, renderItem(item, checked, disabled),
+    //   applyFilters(items, query) -> filtered list,
+    // }
+    // ──────────────────────────────────────────────────────────────
+    function initBatchedPicker(opts) {
+        const dataEl = document.getElementById(opts.dataId);
+        const modal = document.getElementById(opts.modalId);
+        const resultsEl = document.getElementById(opts.resultsId);
+        const counterEl = document.getElementById(opts.counterId);
+        const searchEl = document.getElementById(opts.searchId);
+        const saveBtn = document.getElementById(opts.saveId);
+        const configureBtns = document.querySelectorAll('.configure-btn[data-showcase-slug="' + opts.slug + '"]');
+
+        if (!dataEl || !modal || configureBtns.length === 0) return;
+
+        const data = JSON.parse(dataEl.textContent);
+        const allItems = data[opts.collectionKey] || [];
+        let selectedIds = new Set(data.selected_ids || []);
+
+        function updateCounter() {
+            counterEl.textContent = selectedIds.size + ' / ' + opts.max;
+            counterEl.classList.toggle('text-primary', selectedIds.size > 0);
+        }
+
+        function renderList() {
+            const q = (searchEl.value || '').trim().toLowerCase();
+            const filtered = opts.applyFilters(allItems, q, selectedIds);
+
+            if (filtered.length === 0) {
+                resultsEl.innerHTML = '<p class="text-xs text-base-content/40 italic text-center py-8">No results.</p>';
+                return;
+            }
+
+            let html = '<div class="' + (opts.gridClass || 'grid grid-cols-1 gap-1.5') + '">';
+            for (const item of filtered) {
+                const id = item[opts.idField];
+                const checked = selectedIds.has(id);
+                const disabled = !checked && selectedIds.size >= opts.max;
+                html += opts.renderItem(item, checked, disabled);
+            }
+            html += '</div>';
+            resultsEl.innerHTML = html;
+
+            resultsEl.querySelectorAll('input[type="checkbox"][data-item-id]').forEach(function (cb) {
+                cb.addEventListener('change', function () {
+                    const id = parseInt(cb.dataset.itemId, 10);
+                    if (cb.checked) selectedIds.add(id);
+                    else selectedIds.delete(id);
+                    updateCounter();
+                    renderList();
+                });
+            });
+        }
+
+        configureBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                renderList();
+                updateCounter();
+                modal.showModal();
+            });
+        });
+
+        searchEl.addEventListener('input', PlatPursuit.debounce(renderList, 150));
+        if (opts.filterEls) {
+            opts.filterEls.forEach(function (el) {
+                if (el) el.addEventListener('change', renderList);
+            });
+        }
+
+        saveBtn.addEventListener('click', async function () {
+            saveBtn.disabled = true;
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = 'Saving...';
+            try {
+                const configPayload = {};
+                configPayload[opts.configKey] = Array.from(selectedIds);
+                await PlatPursuit.API.post(
+                    '/api/v1/profile/showcases/' + opts.slug + '/config/',
+                    { config: configPayload }
+                );
+                PlatPursuit.ToastManager.show('Saved!', 'success');
+                data.selected_ids = Array.from(selectedIds);
+                modal.close();
+            } catch (error) {
+                let msg = 'Failed to save.';
+                try {
+                    const errData = await error.response?.json();
+                    if (errData?.error) msg = errData.error;
+                } catch (_) {}
+                PlatPursuit.ToastManager.show(msg, 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Review picker
+    // ──────────────────────────────────────────────────────────────
+    function initReviewPicker() {
+        const esc = PlatPursuit.HTMLUtils.escape;
+        initBatchedPicker({
+            slug: 'review_showcase',
+            max: 2,
+            dataId: 'review-showcase-data',
+            collectionKey: 'reviews',
+            modalId: 'review-picker-modal',
+            resultsId: 'review-picker-results',
+            counterId: 'review-picker-counter',
+            searchId: 'review-picker-search',
+            saveId: 'review-picker-save',
+            configKey: 'review_ids',
+            idField: 'review_id',
+            gridClass: 'grid grid-cols-1 gap-1.5',
+            applyFilters: function (items, q) {
+                return q
+                    ? items.filter(r => r.concept_title.toLowerCase().includes(q))
+                    : items;
+            },
+            renderItem: function (r, checked, disabled) {
+                const recBadge = r.recommended
+                    ? '<span class="badge badge-success badge-xs">Recommended</span>'
+                    : '<span class="badge badge-error badge-xs">Not Rec.</span>';
+                const group = r.group_label ? '<span class="badge badge-xs badge-ghost ml-1">' + esc(r.group_label) + '</span>' : '';
+                const icon = esc(r.icon_url || '');
+                return `
+                    <label class="flex gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 cursor-pointer hover:bg-white/[0.06] transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''}">
+                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary shrink-0 mt-0.5"
+                               data-item-id="${r.review_id}"
+                               ${checked ? 'checked' : ''}
+                               ${disabled ? 'disabled' : ''} />
+                        <div class="w-8 h-8 rounded overflow-hidden shrink-0 ring-1 ring-base-300">
+                            ${icon ? `<img src="${icon}" alt="" class="w-full h-full object-cover" loading="lazy" />` : '<div class="w-full h-full bg-base-300"></div>'}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                                <span class="text-xs font-semibold line-clamp-1 pr-1">${esc(r.concept_title)}</span>
+                                ${recBadge}${group}
+                            </div>
+                            <p class="text-[0.65rem] text-base-content/50 line-clamp-2 pr-1">${esc(r.body_preview)}</p>
+                        </div>
+                    </label>
+                `;
+            },
+        });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Title picker
+    // ──────────────────────────────────────────────────────────────
+    function initTitlePicker() {
+        const esc = PlatPursuit.HTMLUtils.escape;
+        initBatchedPicker({
+            slug: 'title_showcase',
+            max: 6,
+            dataId: 'title-showcase-data',
+            collectionKey: 'titles',
+            modalId: 'title-picker-modal',
+            resultsId: 'title-picker-results',
+            counterId: 'title-picker-counter',
+            searchId: 'title-picker-search',
+            saveId: 'title-picker-save',
+            configKey: 'user_title_ids',
+            idField: 'user_title_id',
+            gridClass: 'grid grid-cols-1 md:grid-cols-2 gap-1.5',
+            applyFilters: function (items, q) {
+                return q
+                    ? items.filter(t => t.name.toLowerCase().includes(q))
+                    : items;
+            },
+            renderItem: function (t, checked, disabled) {
+                const sourceBadge = t.source_type === 'badge'
+                    ? '<span class="badge badge-xs badge-ghost">Badge</span>'
+                    : '<span class="badge badge-xs badge-ghost">Milestone</span>';
+                return `
+                    <label class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 cursor-pointer hover:bg-white/[0.06] transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''}">
+                        <input type="checkbox" class="checkbox checkbox-sm checkbox-primary shrink-0"
+                               data-item-id="${t.user_title_id}"
+                               ${checked ? 'checked' : ''}
+                               ${disabled ? 'disabled' : ''} />
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs font-semibold italic line-clamp-1 pr-1">${esc(t.name)}</p>
+                        </div>
+                        ${sourceBadge}
+                    </label>
+                `;
+            },
         });
     }
 })();

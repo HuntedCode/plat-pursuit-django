@@ -671,9 +671,14 @@ def provide_country_xp_leaderboard(profile, settings=None):
     }
 
 
-def provide_az_challenge(profile):
-    """Full 26-letter A-Z challenge grid with game icons and completion status."""
-    challenge = _find_challenge(profile, 'az')
+def provide_az_challenge(profile, challenge=None):
+    """Full 26-letter A-Z challenge grid with game icons and completion status.
+
+    If `challenge` is provided, uses that specific instance. Otherwise finds
+    the profile's active (or most recently completed) A-Z challenge.
+    """
+    if challenge is None:
+        challenge = _find_challenge(profile, 'az')
     if not challenge:
         return {'has_challenge': False}
 
@@ -737,11 +742,16 @@ def provide_az_challenge(profile):
     }
 
 
-def provide_genre_challenge(profile):
-    """Genre slots with completion status and subgenre tag cloud."""
+def provide_genre_challenge(profile, challenge=None):
+    """Genre slots with completion status and subgenre tag cloud.
+
+    If `challenge` is provided, uses that specific instance. Otherwise finds
+    the profile's active (or most recently completed) genre challenge.
+    """
     from trophies.services.challenge_service import get_subgenre_status
 
-    challenge = _find_challenge(profile, 'genre')
+    if challenge is None:
+        challenge = _find_challenge(profile, 'genre')
     if not challenge:
         return {'has_challenge': False}
 
@@ -828,13 +838,18 @@ def provide_genre_challenge(profile):
     }
 
 
-def provide_calendar_challenge(profile):
-    """Full 12-month perpetual calendar showing platinum earns per day."""
+def provide_calendar_challenge(profile, challenge=None):
+    """Full 12-month perpetual calendar showing platinum earns per day.
+
+    If `challenge` is provided, uses that specific instance. Otherwise finds
+    the profile's active (or most recently completed) calendar challenge.
+    """
     from trophies.services.challenge_service import get_calendar_month_data, get_calendar_stats
     from django.utils import timezone
     import pytz
 
-    challenge = _find_challenge(profile, 'calendar')
+    if challenge is None:
+        challenge = _find_challenge(profile, 'calendar')
     if not challenge:
         return {'has_challenge': False}
 

@@ -74,19 +74,22 @@
                                 {% if avail.descriptor.requires_premium %}
                                     <span class="badge badge-xs badge-primary">Premium</span>
                                 {% endif %}
+                                {% if avail.has_preserved_config and not avail.locked %}
+                                    <span class="badge badge-xs badge-success" title="Your previous configuration is saved and will be restored.">Saved config</span>
+                                {% endif %}
                             </div>
                             <p class="text-[0.7rem] text-base-content/50 line-clamp-2 pr-1 mt-0.5">{{ avail.descriptor.description }}</p>
                         </div>
                         <button class="btn btn-xs btn-primary add-showcase-btn shrink-0 gap-1"
                                 data-showcase-slug="{{ avail.slug }}"
                                 {% if avail.locked or slots_remaining == 0 %}disabled{% endif %}
-                                title="{% if avail.locked %}Premium required{% elif slots_remaining == 0 %}All slots filled{% else %}Add to profile{% endif %}">
+                                title="{% if avail.locked %}Premium required{% elif slots_remaining == 0 %}All slots filled{% elif avail.has_preserved_config %}Restore to profile{% else %}Add to profile{% endif %}">
                             {% if avail.locked %}
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                             {% else %}
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
                             {% endif %}
-                            Add
+                            {% if avail.has_preserved_config and not avail.locked %}Restore{% else %}Add{% endif %}
                         </button>
                     </div>
                     {% empty %}
@@ -94,10 +97,12 @@
                     {% endfor %}
                 </div>
 
-                {# Inactive showcases (preserved from previous premium) #}
-                {% if inactive_showcases %}
+                {# Inactive showcases (preserved from previous premium) - only shown when not premium. #}
+                {# While premium, these appear in the Available list above with their config preserved. #}
+                {% if inactive_showcases and not is_premium %}
                 <div class="border-t border-base-content/5 mt-3 pt-3">
                     <h5 class="text-[0.65rem] font-semibold text-base-content/40 uppercase tracking-wider mb-2">Preserved (Premium expired)</h5>
+                    <p class="text-[0.65rem] text-base-content/40 italic mb-2 pr-1">Your configuration is saved. Re-subscribe to restore these showcases.</p>
                     <div class="flex flex-col gap-1.5">
                         {% for entry in inactive_showcases %}
                         <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] border border-base-content/5 opacity-60">
@@ -172,6 +177,20 @@
                                         title="Display options">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
                                     <span class="hidden md:inline">Options</span>
+                                </button>
+                            {% elif entry.showcase.showcase_type == 'review_showcase' %}
+                                <button class="btn btn-xs btn-ghost border border-base-300 gap-1 configure-btn"
+                                        data-showcase-slug="review_showcase"
+                                        title="Pick your reviews">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    <span class="hidden md:inline">Configure</span>
+                                </button>
+                            {% elif entry.showcase.showcase_type == 'title_showcase' %}
+                                <button class="btn btn-xs btn-ghost border border-base-300 gap-1 configure-btn"
+                                        data-showcase-slug="title_showcase"
+                                        title="Pick your titles">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    <span class="hidden md:inline">Configure</span>
                                 </button>
                             {% elif entry.descriptor.is_automatic %}
                                 <span class="badge badge-xs badge-ghost" title="Updates automatically">Auto</span>
@@ -251,6 +270,62 @@
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
+{# Review picker modal #}
+<dialog id="review-picker-modal" class="modal">
+    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg mb-2">Pick Your Reviews</h3>
+        <p class="text-xs text-base-content/50 italic mb-3 pr-1">Select up to 2 reviews to feature. <span id="review-picker-counter" class="font-bold text-base-content/80">0 / 2</span> selected.</p>
+
+        <input type="text" id="review-picker-search" placeholder="Search by game title..."
+               class="input input-bordered input-sm w-full mb-3" autocomplete="off" />
+
+        <div id="review-picker-results" class="max-h-96 overflow-y-auto">
+            <div class="flex items-center justify-center py-8">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+
+        <div class="modal-action mt-4">
+            <form method="dialog"><button class="btn btn-sm btn-ghost">Cancel</button></form>
+            <button id="review-picker-save" class="btn btn-sm btn-primary">Save</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Title picker modal #}
+<dialog id="title-picker-modal" class="modal">
+    <div class="modal-box max-w-2xl bg-base-200 border-2 border-base-300">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg mb-2">Pick Your Titles</h3>
+        <p class="text-xs text-base-content/50 italic mb-3 pr-1">Select up to 6 titles to feature. <span id="title-picker-counter" class="font-bold text-base-content/80">0 / 6</span> selected.</p>
+
+        <input type="text" id="title-picker-search" placeholder="Search your titles..."
+               class="input input-bordered input-sm w-full mb-3" autocomplete="off" />
+
+        <div id="title-picker-results" class="max-h-96 overflow-y-auto">
+            <div class="flex items-center justify-center py-8">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+
+        <div class="modal-action mt-4">
+            <form method="dialog"><button class="btn btn-sm btn-ghost">Cancel</button></form>
+            <button id="title-picker-save" class="btn btn-sm btn-primary">Save</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
 {# Favorite Games picker modal (populated by JS) #}
 <dialog id="favorite-games-modal" class="modal">
     <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300">
@@ -310,6 +385,12 @@
 {% endif %}
 {% if badge_showcase_data %}
 {{ badge_showcase_data|json_script:"badge-showcase-data" }}
+{% endif %}
+{% if review_showcase_data %}
+{{ review_showcase_data|json_script:"review-showcase-data" }}
+{% endif %}
+{% if title_showcase_data %}
+{{ title_showcase_data|json_script:"title-showcase-data" }}
 {% endif %}
 <script src="{% static 'js/profile-editor.js' %}"></script>
 {% endblock %}
