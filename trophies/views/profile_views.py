@@ -15,7 +15,7 @@ from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.decorators import method_decorator
-from django.views.generic import ListView, DetailView, View
+from django.views.generic import ListView, DetailView, View, TemplateView
 from django_ratelimit.decorators import ratelimit
 from urllib.parse import urlencode
 
@@ -272,68 +272,6 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 header_stats['milestone_platinum'] = None
 
         return header_stats
-
-    def _build_trophy_case(self, profile):
-        """
-        Build trophy case selections list.
-
-        Args:
-            profile: Profile instance
-
-        Returns:
-            list: Trophy case selections padded to max_trophies
-        """
-        max_trophies = 10
-        trophy_case = list(
-            UserTrophySelection.objects.filter(profile=profile)
-            .select_related('earned_trophy__trophy__game')
-            .order_by('-earned_trophy__earned_date_time')
-        )
-        # Pad with None to reach max_trophies
-        trophy_case = trophy_case + [None] * (max_trophies - len(trophy_case))
-        return trophy_case
-
-    def _build_badge_showcase(self, profile):
-        """
-        Build badge showcase data for the profile carousel (premium feature).
-
-        Returns:
-            list[dict]: Showcase badge data, or empty list
-        """
-        if not profile.user_is_premium:
-            return []
-
-        from trophies.models import ProfileBadgeShowcase
-        showcase_entries = (
-            ProfileBadgeShowcase.objects
-            .filter(profile=profile)
-            .select_related('badge', 'badge__base_badge', 'badge__most_recent_concept', 'badge__most_recent_concept__igdb_match')
-            .order_by('display_order')
-        )
-
-        badges = []
-        tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
-        for entry in showcase_entries:
-            badge = entry.badge
-            try:
-                layers = badge.get_badge_layers()
-            except Exception:
-                continue
-            if not layers.get('has_custom_image'):
-                continue
-            concept = badge.most_recent_concept
-            bg_url = concept.get_cover_url() if concept else ''
-            badges.append({
-                    'layers': layers,
-                    'name': badge.effective_display_series or badge.series_slug,
-                    'tier': badge.tier,
-                    'tier_name': tier_names.get(badge.tier, ''),
-                    'series_slug': badge.series_slug,
-                    'bg_url': bg_url or '',
-                })
-        # Pad to 5 with None for placeholder rendering
-        badges += [None] * (5 - len(badges))
-        return badges
 
     def _build_timeline(self, profile):
         """
@@ -908,13 +846,12 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             'recent_plat__trophy__game', 'rarest_plat__trophy__game'
         ).get(id=profile.id)
 
-        # Build shared context (header stats, trophy case, badge showcase, and timeline)
+        # Build shared context (header stats + timeline)
         context['header_stats'] = self._build_header_stats(profile)
-        context['trophy_case'] = self._build_trophy_case(profile)
-        context['trophy_case_count'] = len(context['trophy_case'])
-        showcase_badges = self._build_badge_showcase(profile)
-        context['profile_showcase_badges'] = showcase_badges
-        context['has_showcase_badges'] = any(b for b in showcase_badges)
+
+        # Profile showcases (Steam-style customization)
+        from trophies.services.showcase_service import ProfileShowcaseService
+        context['rendered_showcases'] = ProfileShowcaseService.get_rendered_showcases(profile)
         if profile.psn_history_public:
             context['timeline_events'] = self._build_timeline(profile)
 
@@ -1041,6 +978,191 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 return [self._INFINITE_SCROLL_TEMPLATES[tab]]
 
         return super().get_template_names()
+
+
+class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+    """
+    Steam-style profile customization editor. Users pick showcase types,
+    reorder them, and configure per-type item selection.
+    """
+    template_name = 'trophies/profile_editor.html'
+
+    def get_context_data(self, **kwargs):
+        from trophies.services.showcase_service import (
+            SHOWCASE_REGISTRY, ProfileShowcaseService,
+            FREE_SLOT_LIMIT, PREMIUM_SLOT_LIMIT, slot_limit_for,
+        )
+        from trophies.services.dashboard_service import get_effective_premium
+
+        context = super().get_context_data(**kwargs)
+
+        profile = self.request.user.profile
+        is_premium = get_effective_premium(self.request)
+
+        all_showcases = ProfileShowcaseService.get_all_showcases(profile)
+        active = [s for s in all_showcases if s.is_active]
+        inactive = [s for s in all_showcases if not s.is_active]
+
+        active_types = {s.showcase_type for s in active}
+
+        # Build available + active lists with descriptor metadata
+        available = []
+        for slug, descriptor in SHOWCASE_REGISTRY.items():
+            if slug in active_types:
+                continue
+            available.append({
+                'slug': slug,
+                'descriptor': descriptor,
+                'locked': descriptor['requires_premium'] and not is_premium,
+            })
+
+        active_with_descriptors = []
+        for showcase in active:
+            descriptor = SHOWCASE_REGISTRY.get(showcase.showcase_type)
+            if not descriptor:
+                continue
+            active_with_descriptors.append({
+                'showcase': showcase,
+                'descriptor': descriptor,
+            })
+
+        inactive_with_descriptors = []
+        for showcase in inactive:
+            descriptor = SHOWCASE_REGISTRY.get(showcase.showcase_type)
+            if not descriptor:
+                continue
+            inactive_with_descriptors.append({
+                'showcase': showcase,
+                'descriptor': descriptor,
+            })
+
+        # Data for pickers: only fetch if that showcase is active
+        fav_showcase = next(
+            (s for s in active if s.showcase_type == 'favorite_games'), None
+        )
+        favorite_games_data = None
+        if fav_showcase:
+            from trophies.models import ProfileGame
+            from django.db.models.functions import Lower
+
+            games_qs = (
+                ProfileGame.objects
+                .filter(profile=profile)
+                .select_related('game', 'game__concept')
+                .order_by(Lower('game__title_name'))
+            )
+            all_games = [
+                {
+                    'game_id': pg.game_id,
+                    'title_name': pg.game.title_name,
+                    'icon_url': (
+                        pg.game.title_image
+                        or (pg.game.concept.cover_url if pg.game.concept else '')
+                        or pg.game.title_icon_url
+                        or ''
+                    ),
+                    'progress': pg.progress,
+                    'has_plat': pg.has_plat,
+                    'is_shovelware': pg.game.shovelware_status in ('auto_flagged', 'manually_flagged'),
+                }
+                for pg in games_qs
+            ]
+            favorite_games_data = {
+                'games': all_games,
+                'selected_ids': fav_showcase.config.get('game_ids', []),
+            }
+
+        # Badge picker data
+        badge_showcase_entry = next(
+            (s for s in active if s.showcase_type == 'badge_showcase'), None
+        )
+        badge_showcase_data = None
+        if badge_showcase_entry:
+            from trophies.models import UserBadge, ProfileBadgeShowcase
+
+            earned = (
+                UserBadge.objects.filter(profile=profile)
+                .select_related(
+                    'badge', 'badge__base_badge',
+                    'badge__most_recent_concept',
+                )
+                .order_by('-earned_at')
+            )
+            selected_ids = list(
+                ProfileBadgeShowcase.objects.filter(profile=profile)
+                .order_by('display_order')
+                .values_list('badge_id', flat=True)
+            )
+
+            # Keep only the highest tier earned per series_slug
+            tier_names = {1: 'Bronze', 2: 'Silver', 3: 'Gold', 4: 'Platinum'}
+            highest_by_series = {}  # series_slug -> (badge, layers)
+            for ub in earned:
+                badge = ub.badge
+                try:
+                    layers = badge.get_badge_layers()
+                except Exception:
+                    continue
+                if not layers.get('has_custom_image'):
+                    continue
+                key = badge.series_slug
+                current = highest_by_series.get(key)
+                if not current or badge.tier > current[0].tier:
+                    highest_by_series[key] = (badge, layers)
+
+            # If a selected badge isn't the highest tier (shouldn't happen normally
+            # but could if the user earned a higher tier after selecting), include
+            # it so the user can see/deselect it.
+            selected_id_set = set(selected_ids)
+            for ub in earned:
+                badge = ub.badge
+                if badge.id not in selected_id_set:
+                    continue
+                current = highest_by_series.get(badge.series_slug)
+                if current and current[0].id == badge.id:
+                    continue
+                try:
+                    layers = badge.get_badge_layers()
+                except Exception:
+                    continue
+                if layers.get('has_custom_image'):
+                    highest_by_series[f"{badge.series_slug}__sel_{badge.id}"] = (badge, layers)
+
+            badges = []
+            for _, (badge, layers) in highest_by_series.items():
+                badges.append({
+                    'badge_id': badge.id,
+                    'name': badge.effective_display_series or badge.series_slug,
+                    'tier': badge.tier,
+                    'tier_name': tier_names.get(badge.tier, ''),
+                    'icon_url': layers.get('main') or '',
+                })
+            # Sort by tier desc, then name asc for a stable display
+            badges.sort(key=lambda b: (-b['tier'], b['name'].lower()))
+
+            badge_showcase_data = {
+                'badges': badges,
+                'selected_ids': selected_ids,
+            }
+
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse('home')},
+            {'text': 'My Pursuit', 'url': reverse('my_pursuit_hub')},
+            {'text': 'Profile Editor'},
+        ]
+        context['profile'] = profile
+        context['is_premium'] = is_premium
+        context['available_showcases'] = available
+        context['active_showcases'] = active_with_descriptors
+        context['inactive_showcases'] = inactive_with_descriptors
+        context['slot_limit'] = slot_limit_for(is_premium)
+        context['slots_used'] = len(active)
+        context['slots_remaining'] = max(0, context['slot_limit'] - context['slots_used'])
+        context['free_slot_limit'] = FREE_SLOT_LIMIT
+        context['premium_slot_limit'] = PREMIUM_SLOT_LIMIT
+        context['favorite_games_data'] = favorite_games_data
+        context['badge_showcase_data'] = badge_showcase_data
+        return context
 
 
 class LinkPSNView(LoginRequiredMixin, View):

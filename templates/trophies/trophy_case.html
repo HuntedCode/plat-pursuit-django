@@ -108,12 +108,12 @@
         let selectedCount = {{ selected_count }};
         const maxSelections = {{ max_selections }};
         document.addEventListener('DOMContentLoaded', function() {
-            const grid = document.getElementById('items-grid');
-            if (!grid) return;
-
-            grid.addEventListener('click', function(event) {
+            // Delegate to document so the handler survives HTMX swaps of #browse-results.
+            document.addEventListener('click', function(event) {
                 const card = event.target.closest('.trophy-case-card');
                 if (!card) return;
+                // Only respond to clicks inside the current grid
+                if (!document.getElementById('items-grid')?.contains(card)) return;
 
                 const earned_trophy_id = card.dataset.id;
                 if (!earned_trophy_id) return;

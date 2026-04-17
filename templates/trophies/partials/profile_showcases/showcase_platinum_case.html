@@ -1,0 +1,40 @@
+{% load static custom_filters %}
+{# Platinum Trophy Case showcase (1 row of 10 or 2 rows of 10 depending on count). #}
+{# Expects: showcase, descriptor, data, profile. #}
+
+<div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3">
+    <div class="flex items-center gap-1.5 mb-2">
+        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}
+        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">{{ descriptor.name }}</span>
+    </div>
+
+    {% if data.has_items %}
+    <div class="grid grid-cols-5 md:grid-cols-10 gap-1.5">
+        {% for item in data.items %}
+            {% if item %}
+                {% with item.earned_trophy.trophy as trophy %}
+                <a href="{% url 'game_detail_with_profile' trophy.game.np_communication_id profile.psn_username %}"
+                   class="group"
+                   title="{{ trophy.game.title_name }}">
+                    <figure class="w-full rounded-md overflow-hidden ring-1 ring-base-300 group-hover:ring-primary transition-all">
+                        <img src="{{ trophy.trophy_icon_url }}" class="w-full aspect-square object-cover" loading="lazy" />
+                    </figure>
+                </a>
+                {% endwith %}
+            {% else %}
+                <div class="w-full aspect-square rounded-md bg-base-300/20 border border-dashed border-base-content/10 flex items-center justify-center opacity-40">
+                    {% include 'partials/icons/trophy_cup.html' with color='currentColor' size='w-5 h-5 md:w-6 md:h-6' %}
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-base-content/40 italic py-2">
+        {% if is_own_profile %}
+            No trophies selected yet. Pick your favorite platinums in your <a href="{% url 'trophy_case' profile.psn_username %}" class="text-primary hover:underline">trophy case</a>.
+        {% else %}
+            No trophies selected.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>

@@ -284,7 +284,8 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
         context['toggle_selection_url'] = reverse('toggle-selection')
 
         is_own_profile = self.request.user.is_authenticated and self.request.user.profile == profile
-        max_selections = 10 if profile.user_is_premium else 3 if is_own_profile else 0
+        # Trophy case is now free for all (surfaces via Platinum Trophy Case showcase, 20 slots).
+        max_selections = 20 if is_own_profile else 0
         context['max_selections'] = max_selections
 
         track_page_view('trophy_case', profile.id, self.request)
@@ -294,8 +295,8 @@ class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
     """
     AJAX endpoint to add or remove trophies from user's trophy case selection.
 
-    Handles toggling trophy selections with validation for:
-    - Maximum selection limits (3 for free users, 10 for premium)
+    Validates:
+    - Maximum selection limit (20 for all users; surfaces via profile showcase)
     - Trophy ownership verification
     - Platinum trophy type requirement
 
@@ -313,8 +314,7 @@ class ToggleSelectionView(LoginRequiredMixin, ProfileHotbarMixin, View):
             if earned_trophy.profile != profile:
                 return JsonResponse({'success': False, 'error': 'Unauthorized: Not your trophy'}, status=403)
 
-            is_premium = profile.user_is_premium
-            max_selections = 10 if is_premium else 3
+            max_selections = 20
             current_count = UserTrophySelection.objects.filter(profile=profile).count()
 
             selection, created = UserTrophySelection.objects.get_or_create(profile=profile, earned_trophy_id=earned_trophy_id)

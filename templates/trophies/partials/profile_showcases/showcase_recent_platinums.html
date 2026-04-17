@@ -1,0 +1,30 @@
+{% load static custom_filters humanize %}
+{# Recent Platinums showcase (automatic). Expects: showcase, descriptor, data, profile. #}
+
+<div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3">
+    <div class="flex items-center gap-1.5 mb-2">
+        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3.5 h-3.5' %}
+        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">{{ descriptor.name }}</span>
+    </div>
+
+    {% if data.has_items %}
+    <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+        {% for et in data.items %}
+        <a href="{% url 'game_detail_with_profile' et.trophy.game.np_communication_id profile.psn_username %}"
+           class="bg-base-300/20 border border-base-content/5 rounded-lg p-1.5 hover:bg-white/[0.06] hover:border-primary/40 transition-colors group relative">
+            <figure class="w-full rounded-md overflow-hidden ring-1 ring-base-300 group-hover:ring-primary transition-all">
+                <img src="{{ et.trophy.trophy_icon_url }}" class="w-full aspect-square object-cover" loading="lazy" />
+            </figure>
+            <p class="text-[0.55rem] md:text-[0.6rem] text-base-content/60 text-center font-medium line-clamp-2 mt-1 pr-0.5 italic">{{ et.trophy.game.title_name }}</p>
+            {% if et.earned_date_time %}
+            <p class="text-[0.5rem] text-base-content/40 text-center mt-0.5">{{ et.earned_date_time|date:"M j, Y" }}</p>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-base-content/40 italic py-2">
+        No platinum trophies yet.
+    </p>
+    {% endif %}
+</div>

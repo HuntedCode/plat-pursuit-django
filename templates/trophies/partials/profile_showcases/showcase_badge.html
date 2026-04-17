@@ -1,0 +1,52 @@
+{% load static %}
+{# Badge Showcase. Expects: showcase, descriptor, data, profile, is_own_profile. #}
+
+<div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-3">
+    <div class="flex items-center gap-1.5 mb-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-base-content/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="7"></circle>
+            <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+        </svg>
+        <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">{{ descriptor.name }}</span>
+    </div>
+
+    {% if data.has_items %}
+    <div class="grid grid-cols-3 md:grid-cols-5 gap-2">
+        {% for badge in data.items %}
+            {% if badge %}
+            <a href="{% url 'badge_detail' badge.series_slug %}"
+               class="relative flex flex-col items-center gap-1.5 p-2 rounded-lg overflow-hidden border border-base-content/5 hover:shadow-lg hover:shadow-primary/20 transition-all group">
+                {% if badge.bg_url %}
+                    <div class="absolute inset-0 bg-cover bg-center rounded-lg" style="background-image: url('{{ badge.bg_url }}');"></div>
+                    <div class="absolute inset-0 bg-base-200/50 backdrop-blur-sm rounded-lg"></div>
+                {% else %}
+                    <div class="absolute inset-0 bg-base-300/30"></div>
+                {% endif %}
+                <div class="relative z-10 w-14 h-14 md:w-16 md:h-16">
+                    {% include 'partials/badge.html' with layers=badge.layers %}
+                </div>
+                <div class="relative z-10 text-center min-w-0 w-full">
+                    <p class="text-[0.65rem] md:text-xs font-semibold line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ badge.name }}</p>
+                    <span class="badge badge-xs {% if badge.tier == 4 %}badge-primary{% elif badge.tier == 3 %}badge-warning{% elif badge.tier == 2 %}badge-ghost{% else %}text-amber-700 bg-amber-700/10 border-amber-700/30{% endif %}">{{ badge.tier_name }}</span>
+                </div>
+            </a>
+            {% else %}
+            <div class="flex flex-col items-center justify-center gap-1.5 p-2 rounded-lg border border-dashed border-base-content/10 bg-base-300/20 opacity-50">
+                <div class="w-14 h-14 md:w-16 md:h-16 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-base-content/10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+                </div>
+                <span class="text-[0.6rem] text-base-content/20 font-medium">Empty</span>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-xs text-base-content/40 italic py-2">
+        {% if is_own_profile %}
+            No badges selected yet. Pick up to 5 in the editor.
+        {% else %}
+            No badges selected.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>

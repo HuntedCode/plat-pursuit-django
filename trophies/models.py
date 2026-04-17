@@ -1357,8 +1357,8 @@ class UserTrophySelection(models.Model):
                 count = UserTrophySelection.objects.select_for_update().filter(
                     profile=self.profile
                 ).count()
-                if count >= 10:
-                    raise ValueError("Maximum 10 selections allowed.")
+                if count >= 20:
+                    raise ValueError("Maximum 20 selections allowed.")
                 super().save(*args, **kwargs)
         else:
             super().save(*args, **kwargs)
@@ -1643,6 +1643,58 @@ class ProfileBadgeShowcase(models.Model):
 
     def __str__(self):
         return f"{self.profile.psn_username} showcase #{self.display_order}: {self.badge.name}"
+
+
+class ProfileShowcase(models.Model):
+    """
+    Steam-style profile customization. Users select showcase types to feature
+    on their profile (up to 2 free, 5 premium). Each type can be used once per
+    profile. Config JSON stores user-selected item IDs for user-controlled types.
+    """
+    SHOWCASE_PLATINUM_CASE = 'platinum_case'
+    SHOWCASE_FAVORITE_GAMES = 'favorite_games'
+    SHOWCASE_BADGE = 'badge_showcase'
+    SHOWCASE_RAREST = 'rarest_trophies'
+    SHOWCASE_RECENT_PLATS = 'recent_platinums'
+    SHOWCASE_REVIEW = 'review_showcase'
+    SHOWCASE_CHALLENGE = 'challenge_showcase'
+    SHOWCASE_TITLE = 'title_showcase'
+
+    SHOWCASE_TYPES = [
+        (SHOWCASE_PLATINUM_CASE, 'Platinum Trophy Case'),
+        (SHOWCASE_FAVORITE_GAMES, 'Favorite Games'),
+        (SHOWCASE_BADGE, 'Badge Showcase'),
+        (SHOWCASE_RAREST, 'Rarest Trophies'),
+        (SHOWCASE_RECENT_PLATS, 'Recent Platinums'),
+        (SHOWCASE_REVIEW, 'Review Showcase'),
+        (SHOWCASE_CHALLENGE, 'Challenge Showcase'),
+        (SHOWCASE_TITLE, 'Title Showcase'),
+    ]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='showcases')
+    showcase_type = models.CharField(max_length=30, choices=SHOWCASE_TYPES)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(
+        default=True, db_index=True,
+        help_text="False when a premium-only showcase is preserved during downgrade.",
+    )
+    config = models.JSONField(
+        default=dict, blank=True,
+        help_text="User-selected item IDs for this showcase (schema varies per type).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('profile', 'showcase_type')]
+        ordering = ['sort_order', 'created_at']
+        indexes = [
+            models.Index(fields=['profile', 'is_active', 'sort_order'],
+                         name='profileshowcase_active_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.psn_username} showcase: {self.get_showcase_type_display()}"
 
 
 class UserBadgeProgress(models.Model):

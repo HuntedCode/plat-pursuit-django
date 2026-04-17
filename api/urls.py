@@ -93,6 +93,9 @@ from .profile_card_views import (
     ProfileCardSettingsView, ProfileCardRegenerateTokenView,
     SetDisplayedBadgeView, ToggleShowcaseBadgeView, ReorderShowcaseBadgesView,
 )
+from .profile_showcase_views import (
+    AddShowcaseView, RemoveShowcaseView, ReorderShowcasesView, UpdateShowcaseConfigView,
+)
 
 app_name = 'api'
 
@@ -305,6 +308,12 @@ urlpatterns = [
     path('badges/displayed/', SetDisplayedBadgeView.as_view(), name='set-displayed-badge'),
     path('badges/showcase/', ToggleShowcaseBadgeView.as_view(), name='toggle-showcase-badge'),
     path('badges/showcase/reorder/', ReorderShowcaseBadgesView.as_view(), name='reorder-showcase-badges'),
+
+    # Profile Showcase endpoints
+    path('profile/showcases/', AddShowcaseView.as_view(), name='add-showcase'),
+    path('profile/showcases/reorder/', ReorderShowcasesView.as_view(), name='reorder-showcases'),
+    path('profile/showcases/<slug:slug>/', RemoveShowcaseView.as_view(), name='remove-showcase'),
+    path('profile/showcases/<slug:slug>/config/', UpdateShowcaseConfigView.as_view(), name='update-showcase-config'),
 
     # Review Hub endpoints
     path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),

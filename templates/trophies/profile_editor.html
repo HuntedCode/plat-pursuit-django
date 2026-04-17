@@ -1,0 +1,315 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Profile Editor{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+{% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+{# Page Header #}
+<div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <div>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    Profile Editor
+                </h1>
+                <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                    Customize your profile showcases. Drag to reorder, click to configure.
+                </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="badge badge-ghost gap-1 font-bold">
+                    <span id="slots-used">{{ slots_used }}</span>
+                    <span class="text-base-content/40">/</span>
+                    <span>{{ slot_limit }}</span>
+                    <span class="text-base-content/60 font-normal">slots</span>
+                </div>
+                {% if not is_premium %}
+                    <span class="badge badge-xs badge-warning font-bold">Free tier</span>
+                {% endif %}
+                <a href="{% url 'profile_detail' profile.psn_username %}" class="btn btn-xs md:btn-sm btn-ghost border border-base-300 gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    View Profile
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Premium upsell (free users only) #}
+{% if not is_premium %}
+<div class="card bg-gradient-to-r from-primary/10 via-secondary/5 to-transparent border-2 border-primary/20 shadow-md shadow-neutral mb-3">
+    <div class="card-body p-3 md:p-4 flex flex-col md:flex-row items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-primary shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+        <div class="flex-1 text-center md:text-left">
+            <p class="font-bold text-sm">Unlock up to {{ premium_slot_limit }} showcases with Premium</p>
+            <p class="text-xs text-base-content/50 mt-0.5">Pick from Badge Showcase, Rarest Trophies, Reviews, Titles, and more.</p>
+        </div>
+        <a href="{% url 'subscribe' %}" class="btn btn-sm btn-primary">Go Premium</a>
+    </div>
+</div>
+{% endif %}
+
+{# Main editor: two-column layout #}
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
+
+    {# LEFT: Available Showcases #}
+    <div class="lg:col-span-2">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body p-3 md:p-4">
+                <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    Available Showcases
+                </h4>
+                <div class="flex flex-col gap-2" id="available-showcases-list">
+                    {% for avail in available_showcases %}
+                    <div class="available-showcase-card flex items-start gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 {% if avail.locked %}opacity-60{% endif %}"
+                         data-showcase-slug="{{ avail.slug }}"
+                         data-requires-premium="{{ avail.descriptor.requires_premium|yesno:'true,false' }}">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-sm font-semibold">{{ avail.descriptor.name }}</span>
+                                {% if avail.descriptor.requires_premium %}
+                                    <span class="badge badge-xs badge-primary">Premium</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-[0.7rem] text-base-content/50 line-clamp-2 pr-1 mt-0.5">{{ avail.descriptor.description }}</p>
+                        </div>
+                        <button class="btn btn-xs btn-primary add-showcase-btn shrink-0 gap-1"
+                                data-showcase-slug="{{ avail.slug }}"
+                                {% if avail.locked or slots_remaining == 0 %}disabled{% endif %}
+                                title="{% if avail.locked %}Premium required{% elif slots_remaining == 0 %}All slots filled{% else %}Add to profile{% endif %}">
+                            {% if avail.locked %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                            {% endif %}
+                            Add
+                        </button>
+                    </div>
+                    {% empty %}
+                        <p class="text-xs text-base-content/40 italic py-2 text-center">All available showcases are already on your profile.</p>
+                    {% endfor %}
+                </div>
+
+                {# Inactive showcases (preserved from previous premium) #}
+                {% if inactive_showcases %}
+                <div class="border-t border-base-content/5 mt-3 pt-3">
+                    <h5 class="text-[0.65rem] font-semibold text-base-content/40 uppercase tracking-wider mb-2">Preserved (Premium expired)</h5>
+                    <div class="flex flex-col gap-1.5">
+                        {% for entry in inactive_showcases %}
+                        <div class="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] border border-base-content/5 opacity-60">
+                            <span class="text-xs font-medium flex-1">{{ entry.descriptor.name }}</span>
+                            <span class="badge badge-xs badge-ghost">Inactive</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# RIGHT: Active Showcases (drag-reorder) #}
+    <div class="lg:col-span-3">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body p-3 md:p-4">
+                <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Your Showcases
+                </h4>
+
+                <div class="flex flex-col gap-2" id="active-showcases-list">
+                    {% for entry in active_showcases %}
+                    <div class="active-showcase-row flex items-center gap-2 p-2 rounded-lg bg-white/[0.03] border border-base-content/5"
+                         data-item-id="{{ entry.showcase.showcase_type }}"
+                         data-showcase-slug="{{ entry.showcase.showcase_type }}">
+                        <div class="drag-handle shrink-0 px-1 text-base-content/30 hover:text-base-content/60 cursor-grab active:cursor-grabbing" title="Drag to reorder">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-sm font-semibold">{{ entry.descriptor.name }}</span>
+                                {% if entry.descriptor.requires_premium %}
+                                    <span class="badge badge-xs badge-primary">Premium</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-[0.7rem] text-base-content/50 line-clamp-1 pr-1 mt-0.5">{{ entry.descriptor.description }}</p>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            {% if entry.showcase.showcase_type == 'platinum_case' %}
+                                <a href="{% url 'trophy_case' profile.psn_username %}" class="btn btn-xs btn-ghost border border-base-300 gap-1" title="Pick your platinums">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    <span class="hidden md:inline">Configure</span>
+                                </a>
+                            {% elif entry.showcase.showcase_type == 'favorite_games' %}
+                                <button class="btn btn-xs btn-ghost border border-base-300 gap-1 configure-btn"
+                                        data-showcase-slug="favorite_games"
+                                        title="Pick your favorite games">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    <span class="hidden md:inline">Configure</span>
+                                </button>
+                            {% elif entry.showcase.showcase_type == 'badge_showcase' %}
+                                <button class="btn btn-xs btn-ghost border border-base-300 gap-1 configure-btn"
+                                        data-showcase-slug="badge_showcase"
+                                        title="Pick your badges">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                    <span class="hidden md:inline">Configure</span>
+                                </button>
+                            {% elif entry.showcase.showcase_type == 'rarest_trophies' %}
+                                <button class="btn btn-xs btn-ghost border border-base-300 gap-1 configure-btn"
+                                        data-showcase-slug="rarest_trophies"
+                                        data-one-per-game="{% if entry.showcase.config.one_per_game == False %}false{% else %}true{% endif %}"
+                                        title="Display options">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                                    <span class="hidden md:inline">Options</span>
+                                </button>
+                            {% elif entry.descriptor.is_automatic %}
+                                <span class="badge badge-xs badge-ghost" title="Updates automatically">Auto</span>
+                            {% endif %}
+                            <button class="btn btn-xs btn-ghost text-error remove-showcase-btn" data-showcase-slug="{{ entry.showcase.showcase_type }}" title="Remove from profile">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    {% empty %}
+                        <div class="rounded-lg border-2 border-dashed border-base-content/15 bg-base-content/[0.02] p-6 text-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-base-content/30 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                            <p class="text-sm font-semibold text-base-content/80 mb-1">No showcases yet</p>
+                            <p class="text-xs text-base-content/50 italic">Pick showcases from the left panel to add them to your profile.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Rarest Trophies options modal #}
+<dialog id="rarest-trophies-modal" class="modal">
+    <div class="modal-box max-w-md bg-base-200 border-2 border-base-300">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg mb-4">Rarest Trophies Options</h3>
+
+        <label class="flex items-start gap-3 p-3 rounded-lg bg-white/[0.03] border border-base-content/5 cursor-pointer hover:bg-white/[0.06] transition-colors">
+            <input type="checkbox" id="rarest-one-per-game" class="toggle toggle-sm toggle-primary shrink-0 mt-0.5" checked />
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold">Limit to 1 trophy per game</p>
+                <p class="text-xs text-base-content/50 italic mt-0.5">Adds variety by showing trophies from different games. If you don't have enough unique games, we'll fill remaining slots automatically.</p>
+            </div>
+        </label>
+
+        <p class="text-[0.7rem] text-base-content/40 italic mt-3 pr-1">
+            Platinum trophies are always excluded since they're the rarest in their stack. Rarity is ranked by PSN global earn rate first, then PlatPursuit earn rate.
+        </p>
+
+        <div class="modal-action mt-4">
+            <form method="dialog"><button class="btn btn-sm btn-ghost">Cancel</button></form>
+            <button id="rarest-trophies-save" class="btn btn-sm btn-primary">Save</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Badge picker modal (populated by JS) #}
+<dialog id="badge-picker-modal" class="modal">
+    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg mb-2">Pick Your Badges</h3>
+        <p class="text-xs text-base-content/50 italic mb-4 pr-1">Select up to 5 badges to feature. <span id="badge-picker-counter" class="font-bold text-base-content/80">0 / 5</span> selected.</p>
+
+        <input type="text" id="badge-picker-search" placeholder="Search your badges..."
+               class="input input-bordered input-sm w-full mb-3" autocomplete="off" />
+
+        <div id="badge-picker-results" class="max-h-96 overflow-y-auto">
+            <div class="flex items-center justify-center py-8">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+
+        <div class="modal-action mt-4">
+            <form method="dialog"><button class="btn btn-sm btn-ghost">Close</button></form>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{# Favorite Games picker modal (populated by JS) #}
+<dialog id="favorite-games-modal" class="modal">
+    <div class="modal-box max-w-3xl bg-base-200 border-2 border-base-300">
+        <form method="dialog">
+            <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </form>
+        <h3 class="font-bold text-lg mb-2">Pick Your Favorite Games</h3>
+        <p class="text-xs text-base-content/50 italic mb-3 pr-1">Select up to 6 games from your library. <span id="favorite-games-counter" class="font-bold text-base-content/80">0 / 6</span> selected.</p>
+
+        <input type="text" id="favorite-games-search" placeholder="Search your games..."
+               class="input input-bordered input-sm w-full mb-2" autocomplete="off" />
+
+        {# Filter toggles #}
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" id="fg-filter-plat" class="toggle toggle-xs toggle-primary" />
+                <span class="text-xs">Platinum only</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" id="fg-filter-completed" class="toggle toggle-xs toggle-primary" />
+                <span class="text-xs">100% only</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" id="fg-filter-no-shovelware" class="toggle toggle-xs toggle-primary" checked />
+                <span class="text-xs">Hide shovelware</span>
+            </label>
+        </div>
+
+        <div id="favorite-games-results" class="max-h-96 overflow-y-auto">
+            <div class="flex items-center justify-center py-8">
+                <span class="loading loading-spinner loading-md"></span>
+            </div>
+        </div>
+
+        <div class="modal-action mt-4">
+            <form method="dialog"><button class="btn btn-sm btn-ghost">Cancel</button></form>
+            <button id="favorite-games-save" class="btn btn-sm btn-primary">Save</button>
+        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    window.ShowcaseEditorConfig = {
+        profileUsername: "{{ profile.psn_username|escapejs }}",
+        slotLimit: {{ slot_limit }},
+        isPremium: {{ is_premium|yesno:'true,false' }}
+    };
+</script>
+{% if favorite_games_data %}
+{{ favorite_games_data|json_script:"favorite-games-data" }}
+{% endif %}
+{% if badge_showcase_data %}
+{{ badge_showcase_data|json_script:"badge-showcase-data" }}
+{% endif %}
+<script src="{% static 'js/profile-editor.js' %}"></script>
+{% endblock %}

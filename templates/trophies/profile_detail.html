@@ -11,6 +11,8 @@
 
     {% include 'trophies/partials/profile_detail/profile_detail_header.html' %}
 
+    {% include 'trophies/partials/profile_detail/profile_showcases_section.html' %}
+
     {% if is_own_profile and profile.user_is_premium %}
         {% include 'trophies/partials/profile_detail/banner_editor_modal.html' %}
     {% endif %}
