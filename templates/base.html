@@ -52,11 +52,13 @@
     </a>
     {% include 'partials/navbar.html' %}
     {% include 'partials/hub_subnav.html' %}
+    {% block global_banners %}
     {% include 'partials/site_banner.html' %}
     {% include 'partials/fundraiser_banner.html' %}
     {% if user.is_authenticated and not user.premium_tier %}
         {% include 'partials/premium_upsell_banner.html' %}
     {% endif %}
+    {% endblock global_banners %}
 
     {% if ADSENSE_ENABLED %}
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ ADSENSE_PUB_ID }}"

@@ -4,11 +4,13 @@
 {% block title %}Platinum Pursuit - Track Every Trophy, Earn Every Badge{% endblock %}
 {% block meta_description %}Track every PSN trophy you've ever earned, light up your library with badges, take on real challenges, and turn your backlog into something worth running. Built by hunters, for hunters.{% endblock %}
 
+{% block global_banners %}{% endblock %}
+
 {% block main_layout %}
 <main id="main-content" class="flex-grow" role="main">
 
 {% comment %}SECTION 1: HERO{% endcomment %}
-<section class="relative min-h-[85vh] md:min-h-screen flex items-center justify-center overflow-hidden">
+<section class="relative min-h-[85vh] md:min-h-[calc(100vh_-_var(--chrome-height,_5rem))] flex items-center justify-center overflow-hidden">
     {# Animated gradient background #}
     <div class="absolute inset-0 landing-gradient opacity-15"></div>
 
