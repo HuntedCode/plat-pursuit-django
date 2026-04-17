@@ -533,11 +533,21 @@
   display: inline-flex;
   align-items: center;
   padding: 0.375rem 0.75rem;
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.35);
   transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+/* At lg+, match the real navbar's daisyUI btn-sm sizing so the mockup
+   reads as a faithful miniature of the live chrome. */
+@media (min-width: 1024px) {
+  .tour-navbar-btn {
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+  }
 }
 
 .tour-navbar-btn.active {
@@ -564,17 +574,29 @@
   display: inline-flex;
   align-items: center;
   padding: 0.25rem 0.625rem;
+  border: 1px solid transparent;
   border-radius: 0.375rem;
   font-size: 0.6875rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.4);
   transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+/* At lg+, match the real hub_subnav.html pill (px-3 py-1 text-sm). */
+@media (min-width: 1024px) {
+  .tour-subnav-item {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+  }
 }
 
 .tour-subnav-item.active {
   background: color-mix(in oklab, var(--nav-accent), transparent 85%);
+  border-color: color-mix(in oklab, var(--nav-accent), transparent 70%);
   color: var(--nav-accent);
   font-weight: 600;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 /* Progress dots with connected bar */
