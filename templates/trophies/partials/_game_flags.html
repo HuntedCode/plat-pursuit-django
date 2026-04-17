@@ -1,0 +1,137 @@
+{% comment %}
+    Shared flag display partial. Renders community-flag badges for a single Game.
+
+    Flags are always Game-level (never Concept-level); different versions of the
+    same game can have different flags.
+
+    Required context:
+      - game: Game model instance (needs is_shovelware, is_delisted,
+        is_obtainable, has_online_trophies, has_buggy_trophies)
+
+    Optional context:
+      - variant: 'compact' (default) | 'overlay' | 'full'
+          compact = icon-only badge-xs in a horizontal flex-wrap row
+          overlay = icon-only badge-xs stacked vertically, absolutely positioned
+                    (caller wraps it in a relative container such as an image)
+          full    = labeled badges with daisyUI tooltips plus a
+                    "No Known Issues" clean state when nothing is flagged
+      - hide_shovelware: truthy to hide the shovelware badge when the caller
+          already renders it elsewhere (e.g., game_detail_header's Game
+          Identity row). Defaults to false (shov is shown).
+{% endcomment %}
+{% with variant=variant|default:"compact" %}
+{% if variant == "overlay" %}
+<div class="absolute top-1 left-1 z-10 flex flex-col gap-0.5">
+    {% if game.is_shovelware and not hide_shovelware %}
+        <div class="badge badge-xs badge-warning p-0.5 opacity-90" title="Shovelware">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/></svg>
+        </div>
+    {% endif %}
+    {% if game.is_delisted %}
+        <div class="badge badge-xs badge-error p-0.5 opacity-90" title="Delisted">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M3 3l18 18M10.5 10.677a2 2 0 0 0 2.823 2.823M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path></svg>
+        </div>
+    {% endif %}
+    {% if not game.is_obtainable %}
+        <div class="badge badge-xs badge-error p-0.5 opacity-90" title="Unobtainable Trophies">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        </div>
+    {% endif %}
+    {% if game.has_online_trophies %}
+        <div class="badge badge-xs badge-info p-0.5 opacity-90" title="Online Trophies">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+        </div>
+    {% endif %}
+    {% if game.has_buggy_trophies %}
+        <div class="badge badge-xs badge-warning p-0.5 opacity-90" title="Buggy Trophies">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        </div>
+    {% endif %}
+</div>
+{% elif variant == "full" %}
+<div class="flex flex-row flex-wrap gap-1.5">
+    {% if game.is_shovelware and not hide_shovelware %}
+        <div class="tooltip" data-tip="This game has been flagged as shovelware.">
+            <div class="badge badge-xs md:badge-sm badge-warning font-bold gap-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/></svg>
+                Shovelware
+            </div>
+        </div>
+    {% endif %}
+    {% if game.is_delisted %}
+        <div class="tooltip" data-tip="This game has been removed from the PlayStation Store.">
+            <div class="badge badge-xs md:badge-sm badge-error font-bold gap-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M3 3l18 18M10.5 10.677a2 2 0 0 0 2.823 2.823M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path></svg>
+                Delisted
+            </div>
+        </div>
+    {% endif %}
+    {% if not game.is_obtainable %}
+        <div class="tooltip" data-tip="Trophies in this game can no longer be earned (e.g. server shutdown).">
+            <div class="badge badge-xs md:badge-sm badge-error font-bold gap-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Unobtainable
+            </div>
+        </div>
+    {% endif %}
+    {% if game.has_online_trophies %}
+        <div class="tooltip" data-tip="This game has trophies that require an online connection.">
+            <div class="badge badge-xs md:badge-sm badge-info font-bold gap-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                Online Trophies
+            </div>
+        </div>
+    {% endif %}
+    {% if game.has_buggy_trophies %}
+        <div class="tooltip" data-tip="This game has trophies that are known to be buggy or broken.">
+            <div class="badge badge-xs md:badge-sm badge-warning font-bold gap-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                Buggy Trophies
+            </div>
+        </div>
+    {% endif %}
+    {% if not game.is_delisted and game.is_obtainable and not game.has_online_trophies and not game.has_buggy_trophies %}
+    {% if hide_shovelware or not game.is_shovelware %}
+        <div class="tooltip" data-tip="No known issues with this game.">
+            <div class="badge badge-xs md:badge-sm badge-success font-bold gap-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                No Known Issues
+            </div>
+        </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% else %}
+    {% if game.is_delisted or not game.is_obtainable or game.has_online_trophies or game.has_buggy_trophies or game.is_shovelware and not hide_shovelware %}
+    <div class="flex flex-wrap gap-0.5">
+        {% if game.is_shovelware and not hide_shovelware %}
+            <div class="badge badge-xs badge-warning p-0.5" title="Shovelware">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="m10.06 15.35 7.03-7.03c.98.42 2.16.23 2.95-.57l1.41-1.41c.29-.29.29-.77 0-1.06l-2.74-2.74a.754.754 0 0 0-1.06 0l-1.41 1.41c-.8.8-.98 1.97-.57 2.95l-7.03 7.03-1.77-1.77-3.54 3.54c-1.37 1.37-1.37 3.58 0 4.95s3.58 1.37 4.95 0l3.54-3.54-1.77-1.77Zm7.25-10.34.88-.88 1.68 1.68-.88.88c-.46.46-1.22.46-1.68 0s-.46-1.22 0-1.68M6.88 19.24c-.58.58-1.54.58-2.12 0s-.58-1.54 0-2.12L6.88 15 9 17.12z"/></svg>
+            </div>
+        {% endif %}
+        {% if game.is_delisted %}
+            <div class="badge badge-xs badge-error p-0.5" title="Delisted">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M3 3l18 18M10.5 10.677a2 2 0 0 0 2.823 2.823M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path></svg>
+            </div>
+        {% endif %}
+        {% if not game.is_obtainable %}
+            <div class="badge badge-xs badge-error p-0.5" title="Unobtainable Trophies">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+        {% endif %}
+        {% if game.has_online_trophies %}
+            <div class="badge badge-xs badge-info p-0.5" title="Online Trophies">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+            </div>
+        {% endif %}
+        {% if game.has_buggy_trophies %}
+            <div class="badge badge-xs badge-warning p-0.5" title="Buggy Trophies">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endif %}
+{% endwith %}

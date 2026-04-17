@@ -23,6 +23,7 @@
                             <div class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</div>
                         {% endfor %}
                         {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
+                        {% include 'trophies/partials/_game_flags.html' with game=game %}
                     </div>
                     {% if not profile.sync_status == 'syncing' and pgame.most_recent_trophy_date %}
                         <div class="text-xs text-base-content/40 mt-0.5">Latest: {{ pgame.most_recent_trophy_date|date:"M j, Y" }}</div>

@@ -34,11 +34,12 @@
                 {{ slot.game.title_name }}
             </p>
 
-            {# Platform badges #}
+            {# Platform badges + community flags #}
             <div class="flex flex-wrap gap-0.5 justify-center">
                 {% for platform in slot.game.title_platform %}
                     <span class="badge badge-xs badge-ghost font-mono">{{ platform }}</span>
                 {% endfor %}
+                {% include 'trophies/partials/_game_flags.html' with game=slot.game %}
             </div>
 
             {# Trophy progress #}
