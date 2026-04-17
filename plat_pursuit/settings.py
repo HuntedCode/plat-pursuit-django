@@ -139,6 +139,7 @@ CONTENT_SECURITY_POLICY = {
             "https://adservice.google.com",           # AdSense
             "https://tpc.googlesyndication.com",      # AdSense
             "https://www.google.com",                 # AdSense
+            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP
         ],
         "style-src": [
             "'self'",
@@ -161,6 +162,7 @@ CONTENT_SECURITY_POLICY = {
             "https://tpc.googlesyndication.com",       # AdSense
             "https://www.google.com",                  # AdSense
             "https://www.gstatic.com",                 # AdSense
+            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP UI assets
             "https://images.igdb.com",                 # IGDB company logos & game covers
         ],
         "frame-src": [
@@ -168,6 +170,9 @@ CONTENT_SECURITY_POLICY = {
             "https://googleads.g.doubleclick.net",     # AdSense iframes
             "https://tpc.googlesyndication.com",       # AdSense iframes
             "https://www.google.com",                  # AdSense iframes
+            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP iframe
+            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR) iframe
+            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR) iframe
             "https://www.youtube.com",                 # Roadmap video guides
             "https://www.youtube-nocookie.com",        # Roadmap video guides (privacy-enhanced)
             "https://youtube.com",                     # Roadmap video guides
@@ -175,6 +180,9 @@ CONTENT_SECURITY_POLICY = {
         "connect-src": [
             "'self'",
             "https://pagead2.googlesyndication.com",   # AdSense reporting
+            "https://googleads.g.doubleclick.net",     # AdSense ad serving
+            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
+            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
         ],
         "worker-src": [
             "'self'",

@@ -1,7 +1,10 @@
 {% extends 'base.html' %}
 {% load humanize %}
 {% load custom_filters %}
-{% block title %}{{ object.name }}{% endblock %}
+{% block title %}{{ object.name }} - Games & Trophy Lists{% endblock %}
+{% block meta_description %}PlayStation games developed, published, or ported by {{ object.name }}. Browse trophy lists, community ratings, and platinum roadmaps on Platinum Pursuit.{% endblock %}
+{% block og_title %}{{ object.name }} on Platinum Pursuit{% endblock %}
+{% block og_description %}All PlayStation games from {{ object.name }} with trophy lists and community ratings.{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -210,7 +213,7 @@
         </div>
     {% endif %}
 
-    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+    {% include 'partials/ad_unit.html' with ad_slot="9209595625" %}
 
     {# -- Games by Role -- #}
     {% for section in sections %}

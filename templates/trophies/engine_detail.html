@@ -2,7 +2,10 @@
 {% load static %}
 {% load humanize %}
 {% load custom_filters %}
-{% block title %}{{ engine.name }} Engine{% endblock %}
+{% block title %}{{ engine.name }} Engine - PlayStation Games{% endblock %}
+{% block meta_description %}PlayStation games built on the {{ engine.name }} game engine. Browse trophy lists and community ratings on Platinum Pursuit.{% endblock %}
+{% block og_title %}Games built with {{ engine.name }}{% endblock %}
+{% block og_description %}PlayStation trophy lists for games built on the {{ engine.name }} engine.{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -142,7 +145,7 @@
     {# Badge picker modal (outside form to avoid form interference) #}
     {% include 'partials/browse/badge_picker_modal.html' %}
 
-    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+    {% include 'partials/ad_unit.html' with ad_slot="3933218215" %}
 
     <div id="browse-results">
         {% include 'trophies/partials/tag_detail/browse_results.html' %}

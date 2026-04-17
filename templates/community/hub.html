@@ -518,6 +518,9 @@ See docs/features/community-hub.md for the design rationale.
 
     </div>
 
+    {# ── In-content ad (free users only; premium suppressed by context processor) ─── #}
+    {% include 'partials/ad_unit.html' with ad_slot="6127077227" %}
+
     {# ─────────────────────────────────────────────────────────────────── #}
     {# 5. Roadmap Team recruitment strip                                   #}
     {# Visible to everyone for now. The earlier `is_staff`-hide gate was  #}

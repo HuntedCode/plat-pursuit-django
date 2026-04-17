@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
 {% load humanize %}
 {% load custom_filters %}
-{% block title %}{{ object.name }} Franchise{% endblock %}
+{% block title %}{{ object.name }} Franchise Trophy Lists{% endblock %}
+{% block meta_description %}Explore every PlayStation trophy list in the {{ object.name }} franchise. Track platinum progress across all games on Platinum Pursuit.{% endblock %}
+{% block og_type %}video.other{% endblock %}
+{% block og_title %}{{ object.name }} Franchise on Platinum Pursuit{% endblock %}
+{% block og_description %}Every PlayStation game in the {{ object.name }} franchise with trophy lists, ratings, and community progress.{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -165,7 +169,7 @@
         </div>
     {% endif %}
 
-    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+    {% include 'partials/ad_unit.html' with ad_slot="8944812256" %}
 
     {% if current_tab == 'collections' %}
         {# -- Related Collections Grid -- #}

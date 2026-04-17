@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def ads(request):
     enabled = settings.ADSENSE_ENABLED
 
-    no_ad_prefixes = ['/accounts/', '/staff/', '/api/', '/admin/']
+    no_ad_prefixes = ['/accounts/', '/staff/', '/api/', '/admin/', '/fundraiser/']
     if any(request.path.startswith(p) for p in no_ad_prefixes):
         enabled = False
 

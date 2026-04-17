@@ -1,7 +1,10 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load humanize %}
-{% block title %}{{ tag_name }} Games{% endblock %}
+{% block title %}{{ tag_name }} PlayStation Games & Trophy Lists{% endblock %}
+{% block meta_description %}PlayStation games tagged {{ tag_name }} with trophy lists, community ratings, and platinum roadmaps on Platinum Pursuit.{% endblock %}
+{% block og_title %}{{ tag_name }} Games on Platinum Pursuit{% endblock %}
+{% block og_description %}Browse PlayStation trophy lists for {{ tag_name }} games.{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -36,7 +39,7 @@
     {# Badge picker modal (outside form to avoid form interference) #}
     {% include 'partials/browse/badge_picker_modal.html' %}
 
-    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+    {% include 'partials/ad_unit.html' with ad_slot="5392580059" %}
 
     <div id="browse-results">
         {% include 'trophies/partials/tag_detail/browse_results.html' %}

@@ -61,6 +61,21 @@
     {% endblock global_banners %}
 
     {% if ADSENSE_ENABLED %}
+    {# Consent Mode v2: deny by default; Funding Choices CMP updates on user consent. #}
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('consent', 'default', {
+            'ad_storage': 'denied',
+            'ad_user_data': 'denied',
+            'ad_personalization': 'denied',
+            'analytics_storage': 'denied',
+            'wait_for_update': 500
+        });
+    </script>
+    {# Funding Choices CMP. URL uses pub-XXX (no ca- prefix). AdSense dashboard must have a GDPR message configured. #}
+    <script async src="https://fundingchoicesmessages.google.com/i/{{ ADSENSE_PUB_ID|cut:'ca-' }}?ers=1"></script>
+    <script>(function(){function signalGooglefcPresent(){if(!window.frames['googlefcPresent']){if(document.body){const iframe=document.createElement('iframe');iframe.style='width:0;height:0;border:none;z-index:-1000;left:-1000px;top:-1000px;';iframe.style.display='none';iframe.name='googlefcPresent';document.body.appendChild(iframe);}else{setTimeout(signalGooglefcPresent,0);}}}signalGooglefcPresent();})();</script>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ ADSENSE_PUB_ID }}"
         crossorigin="anonymous"></script>
     {% endif %}
@@ -78,7 +93,10 @@
               {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}
               data-full-width-responsive="true"></ins>
           <script>
-              (adsbygoogle = window.adsbygoogle || []).push({});
+              {# Only push when the aside is actually rendered (lg: breakpoint). Prevents "No slot size for availableWidth=0" TagError on mobile. #}
+              if (window.matchMedia('(min-width: 1024px)').matches) {
+                  (adsbygoogle = window.adsbygoogle || []).push({});
+              }
           </script>
           {% endif %}
       </aside>
@@ -100,7 +118,9 @@
               {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}
               data-full-width-responsive="true"></ins>
           <script>
-              (adsbygoogle = window.adsbygoogle || []).push({});
+              if (window.matchMedia('(min-width: 1024px)').matches) {
+                  (adsbygoogle = window.adsbygoogle || []).push({});
+              }
           </script>
         {% endif %}
       </aside>
@@ -114,14 +134,18 @@
     {% block fixed_overlays %}{% endblock %}
     {% if ADSENSE_ENABLED %}
     <div id="mobile-ad-banner" class="fixed left-0 right-0 z-40 flex justify-center items-center bg-base-300/90 lg:hidden transition-transform duration-300"
-         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0)); height:50px; contain:paint layout;">
+         style="bottom: calc(3.5rem + env(safe-area-inset-bottom, 0)); height:50px; contain:layout style;">
         <ins class="adsbygoogle"
              style="display:inline-block;width:320px;height:50px;"
              data-ad-client="{{ ADSENSE_PUB_ID }}"
              data-ad-slot="9347573919"
              data-ad-format="banner"
              {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}></ins>
-        <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        <script>
+            if (window.matchMedia('(max-width: 1023.98px)').matches) {
+                (adsbygoogle = window.adsbygoogle || []).push({});
+            }
+        </script>
         <button id="mobile-ad-close" type="button"
                 class="absolute -top-3 right-2 w-6 h-6 rounded-full bg-base-300 border border-base-content/20 flex items-center justify-center text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors shadow-md"
                 aria-label="Close ad">
