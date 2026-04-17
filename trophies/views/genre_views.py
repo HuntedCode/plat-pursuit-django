@@ -1,7 +1,7 @@
 import logging
 
 from core.services.tracking import track_page_view
-from django.db.models import Q, Count, Avg, Subquery, OuterRef, Prefetch, Value, IntegerField, FloatField, Case, When
+from django.db.models import Q, F, Count, Avg, Subquery, OuterRef, Prefetch, Value, IntegerField, FloatField, Case, When
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.urls import reverse_lazy
@@ -9,7 +9,7 @@ from django.views.generic import ListView, TemplateView
 
 from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from ..models import (
-    Genre, Theme, GameEngine, Game, Trophy, Badge, UserConceptRating, ProfileGame,
+    Genre, Theme, Game, Trophy, Badge, UserConceptRating, ProfileGame,
 )
 from ..forms import GameSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
@@ -92,7 +92,7 @@ class GenreThemeListView(ProfileHotbarMixin, TemplateView):
 class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
     """Base view for genre and theme detail pages. Shares filter/sort logic."""
     model = Game
-    partial_template_name = 'trophies/partials/genre_detail/browse_results.html'
+    partial_template_name = 'trophies/partials/tag_detail/browse_results.html'
     paginate_by = 30
 
     def get_tag_filter(self):
@@ -182,7 +182,7 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
 class GenreDetailView(TagDetailBaseView):
     """Detail page for a single genre, showing all games in that genre."""
-    template_name = 'trophies/genre_detail.html'
+    template_name = 'trophies/tag_detail.html'
 
     def dispatch(self, request, *args, **kwargs):
         self.genre = Genre.objects.filter(slug=kwargs['slug']).first()
@@ -198,6 +198,7 @@ class GenreDetailView(TagDetailBaseView):
         context['genre'] = self.genre
         context['tag_name'] = self.genre.name
         context['tag_type'] = 'Genre'
+        context['tag_intro_suffix'] = 'in this genre. Find your next platinum.'
         context['detail_url_name'] = 'genre_detail'
         context['detail_slug'] = self.genre.slug
         context['breadcrumb'] = [
@@ -216,7 +217,7 @@ class GenreDetailView(TagDetailBaseView):
 
 class ThemeDetailView(TagDetailBaseView):
     """Detail page for a single theme, showing all games with that theme."""
-    template_name = 'trophies/theme_detail.html'
+    template_name = 'trophies/tag_detail.html'
 
     def dispatch(self, request, *args, **kwargs):
         self.theme = Theme.objects.filter(slug=kwargs['slug']).first()
@@ -232,6 +233,7 @@ class ThemeDetailView(TagDetailBaseView):
         context['theme'] = self.theme
         context['tag_name'] = self.theme.name
         context['tag_type'] = 'Theme'
+        context['tag_intro_suffix'] = 'with this theme.'
         context['detail_url_name'] = 'theme_detail'
         context['detail_slug'] = self.theme.slug
         context['breadcrumb'] = [
@@ -245,3 +247,5 @@ class ThemeDetailView(TagDetailBaseView):
         context = self.get_shared_context(context)
         track_page_view('theme_detail', self.theme.id, self.request)
         return context
+
+

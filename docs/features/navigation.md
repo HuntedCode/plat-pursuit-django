@@ -15,7 +15,7 @@ The four hubs:
 | Hub | URL | Mental mode | Sub-nav items |
 |-----|-----|-------------|---------------|
 | **Dashboard** | `/` | "your personal cockpit" | Dashboard, Stats, Shareables, Recap |
-| **Browse** | `/games/` | "find new content" | Games, Trophies, Companies, Genres & Themes, Flagged Games |
+| **Browse** | `/games/` | "find new content" | Games, Trophies, Recently Added, Companies, Franchises, Genres & Themes, Engines, Flagged Games |
 | **Community** | `/community/` | "what's everyone doing" | Hub, Profiles, Reviews, Challenges, Lists, Leaderboards |
 | **My Pursuit** | `/my-pursuit/` | "your trophy hunting identity and progression" | Badges, Milestones, Titles *(today)* |
 

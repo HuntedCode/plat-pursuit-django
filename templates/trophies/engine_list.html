@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}Game Engines{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# ── Header Card ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-secondary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                    <rect x="9" y="9" width="6" height="6"></rect>
+                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Game Engines</h1>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                Browse games by the engine powering them, from Unreal and Unity to Decima and RE Engine. Data sourced from
+                <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>
+                and may not cover every game in our library.
+            </p>
+        </div>
+    </div>
+
+    {# ── Search + Sort ── #}
+    <form method="get" class="mb-3" data-browse-form
+          hx-get="{% url 'engines_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="outerHTML" hx-select="#browse-results" hx-trigger="submit">
+        <div class="flex flex-col md:flex-row gap-2">
+            <div class="relative flex-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" name="query" value="{{ request.GET.query }}"
+                       class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
+                       placeholder="Search engines..." />
+            </div>
+            <select name="sort" class="select select-bordered select-sm md:select-md w-full md:w-48">
+                {% for value, display in sort_choices %}
+                    <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" data-submit-btn class="btn btn-sm md:btn-md btn-primary">Search</button>
+        </div>
+    </form>
+
+    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+
+    {# ── Engine Cards Grid ── #}
+    <div id="browse-results" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-3">
+        {% for item in items %}
+            <a href="{% url 'engine_detail' slug=item.slug %}"
+               class="card bg-base-200/90 border-2 border-base-300 shadow-md hover:shadow-lg hover:border-secondary/50 transition-all duration-200 group overflow-hidden">
+                <div class="card-body p-3 md:p-4">
+                    <div class="flex items-start gap-3">
+                        {# Logo chip: square, object-contain. Landscape/square logos sit naturally. Falls back to a circuit icon. #}
+                        <div class="w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-lg bg-base-300/60 border border-base-content/10 flex items-center justify-center overflow-hidden p-1.5">
+                            {% if item.logo_url %}
+                                <img src="{{ item.logo_url }}" alt="{{ item.name }}"
+                                     class="max-w-full max-h-full object-contain" loading="lazy" />
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-7 md:h-7 text-secondary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                                    <rect x="9" y="9" width="6" height="6"></rect>
+                                    <line x1="9" y1="1" x2="9" y2="4"></line>
+                                    <line x1="15" y1="1" x2="15" y2="4"></line>
+                                    <line x1="9" y1="20" x2="9" y2="23"></line>
+                                    <line x1="15" y1="20" x2="15" y2="23"></line>
+                                    <line x1="20" y1="9" x2="23" y2="9"></line>
+                                    <line x1="20" y1="14" x2="23" y2="14"></line>
+                                    <line x1="1" y1="9" x2="4" y2="9"></line>
+                                    <line x1="1" y1="14" x2="4" y2="14"></line>
+                                </svg>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="font-bold text-sm md:text-base line-clamp-2 group-hover:text-secondary transition-colors">
+                                {{ item.name }}
+                            </h3>
+                            <span class="badge badge-xs badge-ghost mt-1">{{ item.game_count|intcomma }} game{{ item.game_count|pluralize }}</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        {% empty %}
+            <div class="col-span-full card bg-base-200/90 border-2 border-base-300 shadow-lg">
+                <div class="card-body items-center text-center py-12">
+                    <p class="text-base-content/40 text-sm">No engines found matching your search.</p>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+{% endblock %}

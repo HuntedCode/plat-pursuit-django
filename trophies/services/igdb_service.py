@@ -67,6 +67,9 @@ GAME_FIELDS = (
     'keywords.name, keywords.slug, '
     'game_modes.name, player_perspectives.name, '
     'game_engines.name, game_engines.slug, '
+    'game_engines.description, '
+    'game_engines.logo.image_id, '
+    'game_engines.companies, '
     'involved_companies.company.name, '
     'involved_companies.company.slug, '
     'involved_companies.company.description, '
@@ -1060,15 +1063,20 @@ class IGDBService:
         model records plus through-model links to the Concept.
         """
         from trophies.models import (
-            Genre, Theme, GameEngine,
-            ConceptGenre, ConceptTheme, ConceptEngine,
+            Genre, Theme, GameEngine, Company,
+            ConceptGenre, ConceptTheme, ConceptEngine, EngineCompany,
         )
 
+        # IGDB slugs occasionally contain URL-unsafe characters (e.g. the
+        # engine "CTG (Core Technology Group)" yields slug
+        # "ctg-(core-technology-group)" which breaks Django's slug URL
+        # converter). We always run the IGDB slug through slugify() to
+        # normalize — idempotent for already-clean slugs.
         for genre_data in igdb_data.get('genres', []):
             igdb_id = genre_data.get('id')
             name = genre_data.get('name', '')
-            slug = genre_data.get('slug', '') or slugify(name)
-            if not igdb_id or not name:
+            slug = slugify(genre_data.get('slug') or name)
+            if not igdb_id or not name or not slug:
                 continue
             try:
                 genre, _ = Genre.objects.get_or_create(
@@ -1084,8 +1092,8 @@ class IGDBService:
         for theme_data in igdb_data.get('themes', []):
             igdb_id = theme_data.get('id')
             name = theme_data.get('name', '')
-            slug = theme_data.get('slug', '') or slugify(name)
-            if not igdb_id or not name:
+            slug = slugify(theme_data.get('slug') or name)
+            if not igdb_id or not name or not slug:
                 continue
             try:
                 theme, _ = Theme.objects.get_or_create(
@@ -1098,22 +1106,59 @@ class IGDBService:
                     continue
             ConceptTheme.objects.get_or_create(concept=concept, theme=theme)
 
-        for engine_data in igdb_data.get('game_engines', []):
+        # Engines: IGDB conflates runtime engines with dev tools (Sagebrush
+        # lists Unity AND Photoshop AND Blender). Only take the first entry —
+        # IGDB's ordering puts the real engine first in practice. Admin can
+        # override manually for the rare edge cases.
+        engines_list = igdb_data.get('game_engines', [])
+        engine_data = engines_list[0] if engines_list else None
+        if engine_data:
             igdb_id = engine_data.get('id')
             name = engine_data.get('name', '')
-            slug = engine_data.get('slug', '') or slugify(name)
-            if not igdb_id or not name:
-                continue
-            try:
-                engine, _ = GameEngine.objects.get_or_create(
-                    igdb_id=igdb_id,
-                    defaults={'name': name, 'slug': slug},
-                )
-            except IntegrityError:
-                engine = GameEngine.objects.filter(slug=slug).first()
-                if not engine:
-                    continue
-            ConceptEngine.objects.get_or_create(concept=concept, engine=engine)
+            slug = slugify(engine_data.get('slug') or name)
+            description = engine_data.get('description') or ''
+            logo_data = engine_data.get('logo') or {}
+            logo_image_id = logo_data.get('image_id') or ''
+            company_ids = engine_data.get('companies') or []
+
+            if igdb_id and name and slug:
+                try:
+                    engine, created = GameEngine.objects.get_or_create(
+                        igdb_id=igdb_id,
+                        defaults={
+                            'name': name,
+                            'slug': slug,
+                            'description': description,
+                            'logo_image_id': logo_image_id,
+                        },
+                    )
+                except IntegrityError:
+                    engine = GameEngine.objects.filter(slug=slug).first()
+
+                if engine:
+                    # Backfill description/logo only when empty so we never
+                    # clobber admin-curated values.
+                    updates = {}
+                    if description and not engine.description:
+                        updates['description'] = description
+                    if logo_image_id and not engine.logo_image_id:
+                        updates['logo_image_id'] = logo_image_id
+                    if updates:
+                        for k, v in updates.items():
+                            setattr(engine, k, v)
+                        engine.save(update_fields=list(updates.keys()))
+
+                    ConceptEngine.objects.get_or_create(concept=concept, engine=engine)
+
+                    # Engine maker companies (Epic -> Unreal, Unity Tech -> Unity).
+                    # IGDB gives us company IDs; we only link companies that
+                    # already exist in our DB (enriched via involved_companies
+                    # on some game — the usual case for major engines).
+                    if company_ids:
+                        for company in Company.objects.filter(igdb_id__in=company_ids):
+                            EngineCompany.objects.get_or_create(
+                                engine=engine, company=company,
+                            )
 
     @classmethod
     def _create_concept_franchises(cls, concept, igdb_data):

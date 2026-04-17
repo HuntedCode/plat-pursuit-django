@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, ScoutAccount, Franchise, ConceptFranchise
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise
 
 
 # Register your models here.
@@ -2196,11 +2196,22 @@ class ThemeAdmin(admin.ModelAdmin):
     game_count.admin_order_field = '_game_count'
 
 
+class EngineCompanyInline(admin.TabularInline):
+    model = EngineCompany
+    extra = 0
+    autocomplete_fields = ('company',)
+
+
 @admin.register(GameEngine)
 class GameEngineAdmin(admin.ModelAdmin):
-    list_display = ('name', 'igdb_id', 'slug', 'game_count')
+    list_display = ('name', 'igdb_id', 'slug', 'has_logo', 'game_count')
     search_fields = ('name', 'slug')
     readonly_fields = ('igdb_id',)
+    inlines = [EngineCompanyInline]
+    fieldsets = (
+        (None, {'fields': ('igdb_id', 'name', 'slug')}),
+        ('Metadata', {'fields': ('description', 'logo_image_id')}),
+    )
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(_game_count=Count('engine_concepts'))
@@ -2209,6 +2220,11 @@ class GameEngineAdmin(admin.ModelAdmin):
         return obj._game_count
     game_count.short_description = 'Games'
     game_count.admin_order_field = '_game_count'
+
+    def has_logo(self, obj):
+        return bool(obj.logo_image_id)
+    has_logo.boolean = True
+    has_logo.short_description = 'Logo'
 
 
 # ---------------------------------------------------------------------------

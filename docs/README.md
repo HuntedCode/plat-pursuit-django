@@ -50,6 +50,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Company System](features/company-system.md) | Developer / publisher browse + detail pages, IGDB-grouped games, user progress summary |
 | [Dashboard](features/dashboard.md) | Module registry, customization, drag reorder |
 | [Easter Eggs](features/easter-eggs.md) | Hidden milestones, titles, and the claim API |
+| [Engine System](features/engine-system.md) | Game engine browse + detail pages (shared `tag_detail.html` with Genre/Theme), game-detail engine link-out |
 | [Franchise System](features/franchise-system.md) | Franchise / collection browse + detail pages, main vs. tie-in partitioning, user progress summary |
 | [Fundraiser](features/fundraiser.md) | Campaign system, donations, badge claims |
 | [Game Family](features/game-family.md) | Cross-generation game matching and unification |

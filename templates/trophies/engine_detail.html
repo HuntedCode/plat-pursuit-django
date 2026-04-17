@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% load custom_filters %}
+{% block title %}{{ engine.name }} Engine{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# -- Engine Header (Poster Hero, engine variant) -- #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-secondary shadow-lg shadow-neutral mb-4">
+        <div class="card-body p-4 md:p-6 lg:p-8">
+            <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6 lg:gap-8">
+                {# Logo container: square aspect, object-contain (engine logos are landscape/square, not portrait). Falls back to a circuit icon. #}
+                <div class="w-32 h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 shrink-0 rounded-lg bg-base-300/60 border border-base-content/10 overflow-hidden ring-2 ring-secondary/30 ring-offset-2 ring-offset-base-200 shadow-xl shadow-secondary/10 flex items-center justify-center p-4">
+                    {% if engine.logo_url %}
+                        <img src="{{ engine.logo_url }}" alt="{{ engine.name }} logo"
+                             class="max-w-full max-h-full object-contain" />
+                    {% else %}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 md:w-16 md:h-16 lg:w-20 lg:h-20 text-secondary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                            <rect x="9" y="9" width="6" height="6"></rect>
+                            <line x1="9" y1="1" x2="9" y2="4"></line>
+                            <line x1="15" y1="1" x2="15" y2="4"></line>
+                            <line x1="9" y1="20" x2="9" y2="23"></line>
+                            <line x1="15" y1="20" x2="15" y2="23"></line>
+                            <line x1="20" y1="9" x2="23" y2="9"></line>
+                            <line x1="20" y1="14" x2="23" y2="14"></line>
+                            <line x1="1" y1="9" x2="4" y2="9"></line>
+                            <line x1="1" y1="14" x2="4" y2="14"></line>
+                        </svg>
+                    {% endif %}
+                </div>
+
+                <div class="flex-1 min-w-0 text-center sm:text-left">
+                    {# Eyebrow: always "GAME ENGINE" #}
+                    <div class="flex items-center gap-2 justify-center sm:justify-start mb-1.5">
+                        <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-secondary/80">
+                            Game Engine
+                        </span>
+                        <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-secondary/40 to-transparent"></div>
+                    </div>
+
+                    <h1 class="text-2xl md:text-3xl lg:text-4xl xl:text-5xl font-black leading-tight">
+                        {{ engine.name }}
+                    </h1>
+
+                    {# "By [company]" metadata — only when one or more engine_companies exist. Each company links to its detail page. #}
+                    {% if engine_companies %}
+                        <p class="text-xs md:text-sm text-base-content/60 mt-1.5">
+                            By
+                            {% for company in engine_companies %}
+                                <a href="{% url 'company_detail' slug=company.slug %}" class="font-medium text-secondary hover:underline">{{ company.name }}</a>{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </p>
+                    {% endif %}
+
+                    {# Engine description: shown when IGDB provides one. Clamped at 4 lines so hero stays compact; admins can edit to trim if desired. #}
+                    {% if engine.description %}
+                        <p class="text-xs md:text-sm text-base-content/70 mt-3 line-clamp-4 pr-1 leading-relaxed">
+                            {{ engine.description }}
+                        </p>
+                    {% endif %}
+
+                    {% if user_progress_stats %}
+                        {# "Your Progress" stat cells: numerator/denominator format matching franchise hero. #}
+                        <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4">
+                            <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Your Progress</span>
+                            <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-secondary">
+                                    {{ user_progress_stats.games_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_games|intcomma }}</span>
+                                </div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Games Played</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black">
+                                    {{ user_progress_stats.versions_played|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_versions|intcomma }}</span>
+                                </div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">
+                                    {{ user_progress_stats.trophies_earned|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_trophies|intcomma }}</span>
+                                </div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">
+                                    {{ user_progress_stats.games_platinumed|intcomma }}<span class="text-base-content/40 text-sm md:text-base">/{{ total_platinums|intcomma }}</span>
+                                </div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
+                            </div>
+                        </div>
+
+                        {# Engine-wide completion bar #}
+                        <div class="mt-3 md:mt-4">
+                            <div class="flex items-center justify-between text-xs mb-1">
+                                <span class="text-base-content/60 font-medium">Engine Library Completion</span>
+                                <span class="font-bold text-secondary">{{ user_progress_stats.completion_pct }}%</span>
+                            </div>
+                            <div class="h-2 bg-base-300 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-secondary to-accent rounded-full transition-all duration-500"
+                                     style="width: {{ user_progress_stats.completion_pct }}%"></div>
+                            </div>
+                        </div>
+                    {% else %}
+                        {# Totals-only view (anonymous / unlinked) #}
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mt-4 md:mt-5">
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-secondary">{{ total_games|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Game{{ total_games|pluralize }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black">{{ total_versions|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Version{{ total_versions|pluralize }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning">{{ total_trophies|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Troph{{ total_trophies|pluralize:"y,ies" }}</div>
+                            </div>
+                            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 text-center">
+                                <div class="text-lg md:text-xl lg:text-2xl font-black" style="color: var(--color-trophy-platinum)">{{ total_platinums|intcomma }}</div>
+                                <div class="text-[10px] md:text-xs text-base-content/50 font-medium uppercase tracking-wider">Platinum{{ total_platinums|pluralize }}</div>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <p class="text-[10px] text-base-content/30 italic mt-4 pr-1">
+                        Engine data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Shared filter drawer (platforms, regions, ratings, time-to-beat, letter, etc.). Expects tag_name, detail_url_name, detail_slug context. #}
+    {% include 'trophies/partials/tag_detail/filter_drawer.html' %}
+
+    {# Badge picker modal (outside form to avoid form interference) #}
+    {% include 'partials/browse/badge_picker_modal.html' %}
+
+    {% include 'partials/ad_unit.html' with ad_slot="6809027176" %}
+
+    <div id="browse-results">
+        {% include 'trophies/partials/tag_detail/browse_results.html' %}
+    </div>
+
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+{% endblock %}

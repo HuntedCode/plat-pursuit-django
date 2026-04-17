@@ -89,6 +89,7 @@ BROWSE_HUB = HubSubnavConfig(
         '/franchises/',
         '/genres/',
         '/themes/',
+        '/engines/',
     ),
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2'),
@@ -97,6 +98,7 @@ BROWSE_HUB = HubSubnavConfig(
         HubSubnavItem('companies', 'Companies', 'companies_list', 'building'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers'),
         HubSubnavItem('genres', 'Genres & Themes', 'genres_list', 'tag'),
+        HubSubnavItem('engines', 'Engines', 'engines_list', 'cpu'),
         HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag'),
     ),
 )
@@ -160,6 +162,7 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'franchise_detail': ('browse', 'franchises'),
     'genre_detail': ('browse', 'genres'),
     'theme_detail': ('browse', 'genres'),
+    'engine_detail': ('browse', 'engines'),
     'roadmap_edit': ('browse', 'games'),
     # Community
     'profile_detail': ('community', 'profiles'),

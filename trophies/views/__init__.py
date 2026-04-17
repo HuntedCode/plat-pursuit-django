@@ -34,6 +34,7 @@ from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .franchise_views import FranchiseListView, FranchiseDetailView
 from .genre_views import GenreThemeListView, GenreDetailView, ThemeDetailView
+from .engine_views import EngineListView, EngineDetailView
 
 __all__ = [
     # Game views
@@ -80,4 +81,6 @@ __all__ = [
     'FranchiseListView', 'FranchiseDetailView',
     # Genre/Theme views
     'GenreThemeListView', 'GenreDetailView', 'ThemeDetailView',
+    # Engine views
+    'EngineListView', 'EngineDetailView',
 ]

@@ -4012,6 +4012,17 @@ class GameEngine(models.Model):
     igdb_id = models.IntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, unique=True)
+    description = models.TextField(
+        blank=True, default='',
+        help_text='IGDB engine description, surfaced in the engine detail header.',
+    )
+    logo_image_id = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text='IGDB image hash for the engine logo. Used by logo_url().',
+    )
+    companies = models.ManyToManyField(
+        Company, through='EngineCompany', related_name='engines', blank=True,
+    )
 
     class Meta:
         ordering = ['name']
@@ -4020,6 +4031,14 @@ class GameEngine(models.Model):
 
     def __str__(self):
         return self.name
+
+    def logo_url(self, size='logo_med'):
+        """Build an IGDB image URL for the engine logo, or None when absent."""
+        if not self.logo_image_id:
+            return None
+        return (
+            f'https://images.igdb.com/igdb/image/upload/t_{size}/{self.logo_image_id}.png'
+        )
 
 
 class ConceptGenre(models.Model):
@@ -4063,7 +4082,14 @@ class ConceptTheme(models.Model):
 
 
 class ConceptEngine(models.Model):
-    """Links a Concept to a GameEngine (M2M through model)."""
+    """Links a Concept to a GameEngine (M2M through model).
+
+    Note: ingestion only creates ONE ``ConceptEngine`` per concept — the first
+    entry in IGDB's ``game_engines`` array. IGDB conflates engines with dev
+    tools (Photoshop, Blender, Audacity get listed alongside Unity) so taking
+    only the first entry is the pragmatic noise filter. Admin can override
+    manually when IGDB's ordering is wrong.
+    """
     concept = models.ForeignKey(
         Concept, on_delete=models.CASCADE, related_name='concept_engines'
     )
@@ -4080,6 +4106,29 @@ class ConceptEngine(models.Model):
 
     def __str__(self):
         return f"{self.concept} - {self.engine.name}"
+
+
+class EngineCompany(models.Model):
+    """Links a GameEngine to a Company that makes or maintains it (e.g. Epic
+    Games -> Unreal, Unity Technologies -> Unity). Populated from IGDB's
+    ``game_engines.companies`` field during enrichment.
+    """
+    engine = models.ForeignKey(
+        GameEngine, on_delete=models.CASCADE, related_name='engine_companies'
+    )
+    company = models.ForeignKey(
+        Company, on_delete=models.CASCADE, related_name='company_engines'
+    )
+
+    class Meta:
+        unique_together = ['engine', 'company']
+        indexes = [
+            models.Index(fields=['engine'], name='enginecompany_engine_idx'),
+            models.Index(fields=['company'], name='enginecompany_company_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.engine.name} - {self.company.name}"
 
 
 class Franchise(models.Model):

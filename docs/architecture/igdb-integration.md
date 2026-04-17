@@ -50,7 +50,8 @@ Data we extract from the IGDB response and store in dedicated model fields:
 | **Storyline** | IGDBMatch | `igdb_storyline` | Full plot synopsis |
 | **Time to beat** | IGDBMatch | `time_to_beat_hastily`, `_normally`, `_completely` | Speedrun, average, 100% completion (in seconds) |
 | **Release date** | IGDBMatch | `igdb_first_release_date` | First release date across all platforms |
-| **Game engine** | IGDBMatch | `game_engine_name` | "Creation Engine", "Unity", "Unreal Engine 5" |
+| **Game engine (legacy)** | IGDBMatch | `game_engine_name` | Single string, kept for backwards compatibility |
+| **Game engine (normalized)** | GameEngine + ConceptEngine | `name`, `slug`, `description`, `logo_image_id`, `companies` | One normalized row per engine; `companies` M2M via `EngineCompany` |
 | **Cover art** | IGDBMatch | `igdb_cover_image_id` | IGDB image hash for URL construction |
 | **Franchises / collections** | Franchise + ConceptFranchise | `name`, `slug`, `source_type`, `is_main` | Main franchise + tie-ins + collections, each as a linkable row |
 | **Franchise names (legacy)** | IGDBMatch | `franchise_names` (JSONField) | ["Fallout"] (kept for backwards compatibility; prefer the normalized `Franchise` model) |
@@ -99,6 +100,15 @@ Normalized IGDB franchise or collection. Fields: `igdb_id` (indexed, NOT globall
 
 ### ConceptFranchise
 M2M through table. Links Concept to Franchise. `is_main` is true exactly when the Franchise is IGDB's primary franchise for this game (derived from the plural `franchises[0]` field at enrichment time, with the singular `franchise` field as a fallback). Collections never have `is_main=True`. Unique on (concept, franchise), indexed on `is_main` for browse-page queries.
+
+### GameEngine
+Normalized IGDB game engine (Unreal, Unity, Decima, RE Engine, etc). Fields: `igdb_id` (unique), `name`, `slug`, `description`, `logo_image_id`, `companies` (M2M through `EngineCompany`). `logo_url(size='logo_med')` method mirrors `Company.logo_url`. Admin-editable via Django admin with `filter_horizontal` on companies.
+
+### ConceptEngine
+M2M through table linking Concept to GameEngine. Unique on (concept, engine). IGDB's `game_engines` array conflates real engines with dev tools (Photoshop, Blender, Audacity alongside Unity), so ingestion only creates ONE `ConceptEngine` per concept — the first entry in IGDB's array, which in practice is the real engine. Admin can manually adjust for edge cases where IGDB's ordering is wrong.
+
+### EngineCompany
+M2M through table linking GameEngine to Company (Epic Games → Unreal, Unity Technologies → Unity). Populated during `_create_normalized_tags` from IGDB's `game_engines.companies` field. Only creates links for companies that already exist in the DB — missing maker companies are silently skipped and will fill in on subsequent enrichment of any of their games.
 
 ### IGDBMatch
 OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method`, `status`), parsed Tier 1 data, and the full raw IGDB response (`raw_response`) for future Tier 2 parsing.

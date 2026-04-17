@@ -78,12 +78,22 @@
                 Quick Facts
             </h4>
             <div class="flex flex-col gap-1">
-                {% if igdb.game_engine_name %}
-                <div class="flex items-center gap-1.5 text-xs">
-                    <span class="text-base-content/50 shrink-0">Engine:</span>
-                    <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.game_engine_name }}</span>
-                </div>
-                {% endif %}
+                {% with concept_engines=game.concept.concept_engines.all %}
+                    {% if concept_engines %}
+                        {% for ce in concept_engines %}
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <span class="text-base-content/50 shrink-0">Engine:</span>
+                            <a href="{% url 'engine_detail' slug=ce.engine.slug %}" class="font-medium text-accent hover:underline line-clamp-1 pr-1">{{ ce.engine.name }}</a>
+                        </div>
+                        {% endfor %}
+                    {% elif igdb.game_engine_name %}
+                        {# Fallback for concepts not yet re-enriched after GameEngine model rollout #}
+                        <div class="flex items-center gap-1.5 text-xs">
+                            <span class="text-base-content/50 shrink-0">Engine:</span>
+                            <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.game_engine_name }}</span>
+                        </div>
+                    {% endif %}
+                {% endwith %}
                 {% if franchise_main or franchise_also_featured or franchise_collections %}
                     {% include 'trophies/partials/game_detail/franchise_lines.html' %}
                 {% elif igdb.franchise_names %}
