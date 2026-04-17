@@ -262,6 +262,56 @@
         </section>
     {% endif %}
 
+    {# ─── Available Artworks (live & upcoming, badge artwork campaigns) ──── #}
+    {% if fundraiser.campaign_type == 'badge_artwork' and not is_ended %}
+        <section class="card bg-base-100 border-2 border-base-300 shadow-md shadow-neutral">
+            <div class="card-body space-y-4">
+                <div>
+                    <h2 class="card-title text-xl lg:text-2xl italic">
+                        Artworks Awaiting a Patron
+                        {% if available_badges %}
+                            <span class="text-base-content/50 font-normal text-base lg:text-lg ml-1">({{ available_badges|length }})</span>
+                        {% endif %}
+                    </h2>
+                    <p class="text-base-content/60 italic text-sm mt-1">
+                        {% if available_badges %}
+                            These badge series are still waiting for a hunter to bring them to life.
+                            {% if user.is_authenticated and user.profile and total_picks_remaining %}
+                                Tap any badge to claim it.
+                            {% elif user.is_authenticated %}
+                                Donate ${{ badge_pick_divisor }} or more to earn a pick.
+                            {% else %}
+                                Join the hunt and donate ${{ badge_pick_divisor }}+ to claim one.
+                            {% endif %}
+                        {% else %}
+                            Every current badge series has a patron. Donate to help commission the next wave!
+                        {% endif %}
+                    </p>
+                </div>
+
+                {% if available_badges %}
+                    <div id="available-badges-grid"
+                         role="region"
+                         aria-label="Badge series awaiting a patron"
+                         class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-[32rem] overflow-y-auto pr-1 rounded-lg bg-base-200/40 p-2"
+                         data-has-picks="{% if user.is_authenticated and user.profile and total_picks_remaining %}1{% else %}0{% endif %}">
+                        {% for badge in available_badges %}
+                            {% include 'fundraiser/partials/_badge_tile.html' with badge=badge %}
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="bg-primary/5 border-2 border-primary/30 rounded-lg p-6 text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 mx-auto text-primary" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        <p class="mt-2 text-primary font-semibold italic">Every current badge series has a patron!</p>
+                        <p class="text-base-content/50 text-xs italic">More artworks will open up as the campaign grows. Keep the momentum going.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+    {% endif %}
+
     {# ─── Donation Form ───────────────────────────────────────────────── #}
     {% if is_live and user.is_authenticated %}
         <section class="card bg-base-100 border-2 border-base-300 shadow-lg shadow-neutral">

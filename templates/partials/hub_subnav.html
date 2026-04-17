@@ -57,9 +57,14 @@ the stacking order documentation.
             <ul class="flex items-center gap-1 md:gap-1.5 shrink-0">
                 {% for item in hub_subnav_items %}
                     <li class="shrink-0">
-                        <a href="{% url item.url_name %}"
+                        <a href="{{ item.url }}"
                            class="inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-md text-xs md:text-sm font-medium whitespace-nowrap transition-all {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30 shadow-sm{% else %}text-base-content/70 hover:text-primary hover:bg-base-300/60 border border-transparent{% endif %}"
                            {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>
+                            {% if item.icon == 'heart' %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 md:w-4 md:h-4 text-error" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                                </svg>
+                            {% endif %}
                             {{ item.label }}
                         </a>
                     </li>

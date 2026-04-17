@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.urls import NoReverseMatch, reverse
+
 
 @dataclass(frozen=True)
 class HubSubnavItem:
@@ -39,6 +41,27 @@ class HubSubnavItem:
     url_name: str
     icon: str | None = None
     auth_required: bool = False
+
+
+@dataclass(frozen=True)
+class RenderedSubnavItem:
+    """
+    A sub-nav item with its URL already resolved.
+
+    The template consumes these instead of HubSubnavItem so that dynamic
+    items whose URL requires kwargs (e.g., the Fundraiser tab, which takes
+    a slug) can coexist with static items that reverse from a url_name
+    alone. The resolver lives in the context processor so NoReverseMatch
+    failures degrade to "skip this item" rather than 500.
+
+    ``icon`` is an optional Lucide-style icon name. The template renders
+    a matching SVG inline when set; items without an icon render as
+    label-only pills.
+    """
+    slug: str
+    label: str
+    url: str
+    icon: str | None = None
 
 
 @dataclass(frozen=True)
@@ -194,6 +217,11 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'my_shareables_challenges': ('dashboard', 'shareables'),
     'platinum_grid': ('dashboard', 'shareables'),
     'recap_view': ('dashboard', 'recap'),
+    # Fundraiser: lives at /fundraiser/<slug>/ but conceptually belongs to
+    # the Dashboard hub while a campaign is active. The context processor
+    # appends the Fundraiser tab dynamically when one is live.
+    'fundraiser': ('dashboard', 'fundraiser'),
+    'fundraiser_success': ('dashboard', 'fundraiser'),
 }
 
 
@@ -269,13 +297,32 @@ def resolve_hub_subnav(request) -> dict | None:
     return {'hub': hub, 'active_slug': active_slug}
 
 
-def visible_items(hub: HubSubnavConfig, *, is_authenticated: bool) -> tuple[HubSubnavItem, ...]:
+def build_rendered_items(
+    hub: HubSubnavConfig,
+    *,
+    is_authenticated: bool,
+    extras: tuple[RenderedSubnavItem, ...] = (),
+) -> tuple[RenderedSubnavItem, ...]:
     """
-    Filter a hub's items to those visible for the current viewer.
+    Return the hub's sub-nav items resolved into ``RenderedSubnavItem``s
+    for the current viewer, with any dynamic ``extras`` appended.
 
-    Items with ``auth_required=True`` are hidden from anonymous users so
-    they don't see a tab that would 302-redirect them to login.
+    - ``auth_required`` items are dropped for anonymous viewers.
+    - URLs are resolved via ``reverse(item.url_name)``. If an item's URL
+      name can't be reversed (stale config, URL rename), it's skipped
+      rather than crashing the whole request.
+    - ``extras`` are appended at the end of the strip and are passed
+      through unchanged (caller is responsible for URL resolution since
+      extras may need kwargs, e.g. the Fundraiser tab).
     """
-    if is_authenticated:
-        return hub.items
-    return tuple(item for item in hub.items if not item.auth_required)
+    rendered: list[RenderedSubnavItem] = []
+    for item in hub.items:
+        if item.auth_required and not is_authenticated:
+            continue
+        try:
+            url = reverse(item.url_name)
+        except NoReverseMatch:
+            continue
+        rendered.append(RenderedSubnavItem(slug=item.slug, label=item.label, url=url))
+    rendered.extend(extras)
+    return tuple(rendered)

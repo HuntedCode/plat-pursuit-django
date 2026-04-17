@@ -25,6 +25,7 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 | `templates/fundraiser/fundraiser_admin.html` | Staff dashboard (252 lines) |
 | `templates/fundraiser/partials/badge_tracker.html` | Progress bar + stats |
 | `templates/fundraiser/partials/badge_picker_modal.html` | Badge selection modal |
+| `templates/fundraiser/partials/_badge_tile.html` | Shared unclaimed-badge tile (picker modal + public grid) |
 | `templates/fundraiser/partials/donor_wall.html` | Donor display list |
 | `templates/emails/donation_receipt.html` | Receipt email |
 | `templates/emails/badge_claim_confirmation.html` | Claim confirmation email |
@@ -108,7 +109,20 @@ Badge claiming uses `select_for_update()` on the Badge row to prevent race condi
 - [Badge System](../architecture/badge-system.md): `DonationBadgeClaim.badge` OneToOneField. Milestone "Badge Artwork Patron" (criteria_type='manual').
 - [Email System](../guides/email-setup.md): 3 email templates via EmailService with EmailLog tracking (donation_receipt, badge_claim_confirmation, artwork_complete).
 - Discord: Green embeds via `queue_webhook_send()` for donation announcements.
-- Context processor: `active_fundraiser()` provides banner data to all pages (60s cache).
+- Context processor: `active_fundraiser()` provides banner data (60s cache). Only rendered for viewers who are logged in AND have a linked PSN profile — claiming badge artworks requires a profile, so the banner is noise for anonymous and not-yet-onboarded users.
+- [Hub Sub-navigation](../architecture/ia-and-subnav.md): `hub_subnav()` appends a dynamic **Fundraiser** tab (heart icon) to the Dashboard hub's sub-nav whenever a campaign is active AND the viewer has a linked PSN profile. Reuses the `fundraiser:active_banner` cache key (60s TTL) so there's no extra DB hit on the hot path. Visiting `/fundraiser/<slug>/` highlights the tab via the `fundraiser` URL-name override in `core/hub_subnav.py`.
+
+## Available Artworks Display
+
+The public fundraiser page surfaces every unclaimed badge series in a dedicated "Artworks Awaiting a Patron" section positioned between "My Contributions" and the donation form. This ensures anonymous visitors and donors without remaining picks can still browse the full catalog of artworks that need funding, which was previously only visible inside the (auth-gated) badge picker modal.
+
+- **Query**: Reuses the same `available_badges` queryset built in `FundraiserView.get_context_data` (Tier 1, live, empty `badge_image`, not claimed, not user-type, ordered by `Lower('name')`).
+- **Visibility**: Shown on live and upcoming campaigns; hidden on ended campaigns (claiming is closed, so surfacing unclaimed badges would read as regret).
+- **Layout**: Responsive grid capped at `max-h-[32rem] overflow-y-auto` so large catalogs (50-200+ badges) don't dwarf the page. Uses the shared `_badge_tile.html` partial.
+- **Interactivity**:
+  - Authed user with picks remaining → tile click opens the picker modal pre-selected on that badge, so the donor can confirm without re-searching.
+  - Anon or authed-without-picks → tile click scrolls to the donation form (or the sign-up/login CTA section for anonymous viewers).
+- **Empty state**: Celebratory success card ("Every artwork has a patron!") when `available_badges` is empty.
 
 ## Gotchas and Pitfalls
 

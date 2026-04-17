@@ -158,6 +158,18 @@ Within a hub's sub-nav, the *active* item is the one whose `url_name` resolves t
 
 Profile detail pages (`/community/profiles/<u>/`) and badge detail pages (`/my-pursuit/badges/<slug>/`) inherit their parent sub-nav highlighting via this URL-name mapping.
 
+### Dynamic sub-nav items
+
+Most sub-nav items are static (defined in `HUB_SUBNAV_CONFIG`). The infrastructure also supports dynamic, request-time items via the `extras` parameter on `build_rendered_items(hub, *, is_authenticated, extras=())`. Currently the only dynamic item is the **Fundraiser** tab on the Dashboard hub:
+
+- `plat_pursuit/context_processors.py:_fundraiser_subnav_extras()` checks the `fundraiser:active_banner` cache key (populated by `active_fundraiser` with a 60s TTL).
+- When a campaign is active (`banner_active=True` and within `start_date`/`end_date`), it builds a `RenderedSubnavItem(slug='fundraiser', label='Fundraiser', url=reverse('fundraiser', args=[slug]), icon='heart')` and passes it as an extra to `build_rendered_items`.
+- The extra is only appended for viewers who have a linked PSN profile (`_viewer_has_linked_profile(request)`). Anonymous and not-yet-onboarded users don't see the tab because they can't meaningfully engage with the campaign.
+- The Fundraiser tab appears at the end of the Dashboard strip while active and disappears when the campaign ends or `banner_active` is unchecked.
+- The `fundraiser` and `fundraiser_success` URL names have overrides in `_URL_NAME_TO_SLUG_OVERRIDES` so visiting `/fundraiser/<slug>/` keeps the Dashboard sub-nav visible with the Fundraiser tab highlighted.
+
+When adding new dynamic items, prefer piggybacking on existing cache keys rather than introducing new DB reads on the request path. `RenderedSubnavItem` is frozen and carries `slug`, `label`, `url`, and an optional `icon`; the URL must be fully resolved (including kwargs) before it reaches the template. The template renders an inline SVG for each supported icon name — add a new `{% elif item.icon == '<name>' %}` branch in `templates/partials/hub_subnav.html` when introducing a new icon.
+
 ## Sub-nav Infrastructure
 
 ### Files
@@ -306,6 +318,8 @@ The footer (`templates/partials/footer.html`) gets a 6-column refresh to match t
 - **The hub-of-hubs is not a license to add hubs forever.** The design supports 4 hubs because the mental model has 4 modes (cockpit / browse / community / progression). Resist the urge to add a 5th hub when the next initiative ships. Gamification expands the My Pursuit hub's sub-nav; it does NOT get its own top-level menu item. If a future feature genuinely doesn't fit any existing hub, that's a signal to reconsider the IA, not to add a 5th button.
 
 - **"My Pursuit" name reuse risk**: existing users have a mental model where "My Pursuit" = the personal-utility menu (Customization, Recap, etc.). After this initiative, "My Pursuit" becomes the badge/milestone/title hub. The personal-utility items relocate to the Dashboard sub-nav. Mitigation: a one-time "We've reorganized!" callout banner shown to authenticated users for 30 days post-launch, and 301 redirects on every legacy URL so muscle memory still works.
+
+- **Dynamic items resolve their own URLs.** `build_rendered_items` calls `reverse(item.url_name)` for every static `HubSubnavItem`, which means static items cannot have required URL kwargs. If you need a dynamic item with kwargs (like the Fundraiser tab), build a `RenderedSubnavItem` with the URL pre-resolved and pass it through the `extras` tuple. Static `HubSubnavItem`s that fail `reverse()` (e.g., stale config after a URL rename) are silently skipped rather than crashing the request.
 
 - **Customization removal — verify the audit.** Before merging Phase 10b, manually verify that every customization touchpoint that existed in the old menu is reachable via the avatar dropdown's Settings link OR the dashboard's existing "Edit Layout" / theme controls. If anything is stranded, revive it as a Settings sub-page rather than re-adding the Customization menu item.
 

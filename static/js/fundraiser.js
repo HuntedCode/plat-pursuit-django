@@ -24,6 +24,7 @@ const FundraiserPage = {
         this._initDonationForm();
         this._initProviderToggle();
         this._initBadgePicker();
+        this._initAvailableGrid();
     },
 
     // ── Hero CTA Smooth Scroll ─────────────────────────────────────────
@@ -364,6 +365,49 @@ const FundraiserPage = {
                 confirmBtn.textContent = 'Confirm Claim';
             }
         }
+    },
+
+    // ── Available Artworks Grid (on-page section) ────────────────────────
+
+    _initAvailableGrid() {
+        const grid = document.getElementById('available-badges-grid');
+        if (!grid) return;
+
+        const hasPicks = grid.dataset.hasPicks === '1';
+        const modal = document.getElementById('badge-picker-modal');
+
+        grid.addEventListener('click', (e) => {
+            const tile = e.target.closest('.badge-pick-option');
+            if (!tile) return;
+
+            if (hasPicks && modal) {
+                this._resetPickerState();
+                modal.showModal();
+                const badgeId = tile.dataset.badgeId;
+                const modalTile = document.querySelector(
+                    `#badge-picker-grid .badge-pick-option[data-badge-id="${badgeId}"]`
+                );
+                if (modalTile) {
+                    this._selectBadge(modalTile);
+                    // Instant scroll (no smooth): the modal is opening simultaneously and
+                    // a smooth-scroll race produces a visible jank mid-animation.
+                    modalTile.scrollIntoView({ block: 'center' });
+                } else {
+                    // Badge was claimed between page render and this click, or the
+                    // page data is otherwise stale. Tell the user and invite them
+                    // to pick another.
+                    Toast.show('That badge was just claimed by another hunter. Pick another from the list!', 'info');
+                }
+                return;
+            }
+
+            // Anonymous or authed-without-picks: nudge toward donating / signing up.
+            const target = document.getElementById('donation-form')
+                || document.querySelector('a[href*="account_signup"], a[href*="account_login"]')?.closest('section');
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
     },
 
     _findDonationWithPicks() {

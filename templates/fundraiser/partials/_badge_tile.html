@@ -1,0 +1,29 @@
+{% comment %}
+Single unclaimed-badge tile. Shared by the badge picker modal and the
+public "Available Artworks" section on the fundraiser page.
+
+Required context:
+  badge        Badge instance (Tier 1, badge_image empty, unclaimed)
+
+The rendered button keeps the `.badge-pick-option` hook + data attributes
+so JS click delegation works whether the tile lives inside the modal grid
+(#badge-picker-grid) or the on-page grid (#available-badges-grid).
+{% endcomment %}
+{% load static %}
+<button type="button"
+        class="badge-pick-option card bg-base-200 border-2 border-base-300 hover:border-primary hover:shadow-sm transition-all duration-200 cursor-pointer text-left"
+        data-badge-id="{{ badge.id }}"
+        data-badge-name="{{ badge.effective_display_series|default:badge.name }}">
+    <div class="card-body p-3 items-center text-center gap-1">
+        <div class="w-14 h-14 relative">
+            <img src="{% static 'images/badges/backdrops/1_backdrop.png' %}"
+                 alt="Badge icon" class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
+            <img src="{% static 'images/badges/default.png' %}"
+                 alt="{{ badge.effective_display_series|default:badge.name }}"
+                 class="w-full h-full absolute top-0 left-0 object-contain" loading="lazy">
+        </div>
+        <span class="font-semibold text-xs line-clamp-2 pr-1">
+            {{ badge.effective_display_series|default:badge.name }}
+        </span>
+    </div>
+</button>
