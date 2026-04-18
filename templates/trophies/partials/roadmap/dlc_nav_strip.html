@@ -1,12 +1,12 @@
-{# DLC navigation strip for switching between trophy groups. Expects: available_tabs, active_trophy_group_id, game #}
+{# DLC navigation strip for switching between trophy groups. Expects: available_tabs, active_trophy_group_id, game, roadmap_preview_mode #}
 
 <div class="flex items-center gap-2 overflow-x-auto pb-1 mb-1 scrollbar-thin">
     {% for tab_info in available_tabs %}
         {% if tab_info.has_content %}
             {% if tab_info.trophy_group_id == 'default' %}
-                <a href="{% url 'roadmap_detail' game.np_communication_id %}"
+                <a href="{% url 'roadmap_detail' game.np_communication_id %}{% if roadmap_preview_mode %}?preview=true{% endif %}"
             {% else %}
-                <a href="{% url 'roadmap_detail_dlc' game.np_communication_id tab_info.trophy_group_id %}"
+                <a href="{% url 'roadmap_detail_dlc' game.np_communication_id tab_info.trophy_group_id %}{% if roadmap_preview_mode %}?preview=true{% endif %}"
             {% endif %}
                class="btn btn-sm gap-1.5 shrink-0 {% if tab_info.trophy_group_id == active_trophy_group_id %}btn-primary shadow-md shadow-primary/20{% else %}btn-ghost border border-base-300 text-base-content/60 hover:text-base-content{% endif %}">
                 {% if tab_info.ctg.icon_url %}

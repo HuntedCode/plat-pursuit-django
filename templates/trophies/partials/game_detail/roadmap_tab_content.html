@@ -45,9 +45,9 @@
         {% for tab_info in available_tabs %}
             {% if tab_info.has_content and tab_info.trophy_group_id != tab.concept_trophy_group.trophy_group_id %}
                 {% if tab_info.trophy_group_id == 'default' %}
-                    <a href="{% url 'roadmap_detail' game.np_communication_id %}" class="badge badge-xs badge-ghost hover:badge-primary transition-colors" onclick="event.stopPropagation();">{{ tab_info.ctg.display_name }}</a>
+                    <a href="{% url 'roadmap_detail' game.np_communication_id %}{% if roadmap_preview_mode %}?preview=true{% endif %}" class="badge badge-xs badge-ghost hover:badge-primary transition-colors" onclick="event.stopPropagation();">{{ tab_info.ctg.display_name }}</a>
                 {% else %}
-                    <a href="{% url 'roadmap_detail_dlc' game.np_communication_id tab_info.trophy_group_id %}" class="badge badge-xs badge-ghost hover:badge-primary transition-colors" onclick="event.stopPropagation();">{{ tab_info.ctg.display_name }}</a>
+                    <a href="{% url 'roadmap_detail_dlc' game.np_communication_id tab_info.trophy_group_id %}{% if roadmap_preview_mode %}?preview=true{% endif %}" class="badge badge-xs badge-ghost hover:badge-primary transition-colors" onclick="event.stopPropagation();">{{ tab_info.ctg.display_name }}</a>
                 {% endif %}
             {% endif %}
         {% endfor %}
