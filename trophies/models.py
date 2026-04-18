@@ -2037,28 +2037,31 @@ class UserMilestoneProgress(models.Model):
         return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
 class DeveloperBlacklist(models.Model):
-    """Tracks IGDB developers whose games have been flagged as shovelware.
+    """Tracks IGDB developers whose games are flagged as shovelware.
 
-    Populated when a concept's platinum earn rate crosses the flag threshold
-    AND the concept has a trusted IGDBMatch. The concept's primary developer
-    (first ConceptCompany with is_developer=True, by id) is recorded here.
-    When a developer has any tracked concept, ``is_blacklisted`` is True and
-    other concepts sharing that primary developer are auto-flagged unless
-    shielded (see shovelware_detection_service).
+    ``is_blacklisted`` is set True when a concept primary-developed by this
+    company crosses the rule-1 earn-rate threshold (see
+    ``ShovelwareDetectionService.FLAG_THRESHOLD``). It flips back to False
+    via reconciliation when no concept primary-developed by the company has
+    any non-locked game with platinum earn rate >= ``EVIDENCE_THRESHOLD``.
+    The 10% deadband between the flag threshold (80%) and the evidence
+    threshold (70%) provides hysteresis and prevents boundary oscillation.
+
+    Evidence is always derived from live data (``qualifying_concepts_for``),
+    never from stored state, so concept mergers and IGDB company rewiring
+    never leave stale entries behind.
     """
+    EVIDENCE_THRESHOLD = 70.0
+
     company = models.OneToOneField(
         'Company',
         on_delete=models.CASCADE,
         related_name='developer_blacklist_entry',
     )
     date_added = models.DateTimeField(auto_now_add=True)
-    flagged_concepts = models.JSONField(
-        default=list, blank=True,
-        help_text="List of concept_id strings whose games triggered this entry."
-    )
     is_blacklisted = models.BooleanField(
         default=False,
-        help_text="True when any concept is tracked. Other concepts by this developer get auto-flagged."
+        help_text="True while the company has a non-locked, primary-developed game at >= EVIDENCE_THRESHOLD plat earn rate."
     )
     notes = models.TextField(blank=True)
 
@@ -2067,30 +2070,42 @@ class DeveloperBlacklist(models.Model):
             models.Index(fields=['is_blacklisted'], name='dev_blacklist_active_idx'),
         ]
 
+    @classmethod
+    def qualifying_concepts_for(cls, company, threshold=None):
+        """QuerySet of Concepts primary-developed by ``company`` with at
+        least one non-admin-locked game whose platinum earn rate is at or
+        above ``threshold`` (default: ``EVIDENCE_THRESHOLD``).
+
+        "Primary developer" = first ``ConceptCompany`` row with
+        ``is_developer=True`` on the concept, ordered by id.
+        """
+        from django.db.models import OuterRef, Subquery
+        from trophies.models import Concept, ConceptCompany
+
+        if threshold is None:
+            threshold = cls.EVIDENCE_THRESHOLD
+
+        primary_dev_id = ConceptCompany.objects.filter(
+            concept=OuterRef('pk'),
+            is_developer=True,
+        ).order_by('id').values('company_id')[:1]
+
+        return Concept.objects.annotate(
+            _primary_dev_id=Subquery(primary_dev_id),
+        ).filter(
+            _primary_dev_id=company.id,
+            games__shovelware_lock=False,
+            games__trophies__trophy_type='platinum',
+            games__trophies__trophy_earn_rate__gte=threshold,
+        ).distinct()
+
     @property
     def flagged_concept_count(self):
-        return len(self.flagged_concepts)
-
-    def add_concept(self, concept_id):
-        """Add a concept_id to the tracked list and blacklist the developer."""
-        if concept_id not in self.flagged_concepts:
-            self.flagged_concepts.append(concept_id)
-            self.is_blacklisted = True
-            self.save(update_fields=['flagged_concepts', 'is_blacklisted'])
-            return True
-        return False
-
-    def remove_concept(self, concept_id):
-        """Remove a concept_id. Un-blacklist only when no concepts remain."""
-        if concept_id in self.flagged_concepts:
-            self.flagged_concepts.remove(concept_id)
-            self.is_blacklisted = bool(self.flagged_concepts)
-            self.save(update_fields=['flagged_concepts', 'is_blacklisted'])
-            return True
-        return False
+        """Live count of concepts currently providing blacklist evidence."""
+        return self.qualifying_concepts_for(self.company).count()
 
     def __str__(self):
-        status = "BLACKLISTED" if self.is_blacklisted else f"{self.flagged_concept_count} concepts"
+        status = "BLACKLISTED" if self.is_blacklisted else "inactive"
         return f"{self.company.name} ({status})"
 
 
