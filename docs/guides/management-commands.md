@@ -28,7 +28,6 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | `audit_user_awards` | Audit UserTitle and UserMilestone records, removing unearned ones. Three phases: orphaned badge titles, orphaned milestone titles, and milestone re-validation via handlers. Dry-run by default. | `--commit`, `--username`, `--include-premium`, `--type` (`titles`/`milestones`/`all`) | `python manage.py audit_user_awards --commit` |
 | `sync_all_discord_roles` | Bulk sync Discord roles (badge, milestone, premium) for all verified users. | `--dry-run`, `--profile`, `--batch-size` (default: 100) | `python manage.py sync_all_discord_roles --dry-run` |
 | `backfill_stub_concept_icons` | Copy `title_icon_url` from associated games to `PP_` stub Concepts missing icons. | `--dry-run`, `--batch-size` (default: 100) | `python manage.py backfill_stub_concept_icons` |
-| `populate_blacklist` | Populate publisher blacklist entries from currently flagged shovelware games. | (none) | `python manage.py populate_blacklist` |
 | `backfill_platted_subgenre_count` | Fix `platted_subgenre_count` on genre challenges and revoke incorrectly awarded `subgenre_progress` milestones. | `--dry-run` | `python manage.py backfill_platted_subgenre_count --dry-run` |
 | `recalculate_gamification` | Recalculate gamification stats (badge XP, tiers, series XP) for one or all profiles. | `--profile`, `--dry-run` | `python manage.py recalculate_gamification --profile Jlowe` |
 | `clean_titles` | Strip TM/registered symbols, normalize Unicode Roman numerals, and remove "trophy set" suffixes from Game, Concept, Trophy, and GameFamily titles. | `--dry-run` | `python manage.py clean_titles --dry-run` |
@@ -73,7 +72,8 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | `test_email_system` | Send test emails for any template to verify email delivery. Supports 17+ email template previews. | `recipient_email` (positional, required), `--recap-preview`, `--verification-preview`, `--password-reset-preview`, `--payment-failed-preview`, `--payment-failed-final-preview`, `--cancelled-preview`, `--welcome-preview`, `--payment-succeeded-preview`, `--payment-action-required-preview`, `--donation-receipt-preview`, `--badge-claim-preview`, `--artwork-complete-preview`, `--badge-earned-preview`, `--milestone-preview`, `--free-welcome-preview`, `--broadcast-preview`, `--weekly-digest-preview` | `python manage.py test_email_system your@email.com --recap-preview` |
 | `update_leaderboards` | Recompute and cache all badge leaderboards: per-series earners, per-series progress, total progress, total XP, country XP, and community series XP. | `--series <slug>`, `--country <CC>` | `python manage.py update_leaderboards` |
 | `lock_shovelware` | Lock or unlock a game's shovelware status. Propagates to all games sharing the same concept. | `np_communication_id` (positional, required), `--flag`, `--clear`, `--unlock` (mutually exclusive, required) | `python manage.py lock_shovelware NPWR12345_00 --flag` |
-| `update_shovelware` | Full rebuild of the shovelware list using rule-based detection. Resets auto-flags, scans for high-rate platinums, updates publisher blacklist, applies concept shielding. | `--dry-run`, `--verbose` | `python manage.py update_shovelware --dry-run --verbose` |
+| `update_shovelware` | Surgical shovelware reconciliation. Walks a targeted candidate set and applies `evaluate_concept` idempotently, only writing where state has drifted. Preserves `shovelware_updated_at` on unchanged games. | `--verbose` | `python manage.py update_shovelware` |
+| `backfill_shovelware` | One-shot wipe + rebuild of shovelware state using the IGDB developer algorithm. Use after schema migrations or major data corrections. | `--dry-run`, `--verbose` | `python manage.py backfill_shovelware --dry-run --verbose` |
 | `audit_genre_data` | Report genre and subgenre coverage stats, unique values with counts, and genre-to-subgenre relationships. Filters to challenge-eligible concepts by default. | `--all` | `python manage.py audit_genre_data` |
 | `audit_profile_gamification` | Compare stored ProfileGamification XP values against recalculated totals. Finds and optionally fixes discrepancies. | `--fix`, `--profile`, `--verbose` | `python manage.py audit_profile_gamification --fix --verbose` |
 
@@ -121,7 +121,7 @@ These commands run on automated schedules. See your hosting provider's cron conf
 | `send_weekly_digest` | Monday 08:00 UTC | Send "This Week in PlatPursuit" community newsletter |
 | `populate_title_ids` | Daily or weekly | Sync TitleID table from GitHub |
 | `match_game_families` | Daily | Find and group related Concepts |
-| `update_shovelware` | Daily or weekly | Rebuild shovelware detection flags |
+| `update_shovelware` | Weekly | Surgical shovelware reconciliation (idempotent drift correction) |
 
 ### Admin Tools
 
@@ -131,6 +131,7 @@ Commands for staff to run manually as needed.
 |---------|---------|
 | `redis_admin` | Cache management: flush specific page caches, TokenKeeper queues, bulk thresholds |
 | `lock_shovelware` | Manually flag/clear/unlock a game's shovelware status |
+| `backfill_shovelware` | One-shot wipe + rebuild of shovelware state (use after migrations / major data corrections) |
 | `lock_admin_concepts` | Lock concepts with admin-duplicate suffixes |
 | `refresh_badge_series` | Re-evaluate a badge series after stage/concept changes |
 | `check_all_badges` | Full badge recheck with awarded/revoked reporting |
@@ -178,7 +179,6 @@ Commands that were run once (or a few times) for data migration. They remain in 
 | `populate_user_titles` | Backfill UserTitle records from badge/milestone awards |
 | `populate_banned_words` | Seed banned words for content moderation |
 | `populate_milestones` | Create/update milestone definitions (idempotent, re-runnable) |
-| `populate_blacklist` | Populate publisher blacklist from flagged games |
 | `recalculate_profile_counts` | Full profile trophy count recalculation |
 | `recalculate_gamification` | Full gamification XP recalculation |
 | `recalc_earn_rates` | Recalculate played_count, earned_count, earn_rate |
