@@ -897,6 +897,12 @@ class IGDBService:
 
         if status in ('auto_accepted', 'accepted'):
             cls._apply_enrichment(igdb_match, igdb_data)
+            # Re-evaluate shovelware now that the concept has a trusted
+            # primary developer. Covers the case where rule 1 flagged the
+            # concept before this match existed (e.g. earn rate >= 80% at
+            # platinum sync, match arriving later in the pipeline).
+            from trophies.services.shovelware_detection_service import ShovelwareDetectionService
+            ShovelwareDetectionService.on_igdb_match_trusted(concept)
 
         return igdb_match
 
@@ -1561,6 +1567,8 @@ class IGDBService:
             igdb_match.status = 'accepted'
             igdb_match.save(update_fields=['status'])
             cls._apply_enrichment(igdb_match)
+            from trophies.services.shovelware_detection_service import ShovelwareDetectionService
+            ShovelwareDetectionService.on_igdb_match_trusted(igdb_match.concept)
 
     @classmethod
     def reject_match(cls, igdb_match):

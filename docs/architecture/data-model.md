@@ -356,8 +356,8 @@ Key relationships:
 ### GameListLike
 Like on a public GameList. One per profile per list.
 
-### PublisherBlacklist
-Tracks publishers flagged for shovelware. When any concept from a publisher is flagged, the entire publisher's catalog gets flagged. Stores `flagged_concepts` as a JSON list of concept IDs.
+### DeveloperBlacklist
+Tracks IGDB developers whose games have been flagged as shovelware. Keyed by `Company` (OneToOne). When a concept's primary developer is on the list, the whole concept is auto-flagged unless shielded by a low-earn sibling. Stores `flagged_concepts` as a JSON list of `concept_id` strings. See [docs/reference/shovelware-detection.md](../reference/shovelware-detection.md).
 
 ### APIAuditLog
 Logs PSN API calls for token monitoring: endpoint, status code, response time, remaining quota.
