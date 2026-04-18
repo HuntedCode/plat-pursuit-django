@@ -1,16 +1,71 @@
+# AI training crawlers: disallowed. These bots harvest training data and
+# do not drive search traffic, so blocking them costs nothing.
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: SERankingBacklinksBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: TikTokSpider
+Disallow: /
+
+# Everyone else (includes Googlebot, Bingbot, DuckDuckBot, OAI-SearchBot)
 User-agent: *
 Allow: /
+Crawl-delay: 5
 
 Sitemap: https://platpursuit.com/sitemap.xml
 
-# Disallow admin and API endpoints
+# Admin and API endpoints
 Disallow: /admin/
 Disallow: /api/
 
-# Disallow internal pages
+# Internal pages
 Disallow: /staff/
 Disallow: /monitoring/
 
-# Disallow guides (temporarily hidden during redesign)
+# Guides (temporarily hidden during redesign)
 Disallow: /guides/
 Disallow: /my-guides/
+
+# Profile-scoped variants of canonical pages. These are duplicates of the
+# canonical pages on the <username> axis and dilute crawl budget. Canonical
+# /games/<np_id>/ and /my-pursuit/badges/<badge>/ pages remain crawlable.
+Disallow: /games/*/*
+Disallow: /my-pursuit/badges/*/*
