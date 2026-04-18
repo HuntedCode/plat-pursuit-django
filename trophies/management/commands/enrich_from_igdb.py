@@ -1,6 +1,7 @@
 import re
+from datetime import datetime, timezone as dt_timezone
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from trophies.models import Concept, IGDBMatch, Stage
 from trophies.services.igdb_service import IGDBService, IGDB_PLATFORM_NAMES
@@ -25,6 +26,10 @@ class Command(BaseCommand):
         parser.add_argument(
             '--refresh', action='store_true',
             help='Re-fetch IGDB data for all accepted matches (no re-matching)',
+        )
+        parser.add_argument(
+            '--stale-before', type=str, metavar='YYYY-MM-DD',
+            help='With --refresh, only refresh matches last synced before this date (UTC midnight, exclusive)',
         )
         parser.add_argument(
             '--concept-id', type=str,
@@ -574,6 +579,22 @@ class Command(BaseCommand):
 
         if options['concept_id']:
             matches = matches.filter(concept__concept_id=options['concept_id'])
+
+        stale_before = options.get('stale_before')
+        if stale_before:
+            try:
+                cutoff_date = datetime.strptime(stale_before, '%Y-%m-%d').date()
+            except ValueError:
+                raise CommandError(
+                    f'--stale-before must be in YYYY-MM-DD format (got "{stale_before}")'
+                )
+            cutoff = datetime.combine(
+                cutoff_date, datetime.min.time(), tzinfo=dt_timezone.utc
+            )
+            matches = matches.filter(last_synced_at__lt=cutoff)
+            self.stdout.write(
+                f'Filtering to matches last synced before {cutoff.isoformat()}.'
+            )
 
         total = matches.count()
         if total == 0:
