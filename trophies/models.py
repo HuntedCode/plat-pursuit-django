@@ -2036,22 +2036,35 @@ class UserMilestoneProgress(models.Model):
     def __str__(self):
         return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
-class PublisherBlacklist(models.Model):
-    name = models.CharField(max_length=255, unique=True)
+class DeveloperBlacklist(models.Model):
+    """Tracks IGDB developers whose games have been flagged as shovelware.
+
+    Populated when a concept's platinum earn rate crosses the flag threshold
+    AND the concept has a trusted IGDBMatch. The concept's primary developer
+    (first ConceptCompany with is_developer=True, by id) is recorded here.
+    When a developer has any tracked concept, ``is_blacklisted`` is True and
+    other concepts sharing that primary developer are auto-flagged unless
+    shielded (see shovelware_detection_service).
+    """
+    company = models.OneToOneField(
+        'Company',
+        on_delete=models.CASCADE,
+        related_name='developer_blacklist_entry',
+    )
     date_added = models.DateTimeField(auto_now_add=True)
     flagged_concepts = models.JSONField(
         default=list, blank=True,
-        help_text="List of concept IDs whose games triggered this entry."
+        help_text="List of concept_id strings whose games triggered this entry."
     )
     is_blacklisted = models.BooleanField(
         default=False,
-        help_text="True when any concept is flagged. All publisher games get flagged."
+        help_text="True when any concept is tracked. Other concepts by this developer get auto-flagged."
     )
     notes = models.TextField(blank=True)
 
     class Meta:
         indexes = [
-            models.Index(fields=['name'], name='blacklist_name_idx'),
+            models.Index(fields=['is_blacklisted'], name='dev_blacklist_active_idx'),
         ]
 
     @property
@@ -2059,7 +2072,7 @@ class PublisherBlacklist(models.Model):
         return len(self.flagged_concepts)
 
     def add_concept(self, concept_id):
-        """Add a concept ID and immediately blacklist the publisher."""
+        """Add a concept_id to the tracked list and blacklist the developer."""
         if concept_id not in self.flagged_concepts:
             self.flagged_concepts.append(concept_id)
             self.is_blacklisted = True
@@ -2068,7 +2081,7 @@ class PublisherBlacklist(models.Model):
         return False
 
     def remove_concept(self, concept_id):
-        """Remove a concept ID. Un-blacklist only when no concepts remain."""
+        """Remove a concept_id. Un-blacklist only when no concepts remain."""
         if concept_id in self.flagged_concepts:
             self.flagged_concepts.remove(concept_id)
             self.is_blacklisted = bool(self.flagged_concepts)
@@ -2078,7 +2091,7 @@ class PublisherBlacklist(models.Model):
 
     def __str__(self):
         status = "BLACKLISTED" if self.is_blacklisted else f"{self.flagged_concept_count} concepts"
-        return f"{self.name} ({status})"
+        return f"{self.company.name} ({status})"
 
 
 class Comment(models.Model):
