@@ -58,9 +58,10 @@ See docs/features/community-hub.md for the design rationale.
     </div>
 
     {# ── Hero: site heartbeat (built_for_hunters partial) ── #}
-    {# The partial uses its own max-w-4xl wrapper, which creates a focal #}
-    {# hero-card effect against the full-width sections below it.       #}
-    {% include 'trophies/partials/dashboard/built_for_hunters.html' %}
+    {# `full_width=True` opts this ribbon into the hub's full site    #}
+    {# container width so it matches the feature grid below. Without  #}
+    {# it, the partial defaults to its dashboard-native max-w-4xl.    #}
+    {% include 'trophies/partials/dashboard/built_for_hunters.html' with full_width=True %}
 
     {# ── Active fundraiser banner (conditional) ── #}
     {# When an active fundraiser exists, render a prominent banner here #}
