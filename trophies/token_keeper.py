@@ -1097,6 +1097,69 @@ class TokenKeeper:
         time.sleep(60)
         instance.last_health = time.time()
 
+    # PSN returns sparse metadata for Asia-only titles when queried with the default
+    # US/en-US storefront (the title doesn't exist in that storefront). Retrying the
+    # concept-details lookup against Asian storefronts usually recovers the data.
+    ASIAN_REGION_FALLBACKS = (
+        ('JP', 'ja-JP'),
+        ('HK', 'en-HK'),
+        ('KR', 'ko-KR'),
+        ('TW', 'zh-Hant'),
+    )
+
+    @staticmethod
+    def _details_is_populated(details):
+        """Return True if a PSN details dict carries usable concept metadata."""
+        if not details:
+            return False
+        if details.get('errorCode') is not None:
+            return False
+        if not (details.get('name') or details.get('nameEn')):
+            return False
+        return True
+
+    def _get_details_with_region_fallback(self, game_title, job_type):
+        """Fetch concept details, trying US/en-US first then Asian-region fallbacks.
+
+        Returns (details: dict, used_fallback_region: bool). The flag tells the caller
+        whether the returned payload came from a non-default storefront, so mutations
+        to existing concepts can be gated off per the Asian-title rule.
+        """
+        try:
+            primary = game_title.get_details(country='US', language='en-US')
+            details = primary[0] if primary else {}
+        except Exception:
+            logger.exception("Primary get_details (US/en-US) failed")
+            details = {}
+
+        if self._details_is_populated(details):
+            return details, False
+
+        logger.info("Primary US/en-US response sparse; walking Asian-region fallbacks")
+
+        for country, language in self.ASIAN_REGION_FALLBACKS:
+            # Each retry is an additional PSN API call; record it against a token so
+            # rate limiting stays honest even though the actual HTTP call rides on
+            # game_title.authenticator's session.
+            instance = self._get_instance_for_job(job_type)
+            try:
+                self._record_call(instance.token)
+            finally:
+                self._release_instance(instance)
+            try:
+                fallback = game_title.get_details(country=country, language=language)
+                candidate = fallback[0] if fallback else {}
+            except Exception:
+                logger.exception(f"Region fallback {country}/{language}: exception, continuing")
+                continue
+            if self._details_is_populated(candidate):
+                logger.info(f"Region fallback {country}/{language}: populated concept details")
+                return candidate, True
+            logger.info(f"Region fallback {country}/{language}: sparse, continuing")
+
+        logger.warning("All Asian-region fallbacks returned sparse responses; using primary result")
+        return details, False
+
     # Job Requests
 
     def _job_sync_complete(self, profile_id: int, touched_profilegame_ids: list[int], queue_name: str):
@@ -1990,17 +2053,33 @@ class TokenKeeper:
                     title_id.save(update_fields=['platform'])
                     logger.info(f"Corrected TitleID {title_id.title_id} platform: {old_platform} -> {api_platform}")
 
-                details = game_title.get_details()[0]
+                details, used_fallback_region = self._get_details_with_region_fallback(game_title, job_type)
                 error_code = details.get('errorCode', None)
                 if error_code is None:
                     concept, concept_created = PsnApiService.create_concept_from_details(details)
 
-                    release_date = details.get('defaultProduct', {}).get('releaseDate', None)
-                    if release_date is None:
-                        release_date = details.get('releaseDate', {}).get('date', '')
-                    concept.update_release_date(release_date)
-                    media_data = self._extract_media(details)
-                    concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
+                    # Gate: data from a non-default (Asian) storefront may only be used
+                    # to initialize a NEW concept. It must never overwrite fields on an
+                    # existing concept; a later US/en-US sync is allowed to refresh as
+                    # usual via the concept_created=False, used_fallback_region=False path.
+                    if concept_created or not used_fallback_region:
+                        # English-path refresh: if we're seeing an existing concept via a
+                        # US/en-US response, upgrade its English-facing fields so concepts
+                        # originally seeded from an Asian fallback get their canonical
+                        # English title once we finally see it.
+                        if not concept_created and not used_fallback_region:
+                            PsnApiService.update_concept_english_fields(concept, details)
+                        release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+                        if release_date is None:
+                            release_date = details.get('releaseDate', {}).get('date', '')
+                        concept.update_release_date(release_date)
+                        media_data = self._extract_media(details)
+                        concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
+                    else:
+                        logger.info(
+                            f"Concept {concept.concept_id} matched existing via Asian-region "
+                            f"fallback; skipping release_date/media overwrite"
+                        )
                     game.add_concept(concept)
                     detected_region = detect_region_from_details(details)
                     if detected_region:

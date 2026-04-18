@@ -8,8 +8,9 @@ from trophies.util_modules.constants import TITLE_STATS_SUPPORTED_PLATFORMS
 
 class Command(BaseCommand):
     help = (
-        "Find profiles that own PS4/PS5 games without concepts and queue "
-        "sync_title_stats to resolve proper concepts through the normal pipeline."
+        "Find profiles that own PS4/PS5 games without a real concept (null OR "
+        "PP_ stub) and queue sync_title_stats to resolve proper concepts "
+        "through the normal pipeline."
     )
 
     def add_arguments(self, parser):
@@ -21,29 +22,50 @@ class Command(BaseCommand):
             '--profile-id', type=int, default=None,
             help='Only target a specific profile',
         )
+        parser.add_argument(
+            '--null-only', action='store_true',
+            help='Skip PP_ stub concepts; only target games with no concept at all',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
         profile_id = options['profile_id']
+        null_only = options['null_only']
 
-        # Find PS4/PS5 games without concepts
+        # Find PS4/PS5 games without a real concept. A concept is "missing" if
+        # it's null OR a PP_ stub (created via Concept.create_default_concept
+        # when PSN returned an errorCode for the title lookup). Stubs are fair
+        # game because Game.add_concept() will absorb() the stub's data into
+        # the real concept and delete the stub on replacement.
         modern_platforms = Q()
         for platform in TITLE_STATS_SUPPORTED_PLATFORMS:
             modern_platforms |= Q(title_platform__contains=platform)
 
+        missing_concept = Q(concept__isnull=True)
+        if not null_only:
+            missing_concept |= Q(concept__concept_id__startswith='PP_')
+
         conceptless_games = Game.objects.filter(
             modern_platforms,
-            concept__isnull=True,
-        )
+        ).filter(missing_concept)
 
         total_games = conceptless_games.count()
         if total_games == 0:
             self.stdout.write(self.style.SUCCESS("No PS4/PS5 games without concepts found."))
             return
 
-        self.stdout.write(f"Found {total_games} PS4/PS5 game(s) without concepts:")
+        # Use select_related so the concept_id check below doesn't N+1.
+        conceptless_games = conceptless_games.select_related('concept')
+        null_count = sum(1 for g in conceptless_games if g.concept is None)
+        stub_count = total_games - null_count
+
+        self.stdout.write(
+            f"Found {total_games} PS4/PS5 game(s) missing real concepts "
+            f"({null_count} null, {stub_count} PP_ stub):"
+        )
         for game in conceptless_games:
-            self.stdout.write(f"  {game.title_name} ({game.np_communication_id}) - {game.title_platform}")
+            kind = 'null' if game.concept is None else f'stub {game.concept.concept_id}'
+            self.stdout.write(f"  [{kind}] {game.title_name} ({game.np_communication_id}) - {game.title_platform}")
 
         # Pick one profile per concept-less game to avoid redundant syncs.
         # The concept is assigned to the Game (shared), so only one profile

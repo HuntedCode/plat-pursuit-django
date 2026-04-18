@@ -257,7 +257,7 @@ class PsnApiService:
         return Concept.objects.get_or_create(
             concept_id=details.get('id'),
             defaults={
-                'unified_title': details.get('nameEn', ''),
+                'unified_title': details.get('nameEn') or details.get('name', ''),
                 'publisher_name': details.get('publisherName', ''),
                 'genres': details.get('genres', []),
                 'subgenres': details.get('subGenres', []),
@@ -267,6 +267,63 @@ class PsnApiService:
                 },
                 'content_rating': details.get('contentRating', {}),
             })
+
+    @classmethod
+    def update_concept_english_fields(cls, concept, details):
+        """Refresh language-sensitive concept fields from a US/en-US PSN response.
+
+        Called only on the English sync path for an already-existing concept, so a
+        concept first created from an Asian-region fallback upgrades to canonical
+        English metadata once we finally see it. Only overwrites when the new value
+        is non-empty, so a sparse refresh cannot blank out previously-good data.
+        """
+        try:
+            descriptions_short = next((d['desc'] for d in details['descriptions'] if d['type'] == 'SHORT'), '')
+        except Exception:
+            descriptions_short = ''
+        try:
+            descriptions_long = next((d['desc'] for d in details['descriptions'] if d['type'] == 'LONG'), '')
+        except Exception:
+            descriptions_long = ''
+
+        update_fields = []
+
+        new_title = details.get('nameEn') or details.get('name', '')
+        if new_title and concept.unified_title != new_title:
+            concept.unified_title = new_title
+            update_fields.append('unified_title')
+
+        new_publisher = details.get('publisherName', '')
+        if new_publisher and concept.publisher_name != new_publisher:
+            concept.publisher_name = new_publisher
+            update_fields.append('publisher_name')
+
+        new_genres = details.get('genres', [])
+        if new_genres and concept.genres != new_genres:
+            concept.genres = new_genres
+            update_fields.append('genres')
+
+        new_subgenres = details.get('subGenres', [])
+        if new_subgenres and concept.subgenres != new_subgenres:
+            concept.subgenres = new_subgenres
+            update_fields.append('subgenres')
+
+        new_descriptions = {'short': descriptions_short, 'long': descriptions_long}
+        if (descriptions_short or descriptions_long) and concept.descriptions != new_descriptions:
+            concept.descriptions = new_descriptions
+            update_fields.append('descriptions')
+
+        new_content_rating = details.get('contentRating', {})
+        if new_content_rating and concept.content_rating != new_content_rating:
+            concept.content_rating = new_content_rating
+            update_fields.append('content_rating')
+
+        if update_fields:
+            concept.save(update_fields=update_fields)
+            logger.info(
+                f"Concept {concept.concept_id} refreshed English fields: "
+                f"{', '.join(update_fields)}"
+            )
     
     @classmethod
     def update_profile_game_with_title_stats(cls, profile: Profile, title_stats: TitleStats):
