@@ -2393,6 +2393,7 @@ class IGDBMatchAdmin(admin.ModelAdmin):
     list_display = (
         'concept_title', 'psn_platforms', 'igdb_name', 'igdb_platforms_display',
         'confidence_display', 'status', 'match_method', 'game_category_display',
+        'updated_at',
     )
     list_filter = ('status', 'match_method', 'game_category', PlatformCoverageFilter)
     search_fields = ('concept__unified_title', 'igdb_name')
