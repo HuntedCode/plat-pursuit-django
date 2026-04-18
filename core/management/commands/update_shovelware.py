@@ -90,6 +90,25 @@ class Command(BaseCommand):
             if verbose:
                 self.stdout.write(f"  [EVAL] {concept.concept_id} ({concept.unified_title})")
 
+        # Final sweep: release any currently-blacklisted developer whose
+        # evidence has evaporated. Handles the corner case where a dev was
+        # blacklisted historically but has since lost its "primary developer"
+        # status on every concept (admin edits, IGDB data changes), so the
+        # per-concept evaluation loop never touches them.
+        released = 0
+        blacklisted_entries = DeveloperBlacklist.objects.filter(
+            is_blacklisted=True,
+        ).select_related('company')
+        for entry in blacklisted_entries.iterator(chunk_size=200):
+            if not ShovelwareDetectionService._dev_has_qualifying_evidence(entry.company):
+                entry.is_blacklisted = False
+                entry.save(update_fields=['is_blacklisted'])
+                released += 1
+                if verbose:
+                    self.stdout.write(f"  [RELEASE] {entry.company.name}")
+        if released:
+            self.stdout.write(f"Released {released} developer(s) without qualifying evidence.")
+
         after_counts = self._status_counts()
         blacklisted_devs = DeveloperBlacklist.objects.filter(is_blacklisted=True).count()
 
