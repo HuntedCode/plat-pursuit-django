@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, PublisherBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -1259,7 +1259,114 @@ class BannedWordAdmin(admin.ModelAdmin):
         cache.delete('banned_words:active')
 
 
-# Checklist admin registrations removed during roadmap migration (DB tables retained)
+# ---------- Deprecated Checklist Admin (historical data viewer) ----------
+# The Checklist system was replaced by the Roadmap system. These tables are
+# retained for historical data retrieval only. Admins are read-only to prevent
+# accidental edits to frozen data. `verbose_name_plural` is mutated at import
+# time to cluster these entries under a [Deprecated] prefix in the admin index.
+# (Runtime mutation of _meta is safe here: makemigrations reads the declared
+# Meta class on the model, not the runtime Options object.)
+
+Checklist._meta.verbose_name_plural = '[Deprecated] Checklists'
+ChecklistSection._meta.verbose_name_plural = '[Deprecated] Checklist sections'
+ChecklistItem._meta.verbose_name_plural = '[Deprecated] Checklist items'
+ChecklistVote._meta.verbose_name_plural = '[Deprecated] Checklist votes'
+UserChecklistProgress._meta.verbose_name_plural = '[Deprecated] Checklist user progress'
+ChecklistReport._meta.verbose_name_plural = '[Deprecated] Checklist reports'
+
+
+class _DeprecatedReadOnlyAdmin(admin.ModelAdmin):
+    """Read-only admin base for deprecated models kept for historical data."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields]
+
+
+class ChecklistSectionInline(admin.TabularInline):
+    model = ChecklistSection
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    fields = ('order', 'subtitle', 'created_at')
+    readonly_fields = ('order', 'subtitle', 'created_at')
+    ordering = ('order',)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Checklist)
+class ChecklistAdmin(_DeprecatedReadOnlyAdmin):
+    list_display = ('id', 'title', 'profile', 'concept', 'status', 'upvote_count', 'progress_save_count', 'view_count', 'is_deleted', 'created_at')
+    list_select_related = ('profile', 'concept')
+    list_filter = ('status', 'is_deleted')
+    search_fields = ('title', 'description', 'profile__psn_username', 'concept__unified_title')
+    raw_id_fields = ('concept', 'selected_game', 'profile')
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+    inlines = [ChecklistSectionInline]
+
+
+@admin.register(ChecklistSection)
+class ChecklistSectionAdmin(_DeprecatedReadOnlyAdmin):
+    list_display = ('id', 'subtitle', 'checklist', 'order', 'created_at')
+    list_select_related = ('checklist',)
+    search_fields = ('subtitle', 'description', 'checklist__title')
+    raw_id_fields = ('checklist',)
+    ordering = ('checklist', 'order')
+
+
+@admin.register(ChecklistItem)
+class ChecklistItemAdmin(_DeprecatedReadOnlyAdmin):
+    list_display = ('id', 'text_preview', 'item_type', 'section', 'order', 'trophy_id', 'created_at')
+    list_select_related = ('section__checklist',)
+    list_filter = ('item_type',)
+    search_fields = ('text', 'section__subtitle', 'section__checklist__title')
+    raw_id_fields = ('section',)
+    ordering = ('section', 'order')
+
+    def text_preview(self, obj):
+        if not obj.text:
+            return f'[{obj.item_type}]'
+        return obj.text[:60] + ('...' if len(obj.text) > 60 else '')
+    text_preview.short_description = 'Text'
+
+
+@admin.register(ChecklistVote)
+class ChecklistVoteAdmin(_DeprecatedReadOnlyAdmin):
+    list_display = ('id', 'checklist', 'profile', 'created_at')
+    list_select_related = ('checklist', 'profile')
+    search_fields = ('checklist__title', 'profile__psn_username')
+    raw_id_fields = ('checklist', 'profile')
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+
+
+@admin.register(UserChecklistProgress)
+class UserChecklistProgressAdmin(_DeprecatedReadOnlyAdmin):
+    list_display = ('id', 'profile', 'checklist', 'items_completed', 'total_items', 'progress_percentage', 'last_activity')
+    list_select_related = ('profile', 'checklist')
+    search_fields = ('profile__psn_username', 'checklist__title')
+    raw_id_fields = ('profile', 'checklist')
+    ordering = ('-last_activity',)
+    date_hierarchy = 'last_activity'
+
+
+@admin.register(ChecklistReport)
+class ChecklistReportAdmin(_DeprecatedReadOnlyAdmin):
+    list_display = ('id', 'checklist', 'reporter', 'reason', 'status', 'created_at')
+    list_select_related = ('checklist', 'reporter')
+    list_filter = ('reason', 'status')
+    search_fields = ('checklist__title', 'reporter__psn_username', 'details')
+    raw_id_fields = ('checklist', 'reporter')
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
 
 
 # ---------- Roadmap Admin ----------
