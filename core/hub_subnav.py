@@ -195,6 +195,7 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'list_detail': ('community', 'lists'),
     'list_create': ('community', 'lists'),
     'list_edit': ('community', 'lists'),
+    'my_challenges': ('community', 'challenges'),
     'az_challenge_create': ('community', 'challenges'),
     'az_challenge_detail': ('community', 'challenges'),
     'az_challenge_setup': ('community', 'challenges'),
