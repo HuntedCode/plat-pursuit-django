@@ -120,7 +120,9 @@ def _serialize_challenge(challenge, include_slots=False):
         },
     }
     if include_slots:
-        slots = challenge.az_slots.select_related('game').all()
+        slots = challenge.az_slots.select_related(
+            'game', 'game__concept', 'game__concept__igdb_match',
+        ).all()
         data['slots'] = [_serialize_slot(s) for s in slots]
     return data
 
@@ -168,8 +170,15 @@ class AZChallengeDetailAPIView(APIView):
     def get(self, request, challenge_id):
         try:
             try:
-                challenge = Challenge.objects.select_related('profile').get(
-                    id=challenge_id, is_deleted=False, challenge_type='az',
+                challenge = (
+                    Challenge.objects
+                    .select_related('profile')
+                    .prefetch_related(
+                        'az_slots__game__concept__igdb_match',
+                    )
+                    .get(
+                        id=challenge_id, is_deleted=False, challenge_type='az',
+                    )
                 )
             except Challenge.DoesNotExist:
                 return Response(
@@ -497,7 +506,7 @@ class AZGameSearchAPIView(APIView):
                 is_obtainable=True,
             ).exclude(
                 shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            )
+            ).select_related('concept', 'concept__igdb_match')
 
             # Only games that have a platinum trophy
             games = games.filter(trophies__trophy_type='platinum').distinct()

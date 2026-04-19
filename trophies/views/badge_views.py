@@ -73,8 +73,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset().live().select_related(
-            'base_badge', 'most_recent_concept', 'title',
-            'base_badge__most_recent_concept', 'base_badge__title',
+            'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match', 'title',
+            'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
+            'base_badge__title',
             'submitted_by', 'base_badge__submitted_by',
         )
         form = self.get_filter_form()
@@ -1041,8 +1042,8 @@ class OverallBadgeLeaderboardsView(ProfileHotbarMixin, TemplateView):
             series_badges = Badge.objects.live().filter(
                 tier=1
             ).select_related(
-                'base_badge', 'most_recent_concept',
-                'base_badge__most_recent_concept',
+                'base_badge', 'most_recent_concept', 'most_recent_concept__igdb_match',
+                'base_badge__most_recent_concept', 'base_badge__most_recent_concept__igdb_match',
                 'base_badge__title', 'title',
             ).exclude(
                 series_slug__isnull=True

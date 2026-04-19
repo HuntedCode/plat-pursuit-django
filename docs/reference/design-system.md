@@ -298,9 +298,9 @@ For game cards, badge cards, and similar grid items. Miniature versions of dashb
 <div class="card bg-base-200/90 border-2 border-base-300 shadow-md shadow-neutral
             transition-all duration-300 hover:shadow-lg hover:shadow-{color}/30 hover:border-{color}
             group p-1 md:p-1.5">
-    <!-- Image -->
-    <figure class="relative aspect-square bg-white/[0.03] border border-base-content/5 rounded-lg overflow-hidden">
-        <img class="w-full h-full object-cover" />
+    <!-- Image (game covers use 3:4 portrait; non-game content can use aspect-square) -->
+    <figure class="relative aspect-[3/4] bg-white/[0.03] border border-base-content/5 rounded-lg overflow-hidden">
+        <img class="w-full h-full object-cover object-top" />
     </figure>
 
     <!-- Content -->
@@ -567,26 +567,28 @@ When a chart (e.g., radar) stacks to full width on mobile, constrain and center 
 
 These conventions apply site-wide and are not affected by the redesign:
 
-- Game cover art / title images: `object-cover object-top` with square aspect ratio. The `object-top` anchors to the top of the image so game logos and titles remain visible when portrait images are cropped into square containers
-- Trophy icons: `object-cover` with square aspect ratio
-- Badge images: `object-contain` (transparent backgrounds)
-- Never use `object-fill`
-- See CLAUDE.md "Image Styling Conventions" for full rules
+- Game cover art / title images: `aspect-[3/4]` (portrait) with `object-cover object-top`. IGDB's native cover ratio is portrait; the `object-top` anchor preserves game logos at the top of the cover when wider PSN fallback art crops inside the portrait container.
+- Trophy icons: `object-cover` with square aspect ratio (these are square by nature).
+- Badge images: `object-contain` (transparent backgrounds, custom shapes, stay square).
+- Never use `object-fill`.
+- See CLAUDE.md "Image Styling Conventions" for full rules.
 
 ### Game Image Fallback Chain
 
-Use `{{ game.display_image_url }}` — this is the single source of truth for the fallback chain. Pair it with `{% if game.has_cover_art %}` when the template needs to differentiate styling (real cover art gets `object-cover object-top`; the generic `title_icon_url` fallback gets `object-contain p-3`).
+Use `{{ game.display_image_url }}` — this is the single source of truth for the IGDB-first fallback chain. Pair it with `{% if game.has_cover_art %}` when the template needs to differentiate styling (real cover art gets `object-cover object-top`; the generic `title_icon_url` fallback gets `object-contain p-3`).
 
 The chain `Game.display_image_url` implements:
 
-- **Normal path** (not `force_title_icon`): `title_image` (PSN store art) → `concept.cover_url` → `title_icon_url`.
-- **force_title_icon**: admin flag for games with bad PSN store art. Skips PSN sources entirely and prefers a trusted IGDB cover, falling back to `title_icon_url`.
+- **Normal path** (not `force_title_icon`): **trusted IGDB cover → `concept.concept_icon_url` (PSN MASTER, skipped for `PP_*` stubs) → `game.title_image` → `game.title_icon_url`**.
+- **force_title_icon**: admin flag for games with bad PSN store art. Skips PSN intermediate sources entirely: **trusted IGDB cover → `game.title_icon_url`**.
 
-`Concept.cover_url` itself chains: `concept_icon_url` (PSN MASTER portrait) → trusted IGDB cover. `bg_url` is **deliberately excluded** — it's landscape (`GAMEHUB_COVER_ART`) and crops badly in portrait containers. Use `concept.bg_url` directly if you actually want the landscape image (e.g., share-card backdrops).
+For concept-only contexts (badges, reviews, showcases that don't go through a Game), use `{{ concept.cover_url }}` — same IGDB-first ordering: **trusted IGDB cover → `concept.concept_icon_url` (non-stub only)**. Returns `None` if neither source is available, so gate with `{% if concept.cover_url %}`.
 
-IGDB cover URLs are constructed on the fly from `IGDBMatch.igdb_cover_image_id`. Ensure querysets that render many games include `select_related('concept', 'concept__igdb_match')` so the trusted-IGDB fallback doesn't N+1. The new `Game.has_cover_art` property has the same access pattern.
+`bg_url` is **deliberately excluded** from both chains — it's landscape (`GAMEHUB_COVER_ART`) and crops badly in portrait containers. Use `concept.bg_url` directly if you actually want the landscape image (e.g., share-card backdrops).
 
-For franchise/company browse cards (aggregated cover art across many games), use the four `representative_*` Subquery annotations from `trophies/services/game_grouping_service.py`: `representative_title_image_subquery`, `representative_concept_icon_subquery`, `representative_igdb_cover_id_subquery`, `representative_title_icon_subquery` — checked in that order in the template.
+IGDB cover URLs are constructed on the fly from `IGDBMatch.igdb_cover_image_id`. **Always** include `select_related('concept', 'concept__igdb_match')` (or `most_recent_concept__igdb_match` for badges) on querysets that render covers — IGDB is the first lookup on every render now, so a missing prefetch becomes a guaranteed N+1.
+
+For franchise/company browse cards (aggregated cover art across many games), use the four `representative_*` Subquery annotations from `trophies/services/game_grouping_service.py`: `representative_igdb_cover_id_subquery`, `representative_concept_icon_subquery`, `representative_title_image_subquery`, `representative_title_icon_subquery` — checked in that IGDB-first order in the template.
 
 ---
 

@@ -113,12 +113,13 @@ Currently handled by `absorb()`:
 ## Image Styling Conventions
 
 ### Game Cover Art and Title Images
-- **Always** use `object-cover object-top` for game art (`title_image`, IGDB cover, PSN cover art). The `object-top` anchors to the top of the image, preserving game logos/titles when portrait images are cropped into square containers
-- **Never** use `object-fill`, it stretches/distorts images
-- In inline-style contexts (share cards), use `object-fit: cover`
-- **Image fallback chain**: Use `{{ game.display_image_url }}` (with `{% if game.has_cover_art %}` for styling). This is the single source of truth, defined on the `Game` model. Normal path: `title_image` → `concept.cover_url` (PSN MASTER → trusted IGDB) → `title_icon_url`. When `force_title_icon` is set (admin flag), PSN sources are skipped and we prefer a trusted IGDB cover, falling back to `title_icon_url`. Never reimplement the chain inline — use the helper
-- `concept.bg_url` is deliberately **not** in the cover chain (it's landscape and crops badly in portrait containers). Callers that specifically want the landscape image (e.g. share-card backdrops) should reference `concept.bg_url` directly
-- IGDB cover art is constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size)` / `Concept.cover_url` property. Only used for trusted matches (`is_trusted`). Querysets that render many games need `select_related('concept', 'concept__igdb_match')` to keep `display_image_url` from N+1'ing
+- **Aspect ratio**: game-cover containers use `aspect-[3/4]` (portrait), matching IGDB's native cover ratio. PSN fallback images (square/4:3) center-crop with `object-top` so game logos at the top of the cover survive.
+- **Always** use `object-cover object-top` for game art (IGDB cover, PSN cover art). The `object-top` anchors to the top of the image, preserving game logos/titles when wider PSN fallback art crops in a portrait container.
+- **Never** use `object-fill`, it stretches/distorts images.
+- In inline-style contexts (share cards rendered by Playwright), use `object-fit: cover; object-position: top`.
+- **Image fallback chain (IGDB-first)**: Use `{{ game.display_image_url }}` (with `{% if game.has_cover_art %}` for styling). This is the single source of truth, defined on the `Game` model. Normal path: **trusted IGDB cover → `concept.concept_icon_url` (PSN MASTER, skipped for `PP_*` stub concepts) → `game.title_image` → `game.title_icon_url`**. When `force_title_icon` is set (admin flag), PSN intermediate sources are skipped: trusted IGDB cover → `title_icon_url`. Never reimplement the chain inline, use the helper.
+- `concept.bg_url` is deliberately **not** in the cover chain (it's landscape and crops badly in portrait containers). Callers that specifically want the landscape image (e.g. share-card backdrops) should reference `concept.bg_url` directly.
+- IGDB cover art is constructed on the fly from `IGDBMatch.igdb_cover_image_id` via `Concept.get_cover_url(size)` / `Concept.cover_url` property. Only used for trusted matches (`is_trusted`). Querysets that render many games **must** `select_related('concept', 'concept__igdb_match')` to keep `display_image_url` from N+1'ing (IGDB is now the first lookup on every render, not the fallback).
 
 ### Trophy Icons
 - Use `object-cover` with square aspect ratio (`w-N h-N` pairs or `w-full aspect-square`)

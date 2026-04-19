@@ -56,7 +56,11 @@ def _build_template_context(challenge, format_type, featured_letter=None):
     Uses concurrent image fetching to cache all game icons + avatar
     in parallel rather than sequentially.
     """
-    slots = list(challenge.az_slots.select_related('game').order_by('letter'))
+    slots = list(
+        challenge.az_slots.select_related(
+            'game', 'game__concept', 'game__concept__igdb_match',
+        ).order_by('letter')
+    )
 
     # Batch-fetch trophy progress for assigned games
     game_ids = [s.game_id for s in slots if s.game_id]

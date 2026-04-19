@@ -73,7 +73,11 @@ def provide_platinum_case(profile, config):
     max_items = 20
     selections = list(
         UserTrophySelection.objects.filter(profile=profile)
-        .select_related('earned_trophy__trophy__game', 'earned_trophy__trophy__game__concept')
+        .select_related(
+            'earned_trophy__trophy__game',
+            'earned_trophy__trophy__game__concept',
+            'earned_trophy__trophy__game__concept__igdb_match',
+        )
         .order_by('-earned_trophy__earned_date_time')[:max_items]
     )
     # Display size: 1 row (10) if count <= 10, else 2 rows (20)
@@ -107,7 +111,7 @@ def provide_favorite_games(profile, config):
     pg_map = {
         pg.game_id: pg for pg in ProfileGame.objects.filter(
             profile=profile, game_id__in=game_ids,
-        ).select_related('game', 'game__concept')
+        ).select_related('game', 'game__concept', 'game__concept__igdb_match')
     }
     # Preserve order from config, drop any missing
     ordered = [pg_map[gid] for gid in game_ids if gid in pg_map]
@@ -195,7 +199,12 @@ def provide_rarest_trophies(profile, config):
         .exclude(
             trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
         )
-        .select_related('trophy', 'trophy__game', 'trophy__game__concept')
+        .select_related(
+            'trophy',
+            'trophy__game',
+            'trophy__game__concept',
+            'trophy__game__concept__igdb_match',
+        )
         .order_by('trophy__trophy_earn_rate', 'trophy__earn_rate')
     )
 
@@ -246,7 +255,12 @@ def provide_recent_platinums(profile, config):
     recent = list(
         EarnedTrophy.objects
         .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .select_related('trophy', 'trophy__game', 'trophy__game__concept')
+        .select_related(
+            'trophy',
+            'trophy__game',
+            'trophy__game__concept',
+            'trophy__game__concept__igdb_match',
+        )
         .order_by('-earned_date_time')[:max_items]
     )
     return {
@@ -271,7 +285,7 @@ def provide_review_showcase(profile, config):
     reviews_map = {
         r.id: r for r in Review.objects.filter(
             id__in=review_ids, profile=profile, is_deleted=False,
-        ).select_related('concept', 'concept_trophy_group')
+        ).select_related('concept', 'concept__igdb_match', 'concept_trophy_group')
     }
     ordered = [reviews_map[rid] for rid in review_ids if rid in reviews_map]
     return {

@@ -111,7 +111,7 @@ def build_igdb_groups(
             ungrouped.append({
                 'igdb_id': None,
                 'display_name': game.title_name,
-                'cover_url': _best_cover_url(game),
+                'cover_url': game.display_image_url,
                 'release_date': None,
                 'games': [game],
                 **extras,

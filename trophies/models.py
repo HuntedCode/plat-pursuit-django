@@ -603,39 +603,49 @@ class Game(models.Model):
     def display_image_url(self):
         """Best cover-art URL for this game with the full fallback chain.
 
-        Normal path: title_image (PSN store art) -> concept.cover_url
-        (PSN MASTER -> PSN bg -> trusted IGDB cover) -> title_icon_url.
+        Normal path (IGDB-first):
+        1. Trusted IGDB cover (Concept.get_igdb_cover_url)
+        2. PSN MASTER icon (Concept.concept_icon_url, skipped for PP_* stubs)
+        3. PSN store art (Game.title_image)
+        4. Generic PSN title icon (Game.title_icon_url)
 
         When force_title_icon is set (admin flag for games with bad PSN
-        store art), PSN sources are skipped entirely and we prefer a
-        trusted IGDB cover if available, falling back to title_icon_url.
+        store art), PSN intermediate sources are skipped entirely: we try
+        a trusted IGDB cover, otherwise fall straight to title_icon_url.
         """
+        if self.concept_id:
+            igdb = self.concept.get_igdb_cover_url()
+            if igdb:
+                return igdb
+
         if self.force_title_icon:
-            if self.concept_id:
-                igdb = self.concept.get_igdb_cover_url()
-                if igdb:
-                    return igdb
             return self.title_icon_url or ''
+
+        if self.concept_id:
+            is_stub = self.concept.concept_id.startswith('PP_') if self.concept.concept_id else False
+            if not is_stub and self.concept.concept_icon_url:
+                return self.concept.concept_icon_url
 
         if self.title_image:
             return self.title_image
-        if self.concept_id:
-            cover = self.concept.cover_url
-            if cover:
-                return cover
+
         return self.title_icon_url or ''
 
     @property
     def has_cover_art(self):
-        """True if display_image_url returns real cover art (PSN/IGDB), not
+        """True if display_image_url returns real cover art (IGDB/PSN), not
         just the generic title_icon_url fallback. Templates use this to
         choose object-cover vs object-contain styling.
         """
-        if self.force_title_icon:
-            return bool(self.concept_id and self.concept.get_igdb_cover_url())
-        if self.title_image:
+        if self.concept_id and self.concept.get_igdb_cover_url():
             return True
-        return bool(self.concept_id and self.concept.cover_url)
+        if self.force_title_icon:
+            return False
+        if self.concept_id:
+            is_stub = self.concept.concept_id.startswith('PP_') if self.concept.concept_id else False
+            if not is_stub and self.concept.concept_icon_url:
+                return True
+        return bool(self.title_image)
 
     @property
     def platforms_display(self):
@@ -783,7 +793,8 @@ class Concept(models.Model):
     def get_cover_url(self, size='cover_big'):
         """Return portrait cover art URL for display in square/portrait containers.
 
-        Priority: PSN MASTER icon (portrait) -> trusted IGDB cover (portrait).
+        Priority (IGDB-first, mirrors Game.display_image_url): trusted IGDB cover
+        -> PSN MASTER icon (`concept_icon_url`, skipped for `PP_*` stubs).
         `bg_url` is deliberately excluded from this chain because it's
         landscape art (GAMEHUB_COVER_ART) and crops badly in portrait/square
         containers; callers that need the landscape image should use
@@ -792,13 +803,15 @@ class Concept(models.Model):
         Stub concepts (PP_*) have `concept_icon_url` copied from the source
         game's `title_icon_url` at creation, so returning it would be
         equivalent to falling all the way through to the generic icon. Skip
-        that step for stubs and go straight to IGDB (which may exist if the
-        stub was later enriched).
+        that step for stubs; IGDB may still exist if the stub was enriched.
         """
+        igdb = self.get_igdb_cover_url(size)
+        if igdb:
+            return igdb
         is_stub = self.concept_id.startswith('PP_') if self.concept_id else False
         if not is_stub and self.concept_icon_url:
             return self.concept_icon_url
-        return self.get_igdb_cover_url(size)
+        return None
 
     @property
     def cover_url(self):

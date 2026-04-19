@@ -1873,11 +1873,18 @@ def provide_rate_my_games(profile):
         )
         unrated_ids = [cid for cid in plat_concept_ids if cid and cid not in rated_ids][:12]
         if unrated_ids:
-            for c in Concept.objects.filter(id__in=unrated_ids).exclude(slug='').exclude(slug__isnull=True).values('unified_title', 'concept_icon_url', 'slug'):
+            concepts = (
+                Concept.objects
+                .filter(id__in=unrated_ids)
+                .exclude(slug='')
+                .exclude(slug__isnull=True)
+                .select_related('igdb_match')
+            )
+            for c in concepts:
                 preview_games.append({
-                    'name': c['unified_title'],
-                    'icon_url': c['concept_icon_url'] or '',
-                    'slug': c['slug'],
+                    'name': c.unified_title,
+                    'icon_url': c.cover_url or '',
+                    'slug': c.slug,
                 })
 
     rated_count = max(0, total_plats - unrated_count)
@@ -2008,19 +2015,23 @@ def provide_platinum_grid_cta(profile):
         profile=profile, earned=True, trophy__trophy_type='platinum'
     ).count()
 
-    # Grab up to 12 recent plat icons for a mini preview grid
+    # Grab up to 8 recent plat icons for a mini preview grid (4x2 at 3:4 portrait)
     preview_ets = (
         EarnedTrophy.objects
         .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .select_related('trophy__game')
-        .order_by('-earned_date_time')[:12]
+        .select_related(
+            'trophy__game',
+            'trophy__game__concept',
+            'trophy__game__concept__igdb_match',
+        )
+        .order_by('-earned_date_time')[:8]
     )
     preview_icons = [
         et.trophy.game.display_image_url
         for et in preview_ets
     ]
-    # Pad to 12 for consistent 4x3 grid
-    while len(preview_icons) < 12:
+    # Pad to 8 for consistent 4x2 grid
+    while len(preview_icons) < 8:
         preview_icons.append('')
 
     return {

@@ -571,7 +571,9 @@ def get_calendar_month_data(challenge):
     # Prefetch all days for this challenge (plat_count is precomputed on the model)
     all_days = {
         (d.month, d.day): d
-        for d in challenge.calendar_days.select_related('game').all()
+        for d in challenge.calendar_days.select_related(
+            'game', 'game__concept', 'game__concept__igdb_match',
+        ).all()
     }
 
     months = []

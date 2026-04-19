@@ -811,7 +811,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         reviews_qs = Review.objects.filter(
             profile=profile, is_deleted=False
         ).select_related(
-            'concept_trophy_group__concept'
+            'concept_trophy_group__concept',
+            'concept_trophy_group__concept__igdb_match',
         ).order_by('-created_at')
 
         paginator = Paginator(reviews_qs, per_page)
@@ -1050,7 +1051,7 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             games_qs = (
                 ProfileGame.objects
                 .filter(profile=profile)
-                .select_related('game', 'game__concept')
+                .select_related('game', 'game__concept', 'game__concept__igdb_match')
                 .order_by(Lower('game__title_name'))
             )
             all_games = [

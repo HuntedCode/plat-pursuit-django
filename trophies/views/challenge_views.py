@@ -66,9 +66,11 @@ class ChallengeHubView(ProfileHotbarMixin, TemplateView):
         ).select_related('profile')
 
         if challenge_type == 'az':
-            qs = qs.prefetch_related('az_slots__game')
+            qs = qs.prefetch_related(
+                'az_slots__game__concept__igdb_match',
+            )
         elif challenge_type == 'genre':
-            qs = qs.prefetch_related('genre_slots__concept')
+            qs = qs.prefetch_related('genre_slots__concept__igdb_match')
 
         if search_query:
             qs = qs.filter(

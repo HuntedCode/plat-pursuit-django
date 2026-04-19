@@ -320,7 +320,12 @@ class MonthlyRecapService:
             trophy__trophy_type='platinum',
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date
-        ).select_related('trophy', 'trophy__game').order_by('earned_date_time')
+        ).select_related(
+            'trophy',
+            'trophy__game',
+            'trophy__game__concept',
+            'trophy__game__concept__igdb_match',
+        ).order_by('earned_date_time')
 
         result = []
         for earned in platinums:
@@ -454,7 +459,12 @@ class MonthlyRecapService:
             earned_date_time__gte=start_date,
             earned_date_time__lt=end_date,
             trophy__trophy_type='platinum'
-        ).select_related('trophy', 'trophy__game').order_by('earned_date_time')
+        ).select_related(
+            'trophy',
+            'trophy__game',
+            'trophy__game__concept',
+            'trophy__game__concept__igdb_match',
+        ).order_by('earned_date_time')
 
         # Group platinums by day with details
         platinums_by_day = {}
