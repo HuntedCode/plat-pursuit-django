@@ -56,7 +56,7 @@ class Command(BaseCommand):
         refreshed = 0
         skipped_pre_refresh = 0
 
-        for match in qs.iterator():
+        for match in qs.iterator(chunk_size=500):
             game_type = (match.raw_response or {}).get('game_type')
             if not isinstance(game_type, dict):
                 skipped_pre_refresh += 1
