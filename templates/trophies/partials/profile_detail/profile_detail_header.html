@@ -204,7 +204,7 @@
                     {% if profile.sync_status != 'syncing' and plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
                            class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-primary shrink-0">
+                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-primary shrink-0">
                                 <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
@@ -231,7 +231,7 @@
                     {% if profile.sync_status != 'syncing' and plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
                            class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-accent shrink-0">
+                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-accent shrink-0">
                                 <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
@@ -258,7 +258,7 @@
                     {% if plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
                            class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-success shrink-0">
+                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-success shrink-0">
                                 <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">
@@ -285,7 +285,7 @@
                     {% if plat and plat.game %}
                         <a href="{% url 'game_detail' plat.game.np_communication_id %}"
                            class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/8 hover:bg-white/[0.06] transition-colors group">
-                            <div class="w-9 h-9 rounded-md overflow-hidden ring-1 ring-warning shrink-0">
+                            <div class="w-9 aspect-[3/4] rounded-md overflow-hidden ring-1 ring-warning shrink-0">
                                 <img src="{{ plat.game.display_image_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             </div>
                             <div class="flex-1 min-w-0">

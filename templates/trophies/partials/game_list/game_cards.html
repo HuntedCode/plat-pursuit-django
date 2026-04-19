@@ -9,7 +9,7 @@
               hover:border-{{ game|platform_color }} hover:z-10 group h-full">
 
         {# ── Image ── #}
-        <figure class="relative aspect-square bg-base-300/20 rounded-t-lg overflow-hidden">
+        <figure class="relative aspect-[3/4] bg-base-300/20 rounded-t-lg overflow-hidden">
             <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}"
                  class="w-full h-full {% if game.has_cover_art %}object-cover object-top transition-transform duration-300 group-hover:scale-105{% else %}object-contain p-3{% endif %}" loading="lazy" />
 
@@ -32,7 +32,7 @@
 
         {# ── Content ── #}
         <div class="p-1.5 md:p-2 space-y-1 flex flex-col flex-1">
-            <h3 class="text-xs font-bold line-clamp-2 h-8 group-hover:text-{{ game|platform_color }} transition-colors">{{ game.title_name }}</h3>
+            <h3 class="text-xs font-bold line-clamp-2 h-8 mt-auto group-hover:text-{{ game|platform_color }} transition-colors">{{ game.title_name }}</h3>
 
             <div class="flex flex-wrap gap-0.5 items-center">
                 {% for platform in game.title_platform reversed %}
@@ -42,7 +42,7 @@
             </div>
 
             {# ── Stats panel (dashboard inner panel) ── #}
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 mt-auto space-y-1">
+            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 space-y-1">
                 {# Trophy counts: labeled stat cells #}
                 <div class="grid grid-cols-4 gap-0.5 text-center">
                     <div class="rounded p-0.5">

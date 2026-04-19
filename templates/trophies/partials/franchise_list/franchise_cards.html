@@ -6,19 +6,20 @@
         <div class="card-body p-3 md:p-4">
             <div class="flex items-start gap-3">
                 {% comment %}
-                    Representative cover art (most recent game), with full fallback chain:
-                    title_image → concept_icon (PSN MASTER) → IGDB cover → title_icon → icon placeholder.
+                    Representative cover art (most recent game), IGDB-first fallback chain:
+                    IGDB cover → concept_icon (PSN MASTER) → title_image → title_icon → icon placeholder.
+                    Matches Game.display_image_url ordering.
                 {% endcomment %}
-                <div class="w-14 h-14 md:w-16 md:h-16 shrink-0 rounded-lg bg-base-300 flex items-center justify-center overflow-hidden">
-                    {% if franchise.representative_title_image %}
-                        <img src="{{ franchise.representative_title_image }}" alt="{{ franchise.name }}"
+                <div class="w-14 md:w-16 aspect-[3/4] shrink-0 rounded-lg bg-base-300 flex items-center justify-center overflow-hidden">
+                    {% if franchise.representative_igdb_cover_id %}
+                        <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ franchise.representative_igdb_cover_id }}.png"
+                             alt="{{ franchise.name }}"
                              class="w-full h-full object-cover object-top" loading="lazy" />
                     {% elif franchise.representative_concept_icon %}
                         <img src="{{ franchise.representative_concept_icon }}" alt="{{ franchise.name }}"
                              class="w-full h-full object-cover object-top" loading="lazy" />
-                    {% elif franchise.representative_igdb_cover_id %}
-                        <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ franchise.representative_igdb_cover_id }}.png"
-                             alt="{{ franchise.name }}"
+                    {% elif franchise.representative_title_image %}
+                        <img src="{{ franchise.representative_title_image }}" alt="{{ franchise.name }}"
                              class="w-full h-full object-cover object-top" loading="lazy" />
                     {% elif franchise.representative_title_icon %}
                         <img src="{{ franchise.representative_title_icon }}" alt="{{ franchise.name }}"

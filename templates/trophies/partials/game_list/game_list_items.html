@@ -11,7 +11,7 @@
             <div class="flex items-center gap-2 md:gap-3 lg:gap-4">
 
                 {# ── Image ── #}
-                <div class="relative w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 rounded-lg overflow-hidden shrink-0
+                <div class="relative w-12 md:w-14 lg:w-16 aspect-[3/4] rounded-lg overflow-hidden shrink-0
                             ring-1 ring-base-300 group-hover:ring-{{ game|platform_color }}/50 transition-all">
                     <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}"
                          class="w-full h-full {% if game.has_cover_art %}object-cover object-top{% else %}object-contain p-1.5{% endif %}" loading="lazy" />

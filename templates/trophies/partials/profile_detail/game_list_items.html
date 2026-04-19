@@ -9,7 +9,7 @@
         <div class="card-body m-0 p-2 md:p-3">
             <div class="flex items-center gap-2 md:gap-3">
                 {# Game icon #}
-                <div class="w-12 h-12 md:w-14 md:h-14 rounded-lg overflow-hidden shrink-0
+                <div class="w-12 md:w-14 aspect-[3/4] rounded-lg overflow-hidden shrink-0
                             ring-1 ring-base-300 group-hover:ring-{{ game|platform_color }}/50 transition-all">
                     <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover {% if game.has_cover_art %}object-top{% endif %}" loading="lazy" />
                 </div>

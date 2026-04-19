@@ -24,7 +24,7 @@
 
             {# Game image #}
             <a href="{% url 'game_detail' game.np_communication_id %}" class="shrink-0">
-                <figure class="w-14 h-14 md:w-16 md:h-16 rounded-lg overflow-hidden border border-base-content/5 group-hover:border-{{ game|platform_color }} transition-colors duration-200">
+                <figure class="w-14 md:w-16 aspect-[3/4] rounded-lg overflow-hidden border border-base-content/5 group-hover:border-{{ game|platform_color }} transition-colors duration-200">
                     <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover {% if game.has_cover_art %}object-top{% endif %}" loading="lazy" />
                 </figure>
             </a>

@@ -28,15 +28,15 @@
                 </div>
 
                 {# ── Concept Icon (secondary, lg:+ only) ── #}
-                {% if badge.most_recent_concept %}
-                    <div class="hidden lg:block w-12 h-12 rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
-                        <img src="{{ badge.most_recent_concept.concept_icon_url }}" alt="{{ badge.most_recent_concept.unified_title }}"
-                             class="w-full h-full object-cover" loading="lazy" />
+                {% if badge.most_recent_concept.cover_url %}
+                    <div class="hidden lg:block w-12 aspect-[3/4] rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
+                        <img src="{{ badge.most_recent_concept.cover_url }}" alt="{{ badge.most_recent_concept.unified_title }}"
+                             class="w-full h-full object-cover object-top" loading="lazy" />
                     </div>
-                {% elif badge.base_badge and badge.base_badge.most_recent_concept %}
-                    <div class="hidden lg:block w-12 h-12 rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
-                        <img src="{{ badge.base_badge.most_recent_concept.concept_icon_url }}" alt="{{ badge.base_badge.most_recent_concept.unified_title }}"
-                             class="w-full h-full object-cover" loading="lazy" />
+                {% elif badge.base_badge.most_recent_concept.cover_url %}
+                    <div class="hidden lg:block w-12 aspect-[3/4] rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
+                        <img src="{{ badge.base_badge.most_recent_concept.cover_url }}" alt="{{ badge.base_badge.most_recent_concept.unified_title }}"
+                             class="w-full h-full object-cover object-top" loading="lazy" />
                     </div>
                 {% endif %}
 

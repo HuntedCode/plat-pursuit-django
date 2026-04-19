@@ -507,7 +507,7 @@ const GameListEditor = {
                         <span class="text-xs font-mono text-base-content/40 position-label">#${item.position + 1}</span>
                     </div>
                     <a href="/games/${e(item.np_communication_id)}/" class="flex-shrink-0">
-                        <figure class="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-base-300">
+                        <figure class="w-16 sm:w-20 aspect-[3/4] rounded-lg overflow-hidden border-2 border-base-300">
                             <img src="${imageUrl}" alt="${e(item.title_name)}" class="w-full h-full object-cover" loading="lazy" />
                         </figure>
                     </a>

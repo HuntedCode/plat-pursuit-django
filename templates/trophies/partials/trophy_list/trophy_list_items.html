@@ -23,7 +23,7 @@
                 </div>
 
                 {# ── Game Icon (secondary, lg:+ only) ── #}
-                <div class="hidden lg:block w-8 h-8 rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
+                <div class="hidden lg:block w-8 aspect-[3/4] rounded-md overflow-hidden shrink-0 ring-1 ring-base-300">
                     <img src="{{ trophy.game.display_image_url }}" alt="{{ trophy.game.title_name }}"
                          class="w-full h-full {% if trophy.game.has_cover_art %}object-cover object-top{% else %}object-contain p-0.5{% endif %}" loading="lazy" />
                 </div>

@@ -14,8 +14,8 @@
         {% for review in data.items %}
         <a href="{% url 'review_hub' review.concept.slug %}{% if review.concept_trophy_group and review.concept_trophy_group.trophy_group_id != 'default' %}?group={{ review.concept_trophy_group.trophy_group_id }}{% endif %}"
            class="flex gap-2 p-2.5 rounded-lg bg-base-300/20 border border-base-content/5 hover:bg-white/[0.06] hover:border-primary/40 transition-colors group">
-            <div class="w-10 h-10 rounded overflow-hidden shrink-0 ring-1 ring-base-300 group-hover:ring-primary transition-all">
-                <img src="{{ review.concept.concept_icon_url }}" class="w-full h-full object-cover" loading="lazy" />
+            <div class="w-10 aspect-[3/4] rounded overflow-hidden shrink-0 ring-1 ring-base-300 group-hover:ring-primary transition-all">
+                <img src="{{ review.concept.cover_url }}" class="w-full h-full object-cover object-top" loading="lazy" />
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">

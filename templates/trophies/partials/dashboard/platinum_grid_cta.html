@@ -16,9 +16,9 @@
             <div class="relative flex-1 min-w-0">
                 <div class="grid grid-cols-4 gap-1.5">
                     {% for i in data.preview_icons %}
-                        <div class="aspect-square rounded-lg overflow-hidden border border-base-content/10 shadow-sm">
+                        <div class="aspect-[3/4] rounded-lg overflow-hidden border border-base-content/10 shadow-sm">
                             {% if i %}
-                                <img src="{{ i }}" class="w-full h-full object-cover" loading="lazy" />
+                                <img src="{{ i }}" class="w-full h-full object-cover object-top" loading="lazy" />
                             {% else %}
                                 <div class="w-full h-full bg-white/[0.03]"></div>
                             {% endif %}

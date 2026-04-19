@@ -7,22 +7,24 @@
             <div class="flex items-start gap-3">
                 {% comment %}
                     Thumbnail: representative cover art (most recent game) with
-                    a 4-tier fallback chain (title_image -> concept_icon (PSN
-                    MASTER) -> IGDB cover -> title_icon -> building icon
-                    placeholder). When the company has a logo, it overlays the
-                    bottom-left corner of the thumbnail as a small chip so
-                    users get both visual anchors at a glance.
+                    a 4-tier IGDB-first fallback chain (IGDB cover -> concept_icon
+                    (PSN MASTER) -> title_image -> title_icon -> building icon
+                    placeholder). Matches Game.display_image_url ordering so
+                    company thumbnails stay consistent with the site-wide chain.
+                    When the company has a logo, it overlays the bottom-left
+                    corner of the thumbnail as a small chip so users get both
+                    visual anchors at a glance.
                 {% endcomment %}
-                <div class="relative w-14 h-14 md:w-16 md:h-16 shrink-0 rounded-lg bg-base-300 flex items-center justify-center overflow-hidden">
-                    {% if company.representative_title_image %}
-                        <img src="{{ company.representative_title_image }}" alt="{{ company.name }}"
+                <div class="relative w-14 md:w-16 aspect-[3/4] shrink-0 rounded-lg bg-base-300 flex items-center justify-center overflow-hidden">
+                    {% if company.representative_igdb_cover_id %}
+                        <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ company.representative_igdb_cover_id }}.png"
+                             alt="{{ company.name }}"
                              class="w-full h-full object-cover object-top" loading="lazy" />
                     {% elif company.representative_concept_icon %}
                         <img src="{{ company.representative_concept_icon }}" alt="{{ company.name }}"
                              class="w-full h-full object-cover object-top" loading="lazy" />
-                    {% elif company.representative_igdb_cover_id %}
-                        <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ company.representative_igdb_cover_id }}.png"
-                             alt="{{ company.name }}"
+                    {% elif company.representative_title_image %}
+                        <img src="{{ company.representative_title_image }}" alt="{{ company.name }}"
                              class="w-full h-full object-cover object-top" loading="lazy" />
                     {% elif company.representative_title_icon %}
                         <img src="{{ company.representative_title_icon }}" alt="{{ company.name }}"
