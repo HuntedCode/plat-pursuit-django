@@ -32,7 +32,7 @@ CSP is configured via `CONTENT_SECURITY_POLICY` in settings.py using the `django
 | `font-src` | `'self'`, `fonts.gstatic.com` |
 | `img-src` | `'self'`, `data:`, PSN domains (http + https), `*.s3.amazonaws.com`, Google AdSense domains |
 | `frame-src` | `'self'`, Google AdSense iframe domains |
-| `connect-src` | `'self'`, `pagead2.googlesyndication.com` |
+| `connect-src` | `'self'`, `cdn.jsdelivr.net` (source maps), Google AdSense domains |
 | `frame-ancestors` | `'none'` |
 
 **Note:** `'unsafe-inline'` is required for scripts (template `<script>` blocks) and styles (Tailwind). A future improvement would be nonce-based script loading to remove `'unsafe-inline'` from `script-src`.

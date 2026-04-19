@@ -179,6 +179,7 @@ CONTENT_SECURITY_POLICY = {
         ],
         "connect-src": [
             "'self'",
+            "https://cdn.jsdelivr.net",                # Source maps for chart.js, marked, dompurify, canvas-confetti
             "https://pagead2.googlesyndication.com",   # AdSense reporting
             "https://googleads.g.doubleclick.net",     # AdSense ad serving
             "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
