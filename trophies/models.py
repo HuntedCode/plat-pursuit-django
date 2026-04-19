@@ -4514,7 +4514,9 @@ class IGDBMatch(models.Model):
         return result
 
     def __str__(self):
-        return f"{self.concept} -> {self.igdb_name} ({self.get_status_display()}, {self.match_confidence:.0%})"
+        name = self.igdb_name or "(no match)"
+        confidence = f", {self.match_confidence:.0%}" if self.match_confidence is not None else ""
+        return f"{self.concept} -> {name} ({self.get_status_display()}{confidence})"
 
 
 class GameFlag(models.Model):
