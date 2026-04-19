@@ -42,7 +42,8 @@ class CalendarChallengeShareManager extends ShareImageManager {
                             </svg>
                             Landscape
                         </button>
-                        <button class="btn btn-sm format-btn btn-outline" data-format="portrait">
+                        <!-- Portrait button hidden per product decision. Unhide by removing style="display: none;" to restore. -->
+                        <button class="btn btn-sm format-btn btn-outline" data-format="portrait" style="display: none;">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                             </svg>
@@ -103,7 +104,8 @@ class CalendarChallengeShareManager extends ShareImageManager {
                         </svg>
                         Download Image
                     </button>
-                    <button id="generate-both-btn" class="btn btn-secondary btn-outline">
+                    <!-- "Download Both Formats" button hidden with portrait. Unhide by removing style="display: none;" to restore. -->
+                    <button id="generate-both-btn" class="btn btn-secondary btn-outline" style="display: none;">
                         Download Both Formats
                     </button>
                 </div>

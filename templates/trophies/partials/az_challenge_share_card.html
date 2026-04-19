@@ -90,23 +90,19 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                 {# Row 1: A-I (9 cells) #}
                 <div style="display: flex; gap: 6px;">
                     {% for slot in slots %}{% if forloop.counter <= 9 %}
-                    <div style="width: 118px; height: 118px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                    <div style="width: 90px; height: 120px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
                         {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 6px; left: 8px; font-size: 24px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
                             {% if slot.state == 'completed' %}color: #fbbf24;
                             {% elif slot.state == 'assigned' %}color: #f5f7fc;
                             {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.letter }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 4px; right: 4px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        {% if slot.state == 'assigned' and slot.progress > 0 %}
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
                             <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
                         </div>
@@ -117,23 +113,19 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                 {# Row 2: J-R (9 cells) #}
                 <div style="display: flex; gap: 6px;">
                     {% for slot in slots %}{% if forloop.counter > 9 and forloop.counter <= 18 %}
-                    <div style="width: 118px; height: 118px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                    <div style="width: 90px; height: 120px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
                         {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 6px; left: 8px; font-size: 24px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
                             {% if slot.state == 'completed' %}color: #fbbf24;
                             {% elif slot.state == 'assigned' %}color: #f5f7fc;
                             {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.letter }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 4px; right: 4px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        {% if slot.state == 'assigned' and slot.progress > 0 %}
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
                             <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
                         </div>
@@ -144,23 +136,19 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                 {# Row 3: S-Z (8 cells, centered) #}
                 <div style="display: flex; gap: 6px;">
                     {% for slot in slots %}{% if forloop.counter > 18 %}
-                    <div style="width: 118px; height: 118px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
+                    <div style="width: 90px; height: 120px; border-radius: 6px; position: relative; overflow: hidden; box-sizing: border-box; flex-shrink: 0;
                         {% if slot.state == 'completed' %}background: #2a2e34; border: 4px solid #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 6px; left: 8px; font-size: 24px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
                             {% if slot.state == 'completed' %}color: #fbbf24;
                             {% elif slot.state == 'assigned' %}color: #f5f7fc;
                             {% else %}color: rgba(245, 247, 252, 0.25);{% endif %}">{{ slot.letter }}</div>
-                        {% if slot.state == 'completed' %}
-                        <div style="position: absolute; top: 4px; right: 4px; z-index: 2; width: 28px; height: 28px; background: #fbbf24; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,0.4);">
-                            <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="#1a1b1f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        {% elif slot.state == 'assigned' and slot.progress > 0 %}
+                        {% if slot.state == 'assigned' and slot.progress > 0 %}
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 5px; background: rgba(0,0,0,0.5); z-index: 2;">
                             <div style="height: 100%; width: {{ slot.progress }}%; background: #67d1f8;"></div>
                         </div>
@@ -255,7 +243,7 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
             <div style="display: flex; gap: 20px; background: rgba(42, 46, 52, 0.8); border: 4px solid #67d1f8; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-sizing: border-box; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6);">
                 <div style="width: 120px; height: 120px; border-radius: 6px; overflow: hidden; background: #2a2e34; flex-shrink: 0; box-sizing: border-box;">
                     {% if featured_game_icon %}
-                    <img src="{{ featured_game_icon }}" style="width: 100%; height: 100%; object-fit: cover;" />
+                    <img src="{{ featured_game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
                     {% else %}
                     <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
                         <span style="font-size: 48px; font-weight: bold; color: rgba(245, 247, 252, 0.15);">{{ featured_letter }}</span>
@@ -295,7 +283,7 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 8px; left: 10px; font-size: 26px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -322,7 +310,7 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 8px; left: 10px; font-size: 26px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -349,7 +337,7 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 8px; left: 10px; font-size: 26px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -376,7 +364,7 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 8px; left: 10px; font-size: 26px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
@@ -403,7 +391,7 @@ Grid layout: Landscape 9+9+8 (A-I, J-R, S-Z) | Portrait 6+6+6+6+2 (A-F, G-L, M-R
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 60%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.6){% else %}rgba(0,0,0,0.7){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         <div style="position: absolute; bottom: 8px; left: 10px; font-size: 26px; font-weight: bold; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.8);

@@ -40,7 +40,7 @@ Color reference (converted from oklch):
 <div class="share-image-content" style="width: 1200px; height: 630px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 20px; font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif; box-sizing: border-box;">
     <div style="width: 1160px; height: 590px; border: 3px solid #67d1f8; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(103, 209, 248, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
         {# ── Identity Bar ── #}
-        <div data-element="recap-header" style="padding: 14px 28px; background: linear-gradient(to right, rgba(103, 209, 248, 0.12), rgba(103, 209, 248, 0.03)); border-bottom: 2px solid #1a1b1f; display: flex; align-items: center; gap: 14px; flex-shrink: 0;">
+        <div data-element="recap-header" style="padding: 10px 28px; background: linear-gradient(to right, rgba(103, 209, 248, 0.12), rgba(103, 209, 248, 0.03)); border-bottom: 2px solid #1a1b1f; display: flex; align-items: center; gap: 14px; flex-shrink: 0;">
             {# Avatar #}
             <div style="position: relative; flex-shrink: 0;">
                 {% if avatar_url %}
@@ -99,20 +99,27 @@ Color reference (converted from oklch):
                     </div>
                 </div>
 
-                {# Bottom: Platinums earned this month #}
+                {# Bottom: Platinums earned this month - 4x2 grid of covers with name overlay #}
                 {% if platinums_data %}
                 <div style="flex: 1; background: rgba(42, 46, 52, 0.4); border-radius: 8px; padding: 12px; display: flex; flex-direction: column;">
-                    <div style="font-size: 11px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; margin-bottom: 8px;">Platinums Earned</div>
-                    <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
-                        {% for plat in platinums_data %}
-                        <div style="display: flex; align-items: center; background: rgba(26, 27, 31, 0.5); border-radius: 6px; padding: 6px 8px; gap: 8px;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;">
+                        <div style="font-size: 11px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold;">Platinums Earned</div>
+                        {% if platinums_data|length > 8 %}
+                        <div style="font-size: 9px; color: rgba(245, 247, 252, 0.4); font-style: italic;">+{{ platinums_data|length|add:"-8" }} more</div>
+                        {% endif %}
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 74px); grid-auto-rows: 98px; gap: 6px; justify-content: center;">
+                        {% for plat in platinums_data|slice:":8" %}
+                        <div style="width: 74px; height: 98px; border-radius: 6px; overflow: hidden; background: #2a2e34; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.4); border: 1px solid rgba(26, 27, 31, 0.8);">
                             {% if plat.game_image %}
-                            <img src="{{ plat.game_image }}" style="width: 36px; height: 36px; border-radius: 4px; object-fit: cover; flex-shrink: 0;" />
-                            {% endif %}
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-size: 12px; font-weight: 600; color: #f5f7fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ plat.game_name }}</div>
-                                <div style="font-size: 10px; color: rgba(245, 247, 252, 0.5);">{{ plat.earn_rate }}% earn rate</div>
+                            <img src="{{ plat.game_image }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
+                            <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 55%; background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0));"></div>
+                            <div style="position: absolute; bottom: 4px; left: 5px; right: 5px; font-size: 9px; font-weight: 600; color: #f5f7fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,0.9);">{{ plat.game_name }}</div>
+                            {% else %}
+                            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 6px; box-sizing: border-box;">
+                                <div style="font-size: 9px; color: rgba(245, 247, 252, 0.5); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">{{ plat.game_name }}</div>
                             </div>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -245,7 +252,7 @@ Color reference (converted from oklch):
         </div>
 
         {# Footer: Branding #}
-        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 44px; box-sizing: border-box; line-height: 44px; padding: 0 28px;">
+        <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 44px; box-sizing: border-box; line-height: 44px; padding: 0 28px; flex-shrink: 0;">
             <img src="{% static 'images/logo.png' %}" style="display: inline-block; width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;" /><span style="font-size: 16px; color: #67d1f8; font-weight: bold; font-style: italic; vertical-align: middle;">platpursuit.com</span>
             <span style="float: right; font-size: 12px; color: rgba(245, 247, 252, 0.4); font-style: italic; letter-spacing: 0.03em;">No trophy can hide from us</span>
         </div>

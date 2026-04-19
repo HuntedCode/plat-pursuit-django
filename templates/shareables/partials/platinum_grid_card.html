@@ -4,8 +4,8 @@ Platinum Grid Share Image - Rendered by Playwright for PNG output.
 
 Pure inline CSS (no Tailwind). All sizes are in px for pixel-perfect rendering.
 Variables: icons (list of {image_url, game_name}), cols, rows, width, height,
-           cell_size, cell_gap, header_height, footer_height, padding, section_gap,
-           username, total_plats, icon_type, theme_key
+           cell_width, cell_height, cell_gap, header_height, footer_height,
+           padding, section_gap, username, total_plats, icon_type, theme_key
 {% endcomment %}
 
 <div class="share-image-content" style="
@@ -53,21 +53,21 @@ Variables: icons (list of {image_url, game_name}), cols, rows, width, height,
     {# Icon Grid #}
     <div style="
         display: grid;
-        grid-template-columns: repeat({{ cols }}, {{ cell_size }}px);
+        grid-template-columns: repeat({{ cols }}, {{ cell_width }}px);
         gap: {{ cell_gap }}px;
         flex: 1;
     ">
         {% for icon in icons %}
         <div style="
-            width: {{ cell_size }}px;
-            height: {{ cell_size }}px;
+            width: {{ cell_width }}px;
+            height: {{ cell_height }}px;
             border-radius: 6px;
             overflow: hidden;
             border: 2px solid rgba(245, 247, 252, 0.08);
         ">
             {% if icon.image_url %}
             <img src="{{ icon.image_url }}"
-                 style="width: 100%; height: 100%; object-fit: cover; display: block;"
+                 style="width: 100%; height: 100%; object-fit: cover; object-position: top; display: block;"
                  title="{{ icon.game_name }}" />
             {% else %}
             <div style="

@@ -23,19 +23,26 @@ from trophies.services.dashboard_service import get_effective_premium
 logger = logging.getLogger(__name__)
 
 # Grid layout constants
-CELL_SIZE = 128       # px per icon cell
-CELL_GAP = 4          # px gap between cells
-HEADER_HEIGHT = 80    # px for branding bar
-FOOTER_HEIGHT = 40    # px for footer
-PADDING = 24          # px outer padding
-SECTION_GAP = 12      # px margin between header/grid/footer
+CELL_WIDTH = 128                         # px per icon cell (width)
+CELL_HEIGHT_GAME = CELL_WIDTH * 4 // 3   # 3:4 portrait aspect for game covers (matches IGDB ratio)
+CELL_HEIGHT_TROPHY = CELL_WIDTH          # square for trophy icons (PSN trophy icons are always square)
+CELL_GAP = 4                             # px gap between cells
+HEADER_HEIGHT = 80                       # px for branding bar
+FOOTER_HEIGHT = 40                       # px for footer
+PADDING = 24                             # px outer padding
+SECTION_GAP = 12                         # px margin between header/grid/footer
 
 
-def _calculate_grid_dimensions(count, cols):
+def _cell_height_for(icon_type):
+    """Cell height depends on icon shape: game covers are 3:4 portrait, trophies are square."""
+    return CELL_HEIGHT_TROPHY if icon_type == 'trophy' else CELL_HEIGHT_GAME
+
+
+def _calculate_grid_dimensions(count, cols, cell_height):
     """Calculate pixel dimensions for a grid of icons."""
     rows = math.ceil(count / cols) if cols > 0 else 1
-    width = PADDING * 2 + cols * CELL_SIZE + (cols - 1) * CELL_GAP
-    grid_height = rows * CELL_SIZE + (rows - 1) * CELL_GAP
+    width = PADDING * 2 + cols * CELL_WIDTH + (cols - 1) * CELL_GAP
+    grid_height = rows * cell_height + (rows - 1) * CELL_GAP
     height = PADDING * 2 + HEADER_HEIGHT + FOOTER_HEIGHT + grid_height + SECTION_GAP * 2
     return width, height, rows
 
@@ -123,7 +130,8 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
         cols = _auto_columns(len(ordered))
     cols = min(cols, len(ordered))  # Never more columns than items
 
-    width, height, rows = _calculate_grid_dimensions(len(ordered), cols)
+    cell_height = _cell_height_for(icon_type)
+    width, height, rows = _calculate_grid_dimensions(len(ordered), cols, cell_height)
 
     # Build icon data for template
     icons = []
@@ -145,7 +153,8 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
         'rows': rows,
         'width': width,
         'height': height,
-        'cell_size': CELL_SIZE,
+        'cell_width': CELL_WIDTH,
+        'cell_height': cell_height,
         'cell_gap': CELL_GAP,
         'header_height': HEADER_HEIGHT,
         'footer_height': FOOTER_HEIGHT,

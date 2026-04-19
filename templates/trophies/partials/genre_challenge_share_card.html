@@ -96,7 +96,7 @@ Grid layout: 4x4 for both landscape and portrait
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 2px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 2px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 70%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         {% if slot.game_name %}
@@ -222,7 +222,7 @@ Grid layout: 4x4 for both landscape and portrait
                         {% elif slot.state == 'assigned' %}background: #2a2e34; border: 3px solid rgba(103, 209, 248, 0.4);
                         {% else %}background: rgba(42, 46, 52, 0.6); border: 3px solid #1a1b1f;{% endif %}">
                         {% if slot.game_icon %}
-                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;" />
+                        <img src="{{ slot.game_icon }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top; position: absolute; top: 0; left: 0;" />
                         <div style="position: absolute; bottom: 0; left: 0; width: 100%; height: 65%; background: linear-gradient(to top, {% if slot.state == 'completed' %}rgba(120, 80, 0, 0.7){% else %}rgba(0,0,0,0.75){% endif %}, rgba(0,0,0,0));"></div>
                         {% endif %}
                         {% if slot.game_name %}

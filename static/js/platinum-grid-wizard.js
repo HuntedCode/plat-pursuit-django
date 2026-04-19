@@ -107,6 +107,8 @@
         // Sort
         if (state.sort === 'rarest') {
             items.sort((a, b) => a.psn_earn_rate - b.psn_earn_rate);
+        } else if (state.sort === 'alpha') {
+            items.sort((a, b) => (a.game_name || '').localeCompare(b.game_name || '', undefined, { sensitivity: 'base' }));
         }
         // 'recent' is the default order from the backend
 

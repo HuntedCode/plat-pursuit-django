@@ -180,6 +180,9 @@ class ProfileCardDataService:
         # ---- Recent / Rarest platinum ----
         data.update(ProfileCardDataService._get_notable_plats(profile))
 
+        # ---- Most played game (by play duration) ----
+        data.update(ProfileCardDataService._get_most_played(profile))
+
         # ---- Card theme ----
         card_theme = 'default'
         try:
@@ -291,6 +294,39 @@ class ProfileCardDataService:
                     result['rarest_plat_earn_rate'] = rp.trophy.earn_rate
         except Exception:
             logger.exception('Error fetching rarest plat for profile %s', profile.pk)
+
+        return result
+
+    @staticmethod
+    def _get_most_played(profile):
+        """Get the user's most-played game by play duration."""
+        from trophies.models import ProfileGame
+
+        result = {
+            'most_played_name': None,
+            'most_played_icon': None,
+            'most_played_hours': None,
+        }
+
+        try:
+            pg = (
+                ProfileGame.objects
+                .filter(profile=profile, play_duration__isnull=False)
+                .exclude(hidden_flag=True)
+                .exclude(user_hidden=True)
+                .select_related('game', 'game__concept', 'game__concept__igdb_match')
+                .order_by('-play_duration')
+                .first()
+            )
+            if pg and pg.game and pg.play_duration:
+                game = pg.game
+                result['most_played_name'] = (
+                    game.concept.unified_title if game.concept else game.title_name
+                )
+                result['most_played_icon'] = game.display_image_url
+                result['most_played_hours'] = int(pg.play_duration.total_seconds() / 3600)
+        except Exception:
+            logger.exception('Error fetching most played game for profile %s', profile.pk)
 
         return result
 

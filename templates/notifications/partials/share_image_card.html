@@ -72,26 +72,27 @@ Color reference (converted from oklch):
 
         {# Main Content Area #}
         <div style="flex: 1; display: flex; padding: 16px 24px; gap: 20px; box-sizing: border-box;">
-            {# Left Column: Images Stacked Vertically #}
-            <div style="display: flex; flex-direction: column; justify-content: center; gap: 8px; width: 210px; flex-shrink: 0;">
-                {# Game Image - Square #}
-                <div style="width: 210px; height: 210px; border: 2px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: #2a2e34; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); flex-shrink: 0; box-sizing: border-box;">
+            {# Left Column: Full-height game cover (3:4 portrait) #}
+            <div style="display: flex; flex-direction: column; justify-content: center; width: 324px; flex-shrink: 0;">
+                {# Game Image - fills main-content column height (324x432 at 3:4) #}
+                <div style="width: 324px; height: 432px; border: 2px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: #2a2e34; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); flex-shrink: 0; box-sizing: border-box;">
                     {% if game_image %}
-                    <img src="{{ game_image }}" style="width: 100%; height: 100%; object-fit: cover;" />
+                    <img src="{{ game_image }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
                     {% else %}
                     <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(to bottom right, #32363d, #2a2e34);">
                         <svg style="height: 80px; width: 80px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon></svg>
                     </div>
                     {% endif %}
                 </div>
-                {# Trophy Icon - Square #}
-                <div style="width: 210px; height: 210px; border: 2px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: #2a2e34; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box;">
+                {% comment %}Trophy Icon hidden while cover takes the full left column height; keep in case we revert.
+                <div style="width: 140px; height: 140px; border: 2px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: #2a2e34; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box; align-self: center;">
                     {% if trophy_icon %}
                     <img src="{{ trophy_icon }}" style="width: 100%; height: 100%; object-fit: cover;" />
                     {% else %}
-                    <svg style="height: 80px; width: 80px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon></svg>
+                    <svg style="height: 72px; width: 72px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon></svg>
                     {% endif %}
                 </div>
+                {% endcomment %}
             </div>
 
             {# Right Column: Info & Stats #}
@@ -134,35 +135,35 @@ Color reference (converted from oklch):
                 {# Stats Grid #}
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px;">
                     {% if total_plats > 0 %}
-                    <div style="background: rgba(103, 209, 248, 0.06); border: 2px solid rgba(103, 209, 248, 0.3); border-radius: 8px; padding: 12px 16px; min-width: 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
+                    <div style="background: rgba(103, 209, 248, 0.06); border: 2px solid rgba(103, 209, 248, 0.3); border-radius: 8px; padding: 12px 16px; flex: 1 1 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                         <div style="font-size: 11px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Platinum</div>
                         <div style="font-size: 28px; font-weight: bold; color: #f5f7fc;">#{{ total_plats }}</div>
                     </div>
                     {% endif %}
 
                     {% if earned_trophies and total_trophies %}
-                    <div style="background: rgba(149, 128, 255, 0.06); border: 2px solid rgba(149, 128, 255, 0.3); border-radius: 8px; padding: 12px 16px; min-width: 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
+                    <div style="background: rgba(149, 128, 255, 0.06); border: 2px solid rgba(149, 128, 255, 0.3); border-radius: 8px; padding: 12px 16px; flex: 1 1 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                         <div style="font-size: 11px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Trophies</div>
                         <div style="font-size: 28px; font-weight: bold; color: #f5f7fc;">{{ earned_trophies }}/{{ total_trophies }}</div>
                     </div>
                     {% endif %}
 
                     {% if progress %}
-                    <div style="background: rgba(103, 248, 200, 0.06); border: 2px solid rgba(103, 248, 200, 0.3); border-radius: 8px; padding: 12px 16px; min-width: 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
+                    <div style="background: rgba(103, 248, 200, 0.06); border: 2px solid rgba(103, 248, 200, 0.3); border-radius: 8px; padding: 12px 16px; flex: 1 1 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                         <div style="font-size: 11px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Complete</div>
                         <div style="font-size: 28px; font-weight: bold; color: #f5f7fc;">{{ progress }}%</div>
                     </div>
                     {% endif %}
 
                     {% if earn_rate and earn_rate > 0 %}
-                    <div style="background: rgba(255, 170, 92, 0.06); border: 2px solid rgba(255, 170, 92, 0.3); border-radius: 8px; padding: 12px 16px; min-width: 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
+                    <div style="background: rgba(255, 170, 92, 0.06); border: 2px solid rgba(255, 170, 92, 0.3); border-radius: 8px; padding: 12px 16px; flex: 1 1 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                         <div style="font-size: 11px; color: #ffaa5c; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">Earn Rate</div>
                         <div style="font-size: 28px; font-weight: bold; color: #f5f7fc;">{{ earn_rate }}%</div>
                     </div>
                     {% endif %}
 
                     {% if yearly_plats > 0 and earned_year %}
-                    <div style="background: rgba(103, 248, 200, 0.06); border: 2px solid rgba(103, 248, 200, 0.3); border-radius: 8px; padding: 12px 16px; min-width: 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
+                    <div style="background: rgba(103, 248, 200, 0.06); border: 2px solid rgba(103, 248, 200, 0.3); border-radius: 8px; padding: 12px 16px; flex: 1 1 130px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); box-sizing: border-box;">
                         <div style="font-size: 11px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 4px;">{{ earned_year }}</div>
                         <div style="font-size: 28px; font-weight: bold; color: #f5f7fc;">#{{ yearly_plats }}</div>
                     </div>
@@ -171,9 +172,9 @@ Color reference (converted from oklch):
 
                 {# Badge Progress Section #}
                 {% if badge_xp > 0 or tier1_badges %}
-                <div style="margin-top: 16px;">
+                <div style="margin-top: 16px; display: flex; gap: 10px; align-items: stretch; justify-content: space-between;">
                     {% if badge_xp > 0 %}
-                    <div style="display: inline-block; vertical-align: middle; background: rgba(149, 128, 255, 0.06); border: 2px solid rgba(149, 128, 255, 0.3); border-radius: 8px; padding: 10px 14px; margin-right: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); white-space: nowrap;">
+                    <div style="flex: 0 0 auto; display: inline-block; vertical-align: middle; background: rgba(149, 128, 255, 0.06); border: 2px solid rgba(149, 128, 255, 0.3); border-radius: 8px; padding: 10px 14px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4); white-space: nowrap;">
                         <svg style="display: inline-block; width: 24px; height: 24px; vertical-align: middle; margin-right: 10px;" viewBox="0 0 24 24" fill="none" stroke="#9580ff" stroke-width="2">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                         </svg><div style="display: inline-block; vertical-align: middle;">
@@ -183,13 +184,13 @@ Color reference (converted from oklch):
                     </div>
                     {% endif %}
 
-                    {% for badge in tier1_badges|slice:":2" %}
-                    <div style="display: inline-block; vertical-align: middle; background: rgba(42, 46, 52, 0.8); border: 2px solid rgba(205, 127, 50, 0.3); border-radius: 8px; padding: 10px 14px; margin-right: 10px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
-                        <div style="display: inline-block; width: 36px; height: 36px; border-radius: 4px; overflow: hidden; background: #2a2e34; vertical-align: middle; text-align: center; line-height: 36px;">
+                    {% for badge in tier1_badges|slice:":3" %}
+                    <div style="flex: 0 0 auto; display: inline-block; vertical-align: middle; background: rgba(42, 46, 52, 0.8); border: 2px solid rgba(205, 127, 50, 0.3); border-radius: 8px; padding: 10px 14px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);">
+                        <div style="display: inline-block; width: 32px; height: 32px; border-radius: 4px; overflow: hidden; background: #2a2e34; vertical-align: middle; text-align: center; line-height: 32px;">
                             {% if badge.badge_image_url %}
                             <img src="{{ badge.badge_image_url }}" style="width: 100%; height: 100%; object-fit: contain;" />
                             {% else %}
-                            <svg style="width: 24px; height: 24px; vertical-align: middle; margin-top: 6px;" viewBox="0 0 24 24" fill="none" stroke="#cd7f32" stroke-width="2">
+                            <svg style="width: 22px; height: 22px; vertical-align: middle; margin-top: 5px;" viewBox="0 0 24 24" fill="none" stroke="#cd7f32" stroke-width="2">
                                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
                             </svg>
                             {% endif %}
@@ -232,37 +233,37 @@ Color reference (converted from oklch):
                 {% endif %}
 
                 {# Bottom: Rarity, Playtime & User Rating #}
-                <div style="margin-top: auto; display: flex; flex-wrap: wrap; align-items: center;">
+                <div style="margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px;">
                     {% if rarity_label %}
                     {% with rarity_colors=earn_rate|rarity_color_hex %}
-                    <span style="display: inline-block; background: {{ rarity_colors.bg }}; border: 2px solid {{ rarity_colors.color }}; color: {{ rarity_colors.color }}; padding: 10px 20px; border-radius: 9999px; font-size: 16px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 16px;">
-                        {{ rarity_label }}{% if earn_rate %} <span style="font-size: 13px; opacity: 0.8;">({{ earn_rate }}%)</span>{% endif %}
+                    <span style="display: inline-block; background: {{ rarity_colors.bg }}; border: 2px solid {{ rarity_colors.color }}; color: {{ rarity_colors.color }}; padding: 7px 14px; border-radius: 9999px; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em;">
+                        {{ rarity_label }}{% if earn_rate %} <span style="font-size: 11px; opacity: 0.8;">({{ earn_rate }}%)</span>{% endif %}
                     </span>
                     {% endwith %}
                     {% endif %}
 
                     {% if playtime %}
-                    <span style="display: inline-block; background: rgba(42, 46, 52, 0.8); border: 2px solid #1a1b1f; color: rgba(245, 247, 252, 0.7); padding: 10px 20px; border-radius: 9999px; font-size: 16px; font-weight: 600; margin-right: 16px;">
+                    <span style="display: inline-block; background: rgba(42, 46, 52, 0.8); border: 2px solid #1a1b1f; color: rgba(245, 247, 252, 0.7); padding: 10px 20px; border-radius: 9999px; font-size: 16px; font-weight: 600;">
                         {{ playtime }} Played
                     </span>
                     {% endif %}
 
                     {# User Rating Pills - inline with other bottom items #}
                     {% if user_rating %}
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #fbbf24; color: #fbbf24; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #fbbf24; color: #fbbf24; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="#fbbf24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span>{{ user_rating.overall_rating }}</span>
                     </span>
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #f472b6; color: #f472b6; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #f472b6; color: #f472b6; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg><span>Diff {{ user_rating.difficulty }}/10</span>
                     </span>
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67f8c8; color: #67f8c8; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67f8c8; color: #67f8c8; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#67f8c8" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg><span>Grind {{ user_rating.grindiness }}/10</span>
                     </span>
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #9580ff; color: #9580ff; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #9580ff; color: #9580ff; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#9580ff" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg><span>Fun {{ user_rating.fun_ranking }}/10</span>
                     </span>
                     {% if not playtime %}
-                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67d1f8; color: #67d1f8; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold; margin-right: 6px;">
+                    <span style="display: inline-flex; align-items: center; background: rgba(42, 46, 52, 0.8); border: 2px solid #67d1f8; color: #67d1f8; padding: 8px 12px; border-radius: 9999px; font-size: 13px; font-weight: bold;">
                         <svg style="width: 12px; height: 12px; margin-right: 5px; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="#67d1f8" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>{{ user_rating.hours_to_platinum }}h</span>
                     </span>
                     {% endif %}
@@ -322,7 +323,7 @@ Color reference (converted from oklch):
                 {# Game Image - Square #}
                 <div style="width: 400px; height: 400px; border: 2px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: #2a2e34; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); flex-shrink: 0; box-sizing: border-box;">
                     {% if game_image %}
-                    <img src="{{ game_image }}" style="width: 100%; height: 100%; object-fit: cover;" />
+                    <img src="{{ game_image }}" style="width: 100%; height: 100%; object-fit: cover; object-position: top;" />
                     {% else %}
                     <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(to bottom right, #32363d, #2a2e34);">
                         <svg style="height: 168px; width: 168px;" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="#67d1f8"><path d="M102.49,0c0,27.414,0,104.166,0,137.062c0,112.391,99.33,156.25,153.51,156.25 c54.18,0,153.51-43.859,153.51-156.25c0-32.896,0-109.648,0-137.062H102.49z M256.289,50.551l-68.164,29.768v98.474l-0.049,19.53 c-0.526-0.112-47.274-10.112-47.274-78.391c0-28.17,0-69.6,0-69.6h60.385L256.289,50.551z"></path><polygon points="315.473,400.717 291.681,367.482 279.791,318.506 256,322.004 232.209,318.506 220.314,367.482 205.347,388.394 196.527,400.476 196.699,400.476 196.527,400.717"></polygon><polygon points="366.93,432.24 366.93,432 145.07,432 145.07,511.598 145.07,511.76 145.07,511.76 145.07,512 366.93,512 366.93,432.402 366.93,432.24"></polygon><path d="M511.638,96.668c-0.033-1.268-0.068-2.336-0.068-3.174V45.1h-73.889v38.736h35.152v9.658 c0,1.127,0.037,2.557,0.086,4.258c0.389,13.976,1.303,46.707-21.545,70.203c-5.121,5.266-11.221,9.787-18.219,13.613 c-3.883,17.635-10.109,33.564-18.104,47.814c26.561-6.406,48.026-17.898,64.096-34.422 C513.402,159.734,512.121,113.918,511.638,96.668z"></path><path d="M60.625,167.955c-22.848-23.496-21.934-56.227-21.541-70.203c0.047-1.701,0.082-3.131,0.082-4.258v-9.658 h34.842h0.07l0,0h0.24V45.1H0.43v48.394c0,0.838-0.032,1.906-0.068,3.174c-0.482,17.25-1.76,63.066,32.494,98.293 c16.068,16.524,37.531,28.014,64.092,34.422c-7.996-14.25-14.22-30.182-18.103-47.816C71.846,177.74,65.746,173.221,60.625,167.955 z"></path></svg>
