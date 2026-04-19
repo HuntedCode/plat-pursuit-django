@@ -57,9 +57,15 @@ WEBSITE_CATEGORIES = {
     18: 'discord',
 }
 
-# Fields we request from IGDB for each game
+# Fields we request from IGDB for each game.
+#
+# Deprecated-but-retained for transition (IGDB still returns them on older
+# entries, omits them on newer): `category`, `status`, `external_games.category`.
+# Their replacements (`game_type`, `game_status`, `external_games.game_release_format`)
+# are reference types, so we expand with .* to get the full {id, name} object.
 GAME_FIELDS = (
-    'name, slug, summary, storyline, url, category, status, '
+    'name, slug, summary, storyline, url, '
+    'category, game_type.*, status, game_status.*, '
     'first_release_date, rating, aggregated_rating, '
     'cover.image_id, '
     'genres.name, genres.slug, '
@@ -90,10 +96,15 @@ GAME_FIELDS = (
     'franchises.id, franchises.name, collections.id, collections.name, '
     'alternative_names.name, alternative_names.comment, '
     'external_games.uid, external_games.category, '
+    'external_games.external_game_source.*, external_games.game_release_format.*, '
     'websites.url, websites.category, '
     'platforms, '
     'release_dates.date, release_dates.platform, release_dates.region, '
-    'similar_games'
+    'similar_games, '
+    'bundles, '
+    'parent_game.id, parent_game.name, parent_game.slug, '
+    'version_parent.id, version_parent.name, version_parent.slug, '
+    'version_title'
 )
 
 
