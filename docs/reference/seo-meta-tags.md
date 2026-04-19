@@ -17,6 +17,7 @@ The design prioritizes DRY: views set a single `seo_description` string and it f
 | `core/sitemaps.py` | Sitemap classes for all content types |
 | `plat_pursuit/urls.py` | Sitemap registration at `/sitemap.xml` |
 | `static/robots.txt` | Robots directives (served via `RobotsTxtView`) |
+| `plat_pursuit/middleware.py` | `BotCanonicalRedirectMiddleware` enforces crawler policy for bots that ignore `robots.txt` |
 
 ## SEO Block System (base.html)
 
@@ -93,6 +94,29 @@ Django auto-generates a sitemap index when multiple sections exist. Pagination i
 1. Create a new `Sitemap` subclass in `core/sitemaps.py`
 2. Define `items()`, `location()`, and optionally `lastmod()`
 3. Register it in the `sitemaps` dict in `plat_pursuit/urls.py`
+
+## Crawler Policy: Bot Canonical Redirect
+
+`BotCanonicalRedirectMiddleware` (in `plat_pursuit/middleware.py`, wired early in `MIDDLEWARE` right after WhiteNoise) 301-redirects known crawler requests for profile-scoped URL variants to their canonical counterparts:
+
+| Bot request | Canonical target |
+|-------------|------------------|
+| `/games/<np_id>/<username>/` | `/games/<np_id>/` |
+| `/my-pursuit/badges/<slug>/<username>/` | `/my-pursuit/badges/<slug>/` |
+
+Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirect.
+
+### Why this exists
+
+`static/robots.txt` already `Disallow`s `/games/*/*` and `/my-pursuit/badges/*/*` for everyone, because profile-scoped pages are near-duplicates of canonical pages on the `<username>` axis (only per-profile progress stats and pfp differ; all `og:*` / JSON-LD metadata is profile-independent). However, some crawlers (Meta's `meta-webindexer` in particular) ignore `Disallow` rules, and parallel fan-out of expensive profile-scoped renders has caused origin memory spikes and worker saturation. This middleware enforces the `robots.txt` intent for those crawlers at request-entry, before any session/auth/ORM work runs.
+
+### Gotchas
+
+- **Only bot UAs are matched.** Real users hitting profile-scoped URLs get the full page as normal. The UA list lives in `_BOT_UA_RE` in `plat_pursuit/middleware.py` and may need occasional updates as new aggressive crawlers appear.
+- **UA regex failure mode is graceful.** If a new bot slips through the list, it just hits the full page (same as pre-middleware behavior). No false throttling.
+- **Not cloaking.** Google explicitly endorses canonical redirects for duplicate content. This is the textbook solution.
+- **Do not extend to pages without a canonical non-profile variant.** `/community/profiles/<user>/*` has no canonical strip-to; the profile IS the page. The current regex correctly ignores those paths.
+- **Tests live in `plat_pursuit/tests/test_middleware.py`.** Add cases here when extending the regex.
 
 ## Key Flows
 

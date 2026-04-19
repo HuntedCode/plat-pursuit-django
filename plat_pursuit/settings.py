@@ -234,6 +234,9 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Redirects bot requests for profile-scoped URLs to canonical pages before
+    # any session/auth/ORM work. See plat_pursuit/middleware.py for rationale.
+    "plat_pursuit.middleware.BotCanonicalRedirectMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
