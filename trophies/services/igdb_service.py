@@ -409,9 +409,13 @@ class IGDBService:
             return []
 
         uid_filter = ','.join(f'"{uid}"' for uid in psn_ids)
+        # v4 rename: external_games.category -> external_games.external_game_source.
+        # The enum id is preserved (36 still means PlayStation Store), only the
+        # field path changed. IGDB retains `category` in responses for backward
+        # compatibility but new records populate only external_game_source.
         query = (
             f'fields game; '
-            f'where category = {PLAYSTATION_STORE_CATEGORY} & uid = ({uid_filter}); '
+            f'where external_game_source = {PLAYSTATION_STORE_CATEGORY} & uid = ({uid_filter}); '
             f'limit 10;'
         )
         results = cls._request('external_games', query)
