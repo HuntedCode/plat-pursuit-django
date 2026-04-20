@@ -10,8 +10,11 @@ from trophies.models import IGDBMatch
 # different IGDB assignment.
 NORMAL_GAME_TYPE_IDS = {
     0,   # Main Game
+    4,   # Standalone Expansion — canonical entry for games sold separately
+    6,   # Episode — canonical entry for episodic releases with their own trophy lists
     8,   # Remake
     9,   # Remaster
+    10,  # Expanded Game — canonical entry for Definitive/Director's Cut/GotY versions
     11,  # Port
 }
 
