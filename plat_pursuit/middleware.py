@@ -19,14 +19,25 @@ _BOT_UA_RE = re.compile(
     r'meta-webindexer|meta-externalagent|facebookexternalhit|'
     r'googlebot|google-extended|bingbot|duckduckbot|oai-searchbot|'
     r'bytespider|tiktokspider|'
-    r'claudebot|claude-searchbot|anthropic-ai|gptbot|ccbot|perplexitybot|amazonbot|'
-    r'semrushbot|ahrefsbot|mj12bot|dotbot|serankingbacklinksbot'
+    r'claudebot|claude-searchbot|anthropic-ai|gptbot|ccbot|perplexitybot|'
+    r'amazonbot|amzn-searchbot|'
+    r'semrushbot|ahrefsbot|mj12bot|dotbot|serankingbacklinksbot|barkrowler'
     r')',
     re.IGNORECASE,
 )
 
-_PROFILE_SCOPED_PATH_RE = re.compile(
-    r'^/(games/[^/]+|my-pursuit/badges/[^/]+)/[^/]+/?$'
+# Each rule maps a profile-scoped URL shape to its canonical target. The badge
+# rule intentionally covers the legacy /badges/<slug>/ and /achievements/badges/
+# /<slug>/ prefixes alongside the canonical /my-pursuit/badges/<slug>/, because
+# crawlers often still follow old backlinks to those prefixes. Short-circuiting
+# to the canonical target in one hop avoids a two-hop redirect chain through
+# the existing legacy 301s in plat_pursuit/urls.py.
+_BOT_REDIRECT_RULES = (
+    (re.compile(r'^/games/([^/]+)/[^/]+/?$'), '/games/{slug}/'),
+    (
+        re.compile(r'^/(?:my-pursuit/badges|badges|achievements/badges)/([^/]+)/[^/]+/?$'),
+        '/my-pursuit/badges/{slug}/',
+    ),
 )
 
 
@@ -48,13 +59,14 @@ class BotCanonicalRedirectMiddleware:
     def __call__(self, request):
         ua = request.META.get('HTTP_USER_AGENT', '')
         if ua and _BOT_UA_RE.search(ua):
-            match = _PROFILE_SCOPED_PATH_RE.match(request.path)
-            if match:
-                canonical = f'/{match.group(1)}/'
-                qs = request.META.get('QUERY_STRING', '')
-                if qs:
-                    canonical = f'{canonical}?{qs}'
-                return HttpResponsePermanentRedirect(canonical)
+            for pattern, canonical_template in _BOT_REDIRECT_RULES:
+                match = pattern.match(request.path)
+                if match:
+                    canonical = canonical_template.format(slug=match.group(1))
+                    qs = request.META.get('QUERY_STRING', '')
+                    if qs:
+                        canonical = f'{canonical}?{qs}'
+                    return HttpResponsePermanentRedirect(canonical)
         return self.get_response(request)
 
 

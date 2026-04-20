@@ -103,8 +103,10 @@ Django auto-generates a sitemap index when multiple sections exist. Pagination i
 |-------------|------------------|
 | `/games/<np_id>/<username>/` | `/games/<np_id>/` |
 | `/my-pursuit/badges/<slug>/<username>/` | `/my-pursuit/badges/<slug>/` |
+| `/badges/<slug>/<username>/` (legacy) | `/my-pursuit/badges/<slug>/` |
+| `/achievements/badges/<slug>/<username>/` (legacy) | `/my-pursuit/badges/<slug>/` |
 
-Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirect.
+Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirect. Legacy badge prefixes are caught directly rather than falling through the non-bot 301 chain in `plat_pursuit/urls.py`, which avoids a two-hop redirect when crawlers follow old backlinks.
 
 ### Why this exists
 

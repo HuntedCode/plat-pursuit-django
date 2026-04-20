@@ -79,6 +79,8 @@ class BotCanonicalRedirectMiddlewareTests(SimpleTestCase):
             'CCBot/2.0 (https://commoncrawl.org/faq/)',
             'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-SearchBot/1.0)',
             'Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/bot)',
+            'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Amzn-SearchBot/0.1) Chrome/119.0.6045.214 Safari/537.36',
+            'Mozilla/5.0 (compatible; Barkrowler/0.9; +https://babbar.tech/crawler)',
         ]:
             with self.subTest(ua=ua):
                 response = self.middleware(self._request(
@@ -87,3 +89,30 @@ class BotCanonicalRedirectMiddlewareTests(SimpleTestCase):
                 ))
                 self.assertEqual(response.status_code, 301, msg=ua)
                 self.assertEqual(response['Location'], '/games/NPWR00352_00/')
+
+    def test_legacy_badges_prefix_redirects_directly_to_canonical(self):
+        response = self.middleware(self._request(
+            '/badges/remedy/deviousmeister/',
+            ua='Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Amzn-SearchBot/0.1)',
+        ))
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/my-pursuit/badges/remedy/')
+
+    def test_legacy_achievements_badges_prefix_redirects_directly_to_canonical(self):
+        response = self.middleware(self._request(
+            '/achievements/badges/remedy/deviousmeister/',
+            ua='Mozilla/5.0 (compatible; Barkrowler/0.9; +https://babbar.tech/crawler)',
+            qs='tier=2',
+        ))
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response['Location'], '/my-pursuit/badges/remedy/?tier=2')
+
+    def test_legacy_badges_canonical_path_passes_through(self):
+        # The non-profile legacy /badges/<slug>/ still exists as a 301 route
+        # handled by urls.py; our middleware should only match the profile-
+        # scoped variant, not the bare slug.
+        response = self.middleware(self._request(
+            '/badges/remedy/',
+            ua='meta-webindexer/1.1',
+        ))
+        self.assertEqual(response.status_code, 200)
