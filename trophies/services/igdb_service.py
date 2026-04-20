@@ -553,8 +553,9 @@ class IGDBService:
         lines = [f'IGDB {search_type} search for "{title}": {len(results)} result(s)']
         for r in results:
             score = cls._calculate_confidence(concept, r, 'fuzzy_name')
-            cat = r.get('category', '?')
-            lines.append(f'  - "{r.get("name")}" (cat={cat}, score={score:.0%})')
+            cat = cls._extract_game_category(r)
+            cat_display = '?' if cat is None else cat
+            lines.append(f'  - "{r.get("name")}" (cat={cat_display}, score={score:.0%})')
         logger.info('\n'.join(lines))
 
     @classmethod
@@ -694,7 +695,7 @@ class IGDBService:
                     return 0.0
 
             # Boost main games over DLC/bundles/skins when names are similar
-            category = igdb_game.get('category', 0)
+            category = cls._extract_game_category(igdb_game) or 0
             if category == 0 and is_contained:
                 base += 0.10
 
@@ -727,7 +728,7 @@ class IGDBService:
         # No additional modifier needed here.
 
         # Modifier: non-main game penalty (DLC/bundles score lower)
-        category = igdb_game.get('category', 0)
+        category = cls._extract_game_category(igdb_game) or 0
         if category != 0:
             base -= 0.15
 
@@ -1381,6 +1382,24 @@ class IGDBService:
         )
 
     @classmethod
+    def _extract_game_category(cls, igdb_data):
+        """Return the IGDB category integer ID from a game response, or None.
+
+        IGDB v4 deprecated the flat `category` field in favor of `game_type`,
+        which is a reference type returning `{id, type, ...}`. Prefer the new
+        field, fall back to the legacy one for any old cached response that
+        still has it. Same enum values in both paths (0=Main Game, 3=Bundle,
+        8=Remake, etc.), so downstream consumers don't need to care which
+        source populated it.
+        """
+        if not igdb_data:
+            return None
+        game_type = igdb_data.get('game_type')
+        if isinstance(game_type, dict) and game_type.get('id') is not None:
+            return game_type['id']
+        return igdb_data.get('category')
+
+    @classmethod
     def _is_compilation_response(cls, igdb_data):
         """Return True if an IGDB game response looks like a bundle/compilation.
 
@@ -1390,10 +1409,7 @@ class IGDBService:
         (outbound "bundles containing me" vs inbound "members I contain") and
         that will be verified separately before Phase 5's splitting work.
         """
-        game_type = igdb_data.get('game_type') if igdb_data else None
-        if isinstance(game_type, dict):
-            return game_type.get('id') in (3, 13)
-        return False
+        return cls._extract_game_category(igdb_data) in (3, 13)
 
     @classmethod
     def _parse_game_data(cls, igdb_data):
@@ -1459,7 +1475,7 @@ class IGDBService:
                     external_urls[key] = url
 
         return {
-            'game_category': igdb_data.get('category'),
+            'game_category': cls._extract_game_category(igdb_data),
             'summary': igdb_data.get('summary', ''),
             'storyline': igdb_data.get('storyline', ''),
             'time_to_beat_hastily': ttb_data.get('hastily'),
