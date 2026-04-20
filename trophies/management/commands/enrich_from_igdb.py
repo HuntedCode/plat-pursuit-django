@@ -734,13 +734,18 @@ class Command(BaseCommand):
 
         for i, concept in enumerate(concepts.iterator()):
             try:
+                # Capture the search input the pipeline will use so we can
+                # surface it in the per-concept output line. _pick_search_title
+                # is pure and cheap; the subsequent match_concept call will
+                # compute the same string internally.
+                search_title = IGDBService._pick_search_title(concept)
                 result = IGDBService.match_concept(concept)
 
                 if not result:
                     if not dry_run:
                         IGDBService.record_no_match(concept)
                     summary['no_match'] += 1
-                    self._log_progress(i + 1, total, concept, 'no_match')
+                    self._log_progress(i + 1, total, concept, 'no_match', search_title=search_title)
                     continue
 
                 igdb_data, confidence, method = result
@@ -753,6 +758,7 @@ class Command(BaseCommand):
                         igdb_name=igdb_data.get('name', ''),
                         confidence=confidence,
                         method=method,
+                        search_title=search_title,
                     )
                     continue
 
@@ -767,6 +773,7 @@ class Command(BaseCommand):
                     igdb_name=igdb_data.get('name', ''),
                     confidence=confidence,
                     method=method,
+                    search_title=search_title,
                 )
 
             except Exception as e:
@@ -779,7 +786,7 @@ class Command(BaseCommand):
         self._print_summary(summary, total, dry_run)
 
     def _log_progress(self, current, total, concept, status,
-                      igdb_name='', confidence=0.0, method=''):
+                      igdb_name='', confidence=0.0, method='', search_title=''):
         style_map = {
             'auto_accepted': self.style.SUCCESS,
             'accepted': self.style.SUCCESS,
@@ -790,6 +797,14 @@ class Command(BaseCommand):
         style = style_map.get(status, lambda x: x)
 
         msg = f'  [{current}/{total}] {concept.concept_id} "{concept.unified_title}"'
+        # Only surface the search title when it differs from the concept's
+        # unified_title — i.e. when _pick_search_title chose the game title
+        # over the concept title. For single-game concepts where both are
+        # identical this adds noise; for compilation-candidate concepts or
+        # Asian-region concepts where the game title is richer, it's the
+        # important context.
+        if search_title and search_title != concept.unified_title:
+            msg += f' (searched as "{search_title}")'
         if igdb_name:
             msg += f' -> "{igdb_name}" ({method}, {confidence:.0%})'
         msg += f' [{status}]'
