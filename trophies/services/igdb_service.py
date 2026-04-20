@@ -902,6 +902,7 @@ class IGDBService:
                 'franchise_names': parsed['franchise_names'],
                 'similar_game_igdb_ids': parsed['similar_game_igdb_ids'],
                 'external_urls': parsed['external_urls'],
+                'is_likely_compilation': cls._is_compilation_response(igdb_data),
                 'last_synced_at': datetime.now(dt_timezone.utc),
             },
         )
@@ -1380,6 +1381,21 @@ class IGDBService:
         )
 
     @classmethod
+    def _is_compilation_response(cls, igdb_data):
+        """Return True if an IGDB game response looks like a bundle/compilation.
+
+        IGDB's game_type taxonomy has two values that indicate a multi-game
+        compilation: 3 (Bundle) and 13 (Pack). We intentionally do not use the
+        `bundles` field as a signal here because its direction is ambiguous
+        (outbound "bundles containing me" vs inbound "members I contain") and
+        that will be verified separately before Phase 5's splitting work.
+        """
+        game_type = igdb_data.get('game_type') if igdb_data else None
+        if isinstance(game_type, dict):
+            return game_type.get('id') in (3, 13)
+        return False
+
+    @classmethod
     def _parse_game_data(cls, igdb_data):
         """Extract Tier 1 structured data from a raw IGDB game response.
 
@@ -1519,6 +1535,7 @@ class IGDBService:
                 'franchise_names': [],
                 'similar_game_igdb_ids': [],
                 'external_urls': {},
+                'is_likely_compilation': False,
                 'last_synced_at': datetime.now(dt_timezone.utc),
             },
         )
@@ -1560,6 +1577,7 @@ class IGDBService:
         igdb_match.franchise_names = parsed['franchise_names']
         igdb_match.similar_game_igdb_ids = parsed['similar_game_igdb_ids']
         igdb_match.external_urls = parsed['external_urls']
+        igdb_match.is_likely_compilation = cls._is_compilation_response(igdb_data)
         igdb_match.last_synced_at = datetime.now(dt_timezone.utc)
         igdb_match.save()
 

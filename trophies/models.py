@@ -4442,6 +4442,11 @@ class IGDBMatch(models.Model):
         default=dict, blank=True, help_text='External links: {steam: url, wikipedia: url, ...}'
     )
 
+    # Compilation detection: True when IGDB classifies this match as a bundle
+    # (game_type.id in 3=Bundle, 13=Pack). Surfaces in admin as a triage list
+    # for concepts that may need splitting into their component games.
+    is_likely_compilation = models.BooleanField(default=False, db_index=True)
+
     # Sync tracking
     last_synced_at = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)

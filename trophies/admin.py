@@ -2503,9 +2503,12 @@ class IGDBMatchAdmin(admin.ModelAdmin):
     list_display = (
         'concept_title', 'psn_platforms', 'igdb_name', 'igdb_platforms_display',
         'confidence_display', 'status', 'match_method', 'game_category_display',
-        'updated_at',
+        'compilation_display', 'games_count_display', 'updated_at',
     )
-    list_filter = ('status', 'match_method', 'game_category', PlatformCoverageFilter)
+    list_filter = (
+        'status', 'match_method', 'game_category', 'is_likely_compilation',
+        PlatformCoverageFilter,
+    )
     search_fields = ('concept__unified_title', 'igdb_name')
     raw_id_fields = ('concept',)
     readonly_fields = (
@@ -2535,6 +2538,19 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         return obj.get_game_category_display() if obj.game_category is not None else '-'
     game_category_display.short_description = 'Category'
 
+    def compilation_display(self, obj):
+        return 'Yes' if obj.is_likely_compilation else ''
+    compilation_display.short_description = 'Compilation'
+    compilation_display.admin_order_field = 'is_likely_compilation'
+    compilation_display.boolean = False  # render as text, not icon, so empty stays blank
+
+    def games_count_display(self, obj):
+        # Annotated by get_queryset for sortability; falls back to a live count
+        # if accessed outside the admin queryset (e.g. inline).
+        return getattr(obj, '_games_count', obj.concept.games.count())
+    games_count_display.short_description = 'Games'
+    games_count_display.admin_order_field = '_games_count'
+
     def psn_platforms(self, obj):
         platforms = set()
         for game in obj.concept.games.all():
@@ -2555,7 +2571,14 @@ class IGDBMatchAdmin(admin.ModelAdmin):
     igdb_platforms_display.short_description = 'IGDB PS Platforms'
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('concept').prefetch_related('concept__games')
+        from django.db.models import Count
+        return (
+            super()
+            .get_queryset(request)
+            .select_related('concept')
+            .prefetch_related('concept__games')
+            .annotate(_games_count=Count('concept__games', distinct=True))
+        )
 
     @admin.action(description='Approve selected matches')
     def approve_selected(self, request, queryset):
