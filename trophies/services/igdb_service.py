@@ -257,7 +257,7 @@ class IGDBService:
     # -----------------------------------------------------------------------
 
     @classmethod
-    def search_game(cls, title, limit=10, platform_filter=True):
+    def search_game(cls, title, limit=25, platform_filter=True):
         """Search IGDB for a game by title.
 
         Args:
@@ -279,7 +279,7 @@ class IGDBService:
         return cls._request('games', query)
 
     @classmethod
-    def search_by_exact_name(cls, title, limit=10):
+    def search_by_exact_name(cls, title, limit=20):
         """Query IGDB games by exact name match using where clauses.
 
         Unlike the search endpoint (which uses relevance ranking and buries
@@ -367,7 +367,7 @@ class IGDBService:
         return cls._request('games', detail_query)
 
     @classmethod
-    def search_by_alternative_name(cls, title, limit=5):
+    def search_by_alternative_name(cls, title, limit=15):
         """Search IGDB alternative_names for regional/alternate titles.
 
         Catches games like "Kurushi" (EU) -> "Intelligent Qube" (US/IGDB),
@@ -398,7 +398,7 @@ class IGDBService:
         return cls._request('games', detail_query)
 
     @classmethod
-    def search_by_generic_search(cls, title, limit=10):
+    def search_by_generic_search(cls, title, limit=25):
         """Search IGDB via the `/search` endpoint that powers the website search bar.
 
         Different index than `/games`; ranks across games, alt names, franchises,
@@ -585,11 +585,14 @@ class IGDBService:
             logger.exception(f'IGDB alt-name search failed for "{title}"')
 
         # Strategy 6: Truncated title search (series name before colon/dash).
-        # Capped below auto-accept since this is a loose match.
+        # Capped below auto-accept since this is a loose match. Uses a
+        # tighter limit than the other search_game strategies because the
+        # truncated query is inherently broader — a long tail of matches
+        # just adds noise without surfacing the real winner.
         truncated = cls._extract_series_prefix(title)
         if truncated and truncated != cls._clean_title_for_search(title):
             try:
-                results = cls.search_game(truncated)
+                results = cls.search_game(truncated, limit=15)
                 if results:
                     cls._log_search_results(title, f'truncated ("{truncated}")', concept, results)
                     raw_candidate = cls._pick_best_non_dlc(concept, results)
