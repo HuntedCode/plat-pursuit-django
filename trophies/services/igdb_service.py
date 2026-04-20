@@ -254,6 +254,10 @@ class IGDBService:
         Returns:
             list: Parsed JSON response (list of results)
         """
+        if cls._debug_scoring:
+            # Print the outgoing Apicalypse query so users can paste it into
+            # IGDB's API explorer or curl to reproduce against the vendor.
+            print(f'  IGDB REQUEST /{endpoint}: {query!r}')
         cls._rate_limit()
         token = cls._get_access_token()
         url = f'{cls.API_BASE}/{endpoint}'
@@ -285,8 +289,14 @@ class IGDBService:
                 'IGDB API error %s for %s: %s',
                 response.status_code, endpoint, response.text[:500],
             )
+            if cls._debug_scoring:
+                print(f'  IGDB RESPONSE /{endpoint}: HTTP {response.status_code} — {response.text[:200]}')
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        if cls._debug_scoring:
+            count = len(data) if isinstance(data, list) else 1
+            print(f'  IGDB RESPONSE /{endpoint}: {count} row(s)')
+        return data
 
     # -----------------------------------------------------------------------
     # Search
