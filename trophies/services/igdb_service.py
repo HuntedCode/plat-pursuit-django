@@ -118,6 +118,25 @@ GAME_FIELDS = (
 _ADDON_CATEGORY_IDS = frozenset({1, 2, 5, 7, 14})
 
 
+# Characters in any of these Unicode blocks flag a title as "CJK-family" so
+# we can route it through NFKC instead of NFKD during normalization. NFKD
+# plus combining-mark strip is fine for Latin accents (é → e) but DESTROYS
+# Japanese katakana with dakuten/handakuten (パ becomes ハ — "pa" → "ha"),
+# which changes the word's meaning and ruins IGDB search recall.
+_CJK_PATTERN = re.compile(
+    '['
+    '\u3040-\u309F'   # Hiragana
+    '\u30A0-\u30FF'   # Katakana
+    '\u3400-\u4DBF'   # CJK Unified Ideographs Extension A
+    '\u4E00-\u9FFF'   # CJK Unified Ideographs
+    '\uAC00-\uD7AF'   # Hangul Syllables
+    '\u1100-\u11FF'   # Hangul Jamo
+    '\u3130-\u318F'   # Hangul Compatibility Jamo
+    '\uFF00-\uFFEF'   # Halfwidth and Fullwidth Forms
+    ']'
+)
+
+
 # Pattern to detect likely DLC/addon entries by name
 _DLC_NAME_RE = re.compile(
     r' - .+(?:'
@@ -1017,10 +1036,8 @@ class IGDBService:
         Lowercases, strips platform/edition/year suffixes, normalizes unicode.
         Used for confidence scoring, not for IGDB API queries.
         """
-        # Normalize unicode (smart quotes, bullets, accents)
-        text = unicodedata.normalize('NFKD', text)
-        # Remove non-ASCII combining marks but keep base letters
-        text = ''.join(c for c in text if not unicodedata.combining(c))
+        # Normalize unicode (CJK-safe — see _unicode_normalize_for_matching).
+        text = cls._unicode_normalize_for_matching(text)
         text = text.lower().strip()
         # Strip suffixes
         text = cls._PLATFORM_SUFFIX_RE.sub('', text)
@@ -1078,6 +1095,26 @@ class IGDBService:
         picked = min(games, key=platform_rank)
         return picked.title_name or concept.unified_title or ''
 
+    @staticmethod
+    def _unicode_normalize_for_matching(text):
+        """Normalize unicode for title matching with CJK-safe behavior.
+
+        NFKD + combining-mark strip is great for Latin accents (é → e) but
+        destroys Japanese katakana: パ (U+30D1 "pa") decomposes to ハ
+        (U+30CF "ha") + ゚ (U+309A combining handakuten), and stripping the
+        mark leaves "ha" — a semantically different syllable. Same applies
+        to hiragana dakuten, Hangul Jamo, etc.
+
+        When the text contains CJK characters, use NFKC instead. NFKC still
+        does the compatibility conversions we want (fullwidth １ → 1) but
+        preserves precomposed characters, so パ stays パ. For pure Latin
+        text we keep the accent-stripping behavior unchanged.
+        """
+        if _CJK_PATTERN.search(text):
+            return unicodedata.normalize('NFKC', text)
+        text = unicodedata.normalize('NFKD', text)
+        return ''.join(c for c in text if not unicodedata.combining(c))
+
     @classmethod
     def _clean_title_for_search(cls, text):
         """Clean a title for use in IGDB Apicalypse search queries.
@@ -1085,9 +1122,8 @@ class IGDBService:
         Strips platform suffixes, Apicalypse-breaking characters, and
         unicode noise. IGDB search is fuzzy so this improves match rates.
         """
-        # Normalize unicode
-        text = unicodedata.normalize('NFKD', text)
-        text = ''.join(c for c in text if not unicodedata.combining(c))
+        # Normalize unicode (CJK-safe — see _unicode_normalize_for_matching).
+        text = cls._unicode_normalize_for_matching(text)
         # Strip suffixes
         text = cls._PLATFORM_SUFFIX_RE.sub('', text)
         text = cls._EDITION_SUFFIX_RE.sub('', text)
