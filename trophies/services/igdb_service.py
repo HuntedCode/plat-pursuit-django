@@ -530,6 +530,16 @@ class IGDBService:
         if not title:
             return best
 
+        # Surface the matching decision: which string did _pick_search_title
+        # settle on, and did it come from concept.unified_title or a Game's
+        # title_name. Makes it trivial to spot cases where PSN's concept-level
+        # title differs from the richer Game.title_name we ended up using.
+        source = 'concept title' if title == concept.unified_title else 'game title'
+        logger.info(
+            f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
+            f'using {source}: "{title}"'
+        )
+
         # Strategy 2: Fuzzy search (PlayStation-filtered) - handles 90%+ of games
         try:
             results = cls.search_game(title)
