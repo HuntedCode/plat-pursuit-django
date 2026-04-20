@@ -11,6 +11,11 @@ ALL_PLATFORMS = MODERN_PLATFORMS + ['PS3', 'PSVITA', 'PSVR', 'PSVR2']
 TITLE_STATS_SUPPORTED_PLATFORMS = MODERN_PLATFORMS
 PREFERRED_MEDIA_PLATFORMS = ['PS5']
 
+# Platform recency priority: newest first. Used when a Concept has multiple
+# Games and we need to pick one canonical representative (e.g. for IGDB
+# search input selection where we want the most recent release's title).
+PLATFORM_PRIORITY_ORDER = ['PS5', 'PS4', 'PS3', 'PSVITA', 'PSP', 'PS2', 'PS1']
+
 # Title ID blacklist - Games with known issues or duplicates
 TITLE_ID_BLACKLIST = [
     'CUSA05214_00', 'CUSA01015_00', 'CUSA00129_00', 'CUSA00131_00',

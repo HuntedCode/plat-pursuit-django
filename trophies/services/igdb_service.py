@@ -398,6 +398,56 @@ class IGDBService:
         return cls._request('games', detail_query)
 
     @classmethod
+    def search_by_generic_search(cls, title, limit=10):
+        """Search IGDB via the `/search` endpoint that powers the website search bar.
+
+        Different index than `/games`; ranks across games, alt names, franchises,
+        and companies together. Sometimes catches titles our other strategies
+        miss — particularly fuzzy / partial matches and entries buried by name
+        tokenization differences on `/games`.
+
+        `/search` returns mixed-entity rows; we filter to rows where `game` is a
+        populated dict, unwrap to the game payload, and dedupe by game id. Then
+        re-fetch the full game details with our GAME_FIELDS since the embedded
+        `game.*` expansion from `/search` may not include every field we need
+        for confidence scoring.
+
+        Returns:
+            list: IGDB game objects with full Tier 1 field expansion
+        """
+        cleaned = cls._clean_title_for_search(title)
+        if not cleaned:
+            return []
+        query = (
+            f'search "{cleaned}"; '
+            f'fields *, game.*; '
+            f'limit {limit};'
+        )
+        results = cls._request('search', query)
+        game_ids = []
+        seen = set()
+        for row in results:
+            game_payload = row.get('game') if isinstance(row, dict) else None
+            gid = None
+            if isinstance(game_payload, dict):
+                gid = game_payload.get('id')
+            elif isinstance(game_payload, int):
+                gid = game_payload
+            if gid and gid not in seen:
+                seen.add(gid)
+                game_ids.append(gid)
+        if not game_ids:
+            return []
+
+        id_filter = ','.join(str(gid) for gid in game_ids)
+        detail_query = (
+            f'fields {GAME_FIELDS}; '
+            f'where id = ({id_filter}); '
+            f'limit {len(game_ids)};'
+        )
+        return cls._request('games', detail_query)
+
+    @classmethod
     def get_game_details(cls, igdb_id):
         """Fetch full game details by IGDB ID.
 
@@ -439,11 +489,26 @@ class IGDBService:
     def match_concept(cls, concept):
         """Try to match a Concept to an IGDB game entry.
 
-        Tries in order: family sibling match, external ID, exact name, fuzzy name.
+        Accumulates candidates across all strategies and returns the
+        highest-scored match. Short-circuits only when a strategy produces a
+        candidate at or above the auto-accept threshold — otherwise every
+        strategy runs so a later one can beat an earlier pending-review hit.
 
         Returns:
             tuple: (igdb_data, confidence, method) or None if no match found
         """
+        auto_accept = settings.IGDB_AUTO_ACCEPT_THRESHOLD
+        best = None  # (igdb_data, confidence, method) so far
+
+        def consider(candidate):
+            """Update `best` if candidate scores higher. Return True to short-circuit."""
+            nonlocal best
+            if not candidate:
+                return False
+            if best is None or candidate[1] > best[1]:
+                best = candidate
+            return best[1] >= auto_accept
+
         # Build list of PSN IDs to try for external matching
         psn_ids = []
         if concept.concept_id and not str(concept.concept_id).startswith('PP_'):
@@ -455,97 +520,108 @@ class IGDBService:
             try:
                 results = cls.search_by_external_id(psn_ids)
                 if results:
-                    best = cls._pick_best_match(concept, results, 'external_id')
-                    if best:
+                    candidate = cls._pick_best_match(concept, results, 'external_id')
+                    if consider(candidate):
                         return best
             except Exception:
                 logger.exception(f'IGDB external ID search failed for concept {concept.concept_id}')
 
-        title = concept.unified_title
+        title = cls._pick_search_title(concept)
         if not title:
-            return None
+            return best
 
         # Strategy 2: Fuzzy search (PlayStation-filtered) - handles 90%+ of games
         try:
             results = cls.search_game(title)
+            if results:
+                cls._log_search_results(title, 'PS-filtered', concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results)
+                if consider(candidate):
+                    return best
         except Exception:
             logger.exception(f'IGDB name search failed for "{title}"')
-            return None
-
-        if results:
-            cls._log_search_results(title, 'PS-filtered', concept, results)
-            best = cls._pick_best_non_dlc(concept, results)
-            if best:
-                return best
 
         # Strategy 3: Exact name query (catches base games buried under DLC in fuzzy search)
         try:
             results = cls.search_by_exact_name(title)
+            if results:
+                cls._log_search_results(title, 'exact-name-query', concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results)
+                if consider(candidate):
+                    return best
+            else:
+                logger.info(f'IGDB exact name query for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB exact name query failed for "{title}"')
-            results = []
 
-        if results:
-            cls._log_search_results(title, 'exact-name-query', concept, results)
-            best = cls._pick_best_non_dlc(concept, results)
-            if best:
-                return best
-        else:
-            logger.info(f'IGDB exact name query for "{title}": 0 results')
-
-        # Strategy 4: Fuzzy search unfiltered (catches PC-first games that came to PS later)
+        # Strategy 4: Fuzzy search unfiltered (catches PC-first games that came to PS later).
+        # -5% confidence to reflect the looser platform filter, floored at review threshold.
         try:
             results = cls.search_game(title, platform_filter=False)
+            if results:
+                cls._log_search_results(title, 'unfiltered', concept, results)
+                raw_candidate = cls._pick_best_non_dlc(concept, results)
+                if raw_candidate:
+                    igdb_data, confidence, method = raw_candidate
+                    adjusted_conf = max(confidence - 0.05, settings.IGDB_REVIEW_THRESHOLD)
+                    if consider((igdb_data, adjusted_conf, method)):
+                        return best
+            else:
+                logger.info(f'IGDB unfiltered search for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB unfiltered search failed for "{title}"')
-            return None
-
-        if results:
-            cls._log_search_results(title, 'unfiltered', concept, results)
-            best = cls._pick_best_non_dlc(concept, results)
-            if best:
-                igdb_data, confidence, match_method = best
-                return (igdb_data, max(confidence - 0.05, settings.IGDB_REVIEW_THRESHOLD), match_method)
-        else:
-            logger.info(f'IGDB unfiltered search for "{title}": 0 results')
 
         # Strategy 5: Search alternative names (catches regional title differences, e.g. "Sly Raccoon")
         try:
             results = cls.search_by_alternative_name(title)
+            if results:
+                cls._log_search_results(title, 'alt-name', concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results)
+                if consider(candidate):
+                    return best
+            else:
+                logger.info(f'IGDB alt-name search for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB alt-name search failed for "{title}"')
-            return None
 
-        if results:
-            cls._log_search_results(title, 'alt-name', concept, results)
-            best = cls._pick_best_non_dlc(concept, results)
-            if best:
-                return best
-        else:
-            logger.info(f'IGDB alt-name search for "{title}": 0 results')
-
-        # Strategy 6: Truncated title search (series name before colon/dash)
-        # "Sly 3: Honour Among Thieves" -> search "Sly 3"
+        # Strategy 6: Truncated title search (series name before colon/dash).
+        # Capped below auto-accept since this is a loose match.
         truncated = cls._extract_series_prefix(title)
         if truncated and truncated != cls._clean_title_for_search(title):
             try:
                 results = cls.search_game(truncated)
+                if results:
+                    cls._log_search_results(title, f'truncated ("{truncated}")', concept, results)
+                    raw_candidate = cls._pick_best_non_dlc(concept, results)
+                    if raw_candidate:
+                        igdb_data, confidence, method = raw_candidate
+                        capped = min(confidence, auto_accept - 0.01)
+                        if consider((igdb_data, capped, method)):
+                            return best
+                else:
+                    logger.info(f'IGDB truncated search for "{truncated}": 0 results')
             except Exception:
                 logger.exception(f'IGDB truncated search failed for "{truncated}"')
-                return None
 
+        # Strategy 7: Generic /search endpoint (the website's search bar index).
+        # Looser fuzziness, better alt-name recall. Capped below auto-accept:
+        # results always land in pending_review for staff verification.
+        try:
+            results = cls.search_by_generic_search(title)
             if results:
-                cls._log_search_results(title, f'truncated ("{truncated}")', concept, results)
-                best = cls._pick_best_non_dlc(concept, results)
-                if best:
-                    # Cap at pending_review since this is a loose match
-                    igdb_data, confidence, match_method = best
-                    capped = min(confidence, settings.IGDB_AUTO_ACCEPT_THRESHOLD - 0.01)
-                    return (igdb_data, capped, match_method)
+                cls._log_search_results(title, 'generic-search', concept, results)
+                raw_candidate = cls._pick_best_non_dlc(concept, results)
+                if raw_candidate:
+                    igdb_data, confidence, method = raw_candidate
+                    capped = min(confidence, auto_accept - 0.01)
+                    if consider((igdb_data, capped, method)):
+                        return best
             else:
-                logger.info(f'IGDB truncated search for "{truncated}": 0 results')
+                logger.info(f'IGDB generic-search for "{title}": 0 results')
+        except Exception:
+            logger.exception(f'IGDB generic-search failed for "{title}"')
 
-        return None
+        return best
 
     @classmethod
     def _log_search_results(cls, title, search_type, concept, results):
@@ -814,6 +890,52 @@ class IGDBService:
         # Collapse whitespace
         text = re.sub(r'\s+', ' ', text).strip()
         return text
+
+    @classmethod
+    def _pick_search_title(cls, concept):
+        """Choose the IGDB search input for a concept.
+
+        Rule:
+        - If the concept has multiple Games with distinct cleaned title_names,
+          use `concept.unified_title`. Distinct titles are a strong signal that
+          PSN grouped multiple games into one concept (compilation candidate),
+          and the concept-level name is usually the compilation's umbrella
+          title that IGDB indexes as a Bundle entry.
+        - Otherwise use the most-recently-released Game's `title_name`, picked
+          by platform priority (PS5 > PS4 > PS3 > ...). Game title_name is
+          typically richer than concept.unified_title, which PSN sometimes
+          returns sparsely (especially for Asian-region titles).
+        - Fall back to `concept.unified_title` if no games are attached or
+          the picked game has an empty title.
+        """
+        from trophies.util_modules.constants import PLATFORM_PRIORITY_ORDER
+
+        games = list(concept.games.all())
+        if not games:
+            return concept.unified_title
+
+        # Compilation-candidate check: distinct cleaned title_names on
+        # multiple Games points at a compilation concept.
+        distinct_cleaned = {
+            cls._clean_title_for_search(g.title_name)
+            for g in games
+            if g.title_name
+        }
+        distinct_cleaned.discard('')
+        if len(distinct_cleaned) >= 2:
+            return concept.unified_title or games[0].title_name or ''
+
+        # Single-game concept (or regional/platform variants with the same
+        # cleaned title): pick the Game from the newest platform and use its
+        # raw title_name.
+        def platform_rank(game):
+            for idx, platform in enumerate(PLATFORM_PRIORITY_ORDER):
+                if game.title_platform and platform in game.title_platform:
+                    return idx
+            return len(PLATFORM_PRIORITY_ORDER)
+
+        picked = min(games, key=platform_rank)
+        return picked.title_name or concept.unified_title or ''
 
     @classmethod
     def _clean_title_for_search(cls, text):
