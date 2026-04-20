@@ -338,9 +338,12 @@ class IGDBService:
         seen_ids = set()
         combined = []
 
-        # Prepare a lightly escaped version that preserves colons (unlike _clean_title_for_search)
-        # IGDB's where clause needs the actual name characters
-        lightly_cleaned = title.strip()
+        # Prepare a lightly escaped version that preserves colons (unlike
+        # _clean_title_for_search), since IGDB's where clause needs the actual
+        # name characters. Still run unicode normalization so CJK dakuten are
+        # preserved and fullwidth digits get normalized to halfwidth (IGDB
+        # indexes "1・2・3", not "１・２・３").
+        lightly_cleaned = cls._unicode_normalize_for_matching(title.strip())
         for ch in ('"', '\\'):
             lightly_cleaned = lightly_cleaned.replace(ch, '')
         lightly_cleaned = lightly_cleaned.lower()
