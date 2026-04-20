@@ -108,6 +108,16 @@ GAME_FIELDS = (
 )
 
 
+# IGDB game_type/category IDs that represent "not a full standalone game":
+# DLC (1), Expansion (2), Mod (5), Season (7), Update (14). Used by
+# _calculate_confidence to apply a scoring penalty. Remaster (9), Remake (8),
+# Port (11), Standalone Expansion (4), Episode (6), Expanded Game (10), and
+# Fork (12) are intentionally NOT in this set — they're full standalone games
+# with their own trophy lists. Bundle (3) and Pack (13) are handled via the
+# is_likely_compilation flag, not this penalty.
+_ADDON_CATEGORY_IDS = frozenset({1, 2, 5, 7, 14})
+
+
 # Pattern to detect likely DLC/addon entries by name
 _DLC_NAME_RE = re.compile(
     r' - .+(?:'
@@ -516,6 +526,20 @@ class IGDBService:
                 best = candidate
             return best[1] >= auto_accept
 
+        # Compute the search input once, up front, so every strategy — including
+        # the external-ID match's confidence scoring — compares against the
+        # same cleaned title. Previously the external-ID strategy ran before
+        # the title was picked, and scoring elsewhere used concept.unified_title
+        # directly, which produced misleading confidence values on PP_ stub
+        # concepts whose unified_title has a platform suffix appended.
+        title = cls._pick_search_title(concept)
+        if title:
+            source = 'concept title' if title == concept.unified_title else 'game title'
+            logger.info(
+                f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
+                f'using {source}: "{title}"'
+            )
+
         # Build list of PSN IDs to try for external matching
         psn_ids = []
         if concept.concept_id and not str(concept.concept_id).startswith('PP_'):
@@ -527,32 +551,22 @@ class IGDBService:
             try:
                 results = cls.search_by_external_id(psn_ids)
                 if results:
-                    candidate = cls._pick_best_match(concept, results, 'external_id')
+                    candidate = cls._pick_best_match(concept, results, 'external_id', search_title=title)
                     if consider(candidate):
                         return best
             except Exception:
                 logger.exception(f'IGDB external ID search failed for concept {concept.concept_id}')
 
-        title = cls._pick_search_title(concept)
         if not title:
+            # Strategies 2-7 all need a search title. External ID already ran.
             return best
-
-        # Surface the matching decision: which string did _pick_search_title
-        # settle on, and did it come from concept.unified_title or a Game's
-        # title_name. Makes it trivial to spot cases where PSN's concept-level
-        # title differs from the richer Game.title_name we ended up using.
-        source = 'concept title' if title == concept.unified_title else 'game title'
-        logger.info(
-            f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
-            f'using {source}: "{title}"'
-        )
 
         # Strategy 2: Fuzzy search (PlayStation-filtered) - handles 90%+ of games
         try:
             results = cls.search_game(title)
             if results:
                 cls._log_search_results(title, 'PS-filtered', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
                 if consider(candidate):
                     return best
         except Exception:
@@ -563,7 +577,7 @@ class IGDBService:
             results = cls.search_by_exact_name(title)
             if results:
                 cls._log_search_results(title, 'exact-name-query', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
                 if consider(candidate):
                     return best
             else:
@@ -577,7 +591,7 @@ class IGDBService:
             results = cls.search_game(title, platform_filter=False)
             if results:
                 cls._log_search_results(title, 'unfiltered', concept, results)
-                raw_candidate = cls._pick_best_non_dlc(concept, results)
+                raw_candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
                 if raw_candidate:
                     igdb_data, confidence, method = raw_candidate
                     adjusted_conf = max(confidence - 0.05, settings.IGDB_REVIEW_THRESHOLD)
@@ -593,7 +607,7 @@ class IGDBService:
             results = cls.search_by_alternative_name(title)
             if results:
                 cls._log_search_results(title, 'alt-name', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
                 if consider(candidate):
                     return best
             else:
@@ -612,7 +626,10 @@ class IGDBService:
                 results = cls.search_game(truncated, limit=15)
                 if results:
                     cls._log_search_results(title, f'truncated ("{truncated}")', concept, results)
-                    raw_candidate = cls._pick_best_non_dlc(concept, results)
+                    # Use the truncated string for scoring: scoring against the
+                    # full title would under-rate matches where the truncation
+                    # was the meaningful part (e.g. "Sly 3").
+                    raw_candidate = cls._pick_best_non_dlc(concept, results, search_title=truncated)
                     if raw_candidate:
                         igdb_data, confidence, method = raw_candidate
                         capped = min(confidence, auto_accept - 0.01)
@@ -630,7 +647,7 @@ class IGDBService:
             results = cls.search_by_generic_search(title)
             if results:
                 cls._log_search_results(title, 'generic-search', concept, results)
-                raw_candidate = cls._pick_best_non_dlc(concept, results)
+                raw_candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
                 if raw_candidate:
                     igdb_data, confidence, method = raw_candidate
                     capped = min(confidence, auto_accept - 0.01)
@@ -648,44 +665,51 @@ class IGDBService:
         """Log all IGDB search results with their confidence scores."""
         lines = [f'IGDB {search_type} search for "{title}": {len(results)} result(s)']
         for r in results:
-            score = cls._calculate_confidence(concept, r, 'fuzzy_name')
+            score = cls._calculate_confidence(concept, r, 'fuzzy_name', search_title=title)
             cat = cls._extract_game_category(r)
             cat_display = '?' if cat is None else cat
             lines.append(f'  - "{r.get("name")}" (cat={cat_display}, score={score:.0%})')
         logger.info('\n'.join(lines))
 
     @classmethod
-    def _pick_best_non_dlc(cls, concept, results):
+    def _pick_best_non_dlc(cls, concept, results, search_title=None):
         """Try to pick the best match, preferring non-DLC results.
 
         First tries all results with DLC filtered out. If that yields nothing,
         tries again with DLC included (some PSN "games" are legitimately DLC
         with their own trophy lists).
+
+        `search_title` is forwarded through to scoring so title similarity
+        is computed against the string we searched with.
         """
         # Filter out likely DLC entries
         non_dlc = [r for r in results if not _DLC_NAME_RE.search(r.get('name', ''))]
 
         if non_dlc:
             for method in ('exact_name', 'fuzzy_name'):
-                best = cls._pick_best_match(concept, non_dlc, method)
+                best = cls._pick_best_match(concept, non_dlc, method, search_title=search_title)
                 if best:
                     return best
 
         # Fall back to all results (DLC included) if no non-DLC match found
         for method in ('exact_name', 'fuzzy_name'):
-            best = cls._pick_best_match(concept, results, method)
+            best = cls._pick_best_match(concept, results, method, search_title=search_title)
             if best:
                 return best
 
         return None
 
     @classmethod
-    def _pick_best_match(cls, concept, results, method):
+    def _pick_best_match(cls, concept, results, method, search_title=None):
         """Score all results and return the best match with platform overlap.
 
         Requires at least one PlayStation platform in common between the
         concept's games and the IGDB result. No confidence floor: any
         match with platform overlap is surfaced for review.
+
+        `search_title` is forwarded to _calculate_confidence so title
+        similarity is scored against the same string used for the IGDB
+        search, not raw concept.unified_title.
 
         Returns:
             tuple: (igdb_data, confidence, method) or None
@@ -717,7 +741,7 @@ class IGDBService:
                         print(f'    [{game.get("name", "?")}] SKIPPED (no platform overlap)')
                     continue
 
-            confidence = cls._calculate_confidence(concept, game, method)
+            confidence = cls._calculate_confidence(concept, game, method, search_title=search_title)
             if confidence > 0:
                 scored.append((game, confidence))
 
@@ -749,8 +773,14 @@ class IGDBService:
         return (best_game, final_confidence, method)
 
     @classmethod
-    def _calculate_confidence(cls, concept, igdb_game, method):
+    def _calculate_confidence(cls, concept, igdb_game, method, search_title=None):
         """Calculate match confidence between a Concept and an IGDB game.
+
+        `search_title` is the string we used to search IGDB (as picked by
+        _pick_search_title) — scoring compares IGDB results against this,
+        not raw concept.unified_title, so the comparison stays consistent
+        with what the search actually looked for. Falls back to
+        concept.unified_title if no search_title is provided.
 
         Returns:
             float: Confidence score between 0.0 and 1.0
@@ -759,18 +789,22 @@ class IGDBService:
         debug = cls._debug_scoring
         steps = [] if debug else None
 
+        # Title used for similarity comparison. Prefer the string we searched
+        # with so scoring is consistent with what was actually queried.
+        compare_title = search_title or concept.unified_title
+
         # Normalize titles for comparison
-        psn_norm = cls._normalize_title(concept.unified_title)
+        psn_norm = cls._normalize_title(compare_title)
         igdb_norm = cls._normalize_title(igdb_name)
 
         # Check against primary name AND all alternative names (regional titles, etc.)
-        best_ratio = cls._fuzzy_title_match(concept.unified_title, igdb_name)
+        best_ratio = cls._fuzzy_title_match(compare_title, igdb_name)
         best_name = igdb_name
         for alt in igdb_game.get('alternative_names', []):
             alt_name = alt.get('name', '')
             if not alt_name:
                 continue
-            alt_ratio = cls._fuzzy_title_match(concept.unified_title, alt_name)
+            alt_ratio = cls._fuzzy_title_match(compare_title, alt_name)
             if alt_ratio > best_ratio:
                 best_ratio = alt_ratio
                 best_name = alt_name
@@ -892,12 +926,22 @@ class IGDBService:
         # Platform overlap is enforced by _pick_best_match (hard requirement).
         # No additional modifier needed here.
 
-        # Modifier: non-main game penalty (DLC/bundles score lower)
+        # Modifier: addon penalty. IGDB category values that represent "not a
+        # full standalone game you'd match against a PSN concept":
+        #   1  DLC / Addon      - content attached to a base game
+        #   2  Expansion        - content attached to a base game
+        #   5  Mod              - community modification, not a game
+        #   7  Season           - seasonal pass / subscription content
+        #   14 Update           - patch / update
+        # Remaster (9), Remake (8), Port (11), Standalone Expansion (4),
+        # Episode (6), Expanded Game (10), and Fork (12) are all FULL games
+        # with their own trophy lists and should not be penalized. Bundle (3)
+        # and Pack (13) are compilations surfaced via is_likely_compilation.
         category = cls._extract_game_category(igdb_game) or 0
-        if category != 0:
+        if category in _ADDON_CATEGORY_IDS:
             base -= 0.15
             if debug:
-                steps.append(f'-0.15 non-main-game penalty (category={category})')
+                steps.append(f'-0.15 addon penalty (category={category})')
 
         final = max(0.0, min(1.0, base))
         if debug:
@@ -919,10 +963,13 @@ class IGDBService:
             return 1.0
         return SequenceMatcher(None, t1, t2).ratio()
 
-    # Regex to strip platform suffixes from PSN titles
+    # Regex to strip platform suffixes from PSN titles. Handles both single
+    # platforms ("Foo PS4", "Foo (PS4)") and multi-platform lists as PP_ stub
+    # concepts get: "Foo (PS3, PS4, PSVITA)".
     _PLATFORM_SUFFIX_RE = re.compile(
         r'\s*[\-–—]?\s*\(?\s*'
-        r'(?:PS[345]|PS4\s*&\s*PS5|PlayStation\s*[345V]|PSVR2?|PS\s*Vita)'
+        r'(?:PS[12345]|PS4\s*&\s*PS5|PlayStation\s*[12345V]|PSVR2?|PS\s*Vita|PSP)'
+        r'(?:\s*,\s*(?:PS[12345]|PS4\s*&\s*PS5|PlayStation\s*[12345V]|PSVR2?|PS\s*Vita|PSP))*'
         r'\s*\)?\s*$',
         re.IGNORECASE,
     )
