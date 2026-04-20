@@ -95,6 +95,7 @@ GAME_FIELDS = (
     'franchise.id, franchise.name, '
     'franchises.id, franchises.name, collections.id, collections.name, '
     'alternative_names.name, alternative_names.comment, '
+    'game_localizations.name, game_localizations.region, '
     'external_games.uid, external_games.category, '
     'external_games.external_game_source.*, external_games.game_release_format.*, '
     'websites.url, websites.category, '
@@ -116,6 +117,18 @@ GAME_FIELDS = (
 # with their own trophy lists. Bundle (3) and Pack (13) are handled via the
 # is_likely_compilation flag, not this penalty.
 _ADDON_CATEGORY_IDS = frozenset({1, 2, 5, 7, 14})
+
+
+# Japanese rendaku (sequential voicing): when two morphemes compound, the
+# initial consonant of the second morpheme often voices. "kami" → "gami"
+# in "hayari+kami" → "hayarigami". Applied in Strategy 8 to generate a
+# compact-voiced variant alongside the unvoiced compact, since IGDB's
+# search keyword doesn't tolerate single-char edits (verified: "hayarikami"
+# returns 0 but "hayarigami" returns Hayarigami series entries). Rendaku
+# doesn't always apply in real Japanese, but we're generating candidates —
+# IGDB's 0-result response tells us when a guess is wrong and the spaced
+# variant or a different strategy picks up the slack.
+_RENDAKU_MAP = {'k': 'g', 's': 'z', 't': 'd', 'h': 'b'}
 
 
 # Characters in any of these Unicode blocks flag a title as "CJK-family" so
@@ -447,6 +460,46 @@ class IGDBService:
         return cls._request('games', detail_query)
 
     @classmethod
+    def search_by_localized_name(cls, title, limit=15):
+        """Search IGDB `/game_localizations` for per-region localized titles.
+
+        Distinct from `/alternative_names`: alt-names carries Western-region
+        marketing variants ("Sly Raccoon" vs "Sly Cooper and the Thievius
+        Raccoonus"), while localizations carries the per-region localized
+        title (Japan/Korea/China releases under their native-language name).
+        Verified empirically: searching /game_localizations for "流行り神"
+        returns 5 Hayarigami-series matches that no other strategy surfaces,
+        while /alternative_names for the same string returns 0.
+
+        Doesn't need romanization — the native characters ARE what's indexed
+        in this endpoint, unlike /games name/search which only has the
+        canonical Western release name.
+
+        Returns:
+            list: IGDB game objects with full Tier 1 field expansion
+        """
+        cleaned = cls._clean_title_for_search(title)
+        if not cleaned:
+            return []
+        query = (
+            f'fields game; '
+            f'where name ~ *"{cleaned}"*; '
+            f'limit {limit};'
+        )
+        results = cls._request('game_localizations', query)
+        game_ids = list({r['game'] for r in results if 'game' in r})
+        if not game_ids:
+            return []
+
+        id_filter = ','.join(str(gid) for gid in game_ids)
+        detail_query = (
+            f'fields {GAME_FIELDS}; '
+            f'where id = ({id_filter}); '
+            f'limit {len(game_ids)};'
+        )
+        return cls._request('games', detail_query)
+
+    @classmethod
     def search_by_generic_search(cls, title, limit=25):
         """Search IGDB via the `/search` endpoint that powers the website search bar.
 
@@ -647,7 +700,25 @@ class IGDBService:
         except Exception:
             logger.exception(f'IGDB alt-name search failed for "{title}"')
 
-        # Strategy 6: Truncated title search (series name before colon/dash).
+        # Strategy 6: /game_localizations search — IGDB's per-region localized
+        # title index. Critical for matching Japanese / Korean / Chinese
+        # concepts where the native title isn't in /games.name or
+        # /alternative_names but IS in /game_localizations.name. Verified
+        # live: "流行り神" (Hayarigami) is missing from all other search
+        # paths but returns 5 series matches from this endpoint.
+        try:
+            results = cls.search_by_localized_name(title)
+            if results:
+                cls._log_search_results(title, 'localized-name', concept, results)
+                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                if consider(candidate):
+                    return best
+            else:
+                logger.info(f'IGDB localized-name search for "{title}": 0 results')
+        except Exception:
+            logger.exception(f'IGDB localized-name search failed for "{title}"')
+
+        # Strategy 7: Truncated title search (series name before colon/dash).
         # Capped below auto-accept since this is a loose match. Uses a
         # tighter limit than the other search_game strategies because the
         # truncated query is inherently broader — a long tail of matches
@@ -672,7 +743,7 @@ class IGDBService:
             except Exception:
                 logger.exception(f'IGDB truncated search failed for "{truncated}"')
 
-        # Strategy 7: Generic /search endpoint (the website's search bar index).
+        # Strategy 8: Generic /search endpoint (the website's search bar index).
         # Looser fuzziness, better alt-name recall. Capped below auto-accept:
         # results always land in pending_review for staff verification.
         try:
@@ -690,42 +761,96 @@ class IGDBService:
         except Exception:
             logger.exception(f'IGDB generic-search failed for "{title}"')
 
-        # Strategy 8: CJK romanization fallback. IGDB indexes most Japanese/
-        # Korean/Chinese games under their romanized Western-release name
-        # (verified: no alt-name from the native form exists in the /games
-        # payload), so strategies 2-7 with the native characters never hit.
-        # Romanize offline via pykakasi/pypinyin/hangul-romanize and re-run
-        # the high-signal strategies with the romanized string. Capped below
-        # auto-accept because romanization is a lossy approximation — the
-        # resulting match always needs staff verification.
+        # Strategy 9: CJK romanization fallback. For titles where even the
+        # /game_localizations index doesn't have the native characters (IGDB
+        # data gaps), try romanizing with pykakasi / pypinyin /
+        # hangul-romanize and re-run the high-signal strategies with the
+        # romanized string. Capped below auto-accept because romanization is
+        # a lossy approximation — the resulting match always needs staff
+        # verification.
         romanized, script = cls._try_romanize(title)
         if romanized and romanized.lower() != title.lower():
+            # Generate multiple variants for Japanese. pykakasi splits at
+            # morpheme boundaries ("流行り神" -> "hayari kami") but IGDB
+            # stores the compound form with rendaku voicing ("Hayarigami" —
+            # kami→gami) AND their search keyword doesn't tolerate single-
+            # char edits (verified: searching "hayarikami" returns 0 results
+            # while "hayarigami" returns the series entries). So we try:
+            #
+            #   1. Morpheme-spaced (as pykakasi produces): "hayari kami 1 2 3 pakku"
+            #   2. Compact no-rendaku (morphemes joined as-is): "hayarikami 1 2 3 pakku"
+            #   3. Compact with rendaku (first consonant of 2nd+ morpheme voiced
+            #      per _RENDAKU_MAP): "hayarigami 1 2 3 pakku" — the winner
+            #
+            # Only do variants 2 and 3 when the ORIGINAL title is pure CJK
+            # (no Latin letters). For mixed titles like "ゼルダの伝説 Breath
+            # of the Wild", the English portion is a strong signal we don't
+            # want to mangle by joining romaji tokens with English words.
+            variants = [romanized]
+            has_latin = bool(re.search(r'[A-Za-z]', title))
+            if script == 'japanese' and not has_latin:
+                parts = romanized.split()
+                compact_chunks = []
+                rendaku_chunks = []
+                buf_compact = []
+                buf_rendaku = []
+                for p in parts:
+                    if p.isalpha():
+                        # Alphabetic morpheme: add to current compound buffer.
+                        buf_compact.append(p)
+                        if not buf_rendaku:
+                            buf_rendaku.append(p)  # first morpheme — no voicing
+                        else:
+                            voiced = _RENDAKU_MAP.get(p[0].lower())
+                            buf_rendaku.append(voiced + p[1:] if voiced else p)
+                    else:
+                        # Non-alpha (digit, punctuation): flush compound buffers.
+                        if buf_compact:
+                            compact_chunks.append(''.join(buf_compact))
+                            rendaku_chunks.append(''.join(buf_rendaku))
+                            buf_compact = []
+                            buf_rendaku = []
+                        compact_chunks.append(p)
+                        rendaku_chunks.append(p)
+                if buf_compact:
+                    compact_chunks.append(''.join(buf_compact))
+                    rendaku_chunks.append(''.join(buf_rendaku))
+                compact = ' '.join(compact_chunks)
+                rendaku = ' '.join(rendaku_chunks)
+                if compact and compact != romanized:
+                    variants.append(compact)
+                if rendaku and rendaku != compact and rendaku != romanized:
+                    variants.append(rendaku)
+
             if cls._debug_scoring:
                 print(
-                    f'  Strategy 8: romanized {script} title "{title}" -> "{romanized}"'
+                    f'  Strategy 9: romanized {script} title "{title}" -> '
+                    f'{variants}'
                 )
-            for search_fn, label in (
-                (cls.search_game, 'romanized PS-filtered'),
-                (cls.search_by_exact_name, 'romanized exact-name'),
-                (cls.search_by_generic_search, 'romanized generic-search'),
-            ):
-                try:
-                    r_results = search_fn(romanized)
-                except Exception:
-                    logger.exception(f'{label} failed for romanized "{romanized}"')
-                    continue
-                if not r_results:
-                    logger.info(f'IGDB {label} for romanized "{romanized}": 0 results')
-                    continue
-                cls._log_search_results(romanized, label, concept, r_results)
-                raw_candidate = cls._pick_best_non_dlc(
-                    concept, r_results, search_title=romanized
-                )
-                if raw_candidate:
-                    igdb_data, confidence, method = raw_candidate
-                    capped = min(confidence, auto_accept - 0.01)
-                    if consider((igdb_data, capped, method)):
-                        return best
+
+            for variant in variants:
+                for search_fn, label in (
+                    (cls.search_game, 'romanized PS-filtered'),
+                    (cls.search_by_exact_name, 'romanized exact-name'),
+                    (cls.search_by_generic_search, 'romanized generic-search'),
+                ):
+                    try:
+                        r_results = search_fn(variant)
+                    except Exception:
+                        logger.exception(f'{label} failed for romanized "{variant}"')
+                        continue
+                    if not r_results:
+                        logger.info(f'IGDB {label} for romanized "{variant}": 0 results')
+                        continue
+                    cls._log_search_results(variant, label, concept, r_results)
+                    raw_candidate = cls._pick_best_non_dlc(
+                        concept, r_results, search_title=variant
+                    )
+                    if raw_candidate:
+                        igdb_data, confidence, method = raw_candidate
+                        capped = min(confidence, auto_accept - 0.01)
+                        if consider((igdb_data, capped, method)):
+                            return best
 
         return best
 
