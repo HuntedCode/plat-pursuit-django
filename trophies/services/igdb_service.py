@@ -690,6 +690,43 @@ class IGDBService:
         except Exception:
             logger.exception(f'IGDB generic-search failed for "{title}"')
 
+        # Strategy 8: CJK romanization fallback. IGDB indexes most Japanese/
+        # Korean/Chinese games under their romanized Western-release name
+        # (verified: no alt-name from the native form exists in the /games
+        # payload), so strategies 2-7 with the native characters never hit.
+        # Romanize offline via pykakasi/pypinyin/hangul-romanize and re-run
+        # the high-signal strategies with the romanized string. Capped below
+        # auto-accept because romanization is a lossy approximation — the
+        # resulting match always needs staff verification.
+        romanized, script = cls._try_romanize(title)
+        if romanized and romanized.lower() != title.lower():
+            if cls._debug_scoring:
+                print(
+                    f'  Strategy 8: romanized {script} title "{title}" -> "{romanized}"'
+                )
+            for search_fn, label in (
+                (cls.search_game, 'romanized PS-filtered'),
+                (cls.search_by_exact_name, 'romanized exact-name'),
+                (cls.search_by_generic_search, 'romanized generic-search'),
+            ):
+                try:
+                    r_results = search_fn(romanized)
+                except Exception:
+                    logger.exception(f'{label} failed for romanized "{romanized}"')
+                    continue
+                if not r_results:
+                    logger.info(f'IGDB {label} for romanized "{romanized}": 0 results')
+                    continue
+                cls._log_search_results(romanized, label, concept, r_results)
+                raw_candidate = cls._pick_best_non_dlc(
+                    concept, r_results, search_title=romanized
+                )
+                if raw_candidate:
+                    igdb_data, confidence, method = raw_candidate
+                    capped = min(confidence, auto_accept - 0.01)
+                    if consider((igdb_data, capped, method)):
+                        return best
+
         return best
 
     @classmethod
@@ -1107,6 +1144,76 @@ class IGDBService:
 
         picked = min(games, key=platform_rank)
         return picked.title_name or concept.unified_title or ''
+
+    @staticmethod
+    def _detect_cjk_script(text):
+        """Return 'japanese', 'korean', 'chinese', or None based on script.
+
+        Priority: hangul (unambiguously Korean) > kana (unambiguously Japanese
+        since kanji alone is ambiguous between the two) > pure hanzi (probably
+        Chinese, since Japanese titles almost always include at least some kana).
+        """
+        if not text:
+            return None
+        if re.search(r'[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F]', text):
+            return 'korean'
+        if re.search(r'[\u3040-\u309F\u30A0-\u30FF]', text):
+            return 'japanese'
+        if re.search(r'[\u4E00-\u9FFF\u3400-\u4DBF]', text):
+            return 'chinese'
+        return None
+
+    @classmethod
+    def _try_romanize(cls, text):
+        """Romanize a CJK-containing string using an offline library.
+
+        IGDB's public API indexes most non-Latin titles under their romanized
+        Western-release name (verified: "流行り神 １・２・３パック" has name
+        "Hayarigami 1, 2, 3 Pack" in IGDB's `/games` payload with NO alt-name
+        back to the Japanese form). Searching with the native characters
+        returns zero matches no matter how we clean the query — the bridge
+        has to happen on our side.
+
+        Uses pykakasi for Japanese (high hit rate — many JP games release
+        under romanized titles), pypinyin for Chinese (lower hit rate — most
+        CN entries are translations not romanizations, but non-zero), and
+        hangul-romanize for Korean (medium hit rate).
+
+        Returns (romanized_str, script) or (None, None) when no CJK content
+        is detected or the romanizer fails.
+        """
+        script = cls._detect_cjk_script(text)
+        if not script:
+            return None, None
+        try:
+            if script == 'japanese':
+                import pykakasi
+                kks = pykakasi.kakasi()
+                parts = kks.convert(text)
+                romanized = ' '.join(
+                    item['hepburn'] for item in parts if item.get('hepburn')
+                )
+            elif script == 'chinese':
+                from pypinyin import pinyin, Style
+                parts = pinyin(text, style=Style.NORMAL, errors='default')
+                romanized = ' '.join(p[0] for p in parts if p and p[0])
+            elif script == 'korean':
+                from hangul_romanize import Transliter
+                from hangul_romanize.rule import academic
+                romanized = Transliter(academic).translit(text)
+            else:
+                return None, None
+        except Exception:
+            logger.exception(f'Romanization failed for {script!r} text: {text!r}')
+            return None, None
+
+        # Clean up: strip non-Latin punctuation that leaked through (middle
+        # dots from Japanese titles, stray spaces around them), collapse
+        # whitespace, trim. IGDB search won't know what to do with ・ either.
+        romanized = romanized.replace('\u30FB', ' ')  # Japanese middle dot
+        romanized = romanized.replace('\u00B7', ' ')  # General middle dot
+        romanized = ' '.join(romanized.split())
+        return (romanized or None), script
 
     @staticmethod
     def _unicode_normalize_for_matching(text):
