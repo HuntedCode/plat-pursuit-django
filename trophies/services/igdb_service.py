@@ -1017,9 +1017,16 @@ class IGDBService:
         psn_norm = cls._normalize_title(compare_title)
         igdb_norm = cls._normalize_title(igdb_name)
 
-        # Check against primary name AND all alternative names (regional titles, etc.)
+        # Check against primary name AND all alternative names AND all
+        # per-region localized names. `alternative_names` tends to carry
+        # Western marketing variants ("Sly Raccoon"); `game_localizations`
+        # carries non-Latin per-region titles ("流行り神 1・2・3 パック" for
+        # Japan). A Japanese concept title will never score against the
+        # English primary name but often scores perfectly against the
+        # Japanese game_localizations entry — that's the bridge.
         best_ratio = cls._fuzzy_title_match(compare_title, igdb_name)
         best_name = igdb_name
+        best_source = 'primary'
         for alt in igdb_game.get('alternative_names', []):
             alt_name = alt.get('name', '')
             if not alt_name:
@@ -1028,10 +1035,25 @@ class IGDBService:
             if alt_ratio > best_ratio:
                 best_ratio = alt_ratio
                 best_name = alt_name
+                best_source = 'alt'
+        for loc in igdb_game.get('game_localizations', []):
+            loc_name = loc.get('name', '')
+            if not loc_name:
+                continue
+            loc_ratio = cls._fuzzy_title_match(compare_title, loc_name)
+            if loc_ratio > best_ratio:
+                best_ratio = loc_ratio
+                best_name = loc_name
+                best_source = 'loc'
 
         if debug:
-            alt_note = f' (from alt "{best_name}")' if best_name != igdb_name else ''
-            steps.append(f'title_ratio={best_ratio:.2f}{alt_note}')
+            if best_source == 'alt':
+                src_note = f' (from alt "{best_name}")'
+            elif best_source == 'loc':
+                src_note = f' (from localization "{best_name}")'
+            else:
+                src_note = ''
+            steps.append(f'title_ratio={best_ratio:.2f}{src_note}')
 
         # Containment check using the best-matching name
         best_norm = cls._normalize_title(best_name)
