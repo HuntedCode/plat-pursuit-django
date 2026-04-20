@@ -3,8 +3,11 @@ from django.contrib.admin import SimpleListFilter
 from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, RematchSuggestion, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -1910,8 +1913,19 @@ class GameFamilyAdmin(admin.ModelAdmin):
     list_display = ['canonical_name', 'igdb_id', 'is_verified', 'concept_count', 'created_at', 'updated_at']
     list_filter = ['is_verified']
     search_fields = ['canonical_name', 'admin_notes', 'igdb_id']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at', 'updated_at', 'member_concepts']
     ordering = ['canonical_name']
+    fieldsets = (
+        (None, {
+            'fields': ('canonical_name', 'igdb_id', 'is_verified', 'admin_notes'),
+        }),
+        ('Members', {
+            'fields': ('member_concepts',),
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -1921,6 +1935,29 @@ class GameFamilyAdmin(admin.ModelAdmin):
         return obj._concept_count
     concept_count.short_description = 'Concepts'
     concept_count.admin_order_field = '_concept_count'
+
+    def member_concepts(self, obj):
+        if not obj.pk:
+            return '(save the family first to see members)'
+        rows = list(
+            obj.concepts.only('id', 'concept_id', 'unified_title').order_by('unified_title')
+        )
+        if not rows:
+            return '(no concepts linked to this family)'
+        items = format_html_join(
+            '',
+            '<li><a href="{}">{}</a> <span style="color:#888;">({})</span></li>',
+            (
+                (
+                    reverse('admin:trophies_concept_change', args=[c.pk]),
+                    c.unified_title or '(no title)',
+                    c.concept_id,
+                )
+                for c in rows
+            ),
+        )
+        return format_html('<ul style="margin:0;padding-left:1.25em;">{}</ul>', items)
+    member_concepts.short_description = 'Member concepts'
 
 
 # ---------- Review System Admin ----------
@@ -2603,6 +2640,141 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         if errors:
             msg += f' {errors} error(s) occurred.'
         messages.success(request, msg)
+
+
+@admin.register(RematchSuggestion)
+class RematchSuggestionAdmin(admin.ModelAdmin):
+    """Triage queue for rematch_auto_accepted proposals.
+
+    Each row is a "the matcher would pick a different IGDB id today" suggestion
+    that didn't clear the auto-apply bar. Approve to swap the IGDBMatch; dismiss
+    to mark reviewed and keep the existing match.
+    """
+
+    list_display = (
+        'concept_title',
+        'old_match_display',
+        'proposed_match_display',
+        'confidence_delta_display',
+        'status',
+        'created_at',
+        'reviewed_at',
+    )
+    list_filter = ('status', 'proposed_match_method', 'old_match_method')
+    search_fields = (
+        'concept__concept_id',
+        'concept__unified_title',
+        'old_igdb_name',
+        'proposed_igdb_name',
+        'old_igdb_id',
+        'proposed_igdb_id',
+    )
+    raw_id_fields = ('concept', 'reviewed_by')
+    readonly_fields = (
+        'concept',
+        'old_igdb_id', 'old_igdb_name', 'old_confidence', 'old_match_method',
+        'proposed_igdb_id', 'proposed_igdb_name', 'proposed_confidence',
+        'proposed_match_method', 'proposed_raw_response',
+        'created_at', 'reviewed_at', 'reviewed_by',
+    )
+    actions = ('apply_suggestions', 'dismiss_suggestions')
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+
+    fieldsets = (
+        (None, {'fields': ('concept', 'status')}),
+        ('Current match', {'fields': (
+            'old_igdb_id', 'old_igdb_name', 'old_confidence', 'old_match_method',
+        )}),
+        ('Proposed match', {'fields': (
+            'proposed_igdb_id', 'proposed_igdb_name', 'proposed_confidence',
+            'proposed_match_method', 'proposed_raw_response',
+        )}),
+        ('Review', {'fields': ('created_at', 'reviewed_at', 'reviewed_by')}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('concept', 'reviewed_by')
+
+    def concept_title(self, obj):
+        return f'{obj.concept.unified_title} ({obj.concept.concept_id})'
+    concept_title.short_description = 'Concept'
+    concept_title.admin_order_field = 'concept__unified_title'
+
+    def old_match_display(self, obj):
+        if obj.old_igdb_id is None:
+            return '-'
+        conf = f' ({obj.old_confidence:.0%})' if obj.old_confidence is not None else ''
+        return f'#{obj.old_igdb_id} {obj.old_igdb_name}{conf}'
+    old_match_display.short_description = 'Current'
+
+    def proposed_match_display(self, obj):
+        conf = f' ({obj.proposed_confidence:.0%})'
+        return f'#{obj.proposed_igdb_id} {obj.proposed_igdb_name}{conf}'
+    proposed_match_display.short_description = 'Proposed'
+
+    def confidence_delta_display(self, obj):
+        delta = obj.confidence_delta
+        sign = '+' if delta >= 0 else ''
+        return f'{sign}{delta:.2f}'
+    confidence_delta_display.short_description = 'Δ'
+
+    @admin.action(description='Apply proposed match (updates IGDBMatch)')
+    def apply_suggestions(self, request, queryset):
+        from trophies.services.igdb_service import IGDBService
+        applied = 0
+        skipped = 0
+        errors = 0
+        for suggestion in queryset.filter(status='pending').select_related('concept'):
+            try:
+                IGDBService.process_match(
+                    suggestion.concept,
+                    suggestion.proposed_raw_response,
+                    suggestion.proposed_confidence,
+                    suggestion.proposed_match_method or 'manual',
+                )
+                suggestion.status = 'approved'
+                suggestion.reviewed_at = timezone.now()
+                suggestion.reviewed_by = request.user
+                suggestion.save(update_fields=['status', 'reviewed_at', 'reviewed_by'])
+                applied += 1
+            except Exception as exc:
+                errors += 1
+                messages.error(
+                    request,
+                    f'Error applying suggestion for {suggestion.concept.concept_id}: {exc}',
+                )
+        non_pending = queryset.exclude(status='pending').count()
+        if non_pending:
+            skipped += non_pending
+            messages.warning(
+                request,
+                f'Skipped {non_pending} already-reviewed suggestion(s).',
+            )
+        if applied:
+            messages.success(
+                request,
+                f'Applied {applied} suggestion(s). IGDBMatch rows updated and enrichment re-run.',
+            )
+        if errors and not applied:
+            messages.error(request, f'{errors} error(s) occurred with no successful applies.')
+
+    @admin.action(description='Dismiss suggestions (keep existing match)')
+    def dismiss_suggestions(self, request, queryset):
+        pending = queryset.filter(status='pending')
+        count = pending.update(
+            status='dismissed',
+            reviewed_at=timezone.now(),
+            reviewed_by=request.user,
+        )
+        if count:
+            messages.success(request, f'Dismissed {count} suggestion(s).')
+        non_pending = queryset.exclude(status='pending').count()
+        if non_pending:
+            messages.warning(
+                request,
+                f'Skipped {non_pending} already-reviewed suggestion(s).',
+            )
 
 
 class GameFlagStatusFilter(SimpleListFilter):

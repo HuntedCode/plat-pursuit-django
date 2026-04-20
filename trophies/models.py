@@ -4512,6 +4512,77 @@ class IGDBMatch(models.Model):
         return f"{self.concept} -> {name} ({self.get_status_display()}{confidence})"
 
 
+class RematchSuggestion(models.Model):
+    """Staff-review queue entry for IGDB rematches that don't clear the auto-apply bar.
+
+    Written by `rematch_auto_accepted` whenever a re-run of the matching pipeline
+    produces a different IGDB id for an existing `auto_accepted` match but the new
+    candidate either scores below the auto-accept threshold or doesn't beat the
+    stored confidence. The existing IGDBMatch is preserved; the suggestion row
+    surfaces the alternative for an admin to approve or dismiss.
+    """
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='rematch_suggestions'
+    )
+
+    old_igdb_id = models.IntegerField(null=True, blank=True, db_index=True)
+    old_igdb_name = models.CharField(max_length=500, blank=True)
+    old_confidence = models.FloatField(null=True, blank=True)
+    old_match_method = models.CharField(max_length=20, blank=True)
+
+    proposed_igdb_id = models.IntegerField(db_index=True)
+    proposed_igdb_name = models.CharField(max_length=500, blank=True)
+    proposed_confidence = models.FloatField()
+    proposed_match_method = models.CharField(max_length=20, blank=True)
+    proposed_raw_response = models.JSONField(
+        default=dict, blank=True,
+        help_text='Snapshot of the IGDB payload so the suggestion can be applied without re-querying.',
+    )
+
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reviewed_rematch_suggestions',
+    )
+
+    class Meta:
+        verbose_name = 'rematch suggestion'
+        verbose_name_plural = 'rematch suggestions'
+        indexes = [
+            models.Index(fields=['status', '-created_at'], name='rematch_status_created_idx'),
+            models.Index(fields=['concept', 'status'], name='rematch_concept_status_idx'),
+        ]
+        ordering = ['-created_at']
+
+    @property
+    def confidence_delta(self):
+        """Signed delta between proposed and old confidence (positive = upgrade)."""
+        if self.old_confidence is None:
+            return self.proposed_confidence
+        return self.proposed_confidence - self.old_confidence
+
+    def __str__(self):
+        return (
+            f'{self.concept.concept_id}: '
+            f'#{self.old_igdb_id} -> #{self.proposed_igdb_id} '
+            f'({self.get_status_display()})'
+        )
+
+
 class GameFlag(models.Model):
     """Community flag for game data quality issues. Reviewed by staff in Django admin."""
 

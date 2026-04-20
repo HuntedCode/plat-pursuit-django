@@ -122,6 +122,9 @@ OneToOne to Concept. Stores matching metadata (`match_confidence`, `match_method
 - `rejected`: Match rejected manually (rare; usually rematched instead).
 - `no_match`: Matching ran but no IGDB result was found. The row exists as a marker so subsequent default enrichment passes skip the concept and so the unmatched review queue can surface it for manual intervention. `igdb_id`, `igdb_name`, `match_confidence`, and `match_method` are all blank/null on these rows.
 
+### RematchSuggestion
+FK to Concept (many per concept). Triage queue entry for `rematch_auto_accepted` proposals that didn't clear the auto-apply bar. Snapshots the old and proposed IGDB id/name/confidence/method plus the full proposed IGDB payload (`proposed_raw_response`) so approval can swap the IGDBMatch without re-querying IGDB. `status` is `pending`, `approved`, or `dismissed`; admin actions on `RematchSuggestionAdmin` drive the state transitions. See [Phase 3: Rematch Sweep](#phase-3-rematch-sweep) for the apply rules.
+
 ### Concept Additions
 - `igdb_genres` (JSONField): Genre names from IGDB, separate from PSN's `genres` field
 - `igdb_themes` (JSONField): Theme names from IGDB (no PSN equivalent)
@@ -195,6 +198,23 @@ Deduplication and identity lookups use the composite `(igdb_id, source_type)` ke
 
 Sony does not provide VR platform information. During enrichment, if IGDB reports PSVR (platform 165) or PSVR2 (platform 390), the system appends `'PSVR'` or `'PSVR2'` to `Game.title_platform` for all games under that Concept. Only adds, never removes.
 
+### Phase 3: Rematch Sweep
+
+`rematch_auto_accepted` replays the current matching pipeline against every `IGDBMatch` with `status='auto_accepted'`. The goal is to re-evaluate matches made under earlier (inferior) pipeline behaviour now that Phase 2 inputs (search-title selection, best-so-far accumulation, Strategy 6 localized-name, Strategy 7 `/search`, Strategy 9 romanization) are in place. Human-approved matches (`status='accepted'`) are intentionally excluded: the admin already signed off on those outcomes.
+
+For each match the command compares the new pipeline's top candidate against the stored match and applies one of four rules:
+
+| Case | Action |
+|---|---|
+| Same IGDB id | Skip silently, no record |
+| Different id, new confidence >= auto-accept threshold AND > old confidence | Apply new match via `process_match` (clear upgrade) |
+| Different id, below threshold OR <= old confidence | Keep old, write a `RematchSuggestion` row for admin review |
+| Pipeline returns no match | Keep old, log anomaly |
+
+`RematchSuggestion` rows snapshot the full proposed IGDB payload (`proposed_raw_response`) so the admin action can apply the swap without re-querying. The `RematchSuggestionAdmin` provides per-row context (old vs. proposed id/name/confidence, delta), plus `Apply` and `Dismiss` bulk actions. Apply routes through `process_match`, which overwrites the existing IGDBMatch and re-runs `_apply_enrichment` (family relinking, CJK title promotion, companies, franchises).
+
+Idempotence: re-running the command against the same auto-accepted pool refreshes any existing pending suggestion for the same `(concept, proposed_igdb_id)` pair rather than duplicating rows.
+
 ### Sync Pipeline Hook
 
 In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` creates a NEW concept:
@@ -226,7 +246,7 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 - **ALL CAPS titles**: IGDB search handles all-caps poorly. Title cleaning lowercases before searching.
 - **Colon in titles**: Colons break IGDB's Apicalypse query parser. Stripped from fuzzy search queries, preserved for exact name `where` clauses.
 - **Time-to-beat is community-sourced**: Not all games have it. Newer/niche games often have empty time-to-beat data. Fields are nullable.
-- **Multiple Concepts can share an IGDB ID**: PS4, PS5, PS3, and regional siblings of the same game can each have their own IGDBMatch row pointing at the same `igdb_id`. The unique constraint was dropped (only `db_index=True` remains) so each concept owns its own enrichment lifecycle. Use `find_igdb_family_ties` to surface concepts that share an `igdb_id` but are not in the same `GameFamily`, which usually indicates a missing family grouping.
+- **Multiple Concepts can share an IGDB ID**: PS4, PS5, PS3, and regional siblings of the same game can each have their own IGDBMatch row pointing at the same `igdb_id`. The unique constraint was dropped (only `db_index=True` remains) so each concept owns its own enrichment lifecycle. As of Phase 2.6, shared-IGDB-id concepts are deterministically grouped into the same `GameFamily` by `_link_concept_to_family` — no external diagnostic command is needed any more.
 - **Company mergers**: IGDB tracks renames/mergers via `changed_company_id`. The `Company.current_company` property follows the chain. When displaying company names, prefer `current_company` for accuracy.
 - **Raw response storage**: The `raw_response` JSONField stores the full IGDB API response (5-20KB per game). Tier 2 data can be parsed later without re-querying.
 - **no_match never overwrites real matches**: `IGDBService.record_no_match()` checks for an existing IGDBMatch first and bails if its status is anything other than `no_match`. This means if `--all` is run and a previously-accepted concept temporarily fails to match (transient IGDB hiccup), the accepted row is preserved. The summary still counts it as `no_match` since the matcher returned nothing, but the DB is left untouched.
@@ -246,6 +266,7 @@ In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` create
 | `enrich_from_igdb --force` | Re-match all concepts (overwrites) | `python manage.py enrich_from_igdb --all --force` |
 | `enrich_from_igdb --verbose` | Enable detailed search/scoring logs | `python manage.py enrich_from_igdb --verbose` |
 | `enrich_from_igdb --dry-run` | Preview without saving | `python manage.py enrich_from_igdb --dry-run` |
+| `rematch_auto_accepted` | Re-run the matching pipeline against every `auto_accepted` match. See [Phase 3: rematch sweep](#phase-3-rematch-sweep). | `python manage.py rematch_auto_accepted --dry-run` |
 | `rebuild_franchises_from_cache` | Rebuild Franchise + ConceptFranchise rows from cached `IGDBMatch.raw_response`. No IGDB API calls. Use for schema/logic changes that don't require fresh data. | `python manage.py rebuild_franchises_from_cache --wipe` |
 | `backfill_franchise_main_flag` | Recompute `ConceptFranchise.is_main` from cached raw_response using the current precedence rules. Narrower than a full rebuild — only updates the flag, leaves rows otherwise untouched. | `python manage.py backfill_franchise_main_flag --dry-run` |
 | `franchise_stats` | Read-only diagnostic: franchise/collection totals, per-concept coverage, browse-page surfacing counts, sample names. Useful for auditing enrichment coverage. | `python manage.py franchise_stats --samples 20` |
