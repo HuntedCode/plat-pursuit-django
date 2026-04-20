@@ -17,7 +17,7 @@ from django.views.generic.edit import FormView
 from trophies.mixins import StaffRequiredMixin
 from trophies.services.psn_api_service import PsnApiService
 from ..models import (
-    CommentReport, GameFamily, GameFamilyProposal, ModerationLog,
+    CommentReport, GameFamily, ModerationLog,
     ReviewModerationLog, ReviewReport, Trophy,
 )
 from ..forms import BadgeCreationForm
@@ -613,44 +613,24 @@ class ReviewModerationLogView(StaffRequiredMixin, ListView):
 
 
 class GameFamilyManagementView(StaffRequiredMixin, TemplateView):
-    """Staff-only dashboard for managing GameFamily records and reviewing proposals."""
+    """Staff-only dashboard for managing GameFamily records.
+
+    Post Phase 2.6, families are primarily created by the IGDB enrichment
+    pipeline (keyed on IGDB id). This view exists for admin inspection and
+    manual overrides on the edge cases IGDB doesn't cover.
+    """
     template_name = 'trophies/game_family_management.html'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
-        proposals = list(
-            GameFamilyProposal.objects.filter(
-                status='pending'
-            ).prefetch_related(
-                'concepts', 'concepts__games'
-            ).order_by('-confidence', '-created_at')
-        )
-
-        # Pre-compute trophy icons for proposal concepts in a single bulk query
-        proposal_concept_ids = set()
-        for p in proposals:
-            for c in p.concepts.all():
-                proposal_concept_ids.add(c.id)
-
-        concept_icons = {}
-        if proposal_concept_ids:
-            all_icons = defaultdict(list)
-            for concept_id, trophy_type, url in (
-                Trophy.objects.filter(
-                    game__concept_id__in=proposal_concept_ids,
-                    trophy_icon_url__isnull=False,
-                ).exclude(trophy_icon_url='')
-                .values_list('game__concept_id', 'trophy_type', 'trophy_icon_url')
-            ):
-                all_icons[concept_id].append((trophy_type, url))
-
-            for concept_id, icons in all_icons.items():
-                plat = next((url for t, url in icons if t == 'platinum'), None)
-                concept_icons[concept_id] = plat or icons[0][1]
-
-        context['pending_proposals'] = proposals
-        context['concept_icons'] = concept_icons
+        # Proposal workflow removed in Phase 2.6 — families are now created
+        # deterministically from IGDB id. The template still references these
+        # keys so they're provided as empty defaults for compatibility until
+        # the template is trimmed.
+        context['pending_proposals'] = []
+        context['concept_icons'] = {}
+        context['pending_count'] = 0
 
         families = list(
             GameFamily.objects.prefetch_related(
@@ -659,7 +639,6 @@ class GameFamilyManagementView(StaffRequiredMixin, TemplateView):
         )
 
         context['families'] = families
-        context['pending_count'] = len(proposals)
         context['family_count'] = len(families)
         context['verified_count'] = sum(1 for f in families if f.is_verified)
         context['unverified_count'] = context['family_count'] - context['verified_count']

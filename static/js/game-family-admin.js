@@ -125,47 +125,6 @@
         return card;
     }
 
-    // ── Proposal Actions ──
-    async function approveProposal(proposalId, proposedName) {
-        const name = prompt('Canonical family name:', proposedName);
-        if (name === null) return;
-
-        try {
-            const data = await API.post(`${BASE_URL}/proposals/${proposalId}/approve/`, {
-                canonical_name: name.trim() || proposedName,
-            });
-            Toast.show('Proposal approved!', 'success');
-            const card = document.querySelector(`[data-proposal-id="${proposalId}"]`);
-            if (card) card.remove();
-
-            // Add new family to Existing Families tab
-            if (data.family) {
-                const familiesList = document.getElementById('families-list');
-                // Remove "No game families yet" placeholder if present
-                const emptyMsg = familiesList.querySelector('.text-center.py-12');
-                if (emptyMsg) emptyMsg.remove();
-                familiesList.appendChild(_renderFamilyCard(data.family));
-            }
-        } catch (err) {
-            const msg = await _extractError(err, 'Failed to approve proposal.');
-            Toast.show(msg, 'error');
-        }
-    }
-
-    async function rejectProposal(proposalId) {
-        if (!confirm('Reject this proposal?')) return;
-
-        try {
-            await API.post(`${BASE_URL}/proposals/${proposalId}/reject/`, {});
-            Toast.show('Proposal rejected.', 'info');
-            const card = document.querySelector(`[data-proposal-id="${proposalId}"]`);
-            if (card) card.remove();
-        } catch (err) {
-            const msg = await _extractError(err, 'Failed to reject proposal.');
-            Toast.show(msg, 'error');
-        }
-    }
-
     // ── Family Management ──
     function editFamily(familyId, name, notes) {
         document.getElementById('edit-family-id').value = familyId;
@@ -549,8 +508,6 @@
 
     // Public API
     window.GameFamilyAdmin = {
-        approveProposal,
-        rejectProposal,
         editFamily,
         saveEdit,
         toggleVerified,

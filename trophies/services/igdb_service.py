@@ -1450,22 +1450,11 @@ class IGDBService:
 
         igdb_id = igdb_data['id']
 
-        # Flag if another Concept already has this IGDB game and they're not in the same family
-        existing = (
-            IGDBMatch.objects
-            .filter(igdb_id=igdb_id)
-            .exclude(concept=concept)
-            .select_related('concept')
-            .first()
-        )
-        if existing:
-            other_concept = existing.concept
-            if not concept.family_id or concept.family_id != other_concept.family_id:
-                logger.info(
-                    f'IGDB game {igdb_id} also matched to concept {other_concept.concept_id} '
-                    f'("{other_concept.unified_title}"). Creating family proposal.'
-                )
-                cls._create_family_proposal(concept, other_concept, igdb_id, igdb_data)
+        # NOTE: sibling-concept detection used to create a GameFamilyProposal
+        # here. Post Phase 2.6, GameFamily is keyed on IGDB id and linking
+        # happens deterministically in _link_concept_to_family during
+        # _apply_enrichment. No proposals, no fuzzy matching — same IGDB id
+        # unambiguously means same family.
 
         # Fetch time-to-beat from separate endpoint
         ttb = cls._fetch_time_to_beat(igdb_id)
@@ -1542,6 +1531,114 @@ class IGDBService:
 
         # Add VR platforms to Games that are missing them
         cls._apply_vr_platforms(concept, igdb_data)
+
+        # Promote CJK concept + game titles to the IGDB English name so
+        # discovery, search, and admin views show the Western release name
+        # instead of the native-language form.
+        cls._promote_cjk_titles_to_english(igdb_match, igdb_data)
+
+        # Auto-link this concept into its IGDB-id-keyed GameFamily. New
+        # family created if this is the first concept; existing family
+        # joined otherwise. IGDB id is the single source of truth for
+        # family grouping post Phase 2.6.
+        cls._link_concept_to_family(igdb_match, igdb_data)
+
+    @classmethod
+    def _promote_cjk_titles_to_english(cls, igdb_match, igdb_data):
+        """Rewrite Concept.unified_title and associated Game.title_name(s)
+        to the IGDB English name when the concept title contains CJK
+        characters. Games get lock_title=True so future PSN syncs don't
+        clobber the promotion back to the native title.
+
+        The native-language title is never lost — it's preserved in
+        IGDBMatch.raw_response.game_localizations, which is the Tier 2
+        source the enrichment pass populates on every match.
+        """
+        concept = igdb_match.concept
+        igdb_name = igdb_data.get('name') or igdb_match.igdb_name
+        if not igdb_name:
+            return
+        if not concept.unified_title or not _CJK_PATTERN.search(concept.unified_title):
+            # Only promote CJK titles — Latin titles don't need a rewrite.
+            return
+
+        # Rewrite the concept.
+        old_concept_title = concept.unified_title
+        concept.unified_title = igdb_name
+        concept.save(update_fields=['unified_title'])
+        logger.info(
+            f'Promoted concept {concept.concept_id} title: '
+            f'"{old_concept_title}" -> "{igdb_name}"'
+        )
+
+        # Rewrite associated games whose title is still CJK. Skip games
+        # already locked (admin override) or non-CJK.
+        for game in concept.games.all():
+            if game.lock_title:
+                continue
+            if not game.title_name or not _CJK_PATTERN.search(game.title_name):
+                continue
+            old_game_title = game.title_name
+            game.title_name = igdb_name
+            game.lock_title = True
+            game.save(update_fields=['title_name', 'lock_title'])
+            logger.info(
+                f'Promoted game {game.np_communication_id} title: '
+                f'"{old_game_title}" -> "{igdb_name}" (lock_title=True)'
+            )
+
+    @classmethod
+    def _link_concept_to_family(cls, igdb_match, igdb_data):
+        """Link the concept to its IGDB-id-keyed GameFamily.
+
+        Post Phase 2.6, GameFamily is keyed on IGDB id — one family per IGDB
+        game, holding all concepts (regional variants, platform variants,
+        stubs) that matched to that game. Creation is deterministic:
+        get_or_create by igdb_id.
+
+        Also handles the ID-migration case: if this concept's prior family
+        is different from the target and no other concepts remain in it,
+        the old family is deleted as an orphan. Covers the rare case where
+        IGDB merges two entries (12345 → 67890) and rematching assigns the
+        concept to the new ID's family.
+        """
+        concept = igdb_match.concept
+        igdb_id = igdb_match.igdb_id
+        if not igdb_id:
+            return  # No match → no family
+
+        from trophies.models import GameFamily
+        canonical_name = igdb_data.get('name') or igdb_match.igdb_name or f'IGDB #{igdb_id}'
+        family, created = GameFamily.objects.get_or_create(
+            igdb_id=igdb_id,
+            defaults={'canonical_name': canonical_name, 'is_verified': True},
+        )
+        # Keep canonical_name in sync with IGDB if the family pre-dates our
+        # first sight of the name (e.g. backfill ordering). Don't touch
+        # admin-edited names.
+        if not created and not family.admin_notes and family.canonical_name != canonical_name:
+            family.canonical_name = canonical_name
+            family.save(update_fields=['canonical_name'])
+
+        old_family = None
+        if concept.family_id and concept.family_id != family.pk:
+            old_family = concept.family
+
+        if concept.family_id != family.pk:
+            concept.family = family
+            concept.save(update_fields=['family'])
+            logger.info(
+                f'Linked concept {concept.concept_id} to GameFamily '
+                f'#{family.pk} ("{family.canonical_name}", igdb_id={igdb_id})'
+            )
+
+        # Clean up orphan family if this was its last member.
+        if old_family is not None and old_family.concepts.count() == 0:
+            logger.info(
+                f'Deleting orphan GameFamily #{old_family.pk} '
+                f'("{old_family.canonical_name}") — last member migrated.'
+            )
+            old_family.delete()
 
     @classmethod
     def _create_concept_companies(cls, concept, involved_companies):
@@ -1924,54 +2021,6 @@ class IGDBService:
                     f'Added VR platform(s) {vr_platforms_to_add} to game '
                     f'{game.np_communication_id} "{game.title_name}"'
                 )
-
-    @classmethod
-    def _check_family_proposals(cls, igdb_match):
-        """Check if other concepts share this IGDB game and create family proposals if needed."""
-        existing_matches = (
-            IGDBMatch.objects
-            .filter(igdb_id=igdb_match.igdb_id)
-            .exclude(concept=igdb_match.concept)
-            .select_related('concept')
-        )
-        for other_match in existing_matches:
-            if not igdb_match.concept.family_id or igdb_match.concept.family_id != other_match.concept.family_id:
-                cls._create_family_proposal(
-                    igdb_match.concept, other_match.concept,
-                    igdb_match.igdb_id, igdb_match.raw_response or {},
-                )
-
-    @classmethod
-    def _create_family_proposal(cls, concept_a, concept_b, igdb_id, igdb_data):
-        """Create a GameFamilyProposal when two Concepts share an IGDB game but aren't in the same family."""
-        from trophies.models import GameFamilyProposal
-
-        # Check if a proposal already exists for these two concepts
-        existing = GameFamilyProposal.objects.filter(
-            status='pending',
-            concepts=concept_a,
-        ).filter(concepts=concept_b).exists()
-        if existing:
-            return
-
-        igdb_name = igdb_data.get('name', f'IGDB #{igdb_id}')
-        proposal = GameFamilyProposal.objects.create(
-            proposed_name=igdb_name,
-            confidence=0.95,
-            match_reason=f'Both concepts matched to the same IGDB game: "{igdb_name}" (ID {igdb_id})',
-            match_signals={
-                'source': 'igdb_duplicate_match',
-                'igdb_id': igdb_id,
-                'igdb_name': igdb_name,
-                'concept_a': concept_a.concept_id,
-                'concept_b': concept_b.concept_id,
-            },
-        )
-        proposal.concepts.add(concept_a, concept_b)
-        logger.info(
-            f'Created GameFamilyProposal #{proposal.pk} for "{concept_a.unified_title}" '
-            f'and "{concept_b.unified_title}" (IGDB #{igdb_id})'
-        )
 
     @classmethod
     def _extract_game_category(cls, igdb_data):

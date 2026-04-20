@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, GameFamilyProposal, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -672,10 +672,26 @@ class ConceptFranchiseInline(admin.TabularInline):
 
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
-    list_display = ('id', 'concept_id', 'unified_title', 'release_date', 'publisher_name', 'genres')
-    search_fields = ('concept_id', 'unified_title')
+    list_display = (
+        'id', 'concept_id', 'unified_title', 'family_display',
+        'release_date', 'publisher_name', 'genres',
+    )
+    list_select_related = ('family',)
+    list_filter = ('family__is_verified',)
+    search_fields = ('concept_id', 'unified_title', 'family__canonical_name')
+    raw_id_fields = ('family',)
     actions = ['duplicate_concept', 'lock_games', 'unlock_games']
     inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
+
+    def family_display(self, obj):
+        if not obj.family_id:
+            return '—'
+        label = obj.family.canonical_name
+        if obj.family.igdb_id:
+            label += f' (IGDB {obj.family.igdb_id})'
+        return label
+    family_display.short_description = 'GameFamily'
+    family_display.admin_order_field = 'family__canonical_name'
 
     @admin.action(description="Lock concept on all games using selected concepts")
     def lock_games(self, request, queryset):
@@ -1891,40 +1907,15 @@ class AZChallengeSlotAdmin(admin.ModelAdmin):
 
 @admin.register(GameFamily)
 class GameFamilyAdmin(admin.ModelAdmin):
-    list_display = ['canonical_name', 'is_verified', 'concept_count', 'created_at', 'updated_at']
+    list_display = ['canonical_name', 'igdb_id', 'is_verified', 'concept_count', 'created_at', 'updated_at']
     list_filter = ['is_verified']
-    search_fields = ['canonical_name', 'admin_notes']
+    search_fields = ['canonical_name', 'admin_notes', 'igdb_id']
     readonly_fields = ['created_at', 'updated_at']
     ordering = ['canonical_name']
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs.annotate(_concept_count=Count('concepts'))
-
-    def concept_count(self, obj):
-        return obj._concept_count
-    concept_count.short_description = 'Concepts'
-    concept_count.admin_order_field = '_concept_count'
-
-
-@admin.register(GameFamilyProposal)
-class GameFamilyProposalAdmin(admin.ModelAdmin):
-    list_display = ['proposed_name', 'confidence_pct', 'status', 'concept_count', 'reviewed_by', 'created_at']
-    list_select_related = ('reviewed_by',)
-    list_filter = ['status', 'created_at']
-    search_fields = ['proposed_name', 'match_reason']
-    raw_id_fields = ['resulting_family', 'reviewed_by']
-    readonly_fields = ['created_at', 'confidence', 'match_reason', 'match_signals']
-    date_hierarchy = 'created_at'
-    ordering = ['-confidence', '-created_at']
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.annotate(_concept_count=Count('concepts'))
-
-    def confidence_pct(self, obj):
-        return f"{obj.confidence:.0%}"
-    confidence_pct.short_description = 'Confidence'
 
     def concept_count(self, obj):
         return obj._concept_count

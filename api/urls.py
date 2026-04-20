@@ -54,7 +54,6 @@ from .genre_challenge_views import (
 )
 from .genre_challenge_share_views import GenreChallengeShareHTMLView, GenreChallengeSharePNGView
 from .game_family_views import (
-    ProposalApproveView, ProposalRejectView,
     GameFamilyCreateView, GameFamilyUpdateView, GameFamilyDeleteView,
     GameFamilyAddConceptView, GameFamilyRemoveConceptView,
     ConceptSearchView as GameFamilyConceptSearchView,
@@ -264,8 +263,6 @@ urlpatterns = [
     path('game-families/<int:family_id>/delete/', GameFamilyDeleteView.as_view(), name='game-family-delete'),
     path('game-families/<int:family_id>/add-concept/', GameFamilyAddConceptView.as_view(), name='game-family-add-concept'),
     path('game-families/<int:family_id>/remove-concept/', GameFamilyRemoveConceptView.as_view(), name='game-family-remove-concept'),
-    path('game-families/proposals/<int:proposal_id>/approve/', ProposalApproveView.as_view(), name='game-family-proposal-approve'),
-    path('game-families/proposals/<int:proposal_id>/reject/', ProposalRejectView.as_view(), name='game-family-proposal-reject'),
     path('game-families/search-concepts/', GameFamilyConceptSearchView.as_view(), name='game-family-search-concepts'),
 
     # Subscription admin endpoints (staff-only)

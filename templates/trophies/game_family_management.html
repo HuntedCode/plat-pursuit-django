@@ -11,12 +11,7 @@
     </div>
 
     {# Stats Cards #}
-    <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
-            <div class="stat-title">Pending Proposals</div>
-            <div class="stat-value text-warning">{{ pending_count }}</div>
-            <div class="stat-desc">Awaiting review</div>
-        </div>
+    <div class="grid grid-cols-2 gap-4 mb-6">
         <div class="stat bg-base-100 border-2 border-base-300 rounded-box">
             <div class="stat-title">Total Families</div>
             <div class="stat-value text-info">{{ family_count }}</div>
@@ -29,12 +24,17 @@
         </div>
     </div>
 
+    {# Info banner: families are now IGDB-id-keyed #}
+    <div class="alert alert-info mb-6">
+        <div>
+            <p class="font-semibold">Families are now created automatically from IGDB matches.</p>
+            <p class="text-sm opacity-80">Concepts that share an IGDB game are grouped into the same family on accept. This page is for inspection and manual edge-case overrides. Run <code>python manage.py backfill_game_families_from_igdb</code> to rebuild the set from accepted IGDB matches.</p>
+        </div>
+    </div>
+
     {# Tabs #}
     <div id="gf-tabs" class="tabs tabs-boxed mb-6">
-        <button class="tab tab-active" data-tab="proposals">
-            Pending Proposals ({{ pending_count }})
-        </button>
-        <button class="tab" data-tab="families">
+        <button class="tab tab-active" data-tab="families">
             Existing Families ({{ family_count }})
         </button>
         <button class="tab" data-tab="create">
@@ -42,79 +42,8 @@
         </button>
     </div>
 
-    {# ── Tab 1: Pending Proposals ── #}
-    <div id="tab-proposals" class="gf-tab-panel">
-        {% if pending_proposals %}
-            <div class="space-y-4">
-                {% for proposal in pending_proposals %}
-                    <div class="card bg-base-100 border-2 border-base-300" data-proposal-id="{{ proposal.id }}">
-                        <div class="card-body">
-                            <div class="flex flex-col lg:flex-row justify-between items-start gap-4">
-                                <div class="flex-1">
-                                    <h3 class="text-xl font-bold mb-1">{{ proposal.proposed_name }}</h3>
-                                    <div class="flex flex-wrap gap-2 mb-2">
-                                        <span class="badge badge-warning">{{ proposal.confidence|multiply:100|floatformat:0 }}% confidence</span>
-                                        <span class="badge badge-ghost">{{ proposal.concepts.all|length }} concepts</span>
-                                    </div>
-                                    <p class="text-sm opacity-70 mb-3">{{ proposal.match_reason }}</p>
-
-                                    {# Concept cards #}
-                                    <div class="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                                        {% for concept in proposal.concepts.all %}
-                                            <div class="bg-base-200 rounded-lg p-3">
-                                                <div class="flex items-center gap-2 mb-2">
-                                                    {% with concept_icons|dict_get:concept.id as icon_url %}
-                                                        {% if icon_url %}
-                                                            <img src="{{ icon_url }}"
-                                                                 alt="Game icon" class="w-10 h-10 rounded object-cover flex-shrink-0">
-                                                        {% endif %}
-                                                    {% endwith %}
-                                                    <div class="min-w-0">
-                                                        <p class="font-semibold text-sm truncate">{{ concept.unified_title }}</p>
-                                                        <p class="text-xs opacity-60">{{ concept.concept_id }}</p>
-                                                    </div>
-                                                </div>
-                                                <div class="flex flex-wrap gap-1">
-                                                    {% for game in concept.games.all %}
-                                                        {% for platform in game.title_platform %}
-                                                            <span class="badge badge-xs badge-outline">{{ platform }}</span>
-                                                        {% endfor %}
-                                                    {% endfor %}
-                                                    {% if concept.concept_id|slice:":3" == "PP_" %}
-                                                        <span class="badge badge-xs badge-error">Stub</span>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                        {% endfor %}
-                                    </div>
-                                </div>
-
-                                {# Actions #}
-                                <div class="flex flex-col gap-2 flex-shrink-0">
-                                    <button class="btn btn-success btn-sm"
-                                            onclick="GameFamilyAdmin.approveProposal({{ proposal.id }}, '{{ proposal.proposed_name|escapejs }}')">
-                                        Approve
-                                    </button>
-                                    <button class="btn btn-error btn-sm btn-outline"
-                                            onclick="GameFamilyAdmin.rejectProposal({{ proposal.id }})">
-                                        Reject
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="text-center py-12 opacity-60">
-                <p class="text-lg">No pending proposals.</p>
-                <p class="text-sm mt-2">Run <code>python manage.py match_game_families</code> to generate matches.</p>
-            </div>
-        {% endif %}
-    </div>
-
-    {# ── Tab 2: Existing Families ── #}
-    <div id="tab-families" class="gf-tab-panel hidden">
+    {# ── Tab 1: Existing Families ── #}
+    <div id="tab-families" class="gf-tab-panel">
         <div id="families-list" class="space-y-4">
             {% for family in families %}
                 <div class="card bg-base-100 border-2 border-base-300" data-family-id="{{ family.id }}">
@@ -193,7 +122,7 @@
         </div>
     </div>
 
-    {# ── Tab 3: Manual Create ── #}
+    {# ── Tab 2: Manual Create ── #}
     <div id="tab-create" class="gf-tab-panel hidden">
         <div class="card bg-base-100 border-2 border-base-300">
             <div class="card-body">

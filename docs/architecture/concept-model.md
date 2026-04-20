@@ -20,11 +20,11 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 | `trophies/models.py` (lines 658-881) | `Concept` model: fields, `absorb()`, `create_default_concept()`, `add_title_id()`, `check_and_mark_regional()`, slug generation |
 | `trophies/models.py` (lines 427-526) | `Game` model: fields, `add_concept()`, `add_region()` |
 | `trophies/models.py` (lines 882-894) | `TitleID` model |
-| `trophies/models.py` (lines 603-656) | `GameFamily` and `GameFamilyProposal` models |
+| `trophies/models.py` (GameFamily) | `GameFamily` model (keyed on `igdb_id`, populated via IGDB enrichment) |
 | `trophies/services/psn_api_service.py` | `create_concept_from_details()`: creates or retrieves a Concept from PSN API response data; `update_profile_game_with_title_stats()`: checks for stale concepts during sync |
 | `trophies/token_keeper.py` | `_job_sync_title_id()`: the sync pipeline entry point that calls `create_concept_from_details()`, `game.add_concept()`, and `Concept.create_default_concept()` |
 | `trophies/management/commands/backfill_default_concepts.py` | One-time backfill command for games missing concepts |
-| `core/services/game_family_service.py` | GameFamily matching algorithm (name-based and trophy-based passes) |
+| `trophies/services/igdb_service.py` (`_link_concept_to_family`) | GameFamily linking — runs on every IGDB match acceptance, keyed on `igdb_id` |
 
 ## Data Model
 
@@ -80,18 +80,12 @@ The most critical operation in the system is `Concept.absorb(other)`. When a con
 | `created_at` | DateTimeField (auto) | Creation timestamp |
 | `updated_at` | DateTimeField (auto) | Last modification timestamp |
 
-### GameFamilyProposal
+### ~~GameFamilyProposal~~ (removed in Phase 2.6)
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `concepts` | M2M to Concept | Concepts proposed for grouping |
-| `proposed_name` | CharField(255) | Suggested family name |
-| `confidence` | FloatField | Match confidence score (0.0 to 1.0). High (>=0.85) auto-creates families; medium (0.5-0.84) goes to admin queue |
-| `match_reason` | TextField | Human-readable explanation |
-| `match_signals` | JSONField (dict) | Detailed signal breakdown (trophy overlap, name similarity, etc.) |
-| `status` | CharField(10) | `pending`, `approved`, or `rejected` |
-| `reviewed_by` | FK to CustomUser (nullable) | Staff reviewer |
-| `resulting_family` | FK to GameFamily (nullable) | The family created if approved |
+The proposal model was deleted when GameFamily switched to a deterministic
+IGDB-id-keyed creation model. No proposal / review queue exists anymore —
+families are created inline during IGDB enrichment via `get_or_create`. See
+[Game Family System](../features/game-family.md) for the full flow.
 
 ## Key Flows
 
@@ -144,7 +138,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 9. **Stage.concepts (M2M)**: Iterates `other.stages.all()`. For each stage, adds `self` and removes `other`. This maintains badge stage requirements.
 
-10. **GameFamilyProposal.concepts (M2M)**: Iterates `other.family_proposals.all()`. For each proposal, adds `self` and removes `other`.
+10. ~~**GameFamilyProposal.concepts (M2M)**~~: Removed in Phase 2.6 with the proposal model.
 
 11. **GenreChallengeSlot**: `other.genre_challenge_slots.update(concept=self)`. Re-points genre challenge game picks.
 
@@ -185,7 +179,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 - **IGDB Integration**: `IGDBMatch` is 1:1 with Concept and is transferred during `absorb()` if the surviving concept lacks one. `ConceptCompany`, `ConceptGenre`, `ConceptTheme`, and `ConceptEngine` M2M-through rows are migrated with role merging and de-duplication. `Concept.get_cover_url(size)` / `Concept.cover_url` property returns the PSN MASTER icon (`concept_icon_url`) for non-stub concepts, else constructs an IGDB cover URL from the matched game's `igdb_cover_image_id` (trusted matches only). Note: this per-concept helper is NOT the primary cover-art entry point at render time. `Game.display_image_url` is the single source of truth for templates and prefers **trusted IGDB cover first**, then falls back to `concept.concept_icon_url` → `game.title_image` → `game.title_icon_url`.
 - **Badge System**: `Stage.concepts` (M2M) defines which concepts count toward badge completion. `Badge.most_recent_concept` tracks the newest game in a badge series. Both are handled by `absorb()`.
 - **Challenge System**: `GenreChallengeSlot` and `GenreBonusSlot` reference Concept for genre challenge game picks.
-- **GameFamily Service** (`core/services/game_family_service.py`): Matches related Concepts into families via name-based and trophy-based algorithms. Runs daily via management command.
+- **GameFamily**: Families are now keyed deterministically by `GameFamily.igdb_id`. On IGDB match acceptance, `IGDBService._link_concept_to_family()` creates (or joins) the family by `igdb_id` and reassigns the concept. Orphaned families are cleaned up in the same step. Backfill via `python manage.py backfill_game_families_from_igdb`. No cron or heuristic matcher runs; the old `core/services/game_family_service.py` was removed.
 - **Profile Backgrounds**: Premium users select a Concept for their profile background via `Profile.selected_background`. Re-pointed during `absorb()`.
 - **Review Hub**: Uses `Concept.slug` for URL routing to game pages (ratings, reviews, discussions).
 
@@ -216,7 +210,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 | Command | Purpose | Usage |
 |---------|---------|-------|
 | `backfill_default_concepts` | Create stub concepts for games that have no concept assigned | `python manage.py backfill_default_concepts [--dry-run] [--batch-size 50]` |
-| `match_game_families` | Run the GameFamily matching algorithm to group related Concepts | `python manage.py match_game_families [--dry-run] [--auto-only] [--verbose]` |
+| `backfill_game_families_from_igdb` | One-shot historical pass: populate `GameFamily` records from existing accepted IGDB matches. Live path (`_apply_enrichment`) handles new matches automatically. | `python manage.py backfill_game_families_from_igdb [--dry-run]` |
 
 ## Related Docs
 

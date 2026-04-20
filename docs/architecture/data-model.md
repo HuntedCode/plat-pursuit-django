@@ -145,15 +145,13 @@ Key relationships:
 - `stat_type` FK to `StatType`
 
 ### GameFamily
-Groups related Concepts across generations or regions without merging them. Each Concept keeps its own comments, ratings, and checklists. A lightweight cross-gen unification layer with a `canonical_name` and `is_verified` flag.
-
-### GameFamilyProposal
-Proposed GameFamily grouping awaiting admin review. Contains a confidence score, match signals, and links to a resulting family if approved.
-
-Key relationships:
-- `concepts` M2M to `Concept`
-- `resulting_family` FK to `GameFamily` (nullable)
-- `reviewed_by` FK to `CustomUser`
+Groups related Concepts across platforms and regions without merging them.
+Each Concept keeps its own comments, ratings, and checklists. Keyed on
+`igdb_id` (unique, nullable) — one family per IGDB game. Populated
+automatically by the IGDB enrichment pipeline via `get_or_create`; the
+old heuristic matcher and `GameFamilyProposal` review queue were removed
+in Phase 2.6. See [Game Family System](../features/game-family.md) for
+the full model and flow.
 
 ---
 
@@ -517,7 +515,6 @@ Concept
   |-- 1:N --> ConceptTrophyGroup
   |-- 1:N --> FeaturedGuide
   |-- M2M <-> Stage (via Stage.concepts)
-  |-- M2M <-> GameFamilyProposal (via proposal.concepts)
 
 Game
   |-- N:1 --> Concept

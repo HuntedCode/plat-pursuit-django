@@ -14,7 +14,6 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
-| 03:00 UTC daily | `match_game_families` | Daily | `populate_title_ids` should have completed |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
 | Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
@@ -81,13 +80,15 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Idempotency**: Fully safe to re-run. Uses `update_or_create` for each record, so duplicate runs produce no side effects.
 - **Failure impact**: New games released since the last successful run won't have TitleID entries. This can affect region detection for newly synced games but does not break core functionality.
 
-### match_game_families
+### ~~match_game_families~~ (removed in Phase 2.6)
 
-- **Schedule**: Daily
-- **Command**: `python manage.py match_game_families`
-- **What it does**: Scans all Concepts for cross-generation relationships using a two-pass algorithm: name-based grouping (normalized titles, fuzzy suffix stripping) and trophy-based matching (icon URL overlap, structural fingerprint). High-confidence matches (>=0.85) auto-create `GameFamily` records. Medium-confidence matches (0.5-0.84) create `GameFamilyProposal` records for admin review.
-- **Dependencies**: Ideally runs after `populate_title_ids` so newly imported titles are available for matching. No hard dependency.
-- **Idempotency**: Safe to re-run. Already-grouped Concepts are skipped. Duplicate proposals are deduplicated.
+**Removed**: the heuristic name/trophy-based family matcher was deleted in
+Phase 2.6. `GameFamily` records are now populated automatically by the IGDB
+enrichment pipeline keyed on `igdb_id` — see
+[Game Family System](../features/game-family.md) for the new flow. No cron
+job replaces it; linking happens inline on every match acceptance. A
+one-shot backfill (`backfill_game_families_from_igdb`) exists for the
+historical pass after Phase 3's rematch run.
 - **Failure impact**: New cross-generation game relationships are not automatically discovered. Existing families remain intact.
 
 ### update_shovelware
@@ -175,8 +176,7 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
     DAILY ──────────── check_subscription_milestones
                         populate_title_ids
                             |
-                            v  (title data improves matching)
-                        match_game_families
+                            v
                         update_shovelware
 
 
@@ -194,9 +194,8 @@ Key ordering rules:
 
 1. `refresh_profiles` depends on TokenKeeper being alive to process queued syncs.
 2. `send_monthly_recap_emails` **must** run after `generate_monthly_recaps --finalize`. The 6-hour gap (00:05 to 06:00) on the 3rd of each month ensures this.
-3. `match_game_families` benefits from running after `populate_title_ids` so new title data is available, but it will not fail without it.
-4. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday). The Sunday `cleanup_old_analytics` job has no dependency relationship.
-5. All other jobs are independent and can run in any order relative to each other.
+3. `send_weekly_digest` runs Monday morning, covering the previous ISO week (Monday to Sunday). The Sunday `cleanup_old_analytics` job has no dependency relationship.
+4. All other jobs are independent and can run in any order relative to each other.
 
 ---
 

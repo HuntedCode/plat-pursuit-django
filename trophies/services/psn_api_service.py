@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from datetime import timedelta
 from django.utils import timezone
@@ -12,6 +13,18 @@ from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
 from trophies.discord_utils.discord_notifications import notify_new_platinum
 
 logger = logging.getLogger("psn_api")
+
+
+# CJK-character regex used to prevent title regressions: once a Concept's
+# unified_title is Latin (either natively or promoted via IGDB rename), we
+# don't let a later PSN sync clobber it back to a CJK form. Mirrors the
+# pattern in IGDBService but kept local to avoid an import cycle.
+_CJK_PATTERN = re.compile(
+    '['
+    '\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\u4E00-\u9FFF'
+    '\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uFF00-\uFFEF'
+    ']'
+)
 
 class PsnApiService:
     """Service class for PSN API data processing and model updates."""
@@ -290,8 +303,21 @@ class PsnApiService:
 
         new_title = details.get('nameEn') or details.get('name', '')
         if new_title and concept.unified_title != new_title:
-            concept.unified_title = new_title
-            update_fields.append('unified_title')
+            # CJK-regression guard: once a concept's title is Latin (either
+            # natively or promoted via IGDB rename), don't let a later PSN
+            # sync overwrite it back to a CJK form. Without this, a Japanese
+            # PSN sync response would undo our IGDB-English rename.
+            if (_CJK_PATTERN.search(new_title)
+                    and concept.unified_title
+                    and not _CJK_PATTERN.search(concept.unified_title)):
+                logger.info(
+                    f'Skipping unified_title update for concept {concept.concept_id}: '
+                    f'refusing to regress "{concept.unified_title}" (Latin) -> '
+                    f'"{new_title}" (CJK)'
+                )
+            else:
+                concept.unified_title = new_title
+                update_fields.append('unified_title')
 
         new_publisher = details.get('publisherName', '')
         if new_publisher and concept.publisher_name != new_publisher:

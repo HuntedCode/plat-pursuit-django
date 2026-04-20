@@ -66,7 +66,7 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | `cleanup_old_analytics` | Delete old AnalyticsSession records and anonymize IP addresses from PageView records for GDPR compliance. | `--dry-run`, `--days` (default: 90), `--force` | `python manage.py cleanup_old_analytics --force` |
 | `refresh_homepage_hourly` | Compute and cache the site heartbeat ribbon data ("PlatPursuit at a Glance"). Single cache key per hour. See [Homepage Services](../reference/homepage-services.md). | (none) | `python manage.py refresh_homepage_hourly` |
 | `populate_title_ids` | Populate TitleID table from external PlayStation Titles GitHub repository (PS4 + PS5 TSV files). | (none) | `python manage.py populate_title_ids` |
-| `match_game_families` | Find and group related Concepts into GameFamily records using name-based and trophy-based matching algorithms. | `--dry-run`, `--auto-only`, `--verbose`, `--diagnose <concept_id>`, `--top` (default: 10) | `python manage.py match_game_families --dry-run --verbose` |
+| `backfill_game_families_from_igdb` | Populate `GameFamily` records from accepted `IGDBMatch` rows, keyed on `igdb_id`. One-shot historical pass; live enrichment hooks handle new matches. | `--dry-run` | `python manage.py backfill_game_families_from_igdb --dry-run` |
 | `backfill_guide_view_counts` | Reconcile `Checklist.view_count` from actual PageView records after the `page_type` rename from `checklist` to `guide`. | `--dry-run` | `python manage.py backfill_guide_view_counts` |
 | `send_weekly_digest` | Send "This Week in PlatPursuit" community newsletter with site-wide stats, top platted games, review of the week, and condensed personal stats. Community data fetched once per batch. Only suppressed if the community had zero activity. | `--dry-run`, `--profile-id`, `--force`, `--batch-size` (default: 100) | `python manage.py send_weekly_digest --dry-run` |
 | `test_email_system` | Send test emails for any template to verify email delivery. Supports 17+ email template previews. | `recipient_email` (positional, required), `--recap-preview`, `--verification-preview`, `--password-reset-preview`, `--payment-failed-preview`, `--payment-failed-final-preview`, `--cancelled-preview`, `--welcome-preview`, `--payment-succeeded-preview`, `--payment-action-required-preview`, `--donation-receipt-preview`, `--badge-claim-preview`, `--artwork-complete-preview`, `--badge-earned-preview`, `--milestone-preview`, `--free-welcome-preview`, `--broadcast-preview`, `--weekly-digest-preview` | `python manage.py test_email_system your@email.com --recap-preview` |
@@ -120,7 +120,6 @@ These commands run on automated schedules. See your hosting provider's cron conf
 | `send_monthly_recap_emails` | 3rd of month, 06:00 UTC | Send recap emails + in-app notifications |
 | `send_weekly_digest` | Monday 08:00 UTC | Send "This Week in PlatPursuit" community newsletter |
 | `populate_title_ids` | Daily or weekly | Sync TitleID table from GitHub |
-| `match_game_families` | Daily | Find and group related Concepts |
 | `update_shovelware` | Weekly | Surgical shovelware reconciliation (idempotent drift correction) |
 
 ### Admin Tools
@@ -225,7 +224,7 @@ Controls the number of records processed per database batch. Used by commands th
 
 ### `--verbose`
 
-Shows detailed per-record output. Used by: `backfill_game_regions`, `match_game_families`, `update_shovelware`, `audit_profile_gamification`.
+Shows detailed per-record output. Used by: `backfill_game_regions`, `update_shovelware`, `audit_profile_gamification`.
 
 ### `--commit` vs `--dry-run`
 

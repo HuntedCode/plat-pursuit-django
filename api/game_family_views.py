@@ -1,7 +1,10 @@
 """
 Game Family API views.
 
-Staff-only endpoints for managing GameFamily records and reviewing proposals.
+Staff-only endpoints for manually managing GameFamily records. Post Phase 2.6,
+families are primarily created/populated by the IGDB enrichment pipeline keyed
+on IGDB id; these endpoints exist for manual overrides and admin inspection of
+edge cases (concepts IGDB doesn't have entries for, admin-created groupings).
 """
 import logging
 
@@ -17,7 +20,7 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from trophies.models import Concept, GameFamily, GameFamilyProposal, Trophy
+from trophies.models import Concept, GameFamily, Trophy
 
 logger = logging.getLogger('psn_api')
 
@@ -82,91 +85,6 @@ def _serialize_family(family):
         'concepts': _bulk_serialize_concepts(concepts),
         'concept_count': len(concepts),
     }
-
-
-def _serialize_proposal(proposal):
-    """Serialize a GameFamilyProposal with its member concepts."""
-    concepts = list(proposal.concepts.prefetch_related('games').all())
-    return {
-        'id': proposal.id,
-        'proposed_name': proposal.proposed_name,
-        'confidence': proposal.confidence,
-        'match_reason': proposal.match_reason,
-        'match_signals': proposal.match_signals,
-        'status': proposal.status,
-        'created_at': proposal.created_at.isoformat(),
-        'concepts': _bulk_serialize_concepts(concepts),
-    }
-
-
-class ProposalApproveView(APIView):
-    """Approve a pending proposal, creating a GameFamily."""
-    authentication_classes = [SessionAuthentication, TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    throttle_classes = []
-
-    def post(self, request, proposal_id):
-        try:
-            proposal = GameFamilyProposal.objects.get(id=proposal_id, status='pending')
-        except GameFamilyProposal.DoesNotExist:
-            return Response({'error': 'Proposal not found or already reviewed.'},
-                            status=status.HTTP_404_NOT_FOUND)
-
-        canonical_name = request.data.get('canonical_name', proposal.proposed_name)
-
-        with transaction.atomic():
-            # Lock concepts to prevent concurrent approvals from assigning to different families
-            concepts = list(proposal.concepts.select_for_update().all())
-            already_in_family = [c for c in concepts if c.family_id is not None]
-
-            if already_in_family:
-                # Add remaining concepts to existing family
-                existing_family = already_in_family[0].family
-                for c in concepts:
-                    if c.family_id is None:
-                        c.family = existing_family
-                        c.save(update_fields=['family'])
-                family = existing_family
-            else:
-                family = GameFamily.objects.create(
-                    canonical_name=canonical_name,
-                    is_verified=True,
-                )
-                for c in concepts:
-                    c.family = family
-                    c.save(update_fields=['family'])
-
-            proposal.status = 'approved'
-            proposal.reviewed_by = request.user
-            proposal.reviewed_at = timezone.now()
-            proposal.resulting_family = family
-            proposal.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'resulting_family'])
-
-        return Response({
-            'message': 'Proposal approved.',
-            'family': _serialize_family(family),
-        })
-
-
-class ProposalRejectView(APIView):
-    """Reject a pending proposal."""
-    authentication_classes = [SessionAuthentication, TokenAuthentication]
-    permission_classes = [IsAuthenticated, IsAdminUser]
-    throttle_classes = []
-
-    def post(self, request, proposal_id):
-        try:
-            proposal = GameFamilyProposal.objects.get(id=proposal_id, status='pending')
-        except GameFamilyProposal.DoesNotExist:
-            return Response({'error': 'Proposal not found or already reviewed.'},
-                            status=status.HTTP_404_NOT_FOUND)
-
-        proposal.status = 'rejected'
-        proposal.reviewed_by = request.user
-        proposal.reviewed_at = timezone.now()
-        proposal.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
-
-        return Response({'message': 'Proposal rejected.'})
 
 
 class GameFamilyCreateView(APIView):

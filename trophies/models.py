@@ -683,8 +683,16 @@ class GameFamily(models.Model):
 
     Each Concept keeps its own comments, ratings, and checklists.
     GameFamily is a lightweight grouping layer for cross-gen unification.
+
+    Keyed on IGDB id — one family per IGDB game. Creation is deterministic
+    via `get_or_create(igdb_id=...)` during IGDB enrichment. Concepts that
+    haven't matched IGDB yet are unfamilied; they join as matches come in.
     """
     canonical_name = models.CharField(max_length=255, db_index=True)
+    igdb_id = models.IntegerField(unique=True, null=True, blank=True, db_index=True,
+                                  help_text='IGDB game id this family maps to. Nullable to '
+                                            'support admin-created families for edge cases IGDB '
+                                            'does not cover; Unique when set.')
     admin_notes = models.TextField(blank=True)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -701,36 +709,6 @@ class GameFamily(models.Model):
 
     def __str__(self):
         return self.canonical_name
-
-
-class GameFamilyProposal(models.Model):
-    """Proposed GameFamily grouping awaiting admin review."""
-    STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
-    ]
-
-    concepts = models.ManyToManyField('Concept', related_name='family_proposals')
-    proposed_name = models.CharField(max_length=255)
-    confidence = models.FloatField()
-    match_reason = models.TextField()
-    match_signals = models.JSONField(default=dict)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
-    reviewed_by = models.ForeignKey(
-        'users.CustomUser', null=True, blank=True, on_delete=models.SET_NULL
-    )
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    resulting_family = models.ForeignKey(
-        GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='proposals'
-    )
-
-    class Meta:
-        ordering = ['-confidence', '-created_at']
-
-    def __str__(self):
-        return f"Proposal: {self.proposed_name} ({self.get_status_display()}, {self.confidence:.0%})"
 
 
 class Concept(models.Model):
@@ -942,10 +920,7 @@ class Concept(models.Model):
             stage.concepts.add(self)
             stage.concepts.remove(other)
 
-        # GameFamilyProposal M2M
-        for proposal in other.family_proposals.all():
-            proposal.concepts.add(self)
-            proposal.concepts.remove(other)
+        # GameFamilyProposal M2M removed — proposal model deleted in Phase 2.6.
 
         # Genre challenge slots
         other.genre_challenge_slots.update(concept=self)

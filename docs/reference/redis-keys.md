@@ -222,7 +222,7 @@ All homepage keys use 2x TTL as safety margin (cron refreshes before expiry). Da
 | Key Pattern | TTL | Purpose |
 |-------------|-----|---------|
 | `mod:pending_reports_count` | 60s | Pending CommentReport count (staff navbar) |
-| `mod:pending_proposals_count` | 60s | Pending GameFamilyProposal count (superuser navbar) |
+| ~~`mod:pending_proposals_count`~~ | — | Removed in Phase 2.6 alongside the `GameFamilyProposal` model. |
 
 **Files**: `plat_pursuit/context_processors.py`
 
