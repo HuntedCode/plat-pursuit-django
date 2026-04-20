@@ -475,18 +475,44 @@ class IGDBService:
         in this endpoint, unlike /games name/search which only has the
         canonical Western release name.
 
+        Two-stage query: first try the full cleaned title, then fall back to
+        just the first whitespace-separated token if zero results. PSN
+        native titles often carry platform/edition/numbering suffixes that
+        IGDB stores with subtly different spacing (e.g. PSN's
+        "流行り神 １・２・３パック" vs IGDB's localization name
+        "流行り神 1・2・3 パック" — note the space before パック). The
+        substring `name ~ *"..."*` pattern fails on those single-character
+        differences, but the franchise/series prefix ("流行り神") is almost
+        always indexed as-is and matches cleanly. Our scoring function then
+        picks the right sibling among the returned franchise entries.
+
         Returns:
             list: IGDB game objects with full Tier 1 field expansion
         """
         cleaned = cls._clean_title_for_search(title)
         if not cleaned:
             return []
-        query = (
-            f'fields game; '
-            f'where name ~ *"{cleaned}"*; '
-            f'limit {limit};'
-        )
-        results = cls._request('game_localizations', query)
+
+        def _search_raw(q):
+            query_str = f'fields game; where name ~ *"{q}"*; limit {limit};'
+            try:
+                return cls._request('game_localizations', query_str)
+            except Exception:
+                logger.exception(f'IGDB localized-name query failed for "{q}"')
+                return []
+
+        results = _search_raw(cleaned)
+
+        # Fallback: if the full title returned 0 results and the title has
+        # multiple whitespace-separated tokens, retry with just the first
+        # token. PSN native titles often carry suffixes IGDB stores with
+        # slightly different spacing — matching only the franchise prefix
+        # typically hits the whole series, which scoring narrows down.
+        if not results and ' ' in cleaned:
+            first_token = cleaned.split(maxsplit=1)[0]
+            if first_token and len(first_token) >= 2:
+                results = _search_raw(first_token)
+
         game_ids = list({r['game'] for r in results if 'game' in r})
         if not game_ids:
             return []
