@@ -1203,6 +1203,13 @@ class TokenKeeper:
 
             logger.info(f"Starting complete sync job for {profile_id}...")
 
+            # Drain any IGDB enrichments deferred by _job_sync_title_id.
+            # By this point every Game for every new concept has been attached,
+            # so the matching pipeline sees the full game set — critical for
+            # distinguishing single-game concepts from multi-game compilations.
+            _set_phase('igdb_enrich')
+            self._drain_deferred_igdb_enrich(profile_id)
+
             # Check profile heatlh
             _set_phase('health_check')
             logger.info(f"Starting health check for {profile_id}...")
@@ -2092,9 +2099,13 @@ class TokenKeeper:
                     concept.add_title_id(title_id.title_id)
                     concept.check_and_mark_regional()
 
-                    # IGDB enrichment for newly created concepts (best-effort)
+                    # IGDB enrichment for newly created concepts (best-effort).
+                    # Deferred to sync_complete so every Game for the concept is
+                    # attached before matching runs — _pick_search_title needs the
+                    # full game set to distinguish single-game concepts from
+                    # multi-game compilations.
                     if concept_created:
-                        self._try_igdb_enrich(concept)
+                        self._defer_igdb_enrich(profile_id, concept)
 
                     profile.increment_sync_progress()
                     logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
@@ -2111,7 +2122,7 @@ class TokenKeeper:
                             logger.warning(f"Concept for {title_id.title_id} returned an error code.")
                         default_concept = Concept.create_default_concept(game)
                         game.add_concept(default_concept)
-                        self._try_igdb_enrich(default_concept)
+                        self._defer_igdb_enrich(profile_id, default_concept)
                         logger.info(f"Created default concept for {game.title_name}")
                     logger.info(f"Title ID {title_id.title_id} sync'd successfully!")
             else:
@@ -2127,7 +2138,7 @@ class TokenKeeper:
                             logger.info(f"Game {game.title_name} detected as Asian regional.")
                         default_concept = Concept.create_default_concept(game)
                         game.add_concept(default_concept)
-                        self._try_igdb_enrich(default_concept)
+                        self._defer_igdb_enrich(profile_id, default_concept)
                         logger.info(f"Created default concept for {game.title_name} (game_title was None)")
                     except Exception:
                         logger.exception(f"Failed to create default concept for {game.title_name} (Title ID {title_id.title_id})")
@@ -2142,7 +2153,7 @@ class TokenKeeper:
                 if game.concept is None:
                     default_concept = Concept.create_default_concept(game)
                     game.add_concept(default_concept)
-                    self._try_igdb_enrich(default_concept)
+                    self._defer_igdb_enrich(profile_id, default_concept)
                     logger.info(f"Exception recovery: created default concept for {game.title_name} (Title ID {title_id.title_id})")
             except Exception as recovery_err:
                 logger.exception(f"Exception recovery also failed for {game.title_name} (Title ID {title_id.title_id}): {recovery_err}")
@@ -2154,6 +2165,69 @@ class TokenKeeper:
             IGDBService.enrich_concept(concept)
         except Exception:
             logger.exception(f"IGDB enrichment failed for concept {concept.concept_id}")
+
+    @staticmethod
+    def _pending_igdb_enrich_key(profile_id) -> str:
+        return f"profile:{profile_id}:pending_igdb_enrich"
+
+    def _defer_igdb_enrich(self, profile_id, concept):
+        """Queue a newly created concept for IGDB enrichment at sync_complete.
+
+        Adds concept.id to a per-profile Redis set. Drained by
+        `_drain_deferred_igdb_enrich` so that matching runs after every
+        sibling Game has been attached across title_id jobs. Falls back to
+        inline enrichment if Redis is unavailable (keeps the old behaviour
+        as a safety net).
+        """
+        try:
+            key = self._pending_igdb_enrich_key(profile_id)
+            redis_client.sadd(key, concept.id)
+            redis_client.expire(key, 21600)  # 6h cap in case sync_complete never fires
+        except Exception:
+            logger.exception(
+                f"Failed to defer IGDB enrichment for concept {concept.concept_id}; "
+                f"falling back to inline enrichment"
+            )
+            self._try_igdb_enrich(concept)
+
+    def _drain_deferred_igdb_enrich(self, profile_id):
+        """Run IGDB enrichment for every concept queued during this profile's sync.
+
+        Called at the top of _job_sync_complete, before health-check logic
+        that may itself create default concepts and inline-enrich them.
+        """
+        key = self._pending_igdb_enrich_key(profile_id)
+        try:
+            raw_ids = redis_client.smembers(key)
+        except Exception:
+            logger.exception(f"Failed to read deferred IGDB enrichment set for profile {profile_id}")
+            return
+
+        if not raw_ids:
+            return
+
+        concept_ids = []
+        for item in raw_ids:
+            if isinstance(item, bytes):
+                item = item.decode('utf-8', errors='ignore')
+            try:
+                concept_ids.append(int(item))
+            except (TypeError, ValueError):
+                continue
+
+        if not concept_ids:
+            redis_client.delete(key)
+            return
+
+        concepts = list(Concept.objects.filter(id__in=concept_ids))
+        logger.info(
+            f"Draining deferred IGDB enrichment for profile {profile_id}: "
+            f"{len(concepts)} concept(s)"
+        )
+        for concept in concepts:
+            self._try_igdb_enrich(concept)
+
+        redis_client.delete(key)
 
     def _extract_media(self, details: dict) -> list[dict]:
         """Extract and combine unique media (images/videos) from JSON, deduped by URL per type."""

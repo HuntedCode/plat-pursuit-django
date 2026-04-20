@@ -217,10 +217,18 @@ Idempotence: re-running the command against the same auto-accepted pool refreshe
 
 ### Sync Pipeline Hook
 
-In `token_keeper.py`, after `PsnApiService.create_concept_from_details()` creates a NEW concept:
-- `IGDBService.enrich_concept(concept)` is called (best-effort, wrapped in try/except)
-- Only fires for newly created concepts (not existing ones)
-- Fires for all concepts including `PP_` stubs. Stubs benefit the most from IGDB enrichment because they lack PSN-side metadata, so excluding them was a regression worth reverting.
+In `token_keeper.py`, when `_job_sync_title_id` creates a NEW concept (either via `PsnApiService.create_concept_from_details()` or as a stub default concept), enrichment is **deferred** to the end of the sync rather than fired inline.
+
+1. `_defer_igdb_enrich(profile_id, concept)` adds `concept.id` to a per-profile Redis set: `profile:{profile_id}:pending_igdb_enrich` (TTL 6h as a crash safety net).
+2. `_job_sync_complete` drains the set at its `igdb_enrich` phase (runs before the health check) and calls `IGDBService.enrich_concept(concept)` for each queued concept.
+
+The deferral matters for concepts that end up with multiple sibling Games attached during a single sync: the Phase 2 matching pipeline's `_pick_search_title` needs the full game set in memory to distinguish a single-game concept from a multi-game compilation. Firing enrichment inline after only the first Game was attached produced misleading matches on bundle concepts.
+
+Properties:
+- Only fires for newly created concepts (not existing ones).
+- Fires for all concepts including `PP_` stubs. Stubs benefit the most from IGDB enrichment because they lack PSN-side metadata.
+- If Redis is unreachable, `_defer_igdb_enrich` falls back to inline `_try_igdb_enrich` so enrichment still happens.
+- If `_job_sync_complete` never fires (sync crashed), the default `python manage.py enrich_from_igdb` cron pass picks up the concepts on its next run — no recovery path needed.
 
 ## Integration Points
 
