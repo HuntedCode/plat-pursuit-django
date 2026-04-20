@@ -137,6 +137,13 @@ class IGDBService:
     # Max requests per second across all workers
     MAX_REQUESTS_PER_SECOND = 3  # Conservative (IGDB allows 4)
 
+    # Troubleshooting flag: when True, _calculate_confidence and _pick_best_match
+    # emit a step-by-step breakdown of every candidate's scoring directly to
+    # stdout. Set via enrich_from_igdb --debug-scoring. Uses print() (not
+    # logger) so the output is visible through `docker compose exec` regardless
+    # of the container's Django logging config.
+    _debug_scoring = False
+
     # -----------------------------------------------------------------------
     # Auth
     # -----------------------------------------------------------------------
@@ -695,6 +702,7 @@ class IGDBService:
             pass
 
         scored = []
+        skipped_platform = 0
         for game in results:
             # Require platform overlap (skip VR-only check)
             if concept_plat_ids:
@@ -704,23 +712,41 @@ class IGDBService:
                     if pid:
                         igdb_plat_ids.add(pid)
                 if not (concept_plat_ids & igdb_plat_ids):
+                    skipped_platform += 1
+                    if cls._debug_scoring:
+                        print(f'    [{game.get("name", "?")}] SKIPPED (no platform overlap)')
                     continue
 
             confidence = cls._calculate_confidence(concept, game, method)
             if confidence > 0:
                 scored.append((game, confidence))
 
+        if cls._debug_scoring:
+            print(f'  -> {len(scored)} candidate(s) scored > 0 (skipped {skipped_platform} on platform filter), method={method}')
+
         if not scored:
             return None
 
         scored.sort(key=lambda x: x[1], reverse=True)
 
+        if cls._debug_scoring:
+            print(f'  -> sorted by confidence (top {min(5, len(scored))}):')
+            for g, c in scored[:5]:
+                print(f'       {c:.2f}  {g.get("name")}')
+
         # Ambiguity penalty: if top two are within 0.10, reduce confidence
         best_game, best_confidence = scored[0]
         if len(scored) > 1 and (best_confidence - scored[1][1]) < 0.10:
+            if cls._debug_scoring:
+                print(f'  -> AMBIGUITY PENALTY: top two within 0.10 '
+                      f'({best_confidence:.2f} vs {scored[1][1]:.2f}), winner -0.10')
             best_confidence -= 0.10
 
-        return (best_game, max(best_confidence, 0.01), method)
+        final_confidence = max(best_confidence, 0.01)
+        if cls._debug_scoring:
+            print(f'  -> WINNER: "{best_game.get("name")}" at {final_confidence:.2f}')
+
+        return (best_game, final_confidence, method)
 
     @classmethod
     def _calculate_confidence(cls, concept, igdb_game, method):
@@ -730,6 +756,8 @@ class IGDBService:
             float: Confidence score between 0.0 and 1.0
         """
         igdb_name = igdb_game.get('name', '')
+        debug = cls._debug_scoring
+        steps = [] if debug else None
 
         # Normalize titles for comparison
         psn_norm = cls._normalize_title(concept.unified_title)
@@ -747,6 +775,10 @@ class IGDBService:
                 best_ratio = alt_ratio
                 best_name = alt_name
 
+        if debug:
+            alt_note = f' (from alt "{best_name}")' if best_name != igdb_name else ''
+            steps.append(f'title_ratio={best_ratio:.2f}{alt_note}')
+
         # Containment check using the best-matching name
         best_norm = cls._normalize_title(best_name)
         is_contained = (
@@ -760,10 +792,17 @@ class IGDBService:
                 and (psn_norm in igdb_norm or igdb_norm in psn_norm)
             )
 
+        if debug:
+            steps.append(f'contained={is_contained}')
+
         # Base score by method
         if method == 'external_id':
             base = 0.95
+            if debug:
+                steps.append(f'base=0.95 external_id')
         elif method == 'manual':
+            if debug:
+                print(f'    [{igdb_name}] manual -> 1.00')
             return 1.0
         else:
             ratio = best_ratio
@@ -771,22 +810,38 @@ class IGDBService:
             if method == 'exact_name':
                 if ratio >= 0.98 or (is_contained and (igdb_norm == psn_norm or best_norm == psn_norm)):
                     base = 0.85
+                    if debug:
+                        steps.append(f'base=0.85 exact_name (ratio>=0.98 or normalized match)')
                 else:
+                    if debug:
+                        print(f'    [{igdb_name}] {" | ".join(steps)} | REJECTED exact_name (ratio<0.98, not contained-equal)')
                     return 0.0
             else:  # fuzzy_name
                 if ratio >= 0.90:
                     base = 0.70
+                    if debug:
+                        steps.append(f'base=0.70 fuzzy_name (ratio>=0.90)')
                 elif ratio >= 0.80:
                     base = 0.55
+                    if debug:
+                        steps.append(f'base=0.55 fuzzy_name (ratio>=0.80)')
                 elif is_contained:
                     base = 0.55
+                    if debug:
+                        steps.append(f'base=0.55 fuzzy_name (contained, ratio<0.80)')
                 else:
+                    if debug:
+                        print(f'    [{igdb_name}] {" | ".join(steps)} | REJECTED fuzzy_name (ratio<0.80, not contained)')
                     return 0.0
 
             # Boost main games over DLC/bundles/skins when names are similar
             category = cls._extract_game_category(igdb_game) or 0
             if category == 0 and is_contained:
                 base += 0.10
+                if debug:
+                    steps.append(f'+0.10 main-game boost (category=0, contained)')
+            elif debug:
+                steps.append(f'skip main-game boost (category={category}, contained={is_contained})')
 
         # Modifier: release year proximity
         if concept.release_date and igdb_game.get('first_release_date'):
@@ -797,10 +852,23 @@ class IGDBService:
                 concept_year = concept.release_date.year
                 if abs(igdb_year - concept_year) <= 1:
                     base += 0.05
+                    if debug:
+                        steps.append(f'+0.05 year proximity ({concept_year} vs {igdb_year})')
+                elif debug:
+                    steps.append(f'skip year proximity ({concept_year} vs {igdb_year})')
             except (ValueError, OSError, AttributeError):
-                pass
+                if debug:
+                    steps.append(f'skip year proximity (parse error)')
+        elif debug:
+            missing = []
+            if not concept.release_date:
+                missing.append('concept.release_date')
+            if not igdb_game.get('first_release_date'):
+                missing.append('igdb.first_release_date')
+            steps.append(f'skip year proximity (missing: {",".join(missing)})')
 
         # Modifier: publisher name match
+        pub_matched = False
         if concept.publisher_name and igdb_game.get('involved_companies'):
             for ic in igdb_game['involved_companies']:
                 company = ic.get('company', {})
@@ -811,7 +879,15 @@ class IGDBService:
                     )
                     if pub_ratio >= 0.80:
                         base += 0.05
+                        pub_matched = True
+                        if debug:
+                            steps.append(f'+0.05 publisher match ({concept.publisher_name} ~ {company["name"]})')
                         break
+        if debug and not pub_matched:
+            if not concept.publisher_name:
+                steps.append(f'skip publisher match (concept has no publisher_name)')
+            else:
+                steps.append(f'skip publisher match (no >=80% publisher match)')
 
         # Platform overlap is enforced by _pick_best_match (hard requirement).
         # No additional modifier needed here.
@@ -820,8 +896,13 @@ class IGDBService:
         category = cls._extract_game_category(igdb_game) or 0
         if category != 0:
             base -= 0.15
+            if debug:
+                steps.append(f'-0.15 non-main-game penalty (category={category})')
 
-        return max(0.0, min(1.0, base))
+        final = max(0.0, min(1.0, base))
+        if debug:
+            print(f'    [{igdb_name}] {" | ".join(steps)} -> {final:.2f}')
+        return final
 
     @classmethod
     def _fuzzy_title_match(cls, title1, title2):

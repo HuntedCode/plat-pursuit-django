@@ -75,6 +75,13 @@ class Command(BaseCommand):
             '--badge', action='store_true',
             help='Filter --review or --unmatched to only concepts used in badges',
         )
+        parser.add_argument(
+            '--debug-scoring', action='store_true',
+            help='Print a step-by-step confidence breakdown for every IGDB candidate '
+                 'scored across every strategy. Noisy but invaluable for troubleshooting '
+                 'unexpected confidence values. Best combined with --concept-id <id> to '
+                 'limit output to a single target concept.',
+        )
 
     def handle(self, *args, **options):
         # Toggle verbose IGDB logging
@@ -84,6 +91,10 @@ class Command(BaseCommand):
             igdb_logger.setLevel(logging.INFO)
         else:
             igdb_logger.setLevel(logging.WARNING)
+
+        # Toggle the IGDBService scoring-breakdown flag. Printed output goes
+        # straight to stdout so it's visible through `docker compose exec`.
+        IGDBService._debug_scoring = bool(options.get('debug_scoring'))
 
         if options['search']:
             return self._handle_search(options)
