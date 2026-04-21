@@ -198,6 +198,20 @@ Deduplication and identity lookups use the composite `(igdb_id, source_type)` ke
 
 Sony does not provide VR platform information. During enrichment, if IGDB reports PSVR (platform 165) or PSVR2 (platform 390), the system appends `'PSVR'` or `'PSVR2'` to `Game.title_platform` for all games under that Concept. Only adds, never removes.
 
+### Canonical Id Resolution for GameFamily
+
+GameFamily is keyed on IGDB id (Phase 2.6), but IGDB assigns distinct ids to each *release* of a game — a remaster, a port, or an edition is a separate entry from the original. Using `IGDBMatch.igdb_id` verbatim as the family key would scatter the same underlying game across multiple one-version families.
+
+`IGDBService._resolve_canonical_igdb_id(raw_response, fallback_id)` resolves derivative releases up to their canonical entry before the family lookup:
+
+- **`version_parent`** always takes priority when set (editions like Deluxe, GOTY, Anniversary).
+- **`parent_game`** is honoured only when `game_type.id ∈ {8=Remake, 9=Remaster, 11=Port}`. DLC (1) and Expansion (2) also populate `parent_game` but must NOT collapse into the base game's family — the game_type gate prevents that.
+- Both absent → use the match's own `igdb_id` (the game is its own canonical entry).
+
+Example: Jak and Daxter: The Precursor Legacy has three IGDB entries — #1528 (PS2 original), #302690 (PS3 HD remaster with `parent_game=1528`, `game_type=Remaster`), and #325261 (PS4 port with `parent_game=1528`, `game_type=Port`). With canonical resolution they all key on family `igdb_id=1528`, but each keeps its own `IGDBMatch` row so platform/release-date/company data stays release-specific.
+
+Used by both the live path (`_link_concept_to_family` during `_apply_enrichment`) and the `backfill_game_families_from_igdb` command.
+
 ### Compilation Detection and Splitting (Phase 1 + Phase 5)
 
 `IGDBMatch.is_likely_compilation` is a Tier 1 flag set True when IGDB's `game_type.id` is 3 (Bundle) or 13 (Pack). It's IGDB-side informational: the signal that IGDB thinks this is multi-game product packaging. It does NOT check PSN-side state, so single-SKU bundles that ship on PSN as one unified trophy list also get the flag.

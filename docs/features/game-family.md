@@ -21,12 +21,24 @@ The rule is trivial:
 
 ```
 For every concept with an accepted IGDBMatch:
-  family, _ = GameFamily.objects.get_or_create(igdb_id=match.igdb_id)
+  canonical_id = _resolve_canonical_igdb_id(match.raw_response, match.igdb_id)
+  family, _ = GameFamily.objects.get_or_create(igdb_id=canonical_id)
   concept.family = family
 ```
 
-Two concepts with the same IGDB id unambiguously belong together. Two
-concepts with different IGDB ids are different games. Done.
+The `_resolve_canonical_igdb_id` step collapses versions/releases of the
+same underlying game. IGDB models "same game, different release" via
+`parent_game` (set on Ports, Remakes, Remasters — game_type 11/8/9) and
+`version_parent` (set on editions like Deluxe/GOTY/Anniversary). When
+either is present, the family keys on the parent id instead of the
+derivative's own id. Result: Jak and Daxter: The Precursor Legacy
+(IGDB #1528), its PS3 HD remaster (#302690), and its PS4 port (#325261)
+all collapse into one family keyed on 1528, while each release still has
+its own `IGDBMatch` with its own platform, release date, and companies.
+
+Two concepts with the same canonical IGDB id unambiguously belong
+together. Two concepts with different canonical ids are different games.
+Done.
 
 This behavior is implemented in `IGDBService._link_concept_to_family` which
 fires from `_apply_enrichment` on every match acceptance (auto_accepted

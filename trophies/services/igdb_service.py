@@ -1600,19 +1600,39 @@ class IGDBService:
         stubs) that matched to that game. Creation is deterministic:
         get_or_create by igdb_id.
 
+        The family key resolves through `_resolve_canonical_igdb_id` so
+        ports/remakes/remasters and version editions collapse into the same
+        family as their original entry. Each derivative release keeps its
+        own IGDBMatch row (with its own platforms, release date, companies)
+        but shares a family with the base game.
+
         Also handles the ID-migration case: if this concept's prior family
         is different from the target and no other concepts remain in it,
-        the old family is deleted as an orphan. Covers the rare case where
-        IGDB merges two entries (12345 → 67890) and rematching assigns the
-        concept to the new ID's family.
+        the old family is deleted as an orphan. Covers both the rare case
+        where IGDB merges two entries (12345 → 67890) and the common case
+        where a concept was family-linked under its own id before this
+        canonical-id resolution existed.
         """
         concept = igdb_match.concept
-        igdb_id = igdb_match.igdb_id
-        if not igdb_id:
+        if not igdb_match.igdb_id:
             return  # No match → no family
 
+        igdb_id = cls._resolve_canonical_igdb_id(igdb_data, igdb_match.igdb_id)
+
         from trophies.models import GameFamily
+        # Prefer the canonical entry's name over the derivative's name when
+        # we resolved upward. Fall back to the match's name if the raw data
+        # we have is for the derivative (canonical entry wasn't expanded).
         canonical_name = igdb_data.get('name') or igdb_match.igdb_name or f'IGDB #{igdb_id}'
+        if igdb_id != igdb_match.igdb_id:
+            # We resolved to a parent — the raw_response we're looking at is
+            # the derivative's. Use the parent name from the parent_game or
+            # version_parent dict if present, since it's what the family
+            # should be titled after.
+            parent_obj = igdb_data.get('version_parent') or igdb_data.get('parent_game')
+            if isinstance(parent_obj, dict):
+                canonical_name = parent_obj.get('name') or canonical_name
+
         family, created = GameFamily.objects.get_or_create(
             igdb_id=igdb_id,
             defaults={'canonical_name': canonical_name, 'is_verified': True},
@@ -2055,6 +2075,66 @@ class IGDBService:
         that will be verified separately before Phase 5's splitting work.
         """
         return cls._extract_game_category(igdb_data) in (3, 13)
+
+    # game_type ids that indicate a derivative release pointing at a canonical
+    # original via parent_game: 8=Remake, 9=Remaster, 11=Port. DLC (1) and
+    # Expansion (2) also populate parent_game but we don't want to collapse
+    # those into the base game's family — the matcher's main-game filter
+    # should already prevent DLC from reaching family linking, but we gate
+    # on this set anyway for belt-and-suspenders.
+    _CANONICAL_PARENT_GAME_TYPES = frozenset({8, 9, 11})
+
+    @classmethod
+    def _resolve_canonical_igdb_id(cls, igdb_data, fallback_id):
+        """Resolve the "canonical" IGDB id for GameFamily keying.
+
+        IGDB models "same game, different release" via two fields:
+
+          * `parent_game` — set on Ports (game_type 11), Remakes (8), and
+            Remasters (9), pointing at the original entry.
+          * `version_parent` — set on editions (Deluxe, GOTY, Anniversary
+            etc.) that aren't a distinct release but a repackaging of
+            another entry.
+
+        Using either of these as the family key means all versions/releases
+        of the same title collapse into a single family, even when each
+        release has its own IGDBMatch row with its own platform, release
+        date, and companies.
+
+        `version_parent` always takes priority when present — editions of
+        a port still resolve up to the port's parent, if any. `parent_game`
+        is only honoured when game_type confirms it's a derivative release,
+        to avoid collapsing DLC / expansions (which also populate
+        parent_game) into their base game's family.
+
+        Returns:
+            int: the canonical IGDB id to use as the family key.
+                 Falls back to `fallback_id` (typically the match's own id)
+                 when no parent relationship is present.
+        """
+        canonical = fallback_id
+
+        game_type_id = cls._extract_game_category(igdb_data)
+        if game_type_id in cls._CANONICAL_PARENT_GAME_TYPES:
+            parent = igdb_data.get('parent_game')
+            parent_id = None
+            if isinstance(parent, dict):
+                parent_id = parent.get('id')
+            elif isinstance(parent, int):
+                parent_id = parent
+            if parent_id:
+                canonical = parent_id
+
+        version_parent = igdb_data.get('version_parent')
+        vp_id = None
+        if isinstance(version_parent, dict):
+            vp_id = version_parent.get('id')
+        elif isinstance(version_parent, int):
+            vp_id = version_parent
+        if vp_id:
+            canonical = vp_id
+
+        return canonical
 
     @classmethod
     def _parse_game_data(cls, igdb_data):

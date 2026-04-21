@@ -22,6 +22,7 @@ from collections import defaultdict
 from django.core.management.base import BaseCommand
 
 from trophies.models import Concept, GameFamily, IGDBMatch
+from trophies.services.igdb_service import IGDBService
 
 
 class Command(BaseCommand):
@@ -53,10 +54,25 @@ class Command(BaseCommand):
 
         self.stdout.write(f'Scanning {total} accepted/auto_accepted IGDBMatch row(s)...')
 
-        # Group matches by igdb_id
+        # Group matches by canonical IGDB id. Ports, remakes, remasters and
+        # version editions resolve to their parent entry so all releases of
+        # the same underlying game end up in one family.
         by_igdb_id = defaultdict(list)
+        canonical_names_from_parents = {}
         for match in qs.iterator(chunk_size=500):
-            by_igdb_id[match.igdb_id].append(match)
+            canonical_id = IGDBService._resolve_canonical_igdb_id(
+                match.raw_response or {}, match.igdb_id
+            )
+            by_igdb_id[canonical_id].append(match)
+            # Opportunistically collect a canonical name from a derivative's
+            # parent_game / version_parent dict — we may never have a direct
+            # match row for the canonical id itself if nobody on the site
+            # owns the original release.
+            if canonical_id != match.igdb_id:
+                raw = match.raw_response or {}
+                parent = raw.get('version_parent') or raw.get('parent_game')
+                if isinstance(parent, dict) and parent.get('name'):
+                    canonical_names_from_parents.setdefault(canonical_id, parent['name'])
 
         start = time.time()
         families_created = 0
@@ -67,11 +83,22 @@ class Command(BaseCommand):
         orphans_deleted = 0
 
         for igdb_id, matches in by_igdb_id.items():
-            # Canonical name comes from the most confident / richest payload
-            canonical_name = next(
-                (m.igdb_name for m in matches if m.igdb_name),
-                f'IGDB #{igdb_id}',
-            )
+            # Canonical name priority:
+            #   1. A match whose own igdb_id equals the canonical id (we have
+            #      the parent entry itself as a direct match in this group).
+            #   2. A derivative's parent_game/version_parent.name (collected
+            #      during the scan above).
+            #   3. Fallback to any match's igdb_name.
+            direct = next((m for m in matches if m.igdb_id == igdb_id), None)
+            if direct and direct.igdb_name:
+                canonical_name = direct.igdb_name
+            elif igdb_id in canonical_names_from_parents:
+                canonical_name = canonical_names_from_parents[igdb_id]
+            else:
+                canonical_name = next(
+                    (m.igdb_name for m in matches if m.igdb_name),
+                    f'IGDB #{igdb_id}',
+                )
 
             if dry_run:
                 existing = GameFamily.objects.filter(igdb_id=igdb_id).first()
