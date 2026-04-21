@@ -337,8 +337,10 @@ class Command(BaseCommand):
                 concept_platforms.add(p)
 
         # --- PSN-side concept facts ---
+        psn_release = concept.release_date.strftime('%Y-%m-%d') if concept.release_date else 'unknown'
         self.stdout.write(
             f'  [Concept]   PSN platforms: {", ".join(sorted(concept_platforms)) or "unknown"}  '
+            f'|  Released: {psn_release}  '
             f'|  Publisher: {concept.publisher_name or "unknown"}'
         )
 
@@ -404,9 +406,14 @@ class Command(BaseCommand):
     def _print_match_context(self, match):
         """IGDB-side match context (current match, developer/publisher, row summary)."""
         raw = match.raw_response or {}
+        igdb_released = (
+            match.igdb_first_release_date.strftime('%Y-%m-%d')
+            if match.igdb_first_release_date else 'unknown'
+        )
         self.stdout.write(
             f'  [Match]     IGDB #{match.igdb_id} "{match.igdb_name}"  '
-            f'({match.match_method}, {match.match_confidence:.0%})'
+            f'({match.match_method}, {match.match_confidence:.0%})  '
+            f'|  Released: {igdb_released}'
         )
 
         igdb_companies = raw.get('involved_companies', []) if raw else []
@@ -766,11 +773,29 @@ class Command(BaseCommand):
             pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
             plat_names.append(IGDB_PLATFORM_NAMES.get(pid, str(pid)))
 
+        release_year = self._format_igdb_release_year(r.get('first_release_date'))
+        year_tag = f'  ({release_year})' if release_year else ''
+
         marker = ' <-- current' if current_igdb_id and r.get('id') == current_igdb_id else ''
         return (
-            f'    IGDB #{r["id"]:>8}  "{r.get("name")}"  '
+            f'    IGDB #{r["id"]:>8}  "{r.get("name")}"{year_tag}  '
             f'[{cat_display}]  {", ".join(plat_names)}{marker}'
         )
+
+    @staticmethod
+    def _format_igdb_release_year(timestamp):
+        """Format an IGDB first_release_date unix timestamp as a 4-digit year.
+
+        Returns '' on missing/invalid timestamps — IGDB release dates are
+        community-sourced and frequently absent on obscure or pre-release
+        entries.
+        """
+        if not timestamp:
+            return ''
+        try:
+            return datetime.fromtimestamp(int(timestamp), tz=dt_timezone.utc).strftime('%Y')
+        except (ValueError, OSError, TypeError):
+            return ''
 
     def _handle_enrich(self, options):
         dry_run = options['dry_run']
