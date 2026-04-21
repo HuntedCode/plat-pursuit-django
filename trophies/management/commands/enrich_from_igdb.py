@@ -316,6 +316,16 @@ class Command(BaseCommand):
         riskier), and what the proposed IGDB entry looks like vs. the PSN-side
         ground truth.
         """
+        self._print_concept_context(idx, total, concept, match=match)
+        self._print_match_context(match)
+
+    def _print_unmatched_header(self, idx, total, concept):
+        """Same expanded context block, but without match-side sections (no match exists)."""
+        self._print_concept_context(idx, total, concept, match=None)
+        self.stdout.write('')
+
+    def _print_concept_context(self, idx, total, concept, match):
+        """Shared PSN-side context block used by both review and unmatched queues."""
         self.stdout.write(self.style.WARNING(
             f'--- [{idx + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
         ))
@@ -339,33 +349,37 @@ class Command(BaseCommand):
         for game in games:
             lock = '  [locked]' if game.concept_lock else ''
             platforms = ', '.join(game.title_platform or []) or '?'
-            # np_communication_id column padded for alignment without being too wide
             comm_id = (game.np_communication_id or '')[:16].ljust(16)
             self.stdout.write(
                 f'              · {platforms:<12} {comm_id} "{game.title_name}"{lock}'
             )
 
         # --- Compilation signals ---
-        raw = match.raw_response or {}
+        raw = match.raw_response if match else None
         game_type_name = ''
-        game_type_obj = raw.get('game_type')
-        if isinstance(game_type_obj, dict):
-            game_type_name = game_type_obj.get('name', '')
-        is_compilation = match.is_likely_compilation
-        is_dismissed = match.compilation_review_dismissed
+        if raw:
+            game_type_obj = raw.get('game_type')
+            if isinstance(game_type_obj, dict):
+                game_type_name = game_type_obj.get('name', '')
+        is_compilation = bool(match and match.is_likely_compilation)
+        is_dismissed = bool(match and match.compilation_review_dismissed)
         splittable = is_compilation and len(games) >= 2 and not is_dismissed
         if is_compilation or len(games) >= 2:
             dismissed_note = ' (admin dismissed)' if is_dismissed else ''
-            verdict = (
-                'SPLITTABLE (2+ Games, not dismissed)' if splittable else
-                'flagged bundle, 1 Game (unified trophy list)' if is_compilation else
-                f'{len(games)} Games but not IGDB-flagged'
+            if splittable:
+                verdict = 'SPLITTABLE (2+ Games, not dismissed)'
+            elif is_compilation:
+                verdict = 'flagged bundle, 1 Game (unified trophy list)'
+            elif len(games) >= 2:
+                verdict = f'{len(games)} Games but no IGDB bundle flag'
+            else:
+                verdict = ''
+            game_type_line = f'IGDB game_type: {game_type_name or "?"}  |  ' if match else ''
+            flag_line = (
+                f'is_likely_compilation={is_compilation}{dismissed_note}  |  '
+                if match else ''
             )
-            self.stdout.write(
-                f'  [Compile]   IGDB game_type: {game_type_name or "?"}  '
-                f'|  is_likely_compilation={is_compilation}{dismissed_note}  '
-                f'|  {verdict}'
-            )
+            self.stdout.write(f'  [Compile]   {game_type_line}{flag_line}{verdict}')
 
         # --- Family linkage ---
         if concept.family_id:
@@ -377,7 +391,7 @@ class Command(BaseCommand):
                 f'  [Family]    "{family.canonical_name}"{igdb_tag}{sibling_note}'
             )
 
-        # --- Engagement (flags that reassignment/reject has user-visible consequences) ---
+        # --- Engagement (flags that reassignment has user-visible consequences) ---
         ratings_count = concept.user_ratings.count()
         reviews_count = concept.reviews.count()
         has_roadmap = hasattr(concept, 'roadmap')
@@ -387,7 +401,9 @@ class Command(BaseCommand):
                 f'  [Engaged]   {ratings_count} rating(s), {reviews_count} review(s){roadmap_note}'
             )
 
-        # --- Current IGDB match ---
+    def _print_match_context(self, match):
+        """IGDB-side match context (current match, developer/publisher, row summary)."""
+        raw = match.raw_response or {}
         self.stdout.write(
             f'  [Match]     IGDB #{match.igdb_id} "{match.igdb_name}"  '
             f'({match.match_method}, {match.match_confidence:.0%})'
@@ -423,7 +439,7 @@ class Command(BaseCommand):
         # default enrich pass first; once tried, they land here automatically.
         qs = Concept.objects.filter(
             igdb_match__status='no_match'
-        ).prefetch_related('games')
+        ).select_related('family').prefetch_related('games')
 
         if options.get('badge'):
             badge_concept_ids = self._get_badge_concept_ids()
@@ -448,18 +464,7 @@ class Command(BaseCommand):
 
         while idx < len(concepts):
             concept = concepts[idx]
-
-            concept_platforms = set()
-            for game in concept.games.all():
-                for p in (game.title_platform or []):
-                    concept_platforms.add(p)
-
-            self.stdout.write(self.style.WARNING(
-                f'--- [{idx + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
-            ))
-            self.stdout.write(f'  PSN platforms:  {", ".join(sorted(concept_platforms)) or "unknown"}')
-            self.stdout.write(f'  PSN publisher:  {concept.publisher_name or "unknown"}')
-            self.stdout.write('')
+            self._print_unmatched_header(idx, total, concept)
 
             while True:
                 try:
