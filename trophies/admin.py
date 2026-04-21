@@ -2467,6 +2467,29 @@ class ConceptFranchiseAdmin(admin.ModelAdmin):
     franchise_source_type.admin_order_field = 'franchise__source_type'
 
 
+class SplittableCompilationFilter(SimpleListFilter):
+    """Intersection filter: IGDB-classified bundle AND PSN has 2+ Games on the concept.
+
+    `is_likely_compilation` alone is IGDB-side informational (any game_type=3/13
+    entry). The concepts actually worth splitting are the ones where PSN also
+    ships multiple trophy lists (i.e. `concept.games.count() >= 2`). This filter
+    gives admin one-click access to that triage list without losing the plain
+    `is_likely_compilation` filter.
+    """
+    title = 'splittable compilation'
+    parameter_name = 'splittable'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('yes', 'IGDB bundle AND 2+ Games'),
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(is_likely_compilation=True, _games_count__gte=2)
+        return queryset
+
+
 class PlatformCoverageFilter(SimpleListFilter):
     """Filter IGDBMatches by whether the concept's most modern platform is covered by IGDB."""
     title = 'platform coverage'
@@ -2535,7 +2558,7 @@ class IGDBMatchAdmin(admin.ModelAdmin):
     )
     list_filter = (
         'status', 'match_method', 'game_category', 'is_likely_compilation',
-        PlatformCoverageFilter,
+        SplittableCompilationFilter, PlatformCoverageFilter,
     )
     search_fields = ('concept__unified_title', 'igdb_name')
     raw_id_fields = ('concept',)
