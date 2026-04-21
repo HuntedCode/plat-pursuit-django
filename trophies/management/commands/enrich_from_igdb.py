@@ -126,7 +126,7 @@ class Command(BaseCommand):
     def _handle_review(self, options):
         qs = IGDBMatch.objects.filter(
             status='pending_review',
-        ).select_related('concept').prefetch_related('concept__games')
+        ).select_related('concept', 'concept__family').prefetch_related('concept__games')
 
         if options.get('badge'):
             badge_concept_ids = self._get_badge_concept_ids()
@@ -155,40 +155,7 @@ class Command(BaseCommand):
             match = matches[idx]
             concept = match.concept
 
-            # Display current match
-            self.stdout.write(self.style.WARNING(
-                f'--- [{idx + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
-            ))
-            concept_platforms = set()
-            for game in concept.games.all():
-                for p in (game.title_platform or []):
-                    concept_platforms.add(p)
-            self.stdout.write(f'  PSN platforms:  {", ".join(sorted(concept_platforms)) or "unknown"}')
-            self.stdout.write(f'  PSN publisher:  {concept.publisher_name or "unknown"}')
-            self.stdout.write(
-                f'  Current match:  IGDB #{match.igdb_id} "{match.igdb_name}" '
-                f'({match.match_method}, {match.match_confidence:.0%})'
-            )
-
-            # Show IGDB dev/publisher from raw response
-            igdb_companies = match.raw_response.get('involved_companies', []) if match.raw_response else []
-            igdb_devs = []
-            igdb_pubs = []
-            for ic in igdb_companies:
-                company = ic.get('company', {})
-                name = company.get('name', '') if isinstance(company, dict) else ''
-                if not name:
-                    continue
-                if ic.get('developer'):
-                    igdb_devs.append(name)
-                if ic.get('publisher'):
-                    igdb_pubs.append(name)
-            self.stdout.write(f'  IGDB developer: {", ".join(igdb_devs) or "unknown"}')
-            self.stdout.write(f'  IGDB publisher: {", ".join(igdb_pubs) or "unknown"}')
-
-            # Show IGDB platforms for current match
-            self.stdout.write(f'  IGDB entry:     {self._format_game_result(match.raw_response or {}, current_igdb_id=match.igdb_id).strip()}')
-            self.stdout.write('')
+            self._print_review_header(idx, total, concept, match)
 
             # Interactive loop for this match
             while True:
@@ -339,6 +306,111 @@ class Command(BaseCommand):
         self.stdout.write(f'  Rejected:    {rejected}')
         self.stdout.write(f'  Reassigned:  {reassigned}')
         self.stdout.write(f'  Skipped:     {skipped}')
+
+    def _print_review_header(self, idx, total, concept, match):
+        """Expanded per-concept context block for the interactive review queue.
+
+        Shows enough signal to tell at a glance whether a pending match is
+        correct, whether the concept is a splittable compilation candidate,
+        whether users have already engaged with it (which makes reassignment
+        riskier), and what the proposed IGDB entry looks like vs. the PSN-side
+        ground truth.
+        """
+        self.stdout.write(self.style.WARNING(
+            f'--- [{idx + 1}/{total}] {concept.concept_id} "{concept.unified_title}" ---'
+        ))
+
+        games = list(concept.games.all())
+        concept_platforms = set()
+        for game in games:
+            for p in (game.title_platform or []):
+                concept_platforms.add(p)
+
+        # --- PSN-side concept facts ---
+        self.stdout.write(
+            f'  [Concept]   PSN platforms: {", ".join(sorted(concept_platforms)) or "unknown"}  '
+            f'|  Publisher: {concept.publisher_name or "unknown"}'
+        )
+
+        # --- Per-Game breakdown ---
+        locked_count = sum(1 for g in games if g.concept_lock)
+        lock_note = f', {locked_count} locked' if locked_count else ''
+        self.stdout.write(f'  [Games]     {len(games)} total{lock_note}:')
+        for game in games:
+            lock = '  [locked]' if game.concept_lock else ''
+            platforms = ', '.join(game.title_platform or []) or '?'
+            # np_communication_id column padded for alignment without being too wide
+            comm_id = (game.np_communication_id or '')[:16].ljust(16)
+            self.stdout.write(
+                f'              · {platforms:<12} {comm_id} "{game.title_name}"{lock}'
+            )
+
+        # --- Compilation signals ---
+        raw = match.raw_response or {}
+        game_type_name = ''
+        game_type_obj = raw.get('game_type')
+        if isinstance(game_type_obj, dict):
+            game_type_name = game_type_obj.get('name', '')
+        is_compilation = match.is_likely_compilation
+        is_dismissed = match.compilation_review_dismissed
+        splittable = is_compilation and len(games) >= 2 and not is_dismissed
+        if is_compilation or len(games) >= 2:
+            dismissed_note = ' (admin dismissed)' if is_dismissed else ''
+            verdict = (
+                'SPLITTABLE (2+ Games, not dismissed)' if splittable else
+                'flagged bundle, 1 Game (unified trophy list)' if is_compilation else
+                f'{len(games)} Games but not IGDB-flagged'
+            )
+            self.stdout.write(
+                f'  [Compile]   IGDB game_type: {game_type_name or "?"}  '
+                f'|  is_likely_compilation={is_compilation}{dismissed_note}  '
+                f'|  {verdict}'
+            )
+
+        # --- Family linkage ---
+        if concept.family_id:
+            family = concept.family
+            sibling_count = family.concepts.exclude(pk=concept.pk).count()
+            igdb_tag = f' (igdb #{family.igdb_id})' if family.igdb_id else ''
+            sibling_note = f', {sibling_count} sibling(s)' if sibling_count else ', no siblings yet'
+            self.stdout.write(
+                f'  [Family]    "{family.canonical_name}"{igdb_tag}{sibling_note}'
+            )
+
+        # --- Engagement (flags that reassignment/reject has user-visible consequences) ---
+        ratings_count = concept.user_ratings.count()
+        reviews_count = concept.reviews.count()
+        has_roadmap = hasattr(concept, 'roadmap')
+        if ratings_count or reviews_count or has_roadmap:
+            roadmap_note = ', roadmap present' if has_roadmap else ''
+            self.stdout.write(
+                f'  [Engaged]   {ratings_count} rating(s), {reviews_count} review(s){roadmap_note}'
+            )
+
+        # --- Current IGDB match ---
+        self.stdout.write(
+            f'  [Match]     IGDB #{match.igdb_id} "{match.igdb_name}"  '
+            f'({match.match_method}, {match.match_confidence:.0%})'
+        )
+
+        igdb_companies = raw.get('involved_companies', []) if raw else []
+        igdb_devs = []
+        igdb_pubs = []
+        for ic in igdb_companies:
+            company = ic.get('company', {})
+            name = company.get('name', '') if isinstance(company, dict) else ''
+            if not name:
+                continue
+            if ic.get('developer'):
+                igdb_devs.append(name)
+            if ic.get('publisher'):
+                igdb_pubs.append(name)
+        self.stdout.write(
+            f'  [IGDB co.]  dev: {", ".join(igdb_devs) or "unknown"}  '
+            f'|  pub: {", ".join(igdb_pubs) or "unknown"}'
+        )
+        self.stdout.write(f'  [IGDB row]  {self._format_game_result(raw, current_igdb_id=match.igdb_id).strip()}')
+        self.stdout.write('')
 
     # -------------------------------------------------------------------
     # Unmatched mode: interactive queue for concepts with no match
