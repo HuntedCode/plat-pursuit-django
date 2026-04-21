@@ -2468,25 +2468,33 @@ class ConceptFranchiseAdmin(admin.ModelAdmin):
 
 
 class SplittableCompilationFilter(SimpleListFilter):
-    """Intersection filter: IGDB-classified bundle AND PSN has 2+ Games on the concept.
+    """Intersection filter: IGDB-classified bundle AND PSN has 2+ Games AND not dismissed.
 
     `is_likely_compilation` alone is IGDB-side informational (any game_type=3/13
     entry). The concepts actually worth splitting are the ones where PSN also
-    ships multiple trophy lists (i.e. `concept.games.count() >= 2`). This filter
-    gives admin one-click access to that triage list without losing the plain
-    `is_likely_compilation` filter.
+    ships multiple trophy lists (i.e. `concept.games.count() >= 2`). Admins
+    can mark reviewed-but-not-splittable rows via `compilation_review_dismissed`
+    so they stop reappearing in the triage queue.
     """
     title = 'splittable compilation'
     parameter_name = 'splittable'
 
     def lookups(self, request, model_admin):
         return [
-            ('yes', 'IGDB bundle AND 2+ Games'),
+            ('yes', 'IGDB bundle AND 2+ Games (unreviewed)'),
+            ('dismissed', 'Dismissed as not splittable'),
         ]
 
     def queryset(self, request, queryset):
-        if self.value() == 'yes':
-            return queryset.filter(is_likely_compilation=True, _games_count__gte=2)
+        value = self.value()
+        if value == 'yes':
+            return queryset.filter(
+                is_likely_compilation=True,
+                _games_count__gte=2,
+                compilation_review_dismissed=False,
+            )
+        if value == 'dismissed':
+            return queryset.filter(compilation_review_dismissed=True)
         return queryset
 
 
@@ -2566,7 +2574,11 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         'igdb_id', 'match_confidence', 'match_method', 'raw_response',
         'created_at', 'updated_at', 'last_synced_at',
     )
-    actions = ['approve_selected', 'reject_selected', 'rematch_selected', 'split_selected_compilations']
+    actions = [
+        'approve_selected', 'reject_selected', 'rematch_selected',
+        'split_selected_compilations',
+        'dismiss_compilation_review', 'undismiss_compilation_review',
+    ]
 
     def concept_title(self, obj):
         return obj.concept.unified_title
@@ -2715,6 +2727,24 @@ class IGDBMatchAdmin(admin.ModelAdmin):
             'title': 'Confirm compilation split',
         }
         return render(request, 'admin/trophies/igdbmatch/confirm_split.html', context)
+
+    @admin.action(description='Mark as reviewed — does not need splitting')
+    def dismiss_compilation_review(self, request, queryset):
+        count = queryset.update(compilation_review_dismissed=True)
+        messages.success(
+            request,
+            f'Marked {count} match(es) as reviewed. They will no longer appear '
+            f'in the "splittable compilation" triage filter.',
+        )
+
+    @admin.action(description='Undo "reviewed" (return to splittable queue)')
+    def undismiss_compilation_review(self, request, queryset):
+        count = queryset.update(compilation_review_dismissed=False)
+        messages.success(
+            request,
+            f'Cleared the reviewed flag on {count} match(es). Splittable '
+            f'candidates will reappear in the triage filter.',
+        )
 
 
 @admin.register(RematchSuggestion)

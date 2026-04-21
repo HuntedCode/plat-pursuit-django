@@ -4430,6 +4430,13 @@ class IGDBMatch(models.Model):
     # for concepts that may need splitting into their component games.
     is_likely_compilation = models.BooleanField(default=False, db_index=True)
 
+    # Set True by admins who have reviewed a splittable candidate and decided
+    # no split is needed (single-SKU bundle, one unified trophy list, etc.).
+    # Excluded from the "splittable compilation" filter so the triage queue
+    # stays clean. Does not affect is_likely_compilation — the IGDB-side
+    # signal stays intact.
+    compilation_review_dismissed = models.BooleanField(default=False, db_index=True)
+
     # Sync tracking
     last_synced_at = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
