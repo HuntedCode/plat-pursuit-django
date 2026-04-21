@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, RematchSuggestion, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -2566,7 +2566,7 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         'igdb_id', 'match_confidence', 'match_method', 'raw_response',
         'created_at', 'updated_at', 'last_synced_at',
     )
-    actions = ['approve_selected', 'reject_selected', 'rematch_selected']
+    actions = ['approve_selected', 'reject_selected', 'rematch_selected', 'split_selected_compilations']
 
     def concept_title(self, obj):
         return obj.concept.unified_title
@@ -2663,6 +2663,58 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         if errors:
             msg += f' {errors} error(s) occurred.'
         messages.success(request, msg)
+
+    @admin.action(description='Split compilation concept(s) into parent + child concepts')
+    def split_selected_compilations(self, request, queryset):
+        from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+        from django.shortcuts import render
+        from trophies.services.concept_split_service import (
+            preview_split, split_compilation, ConceptSplitError,
+        )
+
+        matches = list(queryset.select_related('concept').prefetch_related('concept__games'))
+        previews = [preview_split(m.concept) for m in matches]
+
+        if request.POST.get('apply') == f'Execute {len(previews)} split(s)':
+            applied = 0
+            errors = 0
+            for preview in previews:
+                if preview['issues']:
+                    continue
+                try:
+                    split_compilation(concept=preview['concept'], user=request.user)
+                    applied += 1
+                except ConceptSplitError as exc:
+                    errors += 1
+                    messages.error(
+                        request,
+                        f'Split failed for {preview["concept"].concept_id}: {exc}',
+                    )
+                except Exception as exc:
+                    errors += 1
+                    messages.error(
+                        request,
+                        f'Unexpected error splitting {preview["concept"].concept_id}: {exc}',
+                    )
+            if applied:
+                messages.success(request, f'Split {applied} concept(s). Enrichment ran on parent + children.')
+            if errors and not applied:
+                messages.error(request, f'{errors} split(s) failed, none applied.')
+            return None  # fall through to the default changelist response
+
+        has_blocked = any(p['issues'] for p in previews)
+        has_any_executable = any(not p['issues'] for p in previews)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'previews': previews,
+            'selected_pks': [m.pk for m in matches],
+            'action_checkbox_name': ACTION_CHECKBOX_NAME,
+            'has_blocked': has_blocked,
+            'has_any_executable': has_any_executable,
+            'title': 'Confirm compilation split',
+        }
+        return render(request, 'admin/trophies/igdbmatch/confirm_split.html', context)
 
 
 @admin.register(RematchSuggestion)
@@ -2798,6 +2850,111 @@ class RematchSuggestionAdmin(admin.ModelAdmin):
                 request,
                 f'Skipped {non_pending} already-reviewed suggestion(s).',
             )
+
+
+@admin.register(ConceptSplitEvent)
+class ConceptSplitEventAdmin(admin.ModelAdmin):
+    """Audit trail for Phase 5 compilation splits, with a reverse action."""
+
+    list_display = (
+        'id', 'parent_display', 'child_count', 'parent_original_title',
+        'is_reversed', 'created_at', 'created_by',
+    )
+    list_filter = ('is_reversed',)
+    search_fields = (
+        'parent_concept__concept_id',
+        'parent_concept__unified_title',
+        'parent_original_title',
+    )
+    raw_id_fields = ('parent_concept', 'child_concepts', 'created_by', 'reversed_by')
+    readonly_fields = (
+        'parent_concept', 'child_concepts',
+        'parent_original_title', 'parent_original_igdb_id', 'parent_original_igdb_name',
+        'kept_game_id', 'is_reversed', 'reversed_at', 'reversed_by',
+        'created_at', 'created_by',
+    )
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+    actions = ('reverse_selected_splits',)
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related('parent_concept', 'created_by', 'reversed_by')
+            .prefetch_related('child_concepts')
+        )
+
+    def parent_display(self, obj):
+        if not obj.parent_concept:
+            return '(deleted)'
+        return f'{obj.parent_concept.unified_title} ({obj.parent_concept.concept_id})'
+    parent_display.short_description = 'Parent'
+
+    def child_count(self, obj):
+        return obj.child_concepts.count()
+    child_count.short_description = 'Children'
+
+    @admin.action(description='Reverse split (merge children back into parent)')
+    def reverse_selected_splits(self, request, queryset):
+        from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+        from django.shortcuts import render
+        from trophies.services.concept_split_service import (
+            reverse_split, ConceptSplitError,
+        )
+
+        events = list(
+            queryset
+            .select_related('parent_concept')
+            .prefetch_related('child_concepts__games')
+        )
+
+        if request.POST.get('apply') == f'Reverse {len(events)} split(s)':
+            reversed_count = 0
+            errors = 0
+            for event in events:
+                try:
+                    reverse_split(event=event, user=request.user)
+                    reversed_count += 1
+                except ConceptSplitError as exc:
+                    errors += 1
+                    messages.error(request, f'Reverse failed for event #{event.pk}: {exc}')
+                except Exception as exc:
+                    errors += 1
+                    messages.error(request, f'Unexpected error reversing event #{event.pk}: {exc}')
+            if reversed_count:
+                messages.success(
+                    request,
+                    f'Reversed {reversed_count} split(s). Parent concept(s) re-enriched against original title.',
+                )
+            if errors and not reversed_count:
+                messages.error(request, f'{errors} reversal(s) failed, none applied.')
+            return None
+
+        rows = []
+        has_any_executable = False
+        for event in events:
+            issues = []
+            if event.is_reversed:
+                issues.append('Split already reversed.')
+            if not event.parent_concept:
+                issues.append('Parent concept no longer exists.')
+            children = list(event.child_concepts.all())
+            if not children and not event.is_reversed:
+                issues.append('No child concepts linked to this event.')
+            if not issues:
+                has_any_executable = True
+            rows.append({'event': event, 'children': children, 'issues': issues})
+
+        context = {
+            **self.admin_site.each_context(request),
+            'events': rows,
+            'selected_pks': [e.pk for e in events],
+            'action_checkbox_name': ACTION_CHECKBOX_NAME,
+            'has_any_executable': has_any_executable,
+            'title': 'Confirm split reversal',
+        }
+        return render(request, 'admin/trophies/conceptsplitevent/confirm_reverse.html', context)
 
 
 class GameFlagStatusFilter(SimpleListFilter):

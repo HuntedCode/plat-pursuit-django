@@ -936,6 +936,14 @@ class Concept(models.Model):
         # StageCompletionEvent concept references
         StageCompletionEvent.objects.filter(concept=other).update(concept=self)
 
+        # ConceptSplitEvent: move parent/child references to the surviving concept.
+        # The audit event's semantic meaning is preserved; whichever concept
+        # ultimately represents the data carries the history.
+        ConceptSplitEvent.objects.filter(parent_concept=other).update(parent_concept=self)
+        for event in other.splits_as_child.all():
+            event.child_concepts.add(self)
+            event.child_concepts.remove(other)
+
         # ConceptCompany: move to target, merge roles on duplicates
         existing_ccs = {
             cc.company_id: cc for cc in self.concept_companies.all()
@@ -4510,6 +4518,72 @@ class IGDBMatch(models.Model):
         name = self.igdb_name or "(no match)"
         confidence = f", {self.match_confidence:.0%}" if self.match_confidence is not None else ""
         return f"{self.concept} -> {name} ({self.get_status_display()}{confidence})"
+
+
+class ConceptSplitEvent(models.Model):
+    """Audit trail for a bundle-split operation: parent concept split into child concepts.
+
+    Written by `concept_split_service.split_compilation()` when a staff admin
+    splits a multi-game compilation concept into one parent + N-1 child concepts.
+    The parent concept is preserved (retains existing ratings, reviews, comments)
+    but renamed to represent its kept Game; each other Game is moved onto a new
+    child concept.
+
+    The snapshot fields (parent_original_title, parent_original_igdb_id) enable
+    `reverse_split()` to restore the pre-split state if the split was wrong.
+    """
+
+    parent_concept = models.ForeignKey(
+        Concept,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='splits_as_parent',
+        help_text='The concept that was split. Kept attached to one Game and renamed.',
+    )
+    child_concepts = models.ManyToManyField(
+        Concept,
+        related_name='splits_as_child',
+        blank=True,
+        help_text='Newly created concepts, one per non-kept Game.',
+    )
+
+    parent_original_title = models.CharField(max_length=500, blank=True)
+    parent_original_igdb_id = models.IntegerField(null=True, blank=True)
+    parent_original_igdb_name = models.CharField(max_length=500, blank=True)
+    kept_game_id = models.IntegerField(
+        null=True, blank=True,
+        help_text='Game.id retained on the parent concept after the split.',
+    )
+
+    is_reversed = models.BooleanField(default=False, db_index=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='reversed_concept_splits',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='created_concept_splits',
+    )
+
+    class Meta:
+        verbose_name = 'concept split event'
+        verbose_name_plural = 'concept split events'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['is_reversed', '-created_at'], name='split_reversed_created_idx'),
+        ]
+
+    def __str__(self):
+        reversed_tag = ' (reversed)' if self.is_reversed else ''
+        parent = self.parent_concept.concept_id if self.parent_concept else '(deleted)'
+        return f'Split {parent} -> {self.child_concepts.count()} children{reversed_tag}'
 
 
 class RematchSuggestion(models.Model):

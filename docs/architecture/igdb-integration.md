@@ -198,6 +198,24 @@ Deduplication and identity lookups use the composite `(igdb_id, source_type)` ke
 
 Sony does not provide VR platform information. During enrichment, if IGDB reports PSVR (platform 165) or PSVR2 (platform 390), the system appends `'PSVR'` or `'PSVR2'` to `Game.title_platform` for all games under that Concept. Only adds, never removes.
 
+### Compilation Detection and Splitting (Phase 1 + Phase 5)
+
+`IGDBMatch.is_likely_compilation` is a Tier 1 flag set True when IGDB's `game_type.id` is 3 (Bundle) or 13 (Pack). It's IGDB-side informational: the signal that IGDB thinks this is multi-game product packaging. It does NOT check PSN-side state, so single-SKU bundles that ship on PSN as one unified trophy list also get the flag.
+
+The **splittable** subset is the intersection `is_likely_compilation=True AND concept.games.count() >= 2`. Those concepts have multiple PSN-side trophy lists bundled together and are the ones that benefit from splitting. The `IGDBMatchAdmin` exposes a dedicated "splittable compilation" filter for one-click triage.
+
+The split flow lives in `trophies/services/concept_split_service.py`:
+
+1. **`preview_split(concept)`** — read-only; returns the proposed parent rename + child-concept plan + any validation issues (locked games, insufficient game count). Used by the admin confirmation page.
+2. **`split_compilation(concept=..., user=...)`** — pick a "kept" Game by platform priority (PS5 > PS4 > PS3 > PSVita > PSP > PS2 > PS1). Parent keeps the kept Game, gets renamed to the kept Game's title, its compilation-era IGDBMatch is deleted, and enrichment re-runs. Each other Game is moved onto a brand-new child Concept (one Game per child, `unified_title = game.title_name`); each child then runs through `IGDBService.enrich_concept`. A `ConceptSplitEvent` row records the parent's pre-split snapshot for reverse-merge.
+3. **`reverse_split(event=..., user=...)`** — undoes a split by moving child Games back onto the parent. `game.add_concept(parent)` auto-triggers `parent.absorb(child)` + child deletion once each child becomes empty, so any post-split social data (ratings, reviews, comments accumulated on children) migrates back to the parent through `absorb()`. Parent's title is restored from the snapshot and enrichment re-runs against the original bundle name.
+
+Both flows are reached via Django admin actions:
+- **`IGDBMatchAdmin` → "Split compilation concept(s)"** — select splittable rows, confirmation page renders `preview_split` output per row, execute performs the splits with per-row error handling.
+- **`ConceptSplitEventAdmin` → "Reverse split"** — select events, confirmation page lists parent + children, execute performs the merge back.
+
+Note: the split algorithm intentionally does NOT consult IGDB's `bundles` or `collection.games` fields for member discovery. Each child has one PSN-side Game with a clean title; the Phase 2 matcher (`_pick_search_title` → game-title input) resolves each child to its own IGDB entry independently. No bespoke IGDB member-mapping logic needed.
+
 ### Phase 3: Rematch Sweep
 
 `rematch_auto_accepted` replays the current matching pipeline against every `IGDBMatch` with `status='auto_accepted'`. The goal is to re-evaluate matches made under earlier (inferior) pipeline behaviour now that Phase 2 inputs (search-title selection, best-so-far accumulation, Strategy 6 localized-name, Strategy 7 `/search`, Strategy 9 romanization) are in place. Human-approved matches (`status='accepted'`) are intentionally excluded: the admin already signed off on those outcomes.

@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}Confirm split reversal{% endblock %}
+
+{% block content %}
+<h1>Confirm split reversal</h1>
+
+<p>You are about to reverse <strong>{{ events|length }}</strong> split event(s). Each reversal moves all child Games back to the parent concept, restores the parent's original title and IGDB match, and absorbs any data (ratings, reviews, comments) that child concepts accumulated since the split.</p>
+
+<p><strong>This operation is not idempotent</strong>: if the same parent was re-split after this original split, reversing this event will pull the wrong children. Verify the parent and children below before proceeding.</p>
+
+{% for row in events %}
+  <div style="border: 1px solid #ccc; padding: 12px; margin-bottom: 12px;">
+    <h3>Split #{{ row.event.pk }} created {{ row.event.created_at|date:"Y-m-d H:i" }}</h3>
+    {% if row.issues %}
+      <ul style="color:#b00; font-weight: bold;">
+        {% for issue in row.issues %}<li>{{ issue }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p><strong>Parent (to restore):</strong>
+        {% if row.event.parent_concept %}
+          {{ row.event.parent_concept.unified_title }}
+          <small style="color:#888;">({{ row.event.parent_concept.concept_id }})</small>
+          &rarr; restore title to <strong>{{ row.event.parent_original_title }}</strong>
+        {% else %}
+          <span style="color:#b00;">(parent concept no longer exists)</span>
+        {% endif %}
+      </p>
+      <p><strong>Children to merge back (will be absorbed and deleted):</strong></p>
+      <ul>
+        {% for child in row.children %}
+          <li>
+            {{ child.unified_title }}
+            <small style="color:#888;">({{ child.concept_id }}, {{ child.games.count }} game(s))</small>
+          </li>
+        {% empty %}
+          <li style="color:#888;"><em>No children linked to this event.</em></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% endfor %}
+
+<form method="post">
+  {% csrf_token %}
+  {% for pk in selected_pks %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="reverse_selected_splits">
+  <input type="hidden" name="post" value="yes">
+
+  <p>
+    <input type="submit" name="apply" value="Reverse {{ events|length }} split(s)" class="default" {% if not has_any_executable %}disabled{% endif %}>
+    <a href="javascript:history.back()" class="button cancel-link">Cancel</a>
+  </p>
+</form>
+{% endblock %}

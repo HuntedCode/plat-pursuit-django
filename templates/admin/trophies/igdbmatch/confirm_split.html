@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}Confirm compilation split{% endblock %}
+
+{% block content %}
+<h1>Confirm compilation split</h1>
+
+<p>You are about to split <strong>{{ previews|length }}</strong> compilation concept(s) into parent + child concepts. Existing ratings, reviews, and comments stay on the parent (which becomes the kept Game's concept). Each new child concept gets its own IGDB enrichment run.</p>
+
+<p><em>This action writes a <code>ConceptSplitEvent</code> for each split so the operation can be reversed from the Concept Split Event admin.</em></p>
+
+{% for preview in previews %}
+  <div style="border: 1px solid #ccc; padding: 12px; margin-bottom: 12px;">
+    <h3>{{ preview.concept.unified_title }} <small style="color:#888;">({{ preview.concept.concept_id }})</small></h3>
+
+    {% if preview.issues %}
+      <ul style="color: #b00; font-weight: bold;">
+        {% for issue in preview.issues %}
+          <li>{{ issue }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p><strong>Parent will be renamed to:</strong> {{ preview.proposed_parent_title }} (keeps Game #{{ preview.kept_game.id }} on platforms {{ preview.kept_game.title_platform|join:", " }})</p>
+      <p><strong>Spin off {{ preview.proposed_children|length }} new child concept(s):</strong></p>
+      <ul>
+        {% for child in preview.proposed_children %}
+          <li>
+            <strong>{{ child.new_concept_title }}</strong>
+            <span style="color:#888;">(Game #{{ child.game_id }} — {{ child.np_communication_id }}, platforms {{ child.platforms|join:", " }})</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% endfor %}
+
+<form method="post">
+  {% csrf_token %}
+  {% for pk in selected_pks %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="split_selected_compilations">
+  <input type="hidden" name="post" value="yes">
+
+  {% if has_blocked %}
+    <p style="color:#b00;">Some selections have validation issues and will be skipped. Review them above.</p>
+  {% endif %}
+
+  <p>
+    <input type="submit" name="apply" value="Execute {{ previews|length }} split(s)" class="default" {% if not has_any_executable %}disabled{% endif %}>
+    <a href="javascript:history.back()" class="button cancel-link">Cancel</a>
+  </p>
+</form>
+{% endblock %}

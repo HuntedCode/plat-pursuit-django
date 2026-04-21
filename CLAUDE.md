@@ -99,6 +99,7 @@ Currently handled by `absorb()`:
 - Badge.most_recent_concept
 - Stage.concepts (M2M)
 - StageCompletionEvent.concept (FK, SET_NULL)
+- ConceptSplitEvent.parent_concept (FK) + .child_concepts (M2M)
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)
 - ConceptGenre (move to target, skip duplicates by genre_id)
