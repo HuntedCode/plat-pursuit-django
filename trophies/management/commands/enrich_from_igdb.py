@@ -362,7 +362,14 @@ class Command(BaseCommand):
         if raw:
             game_type_obj = raw.get('game_type')
             if isinstance(game_type_obj, dict):
-                game_type_name = game_type_obj.get('name', '')
+                # IGDB's game_type expansion key is `type`, not `name`.
+                # Fall back to the legacy `category` numeric on pre-v4
+                # cached responses.
+                game_type_name = game_type_obj.get('type') or ''
+            if not game_type_name:
+                cat = raw.get('category')
+                if cat is not None:
+                    game_type_name = dict(IGDBMatch.GAME_CATEGORY_CHOICES).get(cat, '')
         is_compilation = bool(match and match.is_likely_compilation)
         is_dismissed = bool(match and match.compilation_review_dismissed)
         splittable = is_compilation and len(games) >= 2 and not is_dismissed
@@ -759,13 +766,28 @@ class Command(BaseCommand):
 
     def _format_game_result(self, r, current_igdb_id=None):
         """Format a single IGDB game result for display."""
-        cat = r.get('category')
-        if cat is not None:
-            cat_display = dict(IGDBMatch.GAME_CATEGORY_CHOICES).get(cat, f'Unknown ({cat})')
-        elif self._DLC_NAME_PATTERNS.search(r.get('name', '')):
-            cat_display = 'Likely DLC'
-        else:
-            cat_display = 'Main Game'
+        # Prefer IGDB v4 `game_type` (replaces deprecated `category`). IGDB
+        # expands game_type as {id, type, checksum, ...} with `.*` — `type`
+        # is the human-readable label ("Main Game", "Bundle", "Port", ...).
+        # Fall back to legacy `category` for older cached responses that
+        # predate the v4 migration, then name-pattern heuristic, then default.
+        cat_display = None
+        game_type = r.get('game_type')
+        if isinstance(game_type, dict):
+            cat_display = game_type.get('type')
+            if not cat_display and game_type.get('id') is not None:
+                cat_display = dict(IGDBMatch.GAME_CATEGORY_CHOICES).get(
+                    game_type['id'], f'Unknown ({game_type["id"]})'
+                )
+
+        if not cat_display:
+            cat = r.get('category')
+            if cat is not None:
+                cat_display = dict(IGDBMatch.GAME_CATEGORY_CHOICES).get(cat, f'Unknown ({cat})')
+            elif self._DLC_NAME_PATTERNS.search(r.get('name', '')):
+                cat_display = 'Likely DLC'
+            else:
+                cat_display = 'Main Game?'  # trailing ? flags the unconfirmed fallback
 
         platforms = r.get('platforms', [])
         plat_names = []
