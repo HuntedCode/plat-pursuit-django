@@ -1540,10 +1540,17 @@ class IGDBService:
         return deleted
 
     @classmethod
-    def _apply_enrichment(cls, igdb_match, igdb_data=None):
+    def _apply_enrichment(cls, igdb_match, igdb_data=None, skip_wipe=False):
         """Apply IGDB enrichment data to the Concept and create Company/ConceptCompany records.
 
         Called on auto_accepted matches and when admin approves pending matches.
+
+        `skip_wipe=True` is intended for bulk callers (e.g. the
+        `rebuild_concept_enrichment` command) that have already issued a
+        catalog-wide wipe before the rebuild loop and don't need the
+        per-concept safety net. Default False preserves the live-path
+        guarantee that `_apply_enrichment` leaves the concept's enrichment
+        identical to the IGDB response, regardless of prior state.
         """
         if igdb_data is None:
             igdb_data = igdb_match.raw_response
@@ -1555,7 +1562,8 @@ class IGDBService:
         # data — we only drop the concept's links. Without this, a concept
         # that moves from IGDB #A to #B would carry A's developers, genres
         # and franchises forward alongside B's, doubling everything up.
-        cls._wipe_enrichment_through_rows(concept)
+        if not skip_wipe:
+            cls._wipe_enrichment_through_rows(concept)
 
         # Create/update Company records and ConceptCompany entries
         cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
