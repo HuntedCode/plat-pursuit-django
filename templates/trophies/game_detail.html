@@ -12,7 +12,7 @@
 
 {% block content %}
     <div id="game-detail-container"
-         data-base-url="{% url 'game_detail' game.np_communication_id %}"
+         data-base-url="{% if url_psn_username %}{% url 'game_detail_with_profile' np_communication_id=game.np_communication_id psn_username=url_psn_username %}{% else %}{% url 'game_detail' np_communication_id=game.np_communication_id %}{% endif %}"
          data-scroll-key="gameDetailScrollPos_{{ game.np_communication_id }}">
         <section>
             {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
@@ -44,7 +44,7 @@
 
                 {# Filter toolbar #}
                 <form id="filter-form" method="get" data-browse-form
-                      hx-get="{% url 'game_detail' np_communication_id=game.np_communication_id %}"
+                      hx-get="{% if url_psn_username %}{% url 'game_detail_with_profile' np_communication_id=game.np_communication_id psn_username=url_psn_username %}{% else %}{% url 'game_detail' np_communication_id=game.np_communication_id %}{% endif %}"
                       hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3 mb-3">
                         <div class="flex flex-col md:flex-row gap-2 md:gap-3">
