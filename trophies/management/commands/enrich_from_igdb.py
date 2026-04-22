@@ -7,6 +7,17 @@ from trophies.models import Concept, IGDBMatch, Stage
 from trophies.services.igdb_service import IGDBService, IGDB_PLATFORM_NAMES
 
 
+# Token filtering for related-title surfacing. Short tokens and common
+# English stopwords produce too much noise as seeds (e.g. "the" matches
+# half the catalog).
+_RELATED_STOPWORDS = frozenset({
+    'the', 'a', 'an', 'of', 'for', 'to', 'and', 'in', 'on', 'at',
+    'with', 'from', 'vs', 'by',
+})
+_RELATED_MIN_TOKEN_LEN = 3
+_RELATED_MAX_SEED_TOKENS = 2
+
+
 class Command(BaseCommand):
     help = 'Enrich Concepts with IGDB data (developer, genre, theme, time-to-beat, etc.)'
 
@@ -173,6 +184,12 @@ class Command(BaseCommand):
                     IGDBService.approve_match(match)
                     self.stdout.write(self.style.SUCCESS('  Approved.'))
                     approved += 1
+                    self._surface_related_after_action(
+                        match.igdb_name or concept.unified_title,
+                        matches, idx,
+                        title_fn=lambda m: m.concept.unified_title,
+                        other_status='no_match',
+                    )
                     break
 
                 elif action == 'r':
@@ -192,6 +209,12 @@ class Command(BaseCommand):
                             continue
                         else:
                             self.stdout.write(self.style.SUCCESS('  Auto-accepted.'))
+                            self._surface_related_after_action(
+                                new_match.igdb_name or concept.unified_title,
+                                matches, idx,
+                                title_fn=lambda m: m.concept.unified_title,
+                                other_status='no_match',
+                            )
                     elif new_match and new_match.igdb_id == old_igdb_id:
                         self.stdout.write('  Re-match found the same game. Use [s]earch + [m]anual to assign a different one, or [n]ext to skip.')
                         matches[idx] = new_match
@@ -287,6 +310,12 @@ class Command(BaseCommand):
                             f'  Assigned IGDB #{new_igdb_id} "{igdb_data.get("name")}" [{new_match.status}]'
                         ))
                         reassigned += 1
+                        self._surface_related_after_action(
+                            igdb_data.get('name') or concept.unified_title,
+                            matches, idx,
+                            title_fn=lambda m: m.concept.unified_title,
+                            other_status='no_match',
+                        )
                         break
                     else:
                         self.stdout.write('  Cancelled.')
@@ -298,6 +327,106 @@ class Command(BaseCommand):
             self.stdout.write('')
 
         self._print_review_summary(approved, rejected, reassigned, skipped)
+
+    # ------------------------------------------------------------------
+    # Related-title surfacing (shared by --review and --unmatched)
+    # ------------------------------------------------------------------
+
+    def _extract_seed_tokens(self, title):
+        """Pull up to 2 significant tokens from a cleaned title for fuzzy matching.
+
+        "Spyro Reignited Trilogy" -> ["spyro", "reignited"]
+        "Final Fantasy XIII" -> ["final", "fantasy"]
+        "The Last of Us" -> ["last"]
+        """
+        if not title:
+            return []
+        cleaned = IGDBService._clean_title_for_search(title) or ''
+        tokens = []
+        seen = set()
+        for tok in cleaned.split():
+            if len(tok) < _RELATED_MIN_TOKEN_LEN or tok.lower() in _RELATED_STOPWORDS:
+                continue
+            key = tok.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            tokens.append(tok)
+            if len(tokens) >= _RELATED_MAX_SEED_TOKENS:
+                break
+        return tokens
+
+    def _title_matches_seed(self, title, seed_tokens):
+        """True if the cleaned title contains any seed token as a whole word."""
+        if not title or not seed_tokens:
+            return False
+        cleaned = IGDBService._clean_title_for_search(title).lower()
+        if not cleaned:
+            return False
+        cleaned_tokens = set(cleaned.split())
+        return any(tok.lower() in cleaned_tokens for tok in seed_tokens)
+
+    def _promote_related_in_queue(self, queue, idx, seed_tokens, title_fn):
+        """Reorder queue[idx+1:] so items whose title matches seed_tokens come first.
+
+        Returns the count of items moved to the front. `title_fn(item)` should
+        return the string title of a queue element (the match's concept title
+        for --review; the concept's own title for --unmatched).
+        """
+        if idx + 1 >= len(queue) or not seed_tokens:
+            return 0
+        related, other = [], []
+        for item in queue[idx + 1:]:
+            if self._title_matches_seed(title_fn(item), seed_tokens):
+                related.append(item)
+            else:
+                other.append(item)
+        if not related:
+            return 0
+        queue[idx + 1:] = related + other
+        return len(related)
+
+    def _count_related_in_other_queue(self, seed_tokens, other_status):
+        """Count concepts in the OTHER queue whose title matches seed_tokens.
+
+        `other_status` is 'no_match' when called from --review, and
+        'pending_review' when called from --unmatched. Returns 0 when
+        seed is empty or no concepts match.
+        """
+        if not seed_tokens:
+            return 0
+        qs = (
+            Concept.objects
+            .filter(igdb_match__status=other_status)
+            .only('id', 'unified_title')
+        )
+        return sum(
+            1 for c in qs
+            if self._title_matches_seed(c.unified_title, seed_tokens)
+        )
+
+    def _surface_related_after_action(self, seed_title, queue, idx, title_fn, other_status):
+        """Unified post-accept hook: promote related in-queue, note cross-queue.
+
+        Called after a successful approve/reassign/manual-assign. Silently
+        no-ops when seed_title produces no tokens (e.g. generic titles
+        that reduce to stopwords only).
+        """
+        seed = self._extract_seed_tokens(seed_title)
+        if not seed:
+            return
+        promoted = self._promote_related_in_queue(queue, idx, seed, title_fn)
+        if promoted:
+            self.stdout.write(self.style.WARNING(
+                f'  -> {promoted} related item(s) queued next based on "{" ".join(seed)}".'
+            ))
+        cross = self._count_related_in_other_queue(seed, other_status)
+        if cross:
+            other_queue_name = 'no_match' if other_status == 'no_match' else 'pending review'
+            mode_flag = '--unmatched' if other_status == 'no_match' else '--review'
+            self.stdout.write(
+                f'  Also: {cross} related concept(s) in the {other_queue_name} queue (run {mode_flag}).'
+            )
 
     def _print_review_summary(self, approved, rejected, reassigned, skipped):
         self.stdout.write('')
@@ -573,6 +702,12 @@ class Command(BaseCommand):
                             f'  Assigned IGDB #{new_igdb_id} "{igdb_data.get("name")}" [{new_match.status}]'
                         ))
                         assigned += 1
+                        self._surface_related_after_action(
+                            igdb_data.get('name') or concept.unified_title,
+                            concepts, idx,
+                            title_fn=lambda c: c.unified_title,
+                            other_status='pending_review',
+                        )
                         break
                     else:
                         self.stdout.write('  Cancelled.')
