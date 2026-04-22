@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, Theme, GameEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -3108,3 +3108,100 @@ class ScoutAccountAdmin(admin.ModelAdmin):
             PSNManager.profile_refresh(scout.profile)
             count += 1
         messages.success(request, f'Queued {count} scout(s) for refresh.')
+
+
+# ---------- IGDB through-table admins ----------
+# Minimal registrations so the doubled-up-enrichment debugging surface is
+# fully visible. Master tables (Company, Genre, Theme, GameEngine, Franchise)
+# already have their own admins above.
+
+@admin.register(ConceptCompany)
+class ConceptCompanyAdmin(admin.ModelAdmin):
+    list_display = ('concept', 'company', 'is_developer', 'is_publisher', 'is_porting', 'is_supporting')
+    list_select_related = ('concept', 'company')
+    list_filter = ('is_developer', 'is_publisher', 'is_porting', 'is_supporting')
+    search_fields = ('concept__unified_title', 'concept__concept_id', 'company__name')
+    raw_id_fields = ('concept', 'company')
+
+
+@admin.register(ConceptGenre)
+class ConceptGenreAdmin(admin.ModelAdmin):
+    list_display = ('concept', 'genre')
+    list_select_related = ('concept', 'genre')
+    list_filter = ('genre',)
+    search_fields = ('concept__unified_title', 'concept__concept_id', 'genre__name')
+    raw_id_fields = ('concept', 'genre')
+
+
+@admin.register(ConceptTheme)
+class ConceptThemeAdmin(admin.ModelAdmin):
+    list_display = ('concept', 'theme')
+    list_select_related = ('concept', 'theme')
+    list_filter = ('theme',)
+    search_fields = ('concept__unified_title', 'concept__concept_id', 'theme__name')
+    raw_id_fields = ('concept', 'theme')
+
+
+@admin.register(ConceptEngine)
+class ConceptEngineAdmin(admin.ModelAdmin):
+    list_display = ('concept', 'engine')
+    list_select_related = ('concept', 'engine')
+    list_filter = ('engine',)
+    search_fields = ('concept__unified_title', 'concept__concept_id', 'engine__name')
+    raw_id_fields = ('concept', 'engine')
+
+
+@admin.register(EngineCompany)
+class EngineCompanyAdmin(admin.ModelAdmin):
+    list_display = ('engine', 'company')
+    list_select_related = ('engine', 'company')
+    search_fields = ('engine__name', 'company__name')
+    raw_id_fields = ('engine', 'company')
+
+
+# ---------- Admin index grouping ----------
+# Split the trophies app's model list on the admin index page into a
+# dedicated "IGDB & Enrichment" subsection. Models still live under the
+# real app internally — this is display-only.
+
+_IGDB_ADMIN_OBJECT_NAMES = frozenset({
+    'IGDBMatch', 'RematchSuggestion', 'ConceptSplitEvent',
+    'GameFamily',
+    'Company', 'ConceptCompany',
+    'Franchise', 'ConceptFranchise',
+    'Genre', 'ConceptGenre',
+    'Theme', 'ConceptTheme',
+    'GameEngine', 'ConceptEngine', 'EngineCompany',
+})
+
+_original_get_app_list = admin.site.get_app_list
+
+
+def _platpursuit_get_app_list(request, app_label=None):
+    """Return the admin index app list, splitting trophies into two sections.
+
+    Trophies gets carved into "IGDB & Enrichment" (matching + normalized
+    metadata models) and "Trophies" (everything else). Other apps are
+    passed through unchanged. Internally all these models still belong
+    to the `trophies` app_label — we only reshape the index display.
+    """
+    app_list = _original_get_app_list(request, app_label)
+    result = []
+    for app in app_list:
+        if app['app_label'] != 'trophies':
+            result.append(app)
+            continue
+        igdb_models = [m for m in app['models'] if m['object_name'] in _IGDB_ADMIN_OBJECT_NAMES]
+        other_models = [m for m in app['models'] if m['object_name'] not in _IGDB_ADMIN_OBJECT_NAMES]
+        if igdb_models:
+            result.append({
+                **app,
+                'name': 'IGDB & Enrichment',
+                'models': igdb_models,
+            })
+        if other_models:
+            result.append({**app, 'models': other_models})
+    return result
+
+
+admin.site.get_app_list = _platpursuit_get_app_list
