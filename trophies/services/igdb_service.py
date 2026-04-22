@@ -1511,6 +1511,35 @@ class IGDBService:
     }
 
     @classmethod
+    def _wipe_enrichment_through_rows(cls, concept):
+        """Delete a concept's through-table enrichment rows.
+
+        Target set: ConceptCompany, ConceptGenre, ConceptTheme,
+        ConceptEngine, ConceptFranchise. The underlying Company / Genre /
+        Theme / GameEngine / Franchise records are shared site-wide and
+        stay put — we only remove the concept-scoped links so that a
+        fresh `_apply_enrichment` run can rebuild them from the current
+        IGDB data without duplicating entries from a prior match.
+
+        Returns a dict of {model_name: deleted_count} for reporting.
+        """
+        from trophies.models import (
+            ConceptCompany, ConceptGenre, ConceptTheme,
+            ConceptEngine, ConceptFranchise,
+        )
+        deleted = {}
+        for model, key in [
+            (ConceptCompany, 'companies'),
+            (ConceptGenre, 'genres'),
+            (ConceptTheme, 'themes'),
+            (ConceptEngine, 'engines'),
+            (ConceptFranchise, 'franchises'),
+        ]:
+            count, _ = model.objects.filter(concept=concept).delete()
+            deleted[key] = count
+        return deleted
+
+    @classmethod
     def _apply_enrichment(cls, igdb_match, igdb_data=None):
         """Apply IGDB enrichment data to the Concept and create Company/ConceptCompany records.
 
@@ -1520,6 +1549,13 @@ class IGDBService:
             igdb_data = igdb_match.raw_response
 
         concept = igdb_match.concept
+
+        # Clear stale through-rows from any prior match. The underlying
+        # Company/Genre/Theme/Engine/Franchise records are shared global
+        # data — we only drop the concept's links. Without this, a concept
+        # that moves from IGDB #A to #B would carry A's developers, genres
+        # and franchises forward alongside B's, doubling everything up.
+        cls._wipe_enrichment_through_rows(concept)
 
         # Create/update Company records and ConceptCompany entries
         cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
@@ -1771,15 +1807,21 @@ class IGDBService:
 
     @classmethod
     def _update_concept_fields(cls, concept, igdb_data):
-        """Update Concept's IGDB genre and theme fields from parsed data."""
+        """Update Concept's IGDB genre and theme JSON denorms from parsed data.
+
+        Unconditional overwrite: if the new match has no genres/themes we
+        write an empty list rather than leaving stale data from a prior
+        match. Paired with the through-row wipe in _apply_enrichment so
+        the JSON denorm stays consistent with the normalized tables.
+        """
         genres = [g.get('name', '') for g in igdb_data.get('genres', []) if g.get('name')]
         themes = [t.get('name', '') for t in igdb_data.get('themes', []) if t.get('name')]
 
         update_fields = []
-        if genres and genres != concept.igdb_genres:
+        if genres != (concept.igdb_genres or []):
             concept.igdb_genres = genres
             update_fields.append('igdb_genres')
-        if themes and themes != concept.igdb_themes:
+        if themes != (concept.igdb_themes or []):
             concept.igdb_themes = themes
             update_fields.append('igdb_themes')
 

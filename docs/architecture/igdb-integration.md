@@ -307,6 +307,7 @@ Properties:
 | `enrich_from_igdb --verbose` | Enable detailed search/scoring logs | `python manage.py enrich_from_igdb --verbose` |
 | `enrich_from_igdb --dry-run` | Preview without saving | `python manage.py enrich_from_igdb --dry-run` |
 | `rematch_auto_accepted` | Re-run the matching pipeline against every `auto_accepted` match. See [Phase 3: rematch sweep](#phase-3-rematch-sweep). | `python manage.py rematch_auto_accepted --dry-run` |
+| `rebuild_concept_enrichment` | Wipe ConceptCompany/Genre/Theme/Engine/Franchise rows for every accepted match and re-apply enrichment from stored raw_response. No IGDB API calls. Use after concept-match reassignments to clear stale enrichment. | `python manage.py rebuild_concept_enrichment --dry-run` |
 | `rebuild_franchises_from_cache` | Rebuild Franchise + ConceptFranchise rows from cached `IGDBMatch.raw_response`. No IGDB API calls. Use for schema/logic changes that don't require fresh data. | `python manage.py rebuild_franchises_from_cache --wipe` |
 | `backfill_franchise_main_flag` | Recompute `ConceptFranchise.is_main` from cached raw_response using the current precedence rules. Narrower than a full rebuild — only updates the flag, leaves rows otherwise untouched. | `python manage.py backfill_franchise_main_flag --dry-run` |
 | `franchise_stats` | Read-only diagnostic: franchise/collection totals, per-concept coverage, browse-page surfacing counts, sample names. Useful for auditing enrichment coverage. | `python manage.py franchise_stats --samples 20` |
