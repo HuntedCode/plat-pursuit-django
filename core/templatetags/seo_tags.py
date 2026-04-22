@@ -160,10 +160,12 @@ def jsonld_game(game, concept, request):
         if concept.release_date:
             data["datePublished"] = concept.release_date.strftime('%Y-%m-%d')
 
-        # Time to complete (from IGDB match)
+        # Time to complete (from IGDB match). Gate on is_trusted — pending
+        # or rejected matches still have the fields populated but the data
+        # isn't reviewed and shouldn't leak into public SEO metadata.
         try:
             igdb_match = concept.igdb_match
-            if igdb_match and igdb_match.time_to_beat_completely:
+            if igdb_match and igdb_match.is_trusted and igdb_match.time_to_beat_completely:
                 hours = igdb_match.time_to_beat_completely // 3600
                 minutes = (igdb_match.time_to_beat_completely % 3600) // 60
                 data["timeRequired"] = f"PT{hours}H{minutes}M"

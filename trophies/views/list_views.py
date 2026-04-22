@@ -10,7 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import (
     Q, F, Prefetch, Subquery, OuterRef, Value, IntegerField, FloatField,
-    Avg, OrderBy,
+    Avg, OrderBy, Case, When,
 )
 from django.db.models.functions import Lower, Coalesce, Cast
 from django.http import Http404
@@ -179,12 +179,26 @@ class GameListDetailView(ProfileHotbarMixin, DetailView):
             items = items.order_by('game__played_count', 'game__title_name')
         elif sort == 'time_to_beat':
             items = items.annotate(
-                _time_to_beat=F('game__concept__igdb_match__time_to_beat_completely'),
+                _time_to_beat=Case(
+                    When(
+                        game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+                        then=F('game__concept__igdb_match__time_to_beat_completely'),
+                    ),
+                    default=None,
+                    output_field=IntegerField(),
+                ),
             )
             items = items.order_by(OrderBy(F('_time_to_beat'), nulls_last=True))
         elif sort == 'time_to_beat_inv':
             items = items.annotate(
-                _time_to_beat=F('game__concept__igdb_match__time_to_beat_completely'),
+                _time_to_beat=Case(
+                    When(
+                        game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+                        then=F('game__concept__igdb_match__time_to_beat_completely'),
+                    ),
+                    default=None,
+                    output_field=IntegerField(),
+                ),
             )
             items = items.order_by(OrderBy(F('_time_to_beat'), descending=True, nulls_last=True))
         elif sort == 'completion' and profile:

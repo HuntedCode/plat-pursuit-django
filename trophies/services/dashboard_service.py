@@ -1276,7 +1276,10 @@ def provide_time_to_beat_insights(profile):
         ProfileGame.objects
         .filter(profile=profile, has_plat=True, user_hidden=False)
         .select_related('game__concept__igdb_match')
-        .filter(game__concept__igdb_match__time_to_beat_completely__isnull=False)
+        .filter(
+            game__concept__igdb_match__time_to_beat_completely__isnull=False,
+            game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+        )
     )
 
     plat_seconds = []
@@ -1312,7 +1315,10 @@ def provide_time_to_beat_insights(profile):
     avg_plat_seconds = sum(plat_seconds) / len(plat_seconds)
     total_plat_seconds = sum(plat_seconds)
 
-    # In-progress games with at least 1 trophy and time-to-beat data
+    # In-progress games with at least 1 trophy and time-to-beat data.
+    # Restrict to trusted IGDB matches — pending/rejected matches have
+    # time-to-beat populated but not reviewed, so they shouldn't drive
+    # user-facing "grinding" estimates.
     grinding_qs = (
         ProfileGame.objects
         .filter(
@@ -1320,7 +1326,10 @@ def provide_time_to_beat_insights(profile):
             earned_trophies_count__gt=0,
         )
         .select_related('game__concept__igdb_match')
-        .filter(game__concept__igdb_match__time_to_beat_completely__isnull=False)
+        .filter(
+            game__concept__igdb_match__time_to_beat_completely__isnull=False,
+            game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+        )
     )
 
     grinding = []

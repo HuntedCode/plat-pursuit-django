@@ -50,7 +50,7 @@
                             <p class="line-clamp-1 pr-1">Released: <time datetime="{{ game.concept.release_date|date:'Y-m-d' }}" class="italic font-medium text-primary/80">{{ game.concept.release_date|date }}</time></p>
                         {% endif %}
                         {% with igdb=game.concept.igdb_match %}
-                            {% if igdb.completion_time_display %}
+                            {% if igdb.is_trusted and igdb.completion_time_display %}
                                 <p class="line-clamp-1 pr-1">Est. Completion: <span class="italic font-medium text-primary/80">{{ igdb.completion_time_display }}</span></p>
                             {% endif %}
                         {% endwith %}

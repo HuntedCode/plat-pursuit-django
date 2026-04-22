@@ -421,7 +421,12 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
         igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
         if igdb_lo > 0 or igdb_hi < 1000:
-            time_q = Q(game__concept__igdb_match__time_to_beat_completely__isnull=False)
+            # Trusted matches only — pending/rejected matches have TTB
+            # populated but not reviewed.
+            time_q = Q(
+                game__concept__igdb_match__time_to_beat_completely__isnull=False,
+                game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+            )
             if igdb_lo > 0:
                 time_q &= Q(game__concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
             if igdb_hi < 1000:
@@ -452,7 +457,14 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             order = ['_avg_rating', Lower('game__title_name')]
         elif sort_val in ('time_to_beat', 'time_to_beat_inv'):
             games_qs = games_qs.annotate(
-                _time_to_beat=F('game__concept__igdb_match__time_to_beat_completely'),
+                _time_to_beat=Case(
+                    When(
+                        game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+                        then=F('game__concept__igdb_match__time_to_beat_completely'),
+                    ),
+                    default=None,
+                    output_field=IntegerField(),
+                ),
             )
             if sort_val == 'time_to_beat':
                 order = [OrderBy(F('_time_to_beat'), nulls_last=True)]

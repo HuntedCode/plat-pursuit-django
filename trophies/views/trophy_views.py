@@ -250,12 +250,26 @@ class TrophyCaseView(ProfileHotbarMixin, ListView):
             qs = qs.order_by('trophy__game__played_count', Lower('trophy__game__title_name'))
         elif sort_val == 'time_to_beat':
             qs = qs.annotate(
-                _time_to_beat=F('trophy__game__concept__igdb_match__time_to_beat_completely'),
+                _time_to_beat=Case(
+                    When(
+                        trophy__game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+                        then=F('trophy__game__concept__igdb_match__time_to_beat_completely'),
+                    ),
+                    default=None,
+                    output_field=IntegerField(),
+                ),
             )
             qs = qs.order_by(OrderBy(F('_time_to_beat'), nulls_last=True))
         elif sort_val == 'time_to_beat_inv':
             qs = qs.annotate(
-                _time_to_beat=F('trophy__game__concept__igdb_match__time_to_beat_completely'),
+                _time_to_beat=Case(
+                    When(
+                        trophy__game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+                        then=F('trophy__game__concept__igdb_match__time_to_beat_completely'),
+                    ),
+                    default=None,
+                    output_field=IntegerField(),
+                ),
             )
             qs = qs.order_by(OrderBy(F('_time_to_beat'), descending=True, nulls_last=True))
         else:  # 'recent' (default)

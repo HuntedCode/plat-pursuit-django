@@ -220,9 +220,14 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
     concept_ids = {pg.game.concept_id for pg in profile_games if pg.game and pg.game.concept_id}
     igdb_lookup = {}
     if concept_ids:
+        # Only trusted matches feed the stats page. Pending/rejected matches
+        # carry populated TTB/category fields but haven't been reviewed.
         igdb_lookup = {
             m.concept_id: m for m in
-            IGDBMatch.objects.filter(concept_id__in=concept_ids)
+            IGDBMatch.objects.filter(
+                concept_id__in=concept_ids,
+                status__in=('accepted', 'auto_accepted'),
+            )
             .only('concept_id', 'game_category', 'franchise_names',
                   'time_to_beat_completely', 'igdb_first_release_date',
                   'raw_response')

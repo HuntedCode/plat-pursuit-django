@@ -226,7 +226,13 @@ def apply_game_browse_filters(qs, form, sort_val=''):
     igdb_lo = form.cleaned_data.get('igdb_time_min') or 0
     igdb_hi = form.cleaned_data.get('igdb_time_max') or 1000
     if igdb_lo > 0 or igdb_hi < 1000:
-        time_q = Q(concept__igdb_match__time_to_beat_completely__isnull=False)
+        # Only apply time filtering against trusted matches — pending/rejected
+        # matches still have time_to_beat populated but the values haven't
+        # been reviewed, so they shouldn't drive the browse filter.
+        time_q = Q(
+            concept__igdb_match__time_to_beat_completely__isnull=False,
+            concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+        )
         if igdb_lo > 0:
             time_q &= Q(concept__igdb_match__time_to_beat_completely__gte=int(igdb_lo) * 3600)
         if igdb_hi < 1000:
@@ -357,10 +363,19 @@ def apply_game_browse_sort(qs, sort_val, annotations_applied=None):
         else:
             order = ['_total_trophy_count'] + _ALPHA_SECONDARY
 
-    # --- Time-to-beat (IGDB completion time, nulls last) ---
+    # --- Time-to-beat (IGDB completion time, nulls last). Gate on
+    # is_trusted so untrusted matches drop to the end of the sort rather
+    # than mingling with reviewed times.
     elif sort_val in ('time_to_beat', 'time_to_beat_inv'):
         qs = qs.annotate(
-            _time_to_beat=F('concept__igdb_match__time_to_beat_completely'),
+            _time_to_beat=Case(
+                When(
+                    concept__igdb_match__status__in=('accepted', 'auto_accepted'),
+                    then=F('concept__igdb_match__time_to_beat_completely'),
+                ),
+                default=None,
+                output_field=IntegerField(),
+            ),
         )
         if sort_val == 'time_to_beat':
             order = [

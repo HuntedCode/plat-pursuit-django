@@ -4464,22 +4464,43 @@ class IGDBMatch(models.Model):
 
     @property
     def completion_time_display(self):
-        """Human-readable 100% completion time estimate."""
+        """Human-readable 100% completion time estimate.
+
+        Returns None when the match isn't trusted — process_match writes
+        TTB fields regardless of status, so pending_review / rejected
+        matches still have values populated. Anything user-facing must
+        only surface these values on accepted/auto_accepted matches.
+        """
+        if not self.is_trusted:
+            return None
         return self._format_seconds(self.time_to_beat_completely)
 
     @property
     def speedrun_time_display(self):
-        """Human-readable speedrun time estimate."""
+        """Human-readable speedrun time estimate. None on untrusted matches."""
+        if not self.is_trusted:
+            return None
         return self._format_seconds(self.time_to_beat_hastily)
 
     @property
     def normal_time_display(self):
-        """Human-readable average playthrough time estimate."""
+        """Human-readable average playthrough time estimate. None on untrusted matches."""
+        if not self.is_trusted:
+            return None
         return self._format_seconds(self.time_to_beat_normally)
 
     @property
     def has_time_to_beat(self):
-        """True if any time-to-beat data exists."""
+        """True if any time-to-beat data exists on a trusted match.
+
+        Returns False on pending_review / rejected matches even when the
+        underlying integer fields are populated — the display properties
+        gate on is_trusted and would all render as None anyway, so this
+        flag's "does TTB exist for display?" semantic demands the same
+        gate.
+        """
+        if not self.is_trusted:
+            return False
         return bool(
             self.time_to_beat_hastily
             or self.time_to_beat_normally
