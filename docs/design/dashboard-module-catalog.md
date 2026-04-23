@@ -34,7 +34,7 @@ The "Complete" count is the source of truth from `DASHBOARD_MODULES` in `trophie
 | 5 | Unread Notifications | Lazy | **Cut** | Redundant with navbar notification bell |
 | 29 | Quick Settings | Server | **Done** | Profile + CustomUser (settings fields) |
 | 37 | My Stats Teaser | Lazy (10m) | **Done** | `stats_service.get_career_overview()`. 4 hero stats + CTA to `/my-stats/` |
-| 40 | Trophy Diversity Score | Lazy (30m) | **Done** | `ConceptGenre` + `ConceptTheme` M2Ms. Composite 0-100 score across distinct genres + themes the user has trophies in (IGDB-powered) |
+| 40 | Trophy Diversity Score | Lazy (30m) | **Cut** | Removed 2026-04-22 — unfiltered EarnedTrophy materialization was a load bottleneck and the stat itself wasn't pulling its weight |
 
 ### Quick Settings (#29) - DONE
 - Inline toggle switches for `hide_hiddens`, `hide_zeros`, `use_24hr_clock`
@@ -229,7 +229,7 @@ These are the crown jewels that make premium feel indispensable. The original sk
 | Slug | Display Name | Modules |
 |------|-------------|---------|
 | `premium` | Premium | Advanced Stats, Theme Picker, Trophy Visualizations, Advanced Badge Stats, Badge Series Overview, Badge Visualizations, Genre & Themes, Time-to-Beat, Profile Showcase Editor |
-| `at_a_glance` | At a Glance | Trophy Snapshot, Recent Activity, Recent Platinums, Your Stats (teaser), Diversity Score, Quick Settings |
+| `at_a_glance` | At a Glance | Trophy Snapshot, Recent Activity, Recent Platinums, Your Stats (teaser), Quick Settings |
 | `progress` | Progress & Challenges | Challenge Hub, Almost There, Milestone Tracker, Roadmaps for Your Library, A-Z Challenge, Platinum Calendar, Genre Challenge, VR Trophy Hunter |
 | `badges` | Badges & Achievements | Badge Progress, Recent Badges, Badge Stats, Badge XP & Leaderboard, Country XP Leaderboard |
 | `highlights` | Highlights & History | Monthly Recap Preview, Library Health, Top Studios, Earned Titles, Rarity Showcase, My Reviews, Rate My Games |

@@ -1032,68 +1032,6 @@ def provide_library_health_alerts(profile, settings=None):
     }
 
 
-def provide_trophy_diversity_score(profile):
-    """Single-stat module: diversity score across IGDB genres + themes.
-
-    Encourages library diversification by showing how many distinct genres
-    and themes the user has any earned trophies in.
-    """
-    from trophies.models import EarnedTrophy, Genre, Theme
-
-    earned_qs = (
-        EarnedTrophy.objects
-        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
-        .select_related('trophy__game__concept')
-        .prefetch_related(
-            'trophy__game__concept__concept_genres__genre',
-            'trophy__game__concept__concept_themes__theme',
-        )
-    )
-
-    seen_genres = set()
-    seen_themes = set()
-    top_genre_counts = defaultdict(int)
-    top_theme_counts = defaultdict(int)
-
-    for et in earned_qs:
-        game = et.trophy.game if et.trophy else None
-        concept = getattr(game, 'concept', None) if game else None
-        if not concept:
-            continue
-        for cg in concept.concept_genres.all():
-            seen_genres.add(cg.genre_id)
-            top_genre_counts[cg.genre.name] += 1
-        for ct in concept.concept_themes.all():
-            seen_themes.add(ct.theme_id)
-            top_theme_counts[ct.theme.name] += 1
-
-    total_genres = Genre.objects.count() or 1
-    total_themes = Theme.objects.count() or 1
-    genre_pct = round(len(seen_genres) / total_genres * 100, 1)
-    theme_pct = round(len(seen_themes) / total_themes * 100, 1)
-    score = round((genre_pct + theme_pct) / 2)
-
-    top_genre = max(top_genre_counts, key=top_genre_counts.get) if top_genre_counts else None
-    top_theme = max(top_theme_counts, key=top_theme_counts.get) if top_theme_counts else None
-
-    if top_genre and top_theme:
-        flavor = f"You favor {top_theme.lower()} {top_genre.lower()} games."
-    elif top_genre:
-        flavor = f"You favor {top_genre.lower()} games."
-    else:
-        flavor = "Earn trophies to build your diversity score."
-
-    return {
-        'has_data': bool(seen_genres or seen_themes),
-        'score': score,
-        'genres_seen': len(seen_genres),
-        'genres_total': total_genres,
-        'themes_seen': len(seen_themes),
-        'themes_total': total_themes,
-        'flavor': flavor,
-    }
-
-
 def provide_profile_badge_showcase_editor(profile):
     """Premium dedicated editor for the 5-slot ProfileBadgeShowcase.
 
@@ -5112,22 +5050,6 @@ DASHBOARD_MODULES = [
         'cache_ttl': 1800,
         'default_size': 'medium',
         'allowed_sizes': ['medium', 'large'],
-    },
-    {
-        'slug': 'trophy_diversity_score',
-        'name': 'Diversity Score',
-        'description': 'How varied is your library? A 0-100 score across IGDB genres and themes you have trophies in.',
-        'category': 'at_a_glance',
-        'template': 'trophies/partials/dashboard/trophy_diversity_score.html',
-        'provider': provide_trophy_diversity_score,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 5,  # at_a_glance #5
-        'default_settings': {},
-        'configurable_settings': [],
-        'cache_ttl': 1800,
-        'default_size': 'small',
-        'allowed_sizes': ['small', 'medium'],
     },
     {
         'slug': 'profile_card_preview',

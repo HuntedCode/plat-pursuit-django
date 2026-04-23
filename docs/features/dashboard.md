@@ -97,7 +97,6 @@ Premium users can create custom tabs with a name (max 20 chars) and icon (from 8
 | `earned_titles` | Earned Titles | highlights | Lazy | 10m | No |
 | `vr_trophy_hunter` | VR Trophy Hunter | progress | Lazy | 30m | No |
 | `profile_badge_showcase_editor` | Profile Showcase | premium | Lazy | None | Yes |
-| `trophy_diversity_score` | Diversity Score | at_a_glance | Lazy | 30m | No |
 
 See [Module Catalog](../design/dashboard-module-catalog.md) for the full module roadmap.
 
@@ -108,7 +107,6 @@ Several modules surface data from the IGDB integration shipped in March 2026:
 - **Top Developers**: aggregates `ConceptCompany` (developer/publisher roles) joined to user's earned trophies. Sub-tab toggle between developers and publishers. Links to `/companies/<slug>/`.
 - **Genre & Themes** (premium): combined module with side-by-side genre + theme radars (via `ConceptGenre` and `ConceptTheme`). All-time only; year-aware genre data lives nowhere now since the field was removed from `trophy_visualizations`.
 - **Time-to-Beat** (premium): uses `IGDBMatch.time_to_beat_completely` to compute average plat duration, longest hunts, and currently-grinding remaining hours.
-- **Trophy Diversity Score**: composite score of distinct genres + themes the user has trophies in (using `ConceptGenre` + `ConceptTheme` normalized M2Ms).
 - **Engine Radar** (in trophy_visualizations): replaced the genre radar slot. Uses `ConceptEngine` to surface what engines power the user's library (Unreal, Unity, Decima, etc.). Falls back gracefully when engine data is sparse.
 
 ## Library Health Alerts
