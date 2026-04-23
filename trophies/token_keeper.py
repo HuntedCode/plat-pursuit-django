@@ -994,16 +994,19 @@ class TokenKeeper:
 
         start_time = time.time()
         try:
-            lookup_key = profile.account_id if profile.account_id else profile.psn_username
-            if lookup_key not in instance.user_cache:
-                start = time.time()
-                instance.user_cache[lookup_key] = {
-                    "user": (instance.client.user(account_id=profile.account_id) if profile.account_id else instance.client.user(online_id=profile.psn_username)),
-                    "timestamp": datetime.now()
-                }
-                self._record_call(instance.token)
-                log_api_call('init_user', instance.token, profile.id, 200, time.time() - start)
-            user = instance.user_cache[lookup_key]['user']
+            # game_title / game_details operate on instance.client directly and
+            # don't need a User object, so skip the init_user warm-up for those.
+            if endpoint not in ("game_title", "game_details"):
+                lookup_key = profile.account_id if profile.account_id else profile.psn_username
+                if lookup_key not in instance.user_cache:
+                    start = time.time()
+                    instance.user_cache[lookup_key] = {
+                        "user": (instance.client.user(account_id=profile.account_id) if profile.account_id else instance.client.user(online_id=profile.psn_username)),
+                        "timestamp": datetime.now()
+                    }
+                    self._record_call(instance.token)
+                    log_api_call('init_user', instance.token, profile.id, 200, time.time() - start)
+                user = instance.user_cache[lookup_key]['user']
 
             self._record_call(instance.token)
             if endpoint == "get_profile_legacy":
@@ -1026,6 +1029,18 @@ class TokenKeeper:
                 data = user.trophy_summary()
             elif endpoint == "game_title":
                 data = instance.client.game_title(**kwargs)
+            elif endpoint == "game_details":
+                # Build a GameTitle bound to THIS instance's authenticator so the
+                # get_details HTTP call rides this instance's pyrate_limiter bucket,
+                # not some other instance's that happened to originate the object.
+                game_title_obj = instance.client.game_title(
+                    title_id=kwargs["title_id"],
+                    platform=kwargs["platform"],
+                    account_id=kwargs["account_id"],
+                    np_communication_id=kwargs["np_communication_id"],
+                )
+                result = game_title_obj.get_details(country=kwargs["country"], language=kwargs["language"])
+                data = result[0] if result else {}
             else:
                 raise ValueError(f"Unknown endpoint: {endpoint}")
             
@@ -1118,40 +1133,51 @@ class TokenKeeper:
             return False
         return True
 
-    def _get_details_with_region_fallback(self, game_title, job_type):
+    def _get_details_with_region_fallback(self, title_id, platform, account_id, np_communication_id, profile, job_type):
         """Fetch concept details, trying US/en-US first then Asian-region fallbacks.
+
+        Each attempt acquires a freshly-picked instance via _execute_api_call with
+        the 'game_details' endpoint, so every request rides its own rate-limit
+        bucket (distributing load across instances) and rate-limit accounting is
+        charged to the instance that actually issued the HTTP call.
 
         Returns (details: dict, used_fallback_region: bool). The flag tells the caller
         whether the returned payload came from a non-default storefront, so mutations
         to existing concepts can be gated off per the Asian-title rule.
         """
-        try:
-            primary = game_title.get_details(country='US', language='en-US')
-            details = primary[0] if primary else {}
-        except Exception:
-            logger.exception("Primary get_details (US/en-US) failed")
-            details = {}
+        call_kwargs = {
+            "title_id": title_id,
+            "platform": PlatformType(platform),
+            "account_id": account_id,
+            "np_communication_id": np_communication_id,
+        }
 
+        def _attempt(country, language):
+            # PSNOutageError intentionally propagates to the worker loop for
+            # circuit-breaker handling; only swallow per-attempt non-outage errors.
+            try:
+                return self._execute_api_call(
+                    self._get_instance_for_job(job_type),
+                    profile,
+                    'game_details',
+                    country=country,
+                    language=language,
+                    **call_kwargs,
+                )
+            except PSNOutageError:
+                raise
+            except Exception:
+                logger.exception(f"get_details {country}/{language} failed")
+                return {}
+
+        details = _attempt('US', 'en-US')
         if self._details_is_populated(details):
             return details, False
 
         logger.info("Primary US/en-US response sparse; walking Asian-region fallbacks")
 
         for country, language in self.ASIAN_REGION_FALLBACKS:
-            # Each retry is an additional PSN API call; record it against a token so
-            # rate limiting stays honest even though the actual HTTP call rides on
-            # game_title.authenticator's session.
-            instance = self._get_instance_for_job(job_type)
-            try:
-                self._record_call(instance.token)
-            finally:
-                self._release_instance(instance)
-            try:
-                fallback = game_title.get_details(country=country, language=language)
-                candidate = fallback[0] if fallback else {}
-            except Exception:
-                logger.exception(f"Region fallback {country}/{language}: exception, continuing")
-                continue
+            candidate = _attempt(country, language)
             if self._details_is_populated(candidate):
                 logger.info(f"Region fallback {country}/{language}: populated concept details")
                 return candidate, True
@@ -2051,8 +2077,15 @@ class TokenKeeper:
                 api_platform = game.title_platform[0]
                 logger.warning(f"Platform mismatch for {title_id.title_id}: TitleID={title_id.platform}, Game={game.title_platform}. Using {api_platform}.")
 
-            game_title = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'game_title', title_id=title_id.title_id, platform=PlatformType(api_platform), account_id=profile.account_id, np_communication_id=game.np_communication_id)
-            if game_title:
+            details, used_fallback_region = self._get_details_with_region_fallback(
+                title_id=title_id.title_id,
+                platform=api_platform,
+                account_id=profile.account_id,
+                np_communication_id=game.np_communication_id,
+                profile=profile,
+                job_type=job_type,
+            )
+            if self._details_is_populated(details):
                 # Fix mismatch at source if API succeeded with corrected platform
                 if api_platform != title_id.platform:
                     old_platform = title_id.platform
@@ -2060,74 +2093,61 @@ class TokenKeeper:
                     title_id.save(update_fields=['platform'])
                     logger.info(f"Corrected TitleID {title_id.title_id} platform: {old_platform} -> {api_platform}")
 
-                details, used_fallback_region = self._get_details_with_region_fallback(game_title, job_type)
-                error_code = details.get('errorCode', None)
-                if error_code is None:
-                    concept, concept_created = PsnApiService.create_concept_from_details(details)
+                concept, concept_created = PsnApiService.create_concept_from_details(details)
 
-                    # Gate: data from a non-default (Asian) storefront may only be used
-                    # to initialize a NEW concept. It must never overwrite fields on an
-                    # existing concept; a later US/en-US sync is allowed to refresh as
-                    # usual via the concept_created=False, used_fallback_region=False path.
-                    if concept_created or not used_fallback_region:
-                        # English-path refresh: if we're seeing an existing concept via a
-                        # US/en-US response, upgrade its English-facing fields so concepts
-                        # originally seeded from an Asian fallback get their canonical
-                        # English title once we finally see it.
-                        if not concept_created and not used_fallback_region:
-                            PsnApiService.update_concept_english_fields(concept, details)
-                        release_date = details.get('defaultProduct', {}).get('releaseDate', None)
-                        if release_date is None:
-                            release_date = details.get('releaseDate', {}).get('date', '')
-                        concept.update_release_date(release_date)
-                        media_data = self._extract_media(details)
-                        concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
-                    else:
-                        logger.info(
-                            f"Concept {concept.concept_id} matched existing via Asian-region "
-                            f"fallback; skipping release_date/media overwrite"
-                        )
-                    game.add_concept(concept)
-                    detected_region = detect_region_from_details(details)
-                    if detected_region:
-                        if title_id.region == 'IP':
-                            title_id.region = detected_region
-                            title_id.save(update_fields=['region'])
-                        game.add_region(detected_region)
-                    else:
-                        game.add_region(title_id.region)
-                    concept.add_title_id(title_id.title_id)
-                    concept.check_and_mark_regional()
-
-                    # IGDB enrichment for newly created concepts (best-effort).
-                    # Deferred to sync_complete so every Game for the concept is
-                    # attached before matching runs — _pick_search_title needs the
-                    # full game set to distinguish single-game concepts from
-                    # multi-game compilations.
-                    if concept_created:
-                        self._defer_igdb_enrich(profile_id, concept)
-
-                    profile.increment_sync_progress()
-                    logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+                # Gate: data from a non-default (Asian) storefront may only be used
+                # to initialize a NEW concept. It must never overwrite fields on an
+                # existing concept; a later US/en-US sync is allowed to refresh as
+                # usual via the concept_created=False, used_fallback_region=False path.
+                if concept_created or not used_fallback_region:
+                    # English-path refresh: if we're seeing an existing concept via a
+                    # US/en-US response, upgrade its English-facing fields so concepts
+                    # originally seeded from an Asian fallback get their canonical
+                    # English title once we finally see it.
+                    if not concept_created and not used_fallback_region:
+                        PsnApiService.update_concept_english_fields(concept, details)
+                    release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+                    if release_date is None:
+                        release_date = details.get('releaseDate', {}).get('date', '')
+                    concept.update_release_date(release_date)
+                    media_data = self._extract_media(details)
+                    concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
                 else:
-                    profile.increment_sync_progress()
-                    if game.concept is None:
-                        region_code = detect_asian_language(game.title_name)
-                        if not region_code == 'Unknown':
-                            game.add_region(region_code)
-                            game.is_regional = True
-                            game.save(update_fields=['is_regional'])
-                            logger.info(f"Game {game.title_name} detected as Asian regional.")
-                        else:
-                            logger.warning(f"Concept for {title_id.title_id} returned an error code.")
-                        default_concept = Concept.create_default_concept(game)
-                        game.add_concept(default_concept)
-                        self._defer_igdb_enrich(profile_id, default_concept)
-                        logger.info(f"Created default concept for {game.title_name}")
-                    logger.info(f"Title ID {title_id.title_id} sync'd successfully!")
-            else:
+                    logger.info(
+                        f"Concept {concept.concept_id} matched existing via Asian-region "
+                        f"fallback; skipping release_date/media overwrite"
+                    )
+                game.add_concept(concept)
+                detected_region = detect_region_from_details(details)
+                if detected_region:
+                    if title_id.region == 'IP':
+                        title_id.region = detected_region
+                        title_id.save(update_fields=['region'])
+                    game.add_region(detected_region)
+                else:
+                    game.add_region(title_id.region)
+                concept.add_title_id(title_id.title_id)
+                concept.check_and_mark_regional()
+
+                # IGDB enrichment for newly created concepts (best-effort).
+                # Deferred to sync_complete so every Game for the concept is
+                # attached before matching runs — _pick_search_title needs the
+                # full game set to distinguish single-game concepts from
+                # multi-game compilations.
+                if concept_created:
+                    self._defer_igdb_enrich(profile_id, concept)
+
                 profile.increment_sync_progress()
-                logger.warning(f"Couldn't get game_title for Title ID {title_id.title_id}")
+                logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+            else:
+                # PSN returned no usable metadata (empty, sparse, or errorCode). Fall
+                # back to a default concept so the Game still has something to group.
+                profile.increment_sync_progress()
+                error_code = details.get('errorCode') if details else None
+                if error_code is not None:
+                    logger.warning(f"Concept for {title_id.title_id} returned errorCode: {error_code}")
+                else:
+                    logger.warning(f"Couldn't get usable details for Title ID {title_id.title_id}")
                 if game.concept is None:
                     try:
                         region_code = detect_asian_language(game.title_name)
@@ -2139,7 +2159,7 @@ class TokenKeeper:
                         default_concept = Concept.create_default_concept(game)
                         game.add_concept(default_concept)
                         self._defer_igdb_enrich(profile_id, default_concept)
-                        logger.info(f"Created default concept for {game.title_name} (game_title was None)")
+                        logger.info(f"Created default concept for {game.title_name}")
                     except Exception:
                         logger.exception(f"Failed to create default concept for {game.title_name} (Title ID {title_id.title_id})")
         except PSNOutageError:
