@@ -26,10 +26,42 @@ Invariants:
     queue — pending / rejected / no_match don't have a vetted canonical.
 """
 
+import re
+
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from trophies.models import Concept, IGDBMatch, Game
+
+
+_WHITESPACE_RE = re.compile(r'\s+')
+
+
+def _normalize_for_merge(s):
+    """Aggressive normalization for auto-merge comparison.
+
+    Collapses differences that are semantically identical in almost all
+    cases, so auto-merge can handle them without admin review:
+      * " - " (space-dash-space, PSN's typical title/subtitle separator)
+        swapped to ": " BEFORE any other transformation — the surrounding
+        spaces are the signal that the dash is a separator rather than
+        a hyphen inside a word. "Spider-Man" keeps its hyphen;
+        "Spider - Man" becomes "spider:man".
+      * Casefold — handles PSN's ALL CAPS vs IGDB's proper case.
+      * All whitespace stripped (not just collapsed) — handles double
+        spaces, leading/trailing whitespace, and compound-word-vs-two-
+        word differences like "BioShock" vs "Bio Shock".
+
+    Order matters: separator swap must run before whitespace stripping,
+    otherwise "Spider - Man" and "Spider-Man" would both collapse to
+    "spider-man" and falsely merge.
+    """
+    if not s:
+        return ''
+    s = s.replace(' - ', ': ')
+    s = s.casefold()
+    s = _WHITESPACE_RE.sub('', s)
+    return s
 
 
 _LEGACY_PLATFORMS = frozenset({'PS3', 'PSP', 'PSVITA', 'PS2', 'PS1'})
@@ -176,12 +208,14 @@ class Command(BaseCommand):
             to IGDB (or IGDB + legacy suffix for the concept). Lock + mark
             reviewed without rewriting anything.
 
-          * CASE-ONLY: concept + every game match IGDB after casefold, but
-            the byte representations differ — typically PSN's ALL CAPS
-            titles vs IGDB's proper-case canonical. Rewrite concept to
-            canonical form (IGDB name + legacy suffix if legacy), rewrite
-            games to raw IGDB, then lock + mark reviewed. IGDB's form wins
-            unconditionally — even if IGDB is itself all-caps.
+          * NORMALIZED: concept + every game match IGDB after
+            `_normalize_for_merge` (casefold + whitespace collapse +
+            " - " -> ": " separator swap), but byte representations differ.
+            Covers PSN's ALL CAPS vs IGDB's proper case, double-space
+            artifacts, and PSN's " - " title/subtitle separator vs IGDB's
+            ":" convention. Rewrite concept to canonical form (IGDB name +
+            legacy suffix if legacy), rewrite games to raw IGDB, then lock
+            + mark reviewed. IGDB's form wins unconditionally.
         """
         qs = (
             IGDBMatch.objects
@@ -195,7 +229,7 @@ class Command(BaseCommand):
             qs = qs.filter(concept__concept_id=options['concept_id'])
 
         exact_locked = 0
-        case_merged = 0
+        normalized_merged = 0
         game_lock_count = 0
         now = timezone.now()
 
@@ -215,28 +249,31 @@ class Command(BaseCommand):
             concept_exact = concept_title in (igdb_name, canonical_concept_title)
             games_exact = all(g.title_name == igdb_name for g in games)
 
-            # Case-insensitive fallback. IGDB's casing wins unconditionally —
-            # all-caps IGDB will overwrite proper-case PSN, and vice versa.
-            concept_case = False
-            games_case = False
+            # Normalized fallback. Casefold + whitespace collapse + " - " -> ":"
+            # swap. IGDB's form wins unconditionally — all-caps IGDB will
+            # overwrite proper-case PSN and vice versa.
+            concept_norm = False
+            games_norm = False
             if not concept_exact:
-                concept_case = concept_title.casefold() in (
-                    igdb_name.casefold(), canonical_concept_title.casefold(),
+                ct_norm = _normalize_for_merge(concept_title)
+                concept_norm = ct_norm in (
+                    _normalize_for_merge(igdb_name),
+                    _normalize_for_merge(canonical_concept_title),
                 )
             if not games_exact:
-                igdb_cf = igdb_name.casefold()
-                games_case = all(
+                igdb_norm = _normalize_for_merge(igdb_name)
+                games_norm = all(
                     g.title_name == igdb_name
-                    or (g.title_name or '').casefold() == igdb_cf
+                    or _normalize_for_merge(g.title_name) == igdb_norm
                     for g in games
                 )
 
-            concept_ok = concept_exact or concept_case
-            games_ok = games_exact or games_case
+            concept_ok = concept_exact or concept_norm
+            games_ok = games_exact or games_norm
             if not concept_ok or not games_ok:
                 continue
 
-            needs_rewrite = concept_case or not games_exact
+            needs_rewrite = concept_norm or not games_exact
 
             # Apply title rewrites for the case-merge branch.
             concept_fields = []
@@ -264,16 +301,16 @@ class Command(BaseCommand):
                         game_lock_count += 1
 
             if needs_rewrite:
-                case_merged += 1
+                normalized_merged += 1
             else:
                 exact_locked += 1
 
-        if exact_locked or case_merged:
+        if exact_locked or normalized_merged:
             parts = []
             if exact_locked:
                 parts.append(f'{exact_locked} exact-match lock(s)')
-            if case_merged:
-                parts.append(f'{case_merged} case-only merge(s)')
+            if normalized_merged:
+                parts.append(f'{normalized_merged} normalized merge(s)')
             parts.append(f'{game_lock_count} game lock(s) applied')
             self.stdout.write(self.style.SUCCESS(
                 'Auto-resolved: ' + '; '.join(parts) + '.'
