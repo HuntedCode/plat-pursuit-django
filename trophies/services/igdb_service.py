@@ -899,29 +899,36 @@ class IGDBService:
     def _pick_best_non_dlc(cls, concept, results, search_title=None):
         """Try to pick the best match, preferring non-DLC results.
 
-        First tries all results with DLC filtered out. If that yields nothing,
-        tries again with DLC included (some PSN "games" are legitimately DLC
-        with their own trophy lists).
+        Scoring pools, in preference order:
+          1. Non-DLC results, evaluated under BOTH exact_name and fuzzy_name
+             methods. Absolute best across the two wins — we don't stop at
+             the first method that produces any match. Previous behavior
+             returned the first exact_name hit even if fuzzy_name would
+             have scored a different result in the pool higher.
+          2. All results (DLC included) as a fallback if non-DLC scored
+             nothing. Same across-both-methods logic.
 
         `search_title` is forwarded through to scoring so title similarity
         is computed against the string we searched with.
         """
-        # Filter out likely DLC entries
         non_dlc = [r for r in results if not _DLC_NAME_RE.search(r.get('name', ''))]
 
-        if non_dlc:
+        def score_pool(pool):
+            """Return best (igdb_data, confidence, method) across both methods."""
+            best = None
             for method in ('exact_name', 'fuzzy_name'):
-                best = cls._pick_best_match(concept, non_dlc, method, search_title=search_title)
-                if best:
-                    return best
+                candidate = cls._pick_best_match(concept, pool, method, search_title=search_title)
+                if candidate and (best is None or candidate[1] > best[1]):
+                    best = candidate
+            return best
 
-        # Fall back to all results (DLC included) if no non-DLC match found
-        for method in ('exact_name', 'fuzzy_name'):
-            best = cls._pick_best_match(concept, results, method, search_title=search_title)
-            if best:
-                return best
+        if non_dlc:
+            picked = score_pool(non_dlc)
+            if picked:
+                return picked
 
-        return None
+        # Fall back to all results (DLC included) if non-DLC scored nothing
+        return score_pool(results)
 
     @classmethod
     def _pick_best_match(cls, concept, results, method, search_title=None):
