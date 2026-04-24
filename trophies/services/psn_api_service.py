@@ -303,11 +303,20 @@ class PsnApiService:
 
         new_title = details.get('nameEn') or details.get('name', '')
         if new_title and concept.unified_title != new_title:
+            # Admin title-lock: the concept's unified_title was manually
+            # curated (typically via `review_title_merges`). Sync must not
+            # touch it, period.
+            if concept.title_lock:
+                logger.info(
+                    f'Skipping unified_title update for concept {concept.concept_id}: '
+                    f'title_lock=True (current: "{concept.unified_title}", '
+                    f'PSN: "{new_title}")'
+                )
             # CJK-regression guard: once a concept's title is Latin (either
             # natively or promoted via IGDB rename), don't let a later PSN
             # sync overwrite it back to a CJK form. Without this, a Japanese
             # PSN sync response would undo our IGDB-English rename.
-            if (_CJK_PATTERN.search(new_title)
+            elif (_CJK_PATTERN.search(new_title)
                     and concept.unified_title
                     and not _CJK_PATTERN.search(concept.unified_title)):
                 logger.info(

@@ -676,14 +676,20 @@ class ConceptFranchiseInline(admin.TabularInline):
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'concept_id', 'unified_title', 'family_display',
-        'release_date', 'publisher_name', 'genres',
+        'id', 'concept_id', 'unified_title', 'title_lock', 'title_reviewed_at',
+        'family_display', 'release_date', 'publisher_name', 'genres',
     )
     list_select_related = ('family',)
-    list_filter = ('family__is_verified',)
+    list_filter = ('family__is_verified', 'title_lock')
     search_fields = ('concept_id', 'unified_title', 'family__canonical_name')
     raw_id_fields = ('family',)
-    actions = ['duplicate_concept', 'lock_games', 'unlock_games']
+    readonly_fields = ('title_reviewed_at',)
+    actions = [
+        'duplicate_concept',
+        'lock_games', 'unlock_games',
+        'lock_titles', 'unlock_titles',
+        'clear_title_review',
+    ]
     inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
 
     def family_display(self, obj):
@@ -711,6 +717,24 @@ class ConceptAdmin(admin.ModelAdmin):
             updated = concept.games.filter(concept_lock=True).update(concept_lock=False)
             count += updated
         messages.success(request, f"Unlocked concept on {count} game(s).")
+
+    @admin.action(description="Lock title (PSN sync won't overwrite unified_title)")
+    def lock_titles(self, request, queryset):
+        count = queryset.filter(title_lock=False).update(title_lock=True)
+        messages.success(request, f"Locked title on {count} concept(s).")
+
+    @admin.action(description="Unlock title (allow PSN sync to update unified_title)")
+    def unlock_titles(self, request, queryset):
+        count = queryset.filter(title_lock=True).update(title_lock=False)
+        messages.success(request, f"Unlocked title on {count} concept(s).")
+
+    @admin.action(description="Clear title review (re-surface in review_title_merges)")
+    def clear_title_review(self, request, queryset):
+        count = queryset.filter(title_reviewed_at__isnull=False).update(title_reviewed_at=None)
+        messages.success(
+            request,
+            f"Cleared title_reviewed_at on {count} concept(s). They'll re-surface on next review_title_merges run."
+        )
 
     @admin.action(description="Duplicate selected concepts")
     def duplicate_concept(self, request, queryset):

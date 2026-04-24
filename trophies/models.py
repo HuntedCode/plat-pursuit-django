@@ -537,6 +537,12 @@ class Game(models.Model):
         if self.trophy_groups.exists() and not concept.concept_trophy_groups.exists():
             from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
             ConceptTrophyGroupService.sync_for_concept(concept)
+        # Invalidate the target concept's title review: a new sibling game
+        # might bring a PSN title variant that needs merging. Don't touch
+        # title_lock — the admin's lock decision stands.
+        if concept.title_reviewed_at is not None:
+            concept.title_reviewed_at = None
+            concept.save(update_fields=['title_reviewed_at'])
         if old_concept and old_concept.games.count() == 0:
             concept.absorb(old_concept)
             old_concept.delete()
@@ -714,6 +720,27 @@ class GameFamily(models.Model):
 class Concept(models.Model):
     concept_id = models.CharField(max_length=50, unique=True)
     unified_title = models.CharField(max_length=255, blank=True)
+    title_lock = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, PSN sync (`update_concept_english_fields`) will not "
+            "overwrite `unified_title`. Set by admins who've manually merged a "
+            "concept's title to the IGDB canonical (via `review_title_merges` "
+            "or the admin), so subsequent regional sync passes don't regress "
+            "the curated title back to the raw PSN titleName."
+        ),
+    )
+    title_reviewed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            "Set by `review_title_merges` when an admin approves, leaves, or "
+            "merges this concept's title. Distinct from title_lock: this flag "
+            "only means 'already reviewed, don't re-surface', while title_lock "
+            "means 'PSN sync can't touch this'. Cleared automatically by "
+            "Game.add_concept when a new game joins the concept, so a fresh "
+            "sibling title gets a re-review."
+        ),
+    )
     title_ids = models.JSONField(default=list, blank=True)
     family = models.ForeignKey(
         GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='concepts'
