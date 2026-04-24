@@ -168,11 +168,20 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------
 
     def _auto_lock_matching(self, options):
-        """Lock and mark reviewed any concept whose titles already match IGDB.
+        """Auto-resolve concepts whose titles already match IGDB.
 
-        These are the "nothing to do" rows that don't need human review —
-        we just want to curate them so PSN sync can't regress them and so
-        they don't re-surface forever in the queue.
+        Two resolution flavours:
+
+          * EXACT: concept title + every game's title_name are byte-equal
+            to IGDB (or IGDB + legacy suffix for the concept). Lock + mark
+            reviewed without rewriting anything.
+
+          * CASE-ONLY: concept + every game match IGDB after casefold, but
+            the byte representations differ — typically PSN's ALL CAPS
+            titles vs IGDB's proper-case canonical. Rewrite concept to
+            canonical form (IGDB name + legacy suffix if legacy), rewrite
+            games to raw IGDB, then lock + mark reviewed. IGDB's form wins
+            unconditionally — even if IGDB is itself all-caps.
         """
         qs = (
             IGDBMatch.objects
@@ -185,7 +194,8 @@ class Command(BaseCommand):
         if options.get('concept_id'):
             qs = qs.filter(concept__concept_id=options['concept_id'])
 
-        locked_count = 0
+        exact_locked = 0
+        case_merged = 0
         game_lock_count = 0
         now = timezone.now()
 
@@ -197,39 +207,76 @@ class Command(BaseCommand):
             suggested_suffix = ''
             if self._is_legacy(games):
                 suggested_suffix = self._legacy_suffix(games)
+            canonical_concept_title = igdb_name + suggested_suffix
 
-            # "Perfect match" means:
-            #   * concept title is either exactly igdb_name, or
-            #     igdb_name + legacy_suffix (the canonical form).
-            #   * every game's title_name is exactly igdb_name.
-            concept_ok = (
-                concept.unified_title == igdb_name
-                or (suggested_suffix and concept.unified_title == igdb_name + suggested_suffix)
-            )
-            games_ok = all(g.title_name == igdb_name for g in games)
+            concept_title = concept.unified_title or ''
 
+            # Exact match first — cheapest check.
+            concept_exact = concept_title in (igdb_name, canonical_concept_title)
+            games_exact = all(g.title_name == igdb_name for g in games)
+
+            # Case-insensitive fallback. IGDB's casing wins unconditionally —
+            # all-caps IGDB will overwrite proper-case PSN, and vice versa.
+            concept_case = False
+            games_case = False
+            if not concept_exact:
+                concept_case = concept_title.casefold() in (
+                    igdb_name.casefold(), canonical_concept_title.casefold(),
+                )
+            if not games_exact:
+                igdb_cf = igdb_name.casefold()
+                games_case = all(
+                    g.title_name == igdb_name
+                    or (g.title_name or '').casefold() == igdb_cf
+                    for g in games
+                )
+
+            concept_ok = concept_exact or concept_case
+            games_ok = games_exact or games_case
             if not concept_ok or not games_ok:
                 continue
 
+            needs_rewrite = concept_case or not games_exact
+
+            # Apply title rewrites for the case-merge branch.
             concept_fields = []
+            if needs_rewrite and concept_title != canonical_concept_title:
+                concept.unified_title = canonical_concept_title
+                concept_fields.append('unified_title')
             if not concept.title_lock:
                 concept.title_lock = True
                 concept_fields.append('title_lock')
             concept.title_reviewed_at = now
             concept_fields.append('title_reviewed_at')
             concept.save(update_fields=concept_fields)
-            locked_count += 1
 
             for g in games:
+                g_fields = []
+                if needs_rewrite and g.title_name != igdb_name:
+                    g.title_name = igdb_name
+                    g_fields.append('title_name')
                 if not g.lock_title:
                     g.lock_title = True
-                    g.save(update_fields=['lock_title'])
-                    game_lock_count += 1
+                    g_fields.append('lock_title')
+                if g_fields:
+                    g.save(update_fields=g_fields)
+                    if 'lock_title' in g_fields:
+                        game_lock_count += 1
 
-        if locked_count:
+            if needs_rewrite:
+                case_merged += 1
+            else:
+                exact_locked += 1
+
+        if exact_locked or case_merged:
+            parts = []
+            if exact_locked:
+                parts.append(f'{exact_locked} exact-match lock(s)')
+            if case_merged:
+                parts.append(f'{case_merged} case-only merge(s)')
+            parts.append(f'{game_lock_count} game lock(s) applied')
             self.stdout.write(self.style.SUCCESS(
-                f'Auto-locked {locked_count} concept(s) already matching IGDB '
-                f'({game_lock_count} game lock(s) applied).'
+                'Auto-resolved: ' + '; '.join(parts) + '.'
             ))
         else:
             self.stdout.write('Auto-lock pre-pass: nothing to do.')
