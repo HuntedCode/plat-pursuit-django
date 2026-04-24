@@ -11,7 +11,7 @@ from datetime import timedelta
 
 import pytz
 from django.core.cache import cache
-from django.db.models import Avg, Count, Max, Min, Q, Sum
+from django.db.models import Avg, Count, F, Max, Min, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -193,10 +193,16 @@ def invalidate_stats_cache(profile_id):
 # ---------------------------------------------------------------------------
 
 def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden=False):
-    """Compute every premium section together for efficient query batching."""
+    """Compute every premium section together for efficient query batching.
+
+    The orchestrator only prepares data that is shared across multiple
+    sections. Section-local data (e.g. the genre/theme/publisher/developer
+    joins that only `_compute_genre_breakdown` needs) is fetched inside
+    the section itself so the shared fetch stays small.
+    """
     from trophies.models import (
         EarnedTrophy, ProfileGame, ProfileGamification,
-        IGDBMatch, ConceptCompany, ConceptGenre, ConceptTheme, ConceptEngine,
+        IGDBMatch, ConceptEngine,
     )
 
     # Build game filter Q for queries that join through game
@@ -233,27 +239,9 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
                   'raw_response')
         }
 
-    # Shared fetch 4: developer + publisher data for concepts
-    dev_lookup = defaultdict(list)
-    pub_lookup = defaultdict(list)  # concept_id -> [company_name, ...]
-    if concept_ids:
-        for cc in (ConceptCompany.objects.filter(concept_id__in=concept_ids)
-                   .filter(Q(is_developer=True) | Q(is_publisher=True))
-                   .select_related('company')):
-            if cc.is_developer:
-                dev_lookup[cc.concept_id].append(cc.company)
-            if cc.is_publisher:
-                pub_lookup[cc.concept_id].append(cc.company.name)
-
-    # Shared fetch 5: normalized genre/theme/engine lookups (M2M)
-    genre_lookup = defaultdict(list)   # concept_id -> [genre_name, ...]
-    theme_lookup = defaultdict(list)   # concept_id -> [theme_name, ...]
+    # Shared fetch 4: engine lookup for _compute_game_library
     engine_lookup = defaultdict(list)  # concept_id -> [engine_name, ...]
     if concept_ids:
-        for cg in ConceptGenre.objects.filter(concept_id__in=concept_ids).select_related('genre'):
-            genre_lookup[cg.concept_id].append(cg.genre.name)
-        for ct in ConceptTheme.objects.filter(concept_id__in=concept_ids).select_related('theme'):
-            theme_lookup[ct.concept_id].append(ct.theme.name)
         for ce in ConceptEngine.objects.filter(concept_id__in=concept_ids).select_related('engine'):
             engine_lookup[ce.concept_id].append(ce.engine.name)
 
@@ -266,7 +254,7 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         'streaks': _compute_streaks(earned_timestamps, user_tz),
         'time_patterns': _compute_time_patterns(earned_timestamps, user_tz),
         'platforms': _compute_platform_breakdown(profile_games),
-        'genres': _compute_genre_breakdown(profile_games, dev_lookup, genre_lookup, theme_lookup, pub_lookup),
+        'genres': _compute_genre_breakdown(profile, exclude_shovelware, exclude_hidden),
         'library': _compute_game_library(profile_games, igdb_lookup, engine_lookup),
         'badges': _compute_badge_stats(profile, gamification),
         'challenges': _compute_challenge_progress(profile),
@@ -1080,17 +1068,43 @@ def _compute_time_patterns(earned_timestamps, user_tz):
 
 def _compute_platform_breakdown(profile_games):
     platforms = defaultdict(lambda: {'trophies': 0, 'games': 0, 'plats': 0, 'total_progress': 0})
+    cross_gen = 0
+    single_platform = 0
+    recent = None
+    latest_date = None
+    first_platform = None
+    earliest_date = None
 
+    # Single pass: accumulate platform aggregates, cross-gen counts, and
+    # first/most-recent platform markers together. Previous implementation
+    # walked profile_games five times; this is just iteration discipline,
+    # not a correctness change.
     for pg in profile_games:
         game = pg.game
         if not game or not game.title_platform:
             continue
-        for plat in game.title_platform:
-            platforms[plat]['games'] += 1
-            platforms[plat]['trophies'] += pg.earned_trophies_count
+
+        platform_list = game.title_platform
+        platform_count = len(platform_list)
+        if platform_count > 1:
+            cross_gen += 1
+        elif platform_count == 1:
+            single_platform += 1
+
+        for plat in platform_list:
+            bucket = platforms[plat]
+            bucket['games'] += 1
+            bucket['trophies'] += pg.earned_trophies_count
             if pg.has_plat:
-                platforms[plat]['plats'] += 1
-            platforms[plat]['total_progress'] += pg.progress or 0
+                bucket['plats'] += 1
+            bucket['total_progress'] += pg.progress or 0
+
+        if pg.last_played_date_time and (latest_date is None or pg.last_played_date_time > latest_date):
+            latest_date = pg.last_played_date_time
+            recent = platform_list[0]
+        if pg.first_played_date_time and (earliest_date is None or pg.first_played_date_time < earliest_date):
+            earliest_date = pg.first_played_date_time
+            first_platform = platform_list[0]
 
     # Sort by trophies desc
     sorted_platforms = sorted(platforms.items(), key=lambda x: x[1]['trophies'], reverse=True)
@@ -1107,34 +1121,6 @@ def _compute_platform_breakdown(profile_games):
             'avg_progress': round(data['total_progress'] / game_count, 1),
             'trophies_per_game': trophies_per_game,
         })
-
-    # Cross-gen count (games on multiple platforms)
-    cross_gen = sum(
-        1 for pg in profile_games
-        if pg.game and pg.game.title_platform and len(pg.game.title_platform) > 1
-    )
-    single_platform = sum(
-        1 for pg in profile_games
-        if pg.game and pg.game.title_platform and len(pg.game.title_platform) == 1
-    )
-
-    # Most recent platform
-    recent = None
-    latest_date = None
-    for pg in profile_games:
-        if pg.game and pg.game.title_platform and pg.last_played_date_time:
-            if latest_date is None or pg.last_played_date_time > latest_date:
-                latest_date = pg.last_played_date_time
-                recent = pg.game.title_platform[0]
-
-    # First platform played
-    first_platform = None
-    earliest_date = None
-    for pg in profile_games:
-        if pg.game and pg.game.title_platform and pg.first_played_date_time:
-            if earliest_date is None or pg.first_played_date_time < earliest_date:
-                earliest_date = pg.first_played_date_time
-                first_platform = pg.game.title_platform[0]
 
     # Highlight winners (from items already computed)
     most_plats_platform = None
@@ -1167,78 +1153,122 @@ def _compute_platform_breakdown(profile_games):
 # Section: Genre Breakdown
 # ---------------------------------------------------------------------------
 
-def _compute_genre_breakdown(profile_games, dev_lookup=None, genre_lookup=None, theme_lookup=None, pub_lookup=None):
-    from trophies.util_modules.constants import GENRE_DISPLAY_NAMES
+def _compute_genre_breakdown(profile, exclude_shovelware=False, exclude_hidden=False):
+    """Aggregate genre/theme/publisher/developer stats for a profile's library.
 
-    genre_lookup = genre_lookup or {}
-    theme_lookup = theme_lookup or {}
-    pub_lookup = pub_lookup or {}
+    Pushes the per-bucket counts into Postgres via GROUP BY queries rather
+    than materializing the full ProfileGame list and iterating in Python.
+    For a user with hundreds of games this drops the working set from
+    thousands of ORM+M2M rows down to a handful of small aggregate result
+    sets, which is the biggest memory win in the stats page pipeline.
+    """
+    from trophies.models import ProfileGame, ConceptCompany
+    from trophies.util_modules.constants import GENRE_DISPLAY_NAMES
 
     # Indie threshold: company_size 1-3 (up to 50 employees)
     INDIE_MAX_SIZE = 3
 
-    genres = defaultdict(lambda: {'games': 0, 'plats': 0, 'total_progress': 0})
-    themes = defaultdict(lambda: {'games': 0, 'plats': 0})
-    publishers = defaultdict(lambda: {'games': 0, 'plats': 0})
-    developers = defaultdict(lambda: {'games': 0, 'plats': 0})
-    dev_countries = Counter()  # ISO numeric code -> count
-    dev_founding_years = []  # (year, company_name) tuples
-    seen_companies = set()  # avoid counting same company twice
-    indie_count = 0
-    aaa_count = 0
-    indie_plats = 0
-    aaa_plats = 0
+    # Base profile-game queryset with toggle filters applied. Used as the join
+    # root for most aggregates (games the profile owns and that survive filters).
+    base_pg = ProfileGame.objects.filter(profile=profile)
+    game_filter_q = _build_game_filter_q(exclude_shovelware, exclude_hidden)
+    if game_filter_q:
+        base_pg = base_pg.filter(game_filter_q)
 
-    for pg in profile_games:
-        concept = pg.game.concept if pg.game else None
-        concept_id = concept.id if concept else None
-        # Use IGDB genres exclusively (normalized M2M)
-        genre_list = genre_lookup.get(concept_id, []) if concept_id else []
-        theme_list = theme_lookup.get(concept_id, []) if concept_id else []
-        # Use IGDB publisher data exclusively (normalized M2M)
-        pub_names = pub_lookup.get(concept_id, []) if concept_id else []
+    # ---- Genres (name + games + plats + total_progress for avg) --------------
+    genre_rows = list(
+        base_pg
+        .filter(game__concept__concept_genres__genre__name__isnull=False)
+        .values(name=F('game__concept__concept_genres__genre__name'))
+        .annotate(
+            games=Count('id', distinct=True),
+            plats=Count('id', distinct=True, filter=Q(has_plat=True)),
+            total_progress=Sum('progress'),
+        )
+        .order_by()
+    )
 
-        for genre in genre_list:
-            genres[genre]['games'] += 1
-            if pg.has_plat:
-                genres[genre]['plats'] += 1
-            genres[genre]['total_progress'] += pg.progress or 0
+    # ---- Themes (name + games + plats) ---------------------------------------
+    theme_rows = list(
+        base_pg
+        .filter(game__concept__concept_themes__theme__name__isnull=False)
+        .values(name=F('game__concept__concept_themes__theme__name'))
+        .annotate(
+            games=Count('id', distinct=True),
+            plats=Count('id', distinct=True, filter=Q(has_plat=True)),
+        )
+        .order_by()
+    )
 
-        for theme in theme_list:
-            themes[theme]['games'] += 1
-            if pg.has_plat:
-                themes[theme]['plats'] += 1
+    # ---- Publishers (top N by plats) -----------------------------------------
+    publisher_rows = list(
+        base_pg
+        .filter(game__concept__concept_companies__is_publisher=True)
+        .values(name=F('game__concept__concept_companies__company__name'))
+        .annotate(
+            games=Count('id', distinct=True),
+            plats=Count('id', distinct=True, filter=Q(has_plat=True)),
+        )
+        .order_by()
+    )
 
-        for pub_name in pub_names:
-            publishers[pub_name]['games'] += 1
-            if pg.has_plat:
-                publishers[pub_name]['plats'] += 1
+    # ---- Developers (top N by plats) -----------------------------------------
+    developer_rows = list(
+        base_pg
+        .filter(game__concept__concept_companies__is_developer=True)
+        .values(name=F('game__concept__concept_companies__company__name'))
+        .annotate(
+            games=Count('id', distinct=True),
+            plats=Count('id', distinct=True, filter=Q(has_plat=True)),
+        )
+        .order_by()
+    )
 
-        # Developer stats from pre-fetched lookup + indie/AAA classification
-        if concept and dev_lookup:
-            devs = dev_lookup.get(concept.id, [])
-            for company in devs:
-                developers[company.name]['games'] += 1
-                if pg.has_plat:
-                    developers[company.name]['plats'] += 1
-                # Track country and founding year (once per company)
-                if company.id not in seen_companies:
-                    seen_companies.add(company.id)
-                    if company.country:
-                        dev_countries[company.country] += 1
-                    if company.start_date:
-                        dev_founding_years.append((company.start_date.year, company.name))
-            # Classify by largest developer's company_size
-            if devs:
-                max_size = max((c.company_size or 0) for c in devs)
-                if 0 < max_size <= INDIE_MAX_SIZE:
-                    indie_count += 1
-                    if pg.has_plat:
-                        indie_plats += 1
-                elif max_size > INDIE_MAX_SIZE:
-                    aaa_count += 1
-                    if pg.has_plat:
-                        aaa_plats += 1
+    # ---- Developer studios (country + founding year, once per company) -------
+    # Each row is one distinct Company that developed at least one game in the
+    # filtered library. Done as a separate query so we're not repeating the
+    # above join with extra columns and inflating GROUP BY cardinality.
+    library_concept_ids = base_pg.values_list('game__concept_id', flat=True).distinct()
+    dev_companies = list(
+        ConceptCompany.objects
+        .filter(is_developer=True, concept_id__in=library_concept_ids)
+        .values('company_id', 'company__name', 'company__country', 'company__start_date')
+        .distinct()
+    )
+    dev_countries = Counter()
+    dev_founding_years = []
+    for row in dev_companies:
+        if row['company__country']:
+            dev_countries[row['company__country']] += 1
+        if row['company__start_date']:
+            dev_founding_years.append((row['company__start_date'].year, row['company__name']))
+
+    # ---- Indie vs AAA classification (max developer company_size per game) ---
+    # One row per profile-game with the max company_size across its developers.
+    indie_rows = (
+        base_pg
+        .filter(game__concept__concept_companies__is_developer=True)
+        .values('id', 'has_plat')
+        .annotate(max_dev_size=Max('game__concept__concept_companies__company__company_size'))
+    )
+    indie_count = aaa_count = indie_plats = aaa_plats = 0
+    for row in indie_rows:
+        size = row['max_dev_size'] or 0
+        if 0 < size <= INDIE_MAX_SIZE:
+            indie_count += 1
+            if row['has_plat']:
+                indie_plats += 1
+        elif size > INDIE_MAX_SIZE:
+            aaa_count += 1
+            if row['has_plat']:
+                aaa_plats += 1
+
+    # Normalize aggregate rows into defaultdicts so the display-building code
+    # downstream stays unchanged.
+    genres = {r['name']: {'games': r['games'], 'plats': r['plats'], 'total_progress': r['total_progress'] or 0} for r in genre_rows}
+    themes = {r['name']: {'games': r['games'], 'plats': r['plats']} for r in theme_rows}
+    publishers = {r['name']: {'games': r['games'], 'plats': r['plats']} for r in publisher_rows if r['name']}
+    developers = {r['name']: {'games': r['games'], 'plats': r['plats']} for r in developer_rows if r['name']}
 
     # Sort genres by plats desc
     sorted_genres = sorted(genres.items(), key=lambda x: x[1]['plats'], reverse=True)
