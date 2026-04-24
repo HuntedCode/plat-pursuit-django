@@ -1,10 +1,13 @@
+import logging
 import re
 
-from django.http import HttpResponsePermanentRedirect
+from django.http import HttpResponseRedirect, HttpResponsePermanentRedirect
 from django.utils import timezone
 from django.conf import settings
 import pytz
 import threading
+
+logger = logging.getLogger(__name__)
 
 # Thread-local storage for current request
 _thread_locals = threading.local()
@@ -39,6 +42,66 @@ _BOT_REDIRECT_RULES = (
         '/my-pursuit/badges/{slug}/',
     ),
 )
+
+
+# Paths that the Cloudflare origin guard protects. Scoped narrowly to the
+# profile-scoped detail views that dominate crash-time traffic in Render logs;
+# other routes (home, static assets, health checks on `/`) are intentionally
+# left alone so a misconfigured proxy cannot lock us out of our own site.
+_CLOUDFLARE_GUARDED_PATH_RE = re.compile(
+    r'^/(?:games/[^/]+|(?:my-pursuit/badges|badges|achievements/badges)/[^/]+)/[^/]+/?$'
+)
+
+# Public front door. Direct-origin requests for guarded paths are bounced
+# back to this host so they re-enter through Cloudflare's proxy, where Bot
+# Fight Mode and WAF rules can evaluate them.
+_CLOUDFLARE_PUBLIC_ORIGIN = 'https://platpursuit.com'
+
+
+class CloudflareOriginGuardMiddleware:
+    """Bounce direct-origin requests for guarded paths back through Cloudflare.
+
+    Every request that actually transits Cloudflare carries a `CF-Ray` header.
+    A request for a guarded path that *lacks* this header reached Django by
+    skipping the proxy entirely — typically a scraper that cached the origin
+    IP during the window when the public Render subdomain exposed it. We
+    redirect those hits to the public hostname so Cloudflare has a chance to
+    inspect them (Bot Fight Mode, Managed Rules, etc.) before they reach the
+    expensive view code.
+
+    The guard is deliberately narrow (profile-scoped detail URLs only): we do
+    not want a CF outage to lock legitimate users out of the rest of the
+    site, and Render's own health checks hit `/` internally without a
+    CF-Ray header.
+
+    Fires an INFO log per catch with a grep-friendly `CF_BYPASS_BLOCKED`
+    prefix so operators can spot-check how much direct-origin traffic is
+    being funneled back through the proxy.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            _CLOUDFLARE_GUARDED_PATH_RE.match(request.path)
+            and not request.META.get('HTTP_CF_RAY')
+        ):
+            ua = request.META.get('HTTP_USER_AGENT', '')
+            logger.info(
+                'CF_BYPASS_BLOCKED path=%s ip=%s ua=%r',
+                request.path,
+                request.META.get('REMOTE_ADDR', ''),
+                ua[:120],
+            )
+            target = f'{_CLOUDFLARE_PUBLIC_ORIGIN}{request.path}'
+            qs = request.META.get('QUERY_STRING', '')
+            if qs:
+                target = f'{target}?{qs}'
+            # 302, not 301: we don't want scrapers or caches to memorize this
+            # as a permanent move — behavior depends on runtime CF-Ray state.
+            return HttpResponseRedirect(target)
+        return self.get_response(request)
 
 
 class BotCanonicalRedirectMiddleware:

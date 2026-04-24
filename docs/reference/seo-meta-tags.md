@@ -17,7 +17,7 @@ The design prioritizes DRY: views set a single `seo_description` string and it f
 | `core/sitemaps.py` | Sitemap classes for all content types |
 | `plat_pursuit/urls.py` | Sitemap registration at `/sitemap.xml` |
 | `static/robots.txt` | Robots directives (served via `RobotsTxtView`) |
-| `plat_pursuit/middleware.py` | `BotCanonicalRedirectMiddleware` enforces crawler policy for bots that ignore `robots.txt` |
+| `plat_pursuit/middleware.py` | `BotCanonicalRedirectMiddleware` enforces crawler policy for bots that ignore `robots.txt`; `CloudflareOriginGuardMiddleware` bounces direct-origin scrapers back through Cloudflare |
 
 ## SEO Block System (base.html)
 
@@ -119,6 +119,45 @@ Query strings (e.g. `?tier=3` on badge detail) are preserved through the redirec
 - **Not cloaking.** Google explicitly endorses canonical redirects for duplicate content. This is the textbook solution.
 - **Do not extend to pages without a canonical non-profile variant.** `/community/profiles/<user>/*` has no canonical strip-to; the profile IS the page. The current regex correctly ignores those paths.
 - **Tests live in `plat_pursuit/tests/test_middleware.py`.** Add cases here when extending the regex.
+
+## Crawler Policy: Cloudflare Origin Guard
+
+`CloudflareOriginGuardMiddleware` (in `plat_pursuit/middleware.py`, wired just before `BotCanonicalRedirectMiddleware`) 302-redirects direct-origin requests for the same profile-scoped paths back through Cloudflare's public hostname. It's a defense against scrapers that cached the origin IP (e.g. during the window when the Render `*.onrender.com` subdomain was publicly resolvable) and continue connecting direct-origin while spoofing `Host: platpursuit.com`.
+
+### How the guard decides
+
+Cloudflare stamps every proxied request with a `CF-Ray` header. If that header is missing on a guarded path, the request reached Django without traversing the proxy. The middleware bounces those to `https://platpursuit.com<path>` with a 302 so the next hop re-enters through Cloudflare, where Bot Fight Mode and WAF rules can evaluate it.
+
+### Scope
+
+Deliberately narrow — only the profile-scoped patterns covered by `_CLOUDFLARE_GUARDED_PATH_RE`:
+
+| Path pattern | Behavior without `CF-Ray` |
+|--------------|---------------------------|
+| `/games/<np_id>/<username>/` | 302 → `https://platpursuit.com/<path>` |
+| `/my-pursuit/badges/<slug>/<username>/` | 302 → `https://platpursuit.com/<path>` |
+| `/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
+| `/achievements/badges/<slug>/<username>/` (legacy) | 302 → `https://platpursuit.com/<path>` |
+| Everything else (`/`, static, browse, etc.) | Unaffected — passes through |
+
+The narrow scope is intentional: Render's internal health checks hit `/` without a `CF-Ray` header, and a broader guard would trip them and cause false restarts.
+
+### Diagnostics
+
+Every caught bypass emits an INFO-level log line with the grep-friendly prefix `CF_BYPASS_BLOCKED`:
+
+```
+INFO 2026-XX-XX HH:MM:SS,NNN plat_pursuit.middleware CF_BYPASS_BLOCKED path=... ip=... ua='...'
+```
+
+These flow through the standard `plat_pursuit` logger → console handler → stdout → Render log viewer. Search for `CF_BYPASS_BLOCKED` in Render logs to quantify how much direct-origin traffic is being funneled back through the proxy.
+
+### Gotchas
+
+- **302, not 301.** Response is intentionally not permanent. Whether a given request belongs behind the guard depends on runtime CF-Ray presence, not a URL property, so caching the redirect would be wrong.
+- **Order matters.** Wired ahead of `BotCanonicalRedirectMiddleware` so direct-IP hits get funneled back through CF before the bot-UA canonical redirect evaluates — otherwise known-bot direct-origin hits would 301 to the non-profile canonical (which isn't guarded) and never pass through CF at all.
+- **Depends on Cloudflare fronting real traffic.** If CF is bypassed for legitimate users (e.g. DNS misconfiguration, gray-cloud record), the guard will redirect them too. Verify CF is proxying with `curl -sI https://platpursuit.com/ | grep cf-ray` before assuming the guard is safe.
+- **Tests live in `plat_pursuit/tests/test_middleware.py`** (`CloudflareOriginGuardMiddlewareTests` class).
 
 ## Key Flows
 

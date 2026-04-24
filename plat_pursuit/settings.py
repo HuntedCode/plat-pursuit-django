@@ -234,6 +234,11 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Bounces direct-origin requests for profile-scoped URLs back through
+    # Cloudflare so Bot Fight Mode / WAF can evaluate them. Runs ahead of
+    # the bot redirect so direct-IP scrapers hit CF before any Python-side
+    # routing happens. See plat_pursuit/middleware.py for rationale.
+    "plat_pursuit.middleware.CloudflareOriginGuardMiddleware",
     # Redirects bot requests for profile-scoped URLs to canonical pages before
     # any session/auth/ORM work. See plat_pursuit/middleware.py for rationale.
     "plat_pursuit.middleware.BotCanonicalRedirectMiddleware",
@@ -496,6 +501,11 @@ LOGGING = {
             'propagate': False,
         },
         'users': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'plat_pursuit': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,

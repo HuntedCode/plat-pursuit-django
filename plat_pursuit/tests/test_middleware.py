@@ -1,7 +1,10 @@
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
 
-from plat_pursuit.middleware import BotCanonicalRedirectMiddleware
+from plat_pursuit.middleware import (
+    BotCanonicalRedirectMiddleware,
+    CloudflareOriginGuardMiddleware,
+)
 
 
 def _passthrough(request):
@@ -116,3 +119,75 @@ class BotCanonicalRedirectMiddlewareTests(SimpleTestCase):
             ua='meta-webindexer/1.1',
         ))
         self.assertEqual(response.status_code, 200)
+
+
+class CloudflareOriginGuardMiddlewareTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = CloudflareOriginGuardMiddleware(_passthrough)
+
+    def _request(self, path, cf_ray=None, qs=''):
+        full_path = f'{path}?{qs}' if qs else path
+        headers = {}
+        if cf_ray is not None:
+            headers['HTTP_CF_RAY'] = cf_ray
+        return self.factory.get(full_path, **headers)
+
+    def test_guarded_path_without_cf_ray_redirects_to_public_origin(self):
+        response = self.middleware(self._request(
+            '/games/NPWR00352_00/deviousmeister/',
+        ))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            'https://platpursuit.com/games/NPWR00352_00/deviousmeister/',
+        )
+
+    def test_guarded_path_with_cf_ray_passes_through(self):
+        response = self.middleware(self._request(
+            '/games/NPWR00352_00/deviousmeister/',
+            cf_ray='9f16cd984feb2732-EWR',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'ok')
+
+    def test_guarded_badge_path_without_cf_ray_preserves_query_string(self):
+        response = self.middleware(self._request(
+            '/my-pursuit/badges/remedy/deviousmeister/',
+            qs='tier=3',
+        ))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            'https://platpursuit.com/my-pursuit/badges/remedy/deviousmeister/?tier=3',
+        )
+
+    def test_legacy_badge_prefix_without_cf_ray_is_guarded(self):
+        response = self.middleware(self._request(
+            '/badges/remedy/deviousmeister/',
+        ))
+        self.assertEqual(response.status_code, 302)
+
+    def test_canonical_paths_without_cf_ray_pass_through(self):
+        # Non-profile-scoped paths are intentionally unguarded so Render health
+        # checks on `/` and other non-expensive routes still serve normally.
+        for path in (
+            '/',
+            '/games/NPWR00352_00/',
+            '/my-pursuit/badges/remedy/',
+            '/community/profiles/someone/',
+            '/accounts/login/',
+        ):
+            with self.subTest(path=path):
+                response = self.middleware(self._request(path))
+                self.assertEqual(response.status_code, 200, msg=path)
+
+    def test_guard_logs_bypass_with_grep_friendly_tag(self):
+        with self.assertLogs('plat_pursuit.middleware', level='INFO') as captured:
+            self.middleware(self._request(
+                '/games/NPWR00352_00/deviousmeister/',
+            ))
+        self.assertTrue(
+            any('CF_BYPASS_BLOCKED' in msg for msg in captured.output),
+            f'expected a CF_BYPASS_BLOCKED log line, got: {captured.output}',
+        )
