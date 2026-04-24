@@ -1270,6 +1270,9 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
             if has_plat:
                 qs = qs.filter(trophies__trophy_type='platinum').distinct()
 
+            if self.request.GET.get('hide_shovelware'):
+                qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+
             # Sort within the capped pool
             if sort_val == 'alpha':
                 qs = annotate_ascii_name(qs)
@@ -1313,6 +1316,9 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
                     platform_q |= Q(game__title_platform__contains=plat)
                 qs = qs.filter(platform_q)
 
+            if self.request.GET.get('hide_shovelware'):
+                qs = qs.exclude(game__shovelware_status__in=['auto_flagged', 'manually_flagged'])
+
             # Sort within the capped pool
             if sort_val == 'alpha':
                 return qs.order_by(Lower('game__title_name'), 'trophy_group_name')
@@ -1345,6 +1351,7 @@ class RecentlyAddedView(HtmxListMixin, ProfileHotbarMixin, ListView):
         context['current_sort'] = self.request.GET.get('sort', 'recent')
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['has_platinum_checked'] = bool(self.request.GET.get('has_platinum'))
+        context['hide_shovelware_checked'] = bool(self.request.GET.get('hide_shovelware'))
         context['platform_choices'] = ALL_PLATFORMS
 
         # 30-day counts for category cards
