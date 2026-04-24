@@ -35,31 +35,58 @@ from trophies.models import Concept, IGDBMatch, Game
 
 
 _WHITESPACE_RE = re.compile(r'\s+')
+_AND_WORD_RE = re.compile(r'\band\b')
+
+# Unicode punctuation variants that render identically to their ASCII
+# counterparts but compare unequal. Normalized to ASCII before the
+# separator-swap + whitespace passes so Unicode dashes get caught too.
+_UNICODE_PUNCT_MAP = {
+    '\u2018': "'",   # left single quotation mark   '
+    '\u2019': "'",   # right single quotation mark  '
+    '\u201C': '"',   # left double quotation mark   "
+    '\u201D': '"',   # right double quotation mark  "
+    '\u2013': '-',   # en dash                      –
+    '\u2014': '-',   # em dash                      —
+}
+
+# Trademark noise characters stripped entirely — semantically empty.
+_STRIP_CHARS = '\u2122\u00AE\u00A9\u2120'  # ™ ® © ℠
 
 
 def _normalize_for_merge(s):
     """Aggressive normalization for auto-merge comparison.
 
-    Collapses differences that are semantically identical in almost all
-    cases, so auto-merge can handle them without admin review:
-      * " - " (space-dash-space, PSN's typical title/subtitle separator)
-        swapped to ": " BEFORE any other transformation — the surrounding
-        spaces are the signal that the dash is a separator rather than
-        a hyphen inside a word. "Spider-Man" keeps its hyphen;
-        "Spider - Man" becomes "spider:man".
-      * Casefold — handles PSN's ALL CAPS vs IGDB's proper case.
-      * All whitespace stripped (not just collapsed) — handles double
-        spaces, leading/trailing whitespace, and compound-word-vs-two-
-        word differences like "BioShock" vs "Bio Shock".
+    Applied in this exact order (order matters — the separator swap and
+    whitespace strip rely on earlier passes having already landed):
 
-    Order matters: separator swap must run before whitespace stripping,
-    otherwise "Spider - Man" and "Spider-Man" would both collapse to
-    "spider-man" and falsely merge.
+      1. Unicode punctuation -> ASCII. Smart quotes/apostrophes (' ') -> ',
+         smart double quotes ("") -> ", en/em dashes (– —) -> -. Runs
+         first so the separator swap in step 2 catches Unicode dashes too.
+      2. " - " (space-ASCII-dash-space) -> ": ". PSN's typical
+         title/subtitle separator convention; surrounding spaces
+         distinguish it from a hyphen inside a word. "Spider-Man" stays
+         intact; "Spider - Man" becomes "spider:man".
+      3. Casefold — handles PSN ALL CAPS vs IGDB proper case.
+      4. Strip trademark symbols: ™ ® © ℠. Semantically empty noise PSN
+         sometimes includes where IGDB doesn't.
+      5. Whole-word "and" -> "&". Word-boundary regex, so "Portland" and
+         "Understanding" stay untouched. Normalizes "Ratchet & Clank"
+         vs "Ratchet and Clank".
+      6. Strip colons. PSN/IGDB diverge on title:subtitle colons
+         ("Uncharted: Drake's Fortune" vs "Uncharted Drake's Fortune").
+      7. Strip ALL whitespace. Catches double spaces AND compound-word
+         vs two-word differences ("BioShock" vs "Bio Shock").
     """
     if not s:
         return ''
+    for unicode_ch, ascii_ch in _UNICODE_PUNCT_MAP.items():
+        s = s.replace(unicode_ch, ascii_ch)
     s = s.replace(' - ', ': ')
     s = s.casefold()
+    for ch in _STRIP_CHARS:
+        s = s.replace(ch, '')
+    s = _AND_WORD_RE.sub('&', s)
+    s = s.replace(':', '')
     s = _WHITESPACE_RE.sub('', s)
     return s
 
@@ -209,13 +236,17 @@ class Command(BaseCommand):
             reviewed without rewriting anything.
 
           * NORMALIZED: concept + every game match IGDB after
-            `_normalize_for_merge` (casefold + whitespace collapse +
-            " - " -> ": " separator swap), but byte representations differ.
-            Covers PSN's ALL CAPS vs IGDB's proper case, double-space
-            artifacts, and PSN's " - " title/subtitle separator vs IGDB's
-            ":" convention. Rewrite concept to canonical form (IGDB name +
-            legacy suffix if legacy), rewrite games to raw IGDB, then lock
-            + mark reviewed. IGDB's form wins unconditionally.
+            `_normalize_for_merge`, but byte representations differ. The
+            normalizer folds Unicode punctuation (smart quotes, en/em
+            dashes) to ASCII, swaps " - " -> ":", casefolds, strips
+            trademark symbols, normalizes "and" -> "&", strips colons,
+            and strips all whitespace. See that helper's docstring for
+            the exact order. Covers the vast majority of cosmetic PSN/
+            IGDB divergences (ALL CAPS, apostrophe variants, spacing,
+            dash-vs-colon separators, "& vs and"). Rewrite concept to
+            canonical form (IGDB name + legacy suffix if legacy), rewrite
+            games to raw IGDB, then lock + mark reviewed. IGDB's form
+            wins unconditionally.
         """
         qs = (
             IGDBMatch.objects
