@@ -95,6 +95,31 @@ Django auto-generates a sitemap index when multiple sections exist. Pagination i
 2. Define `items()`, `location()`, and optionally `lastmod()`
 3. Register it in the `sitemaps` dict in `plat_pursuit/urls.py`
 
+## Access Policy: Anonymous Profile-Scoped Views
+
+Profile-scoped detail URLs require authentication. They're the most expensive render paths on the site (per-profile `EarnedTrophy` queries, milestone dicts, etc.) and bot fan-out against them has been the primary driver of container-level OOM crashes. Rather than serve them to anyone who shows up, we gate them at view dispatch.
+
+| Anonymous request | Response |
+|-------------------|----------|
+| `/games/<np_id>/<username>/` | 302 → `/games/<np_id>/?from_profile=<username>` |
+| `/my-pursuit/badges/<slug>/<username>/` | 302 → `/my-pursuit/badges/<slug>/?from_profile=<username>` |
+| `/badges/<slug>/<username>/` (legacy) | Existing legacy 301 chain → then gated same way |
+
+Logic lives in `GameDetailView.dispatch` and `BadgeDetailView.dispatch`. The `from_profile` query param surfaces a dismissible sign-up banner on the canonical page via `templates/partials/anon_profile_banner.html`, turning the moment into a soft sign-up pitch instead of a wall — the visitor still gets a useful page about the game or badge they wanted to see.
+
+### Why this shape
+
+- **Canonical page, not login form.** Redirecting to `/accounts/login/` is a wall. Redirecting to the canonical page means the visitor still sees something useful and can dismiss the banner if they're just browsing.
+- **302, not 301.** The redirect is conditional on auth state, which changes at runtime. A 301 would tell caches "this URL permanently lives at the canonical path" — wrong when signed-in users should hit the profile-scoped page.
+- **Dismissible banner.** Session-storage flag so it doesn't re-appear on every page load for someone who's decided they're just browsing. Resets with the session.
+- **OG tags still come from the canonical page.** The canonical page's `og:*` tags are profile-independent (see the Bot Canonical Redirect section for why), so shared social-media previews render the game/badge info either way.
+
+### Gotchas
+
+- **Auth check lives in `dispatch`, not a mixin.** This is deliberate — mixins stack and reorder oddly with `DetailView`; keeping the redirect inline in each view's dispatch keeps the reading path linear.
+- **Query string is preserved.** `?tier=3` on a profile-scoped badge URL flows through the redirect so the canonical page honors the same sub-selection.
+- **Logged-in users hit profile-scoped paths normally.** No redirect, no banner — they see the full profile-scoped render.
+
 ## Crawler Policy: Bot Canonical Redirect
 
 `BotCanonicalRedirectMiddleware` (in `plat_pursuit/middleware.py`, wired early in `MIDDLEWARE` right after WhiteNoise) 301-redirects known crawler requests for profile-scoped URL variants to their canonical counterparts:

@@ -83,6 +83,11 @@ class CloudflareOriginGuardMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Dev-local requests never transit Cloudflare, so the CF-Ray check
+        # would always fail and bounce localhost traffic to production. Skip
+        # the guard entirely when DEBUG is on.
+        if settings.DEBUG:
+            return self.get_response(request)
         if (
             _CLOUDFLARE_GUARDED_PATH_RE.match(request.path)
             and not request.META.get('HTTP_CF_RAY')

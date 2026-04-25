@@ -19,7 +19,8 @@ from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Q, F, Prefetch, Max
 from django.db.models.functions import Lower
-from django.http import Http404
+from django.http import Http404, HttpResponseRedirect
+from urllib.parse import urlencode
 from django.shortcuts import get_object_or_404
 from django.urls import reverse_lazy, reverse
 from django.utils.text import slugify
@@ -421,6 +422,21 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
     slug_field = 'series_slug'
     slug_url_kwarg = 'series_slug'
     context_object_name = 'series_badges'
+
+    def dispatch(self, request, *args, **kwargs):
+        # Profile-scoped variants (/my-pursuit/badges/<slug>/<username>/ and
+        # the legacy /badges/<slug>/<username>/ prefix) require auth — see
+        # GameDetailView.dispatch for the full rationale. Anonymous visitors
+        # are redirected to the canonical badge series page with a
+        # from_profile hint that drives a sign-up banner.
+        psn_username = kwargs.get('psn_username')
+        if psn_username and not request.user.is_authenticated:
+            canonical = reverse('badge_detail', kwargs={'series_slug': kwargs['series_slug']})
+            params = {'from_profile': psn_username}
+            existing_qs = request.META.get('QUERY_STRING', '')
+            suffix = f'&{existing_qs}' if existing_qs else ''
+            return HttpResponseRedirect(f'{canonical}?{urlencode(params)}{suffix}')
+        return super().dispatch(request, *args, **kwargs)
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]

@@ -1,5 +1,5 @@
 from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from plat_pursuit.middleware import (
     BotCanonicalRedirectMiddleware,
@@ -121,6 +121,7 @@ class BotCanonicalRedirectMiddlewareTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+@override_settings(DEBUG=False)
 class CloudflareOriginGuardMiddlewareTests(SimpleTestCase):
     def setUp(self):
         self.factory = RequestFactory()
@@ -191,3 +192,13 @@ class CloudflareOriginGuardMiddlewareTests(SimpleTestCase):
             any('CF_BYPASS_BLOCKED' in msg for msg in captured.output),
             f'expected a CF_BYPASS_BLOCKED log line, got: {captured.output}',
         )
+
+    @override_settings(DEBUG=True)
+    def test_guard_is_disabled_when_debug_is_true(self):
+        # Local dev requests never carry a CF-Ray header; if the guard fired
+        # in DEBUG it would bounce every localhost hit to production.
+        response = self.middleware(self._request(
+            '/games/NPWR00352_00/deviousmeister/',
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'ok')

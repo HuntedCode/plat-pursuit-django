@@ -211,6 +211,22 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
     slug_url_kwarg = 'np_communication_id'
     context_object_name = 'game'
 
+    def dispatch(self, request, *args, **kwargs):
+        # Profile-scoped variants (/games/<np>/<username>/) require auth. They
+        # are the most expensive class of rendered page on the site and have
+        # been the primary driver of container-level OOM crashes from bot
+        # fan-out. Anonymous visitors are redirected to the canonical game
+        # page with a from_profile hint that drives a sign-up banner — cheap
+        # to render, still useful to casual visitors, cuts scraper access.
+        psn_username = kwargs.get('psn_username')
+        if psn_username and not request.user.is_authenticated:
+            canonical = reverse('game_detail', kwargs={'np_communication_id': kwargs['np_communication_id']})
+            params = {'from_profile': psn_username}
+            existing_qs = request.META.get('QUERY_STRING', '')
+            suffix = f'&{existing_qs}' if existing_qs else ''
+            return HttpResponseRedirect(f'{canonical}?{urlencode(params)}{suffix}')
+        return super().dispatch(request, *args, **kwargs)
+
     def get_queryset(self):
         # Pre-sort by is_main DESC then name so the about-card view-side
         # partition (see _partition_franchise_links) finds the main first.
