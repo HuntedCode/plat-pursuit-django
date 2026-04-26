@@ -16,6 +16,26 @@ PREFERRED_MEDIA_PLATFORMS = ['PS5']
 # search input selection where we want the most recent release's title).
 PLATFORM_PRIORITY_ORDER = ['PS5', 'PS4', 'PS3', 'PSVITA', 'PSP', 'PS2', 'PS1']
 
+# Platform display order for game lists (badge stages, future browse sorts).
+# Newest first, with VR cohorts grouped between PS4 and PS3.
+PLATFORM_DISPLAY_ORDER = ['PS5', 'PS4', 'PSVR2', 'PSVR', 'PS3', 'PSVITA']
+_PLATFORM_DISPLAY_RANK = {p: i for i, p in enumerate(PLATFORM_DISPLAY_ORDER)}
+_PLATFORM_DISPLAY_FALLBACK = len(PLATFORM_DISPLAY_ORDER)
+
+
+def platform_display_rank(title_platform):
+    """Return the display rank of a game's newest supported platform.
+
+    Multi-platform games (e.g. PS4+PS5 cross-buy) sort by their newest entry.
+    Lower rank = newer / shown first. Unknown platforms fall to the bottom.
+    """
+    if not title_platform:
+        return _PLATFORM_DISPLAY_FALLBACK
+    return min(
+        (_PLATFORM_DISPLAY_RANK.get(p, _PLATFORM_DISPLAY_FALLBACK) for p in title_platform),
+        default=_PLATFORM_DISPLAY_FALLBACK,
+    )
+
 # Title ID blacklist - Games with known issues or duplicates
 TITLE_ID_BLACKLIST = [
     'CUSA05214_00', 'CUSA01015_00', 'CUSA00129_00', 'CUSA00131_00',

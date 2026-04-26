@@ -8,6 +8,7 @@ from trophies.services.xp_service import get_tier_xp
 from trophies.util_modules.constants import (
     BADGE_TIER_XP, BRONZE_STAGE_XP, SILVER_STAGE_XP,
     GOLD_STAGE_XP, PLAT_STAGE_XP,
+    platform_display_rank,
 )
 
 
@@ -519,18 +520,22 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['selected_tier_is_plat'] = selected_tier in [1, 3]
 
         stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=Game.objects.select_related('concept', 'concept__igdb_match').order_by(Lower('title_name')))
+            Prefetch('concepts__games', queryset=Game.objects.select_related('concept', 'concept__igdb_match'))
         ))
         context['stage_count'] = len(stages)
 
-        # Collect all games across all stages first (uses prefetched data)
+        # Collect all games across all stages first (uses prefetched data).
+        # Sort by newest platform (PS5 > PS4 > VRs > PS3 > Vita), then alphabetical.
         stage_games_map = {}
         all_games_set = set()
         for stage in stages:
             games = set()
             for concept in stage.concepts.all():
                 games.update(concept.games.all())
-            stage_games_map[stage.id] = sorted(games, key=lambda g: g.title_name)
+            stage_games_map[stage.id] = sorted(
+                games,
+                key=lambda g: (platform_display_rank(g.title_platform), g.title_name.lower()),
+            )
             all_games_set.update(games)
 
         # Single bulk ProfileGame query instead of one per stage
@@ -829,7 +834,19 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['tier_req_stages'] = tier_req_stages
 
         logger.debug(f"Badge detail loaded {len(structured_data)} stage data entries for {series_slug}")
-        context['stage_data'] = structured_data
+
+        # Split stages by whether they apply to the selected tier so the template
+        # can foreground the current tier's requirements and tuck the rest into
+        # a collapsed disclosure. Bonus stages (no required_tiers) always apply.
+        applicable_stages = []
+        other_tier_stages = []
+        for data in structured_data:
+            if data['stage'].applies_to_tier(selected_tier):
+                applicable_stages.append(data)
+            else:
+                other_tier_stages.append(data)
+        context['stage_data'] = applicable_stages
+        context['other_tier_stages'] = other_tier_stages
         context['completion'] = badge_completion
         context['badge_requirements'] = badge_requirements
         context['is_earned'] = is_earned

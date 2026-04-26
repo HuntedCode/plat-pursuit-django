@@ -3,6 +3,7 @@
             {% if data.stage_completion_state == 'complete' %}bg-success/10 border border-success/10 hover:bg-success/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06]{% endif %}"
      data-stage-toggle="{{ stage.stage_number }}"
      data-stage-complete="{% if data.stage_completion_state == 'complete' %}true{% else %}false{% endif %}"
+     data-stage-bonus="{% if stage.stage_number == 0 %}true{% else %}false{% endif %}"
      role="button" aria-expanded="true" tabindex="0">
     {# Stage Icon #}
     <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden border shrink-0
