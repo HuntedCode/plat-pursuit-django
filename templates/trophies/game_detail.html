@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% load custom_filters humanize static seo_tags %}
-{% block title %}{{ game.title_name }} Trophy Guide ({{ game.platforms_display }}){% endblock %}
+{% block title %}{{ game.title_name }} Trophies ({{ game.platforms_display }}){% endblock %}
 {% block meta_description %}Trophy list, roadmap, and community ratings for {{ game.title_name }} on {{ game.platforms_display }}. Track your PlayStation platinum progress on Platinum Pursuit.{% endblock %}
 {% block og_type %}video.other{% endblock %}
-{% block og_title %}{{ game.title_name }} Trophy Guide{% endblock %}
+{% block og_title %}{{ game.title_name }} Trophies{% endblock %}
 {% block og_description %}{{ game.title_name }} trophy list and platinum roadmap for {{ game.platforms_display }}. Join the hunt on Platinum Pursuit.{% endblock %}
 {% block twitter_description %}{{ game.title_name }} trophy list and platinum roadmap for {{ game.platforms_display }}.{% endblock %}
 {% block og_image %}{% if game.image_url %}{{ game.image_url }}{% else %}{{ request.scheme }}://{{ request.get_host }}{{ logo_path }}{% endif %}{% endblock %}
