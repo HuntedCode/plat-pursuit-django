@@ -53,6 +53,21 @@ _UNICODE_PUNCT_MAP = {
 _STRIP_CHARS = '\u2122\u00AE\u00A9\u2120'  # ™ ® © ℠
 
 
+# Heavy IGDBMatch fields this command never reads. Defer to keep the
+# in-memory footprint down — `raw_response` alone is ~10 KB per row, and
+# at thousands of mismatches per pass that adds up to tens of MB of dead
+# weight. Display + lock paths only need `igdb_name` and
+# `igdb_first_release_date` from the match.
+_IGDBMATCH_DEFERRED_FIELDS = (
+    'raw_response',
+    'igdb_summary',
+    'igdb_storyline',
+    'franchise_names',
+    'similar_game_igdb_ids',
+    'external_urls',
+)
+
+
 def _normalize_for_merge(s):
     """Aggressive normalization for auto-merge comparison.
 
@@ -255,6 +270,7 @@ class Command(BaseCommand):
             .filter(concept__title_reviewed_at__isnull=True)
             .select_related('concept')
             .prefetch_related('concept__games')
+            .defer(*_IGDBMATCH_DEFERRED_FIELDS)
         )
         if options.get('concept_id'):
             qs = qs.filter(concept__concept_id=options['concept_id'])
@@ -360,6 +376,7 @@ class Command(BaseCommand):
             .exclude(igdb_name='')
             .select_related('concept')
             .prefetch_related('concept__games')
+            .defer(*_IGDBMATCH_DEFERRED_FIELDS)
             .order_by('concept__concept_id')
         )
 
