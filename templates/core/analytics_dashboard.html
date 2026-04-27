@@ -29,6 +29,11 @@
             {{ opt.label }}
           </a>
         {% endfor %}
+        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}&refresh=1"
+           class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-base-200/60 text-base-content/60 border-base-content/10 hover:border-base-content/30"
+           title="Bypass the 5-minute cache">
+          ↻ Refresh
+        </a>
       </div>
     </div>
   </div>
@@ -110,8 +115,7 @@
               <tr class="text-base-content/60 border-b border-base-content/10">
                 <th class="text-left font-medium py-2 pr-2">Page</th>
                 <th class="text-left font-medium py-2 px-2 hidden md:table-cell">Type</th>
-                <th class="text-right font-medium py-2 px-2">Views</th>
-                <th class="text-right font-medium py-2 pl-2">Sessions</th>
+                <th class="text-right font-medium py-2 pl-2">Views</th>
               </tr>
             </thead>
             <tbody>
@@ -123,8 +127,7 @@
                   <td class="py-2 px-2 hidden md:table-cell text-base-content/60">
                     {{ row.page_type }}
                   </td>
-                  <td class="py-2 px-2 text-right font-mono">{{ row.views }}</td>
-                  <td class="py-2 pl-2 text-right font-mono text-base-content/60">{{ row.unique_sessions }}</td>
+                  <td class="py-2 pl-2 text-right font-mono">{{ row.views }}</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -348,6 +351,7 @@
   <p class="text-xs text-base-content/40 text-center pt-2">
     Bounce = sessions with ≤1 page view. Sessions time out after 30 minutes of inactivity.
     Top-line metrics include bot traffic — see Devices panel for bot share. Bounce-rate colors: green &lt;40%, amber 40-60%, red ≥60%.
+    {% if from_cache %}<span class="text-base-content/30">· served from 5-minute cache, click ↻ Refresh to recompute</span>{% endif %}
   </p>
 
 </div>

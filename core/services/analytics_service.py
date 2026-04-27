@@ -16,9 +16,13 @@ import re
 from datetime import timedelta
 from urllib.parse import urlparse
 
+from django.core.cache import cache
 from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+
+CACHE_TTL = 300  # 5 minutes
+CACHE_PREFIX = "staff_analytics_dashboard"
 
 logger = logging.getLogger("psn_api")
 
@@ -208,13 +212,21 @@ def _build_trend(start, end):
 
 
 def _top_pages(start, end, page_type_filter=None, limit=20):
+    """
+    Top pages by view count.
+
+    Note: we don't compute COUNT(DISTINCT session_id) here. The PageView dedup
+    layer enforces one row per session per page per 30-min window, so views
+    and unique sessions are effectively the same number on this table. The
+    DISTINCT count was very expensive and added no signal.
+    """
     qs = _pageview_qs(start, end)
     if page_type_filter:
         qs = qs.filter(page_type=page_type_filter)
 
     rows = list(
         qs.values("page_type", "object_id")
-        .annotate(views=Count("id"), unique_sessions=Count("session_id", distinct=True))
+        .annotate(views=Count("id"))
         .order_by("-views")[:limit]
     )
     return _attach_object_labels(rows)
@@ -279,19 +291,33 @@ def _attach_object_labels(rows):
 
 
 def _top_referrers(start, end, limit=15):
-    """Group sessions by referrer hostname. Direct = no referrer."""
-    qs = _session_qs(start, end).values_list("referrer", flat=True)
+    """
+    Group sessions by referrer hostname.
+
+    Performance: GROUP BY in SQL on raw referrer URL first, THEN parse the host
+    in Python only over the deduplicated URL list. A site with millions of
+    sessions typically has only a few hundred unique referrer URLs, so we
+    iterate hundreds of rows in Python instead of millions.
+    """
+    rows = (
+        _session_qs(start, end)
+        .values("referrer")
+        .annotate(c=Count("session_id"))
+        .order_by("-c")
+    )
 
     host_counts = {}
-    for ref in qs.iterator():
-        host = _referrer_host(ref)
-        host_counts[host] = host_counts.get(host, 0) + 1
+    total = 0
+    for row in rows.iterator():
+        host = _referrer_host(row["referrer"])
+        host_counts[host] = host_counts.get(host, 0) + row["c"]
+        total += row["c"]
 
-    rows = sorted(host_counts.items(), key=lambda kv: kv[1], reverse=True)[:limit]
-    total = sum(host_counts.values()) or 1
+    sorted_hosts = sorted(host_counts.items(), key=lambda kv: kv[1], reverse=True)[:limit]
+    denom = total or 1
     return [
-        {"host": host, "sessions": count, "pct": round(count / total * 100, 1)}
-        for host, count in rows
+        {"host": host, "sessions": count, "pct": round(count / denom * 100, 1)}
+        for host, count in sorted_hosts
     ]
 
 
@@ -323,11 +349,18 @@ def _site_events_summary(start, end):
 
 
 def _recap_funnel(start, end):
-    """Recap-specific funnel: page_view -> share_generate -> image_download."""
-    qs = _siteevent_qs(start, end)
-    page_views = qs.filter(event_type="recap_page_view").count()
-    shares = qs.filter(event_type="recap_share_generate").count()
-    downloads = qs.filter(event_type="recap_image_download").count()
+    """Recap-specific funnel: page_view -> share_generate -> image_download.
+
+    Single query with conditional aggregates instead of three separate counts.
+    """
+    agg = _siteevent_qs(start, end).aggregate(
+        page_views=Count("id", filter=Q(event_type="recap_page_view")),
+        shares=Count("id", filter=Q(event_type="recap_share_generate")),
+        downloads=Count("id", filter=Q(event_type="recap_image_download")),
+    )
+    page_views = agg["page_views"] or 0
+    shares = agg["shares"] or 0
+    downloads = agg["downloads"] or 0
 
     def pct(num, den):
         if not den:
@@ -464,20 +497,32 @@ def _parse_user_agent(ua):
 
 
 def _device_browser_breakdown(start, end):
-    """Aggregate device + browser categories across sessions in window."""
-    qs = _session_qs(start, end).values_list("user_agent", flat=True)
+    """
+    Aggregate device + browser categories across sessions in window.
+
+    Performance: GROUP BY user_agent in SQL first, then parse each unique UA
+    string ONCE in Python and multiply by the row count. Most sessions share
+    a UA with thousands of others, so this is O(unique UAs) instead of
+    O(sessions).
+    """
+    rows = (
+        _session_qs(start, end)
+        .values("user_agent")
+        .annotate(c=Count("session_id"))
+    )
 
     device_counts = {}
     browser_counts = {}
     bot_count = 0
     total = 0
-    for ua in qs.iterator():
-        parsed = _parse_user_agent(ua)
-        device_counts[parsed["device"]] = device_counts.get(parsed["device"], 0) + 1
-        browser_counts[parsed["browser"]] = browser_counts.get(parsed["browser"], 0) + 1
+    for row in rows.iterator():
+        parsed = _parse_user_agent(row["user_agent"])
+        c = row["c"]
+        device_counts[parsed["device"]] = device_counts.get(parsed["device"], 0) + c
+        browser_counts[parsed["browser"]] = browser_counts.get(parsed["browser"], 0) + c
         if parsed["is_bot"]:
-            bot_count += 1
-        total += 1
+            bot_count += c
+        total += c
 
     def _format(counts):
         items = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
@@ -496,8 +541,34 @@ def _device_browser_breakdown(start, end):
     }
 
 
-def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None):
-    """Top-level entry point. Returns the full payload for the analytics dashboard."""
+def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None, force_refresh=False):
+    """
+    Top-level entry point. Returns the full payload for the analytics dashboard.
+
+    Cached in Redis for 5 minutes per (range, page_type_filter) pair. Pass
+    `force_refresh=True` (e.g. via `?refresh=1` on the page) to bypass.
+    """
+    cache_key = f"{CACHE_PREFIX}:{range_key}:{page_type_filter or 'all'}"
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            cached["from_cache"] = True
+            return cached
+
+    data = _compute_dashboard_data(range_key, page_type_filter)
+    try:
+        cache.set(cache_key, data, CACHE_TTL)
+    except Exception:
+        # If the cache backend rejects the payload (e.g. window has datetimes
+        # that don't pickle in some configs), just skip caching this call.
+        logger.exception("Failed to cache analytics dashboard payload")
+    data["from_cache"] = False
+    return data
+
+
+def _compute_dashboard_data(range_key, page_type_filter):
+    """Uncached compute path. Separate from the public function so the cache
+    wrapper stays trivial."""
     window = resolve_range(range_key)
     totals = _compute_totals(window["start"], window["end"])
 
