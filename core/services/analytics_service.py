@@ -153,7 +153,7 @@ def _compute_totals(start, end, include_bots=False):
     """Headline metrics for a given window.
 
     Always computes bot_session_count too, regardless of include_bots, so the
-    dashboard can always show "X bot sessions filtered out" — that signal is
+    dashboard can always show "X bot sessions filtered out": that signal is
     useful even when bots are excluded from headline numbers.
     """
     sessions = _session_qs(start, end, include_bots=include_bots)
@@ -462,8 +462,8 @@ def _top_entry_or_exit_pages(start, end, *, exit_page=False, limit=15, include_b
     """
     Top first/last pages per session. Uses Postgres DISTINCT ON over
     (session_id) ordered by viewed_at ASC (entry) or DESC (exit), then
-    aggregates by (page_type, object_id) in Python — small dataset,
-    keeps the query simple.
+    aggregates by (page_type, object_id) in Python (small dataset,
+    keeps the query simple).
     """
     qs = _pageview_qs(start, end, include_bots=include_bots)
     if exit_page:

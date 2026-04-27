@@ -1,5 +1,5 @@
 """
-Behavioral bot detection — catches UA-spoofing bots that survived the regex
+Behavioral bot detection: catches UA-spoofing bots that survived the regex
 classifier in core.services.bot_detection.
 
 Three rules, each pure: takes a candidate queryset of unflagged sessions plus
@@ -8,13 +8,13 @@ command flag_behavioral_bots runs them in order and reports the counts.
 
 Rules:
     Rule 1 (no_ref_bounce): anonymous + no referrer + page_count <= 1
-        The classic scraper "drive-by" pattern. Conservative-aggressive — also
+        The classic scraper "drive-by" pattern. Conservative-aggressive: also
         catches real users who hit the homepage via bookmark and bounce, but
         the false-positive volume is small relative to the signal.
 
     Rule 2 (ip_burst): same IP, > N sessions, < M distinct UAs in window
         Catches scrapers that rotate UA strings from a single IP. Real shared
-        IPs (corporate / school NAT) are protected by the diversity check —
+        IPs (corporate / school NAT) are protected by the diversity check;
         many users behind one IP have many different UAs.
 
     Rule 3 (ua_spoofer): UA appears in > X anonymous + no-ref + bounced sessions
@@ -22,7 +22,7 @@ Rules:
         detection requires anon + no-ref + bounced as supporting evidence so
         a legitimate-but-popular UA isn't accidentally flagged.
 
-Sessions younger than SESSION_AGE_BUFFER_MIN are skipped — page_count is only
+Sessions younger than SESSION_AGE_BUFFER_MIN are skipped: page_count is only
 final after the 30-min session timeout, so flagging in-progress sessions
 would race with the middleware's page-view writers.
 """
@@ -65,7 +65,7 @@ def find_rule1_no_ref_bounce(candidates_qs):
 def find_rule2_ip_burst(candidates_qs, window_start, window_end):
     """
     IPs with bot-like burst patterns in the window. Pattern detection looks
-    at ALL sessions (including already-flagged) — that's evidence of how
+    at ALL sessions (including already-flagged): that's evidence of how
     the IP behaves overall. Flagging only touches the candidate set.
 
     Returns a queryset; the suspicious-IPs subquery becomes a SQL subquery
@@ -131,7 +131,7 @@ def run_behavioral_classification(lookback_hours, dry_run=False):
 
     Each rule produces a queryset of sessions to flag; we either count it
     (dry_run) or update is_bot=True on it (live). All work happens in
-    Postgres — no session_id list is ever materialized in Python, so this
+    Postgres: no session_id list is ever materialized in Python, so this
     is safe to run over months of data on a constrained webserver.
 
     The candidate queryset is rebuilt between rules (it's lazy), so a

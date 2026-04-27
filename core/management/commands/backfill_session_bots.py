@@ -42,7 +42,7 @@ class Command(BaseCommand):
         total = AnalyticsSession.objects.count()
         self.stdout.write(f"Scanning {total:,} sessions...")
 
-        # Iterate is_bot=False rows only — already-flagged bots from prior
+        # Iterate is_bot=False rows only. Already-flagged bots from prior
         # backfill runs (or the new middleware path) are skipped. Cheap with
         # the new index. Using values_list keeps memory bounded.
         candidate_qs = (

@@ -5,7 +5,9 @@ import time
 from django.contrib.staticfiles.finders import find
 from django.http import HttpResponse
 from django.shortcuts import render
+from django.template.loader import render_to_string
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from core.services.analytics_service import get_dashboard_data as get_analytics_dashboard_data
@@ -177,6 +179,40 @@ class AnalyticsDashboardView(StaffRequiredMixin, TemplateView):
         )
         context.update(data)
         return context
+
+
+class AnalyticsReportView(StaffRequiredMixin, View):
+    """Markdown report download for the staff analytics dashboard.
+
+    Renders the same payload as AnalyticsDashboardView via the cached
+    get_dashboard_data helper, but formats it as a markdown document that
+    downloads as a .md file. Useful for sharing the snapshot in chat / Discord
+    / docs without having to copy-paste each panel by hand.
+    """
+
+    def get(self, request, *args, **kwargs):
+        range_key = request.GET.get('range', '30d')
+        page_type_filter = request.GET.get('page_type') or None
+        include_bots = request.GET.get('include_bots') == '1'
+        force_refresh = request.GET.get('refresh') == '1'
+
+        data = get_analytics_dashboard_data(
+            range_key=range_key,
+            page_type_filter=page_type_filter,
+            include_bots=include_bots,
+            force_refresh=force_refresh,
+        )
+        context = {**data, 'generated_at': timezone.now()}
+        body = render_to_string('core/analytics_report.md', context)
+
+        now = timezone.now()
+        bots_tag = 'with-bots' if include_bots else 'humans'
+        filter_tag = f'-{page_type_filter}' if page_type_filter else ''
+        filename = f"platpursuit-analytics-{range_key}{filter_tag}-{bots_tag}-{now.strftime('%Y%m%d-%H%M')}.md"
+
+        response = HttpResponse(body, content_type='text/markdown; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class HomeView(ProfileHotbarMixin, TemplateView):

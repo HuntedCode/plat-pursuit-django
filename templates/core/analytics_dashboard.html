@@ -30,7 +30,7 @@
           </a>
         {% endfor %}
 
-        {# Include-bots toggle. Off by default — bots are excluded from every metric. #}
+        {# Include-bots toggle. Off by default; bots are excluded from every metric. #}
         <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if not include_bots %}&include_bots=1{% endif %}"
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
                   {% if include_bots %}
@@ -46,6 +46,12 @@
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-base-200/60 text-base-content/60 border-base-content/10 hover:border-base-content/30"
            title="Bypass the 5-minute cache">
           ↻ Refresh
+        </a>
+
+        <a href="{% url 'staff_analytics_report' %}?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}"
+           class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-emerald-500/10 text-emerald-200 border-emerald-500/30 hover:border-emerald-500/60"
+           title="Download a markdown report of this view">
+          ⬇ Report
         </a>
       </div>
     </div>
@@ -70,7 +76,7 @@
           <strong class="text-rose-200 font-mono">{{ totals.bot_session_count }}</strong> bot session(s) were filtered out of the metrics above.
         {% endif %}
       </span>
-      <span class="text-rose-200/50 hidden md:inline">UA detection only — see /staff/analytics docs for caveats.</span>
+      <span class="text-rose-200/50 hidden md:inline">UA detection only; see /staff/analytics docs for caveats.</span>
     </div>
   {% endif %}
 
@@ -339,39 +345,44 @@
       {% endif %}
     </div>
 
-    {# Recap funnel callout #}
+    {# Recap engagement callout. Not a strict funnel: share-card slide
+       impressions can fire multiple times per page view, so the share %
+       can exceed 100. Read these as relative engagement signal. #}
     <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
-      <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Monthly Recap Funnel</h2>
+      <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Monthly Recap Engagement</h2>
       <div class="space-y-2">
         <div class="flex items-center justify-between text-sm">
-          <span class="text-base-content/70">Page views</span>
+          <span class="text-base-content/70">Recap page views</span>
           <span class="font-mono font-bold">{{ recap_funnel.page_views }}</span>
         </div>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-base-content/70">→ Share card viewed</span>
+          <span class="text-base-content/70">Share card impressions</span>
           <span class="font-mono">
             {{ recap_funnel.share_generate }}
             {% if recap_funnel.pv_to_share_pct is not None %}
-              <span class="text-base-content/50 text-xs">({{ recap_funnel.pv_to_share_pct }}%)</span>
+              <span class="text-base-content/50 text-xs">({{ recap_funnel.pv_to_share_pct }}% vs page views)</span>
             {% endif %}
           </span>
         </div>
         <div class="flex items-center justify-between text-sm">
-          <span class="text-base-content/70">→ Image downloaded</span>
+          <span class="text-base-content/70">Image downloads</span>
           <span class="font-mono">
             {{ recap_funnel.image_download }}
             {% if recap_funnel.share_to_dl_pct is not None %}
-              <span class="text-base-content/50 text-xs">({{ recap_funnel.share_to_dl_pct }}%)</span>
+              <span class="text-base-content/50 text-xs">({{ recap_funnel.share_to_dl_pct }}% of impressions)</span>
             {% endif %}
           </span>
         </div>
         <div class="pt-2 mt-2 border-t border-base-content/10 flex items-center justify-between text-xs text-base-content/60">
-          <span>End-to-end</span>
+          <span>Downloads / page view</span>
           <span class="font-mono">
-            {% if recap_funnel.pv_to_dl_pct is not None %}{{ recap_funnel.pv_to_dl_pct }}%{% else %}—{% endif %}
+            {% if recap_funnel.pv_to_dl_pct is not None %}{{ recap_funnel.pv_to_dl_pct }}%{% else %}n/a{% endif %}
           </span>
         </div>
       </div>
+      <p class="text-[11px] text-base-content/40 mt-3">
+        Share-card impressions can exceed page views: the slide fires each time it's rendered.
+      </p>
     </div>
 
   </div>
@@ -379,7 +390,7 @@
   <p class="text-xs text-base-content/40 text-center pt-2">
     Bounce = sessions with ≤1 page view. Sessions time out after 30 minutes of inactivity.
     {% if include_bots %}
-      Bot sessions are <strong class="text-rose-200">included</strong> in all metrics — toggle off via the “Bots” button.
+      Bot sessions are <strong class="text-rose-200">included</strong> in all metrics; toggle off via the "Bots" button.
     {% else %}
       Bot sessions are excluded by default (UA-based detection). Spoofed UAs aren't caught.
     {% endif %}

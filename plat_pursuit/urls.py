@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap,
@@ -281,6 +281,7 @@ urlpatterns = [
     path('staff/subscriptions/', SubscriptionAdminView.as_view(), name='subscription_admin'),
     # Bookmark-only staff analytics dashboard. Not linked from nav.
     path('staff/analytics/', AnalyticsDashboardView.as_view(), name='staff_analytics'),
+    path('staff/analytics/report/', AnalyticsReportView.as_view(), name='staff_analytics_report'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
     # NOTE: PlatinumGridView's canonical path is now /tools/platinum-grid/

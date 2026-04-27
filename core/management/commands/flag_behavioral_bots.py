@@ -18,7 +18,7 @@ Usage:
     # Hourly cron: run with default lookback, no dry-run
     python manage.py flag_behavioral_bots --lookback-hours 2
 
-Sessions younger than 30 minutes are always skipped — page_count isn't final
+Sessions younger than 30 minutes are always skipped: page_count isn't final
 until the session times out, so flagging in-flight sessions is unsafe.
 """
 from django.core.management.base import BaseCommand
