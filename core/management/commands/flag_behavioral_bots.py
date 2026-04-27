@@ -41,17 +41,10 @@ class Command(BaseCommand):
             action="store_true",
             help="Count sessions that would be flagged without writing.",
         )
-        parser.add_argument(
-            "--batch-size",
-            type=int,
-            default=5000,
-            help="Number of session_ids per UPDATE batch (default: 5000).",
-        )
 
     def handle(self, *args, **options):
         lookback_hours = options["lookback_hours"]
         dry_run = options["dry_run"]
-        batch_size = options["batch_size"]
 
         if dry_run:
             self.stdout.write(self.style.WARNING("--- DRY RUN MODE ---\n"))
@@ -64,7 +57,6 @@ class Command(BaseCommand):
         counts = run_behavioral_classification(
             lookback_hours=lookback_hours,
             dry_run=dry_run,
-            batch_size=batch_size,
         )
 
         verb = "Would flag" if dry_run else "Flagged"

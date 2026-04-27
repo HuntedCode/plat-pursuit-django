@@ -50,12 +50,15 @@ def _no_referrer_q():
 
 
 def find_rule1_no_ref_bounce(candidates_qs):
-    """Anonymous + no referrer + page_count <= 1, within the candidate set."""
-    return list(
+    """Anonymous + no referrer + page_count <= 1, within the candidate set.
+
+    Returns a queryset (not materialized) so the caller can count or update
+    it server-side without ever pulling session_ids into Python memory.
+    """
+    return (
         candidates_qs
         .filter(page_count__lte=1, user_id__isnull=True)
         .filter(_no_referrer_q())
-        .values_list("session_id", flat=True)
     )
 
 
@@ -64,6 +67,9 @@ def find_rule2_ip_burst(candidates_qs, window_start, window_end):
     IPs with bot-like burst patterns in the window. Pattern detection looks
     at ALL sessions (including already-flagged) — that's evidence of how
     the IP behaves overall. Flagging only touches the candidate set.
+
+    Returns a queryset; the suspicious-IPs subquery becomes a SQL subquery
+    in the IN clause, no Python materialization at any layer.
     """
     from core.models import AnalyticsSession
 
@@ -83,17 +89,9 @@ def find_rule2_ip_burst(candidates_qs, window_start, window_end):
             session_count__gt=RULE2_MIN_SESSIONS_PER_IP,
             ua_count__lt=RULE2_MAX_UAS_PER_IP,
         )
-        .values_list("ip_address", flat=True)
+        .values("ip_address")
     )
-    ips = list(suspicious_ips)
-    if not ips:
-        return []
-
-    return list(
-        candidates_qs
-        .filter(ip_address__in=ips)
-        .values_list("session_id", flat=True)
-    )
+    return candidates_qs.filter(ip_address__in=suspicious_ips)
 
 
 def find_rule3_ua_spoofer(candidates_qs, window_start, window_end):
@@ -102,6 +100,8 @@ def find_rule3_ua_spoofer(candidates_qs, window_start, window_end):
     detection over all sessions in the window (regardless of is_bot), but
     the supporting-evidence filter (anon + no-ref + bounced) is what keeps
     legit-but-popular UAs from being flagged.
+
+    Returns a queryset; the suspicious-UAs subquery becomes a SQL subquery.
     """
     from core.models import AnalyticsSession
 
@@ -117,30 +117,28 @@ def find_rule3_ua_spoofer(candidates_qs, window_start, window_end):
         .values("user_agent")
         .annotate(c=Count("session_id"))
         .filter(c__gt=RULE3_MIN_SESSIONS_PER_UA)
-        .values_list("user_agent", flat=True)
+        .values("user_agent")
     )
-    uas = list(suspicious_uas)
-    if not uas:
-        return []
-
-    return list(
-        candidates_qs
-        .filter(user_agent__in=uas)
-        .values_list("session_id", flat=True)
-    )
+    return candidates_qs.filter(user_agent__in=suspicious_uas)
 
 
 # --- Orchestration ---------------------------------------------------------
 
-def run_behavioral_classification(lookback_hours, dry_run=False, batch_size=5000):
+def run_behavioral_classification(lookback_hours, dry_run=False):
     """
     Run all three rules over the lookback window. Returns
     {rule_name: count_flagged}.
 
-    The candidate queryset is rebuilt between rules (it's lazy), so a session
-    flagged by rule 1 won't be re-evaluated by rules 2 or 3. Pattern detection
-    in rules 2 and 3 still sees those sessions as evidence of the IP/UA's
-    bot-like behavior because pattern queries don't filter on is_bot.
+    Each rule produces a queryset of sessions to flag; we either count it
+    (dry_run) or update is_bot=True on it (live). All work happens in
+    Postgres — no session_id list is ever materialized in Python, so this
+    is safe to run over months of data on a constrained webserver.
+
+    The candidate queryset is rebuilt between rules (it's lazy), so a
+    session flagged by rule 1 won't be re-evaluated by rules 2 or 3.
+    Pattern detection in rules 2 and 3 still sees those sessions as
+    evidence of the IP/UA's bot-like behavior because pattern queries
+    don't filter on is_bot.
     """
     from core.models import AnalyticsSession
 
@@ -163,21 +161,9 @@ def run_behavioral_classification(lookback_hours, dry_run=False, batch_size=5000
 
     counts = {}
     for name, finder in rules:
-        ids = finder()
-        counts[name] = _flag(ids, dry_run=dry_run, batch_size=batch_size)
+        target_qs = finder()
+        if dry_run:
+            counts[name] = target_qs.count()
+        else:
+            counts[name] = target_qs.update(is_bot=True)
     return counts
-
-
-def _flag(session_ids, *, dry_run, batch_size):
-    """Mark sessions is_bot=True in batches. Returns total flagged."""
-    if not session_ids:
-        return 0
-    if dry_run:
-        return len(session_ids)
-
-    from core.models import AnalyticsSession
-    total = 0
-    for i in range(0, len(session_ids), batch_size):
-        chunk = session_ids[i:i + batch_size]
-        total += AnalyticsSession.objects.filter(session_id__in=chunk).update(is_bot=True)
-    return total
