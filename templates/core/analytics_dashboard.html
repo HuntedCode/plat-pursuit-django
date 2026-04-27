@@ -1,0 +1,413 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Site Analytics - Staff{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-3 md:px-5 py-4 md:py-6 space-y-4 md:space-y-6">
+
+  {# ──────────── Page header ──────────── #}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold text-base-content">Site Analytics</h1>
+        <p class="text-xs md:text-sm text-base-content/60 mt-1">
+          {{ window.label }} &middot; sourced from existing PageView / AnalyticsSession / SiteEvent records.
+        </p>
+      </div>
+
+      {# Range selector (querystring-driven) #}
+      <div class="flex flex-wrap items-center gap-1.5">
+        {% for opt in range_options %}
+          <a href="?range={{ opt.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}"
+             class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
+                    {% if window.key == opt.key %}
+                      bg-primary text-primary-content border-primary
+                    {% else %}
+                      bg-base-200/60 text-base-content/80 border-base-content/10 hover:border-base-content/30
+                    {% endif %}">
+            {{ opt.label }}
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {# ──────────── Stat tiles ──────────── #}
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
+    {% include 'core/_partials/stat_tile.html' with label='Sessions' value=totals.sessions delta=deltas.sessions formatter='int' %}
+    {% include 'core/_partials/stat_tile.html' with label='Page Views' value=totals.pageviews delta=deltas.pageviews formatter='int' %}
+    {% include 'core/_partials/stat_tile.html' with label='Bounce Rate' value=totals.bounce_rate_pct delta=deltas.bounce_rate_pct formatter='pct' invert_delta=True %}
+    {% include 'core/_partials/stat_tile.html' with label='Pages / Session' value=totals.avg_pages_per_session delta=deltas.avg_pages_per_session formatter='float' %}
+    {% include 'core/_partials/stat_tile.html' with label='Authed Sessions' value=totals.authed_pct delta=deltas.authed_pct formatter='pct' %}
+  </div>
+
+  {# ──────────── Trend chart ──────────── #}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+    <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Daily Trend</h2>
+    <div class="relative h-64 md:h-80">
+      <canvas id="analytics-trend-chart"></canvas>
+    </div>
+  </div>
+
+  {# ──────────── Bounce rate by entry section ──────────── #}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-base md:text-lg font-bold text-base-content">Bounce Rate by Entry Section</h2>
+      <span class="text-xs text-base-content/50 hidden md:inline">Where do people land, and how often do they leave immediately?</span>
+    </div>
+    {% if bounce_by_section %}
+      <div class="space-y-1.5">
+        {% for row in bounce_by_section %}
+          <div class="flex items-center gap-3 text-xs md:text-sm">
+            <div class="w-32 md:w-40 truncate text-base-content/80" title="{{ row.page_type }}">{{ row.page_type }}</div>
+            <div class="flex-1 relative h-5 bg-base-200/50 rounded overflow-hidden">
+              <div class="absolute inset-y-0 left-0
+                          {% if row.bounce_rate_pct < 40 %}bg-emerald-500/70
+                          {% elif row.bounce_rate_pct < 60 %}bg-amber-500/70
+                          {% else %}bg-rose-500/70{% endif %}"
+                   style="width: {{ row.bounce_rate_pct }}%;"></div>
+              <div class="absolute inset-0 flex items-center px-2 text-[11px] font-mono text-base-content/90">
+                {{ row.bounce_rate_pct }}%
+              </div>
+            </div>
+            <div class="w-24 md:w-32 text-right font-mono text-base-content/60">
+              {{ row.bounced }} / {{ row.sessions }}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-sm text-base-content/50 italic">No data in this window.</p>
+    {% endif %}
+  </div>
+
+  {# ──────────── Top pages + Top referrers (2-col on lg+) ──────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+
+    {# Top pages #}
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+        <h2 class="text-base md:text-lg font-bold text-base-content">Top Pages</h2>
+        <form method="get" class="flex items-center gap-2">
+          <input type="hidden" name="range" value="{{ window.key }}">
+          <select name="page_type"
+                  onchange="this.form.submit()"
+                  class="bg-base-200/60 border border-base-content/10 rounded-lg px-2 py-1 text-xs md:text-sm">
+            <option value="">All page types</option>
+            {% for choice_key, choice_label in page_type_choices %}
+              <option value="{{ choice_key }}" {% if page_type_filter == choice_key %}selected{% endif %}>
+                {{ choice_label }}
+              </option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% if top_pages %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs md:text-sm">
+            <thead>
+              <tr class="text-base-content/60 border-b border-base-content/10">
+                <th class="text-left font-medium py-2 pr-2">Page</th>
+                <th class="text-left font-medium py-2 px-2 hidden md:table-cell">Type</th>
+                <th class="text-right font-medium py-2 px-2">Views</th>
+                <th class="text-right font-medium py-2 pl-2">Sessions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in top_pages %}
+                <tr class="border-b border-base-content/5 last:border-0 hover:bg-base-200/40">
+                  <td class="py-2 pr-2 truncate max-w-[200px] md:max-w-[320px]" title="{{ row.object_label }}">
+                    {{ row.object_label }}
+                  </td>
+                  <td class="py-2 px-2 hidden md:table-cell text-base-content/60">
+                    {{ row.page_type }}
+                  </td>
+                  <td class="py-2 px-2 text-right font-mono">{{ row.views }}</td>
+                  <td class="py-2 pl-2 text-right font-mono text-base-content/60">{{ row.unique_sessions }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No page views recorded in this window.</p>
+      {% endif %}
+    </div>
+
+    {# Top referrers #}
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Top Referrers</h2>
+      {% if top_referrers %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs md:text-sm">
+            <thead>
+              <tr class="text-base-content/60 border-b border-base-content/10">
+                <th class="text-left font-medium py-2 pr-2">Source</th>
+                <th class="text-right font-medium py-2 px-2">Sessions</th>
+                <th class="text-right font-medium py-2 pl-2">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in top_referrers %}
+                <tr class="border-b border-base-content/5 last:border-0 hover:bg-base-200/40">
+                  <td class="py-2 pr-2 truncate max-w-[260px]" title="{{ row.host }}">
+                    {{ row.host }}
+                  </td>
+                  <td class="py-2 px-2 text-right font-mono">{{ row.sessions }}</td>
+                  <td class="py-2 pl-2 text-right font-mono text-base-content/60">{{ row.pct }}%</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No sessions recorded in this window.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# ──────────── Top entry / exit pages (2-col on lg+) ──────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <h2 class="text-base md:text-lg font-bold text-base-content mb-1">Top Entry Pages</h2>
+      <p class="text-xs text-base-content/50 mb-3">First page of each session</p>
+      {% if top_entry_pages %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs md:text-sm">
+            <thead>
+              <tr class="text-base-content/60 border-b border-base-content/10">
+                <th class="text-left font-medium py-2 pr-2">Page</th>
+                <th class="text-left font-medium py-2 px-2 hidden md:table-cell">Type</th>
+                <th class="text-right font-medium py-2 pl-2">Sessions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in top_entry_pages %}
+                <tr class="border-b border-base-content/5 last:border-0 hover:bg-base-200/40">
+                  <td class="py-2 pr-2 truncate max-w-[200px] md:max-w-[260px]" title="{{ row.object_label }}">{{ row.object_label }}</td>
+                  <td class="py-2 px-2 hidden md:table-cell text-base-content/60">{{ row.page_type }}</td>
+                  <td class="py-2 pl-2 text-right font-mono">{{ row.views }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No entries recorded.</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <h2 class="text-base md:text-lg font-bold text-base-content mb-1">Top Exit Pages</h2>
+      <p class="text-xs text-base-content/50 mb-3">Last page of each session</p>
+      {% if top_exit_pages %}
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs md:text-sm">
+            <thead>
+              <tr class="text-base-content/60 border-b border-base-content/10">
+                <th class="text-left font-medium py-2 pr-2">Page</th>
+                <th class="text-left font-medium py-2 px-2 hidden md:table-cell">Type</th>
+                <th class="text-right font-medium py-2 pl-2">Sessions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in top_exit_pages %}
+                <tr class="border-b border-base-content/5 last:border-0 hover:bg-base-200/40">
+                  <td class="py-2 pr-2 truncate max-w-[200px] md:max-w-[260px]" title="{{ row.object_label }}">{{ row.object_label }}</td>
+                  <td class="py-2 px-2 hidden md:table-cell text-base-content/60">{{ row.page_type }}</td>
+                  <td class="py-2 pl-2 text-right font-mono">{{ row.views }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No exits recorded.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# ──────────── Devices + Browsers (2-col on lg+) ──────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base md:text-lg font-bold text-base-content">Devices</h2>
+        {% if device_browser.bot_count %}
+          <span class="text-xs text-base-content/50 font-mono">
+            Bots: {{ device_browser.bot_count }} ({{ device_browser.bot_pct }}%)
+          </span>
+        {% endif %}
+      </div>
+      {% if device_browser.devices %}
+        <div class="space-y-1.5">
+          {% for d in device_browser.devices %}
+            <div class="flex items-center gap-3 text-xs md:text-sm">
+              <div class="w-20 md:w-24 truncate text-base-content/80">{{ d.name }}</div>
+              <div class="flex-1 relative h-5 bg-base-200/50 rounded overflow-hidden">
+                <div class="absolute inset-y-0 left-0 bg-indigo-500/60" style="width: {{ d.pct }}%;"></div>
+                <div class="absolute inset-0 flex items-center px-2 text-[11px] font-mono text-base-content/90">{{ d.pct }}%</div>
+              </div>
+              <div class="w-16 text-right font-mono text-base-content/60">{{ d.count }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No data in this window.</p>
+      {% endif %}
+    </div>
+
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-base md:text-lg font-bold text-base-content">Browsers</h2>
+        <span class="text-xs text-base-content/50 font-mono">
+          Human sessions: {{ device_browser.human_sessions }}
+        </span>
+      </div>
+      {% if device_browser.browsers %}
+        <div class="space-y-1.5">
+          {% for b in device_browser.browsers %}
+            <div class="flex items-center gap-3 text-xs md:text-sm">
+              <div class="w-20 md:w-24 truncate text-base-content/80">{{ b.name }}</div>
+              <div class="flex-1 relative h-5 bg-base-200/50 rounded overflow-hidden">
+                <div class="absolute inset-y-0 left-0 bg-emerald-500/60" style="width: {{ b.pct }}%;"></div>
+                <div class="absolute inset-0 flex items-center px-2 text-[11px] font-mono text-base-content/90">{{ b.pct }}%</div>
+              </div>
+              <div class="w-16 text-right font-mono text-base-content/60">{{ b.count }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No data in this window.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# ──────────── Site events + Recap funnel ──────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
+    {# Site events rollup (2-col span) #}
+    <div class="lg:col-span-2 bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Site Events</h2>
+      {% if site_events %}
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {% for ev in site_events %}
+            <div class="bg-base-200/40 border border-base-content/10 rounded-lg px-3 py-2">
+              <div class="text-xs text-base-content/60 truncate" title="{{ ev.event_type }}">{{ ev.event_type }}</div>
+              <div class="text-lg font-bold font-mono">{{ ev.c }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-sm text-base-content/50 italic">No site events recorded in this window.</p>
+      {% endif %}
+    </div>
+
+    {# Recap funnel callout #}
+    <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+      <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Monthly Recap Funnel</h2>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-base-content/70">Page views</span>
+          <span class="font-mono font-bold">{{ recap_funnel.page_views }}</span>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-base-content/70">→ Share card viewed</span>
+          <span class="font-mono">
+            {{ recap_funnel.share_generate }}
+            {% if recap_funnel.pv_to_share_pct is not None %}
+              <span class="text-base-content/50 text-xs">({{ recap_funnel.pv_to_share_pct }}%)</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-base-content/70">→ Image downloaded</span>
+          <span class="font-mono">
+            {{ recap_funnel.image_download }}
+            {% if recap_funnel.share_to_dl_pct is not None %}
+              <span class="text-base-content/50 text-xs">({{ recap_funnel.share_to_dl_pct }}%)</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="pt-2 mt-2 border-t border-base-content/10 flex items-center justify-between text-xs text-base-content/60">
+          <span>End-to-end</span>
+          <span class="font-mono">
+            {% if recap_funnel.pv_to_dl_pct is not None %}{{ recap_funnel.pv_to_dl_pct }}%{% else %}—{% endif %}
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="text-xs text-base-content/40 text-center pt-2">
+    Bounce = sessions with ≤1 page view. Sessions time out after 30 minutes of inactivity.
+    Top-line metrics include bot traffic — see Devices panel for bot share. Bounce-rate colors: green &lt;40%, amber 40-60%, red ≥60%.
+  </p>
+
+</div>
+
+{# ──────────── Chart.js ──────────── #}
+<script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
+{{ trend|json_script:"analytics-trend-data" }}
+<script>
+  (function () {
+    const dataEl = document.getElementById('analytics-trend-data');
+    if (!dataEl) return;
+    const trend = JSON.parse(dataEl.textContent || '[]');
+    if (!trend.length) return;
+
+    const ctx = document.getElementById('analytics-trend-chart');
+    if (!ctx) return;
+
+    const labels = trend.map(r => r.date);
+    const sessions = trend.map(r => r.sessions);
+    const pageviews = trend.map(r => r.pageviews);
+
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'Sessions',
+            data: sessions,
+            borderColor: 'rgb(99, 102, 241)',
+            backgroundColor: 'rgba(99, 102, 241, 0.15)',
+            fill: true,
+            tension: 0.25,
+            pointRadius: 2,
+          },
+          {
+            label: 'Page Views',
+            data: pageviews,
+            borderColor: 'rgb(16, 185, 129)',
+            backgroundColor: 'rgba(16, 185, 129, 0.10)',
+            fill: false,
+            tension: 0.25,
+            pointRadius: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+          y: { beginAtZero: true, ticks: { precision: 0 } },
+        },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { mode: 'index', intersect: false },
+        },
+      },
+    });
+  })();
+</script>
+{% endblock %}

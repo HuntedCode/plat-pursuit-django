@@ -1,0 +1,37 @@
+{% comment %}
+Stat tile for the staff analytics dashboard.
+
+Args:
+  label         (str)            Display label.
+  value         (number)         Current value.
+  delta         (float | None)   Signed % change vs prior window. None = no comparison.
+  formatter     (str)            'int' | 'float' | 'pct'  -> picks how `value` is rendered.
+  invert_delta  (bool, optional) If True, a negative delta is GOOD (e.g. bounce rate).
+{% endcomment %}
+<div class="bg-base-100/60 border border-base-content/10 rounded-xl p-3 md:p-4">
+  <div class="text-[10px] md:text-xs uppercase tracking-wide text-base-content/50 truncate">{{ label }}</div>
+  <div class="mt-1 flex items-baseline gap-2">
+    <div class="text-lg md:text-2xl font-bold font-mono text-base-content">
+      {% if formatter == 'pct' %}
+        {{ value }}%
+      {% elif formatter == 'float' %}
+        {{ value }}
+      {% else %}
+        {{ value|default_if_none:0 }}
+      {% endif %}
+    </div>
+    {% if delta is not None %}
+      {% if delta > 0 %}
+        <div class="text-[10px] md:text-xs font-mono {% if invert_delta %}text-rose-400{% else %}text-emerald-400{% endif %}">
+          ▲ {{ delta }}%
+        </div>
+      {% elif delta < 0 %}
+        <div class="text-[10px] md:text-xs font-mono {% if invert_delta %}text-emerald-400{% else %}text-rose-400{% endif %}">
+          ▼ {{ delta }}%
+        </div>
+      {% else %}
+        <div class="text-[10px] md:text-xs font-mono text-base-content/40">— 0%</div>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>

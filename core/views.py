@@ -8,8 +8,9 @@ from django.shortcuts import render
 from django.urls import reverse_lazy
 from django.views.generic import TemplateView, View
 
+from core.services.analytics_service import get_dashboard_data as get_analytics_dashboard_data
 from core.services.community_hub_service import build_community_hub_context
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
 from trophies.views.dashboard_views import build_dashboard_context, _get_site_heartbeat
 
@@ -149,6 +150,28 @@ class CommunityHubView(ProfileHotbarMixin, TemplateView):
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Community Hub'},
         ]
+        return context
+
+
+class AnalyticsDashboardView(StaffRequiredMixin, TemplateView):
+    """Staff-only analytics dashboard at /staff/analytics/.
+
+    Bookmark-only (not in nav). Reads existing AnalyticsSession / PageView /
+    SiteEvent data, no schema changes. Date window via ?range= (7d, 30d, 90d,
+    all); page-type filter via ?page_type= for the Top Pages table.
+    """
+    template_name = 'core/analytics_dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        range_key = self.request.GET.get('range', '30d')
+        page_type_filter = self.request.GET.get('page_type') or None
+
+        data = get_analytics_dashboard_data(
+            range_key=range_key,
+            page_type_filter=page_type_filter,
+        )
+        context.update(data)
         return context
 
 
