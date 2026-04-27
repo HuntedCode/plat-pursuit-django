@@ -10,6 +10,8 @@ import uuid
 from django.core.cache import cache
 from django.utils import timezone
 
+from core.services.bot_detection import is_bot_user_agent
+
 logger = logging.getLogger("psn_api")
 
 SESSION_COOKIE_NAME = 'pp_analytics_session'
@@ -73,6 +75,7 @@ def _create_new_session(request):
     ip_address = _get_ip(request)
     referrer = request.META.get('HTTP_REFERER', '')
     user_agent = request.META.get('HTTP_USER_AGENT', '')
+    is_bot = is_bot_user_agent(user_agent)
 
     # Store in Redis cache
     session_data = {
@@ -83,6 +86,7 @@ def _create_new_session(request):
         'last_activity': timezone.now().isoformat(),
         'referrer': referrer,
         'user_agent': user_agent,
+        'is_bot': is_bot,
     }
     cache_key = f"{SESSION_CACHE_PREFIX}:{session_id_str}"
     cache.set(cache_key, session_data, SESSION_TIMEOUT)
@@ -90,7 +94,7 @@ def _create_new_session(request):
     # Create DB record in background thread
     thread = threading.Thread(
         target=_create_session_db_record,
-        args=(session_id, user_id, ip_address, referrer, user_agent),
+        args=(session_id, user_id, ip_address, referrer, user_agent, is_bot),
         daemon=True,
     )
     thread.start()
@@ -98,7 +102,7 @@ def _create_new_session(request):
     return session_id_str
 
 
-def _create_session_db_record(session_id, user_id, ip_address, referrer, user_agent):
+def _create_session_db_record(session_id, user_id, ip_address, referrer, user_agent, is_bot):
     """Create AnalyticsSession DB record (runs in background)."""
     try:
         from core.models import AnalyticsSession
@@ -108,6 +112,7 @@ def _create_session_db_record(session_id, user_id, ip_address, referrer, user_ag
             ip_address=ip_address or None,
             referrer=referrer[:500] if referrer else None,
             user_agent=user_agent[:500] if user_agent else None,
+            is_bot=is_bot,
         )
     except Exception:
         logger.exception("Failed to create AnalyticsSession: %s", session_id)

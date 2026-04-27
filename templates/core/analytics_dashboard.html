@@ -16,10 +16,10 @@
         </p>
       </div>
 
-      {# Range selector (querystring-driven) #}
+      {# Range selector + filters (querystring-driven) #}
       <div class="flex flex-wrap items-center gap-1.5">
         {% for opt in range_options %}
-          <a href="?range={{ opt.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}"
+          <a href="?range={{ opt.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}"
              class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
                     {% if window.key == opt.key %}
                       bg-primary text-primary-content border-primary
@@ -29,7 +29,20 @@
             {{ opt.label }}
           </a>
         {% endfor %}
-        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}&refresh=1"
+
+        {# Include-bots toggle. Off by default — bots are excluded from every metric. #}
+        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if not include_bots %}&include_bots=1{% endif %}"
+           class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
+                  {% if include_bots %}
+                    bg-rose-500/20 text-rose-200 border-rose-500/40
+                  {% else %}
+                    bg-base-200/60 text-base-content/60 border-base-content/10 hover:border-base-content/30
+                  {% endif %}"
+           title="{% if include_bots %}Bots are currently included. Click to exclude.{% else %}Bots are currently excluded. Click to include them.{% endif %}">
+          {% if include_bots %}Bots: ON{% else %}Bots: OFF{% endif %}
+        </a>
+
+        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}&refresh=1"
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-base-200/60 text-base-content/60 border-base-content/10 hover:border-base-content/30"
            title="Bypass the 5-minute cache">
           ↻ Refresh
@@ -46,6 +59,20 @@
     {% include 'core/_partials/stat_tile.html' with label='Pages / Session' value=totals.avg_pages_per_session delta=deltas.avg_pages_per_session formatter='float' %}
     {% include 'core/_partials/stat_tile.html' with label='Authed Sessions' value=totals.authed_pct delta=deltas.authed_pct formatter='pct' %}
   </div>
+
+  {# Bot signal: always show the bot-session count regardless of toggle state. #}
+  {% if totals.bot_session_count %}
+    <div class="bg-rose-500/5 border border-rose-500/20 rounded-lg px-3 py-2 text-xs md:text-sm text-rose-200/80 flex items-center justify-between gap-3">
+      <span>
+        {% if include_bots %}
+          <strong class="text-rose-200 font-mono">{{ totals.bot_session_count }}</strong> of the {{ totals.sessions }} sessions above are classified as bots (UA-based).
+        {% else %}
+          <strong class="text-rose-200 font-mono">{{ totals.bot_session_count }}</strong> bot session(s) were filtered out of the metrics above.
+        {% endif %}
+      </span>
+      <span class="text-rose-200/50 hidden md:inline">UA detection only — see /staff/analytics docs for caveats.</span>
+    </div>
+  {% endif %}
 
   {# ──────────── Trend chart ──────────── #}
   <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
@@ -96,6 +123,7 @@
         <h2 class="text-base md:text-lg font-bold text-base-content">Top Pages</h2>
         <form method="get" class="flex items-center gap-2">
           <input type="hidden" name="range" value="{{ window.key }}">
+          {% if include_bots %}<input type="hidden" name="include_bots" value="1">{% endif %}
           <select name="page_type"
                   onchange="this.form.submit()"
                   class="bg-base-200/60 border border-base-content/10 rounded-lg px-2 py-1 text-xs md:text-sm">
@@ -350,7 +378,12 @@
 
   <p class="text-xs text-base-content/40 text-center pt-2">
     Bounce = sessions with ≤1 page view. Sessions time out after 30 minutes of inactivity.
-    Top-line metrics include bot traffic — see Devices panel for bot share. Bounce-rate colors: green &lt;40%, amber 40-60%, red ≥60%.
+    {% if include_bots %}
+      Bot sessions are <strong class="text-rose-200">included</strong> in all metrics — toggle off via the “Bots” button.
+    {% else %}
+      Bot sessions are excluded by default (UA-based detection). Spoofed UAs aren't caught.
+    {% endif %}
+    Bounce-rate colors: green &lt;40%, amber 40-60%, red ≥60%.
     {% if from_cache %}<span class="text-base-content/30">· served from 5-minute cache, click ↻ Refresh to recompute</span>{% endif %}
   </p>
 

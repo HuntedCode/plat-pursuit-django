@@ -12,7 +12,6 @@ Still deferred (would need schema or client changes):
 - Real-time / live view (needs websockets or polling endpoint)
 """
 import logging
-import re
 from datetime import timedelta
 from urllib.parse import urlparse
 
@@ -20,6 +19,8 @@ from django.core.cache import cache
 from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+
+from core.services.bot_detection import is_bot_user_agent
 
 CACHE_TTL = 300  # 5 minutes
 CACHE_PREFIX = "staff_analytics_dashboard"
@@ -94,27 +95,51 @@ def resolve_range(range_key):
     }
 
 
-def _session_qs(start, end):
+def _session_qs(start, end, include_bots=False):
     from core.models import AnalyticsSession
     qs = AnalyticsSession.objects.all()
     if start is not None:
         qs = qs.filter(created_at__gte=start)
     if end is not None:
         qs = qs.filter(created_at__lt=end)
+    if not include_bots:
+        qs = qs.filter(is_bot=False)
     return qs
 
 
-def _pageview_qs(start, end):
-    from core.models import PageView
+def _pageview_qs(start, end, include_bots=False):
+    """
+    PageView queryset for the dashboard window.
+
+    Going forward, bot sessions never produce PageView rows
+    (track_page_view skips them). So is_bot filtering only matters for
+    historical pollution. We filter to PageViews whose session is non-bot
+    via a subquery; the human-session set is the smaller list (bots
+    dominate by count), which keeps the IN clause tight.
+    """
+    from core.models import AnalyticsSession, PageView
     qs = PageView.objects.all()
     if start is not None:
         qs = qs.filter(viewed_at__gte=start)
     if end is not None:
         qs = qs.filter(viewed_at__lt=end)
+    if not include_bots:
+        human_session_ids = AnalyticsSession.objects.filter(
+            is_bot=False
+        ).values("session_id")
+        qs = qs.filter(session_id__in=human_session_ids)
     return qs
 
 
-def _siteevent_qs(start, end):
+def _siteevent_qs(start, end, include_bots=False):
+    """
+    SiteEvent has no session_id link, so we can't filter by bot status.
+    track_site_event already skips bots going forward; historical
+    pollution from before the deploy is minimal because events require
+    explicit user actions (challenge create, recap share, etc.) that
+    bots typically can't trigger. The include_bots argument is accepted
+    for API consistency with the other querysets but has no effect.
+    """
     from core.models import SiteEvent
     qs = SiteEvent.objects.all()
     if start is not None:
@@ -124,10 +149,19 @@ def _siteevent_qs(start, end):
     return qs
 
 
-def _compute_totals(start, end):
-    """Headline metrics for a given window."""
-    sessions = _session_qs(start, end)
-    pageview_count = _pageview_qs(start, end).count()
+def _compute_totals(start, end, include_bots=False):
+    """Headline metrics for a given window.
+
+    Always computes bot_session_count too, regardless of include_bots, so the
+    dashboard can always show "X bot sessions filtered out" — that signal is
+    useful even when bots are excluded from headline numbers.
+    """
+    sessions = _session_qs(start, end, include_bots=include_bots)
+    pageview_count = _pageview_qs(start, end, include_bots=include_bots).count()
+
+    # Independent bot-session count for transparency. Indexed, cheap.
+    bot_qs = _session_qs(start, end, include_bots=True).filter(is_bot=True)
+    bot_session_count = bot_qs.count()
 
     agg = sessions.aggregate(
         total=Count("session_id"),
@@ -156,6 +190,7 @@ def _compute_totals(start, end):
         "anon_count": anon,
         "authed_pct": round(authed_pct, 1),
         "anon_pct": round(anon_pct, 1),
+        "bot_session_count": bot_session_count,
     }
 
 
@@ -169,25 +204,28 @@ def _compute_delta(current, prior):
     return round(delta, 1)
 
 
-def _build_trend(start, end):
+def _build_trend(start, end, include_bots=False):
     """Daily session and pageview counts. Returns list of {date, sessions, pageviews}."""
     if start is None:
         # All-time: derive a span from the earliest record so we don't blow up the chart.
         from core.models import AnalyticsSession
-        earliest = AnalyticsSession.objects.order_by("created_at").values_list("created_at", flat=True).first()
+        earliest_qs = AnalyticsSession.objects.all()
+        if not include_bots:
+            earliest_qs = earliest_qs.filter(is_bot=False)
+        earliest = earliest_qs.order_by("created_at").values_list("created_at", flat=True).first()
         if not earliest:
             return []
         start = earliest
 
     sessions_by_day = (
-        _session_qs(start, end)
+        _session_qs(start, end, include_bots=include_bots)
         .annotate(day=TruncDate("created_at"))
         .values("day")
         .annotate(c=Count("session_id"))
         .order_by("day")
     )
     pageviews_by_day = (
-        _pageview_qs(start, end)
+        _pageview_qs(start, end, include_bots=include_bots)
         .annotate(day=TruncDate("viewed_at"))
         .values("day")
         .annotate(c=Count("id"))
@@ -211,7 +249,7 @@ def _build_trend(start, end):
     return out
 
 
-def _top_pages(start, end, page_type_filter=None, limit=20):
+def _top_pages(start, end, page_type_filter=None, limit=20, include_bots=False):
     """
     Top pages by view count.
 
@@ -220,7 +258,7 @@ def _top_pages(start, end, page_type_filter=None, limit=20):
     and unique sessions are effectively the same number on this table. The
     DISTINCT count was very expensive and added no signal.
     """
-    qs = _pageview_qs(start, end)
+    qs = _pageview_qs(start, end, include_bots=include_bots)
     if page_type_filter:
         qs = qs.filter(page_type=page_type_filter)
 
@@ -290,7 +328,7 @@ def _attach_object_labels(rows):
     return rows
 
 
-def _top_referrers(start, end, limit=15):
+def _top_referrers(start, end, limit=15, include_bots=False):
     """
     Group sessions by referrer hostname.
 
@@ -300,7 +338,7 @@ def _top_referrers(start, end, limit=15):
     iterate hundreds of rows in Python instead of millions.
     """
     rows = (
-        _session_qs(start, end)
+        _session_qs(start, end, include_bots=include_bots)
         .values("referrer")
         .annotate(c=Count("session_id"))
         .order_by("-c")
@@ -338,8 +376,8 @@ def _referrer_host(ref):
         return "Direct / unknown"
 
 
-def _site_events_summary(start, end):
-    qs = _siteevent_qs(start, end)
+def _site_events_summary(start, end, include_bots=False):
+    qs = _siteevent_qs(start, end, include_bots=include_bots)
     rows = list(
         qs.values("event_type")
         .annotate(c=Count("id"))
@@ -348,12 +386,12 @@ def _site_events_summary(start, end):
     return rows
 
 
-def _recap_funnel(start, end):
+def _recap_funnel(start, end, include_bots=False):
     """Recap-specific funnel: page_view -> share_generate -> image_download.
 
     Single query with conditional aggregates instead of three separate counts.
     """
-    agg = _siteevent_qs(start, end).aggregate(
+    agg = _siteevent_qs(start, end, include_bots=include_bots).aggregate(
         page_views=Count("id", filter=Q(event_type="recap_page_view")),
         shares=Count("id", filter=Q(event_type="recap_share_generate")),
         downloads=Count("id", filter=Q(event_type="recap_image_download")),
@@ -377,7 +415,7 @@ def _recap_funnel(start, end):
     }
 
 
-def _bounce_by_page_type(start, end, limit=20):
+def _bounce_by_page_type(start, end, limit=20, include_bots=False):
     """
     For each entry page_type, how many sessions started there and how many bounced.
     Bounce = AnalyticsSession.page_count <= 1. The entry page is the earliest
@@ -399,6 +437,8 @@ def _bounce_by_page_type(start, end, limit=20):
         sessions = sessions.filter(created_at__gte=start)
     if end is not None:
         sessions = sessions.filter(created_at__lt=end)
+    if not include_bots:
+        sessions = sessions.filter(is_bot=False)
 
     rows = list(
         sessions.annotate(entry_pt=Subquery(first_pv_subq))
@@ -418,14 +458,14 @@ def _bounce_by_page_type(start, end, limit=20):
     return rows
 
 
-def _top_entry_or_exit_pages(start, end, *, exit_page=False, limit=15):
+def _top_entry_or_exit_pages(start, end, *, exit_page=False, limit=15, include_bots=False):
     """
     Top first/last pages per session. Uses Postgres DISTINCT ON over
     (session_id) ordered by viewed_at ASC (entry) or DESC (exit), then
     aggregates by (page_type, object_id) in Python — small dataset,
     keeps the query simple.
     """
-    qs = _pageview_qs(start, end)
+    qs = _pageview_qs(start, end, include_bots=include_bots)
     if exit_page:
         qs = qs.order_by("session_id", "-viewed_at")
     else:
@@ -451,22 +491,19 @@ def _top_entry_or_exit_pages(start, end, *, exit_page=False, limit=15):
 # Lightweight regex-based UA categorization. No external dependency.
 # Order matters: Edge UA contains "Chrome", Opera UA contains "Chrome", so the
 # more-specific browser must be checked first. Same for tablet vs mobile.
-
-_BOT_PATTERNS = re.compile(
-    r"bot|spider|crawler|slurp|scrape|fetch|preview|lighthouse|pingdom|"
-    r"facebookexternalhit|twitterbot|linkedinbot|discordbot|telegrambot|"
-    r"whatsapp|skypeuripreview|curl|wget|python-|http-client|java/|go-http-client|"
-    r"headlesschrome|phantomjs|httpx",
-    re.IGNORECASE,
-)
+#
+# Bot detection itself lives in core.services.bot_detection (shared with
+# the middleware, backfill command, and tracking writers).
 
 
 def _parse_user_agent(ua):
-    """Categorize a UA string into device + browser + is_bot. Empty/missing -> Unknown."""
+    """Categorize a UA string into device + browser + is_bot."""
+    is_bot = is_bot_user_agent(ua)
     if not ua:
-        return {"device": "Unknown", "browser": "Unknown", "is_bot": False}
+        return {"device": "Bot" if is_bot else "Unknown",
+                "browser": "Bot" if is_bot else "Unknown",
+                "is_bot": is_bot}
 
-    is_bot = bool(_BOT_PATTERNS.search(ua))
     ua_l = ua.lower()
 
     if is_bot:
@@ -496,7 +533,7 @@ def _parse_user_agent(ua):
     return {"device": device, "browser": browser, "is_bot": is_bot}
 
 
-def _device_browser_breakdown(start, end):
+def _device_browser_breakdown(start, end, include_bots=False):
     """
     Aggregate device + browser categories across sessions in window.
 
@@ -504,9 +541,14 @@ def _device_browser_breakdown(start, end):
     string ONCE in Python and multiply by the row count. Most sessions share
     a UA with thousands of others, so this is O(unique UAs) instead of
     O(sessions).
+
+    When include_bots=False (default), the bot_count surfaced here will be
+    zero because the underlying queryset has already filtered them out. To
+    see bot share, the caller passes include_bots=True (i.e. the
+    "include bots" toggle on the dashboard).
     """
     rows = (
-        _session_qs(start, end)
+        _session_qs(start, end, include_bots=include_bots)
         .values("user_agent")
         .annotate(c=Count("session_id"))
     )
@@ -541,21 +583,26 @@ def _device_browser_breakdown(start, end):
     }
 
 
-def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None, force_refresh=False):
+def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None,
+                       include_bots=False, force_refresh=False):
     """
     Top-level entry point. Returns the full payload for the analytics dashboard.
 
-    Cached in Redis for 5 minutes per (range, page_type_filter) pair. Pass
-    `force_refresh=True` (e.g. via `?refresh=1` on the page) to bypass.
+    Cached in Redis for 5 minutes per (range, page_type_filter, include_bots)
+    triple. Pass `force_refresh=True` (e.g. via `?refresh=1` on the page)
+    to bypass.
     """
-    cache_key = f"{CACHE_PREFIX}:{range_key}:{page_type_filter or 'all'}"
+    cache_key = (
+        f"{CACHE_PREFIX}:{range_key}:{page_type_filter or 'all'}"
+        f":bots={'1' if include_bots else '0'}"
+    )
     if not force_refresh:
         cached = cache.get(cache_key)
         if cached is not None:
             cached["from_cache"] = True
             return cached
 
-    data = _compute_dashboard_data(range_key, page_type_filter)
+    data = _compute_dashboard_data(range_key, page_type_filter, include_bots)
     try:
         cache.set(cache_key, data, CACHE_TTL)
     except Exception:
@@ -566,15 +613,17 @@ def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None, force_ref
     return data
 
 
-def _compute_dashboard_data(range_key, page_type_filter):
+def _compute_dashboard_data(range_key, page_type_filter, include_bots):
     """Uncached compute path. Separate from the public function so the cache
     wrapper stays trivial."""
     window = resolve_range(range_key)
-    totals = _compute_totals(window["start"], window["end"])
+    totals = _compute_totals(window["start"], window["end"], include_bots=include_bots)
 
     delta_keys = ("sessions", "pageviews", "bounce_rate_pct", "avg_pages_per_session", "authed_pct")
     if window["prior_start"] is not None:
-        prior_totals = _compute_totals(window["prior_start"], window["prior_end"])
+        prior_totals = _compute_totals(
+            window["prior_start"], window["prior_end"], include_bots=include_bots
+        )
         deltas = {k: _compute_delta(totals[k], prior_totals[k]) for k in delta_keys}
     else:
         # All-time has no prior period. Populate with explicit Nones so template
@@ -588,15 +637,27 @@ def _compute_dashboard_data(range_key, page_type_filter):
         "totals": totals,
         "prior_totals": prior_totals,
         "deltas": deltas,
-        "trend": _build_trend(window["start"], window["end"]),
-        "top_pages": _top_pages(window["start"], window["end"], page_type_filter=page_type_filter),
-        "top_referrers": _top_referrers(window["start"], window["end"]),
-        "site_events": _site_events_summary(window["start"], window["end"]),
-        "recap_funnel": _recap_funnel(window["start"], window["end"]),
-        "bounce_by_section": _bounce_by_page_type(window["start"], window["end"]),
-        "top_entry_pages": _top_entry_or_exit_pages(window["start"], window["end"], exit_page=False),
-        "top_exit_pages": _top_entry_or_exit_pages(window["start"], window["end"], exit_page=True),
-        "device_browser": _device_browser_breakdown(window["start"], window["end"]),
+        "include_bots": include_bots,
+        "trend": _build_trend(window["start"], window["end"], include_bots=include_bots),
+        "top_pages": _top_pages(
+            window["start"], window["end"],
+            page_type_filter=page_type_filter, include_bots=include_bots,
+        ),
+        "top_referrers": _top_referrers(window["start"], window["end"], include_bots=include_bots),
+        "site_events": _site_events_summary(window["start"], window["end"], include_bots=include_bots),
+        "recap_funnel": _recap_funnel(window["start"], window["end"], include_bots=include_bots),
+        "bounce_by_section": _bounce_by_page_type(
+            window["start"], window["end"], include_bots=include_bots,
+        ),
+        "top_entry_pages": _top_entry_or_exit_pages(
+            window["start"], window["end"], exit_page=False, include_bots=include_bots,
+        ),
+        "top_exit_pages": _top_entry_or_exit_pages(
+            window["start"], window["end"], exit_page=True, include_bots=include_bots,
+        ),
+        "device_browser": _device_browser_breakdown(
+            window["start"], window["end"], include_bots=include_bots,
+        ),
         "page_type_filter": page_type_filter,
         "page_type_choices": PAGE_TYPE_CHOICES,
         "range_options": [

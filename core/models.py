@@ -30,6 +30,16 @@ class AnalyticsSession(models.Model):
     referrer = models.URLField(max_length=500, blank=True, null=True, help_text="HTTP Referer header")
     user_agent = models.CharField(max_length=500, blank=True, null=True, help_text="User-Agent string")
 
+    # Bot classification. Set at session creation by core.services.bot_detection
+    # via the AnalyticsSessionMiddleware. Backfill for historical rows is done
+    # by the backfill_session_bots management command. Indexed because every
+    # analytics dashboard query filters on it.
+    is_bot = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True if the User-Agent matched the bot regex (or was empty/very short).",
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=['user_id', 'created_at'], name='as_user_created_idx'),

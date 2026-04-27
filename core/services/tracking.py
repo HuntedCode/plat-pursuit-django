@@ -102,12 +102,22 @@ def track_page_view(page_type, object_id, request):
     Deduplication: one view per session per page per 30-minute window.
     Session identified by analytics_session_id (set by AnalyticsSessionMiddleware).
 
+    Bot sessions are skipped entirely — no PageView row, no view_count
+    increment, no AnalyticsSession.page_count update. Bot classification
+    comes from request.is_bot (set by AnalyticsSessionMiddleware).
+
     Args:
         page_type: One of 'profile', 'game', 'guide', 'badge', 'game_list', 'index', etc.
         object_id: The object's identifier (int PK for profile/game/checklist/game_list, series_slug str for badge, 'home' for index)
         request: Django HttpRequest object
     """
     try:
+        # Skip bot traffic entirely. Saves DB writes and keeps view_count
+        # denormalizations clean. is_bot is computed once per request in
+        # AnalyticsSessionMiddleware.
+        if getattr(request, 'is_bot', False):
+            return
+
         # Get analytics session ID from request (set by middleware)
         session_id = getattr(request, 'analytics_session_id', None)
         if not session_id:
@@ -158,6 +168,13 @@ def track_site_event(event_type, object_id, request):
         request: Django HttpRequest object
     """
     try:
+        # Skip bot traffic. SiteEvents are user-initiated actions (challenge
+        # creates, recap shares, etc.) so a bot triggering one is almost
+        # always either a scripted abuser or a misclassified UA — drop it
+        # rather than pollute the funnel.
+        if getattr(request, 'is_bot', False):
+            return
+
         from core.models import SiteEvent
         user_id = request.user.id if request.user.is_authenticated else None
         SiteEvent.objects.create(

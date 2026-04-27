@@ -4,10 +4,11 @@ Analytics session tracking middleware.
 Manages analytics session lifecycle:
 - Creates session cookie for new visitors
 - Refreshes session on activity
-- Stores session_id in request for tracking service
+- Stores session_id and is_bot flag on the request for tracking service
 """
 from django.conf import settings
 
+from core.services.bot_detection import is_bot_user_agent
 from core.services.session_tracking import (
     get_or_create_session,
     SESSION_COOKIE_NAME,
@@ -27,6 +28,12 @@ class AnalyticsSessionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Bot classification is computed once per request from the UA and
+        # made available to track_page_view / track_site_event so they can
+        # skip DB writes for bot traffic. The session creation path also
+        # reads it (via the request) when persisting AnalyticsSession.
+        request.is_bot = is_bot_user_agent(request.META.get('HTTP_USER_AGENT', ''))
+
         # Get or create analytics session (Redis-first, fast)
         session_id = get_or_create_session(request)
 

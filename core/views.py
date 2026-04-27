@@ -166,11 +166,13 @@ class AnalyticsDashboardView(StaffRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         range_key = self.request.GET.get('range', '30d')
         page_type_filter = self.request.GET.get('page_type') or None
+        include_bots = self.request.GET.get('include_bots') == '1'
         force_refresh = self.request.GET.get('refresh') == '1'
 
         data = get_analytics_dashboard_data(
             range_key=range_key,
             page_type_filter=page_type_filter,
+            include_bots=include_bots,
             force_refresh=force_refresh,
         )
         context.update(data)
