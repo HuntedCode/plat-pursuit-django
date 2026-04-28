@@ -36,6 +36,16 @@ PLAT_TO_IGDB_ID = {
     'PS4': 48, 'PSVR': 165, 'PS5': 167, 'PSVR2': 390,
 }
 
+# IGDB VR platform -> host PlayStation platform it runs on.
+# PSN never reports PSVR/PSVR2 (Sony only exposes the host platform), but
+# IGDB regularly lists VR titles as PSVR/PSVR2 only. Used during platform
+# overlap to treat an IGDB VR platform as implying its host hardware so
+# fresh PS4/PS5 concepts can still match VR-only IGDB entries.
+VR_HOST_PLATFORM = {
+    165: 48,   # PSVR  -> PS4
+    390: 167,  # PSVR2 -> PS5
+}
+
 # IGDB external game category for PlayStation Store
 PLAYSTATION_STORE_CATEGORY = 36
 
@@ -935,8 +945,11 @@ class IGDBService:
         """Score all results and return the best match with platform overlap.
 
         Requires at least one PlayStation platform in common between the
-        concept's games and the IGDB result. No confidence floor: any
-        match with platform overlap is surfaced for review.
+        concept's games and the IGDB result. IGDB VR platforms are treated
+        as implying their host hardware (PSVR -> PS4, PSVR2 -> PS5) so
+        VR-only IGDB entries can still match concepts whose PSN data only
+        reports the host platform. No confidence floor: any match with
+        platform overlap is surfaced for review.
 
         `search_title` is forwarded to _calculate_confidence so title
         similarity is scored against the same string used for the IGDB
@@ -959,13 +972,19 @@ class IGDBService:
         scored = []
         skipped_platform = 0
         for game in results:
-            # Require platform overlap (skip VR-only check)
+            # Require platform overlap. IGDB VR platforms (PSVR/PSVR2) are
+            # expanded to include their host hardware (PS4/PS5) because
+            # IGDB lists VR titles as VR-only while PSN only ever reports
+            # the host platform — without expansion these never overlap.
             if concept_plat_ids:
                 igdb_plat_ids = set()
                 for p in game.get('platforms', []):
                     pid = p if isinstance(p, int) else p.get('id') if isinstance(p, dict) else None
                     if pid:
                         igdb_plat_ids.add(pid)
+                        host = VR_HOST_PLATFORM.get(pid)
+                        if host:
+                            igdb_plat_ids.add(host)
                 if not (concept_plat_ids & igdb_plat_ids):
                     skipped_platform += 1
                     if cls._debug_scoring:
