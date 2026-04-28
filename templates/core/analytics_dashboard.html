@@ -16,10 +16,12 @@
         </p>
       </div>
 
-      {# Range selector + filters (querystring-driven) #}
+      {# Range selector + filters (querystring-driven). The lag param is only
+         appended when explicitly set to 0 (the non-default off state); the
+         24h default is implicit. #}
       <div class="flex flex-wrap items-center gap-1.5">
         {% for opt in range_options %}
-          <a href="?range={{ opt.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}"
+          <a href="?range={{ opt.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours == 0 %}&exclude_recent_hours=0{% endif %}"
              class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
                     {% if window.key == opt.key %}
                       bg-primary text-primary-content border-primary
@@ -31,7 +33,7 @@
         {% endfor %}
 
         {# Include-bots toggle. Off by default; bots are excluded from every metric. #}
-        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if not include_bots %}&include_bots=1{% endif %}"
+        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if not include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours == 0 %}&exclude_recent_hours=0{% endif %}"
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
                   {% if include_bots %}
                     bg-rose-500/20 text-rose-200 border-rose-500/40
@@ -42,13 +44,27 @@
           {% if include_bots %}Bots: ON{% else %}Bots: OFF{% endif %}
         </a>
 
-        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}&refresh=1"
+        {# Recent-tail buffer toggle. 24h by default so the un-classified bot
+           tail (sessions newer than the behavioral cron's last pass) doesn't
+           pollute the report. Click to disable when you need real-time data. #}
+        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours > 0 %}&exclude_recent_hours=0{% endif %}"
+           class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
+                  {% if window.exclude_recent_hours == 0 %}
+                    bg-amber-500/20 text-amber-200 border-amber-500/40
+                  {% else %}
+                    bg-base-200/60 text-base-content/60 border-base-content/10 hover:border-base-content/30
+                  {% endif %}"
+           title="{% if window.exclude_recent_hours > 0 %}Last {{ window.exclude_recent_hours }}h excluded so the unflagged bot tail doesn't pollute totals. Click to include today's data.{% else %}Today's data is included; expect a bot-noise spike. Click to re-enable the 24h buffer.{% endif %}">
+          {% if window.exclude_recent_hours == 0 %}Buffer: OFF{% else %}Buffer: {{ window.exclude_recent_hours }}h{% endif %}
+        </a>
+
+        <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours == 0 %}&exclude_recent_hours=0{% endif %}&refresh=1"
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-base-200/60 text-base-content/60 border-base-content/10 hover:border-base-content/30"
            title="Bypass the 5-minute cache">
           ↻ Refresh
         </a>
 
-        <a href="{% url 'staff_analytics_report' %}?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}"
+        <a href="{% url 'staff_analytics_report' %}?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours == 0 %}&exclude_recent_hours=0{% endif %}"
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-emerald-500/10 text-emerald-200 border-emerald-500/30 hover:border-emerald-500/60"
            title="Download a markdown report of this view">
           ⬇ Report
@@ -130,6 +146,7 @@
         <form method="get" class="flex items-center gap-2">
           <input type="hidden" name="range" value="{{ window.key }}">
           {% if include_bots %}<input type="hidden" name="include_bots" value="1">{% endif %}
+          {% if window.exclude_recent_hours == 0 %}<input type="hidden" name="exclude_recent_hours" value="0">{% endif %}
           <select name="page_type"
                   onchange="this.form.submit()"
                   class="bg-base-200/60 border border-base-content/10 rounded-lg px-2 py-1 text-xs md:text-sm">

@@ -169,14 +169,19 @@ class AnalyticsDashboardView(StaffRequiredMixin, TemplateView):
         range_key = self.request.GET.get('range', '30d')
         page_type_filter = self.request.GET.get('page_type') or None
         include_bots = self.request.GET.get('include_bots') == '1'
+        exclude_recent_hours = self.request.GET.get('exclude_recent_hours')
         force_refresh = self.request.GET.get('refresh') == '1'
 
-        data = get_analytics_dashboard_data(
+        kwargs_for_data = dict(
             range_key=range_key,
             page_type_filter=page_type_filter,
             include_bots=include_bots,
             force_refresh=force_refresh,
         )
+        if exclude_recent_hours is not None:
+            kwargs_for_data['exclude_recent_hours'] = exclude_recent_hours
+
+        data = get_analytics_dashboard_data(**kwargs_for_data)
         context.update(data)
         return context
 
@@ -194,21 +199,28 @@ class AnalyticsReportView(StaffRequiredMixin, View):
         range_key = request.GET.get('range', '30d')
         page_type_filter = request.GET.get('page_type') or None
         include_bots = request.GET.get('include_bots') == '1'
+        exclude_recent_hours = request.GET.get('exclude_recent_hours')
         force_refresh = request.GET.get('refresh') == '1'
 
-        data = get_analytics_dashboard_data(
+        kwargs_for_data = dict(
             range_key=range_key,
             page_type_filter=page_type_filter,
             include_bots=include_bots,
             force_refresh=force_refresh,
         )
+        if exclude_recent_hours is not None:
+            kwargs_for_data['exclude_recent_hours'] = exclude_recent_hours
+
+        data = get_analytics_dashboard_data(**kwargs_for_data)
         context = {**data, 'generated_at': timezone.now()}
         body = render_to_string('core/analytics_report.md', context)
 
         now = timezone.now()
         bots_tag = 'with-bots' if include_bots else 'humans'
         filter_tag = f'-{page_type_filter}' if page_type_filter else ''
-        filename = f"platpursuit-analytics-{range_key}{filter_tag}-{bots_tag}-{now.strftime('%Y%m%d-%H%M')}.md"
+        lag_h = data.get('window', {}).get('exclude_recent_hours', 0) or 0
+        lag_tag = f'-lag{lag_h}h' if lag_h else ''
+        filename = f"platpursuit-analytics-{range_key}{filter_tag}-{bots_tag}{lag_tag}-{now.strftime('%Y%m%d-%H%M')}.md"
 
         response = HttpResponse(body, content_type='text/markdown; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'

@@ -70,28 +70,53 @@ PAGE_TYPE_CHOICES = [
 ]
 
 
-def resolve_range(range_key):
-    """Map a range querystring value to (start_dt, end_dt, label, prior_start_dt)."""
+DEFAULT_LAG_HOURS = 24
+MAX_LAG_HOURS = 168  # 7 days; sanity ceiling
+
+
+def resolve_range(range_key, exclude_recent_hours=DEFAULT_LAG_HOURS):
+    """Map a range querystring value to a window dict.
+
+    `exclude_recent_hours` shifts the entire window backward by that many hours,
+    so the recent un-classified bot tail (sessions that haven't run through the
+    behavioral cron yet) doesn't pollute the report. The full N-day window is
+    preserved; it just ends `exclude_recent_hours` ago instead of `now`. The
+    prior comparison window also shifts so the delta math stays apples-to-apples.
+
+    Clamped to [0, MAX_LAG_HOURS]. 0 disables the buffer (shows today's data).
+    """
     range_key = range_key if range_key in RANGE_OPTIONS else DEFAULT_RANGE
+    try:
+        lag_hours = int(exclude_recent_hours)
+    except (TypeError, ValueError):
+        lag_hours = DEFAULT_LAG_HOURS
+    lag_hours = max(0, min(MAX_LAG_HOURS, lag_hours))
+
     now = timezone.now()
+    end = now - timedelta(hours=lag_hours)
     days = RANGE_OPTIONS[range_key]
+
+    suffix = f" (ending {lag_hours}h ago)" if lag_hours else ""
+
     if days is None:
         return {
             "key": range_key,
-            "label": "All time",
+            "label": f"All time{suffix}",
             "start": None,
-            "end": now,
+            "end": end,
             "prior_start": None,
             "prior_end": None,
+            "exclude_recent_hours": lag_hours,
         }
-    start = now - timedelta(days=days)
+    start = end - timedelta(days=days)
     return {
         "key": range_key,
-        "label": f"Last {days} days",
+        "label": f"Last {days} days{suffix}",
         "start": start,
-        "end": now,
+        "end": end,
         "prior_start": start - timedelta(days=days),
         "prior_end": start,
+        "exclude_recent_hours": lag_hours,
     }
 
 
@@ -584,17 +609,19 @@ def _device_browser_breakdown(start, end, include_bots=False):
 
 
 def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None,
-                       include_bots=False, force_refresh=False):
+                       include_bots=False, exclude_recent_hours=DEFAULT_LAG_HOURS,
+                       force_refresh=False):
     """
     Top-level entry point. Returns the full payload for the analytics dashboard.
 
-    Cached in Redis for 5 minutes per (range, page_type_filter, include_bots)
-    triple. Pass `force_refresh=True` (e.g. via `?refresh=1` on the page)
-    to bypass.
+    Cached in Redis for 5 minutes per (range, page_type_filter, include_bots,
+    exclude_recent_hours) tuple. Pass `force_refresh=True` (e.g. via
+    `?refresh=1` on the page) to bypass.
     """
     cache_key = (
         f"{CACHE_PREFIX}:{range_key}:{page_type_filter or 'all'}"
         f":bots={'1' if include_bots else '0'}"
+        f":lag={exclude_recent_hours}"
     )
     if not force_refresh:
         cached = cache.get(cache_key)
@@ -602,7 +629,9 @@ def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None,
             cached["from_cache"] = True
             return cached
 
-    data = _compute_dashboard_data(range_key, page_type_filter, include_bots)
+    data = _compute_dashboard_data(
+        range_key, page_type_filter, include_bots, exclude_recent_hours,
+    )
     try:
         cache.set(cache_key, data, CACHE_TTL)
     except Exception:
@@ -613,10 +642,10 @@ def get_dashboard_data(range_key=DEFAULT_RANGE, page_type_filter=None,
     return data
 
 
-def _compute_dashboard_data(range_key, page_type_filter, include_bots):
+def _compute_dashboard_data(range_key, page_type_filter, include_bots, exclude_recent_hours):
     """Uncached compute path. Separate from the public function so the cache
     wrapper stays trivial."""
-    window = resolve_range(range_key)
+    window = resolve_range(range_key, exclude_recent_hours=exclude_recent_hours)
     totals = _compute_totals(window["start"], window["end"], include_bots=include_bots)
 
     delta_keys = ("sessions", "pageviews", "bounce_rate_pct", "avg_pages_per_session", "authed_pct")
