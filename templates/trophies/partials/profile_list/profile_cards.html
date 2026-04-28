@@ -100,9 +100,9 @@
                     </div>
 
                     {# Recent platinum #}
+                    <div class="border-t border-base-content/10"></div>
                     {% with profile.recent_platinum.0.trophy as recent %}
                         {% if recent %}
-                            <div class="border-t border-base-content/10"></div>
                             <div class="flex items-center gap-1.5 p-0.5">
                                 <div class="w-7 h-7 rounded-md overflow-hidden shrink-0 border border-trophy-platinum">
                                     <img src="{{ recent.trophy_icon_url }}" alt="{{ recent.trophy_name }}"
@@ -111,6 +111,19 @@
                                 <div class="flex-1 min-w-0">
                                     <div class="text-xs font-semibold line-clamp-1">{{ recent.trophy_name }}</div>
                                     <div class="text-[0.6rem] text-accent italic line-clamp-1 pr-1">{{ recent.game.title_name }}</div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="flex items-center gap-1.5 p-0.5" title="No recent platinum">
+                                <div class="w-7 h-7 rounded-md shrink-0 border border-dashed border-base-content/20 bg-white/[0.03] flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"></path>
+                                        <path d="M17 5h2a2 2 0 0 1 2 2v1a3 3 0 0 1-3 3M7 5H5a2 2 0 0 0-2 2v1a3 3 0 0 0 3 3"></path>
+                                    </svg>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs font-semibold text-base-content/40 line-clamp-1">No recent platinum</div>
+                                    <div class="text-[0.6rem] text-base-content/30 italic line-clamp-1 pr-1">Still on the hunt</div>
                                 </div>
                             </div>
                         {% endif %}
