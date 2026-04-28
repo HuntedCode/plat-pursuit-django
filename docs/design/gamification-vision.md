@@ -1,5 +1,9 @@
 # PlatPursuit Gamification System — Design Document
 
+> **Strategic framing:** See [Product Identity](product-identity.md) for the 2-minute pitch and identity decisions this implementation serves. When the two documents disagree, the identity doc wins; this doc is the implementation reference, the identity doc is the strategic frame.
+>
+> **Note on premium model:** This doc was written assuming gamification would be premium-only. That position is being reconsidered (lean: spine visible to all, premium for expression and engagement). Treat references to "premium-only" gating in this doc as historical context until the planning work resolves them.
+
 ## Context
 PlatPursuit has gamification infrastructure already in place (`StatType`, `StageStatValue`, `ProfileGamification`) that isn't being fully utilized. The goal is to design a **premium-only** RPG-style system that sits on top of the existing badge XP system without changing badge XP at all.
 
