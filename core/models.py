@@ -282,3 +282,48 @@ class EmailLog(models.Model):
     def __str__(self):
         target = self.user.email if self.user else self.recipient_email
         return f"{self.get_email_type_display()} -> {target} ({self.status})"
+
+
+class CommunityTrophyDay(models.Model):
+    """
+    Daily aggregate of trophy activity from Discord-linked profiles.
+
+    Computed and posted to Discord at ~12:30 PM ET for the previous ET day
+    by the post_community_trophy_tracker management command. Each row is
+    immutable after posting; the `posted_at` field gates against double-posts.
+
+    Eligibility: Profile.discord_id IS NOT NULL, Trophy.game.shovelware_status='clean',
+    EarnedTrophy.earned_date_time within the target ET calendar day.
+
+    PP Score = total_trophies + (5 * total_platinums) + (3 * total_ultra_rares).
+    Weights are applied at compute time and stored; changing the formula does
+    NOT retroactively recompute historical rows.
+    """
+    date = models.DateField(unique=True, help_text="The ET calendar day these stats cover.")
+
+    total_trophies = models.PositiveIntegerField(default=0)
+    total_platinums = models.PositiveIntegerField(default=0)
+    total_ultra_rares = models.PositiveIntegerField(default=0)
+    pp_score = models.PositiveIntegerField(default=0)
+
+    eligible_profile_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Snapshot of how many Discord-linked profiles existed when this day was computed. Internal diagnostic.",
+    )
+
+    posted_at = models.DateTimeField(null=True, blank=True, help_text="When the Discord webhook post succeeded. Idempotency gate.")
+    computed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date']
+        indexes = [
+            models.Index(fields=['-pp_score'], name='ctd_pp_score_idx'),
+            models.Index(fields=['-total_platinums'], name='ctd_plat_idx'),
+            models.Index(fields=['-total_trophies'], name='ctd_trophies_idx'),
+            models.Index(fields=['-total_ultra_rares'], name='ctd_ur_idx'),
+        ]
+        verbose_name = "Community Trophy Day"
+        verbose_name_plural = "Community Trophy Days"
+
+    def __str__(self):
+        return f"{self.date}: {self.total_trophies:,}T / {self.total_platinums:,}P / PP={self.pp_score:,}"

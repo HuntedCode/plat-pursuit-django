@@ -58,7 +58,7 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 
 | Command | Purpose | Key Flags | Typical Usage |
 |---------|---------|-----------|---------------|
-| `refresh_profiles` | Queue profiles for PSN sync based on tier and last update time. Premium every 6h, basic every 12h, Discord-verified every 24h, unregistered every 7d. | `--premium-hours` (default: 6), `--basic-hours` (default: 12), `--discord-hours` (default: 24), `--unreg-days` (default: 7) | `python manage.py refresh_profiles` |
+| `refresh_profiles` | Queue profiles for PSN sync based on tier and last update time. Premium every 6h, basic every 12h, Discord-verified every 12h, unregistered every 7d. | `--premium-hours` (default: 6), `--basic-hours` (default: 12), `--discord-hours` (default: 12), `--unreg-days` (default: 7) | `python manage.py refresh_profiles` |
 | `recalc_earn_rates` | Recalculate `played_count` on Games and `earned_count`/`earn_rate` on Trophies from source data. | `--dry-run`, `--batch-size` (default: 1000) | `python manage.py recalc_earn_rates --dry-run` |
 | `recalculate_profile_counts` | Recalculate trophy counts for all profiles using `update_profile_trophy_counts()`. | (none) | `python manage.py recalculate_profile_counts` |
 | `process_scheduled_notifications` | Process pending scheduled notifications that are due for delivery. | `--dry-run` | `python manage.py process_scheduled_notifications` |
@@ -67,6 +67,7 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | `mark_recaps_sent` | One-time fix: mark all existing recaps as `email_sent` and `notification_sent` to prevent stale sends. | `--dry-run` | `python manage.py mark_recaps_sent` |
 | `cleanup_old_analytics` | Delete old AnalyticsSession records and anonymize IP addresses from PageView records for GDPR compliance. | `--dry-run`, `--days` (default: 90), `--force` | `python manage.py cleanup_old_analytics --force` |
 | `refresh_homepage_hourly` | Compute and cache the site heartbeat ribbon data ("PlatPursuit at a Glance"). Single cache key per hour. See [Homepage Services](../reference/homepage-services.md). | (none) | `python manage.py refresh_homepage_hourly` |
+| `post_community_trophy_tracker` | Compute previous ET day's community trophy stats from Discord-linked profiles and post a daily summary to Discord via webhook. Idempotent via `CommunityTrophyDay.posted_at`. See [Community Trophy Tracker](../features/community-trophy-tracker.md). | `--date YYYY-MM-DD`, `--force-repost`, `--dry-run`, `--test-data`, `--test-scenario {record\|normal}`, `--use-platinum-webhook` | `python manage.py post_community_trophy_tracker --test-data` |
 | `populate_title_ids` | Populate TitleID table from external PlayStation Titles GitHub repository (PS4 + PS5 TSV files). | (none) | `python manage.py populate_title_ids` |
 | `backfill_game_families_from_igdb` | Populate `GameFamily` records from accepted `IGDBMatch` rows, keyed on `igdb_id`. One-shot historical pass; live enrichment hooks handle new matches. | `--dry-run` | `python manage.py backfill_game_families_from_igdb --dry-run` |
 | `backfill_guide_view_counts` | Reconcile `Checklist.view_count` from actual PageView records after the `page_type` rename from `checklist` to `guide`. | `--dry-run` | `python manage.py backfill_guide_view_counts` |

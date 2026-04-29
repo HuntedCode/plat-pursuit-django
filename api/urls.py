@@ -99,6 +99,9 @@ from .profile_card_views import (
 from .profile_showcase_views import (
     AddShowcaseView, RemoveShowcaseView, ReorderShowcasesView, UpdateShowcaseConfigView,
 )
+from .community_stats_views import (
+    CommunityStatsDayView, CommunityStatsTodayView, CommunityStatsRecordsView,
+)
 
 app_name = 'api'
 
@@ -345,4 +348,9 @@ urlpatterns = [
     path('roadmap/<int:roadmap_id>/lock/release/', RoadmapLockReleaseView.as_view(), name='roadmap-lock-release'),
     path('roadmap/<int:roadmap_id>/lock/break/', RoadmapLockBreakView.as_view(), name='roadmap-lock-break'),
     path('roadmap/<int:roadmap_id>/lock/merge/', RoadmapLockMergeView.as_view(), name='roadmap-lock-merge'),
+
+    # Community Trophy Tracker (public, read-only aggregates)
+    path('community-stats/today/', CommunityStatsTodayView.as_view(), name='community-stats-today'),
+    path('community-stats/records/', CommunityStatsRecordsView.as_view(), name='community-stats-records'),
+    path('community-stats/<str:date_str>/', CommunityStatsDayView.as_view(), name='community-stats-day'),
 ]

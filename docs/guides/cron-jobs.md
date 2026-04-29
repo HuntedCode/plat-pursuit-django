@@ -15,6 +15,8 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
+| 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
+| 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
 | Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
@@ -28,7 +30,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 
 - **Schedule**: Every 30 minutes
 - **Command**: `python manage.py refresh_profiles`
-- **What it does**: Scans all profiles and queues those whose data is stale for a PSN sync via TokenKeeper. Processes scouts first (per-scout configurable cadence, default 2h, capped at `--max-scouts` per run), then tier-based profiles: premium (6h), basic (12h), Discord-verified (24h), unregistered (7d). The command only *queues* profiles; the actual sync work happens asynchronously in the TokenKeeper worker.
+- **What it does**: Scans all profiles and queues those whose data is stale for a PSN sync via TokenKeeper. Processes scouts first (per-scout configurable cadence, default 2h, capped at `--max-scouts` per run), then tier-based profiles: premium (6h), basic (12h), Discord-verified (12h), unregistered (7d). The command only *queues* profiles; the actual sync work happens asynchronously in the TokenKeeper worker.
 - **Dependencies**: TokenKeeper must be running to process the queued jobs. If TokenKeeper is down, profiles will queue up but not sync.
 - **Idempotency**: Fully safe to re-run. Profiles already queued or recently synced are skipped by the threshold check. Double-running causes no harm because `PSNManager.profile_refresh()` deduplicates.
 - **Failure impact**: Profiles stop getting updated. Scout discovery and premium users are affected first. The site continues to serve cached data but it becomes increasingly stale.
@@ -99,6 +101,16 @@ historical pass after Phase 3's rematch run.
 - **Dependencies**: None, but having current earn rate data (from recent syncs) improves accuracy.
 - **Idempotency**: Fully safe to re-run. The command resets and rebuilds from scratch each time. Locked and manually flagged games are preserved.
 - **Failure impact**: The shovelware list becomes stale. New shovelware games are not excluded from challenge eligibility until the next successful run.
+
+### post_community_trophy_tracker
+
+- **Schedule**: Twice daily at **16:30 UTC** and **17:30 UTC** (both entries by design)
+- **Command**: `python manage.py post_community_trophy_tracker`
+- **What it does**: Computes the previous ET calendar day's community trophy stats (total trophies, platinums, ultra rares, and a weighted PP Score) for profiles with Discord linked, stores them as a `CommunityTrophyDay` row, and posts a Discord embed via `DISCORD_PLATINUM_WEBHOOK_URL`. Detects new all-time records per stat and tags the embed accordingly. See [Community Trophy Tracker](../features/community-trophy-tracker.md) for the full data flow.
+- **Why two crons?**: Render schedules in UTC. 16:30 UTC = 12:30 PM EDT (summer), 17:30 UTC = 12:30 PM EST (winter). Whichever fires first at the right ET time succeeds; the other becomes a no-op via the `posted_at` idempotency gate. **This is intentional, not a duplicate config bug.**
+- **Dependencies**: `refresh_profiles` should have completed at least one cycle for each tier after midnight ET so trophies earned in the final hour of the target day are synced. With the 12h Discord-verified cadence and the ~30 min sync buffer before noon ET, all eligible profiles will have synced at least once before this job runs.
+- **Idempotency**: Fully safe to re-run. The `CommunityTrophyDay.posted_at` field gates against double-posts. Use `--force-repost` to override (e.g., after editing a row in the admin to fix a bad post). Use `--dry-run` to preview the embed JSON without writing to the DB or posting.
+- **Failure impact**: That day's tracker post is skipped. The data is reconstructable any time later by running `python manage.py post_community_trophy_tracker --date=YYYY-MM-DD`. Records are not lost (they're computed from stored rows on every post).
 
 ### cleanup_old_analytics
 
@@ -178,6 +190,7 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
                             |
                             v
                         update_shovelware
+                        post_community_trophy_tracker (16:30 + 17:30 UTC, DST safety net)
 
 
     WEEKLY ─────────── cleanup_old_analytics --force       [Sunday]

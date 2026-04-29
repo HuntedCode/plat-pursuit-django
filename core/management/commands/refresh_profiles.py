@@ -11,7 +11,7 @@ class Command(BaseCommand):
     help = 'Automatically queue profiles for refresh based on tier and last update time.'
     PREMIUM_THRESHOLD_HOURS = 6
     BASIC_THRESHOLD_HOURS = 12
-    DISCORD_VERIFIED_THRESHOLD_HOURS = 24
+    DISCORD_VERIFIED_THRESHOLD_HOURS = 12
     UNREGISTERED_THRESHOLD_DAYS = 7
     MAX_SCOUTS_PER_RUN = 50
 
