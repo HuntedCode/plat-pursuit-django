@@ -93,10 +93,18 @@
         nextLocalId: -1,
         pushTimer: null,
         lockLost: false,
+        // True once the user has made ANY edit this session. Differs from
+        // `hasUnsaved` (which only tracks "is there a pending debounced push
+        // not yet on the server"). `dirty` stays true after a successful
+        // branch push, because the branch still differs from live records;
+        // it only resets after a merge. Used to decide whether to release
+        // the lock on tab close — releasing a dirty branch destroys work.
+        dirty: false,
 
         init(initialPayload) {
             this.state = initialPayload || { payload_version: PAYLOAD_VERSION, tabs: [] };
             if (!this.state.payload_version) this.state.payload_version = PAYLOAD_VERSION;
+            this.dirty = false;
         },
 
         findTab(tabId) {
@@ -115,6 +123,7 @@
         schedulePush() {
             if (this.lockLost) return;
             hasUnsaved = true;
+            this.dirty = true;
             setSaveStatus('unsaved');
             if (this.pushTimer) clearTimeout(this.pushTimer);
             this.pushTimer = setTimeout(() => this.push(), 1500);
@@ -581,16 +590,19 @@
                     return;
                 }
                 hasUnsaved = false;
+                BranchProxy.dirty = false;
+                // Server deleted the lock as part of the merge — flag it on
+                // the client so the upcoming beforeunload doesn't redundantly
+                // hit /release/.
+                BranchProxy.lockLost = true;
                 setSaveStatus('saved');
                 Toast.show(result.summary || 'Saved.', 'success');
-                // Save = save & exit. The merge service released the lock;
-                // redirecting to the public detail page (rather than reloading
-                // the editor) avoids re-acquiring a fresh 1-hour lock when the
-                // writer is finished. They can navigate back any time to keep
-                // editing, which will acquire a new lock then.
+                // Save = save & exit. Redirect to the game detail page (where
+                // the writer came from) rather than reloading the editor;
+                // reloading would acquire a fresh 1-hour lock unnecessarily.
                 const slug = editorEl.dataset.gameSlug || '';
                 setTimeout(() => {
-                    window.location.href = slug ? `/games/${slug}/roadmap/` : '/';
+                    window.location.href = slug ? `/games/${slug}/` : '/';
                 }, 500);
             } catch (err) {
                 const errData = await err.response?.json().catch(() => null);
@@ -1186,6 +1198,21 @@
                 await apiCall('patch', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/`, body);
             });
         });
+
+        // Editor-only gate. Tab metadata fields (difficulty, estimated_hours,
+        // missable_count, online_required, min_playthroughs) are gated to
+        // editor+ on the server. Surface that to writers by disabling the
+        // inputs and toning down the card so they aren't confused about why
+        // saves on these fields fail.
+        if (!canDelete) {
+            document.querySelectorAll('.guide-metadata-card').forEach(card => {
+                card.classList.add('opacity-60');
+                card.querySelectorAll('input, textarea, select, button').forEach(el => {
+                    if (el.closest('[data-readonly-exempt]')) return;
+                    el.disabled = true;
+                });
+            });
+        }
     }
 
     // ------------------------------------------------------------------ //
@@ -1730,19 +1757,39 @@
             enterReadOnlyMode('Editor is read-only.');
         }
 
-        // Warn on navigation with unsaved changes; release lock on close.
+        // On navigate-away:
+        //   - If the branch has any edits, flush them to /lock/branch/ via
+        //     keepalive so the work survives the unload, and KEEP the lock
+        //     alive. Advisory resume restores the session when the writer
+        //     comes back. Releasing here would delete the lock + branch and
+        //     destroy uncommitted work.
+        //   - If the branch is clean (no edits this session), release the
+        //     lock so others can take it without waiting for idle expiry.
+        // Both fetches use keepalive — fetch survives unload AND carries the
+        // CSRF token DRF requires (sendBeacon couldn't, was silently 403'ing).
         window.addEventListener('beforeunload', (e) => {
-            if (hasUnsaved) {
+            // Fire the browser's native dialog when there's any unsaved work,
+            // so a tab close / refresh / external link surfaces a warning
+            // even if the most recent autosave already pushed to the server.
+            if (BranchProxy.dirty) {
                 e.preventDefault();
                 e.returnValue = '';
             }
-            // Best-effort release using fetch + keepalive (modern equivalent
-            // of sendBeacon, but supports custom headers so we can pass the
-            // CSRF token DRF SessionAuthentication requires; sendBeacon was
-            // silently 403'ing the release endpoint).
-            if (!BranchProxy.lockLost) {
-                try {
-                    const csrfToken = window.PlatPursuit.CSRFToken?.get?.() || '';
+            if (BranchProxy.lockLost) return;
+            const csrfToken = window.PlatPursuit.CSRFToken?.get?.() || '';
+            try {
+                if (BranchProxy.dirty) {
+                    fetch(`/api/v1/roadmap/${roadmapId}/lock/branch/`, {
+                        method: 'PATCH',
+                        headers: {
+                            'X-CSRFToken': csrfToken,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ branch_payload: BranchProxy.state }),
+                        keepalive: true,
+                        credentials: 'same-origin',
+                    });
+                } else {
                     fetch(`/api/v1/roadmap/${roadmapId}/lock/release/`, {
                         method: 'POST',
                         headers: {
@@ -1753,11 +1800,42 @@
                         keepalive: true,
                         credentials: 'same-origin',
                     });
-                } catch (err) {
-                    // Lock auto-expires anyway; best-effort.
                 }
+            } catch (err) {
+                // Best-effort; lock auto-expires anyway.
             }
         });
+
+        // Informative warning for in-page navigation (navbar links,
+        // breadcrumbs, etc.). The browser's beforeunload dialog can't be
+        // customized in modern browsers, so we intercept clicks on internal
+        // links and surface our own message that explains the advisory lock
+        // model: leaving doesn't lose work, just keeps the session open.
+        document.addEventListener('click', (e) => {
+            if (!BranchProxy.dirty || BranchProxy.lockLost) return;
+            const link = e.target.closest('a[href]');
+            if (!link) return;
+            // Skip anything that wouldn't actually unload this page.
+            if (link.target === '_blank' || link.hasAttribute('download')) return;
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            // Skip editor-internal Cancel/Save buttons (those are <button>s
+            // anyway, but Preview is an <a target="_blank">). Also skip the
+            // formatting toolbar buttons that may use anchor-style markup.
+            if (link.closest('[data-readonly-exempt]')) return;
+            const proceed = confirm(
+                'You have unsaved roadmap changes.\n\n'
+                + 'Your branch is preserved on the server and your edit lock stays '
+                + 'open — you can come back any time and resume right where you '
+                + 'left off. The lock only releases when you save, click Cancel, '
+                + 'or it goes idle long enough for another author to claim it.\n\n'
+                + 'Leave the editor?'
+            );
+            if (!proceed) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);  // capture-phase so we run before bubbling handlers navigate
     }
 
     function initSaveCancelButtons() {
@@ -1768,9 +1846,13 @@
         }
         if (cancelBtn) {
             cancelBtn.addEventListener('click', async () => {
-                if (hasUnsaved && !confirm(
-                    'Discard your unsaved branch and exit the editor? '
-                    + 'You will lose any changes made since the last save.'
+                if (BranchProxy.dirty && !confirm(
+                    'Discard your unsaved branch and exit the editor?\n\n'
+                    + 'Cancel will permanently release your edit lock and '
+                    + 'delete the branch. Any changes you\'ve made since '
+                    + 'the last Save will be lost.\n\n'
+                    + '(If you just want to step away and come back later, '
+                    + 'close the tab instead — your work will be preserved.)'
                 )) return;
                 await LockController.release();
                 window.location.href = `/games/${editorEl.dataset.gameSlug || ''}/`;
