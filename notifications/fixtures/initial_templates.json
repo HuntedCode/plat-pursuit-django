@@ -142,5 +142,23 @@
       "created_at": "2025-01-01T00:00:00Z",
       "updated_at": "2025-01-01T00:00:00Z"
     }
+  },
+  {
+    "model": "notifications.notificationtemplate",
+    "pk": 9,
+    "fields": {
+      "name": "roadmap_note_mention",
+      "notification_type": "roadmap_note_mention",
+      "title_template": "💬 {author_username} mentioned you on {game_title}",
+      "message_template": "{target_label} — “{body_excerpt}”",
+      "icon": "💬",
+      "action_url_template": "/games/{game_slug}/roadmap/edit/?note={note_id}",
+      "action_text": "View note",
+      "auto_trigger_enabled": true,
+      "trigger_event": "roadmap_note_mention",
+      "priority": "normal",
+      "created_at": "2026-04-30T00:00:00Z",
+      "updated_at": "2026-04-30T00:00:00Z"
+    }
   }
 ]

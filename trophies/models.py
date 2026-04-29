@@ -4178,6 +4178,16 @@ class RoadmapEditLock(models.Model):
     def hard_cap_seconds_remaining(self):
         return max(0, int((self.acquired_at + self.HARD_CAP - timezone.now()).total_seconds()))
 
+    @property
+    def hard_cap_at(self):
+        """Absolute timestamp at which the session cap expires.
+
+        Used by surfaces that show 'lock releases by X' to other writers —
+        the idle timer can keep getting extended, so the cap is the firm
+        ceiling on how long an outsider may have to wait.
+        """
+        return self.acquired_at + self.HARD_CAP
+
     def is_held_by(self, profile):
         return profile is not None and self.holder_id == profile.id
 
@@ -4248,6 +4258,135 @@ class RoadmapRevision(models.Model):
 
     def __str__(self):
         return f"Revision: roadmap={self.roadmap_id}, {self.action_type} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class RoadmapNote(models.Model):
+    """Author-only back-channel notes on a roadmap.
+
+    Notes are meta-content (discussion between authors) — they live entirely
+    outside the lock + branch + revision flow. Posting a note never requires
+    holding the edit lock; any writer+ can leave one any time, including
+    while another author is mid-session. Notes are NOT serialized into
+    revision snapshots — they're discussion, not guide state.
+
+    A note can attach to one of four targets:
+      - the guide as a whole (`target_kind='guide'`)
+      - a tab's content (`target_kind='tab'`, `target_tab` set) — surfaced
+        on the General Tips card since that's the natural anchor; in practice
+        notes here cover the tab's general_tips / metadata discussion.
+      - a specific RoadmapStep (`target_kind='step'`, `target_step` set)
+      - a specific TrophyGuide (`target_kind='trophy_guide'`, `target_trophy_guide` set)
+
+    Notes are visible only to writer+ profiles; the public detail page never
+    surfaces them.
+    """
+    TARGET_GUIDE = 'guide'
+    TARGET_TAB = 'tab'
+    TARGET_STEP = 'step'
+    TARGET_TROPHY_GUIDE = 'trophy_guide'
+    TARGET_KIND_CHOICES = [
+        (TARGET_GUIDE, 'Guide'),
+        (TARGET_TAB, 'Tab'),
+        (TARGET_STEP, 'Step'),
+        (TARGET_TROPHY_GUIDE, 'Trophy guide'),
+    ]
+
+    STATUS_OPEN = 'open'
+    STATUS_RESOLVED = 'resolved'
+    STATUS_CHOICES = [
+        (STATUS_OPEN, 'Open'),
+        (STATUS_RESOLVED, 'Resolved'),
+    ]
+
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='notes'
+    )
+    target_kind = models.CharField(max_length=20, choices=TARGET_KIND_CHOICES)
+    target_tab = models.ForeignKey(
+        'RoadmapTab', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='notes',
+    )
+    target_step = models.ForeignKey(
+        'RoadmapStep', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='notes',
+    )
+    target_trophy_guide = models.ForeignKey(
+        'TrophyGuide', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='notes',
+    )
+    author = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_roadmap_notes',
+    )
+    body = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_OPEN)
+    resolved_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='resolved_roadmap_notes',
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Roadmap Note'
+        verbose_name_plural = 'Roadmap Notes'
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['roadmap', 'status', 'created_at'], name='roadmap_note_thread_idx'),
+            models.Index(fields=['target_tab'], name='roadmap_note_tab_idx'),
+            models.Index(fields=['target_step'], name='roadmap_note_step_idx'),
+            models.Index(fields=['target_trophy_guide'], name='roadmap_note_guide_idx'),
+            models.Index(fields=['author', '-created_at'], name='roadmap_note_author_idx'),
+        ]
+        constraints = [
+            # Enforce that target_<kind> FK is set iff target_kind matches.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(target_kind='guide', target_tab__isnull=True, target_step__isnull=True, target_trophy_guide__isnull=True)
+                    | models.Q(target_kind='tab', target_tab__isnull=False, target_step__isnull=True, target_trophy_guide__isnull=True)
+                    | models.Q(target_kind='step', target_tab__isnull=True, target_step__isnull=False, target_trophy_guide__isnull=True)
+                    | models.Q(target_kind='trophy_guide', target_tab__isnull=True, target_step__isnull=True, target_trophy_guide__isnull=False)
+                ),
+                name='roadmap_note_target_consistency',
+            ),
+        ]
+
+    def __str__(self):
+        return f"Note: roadmap={self.roadmap_id}, {self.target_kind}, by {self.author_id} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def is_resolved(self):
+        return self.status == self.STATUS_RESOLVED
+
+
+class RoadmapNoteRead(models.Model):
+    """Per-author last-seen tracker for the editor heads-up banner.
+
+    Updated when a writer+ opens the editor for a roadmap. Used to compute
+    the "X new notes since you were last here" count surfaced on editor
+    open. Resolved notes don't count toward unread (per the design
+    decision — if someone closed a loop before you saw it, treat it as
+    handled).
+    """
+    profile = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='roadmap_note_reads'
+    )
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='note_reads'
+    )
+    last_read_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = 'Roadmap Note Read'
+        verbose_name_plural = 'Roadmap Note Reads'
+        unique_together = ['profile', 'roadmap']
+        indexes = [
+            models.Index(fields=['profile', 'roadmap'], name='roadmap_note_read_idx'),
+        ]
+
+    def __str__(self):
+        return f"NoteRead: profile={self.profile_id}, roadmap={self.roadmap_id} @ {self.last_read_at:%Y-%m-%d %H:%M}"
 
 
 # ---------------------------------------------------------------------------

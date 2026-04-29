@@ -91,6 +91,10 @@ from .roadmap_lock_views import (
     RoadmapLockAcquireView, RoadmapLockHeartbeatView, RoadmapLockBranchView,
     RoadmapLockReleaseView, RoadmapLockBreakView, RoadmapLockMergeView,
 )
+from .roadmap_note_views import (
+    RoadmapNoteListCreateView, RoadmapNoteDetailView,
+    RoadmapNoteResolveView, RoadmapNoteMarkReadView,
+)
 from .profile_card_views import (
     ProfileCardHTMLView, ProfileCardPNGView,
     ProfileCardSettingsView, ProfileCardRegenerateTokenView,
@@ -348,6 +352,11 @@ urlpatterns = [
     path('roadmap/<int:roadmap_id>/lock/release/', RoadmapLockReleaseView.as_view(), name='roadmap-lock-release'),
     path('roadmap/<int:roadmap_id>/lock/break/', RoadmapLockBreakView.as_view(), name='roadmap-lock-break'),
     path('roadmap/<int:roadmap_id>/lock/merge/', RoadmapLockMergeView.as_view(), name='roadmap-lock-merge'),
+    # Author notes (writer+, no lock requirement)
+    path('roadmap/<int:roadmap_id>/notes/', RoadmapNoteListCreateView.as_view(), name='roadmap-notes-list'),
+    path('roadmap/<int:roadmap_id>/notes/<int:note_id>/', RoadmapNoteDetailView.as_view(), name='roadmap-notes-detail'),
+    path('roadmap/<int:roadmap_id>/notes/<int:note_id>/resolve/', RoadmapNoteResolveView.as_view(), name='roadmap-notes-resolve'),
+    path('roadmap/<int:roadmap_id>/notes/mark-read/', RoadmapNoteMarkReadView.as_view(), name='roadmap-notes-mark-read'),
 
     # Community Trophy Tracker (public, read-only aggregates)
     path('community-stats/today/', CommunityStatsTodayView.as_view(), name='community-stats-today'),

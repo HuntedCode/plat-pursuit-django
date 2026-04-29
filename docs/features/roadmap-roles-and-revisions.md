@@ -183,6 +183,73 @@ converts them to null on send.
 2. Server (`restore_revision` service) refuses to run while a non-expired lock exists. Then clears all live Steps + TrophyGuides on this roadmap, resets Tab fields from snapshot, recreates Steps + TrophyGuides from snapshot.
 3. Creates a new `restored` revision so the restore itself is auditable.
 
+## Author notes
+
+A back-channel comment system layered onto the editor for cross-author
+discussion. Notes live entirely outside the lock + branch + revision flow:
+posting one never requires holding the edit lock, and they're not serialized
+into revision snapshots. Any writer+ can comment any time, including while
+another author is mid-session.
+
+### Targets and scoping
+- **Section-anchored**: a note attaches to a specific `RoadmapStep` or
+  `TrophyGuide` (`target_kind='step'` / `'trophy_guide'`). Discussion lives
+  next to the content it's about.
+- **Guide-level**: `target_kind='guide'` for cross-cutting feedback ("ready
+  for review", "needs trophy guides for chapter 3"). Surfaced in the editor's
+  General Notes drawer.
+- **No tab-level**: tabs are auto-generated structural shells, no real
+  surface for discussion there.
+- **No ownership scoping**: a writer can comment on any section regardless
+  of who created it. Authors edit/delete their own notes; editor+ can delete
+  anyone's; same for resolving.
+
+### Resolved/Open
+Each note has a status. Resolved notes hide from the heads-up unread count
+(if someone closed a loop before you saw it, treat it as handled), but stay
+accessible via "Show resolved" toggle in the General Notes drawer.
+
+### Lifecycle
+- Notes survive saves, publishes, restores.
+- When a `RoadmapStep` or `TrophyGuide` is deleted, attached notes
+  cascade-delete with it. Discussion goes with the deleted thing.
+- Notes are stored in `RoadmapNote`; per-profile last-read state in
+  `RoadmapNoteRead`.
+
+### Heads-up banner
+When a writer opens the editor, if there are open notes (by other authors)
+posted since their last `RoadmapNoteRead.last_read_at`, the editor shows a
+top-of-page banner: "X new notes from your team since you were last here.
+[Review notes]" → opens the General Notes drawer.
+
+`mark_read` is fired ~5s after editor open (gives the writer a moment to
+actually see the heads-up before it counts as "read").
+
+### @mentions
+`@psn_username` in a note body is parsed via regex
+(`(?<![A-Za-z0-9_\-/@])@([A-Za-z0-9_\-]{3,16})`), resolved against existing
+Profiles, and rendered as profile links at display time. New mentions fire
+a `roadmap_note_mention` notification through the existing notification
+system (immediate, not deferred — mentions are 1-to-1, no batching value).
+
+**Role gate**: only Profiles with `roadmap_role >= writer` get pinged. If a
+note mentions a regular user's PSN handle (accidentally or otherwise), no
+notification fires for that user — they're not on the roadmap team. This
+keeps random users from being paged because someone else owns their handle
+or because of typos.
+
+**Notification content**: the title shows author + game; the message shows
+the target section + a 160-char excerpt of the note body; the `detail`
+(markdown, 2.5KB) carries the full note body alongside the game / section
+/ timestamp metadata so the recipient can read the whole note without
+clicking into the editor. The action button deep-links to the editor with
+`?note=<id>` for direct navigation.
+
+Editing a note re-fires notifications only for newly-mentioned profiles, so
+re-saving the same body doesn't re-spam already-notified users. Unknown
+handles silently drop. Self-mentions DO fire — if a writer types their own
+handle they meant it (self-reminder, testing, etc.).
+
 ## API Endpoints
 
 | Method | Path | Min Role | Purpose |
@@ -194,6 +261,12 @@ converts them to null on send.
 | POST | `/api/v1/roadmap/<id>/lock/break/` | publisher | Force-break someone else's lock; archives branch as `force_unlocked` revision. |
 | POST | `/api/v1/roadmap/<id>/lock/merge/` | writer | Apply branch_payload → live records, create revision, release lock. Per-action role rules enforced inside merge service. |
 | POST | `/api/v1/roadmap/<id>/publish/` | publisher | Toggle status. Creates `published`/`unpublished` revision. |
+| GET | `/api/v1/roadmap/<id>/notes/` | writer | List notes (filter by `status`, `target_kind`, `target_step_id`, `target_trophy_guide_id`). |
+| POST | `/api/v1/roadmap/<id>/notes/` | writer | Create a note. Lock-independent — anyone can comment any time. |
+| PATCH | `/api/v1/roadmap/<id>/notes/<note_id>/` | writer | Edit own note body. |
+| DELETE | `/api/v1/roadmap/<id>/notes/<note_id>/` | writer | Delete own; editor+ can delete anyone's. |
+| POST | `/api/v1/roadmap/<id>/notes/<note_id>/resolve/` | writer | Toggle status (own; editor+ for anyone's). |
+| POST | `/api/v1/roadmap/<id>/notes/mark-read/` | writer | Bump `RoadmapNoteRead.last_read_at` for the heads-up banner. |
 
 The legacy per-field endpoints (`/tab/<id>/`, `/steps/`, etc.) are still
 mounted but the new editor doesn't use them. They remain functional for

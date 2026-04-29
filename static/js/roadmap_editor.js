@@ -93,18 +93,36 @@
         nextLocalId: -1,
         pushTimer: null,
         lockLost: false,
-        // True once the user has made ANY edit this session. Differs from
-        // `hasUnsaved` (which only tracks "is there a pending debounced push
-        // not yet on the server"). `dirty` stays true after a successful
-        // branch push, because the branch still differs from live records;
-        // it only resets after a merge. Used to decide whether to release
-        // the lock on tab close — releasing a dirty branch destroys work.
+        // `dirty` = branch has any work in it that differs from live records.
+        // Includes work from PRIOR sessions (set by LockController when
+        // resuming a non-fresh lock). Used by Cancel to know whether to
+        // confirm before destroying the branch.
+        //
+        // `dirtyThisSession` = the user has edited something during this
+        // page's lifetime. Used by beforeunload to decide whether to fire
+        // the native browser warning dialog (no point warning if the work
+        // was already on the server before they opened this tab).
         dirty: false,
+        dirtyThisSession: false,
 
         init(initialPayload) {
             this.state = initialPayload || { payload_version: PAYLOAD_VERSION, tabs: [] };
             if (!this.state.payload_version) this.state.payload_version = PAYLOAD_VERSION;
             this.dirty = false;
+            this.dirtyThisSession = false;
+            // Resumed sessions can carry over negative-id entries the user
+            // created last time. Reset nextLocalId below the lowest existing
+            // negative so new sections don't collide with surviving ones.
+            let minId = 0;
+            (this.state.tabs || []).forEach(tab => {
+                (tab.steps || []).forEach(s => {
+                    if (typeof s.id === 'number' && s.id < minId) minId = s.id;
+                });
+                (tab.trophy_guides || []).forEach(g => {
+                    if (typeof g.id === 'number' && g.id < minId) minId = g.id;
+                });
+            });
+            this.nextLocalId = minId - 1;
         },
 
         findTab(tabId) {
@@ -124,6 +142,7 @@
             if (this.lockLost) return;
             hasUnsaved = true;
             this.dirty = true;
+            this.dirtyThisSession = true;
             setSaveStatus('unsaved');
             if (this.pushTimer) clearTimeout(this.pushTimer);
             this.pushTimer = setTimeout(() => this.push(), 1500);
@@ -460,6 +479,23 @@
                 const result = await API.post(`/api/v1/roadmap/${roadmapId}/lock/acquire/`, {});
                 this.applyLockState(result.lock);
                 BranchProxy.init(result.branch_payload);
+                // The page rendered tabsData from server-side LIVE state. If
+                // the branch_payload differs (resumed session with unmerged
+                // edits), mutate tabsData in place and push branch values
+                // into the server-rendered DOM fields so the editor UI
+                // reflects what the writer was working on, not the live
+                // state. Must run BEFORE initMetadataFields and the
+                // renderSteps/renderTrophyGuides calls below.
+                hydrateTabsDataFromBranch(result.branch_payload);
+                // If we're resuming an existing lock (held by self from a
+                // prior tab/session), the branch may have unmerged work.
+                // Mark dirty so Cancel confirms before destroying it. The
+                // beforeunload native dialog stays gated on
+                // `dirtyThisSession`, which only fires for edits made on
+                // this specific page load.
+                if (result.reacquired === false) {
+                    BranchProxy.dirty = true;
+                }
                 this.lastActivityAt = Date.now();
                 this.installActivityListeners();
                 this.startHeartbeatTimer();
@@ -591,6 +627,7 @@
                 }
                 hasUnsaved = false;
                 BranchProxy.dirty = false;
+                BranchProxy.dirtyThisSession = false;
                 // Server deleted the lock as part of the merge — flag it on
                 // the client so the upcoming beforeunload doesn't redundantly
                 // hit /release/.
@@ -662,10 +699,15 @@
             }
             if (state === 'conflict' && lock) {
                 banner.classList.add('border-warning/40', 'bg-warning/10');
-                const mins = Math.floor((lock.seconds_until_expiry || 0) / 60);
-                msg.textContent = lock.is_stale
+                // Surface the SESSION (hard-cap) timer rather than idle —
+                // for someone waiting on a lock, the cap is the firm ceiling
+                // ("you'll wait at most this long"). Idle resets on every
+                // keystroke, so it would be misleading.
+                const mins = Math.floor((lock.hard_cap_seconds_remaining || 0) / 60);
+                const baseMsg = lock.is_stale
                     ? `Locked by ${lock.holder_username || 'another author'} (idle). Reload to take over — their branch will be archived.`
-                    : `Locked by ${lock.holder_username || 'another author'} (expires in ~${mins} min). Editor is read-only.`;
+                    : `Locked by ${lock.holder_username || 'another author'} (session ends in ~${mins} min). Editor is read-only — but you can still leave notes.`;
+                msg.textContent = baseMsg;
                 if (action && canPublish && !lock.is_stale) {
                     action.innerHTML = '<button id="force-unlock-btn" class="btn btn-xs btn-warning">Force unlock</button>';
                     action.querySelector('#force-unlock-btn').addEventListener('click', () => this.forceUnlock());
@@ -679,6 +721,73 @@
             }
         },
     };
+
+    /**
+     * Replace tabsData fields with the branch_payload returned by
+     * /lock/acquire/, and push branch values into server-rendered DOM
+     * fields that aren't otherwise hydrated (general_tips and youtube_url
+     * textareas/inputs). Steps + trophy guides are rendered from tabsData
+     * later in init(), so updating tabsData is enough for those.
+     *
+     * Called once during LockController.init(). Idempotent: for a fresh
+     * lock, branch_payload == live snapshot, so the assignments are no-ops.
+     */
+    function hydrateTabsDataFromBranch(payload) {
+        if (!payload || !Array.isArray(payload.tabs)) return;
+        payload.tabs.forEach(branchTab => {
+            const tabId = branchTab.id;
+            const existing = tabsData.find(t => t.id === tabId);
+            if (!existing) return;
+
+            // Tab-level content + metadata
+            existing.general_tips = branchTab.general_tips || '';
+            existing.youtube_url = branchTab.youtube_url || '';
+            existing.difficulty = branchTab.difficulty;
+            existing.estimated_hours = branchTab.estimated_hours;
+            existing.missable_count = branchTab.missable_count;
+            existing.online_required = branchTab.online_required;
+            existing.min_playthroughs = branchTab.min_playthroughs;
+            existing.created_by_id = branchTab.created_by_id;
+            existing.last_edited_by_id = branchTab.last_edited_by_id;
+
+            // Steps — direct mapping (branch + tabsData both use a list)
+            existing.steps = (branchTab.steps || []).map(s => ({
+                id: s.id,
+                title: s.title,
+                description: s.description,
+                youtube_url: s.youtube_url,
+                order: s.order,
+                created_by_id: s.created_by_id,
+                last_edited_by_id: s.last_edited_by_id,
+                trophy_ids: s.trophy_ids || [],
+            }));
+
+            // Trophy guides — branch uses a list, tabsData uses a dict
+            // keyed by trophy_id. Convert here.
+            existing.trophy_guides = {};
+            (branchTab.trophy_guides || []).forEach(tg => {
+                existing.trophy_guides[tg.trophy_id] = {
+                    body: tg.body || '',
+                    is_missable: !!tg.is_missable,
+                    is_online: !!tg.is_online,
+                    is_unobtainable: !!tg.is_unobtainable,
+                    created_by_id: tg.created_by_id,
+                    last_edited_by_id: tg.last_edited_by_id,
+                };
+            });
+
+            // Server-rendered DOM fields that aren't hydrated by any
+            // existing init function — push branch values into them.
+            const tipsInput = document.querySelector(
+                `.general-tips-input[data-tab-id="${tabId}"]`
+            );
+            if (tipsInput) tipsInput.value = existing.general_tips;
+            const ytInput = document.querySelector(
+                `.youtube-url-input[data-tab-id="${tabId}"]`
+            );
+            if (ytInput) ytInput.value = existing.youtube_url;
+        });
+    }
 
     function enterReadOnlyMode(reason) {
         editorEl.querySelectorAll('input, textarea, select, button').forEach(el => {
@@ -881,6 +990,12 @@
         });
 
         initDragReorder(tabId);
+
+        // Notes module mounts the 💬 N indicator on each step row. Lazy
+        // optional-chain because notes JS may load slightly after editor JS
+        // — when notes init eventually fires, it'll mount across the whole
+        // editor. This call covers in-session re-renders (Add Step, etc.).
+        window.PlatPursuit?.RoadmapNotes?.mountAllIndicators?.();
     }
 
     function createStepElement(step, number, groupId) {
@@ -1330,6 +1445,9 @@
 
             container.appendChild(el);
         });
+
+        // Re-mount note indicators on the freshly-rendered trophy guide rows.
+        window.PlatPursuit?.RoadmapNotes?.mountAllIndicators?.();
     }
 
     // ------------------------------------------------------------------ //
@@ -1757,28 +1875,37 @@
             enterReadOnlyMode('Editor is read-only.');
         }
 
+        // One-shot flag: set by the in-page navigation confirm so we don't
+        // immediately re-prompt with the browser's native dialog. Cleared
+        // after beforeunload fires (so the next navigation is treated
+        // independently). Tab close / refresh / browser-back still get
+        // the native warning since they don't go through the click handler.
+        let suppressNativeUnload = false;
+        window.__roadmapEditorSuppressNativeUnload = () => { suppressNativeUnload = true; };
+
         // On navigate-away:
-        //   - If the branch has any edits, flush them to /lock/branch/ via
-        //     keepalive so the work survives the unload, and KEEP the lock
-        //     alive. Advisory resume restores the session when the writer
-        //     comes back. Releasing here would delete the lock + branch and
-        //     destroy uncommitted work.
-        //   - If the branch is clean (no edits this session), release the
-        //     lock so others can take it without waiting for idle expiry.
+        //   - If the branch has edits made THIS session, flush them to
+        //     /lock/branch/ via keepalive so the work survives the unload,
+        //     and KEEP the lock alive. Advisory resume restores the session
+        //     when the writer comes back.
+        //   - Native browser dialog only fires when the user has edits this
+        //     session that haven't synced (otherwise no point — server
+        //     already has the branch). Suppressed if the in-page confirm
+        //     just ran, to avoid double-prompting.
         // Both fetches use keepalive — fetch survives unload AND carries the
-        // CSRF token DRF requires (sendBeacon couldn't, was silently 403'ing).
+        // CSRF token DRF requires.
         window.addEventListener('beforeunload', (e) => {
-            // Fire the browser's native dialog when there's any unsaved work,
-            // so a tab close / refresh / external link surfaces a warning
-            // even if the most recent autosave already pushed to the server.
-            if (BranchProxy.dirty) {
+            if (BranchProxy.dirtyThisSession && !suppressNativeUnload) {
                 e.preventDefault();
                 e.returnValue = '';
             }
+            // Reset for the next navigation (in case this one is canceled).
+            suppressNativeUnload = false;
+
             if (BranchProxy.lockLost) return;
             const csrfToken = window.PlatPursuit.CSRFToken?.get?.() || '';
             try {
-                if (BranchProxy.dirty) {
+                if (BranchProxy.dirtyThisSession) {
                     fetch(`/api/v1/roadmap/${roadmapId}/lock/branch/`, {
                         method: 'PATCH',
                         headers: {
@@ -1789,7 +1916,9 @@
                         keepalive: true,
                         credentials: 'same-origin',
                     });
-                } else {
+                } else if (!BranchProxy.dirty) {
+                    // Branch is fully clean (no resumed work either) —
+                    // release the lock so others aren't held up.
                     fetch(`/api/v1/roadmap/${roadmapId}/lock/release/`, {
                         method: 'POST',
                         headers: {
@@ -1801,6 +1930,8 @@
                         credentials: 'same-origin',
                     });
                 }
+                // Else: resumed session with no new edits — leave lock + branch
+                // alone, server already has the latest state.
             } catch (err) {
                 // Best-effort; lock auto-expires anyway.
             }
@@ -1834,6 +1965,11 @@
             if (!proceed) {
                 e.preventDefault();
                 e.stopPropagation();
+            } else {
+                // User already confirmed via the in-page dialog — suppress
+                // the immediately-following native beforeunload warning so
+                // they don't have to dismiss two dialogs for one navigation.
+                window.__roadmapEditorSuppressNativeUnload?.();
             }
         }, true);  // capture-phase so we run before bubbling handlers navigate
     }
@@ -1849,11 +1985,15 @@
                 if (BranchProxy.dirty && !confirm(
                     'Discard your unsaved branch and exit the editor?\n\n'
                     + 'Cancel will permanently release your edit lock and '
-                    + 'delete the branch. Any changes you\'ve made since '
-                    + 'the last Save will be lost.\n\n'
+                    + 'delete the branch. Any unsaved changes — including '
+                    + 'work from a previous session you resumed — will be '
+                    + 'lost.\n\n'
                     + '(If you just want to step away and come back later, '
                     + 'close the tab instead — your work will be preserved.)'
                 )) return;
+                // Prevent the native beforeunload dialog from firing on top
+                // of the confirm the user just answered.
+                window.__roadmapEditorSuppressNativeUnload?.();
                 await LockController.release();
                 window.location.href = `/games/${editorEl.dataset.gameSlug || ''}/`;
             });

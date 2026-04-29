@@ -7,6 +7,7 @@
 {{ tabs_data|json_script:"roadmap-tabs-data" }}
 {{ trophies_by_group|json_script:"roadmap-trophies-data" }}
 {{ profiles_by_id|json_script:"roadmap-profiles-data" }}
+{{ mentionable_authors|json_script:"roadmap-mentionable-authors" }}
 <div id="roadmap-editor"
      data-roadmap-id="{{ roadmap.id }}"
      data-game-slug="{{ game.np_communication_id }}"
@@ -24,6 +25,24 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                 <span class="lock-banner-msg text-xs md:text-sm flex-1 min-w-0"></span>
                 <span class="lock-banner-action shrink-0"></span>
+            </div>
+        </div>
+    </div>
+
+    {# ═══ Notes Heads-up Banner ═══ #}
+    {# Server-rendered visible state when notes_unread_count > 0; JS hides #}
+    {# it after the user opens General Notes. #}
+    <div id="notes-heads-up"
+         class="{% if not notes_unread_count %}hidden {% endif %}card border-2 border-info/40 bg-info/10 mb-3"
+         data-readonly-exempt
+         data-initial-unread="{{ notes_unread_count }}">
+        <div class="card-body p-2 md:p-3">
+            <div class="flex items-center gap-3 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                <span class="text-xs md:text-sm flex-1 min-w-0">
+                    <strong class="notes-unread-count">{{ notes_unread_count }}</strong> new note{{ notes_unread_count|pluralize }} from your team since you were last here.
+                </span>
+                <button id="notes-heads-up-open" class="btn btn-xs btn-info shrink-0">Review notes</button>
             </div>
         </div>
     </div>
@@ -63,6 +82,11 @@
                         </svg>
                         <span class="hidden md:inline">Preview</span>
                     </a>
+                    <button id="general-notes-btn" class="btn btn-sm btn-ghost border border-base-300 gap-1 relative" data-readonly-exempt>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                        <span class="hidden md:inline">Notes</span>
+                        <span id="general-notes-badge" class="hidden absolute -top-1 -right-1 items-center justify-center min-w-[1rem] h-4 px-1 rounded-full bg-info text-info-content text-[10px] font-bold"></span>
+                    </button>
                     <button id="roadmap-cancel-btn" class="btn btn-sm btn-ghost border border-base-300 gap-1">
                         <span class="hidden md:inline">Cancel</span>
                         <span class="md:hidden">×</span>
@@ -212,6 +236,8 @@
                         <span class="general-tips-owner-icon-fallback hidden w-3.5 h-3.5 rounded-full bg-base-300 items-center justify-center text-[8px] font-bold"></span>
                         <span class="general-tips-owner-name"></span>
                     </span>
+                    {# Note indicator slot — JS mounts the 💬 N button here. #}
+                    <span class="note-indicator-slot ml-auto" data-readonly-exempt></span>
                 </h2>
                 <p class="text-xs text-base-content/40 mb-3">Advice and things to know before starting. Supports markdown formatting.</p>
                 {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
@@ -344,8 +370,87 @@
         </div>
     </details>
 </template>
+
+{# ─── General Notes Drawer ─── #}
+{# Slide-out panel anchored to the right of the viewport. Toggled by the    #}
+{# header's "Notes" button. Contains the guide-level thread (target_kind=   #}
+{# 'guide'). Section-level notes show inline on their respective rows; this #}
+{# panel is for cross-cutting feedback ("ready for review", "needs trophy   #}
+{# guides for chapter 3", etc).                                             #}
+<div id="general-notes-drawer"
+     class="hidden fixed top-0 right-0 h-screen w-full md:w-96 bg-base-200 border-l-2 border-base-300 shadow-2xl z-50 flex-col"
+     data-readonly-exempt>
+    <div class="flex items-center justify-between gap-2 p-3 border-b-2 border-base-300 shrink-0">
+        <h3 class="text-base font-bold flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+            General Notes
+        </h3>
+        <div class="flex items-center gap-1">
+            <label class="cursor-pointer flex items-center gap-1 text-xs text-base-content/60">
+                <input type="checkbox" class="notes-show-resolved-toggle checkbox checkbox-xs">
+                Show resolved
+            </label>
+            <button id="general-notes-close" class="btn btn-ghost btn-xs">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+    </div>
+    <div id="general-notes-list" class="flex-1 overflow-y-auto p-3 space-y-2"></div>
+    <div class="p-3 border-t-2 border-base-300 shrink-0">
+        <textarea id="general-notes-composer"
+                  class="textarea textarea-bordered w-full text-sm"
+                  rows="3"
+                  placeholder="Leave a note for your team... (use @username to ping someone)"
+                  maxlength="5000"></textarea>
+        <div class="flex items-center justify-between gap-2 mt-2">
+            <span class="text-[10px] text-base-content/40">@username pings the author</span>
+            <button id="general-notes-post-btn" class="btn btn-sm btn-primary">Post note</button>
+        </div>
+    </div>
+</div>
+
+{# ─── Inline section thread template (cloned by JS into each step + trophy guide row) ─── #}
+{# `data-readonly-exempt` keeps notes interactive even when the editor is in #}
+{# read-only mode (lock held by another author). Notes are an always-on        #}
+{# back-channel — they never require holding the edit lock.                    #}
+<template id="note-thread-template">
+    <div class="note-thread mt-2 pt-2 border-t border-base-content/5 space-y-2" data-readonly-exempt>
+        <div class="note-list space-y-2"></div>
+        <div class="note-composer-wrap flex items-start gap-2">
+            <textarea class="note-composer textarea textarea-bordered textarea-xs flex-1 text-xs"
+                      rows="2"
+                      placeholder="Leave a note... (@username to ping)"
+                      maxlength="5000"></textarea>
+            <button class="note-post-btn btn btn-xs btn-primary shrink-0 self-stretch">Post</button>
+        </div>
+    </div>
+</template>
+
+{# ─── Single note row template (cloned by JS for each note within a thread) ─── #}
+<template id="note-row-template">
+    <div class="note-row rounded border border-base-content/5 bg-white/[0.03] p-2" data-readonly-exempt>
+        <div class="flex items-start gap-2">
+            <span class="note-avatar shrink-0 w-5 h-5 rounded-full bg-base-300 overflow-hidden flex items-center justify-center text-[10px] font-bold"></span>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap text-[10px] text-base-content/50">
+                    <span class="note-author font-semibold text-base-content/80"></span>
+                    <span class="note-timestamp"></span>
+                    <span class="note-resolved-pill hidden items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-success/15 text-success text-[10px]">Resolved</span>
+                </div>
+                <div class="note-body text-xs whitespace-pre-wrap break-words mt-0.5"></div>
+                <div class="note-actions hidden items-center gap-2 mt-1">
+                    <button class="note-resolve-btn text-[10px] text-base-content/50 hover:text-success">Resolve</button>
+                    <button class="note-reopen-btn hidden text-[10px] text-base-content/50 hover:text-warning">Reopen</button>
+                    <button class="note-edit-btn hidden text-[10px] text-base-content/50 hover:text-info">Edit</button>
+                    <button class="note-delete-btn hidden text-[10px] text-base-content/50 hover:text-error">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
 {% endblock %}
 
 {% block js_scripts %}
 <script src="{% static 'js/roadmap_editor.js' %}"></script>
+<script src="{% static 'js/roadmap_notes.js' %}"></script>
 {% endblock %}

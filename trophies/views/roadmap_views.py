@@ -323,4 +323,38 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
         # lock; writers only see their own sections as editable.
         context['viewer_profile_id'] = profile.id
 
+        # Notes — surface unread count for the heads-up banner. The actual
+        # notes are fetched client-side via /api/v1/roadmap/<id>/notes/ on
+        # editor init; we don't inline them in tabs_data because they're
+        # decoupled from the lock + branch flow.
+        from trophies.services import roadmap_note_service
+        context['notes_unread_count'] = roadmap_note_service.unread_count(
+            profile=profile, roadmap=roadmap,
+        )
+
+        # Mention autocomplete: pre-load ALL profiles with writer-or-higher
+        # role so the JS can filter purely client-side. The team is small
+        # enough that fetching the whole list once per page is cheaper and
+        # snappier than a debounced search endpoint. Order by role tier
+        # (publishers first, then editors, then writers) and within each by
+        # username — gives a sensible default ranking when prefixes tie.
+        ROLE_ORDER = {'publisher': 0, 'editor': 1, 'writer': 2}
+        mention_qs = Profile.objects.filter(
+            roadmap_role__in=['writer', 'editor', 'publisher']
+        ).only(
+            'id', 'psn_username', 'display_psn_username', 'avatar_url', 'roadmap_role',
+        )
+        context['mentionable_authors'] = sorted(
+            (
+                {
+                    'username': p.psn_username,
+                    'display_name': p.display_psn_username or p.psn_username,
+                    'avatar_url': p.avatar_url or '',
+                    'role': p.roadmap_role,
+                }
+                for p in mention_qs
+            ),
+            key=lambda a: (ROLE_ORDER.get(a['role'], 99), a['username']),
+        )
+
         return context

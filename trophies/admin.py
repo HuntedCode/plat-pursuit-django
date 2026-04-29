@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -1539,6 +1539,30 @@ class RoadmapRevisionAdmin(admin.ModelAdmin):
             f'Restored revision #{revision.id}. New revision #{new_rev.id} logs the restore.',
             messages.SUCCESS,
         )
+
+
+@admin.register(RoadmapNote)
+class RoadmapNoteAdmin(admin.ModelAdmin):
+    list_display = ['id', 'roadmap', 'target_kind', 'author', 'status', 'body_preview', 'created_at']
+    list_select_related = ('roadmap__concept', 'author', 'resolved_by')
+    list_filter = ['target_kind', 'status']
+    raw_id_fields = ['roadmap', 'target_step', 'target_trophy_guide', 'author', 'resolved_by']
+    readonly_fields = ['created_at', 'updated_at', 'resolved_at']
+    search_fields = ['roadmap__concept__unified_title', 'body', 'author__psn_username']
+    date_hierarchy = 'created_at'
+
+    def body_preview(self, obj):
+        return obj.body[:80] + '...' if len(obj.body) > 80 else obj.body
+    body_preview.short_description = 'Body'
+
+
+@admin.register(RoadmapNoteRead)
+class RoadmapNoteReadAdmin(admin.ModelAdmin):
+    list_display = ['id', 'profile', 'roadmap', 'last_read_at']
+    list_select_related = ('profile', 'roadmap__concept')
+    raw_id_fields = ['profile', 'roadmap']
+    readonly_fields = ['last_read_at']
+    search_fields = ['profile__psn_username', 'roadmap__concept__unified_title']
 
 
 # ---------- Gamification Admin ----------
@@ -3258,6 +3282,7 @@ _IGDB_ADMIN_OBJECT_NAMES = frozenset({
 _ROADMAP_ADMIN_OBJECT_NAMES = frozenset({
     'Roadmap', 'RoadmapTab', 'RoadmapStep', 'RoadmapStepTrophy', 'TrophyGuide',
     'RoadmapEditLock', 'RoadmapRevision',
+    'RoadmapNote', 'RoadmapNoteRead',
 })
 
 _original_get_app_list = admin.site.get_app_list
@@ -3291,7 +3316,9 @@ def _platpursuit_get_app_list(request, app_label=None):
             # Order roadmap models semantically: authoring → lock → history.
             authoring_order = [
                 'Roadmap', 'RoadmapTab', 'RoadmapStep', 'TrophyGuide',
-                'RoadmapStepTrophy', 'RoadmapEditLock', 'RoadmapRevision',
+                'RoadmapStepTrophy',
+                'RoadmapNote', 'RoadmapNoteRead',
+                'RoadmapEditLock', 'RoadmapRevision',
             ]
             order_idx = {name: i for i, name in enumerate(authoring_order)}
             roadmap_models.sort(key=lambda m: order_idx.get(m['object_name'], 99))

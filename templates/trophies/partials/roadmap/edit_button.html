@@ -2,7 +2,7 @@
 {% if held_by_other %}
     {# Active lock held by another author — surface who's editing instead of an Edit button. #}
     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-warning/40 bg-warning/10 text-warning text-[10px] md:text-xs font-medium shrink-0"
-          title="Lock held until {{ active_lock.expires_at|date:'H:i' }} unless extended.">
+          title="Session ends by {{ active_lock.hard_cap_at|date:'H:i' }} (may release sooner if idle).">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
         Editing: {{ active_lock.holder.psn_username }}
     </span>
