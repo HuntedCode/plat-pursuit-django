@@ -97,7 +97,7 @@ There is no auto-restore on re-subscribe — users re-activate via the editor. T
 | POST | `/api/v1/profile/showcases/reorder/` | User | Reorder (body: `{showcase_types: [slug...]}`) |
 | POST | `/api/v1/profile/showcases/<slug>/config/` | User | Update config (body: `{config: {...}}`) |
 
-All endpoints use `get_effective_premium(request)` which honors the staff preview toggle.
+All endpoints resolve premium status via `profile.user_is_premium`.
 
 ## Integration Points
 

@@ -211,7 +211,6 @@ Each tab is a collapsible section listing its modules. Each module row shows:
 | GET | `/api/v1/dashboard/module/<slug>/` | Staff | Rendered HTML for lazy module |
 | POST | `/api/v1/dashboard/config/` | Staff | Update hidden/settings/order/tab_config |
 | POST | `/api/v1/dashboard/reorder/` | Staff (Premium) | Save drag-drop order |
-| POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview |
 | POST | `/api/v1/user/quick-settings/` | Staff | Quick Settings auto-save (toggles, timezone, region) |
 
 ### Config Update Behavior
@@ -246,13 +245,9 @@ Free users see blurred previews of all premium modules using real data from the 
 - Chart.js loaded for all users so charts render behind the blur
 - Premium modules included in `get_dashboard_tabs()` with `is_preview=True` and `load_strategy='server'`
 
-## Staff Premium Preview Toggle
-
-Staff can switch between "view as premium" and "view as free" via a header button. Uses session variable `dashboard_preview_premium`. The `get_effective_premium(request)` helper is used by all views and API endpoints.
-
 ## Gotchas and Pitfalls
 
-- **Premium checks use `get_effective_premium(request)`**: Never read `profile.user_is_premium` directly.
+- **Premium checks read `profile.user_is_premium` directly**: Dashboard, stats, profile, platinum-grid, and showcase views all consult the model property.
 - **No model instances in provider return data**: Cache serialization fails with Django model objects.
 - **Settings only active for premium**: Free users get defaults. Saved settings preserved across downgrades.
 - **Calendar weekday offset**: Uses `""|ljust:offset` (not `"x"|ljust:offset`) to avoid off-by-one.

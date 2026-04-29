@@ -372,13 +372,11 @@ class ToggleShowcaseBadgeView(APIView):
         from trophies.models import UserBadge, ProfileBadgeShowcase
         from trophies.services.dashboard_service import invalidate_dashboard_cache
 
-        from trophies.services.dashboard_service import get_effective_premium
-
         profile = getattr(request.user, 'profile', None)
         if not profile:
             return Response({'error': 'No profile linked.'}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        if not get_effective_premium(request):
+        if not profile.user_is_premium:
             return Response({'error': 'Premium subscription required.'}, status=http_status.HTTP_403_FORBIDDEN)
 
         badge_id = request.data.get('badge_id')
@@ -457,16 +455,14 @@ class ReorderShowcaseBadgesView(APIView):
 
     def post(self, request):
         from trophies.models import ProfileBadgeShowcase
-        from trophies.services.dashboard_service import (
-            invalidate_dashboard_cache, get_effective_premium,
-        )
+        from trophies.services.dashboard_service import invalidate_dashboard_cache
         from django.db import transaction
 
         profile = getattr(request.user, 'profile', None)
         if not profile:
             return Response({'error': 'No profile linked.'}, status=http_status.HTTP_400_BAD_REQUEST)
 
-        if not get_effective_premium(request):
+        if not profile.user_is_premium:
             return Response({'error': 'Premium subscription required.'}, status=http_status.HTTP_403_FORBIDDEN)
 
         badge_ids = request.data.get('badge_ids')

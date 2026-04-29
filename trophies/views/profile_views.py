@@ -1005,12 +1005,11 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             SHOWCASE_REGISTRY, ProfileShowcaseService,
             FREE_SLOT_LIMIT, PREMIUM_SLOT_LIMIT, slot_limit_for,
         )
-        from trophies.services.dashboard_service import get_effective_premium
 
         context = super().get_context_data(**kwargs)
 
         profile = self.request.user.profile
-        is_premium = get_effective_premium(self.request)
+        is_premium = profile.user_is_premium
 
         all_showcases = ProfileShowcaseService.get_all_showcases(profile)
         active = [s for s in all_showcases if s.is_active]

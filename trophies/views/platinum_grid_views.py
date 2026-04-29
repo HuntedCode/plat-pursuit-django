@@ -15,7 +15,6 @@ from django.utils.safestring import mark_safe
 
 from trophies.mixins import ProfileHotbarMixin
 from trophies.models import EarnedTrophy, ProfileGame
-from trophies.services.dashboard_service import get_effective_premium
 from trophies.themes import get_available_themes_for_grid
 
 from django.views.generic import TemplateView
@@ -56,8 +55,7 @@ class PlatinumGridView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             {'text': 'Platinum Grid'},
         ]
 
-        # Limits (respects staff preview toggle from dashboard).
-        is_premium = get_effective_premium(self.request)
+        is_premium = profile.user_is_premium
         max_icons = 500 if is_premium else 100
         context['max_icons'] = max_icons
         context['is_premium'] = is_premium

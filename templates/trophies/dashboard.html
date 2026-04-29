@@ -36,30 +36,18 @@
                         {% endif %}
                     </div>
                 </div>
-                {# Inline action buttons #}
-                <div class="flex items-center gap-1.5 shrink-0">
-                    {% if request.user.is_staff %}
-                    <button id="preview-toggle-btn"
-                            class="btn btn-xs {% if is_premium %}btn-warning{% else %}btn-ghost border-base-300{% endif %} gap-1"
-                            title="Toggle premium/free preview (staff)">
-                        {% if is_premium %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/>
-                            </svg>
-                            <span class="hidden md:inline">Premium</span>
-                        {% else %}
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <path d="M12 6v6l4 2"></path>
-                            </svg>
-                            <span class="hidden md:inline">Free</span>
-                        {% endif %}
-                    </button>
-                    {% if preview_mode %}
-                        <span class="badge badge-xs badge-outline badge-warning">Preview</span>
-                    {% endif %}
-                    {% endif %}
-                    <button id="customize-btn" class="btn btn-ghost btn-xs border border-base-300 gap-1" title="Customize">
+                {# Stacked action buttons #}
+                <div class="flex flex-col gap-1 shrink-0">
+                    <a href="{% url 'profile_detail' profile.psn_username %}"
+                       class="btn btn-ghost btn-xs border border-base-300 gap-1 justify-start"
+                       title="View profile">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span class="hidden md:inline">Profile</span>
+                    </a>
+                    <button id="customize-btn" class="btn btn-ghost btn-xs border border-base-300 gap-1 justify-start" title="Customize">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"></circle>
                             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -268,16 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     {% endif %}
-
-    // Staff preview toggle: switch between premium and free views
-    document.getElementById('preview-toggle-btn')?.addEventListener('click', async () => {
-        try {
-            await PlatPursuit.API.request('/api/v1/dashboard/preview-toggle/', { method: 'POST', body: {} });
-            window.location.reload();
-        } catch (e) {
-            PlatPursuit.ToastManager.error('Failed to toggle preview mode.');
-        }
-    });
 
     // Home router handoff: when sync transitions away from 'synced' (user clicks
     // Sync in the hotbar, sync errors out, etc.) reload so HomeView re-resolves

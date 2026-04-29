@@ -10,14 +10,13 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django_ratelimit.decorators import ratelimit
 
-from trophies.mixins import LoginRequiredAPIMixin, StaffRequiredAPIMixin
+from trophies.mixins import LoginRequiredAPIMixin
 
 from trophies.models import DashboardConfig
 from trophies.services.dashboard_service import (
     get_module_by_slug,
     get_lazy_module_data,
     get_valid_slugs,
-    get_effective_premium,
     validate_module_size,
     VALID_SIZES,
     MAX_FREE_HIDDEN,
@@ -36,7 +35,7 @@ class DashboardModuleDataView(LoginRequiredAPIMixin, View):
 
     def get(self, request, slug):
         profile = request.user.profile
-        is_premium = get_effective_premium(request)
+        is_premium = profile.user_is_premium
 
         mod = get_module_by_slug(slug)
         if not mod:
@@ -106,7 +105,7 @@ class DashboardConfigUpdateView(LoginRequiredAPIMixin, View):
     @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
     def post(self, request):
         profile = request.user.profile
-        is_premium = get_effective_premium(request)
+        is_premium = profile.user_is_premium
 
         try:
             body = json.loads(request.body)
@@ -246,7 +245,7 @@ class DashboardModuleReorderView(LoginRequiredAPIMixin, View):
     def post(self, request):
         profile = request.user.profile
 
-        if not get_effective_premium(request):
+        if not profile.user_is_premium:
             return JsonResponse({'error': 'Reordering requires premium.'}, status=403)
 
         try:
@@ -272,29 +271,6 @@ class DashboardModuleReorderView(LoginRequiredAPIMixin, View):
         })
 
 
-class DashboardPreviewToggleView(StaffRequiredAPIMixin, View):
-    """
-    POST /api/v1/dashboard/preview-toggle/
-
-    Toggle premium preview mode for staff testing.
-    Sets a session variable that overrides is_premium on the dashboard.
-    """
-
-    @method_decorator(ratelimit(key='user', rate='15/m', method='POST', block=True))
-    def post(self, request):
-        current = request.session.get('dashboard_preview_premium')
-        if current is None:
-            # First toggle: opposite of real status
-            request.session['dashboard_preview_premium'] = not request.user.profile.user_is_premium
-        else:
-            # Subsequent toggles: flip
-            request.session['dashboard_preview_premium'] = not current
-        return JsonResponse({
-            'status': 'ok',
-            'preview_premium': request.session['dashboard_preview_premium'],
-        })
-
-
 class StatsPageDataView(LoginRequiredAPIMixin, View):
     """
     GET /api/v1/stats/premium/
@@ -308,7 +284,7 @@ class StatsPageDataView(LoginRequiredAPIMixin, View):
         from trophies.services.stats_service import get_premium_stats
 
         profile = request.user.profile
-        is_premium = get_effective_premium(request)
+        is_premium = profile.user_is_premium
 
         if not is_premium:
             return JsonResponse({'error': 'Premium required.'}, status=403)

@@ -21,7 +21,6 @@ from trophies.services.dashboard_service import (
     get_dashboard_tabs,
     get_tabs_for_customize,
     get_server_module_data,
-    get_effective_premium,
     get_premium_preview_html,
     VALID_TAB_ICONS,
     MAX_FREE_HIDDEN,
@@ -49,13 +48,13 @@ def build_dashboard_context(request, profile):
     without going through view inheritance.
 
     Args:
-        request: HttpRequest (used for session-based premium preview).
+        request: HttpRequest (used for ad context resolution).
         profile: Profile instance for the user being rendered.
 
     Returns:
         dict: full template context for trophies/dashboard.html.
     """
-    is_premium = get_effective_premium(request)
+    is_premium = profile.user_is_premium
 
     config, _ = DashboardConfig.objects.get_or_create(profile=profile)
 
@@ -106,8 +105,6 @@ def build_dashboard_context(request, profile):
         'max_free_hidden': MAX_FREE_HIDDEN,
         'hidden_count': len(config.hidden_modules) if config.hidden_modules else 0,
         'displayed_title': profile.displayed_title,
-        'preview_mode': request.session.get('dashboard_preview_premium') is not None,
-        'real_is_premium': profile.user_is_premium,
         'site_heartbeat': _get_site_heartbeat(),
         'breadcrumb': [
             {'text': 'Home', 'url': reverse_lazy('home')},

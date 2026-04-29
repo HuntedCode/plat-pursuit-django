@@ -24,18 +24,6 @@ MAX_FREE_HIDDEN = 3
 SHOWCASE_PROFILE_ID = 3
 
 
-def get_effective_premium(request):
-    """
-    Return effective premium status, accounting for staff preview override.
-
-    Staff users can toggle a session variable to simulate premium/free views.
-    Falls back to real profile.user_is_premium when no override is set.
-    """
-    preview = request.session.get('dashboard_preview_premium')
-    if preview is not None:
-        return preview
-    return request.user.profile.user_is_premium
-
 # Default cache TTL for lazy-loaded modules (seconds)
 DEFAULT_CACHE_TTL = 600  # 10 minutes
 

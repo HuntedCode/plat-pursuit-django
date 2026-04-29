@@ -73,7 +73,6 @@ Two shared fetches power multiple sections (avoiding redundant queries):
 ## Gotchas and Pitfalls
 
 - **Staff-only:** Page uses `StaffRequiredMixin`. Swap to `LoginRequiredMixin` for public launch.
-- **Premium toggle:** Uses the same `dashboard_preview_premium` session variable as the dashboard. Toggling on either page affects both.
 - **Timezone:** All time-based calculations use `profile.user.user_timezone` via pytz. Display dates use Django's `TimezoneMiddleware`.
 - **Null timestamps:** `EarnedTrophy.earned_date_time` can be null. Always filter `earned_date_time__isnull=False`.
 - **Null play_duration:** `ProfileGame.play_duration` is nullable. Duration stats show `None` (template handles fallback).

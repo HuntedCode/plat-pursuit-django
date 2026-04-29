@@ -18,7 +18,6 @@ from rest_framework.views import APIView
 from core.services.share_image_cache import ShareImageCache
 from trophies.mixins import LoginRequiredAPIMixin
 from trophies.models import EarnedTrophy
-from trophies.services.dashboard_service import get_effective_premium
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +104,7 @@ def _build_grid_context(request, profile, icon_ids, icon_type, cols, theme_key):
 
     Returns (context_dict, error_string). error_string is None on success.
     """
-    is_premium = get_effective_premium(request)
+    is_premium = profile.user_is_premium
     max_icons = 500 if is_premium else 100
     if len(icon_ids) > max_icons:
         return None, f'Maximum {max_icons} icons allowed.'

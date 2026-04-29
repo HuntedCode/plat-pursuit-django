@@ -190,7 +190,6 @@ The dashboard is the synced-state home page for all users (see [Home Page Router
 | GET | `/api/v1/dashboard/module/<slug>/` | Login | Lazy module HTML |
 | POST | `/api/v1/dashboard/config/` | Login | Update hidden modules / settings / order / tab config |
 | POST | `/api/v1/dashboard/reorder/` | Login (Premium) | Save drag-drop order |
-| POST | `/api/v1/dashboard/preview-toggle/` | Staff | Toggle premium/free preview (debug only) |
 | POST | `/api/v1/user/quick-settings/` | Login | Quick Settings auto-save (toggles, timezone, region) |
 
 ### Stats Page

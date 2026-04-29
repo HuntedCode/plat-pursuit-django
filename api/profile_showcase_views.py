@@ -13,7 +13,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from trophies.services.dashboard_service import get_effective_premium
 from trophies.services.showcase_service import (
     ProfileShowcaseService,
     ShowcaseAlreadyActive,
@@ -53,7 +52,7 @@ class AddShowcaseView(APIView):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
-        is_premium = get_effective_premium(request)
+        is_premium = profile.user_is_premium
 
         try:
             showcase = ProfileShowcaseService.add_showcase(
