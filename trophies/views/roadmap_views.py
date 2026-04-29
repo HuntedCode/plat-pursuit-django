@@ -1,19 +1,22 @@
 """
-Roadmap views: public detail page and staff-only editor.
+Roadmap views: public detail page and role-gated editor.
 
 The detail page provides a full guide experience with sticky TOC, scrollspy,
-progress tracking, and per-DLC pages. The editor is staff-only for authoring
-roadmap content (steps, tips, trophy associations, YouTube embeds, metadata).
+progress tracking, and per-DLC pages. The editor is gated to authors with at
+least the `writer` roadmap_role (independent of Django is_staff). Writers and
+editors are additionally blocked from editing published guides; only
+publishers may edit a guide that is currently live.
 """
 import logging
 
-from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib import messages
 from django.http import Http404
-from django.utils.decorators import method_decorator
+from django.shortcuts import redirect
 from django.views.generic import DetailView
 
-from trophies.mixins import ProfileHotbarMixin
+from trophies.mixins import ProfileHotbarMixin, RoadmapAuthorRequiredMixin
 from trophies.models import EarnedTrophy, Game
+from trophies.permissions.roadmap_permissions import can_view_editor
 from trophies.services.rating_service import RatingService
 from trophies.services.roadmap_service import RoadmapService
 
@@ -48,11 +51,12 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         user = self.request.user
         trophy_group_id = self.kwargs.get('trophy_group_id', 'default')
 
-        # Staff preview support
+        # Author preview support: any role >= writer can preview drafts.
         preview_mode = (
             self.request.GET.get('preview') == 'true'
             and user.is_authenticated
-            and user.is_staff
+            and getattr(user, 'profile', None) is not None
+            and user.profile.has_roadmap_role('writer')
         )
         context['roadmap_preview_mode'] = preview_mode
 
@@ -140,12 +144,20 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         return context
 
 
-@method_decorator(staff_member_required, name='dispatch')
-class RoadmapEditorView(ProfileHotbarMixin, DetailView):
-    """Staff-only roadmap editor page.
+class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
+    """Role-gated roadmap editor page.
 
-    Gets or creates a Roadmap for the game's Concept, auto-creates tabs
-    for any ConceptTrophyGroups, and provides all trophies for the picker.
+    Open to any user with at least the `writer` roadmap role on UNPUBLISHED
+    guides. Published guides are publisher-only — writers and editors who try
+    to open the editor on a live guide are redirected back to the detail page
+    with a flash explaining why. Per-action permission scoping (writer-only-
+    edits-own-sections, editor-only deletes, publisher-only status toggle) is
+    enforced server-side in the merge / publish endpoints, with the editor UI
+    hiding affordances the current role lacks.
+
+    Note: ProfileHotbarMixin is intentionally NOT mixed in. The hotbar
+    competes with the sticky page header for vertical space and adds noise
+    that's irrelevant to authoring (sync status, queue position, etc.).
     """
     model = Game
     template_name = 'trophies/roadmap_edit.html'
@@ -158,7 +170,24 @@ class RoadmapEditorView(ProfileHotbarMixin, DetailView):
             raise Http404("Game has no concept.")
         return game
 
+    def get(self, request, *args, **kwargs):
+        # Defense in depth: even though templates hide the Edit button on
+        # published guides for non-publishers, anyone with the URL can hit
+        # this view. Block at the top of GET before rendering.
+        self.object = self.get_object()
+        roadmap = RoadmapService.get_roadmap_for_editor(self.object.concept)
+        if not can_view_editor(request.user.profile, roadmap):
+            messages.warning(
+                request,
+                'This guide is published — only publishers can edit it directly. '
+                'Ask a publisher to unpublish first if you need to make changes.',
+            )
+            return redirect('roadmap_detail', self.object.np_communication_id)
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
+        from trophies.models import Profile
+
         context = super().get_context_data(**kwargs)
         game = self.object
         concept = game.concept
@@ -182,18 +211,34 @@ class RoadmapEditorView(ProfileHotbarMixin, DetailView):
             })
         context['trophies_by_group'] = trophies_by_group
 
-        # Build tab data for JS initialization
+        # Build tab data for JS initialization. Each step/guide carries its
+        # `created_by_id` so the JS can render an "Owned by X" badge and lock
+        # the inputs for writers who don't own the row. Profile display info
+        # lives in a separate lookup map (`profiles_by_id`) so duplicate
+        # profiles aren't spammed across steps.
+        referenced_profile_ids = set()
+
+        def _track(profile_id):
+            if profile_id:
+                referenced_profile_ids.add(profile_id)
+
         tabs_data = []
         for tab in roadmap.tabs.all():
             ctg = tab.concept_trophy_group
+            _track(tab.created_by_id)
+            _track(tab.last_edited_by_id)
             steps_data = []
             for step in tab.steps.all():
+                _track(step.created_by_id)
+                _track(step.last_edited_by_id)
                 steps_data.append({
                     'id': step.id,
                     'title': step.title,
                     'description': step.description,
                     'youtube_url': step.youtube_url,
                     'order': step.order,
+                    'created_by_id': step.created_by_id,
+                    'last_edited_by_id': step.last_edited_by_id,
                     'trophy_ids': list(
                         step.step_trophies.order_by('order').values_list('trophy_id', flat=True)
                     ),
@@ -204,9 +249,14 @@ class RoadmapEditorView(ProfileHotbarMixin, DetailView):
                     'is_missable': tg.is_missable,
                     'is_online': tg.is_online,
                     'is_unobtainable': tg.is_unobtainable,
+                    'created_by_id': tg.created_by_id,
+                    'last_edited_by_id': tg.last_edited_by_id,
                 }
                 for tg in tab.trophy_guides.all()
             }
+            for tg in tab.trophy_guides.all():
+                _track(tg.created_by_id)
+                _track(tg.last_edited_by_id)
             tabs_data.append({
                 'id': tab.id,
                 'trophy_group_id': ctg.trophy_group_id,
@@ -218,10 +268,26 @@ class RoadmapEditorView(ProfileHotbarMixin, DetailView):
                 'missable_count': tab.missable_count,
                 'online_required': tab.online_required,
                 'min_playthroughs': tab.min_playthroughs,
+                'created_by_id': tab.created_by_id,
+                'last_edited_by_id': tab.last_edited_by_id,
                 'steps': steps_data,
                 'trophy_guides': trophy_guides_data,
             })
         context['tabs_data'] = tabs_data
+
+        # Profile lookup for ownership badges. One query, regardless of how
+        # many steps/guides reference profiles.
+        profiles_by_id = {}
+        if referenced_profile_ids:
+            for p in Profile.objects.filter(id__in=referenced_profile_ids).only(
+                'id', 'psn_username', 'display_psn_username', 'avatar_url'
+            ):
+                profiles_by_id[p.id] = {
+                    'username': p.psn_username,
+                    'display_name': p.display_psn_username or p.psn_username,
+                    'avatar_url': p.avatar_url or '',
+                }
+        context['profiles_by_id'] = profiles_by_id
 
         # Breadcrumb
         context['breadcrumb'] = [
@@ -232,5 +298,17 @@ class RoadmapEditorView(ProfileHotbarMixin, DetailView):
 
         context['game'] = game
         context['concept'] = concept
+
+        # Role flags for the editor UI: hide delete affordances for writers,
+        # hide publish toggle for non-publishers. Server-side merge/publish
+        # endpoints enforce these as well.
+        profile = self.request.user.profile
+        context['author_role'] = profile.roadmap_role
+        context['author_can_delete'] = profile.has_roadmap_role('editor')
+        context['author_can_publish'] = profile.has_roadmap_role('publisher')
+        # JS needs the viewer's profile id to apply writer-scoping (lock
+        # inputs on sections owned by other writers). Editor+ bypasses the
+        # lock; writers only see their own sections as editable.
+        context['viewer_profile_id'] = profile.id
 
         return context

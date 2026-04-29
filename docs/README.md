@@ -63,6 +63,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | [Profile Showcases](features/profile-showcases.md) | Steam-style customization: pick showcase types to feature on your profile |
 | [Review Hub](features/review-hub.md) | Reviews, ratings, concept trophy groups (formerly "Community Hub") |
 | [Roadmap System](features/roadmap-system.md) | Staff-authored platinum guides on game detail (replaces the legacy checklist system) |
+| [Roadmap Roles, Locks & Revisions](features/roadmap-roles-and-revisions.md) | Role-based authoring (writer/editor/publisher), guide-level edit lock, branch-and-merge save flow, permanent revision history |
 | [Share Images](features/share-images.md) | Playwright renderer, caching, card types |
 | [Subscription Lifecycle](features/subscription-lifecycle.md) | Activation, cancellation, renewal, admin dashboard |
 

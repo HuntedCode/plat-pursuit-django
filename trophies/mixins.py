@@ -65,6 +65,25 @@ class StaffRequiredAPIMixin(LoginRequiredAPIMixin):
         return super().dispatch(request, *args, **kwargs)
 
 
+class RoadmapAuthorRequiredMixin(LoginRequiredMixin):
+    """
+    Mixin that requires the user to have at least the writer roadmap role.
+    Independent of Django staff status. Unauthenticated users hit login;
+    authenticated users without a sufficient role redirect to home.
+    """
+    min_roadmap_role = 'writer'
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        profile = getattr(request.user, 'profile', None)
+        if profile and profile.has_roadmap_role(self.min_roadmap_role):
+            return super().dispatch(request, *args, **kwargs)
+
+        return redirect('home')
+
+
 class RecapSyncGateMixin:
     """
     Returns a gated recap_index response if the user has no linked profile or

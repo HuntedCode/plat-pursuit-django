@@ -137,6 +137,22 @@ class Profile(models.Model):
     game_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Game Detail Tour.")
     badge_detail_tour_completed_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when user completed or skipped the Badge Detail Tour.")
     view_count = models.PositiveIntegerField(default=0, help_text="Denormalized total page view count.")
+    roadmap_role = models.CharField(
+        max_length=20,
+        choices=[
+            ('none', 'None'),
+            ('writer', 'Writer'),
+            ('editor', 'Editor'),
+            ('publisher', 'Publisher'),
+        ],
+        default='none',
+        help_text=(
+            "Roadmap authoring role. Independent of is_staff. "
+            "writer: edit own sections on unpublished guides. "
+            "editor: edit any field on unpublished guides. "
+            "publisher: editor power plus toggle visibility and force-break locks."
+        ),
+    )
 
     objects = ProfileManager()
 
@@ -166,7 +182,25 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.psn_username
-    
+
+    def has_roadmap_role(self, min_role):
+        """Return True if this profile's roadmap_role meets or exceeds min_role."""
+        from trophies.permissions.roadmap_permissions import has_roadmap_role
+        return has_roadmap_role(self, min_role)
+
+    @property
+    def is_roadmap_author(self):
+        """True for any roadmap_role >= writer. Use in templates for edit-button gates."""
+        return self.has_roadmap_role('writer')
+
+    @property
+    def is_roadmap_editor(self):
+        return self.has_roadmap_role('editor')
+
+    @property
+    def is_roadmap_publisher(self):
+        return self.has_roadmap_role('publisher')
+
     def save(self, *args, **kwargs):
         if self.psn_username:
             self.psn_username = self.psn_username.lower()
@@ -3901,6 +3935,40 @@ class Roadmap(models.Model):
     def is_draft(self):
         return self.status == 'draft'
 
+    def contributors(self):
+        """Return distinct Profiles who created or last-edited any part of this roadmap.
+
+        Unions: roadmap.created_by, plus created_by/last_edited_by across all
+        Tabs, Steps, and TrophyGuides. Cached on the instance per request.
+        """
+        if not hasattr(self, '_contributors_cache'):
+            profile_ids = set()
+            if self.created_by_id:
+                profile_ids.add(self.created_by_id)
+            for tab in self.tabs.all():
+                if tab.created_by_id:
+                    profile_ids.add(tab.created_by_id)
+                if tab.last_edited_by_id:
+                    profile_ids.add(tab.last_edited_by_id)
+                for step in tab.steps.all():
+                    if step.created_by_id:
+                        profile_ids.add(step.created_by_id)
+                    if step.last_edited_by_id:
+                        profile_ids.add(step.last_edited_by_id)
+                for guide in tab.trophy_guides.all():
+                    if guide.created_by_id:
+                        profile_ids.add(guide.created_by_id)
+                    if guide.last_edited_by_id:
+                        profile_ids.add(guide.last_edited_by_id)
+            if not profile_ids:
+                self._contributors_cache = []
+            else:
+                self._contributors_cache = list(
+                    Profile.objects.filter(id__in=profile_ids)
+                    .order_by('psn_username')
+                )
+        return self._contributors_cache
+
 
 class RoadmapTab(models.Model):
     """One tab per ConceptTrophyGroup within a roadmap (base game + each DLC).
@@ -3939,6 +4007,15 @@ class RoadmapTab(models.Model):
         default=1,
         help_text="Minimum playthroughs required for all trophies."
     )
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_roadmap_tabs',
+        help_text='Profile that first wrote this tab\'s content fields. Used for writer-ownership scoping.'
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_roadmap_tabs',
+    )
 
     class Meta:
         unique_together = ['roadmap', 'concept_trophy_group']
@@ -3961,6 +4038,15 @@ class RoadmapStep(models.Model):
     description = models.TextField(blank=True)
     youtube_url = models.URLField(blank=True)
     order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_roadmap_steps',
+        help_text='Profile that originally created this step. Used for writer-ownership scoping (writers can only edit steps they created).'
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_roadmap_steps',
+    )
 
     class Meta:
         ordering = ['order']
@@ -4005,6 +4091,15 @@ class TrophyGuide(models.Model):
     is_missable = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)
     is_unobtainable = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_trophy_guides',
+        help_text='Profile that originally wrote this trophy guide. Used for writer-ownership scoping.'
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_trophy_guides',
+    )
 
     class Meta:
         unique_together = ['tab', 'trophy_id']
@@ -4012,6 +4107,129 @@ class TrophyGuide(models.Model):
 
     def __str__(self):
         return f"TrophyGuide: tab={self.tab_id}, trophy_id={self.trophy_id}"
+
+
+class RoadmapEditLock(models.Model):
+    """Single-writer guide-level edit lock with idle and absolute-time expiry.
+
+    Acquired when a user opens the editor; refreshed by JS heartbeats every
+    couple of minutes; auto-expires after 15 minutes of idle OR 1 hour total
+    (whichever comes first). The `branch_payload` JSONField holds in-progress
+    edits as a draft; autosaves write here and never touch live records. An
+    explicit "Save" merges the payload into live records, creates a
+    RoadmapRevision, and releases the lock. Cancel/expire discards the branch.
+    """
+    IDLE_TIMEOUT = timedelta(minutes=15)
+    HARD_CAP = timedelta(hours=1)
+    PAYLOAD_VERSION = 1
+
+    roadmap = models.OneToOneField(
+        Roadmap, on_delete=models.CASCADE, related_name='edit_lock'
+    )
+    holder = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='held_roadmap_locks'
+    )
+    acquired_at = models.DateTimeField(default=timezone.now)
+    last_heartbeat = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    branch_payload = models.JSONField(default=dict)
+    payload_version = models.PositiveSmallIntegerField(default=PAYLOAD_VERSION)
+
+    class Meta:
+        verbose_name = 'Roadmap Edit Lock'
+        verbose_name_plural = 'Roadmap Edit Locks'
+        indexes = [
+            models.Index(fields=['expires_at'], name='roadmap_lock_expires_idx'),
+        ]
+
+    def __str__(self):
+        return f"Lock: roadmap={self.roadmap_id}, holder={self.holder_id}, expires={self.expires_at}"
+
+    def _compute_expires_at(self):
+        """Earlier of (last_heartbeat + idle_timeout) and (acquired_at + hard_cap)."""
+        idle_expiry = self.last_heartbeat + self.IDLE_TIMEOUT
+        hard_cap_expiry = self.acquired_at + self.HARD_CAP
+        return min(idle_expiry, hard_cap_expiry)
+
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def seconds_until_expiry(self):
+        return max(0, int((self.expires_at - timezone.now()).total_seconds()))
+
+    def hard_cap_seconds_remaining(self):
+        return max(0, int((self.acquired_at + self.HARD_CAP - timezone.now()).total_seconds()))
+
+    def is_held_by(self, profile):
+        return profile is not None and self.holder_id == profile.id
+
+    def heartbeat(self):
+        """Bump last_heartbeat to now and recompute expires_at."""
+        self.last_heartbeat = timezone.now()
+        self.expires_at = self._compute_expires_at()
+        self.save(update_fields=['last_heartbeat', 'expires_at'])
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = self._compute_expires_at()
+        super().save(*args, **kwargs)
+
+
+class RoadmapRevision(models.Model):
+    """Permanent JSON snapshot of a roadmap, recorded on every explicit save.
+
+    Wiki-style: kept forever. Captures full guide structure (tabs, steps,
+    trophy guides, attribution) so a roadmap can be restored to any point in
+    time. Restores create a new `restored` revision, so the restore itself
+    is auditable.
+    """
+    ACTION_CREATED = 'created'
+    ACTION_EDITED = 'edited'
+    ACTION_PUBLISHED = 'published'
+    ACTION_UNPUBLISHED = 'unpublished'
+    ACTION_RESTORED = 'restored'
+    ACTION_FORCE_UNLOCKED = 'force_unlocked'
+    ACTION_AUTO_TAKEN_OVER = 'auto_taken_over'
+
+    ACTION_CHOICES = [
+        (ACTION_CREATED, 'Created'),
+        (ACTION_EDITED, 'Edited'),
+        (ACTION_PUBLISHED, 'Published'),
+        (ACTION_UNPUBLISHED, 'Unpublished'),
+        (ACTION_RESTORED, 'Restored'),
+        (ACTION_FORCE_UNLOCKED, 'Force unlocked'),
+        (ACTION_AUTO_TAKEN_OVER, 'Auto-taken over (stale lock)'),
+    ]
+
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='revisions'
+    )
+    author = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_roadmap_revisions',
+        help_text='Profile that triggered this revision. NULL preserves history if profile is later deleted.'
+    )
+    action_type = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    snapshot = models.JSONField(
+        help_text='Full guide state after this action: tabs, steps, trophy guides, attribution.'
+    )
+    summary = models.CharField(
+        max_length=200, blank=True,
+        help_text='Auto-generated short description (e.g., "edited 3 steps in Story Walkthrough").'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Roadmap Revision'
+        verbose_name_plural = 'Roadmap Revisions'
+        indexes = [
+            models.Index(fields=['roadmap', '-created_at'], name='roadmap_rev_recent_idx'),
+            models.Index(fields=['author', '-created_at'], name='roadmap_rev_author_idx'),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Revision: roadmap={self.roadmap_id}, {self.action_type} @ {self.created_at:%Y-%m-%d %H:%M}"
 
 
 # ---------------------------------------------------------------------------

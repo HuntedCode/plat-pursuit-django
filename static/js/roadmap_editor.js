@@ -28,10 +28,714 @@
     const roadmapId = parseInt(editorEl.dataset.roadmapId, 10);
     const tabsData = JSON.parse(document.getElementById('roadmap-tabs-data')?.textContent || '[]');
     const trophiesByGroup = JSON.parse(document.getElementById('roadmap-trophies-data')?.textContent || '{}');
+    const profilesById = JSON.parse(document.getElementById('roadmap-profiles-data')?.textContent || '{}');
+    const authorRole = editorEl.dataset.authorRole || 'writer';
+    const canDelete = editorEl.dataset.authorCanDelete === 'true';
+    const canPublish = editorEl.dataset.authorCanPublish === 'true';
+    const viewerProfileId = parseInt(editorEl.dataset.viewerProfileId, 10) || null;
+    // Editors and publishers bypass section-ownership scoping. Writers can
+    // only edit sections they own (or untouched/ownerless sections).
+    const bypassOwnershipScope = canDelete; // canDelete proxies "is editor+"
 
     let activeTabId = tabsData.length ? tabsData[0].id : null;
     let hasUnsaved = false;
     let dragManagers = {};
+
+    // ------------------------------------------------------------------ //
+    //  Lock + Branch-and-Merge Controller
+    //
+    //  The editor never mutates live records directly. On load we acquire a
+    //  RoadmapEditLock; autosaves go to lock.branch_payload via PATCH /branch/;
+    //  an explicit Save click POSTs /merge/, which atomically applies the
+    //  payload to live records and creates a RoadmapRevision. The lock auto-
+    //  expires after 15 min of idle or 1 hour absolute. JS heartbeats every
+    //  2 min keep the idle timer fresh.
+    // ------------------------------------------------------------------ //
+
+    // Heartbeat: timer fires every 2 min as a keep-alive, but only sends a
+    // heartbeat if the user has been active recently. Activity itself can also
+    // trigger a heartbeat (debounced), so locks stay fresh during real work
+    // and quietly go stale when the writer steps away.
+    const HEARTBEAT_TIMER_MS = 2 * 60 * 1000;
+    const HEARTBEAT_ACTIVITY_DEBOUNCE_MS = 60 * 1000;
+    const ACTIVITY_RECENT_WINDOW_MS = 5 * 60 * 1000;
+    // Warning thresholds (seconds-until-expiry).
+    const IDLE_WARNING_S = 180;     // T-3min: gentle toast
+    const IDLE_CRITICAL_S = 30;     // T-30s: banner
+    const HARDCAP_WARNING_S = 300;  // T-5min on the hour cap: banner
+    const PAYLOAD_VERSION = 1;
+    const LEGACY_TAB_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/?$`
+    );
+    const LEGACY_STEP_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/steps/?$`
+    );
+    const LEGACY_STEP_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/steps/reorder/?$`
+    );
+    const LEGACY_STEP_DETAIL_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/steps/(-?\\d+)/?$`
+    );
+    const LEGACY_STEP_TROPHIES_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/steps/(-?\\d+)/trophies/?$`
+    );
+    const LEGACY_TROPHY_GUIDE_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/trophy-guides/(\\d+)/?$`
+    );
+
+    /**
+     * Maintains the in-memory branch_payload (canonical wire shape) and
+     * mutates it in response to legacy-style API calls from the editor UI.
+     * A single debounced PATCH /lock/branch/ pushes the latest state.
+     */
+    const BranchProxy = {
+        state: null,
+        nextLocalId: -1,
+        pushTimer: null,
+        lockLost: false,
+
+        init(initialPayload) {
+            this.state = initialPayload || { payload_version: PAYLOAD_VERSION, tabs: [] };
+            if (!this.state.payload_version) this.state.payload_version = PAYLOAD_VERSION;
+        },
+
+        findTab(tabId) {
+            return this.state.tabs.find(t => t.id === tabId);
+        },
+
+        findStep(tabId, stepId) {
+            const tab = this.findTab(tabId);
+            return tab ? tab.steps.find(s => s.id === stepId) : null;
+        },
+
+        nextId() {
+            return this.nextLocalId--;
+        },
+
+        schedulePush() {
+            if (this.lockLost) return;
+            hasUnsaved = true;
+            setSaveStatus('unsaved');
+            if (this.pushTimer) clearTimeout(this.pushTimer);
+            this.pushTimer = setTimeout(() => this.push(), 1500);
+        },
+
+        async pushNow() {
+            if (this.pushTimer) {
+                clearTimeout(this.pushTimer);
+                this.pushTimer = null;
+            }
+            return this.push();
+        },
+
+        async push() {
+            if (this.lockLost) return;
+            try {
+                setSaveStatus('saving');
+                const result = await API.patch(
+                    `/api/v1/roadmap/${roadmapId}/lock/branch/`,
+                    { branch_payload: this.state }
+                );
+                if (result.lock_lost) {
+                    LockController.handleLockLost();
+                    return;
+                }
+                LockController.applyLockState(result.lock);
+                setSaveStatus('saved');
+            } catch (err) {
+                const errData = await err.response?.json().catch(() => null);
+                if (errData?.lock_lost || err.response?.status === 409) {
+                    LockController.handleLockLost();
+                    return;
+                }
+                setSaveStatus('error');
+                Toast.show(errData?.error || 'Autosave failed.', 'error');
+            }
+        },
+
+        // Translate the legacy URL+method+body into a state mutation.
+        // Returns a synthetic response that matches what the legacy endpoint used to.
+        handle(method, url, body) {
+            if (this.lockLost) {
+                throw new Error('Lock has been lost. Refresh to continue editing.');
+            }
+
+            const m = method.toLowerCase();
+            let match;
+
+            // Tab field update: PATCH /tab/Y/
+            if ((match = url.match(LEGACY_TAB_PATTERN)) && m === 'patch') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                Object.keys(body || {}).forEach(k => {
+                    if (k in tab) tab[k] = body[k];
+                });
+                this.schedulePush();
+                return { ...body };
+            }
+
+            // Step create: POST /tab/Y/steps/
+            if ((match = url.match(LEGACY_STEP_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const newStep = {
+                    id: this.nextId(),
+                    title: (body.title || '').trim() || 'New Step',
+                    description: body.description || '',
+                    youtube_url: body.youtube_url || '',
+                    order: tab.steps.length,
+                    trophy_ids: [],
+                    // Stamp the viewer as owner client-side so the badge says
+                    // "You" immediately. Server stamps the actual created_by
+                    // on merge using the merging profile's id.
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                tab.steps.push(newStep);
+                this.schedulePush();
+                return { ...newStep };
+            }
+
+            // Step reorder: POST /tab/Y/steps/reorder/
+            if ((match = url.match(LEGACY_STEP_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const orderedIds = (body.step_ids || []).map(x => parseInt(x, 10));
+                const stepMap = {};
+                tab.steps.forEach(s => { stepMap[s.id] = s; });
+                tab.steps = orderedIds.map(id => stepMap[id]).filter(Boolean);
+                tab.steps.forEach((s, i) => { s.order = i; });
+                this.schedulePush();
+                return { status: 'ok' };
+            }
+
+            // Step update / delete: PATCH or DELETE /tab/Y/steps/Z/
+            if ((match = url.match(LEGACY_STEP_DETAIL_PATTERN)) && (m === 'patch' || m === 'delete')) {
+                const tabId = parseInt(match[1], 10);
+                const stepId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                if (m === 'delete') {
+                    tab.steps = tab.steps.filter(s => s.id !== stepId);
+                    this.schedulePush();
+                    return null;
+                }
+                const step = tab.steps.find(s => s.id === stepId);
+                if (!step) throw new Error(`Step ${stepId} not in branch.`);
+                Object.keys(body || {}).forEach(k => {
+                    if (k in step) step[k] = body[k];
+                });
+                this.schedulePush();
+                return { id: step.id, title: step.title, description: step.description, order: step.order };
+            }
+
+            // Step trophy associations: PUT /tab/Y/steps/Z/trophies/
+            if ((match = url.match(LEGACY_STEP_TROPHIES_PATTERN)) && m === 'put') {
+                const tabId = parseInt(match[1], 10);
+                const stepId = parseInt(match[2], 10);
+                const step = this.findStep(tabId, stepId);
+                if (!step) throw new Error(`Step ${stepId} not in branch.`);
+                step.trophy_ids = (body.trophy_ids || []).map(x => parseInt(x, 10));
+                this.schedulePush();
+                return { status: 'ok' };
+            }
+
+            // Trophy guide upsert / delete: PUT or DELETE /tab/Y/trophy-guides/T/
+            if ((match = url.match(LEGACY_TROPHY_GUIDE_PATTERN)) && (m === 'put' || m === 'delete')) {
+                const tabId = parseInt(match[1], 10);
+                const trophyId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                if (m === 'delete') {
+                    tab.trophy_guides = tab.trophy_guides.filter(g => g.trophy_id !== trophyId);
+                    this.schedulePush();
+                    return null;
+                }
+                let guide = tab.trophy_guides.find(g => g.trophy_id === trophyId);
+                const incomingBody = body.body || '';
+                // Empty body deletes the guide (matching legacy endpoint behavior).
+                if (!incomingBody.trim()) {
+                    if (guide) {
+                        tab.trophy_guides = tab.trophy_guides.filter(g => g.trophy_id !== trophyId);
+                    }
+                    this.schedulePush();
+                    return null;
+                }
+                if (!guide) {
+                    guide = {
+                        id: this.nextId(),
+                        trophy_id: trophyId,
+                        body: '',
+                        order: tab.trophy_guides.length,
+                        is_missable: false,
+                        is_online: false,
+                        is_unobtainable: false,
+                        // Stamp viewer as owner client-side; server re-stamps on merge.
+                        created_by_id: viewerProfileId,
+                        last_edited_by_id: viewerProfileId,
+                    };
+                    tab.trophy_guides.push(guide);
+                }
+                guide.body = incomingBody;
+                if ('is_missable' in body) guide.is_missable = !!body.is_missable;
+                if ('is_online' in body) guide.is_online = !!body.is_online;
+                if ('is_unobtainable' in body) guide.is_unobtainable = !!body.is_unobtainable;
+                this.schedulePush();
+                return {
+                    trophy_id: guide.trophy_id, body: guide.body,
+                    is_missable: guide.is_missable, is_online: guide.is_online,
+                    is_unobtainable: guide.is_unobtainable,
+                };
+            }
+
+            throw new Error(`BranchProxy: unhandled ${method.toUpperCase()} ${url}`);
+        },
+
+        // Convert local state to wire format (negative ids -> null for new rows).
+        toWirePayload() {
+            const cloned = JSON.parse(JSON.stringify(this.state));
+            (cloned.tabs || []).forEach(tab => {
+                (tab.steps || []).forEach(step => {
+                    if (typeof step.id === 'number' && step.id < 0) step.id = null;
+                });
+                (tab.trophy_guides || []).forEach(g => {
+                    if (typeof g.id === 'number' && g.id < 0) g.id = null;
+                });
+            });
+            return cloned;
+        },
+    };
+
+    /**
+     * Live timer chip + threshold-based warnings.
+     *
+     * Ticks every second using the most recent server lock state. Threshold
+     * crossings (idle T-3min, idle T-30s, hard-cap T-5min) emit informational
+     * warnings (no blocking modals — work is preserved either way under the
+     * advisory model). Flags are reset on each successful heartbeat so a
+     * writer who steps away repeatedly is warned each idle period.
+     */
+    const LockTimer = {
+        lockSnapshot: null,
+        tickHandle: null,
+        idleWarningFired: false,
+        idleCriticalFired: false,
+        hardcapWarningFired: false,
+
+        update(lock) {
+            if (!lock) return;
+            // Server gives us seconds_until_expiry / hard_cap_seconds_remaining
+            // computed at request time. Re-anchor to local clock for tick math.
+            const now = Date.now();
+            this.lockSnapshot = {
+                idleExpiresAtMs: now + (lock.seconds_until_expiry || 0) * 1000,
+                hardCapAtMs: now + (lock.hard_cap_seconds_remaining || 0) * 1000,
+                heldBySelf: !!lock.held_by_self,
+                holderUsername: lock.holder_username,
+            };
+            // A successful heartbeat reset means we're no longer in any warning
+            // window — clear flags so the next stale period gets re-warned.
+            if ((lock.seconds_until_expiry || 0) > IDLE_WARNING_S) this.idleWarningFired = false;
+            if ((lock.seconds_until_expiry || 0) > IDLE_CRITICAL_S) this.idleCriticalFired = false;
+            if ((lock.hard_cap_seconds_remaining || 0) > HARDCAP_WARNING_S) this.hardcapWarningFired = false;
+        },
+
+        start() {
+            if (this.tickHandle) clearInterval(this.tickHandle);
+            this.tickHandle = setInterval(() => this.tick(), 1000);
+            this.tick();
+        },
+
+        stop() {
+            if (this.tickHandle) clearInterval(this.tickHandle);
+            this.tickHandle = null;
+        },
+
+        tick() {
+            if (!this.lockSnapshot || !this.lockSnapshot.heldBySelf) {
+                this.renderChip(null);
+                return;
+            }
+            const now = Date.now();
+            const idleS = Math.max(0, Math.round((this.lockSnapshot.idleExpiresAtMs - now) / 1000));
+            const capS = Math.max(0, Math.round((this.lockSnapshot.hardCapAtMs - now) / 1000));
+            this.renderChip({ idleS, capS });
+
+            if (idleS <= IDLE_WARNING_S && idleS > IDLE_CRITICAL_S && !this.idleWarningFired) {
+                this.idleWarningFired = true;
+                Toast.show(
+                    'Session going idle in 3 min — others can claim the guide if you don\'t return.',
+                    'info'
+                );
+            }
+            if (idleS <= IDLE_CRITICAL_S && !this.idleCriticalFired) {
+                this.idleCriticalFired = true;
+                LockController.renderBanner('idle-critical', null);
+                Toast.show(
+                    'Lock about to go stale — your branch is safe, but others can take over.',
+                    'warning'
+                );
+            }
+            if (capS <= HARDCAP_WARNING_S && !this.hardcapWarningFired) {
+                this.hardcapWarningFired = true;
+                LockController.renderBanner('hardcap-warning', null);
+                Toast.show(
+                    'Editing for nearly an hour — consider clicking Save to checkpoint.',
+                    'info'
+                );
+            }
+        },
+
+        renderChip(state) {
+            const chip = document.getElementById('lock-timer-chip');
+            if (!chip) return;
+            const label = chip.querySelector('.lock-timer-label');
+            const tooltip = chip.querySelector('.lock-timer-tooltip');
+            if (!state) {
+                chip.classList.add('hidden');
+                chip.classList.remove('inline-flex');
+                return;
+            }
+            chip.classList.remove('hidden');
+            chip.classList.add('inline-flex');
+            const fmt = (s) => {
+                const m = Math.floor(s / 60);
+                const r = s % 60;
+                return `${m}:${r.toString().padStart(2, '0')}`;
+            };
+            // The chip displays the SESSION (hard-cap) countdown — that's the
+            // meaningful "how much time do I have" number while actively
+            // working. The idle timer just resets on every keystroke, so it's
+            // noise in the chip; it's still surfaced in the tooltip on hover
+            // and via toasts when it actually approaches expiry.
+            chip.classList.remove(
+                'border-success/30', 'text-success/80', 'bg-success/5',
+                'border-warning/40', 'text-warning', 'bg-warning/10',
+                'border-error/40', 'text-error', 'bg-error/10',
+            );
+            if (state.capS <= 60) {
+                chip.classList.add('border-error/40', 'text-error', 'bg-error/10');
+            } else if (state.capS <= 300) {
+                chip.classList.add('border-warning/40', 'text-warning', 'bg-warning/10');
+            } else {
+                chip.classList.add('border-success/30', 'text-success/80', 'bg-success/5');
+            }
+            label.textContent = 'Session ' + fmt(state.capS);
+            // Update only the inner tooltip text. We avoid `chip.title` because
+            // the native browser tooltip refreshes on every attribute change,
+            // which flickers annoyingly while hovering during the 1s ticks.
+            // The CSS-hover tooltip below stays put and just shows new text.
+            if (tooltip) {
+                tooltip.textContent = `Session: ${fmt(state.capS)} · Idle: ${fmt(state.idleS)} · typing extends idle`;
+            }
+        },
+    };
+
+    /**
+     * Lock lifecycle: acquire on load, activity-aware heartbeat, merge on
+     * Save click, release on close. Advisory expiry semantics — a stale lock
+     * still held by self resumes cleanly; takeover archives the displaced
+     * branch as a recovery revision.
+     */
+    const LockController = {
+        lockState: null,
+        heartbeatTimerHandle: null,
+        lastActivityAt: 0,
+        lastHeartbeatAt: 0,
+
+        async init() {
+            try {
+                const result = await API.post(`/api/v1/roadmap/${roadmapId}/lock/acquire/`, {});
+                this.applyLockState(result.lock);
+                BranchProxy.init(result.branch_payload);
+                this.lastActivityAt = Date.now();
+                this.installActivityListeners();
+                this.startHeartbeatTimer();
+                LockTimer.start();
+                if (result.resumed_stale) {
+                    this.renderBanner('resumed-stale', result.lock);
+                } else if (result.archived_predecessor_revision_id) {
+                    Toast.show(
+                        'Previous editor session was idle — taken over and archived as a revision.',
+                        'info'
+                    );
+                }
+                return true;
+            } catch (err) {
+                const errData = await err.response?.json().catch(() => null);
+                if (err.response?.status === 409 && errData?.lock) {
+                    this.lockState = errData.lock;
+                    BranchProxy.lockLost = true;
+                    this.renderBanner('conflict', errData.lock);
+                    enterReadOnlyMode(`Editor locked by ${errData.lock.holder_username || 'another author'}.`);
+                    return false;
+                }
+                Toast.show(errData?.error || 'Failed to acquire edit lock.', 'error');
+                enterReadOnlyMode('Failed to acquire edit lock.');
+                return false;
+            }
+        },
+
+        applyLockState(lock) {
+            if (!lock) return;
+            this.lockState = lock;
+            LockTimer.update(lock);
+        },
+
+        installActivityListeners() {
+            const onActivity = () => {
+                this.lastActivityAt = Date.now();
+                if (BranchProxy.lockLost) return;
+                // Debounced "first activity in a while" heartbeat.
+                if (Date.now() - this.lastHeartbeatAt > HEARTBEAT_ACTIVITY_DEBOUNCE_MS) {
+                    this.heartbeat();
+                }
+            };
+            ['keydown', 'mousedown', 'pointerdown', 'input'].forEach(evt => {
+                editorEl.addEventListener(evt, onActivity, { passive: true });
+            });
+        },
+
+        startHeartbeatTimer() {
+            if (this.heartbeatTimerHandle) clearInterval(this.heartbeatTimerHandle);
+            this.heartbeatTimerHandle = setInterval(() => {
+                if (BranchProxy.lockLost) return;
+                // Keep-alive only if the user has been active in the recent window.
+                // Otherwise, let the lock go stale so others can take over.
+                if (Date.now() - this.lastActivityAt < ACTIVITY_RECENT_WINDOW_MS) {
+                    this.heartbeat();
+                }
+            }, HEARTBEAT_TIMER_MS);
+        },
+
+        async heartbeat() {
+            if (BranchProxy.lockLost) return;
+            this.lastHeartbeatAt = Date.now();
+            try {
+                const result = await API.post(
+                    `/api/v1/roadmap/${roadmapId}/lock/heartbeat/`, {}
+                );
+                if (result.lock_lost) {
+                    this.handleLockLost(true);
+                    return;
+                }
+                this.applyLockState(result.lock);
+                if (result.was_stale) {
+                    Toast.show('Welcome back — your session resumed.', 'success');
+                }
+                this.renderBanner('hidden', null);
+            } catch (err) {
+                if (err.response?.status === 404 || err.response?.status === 409) {
+                    this.handleLockLost(true);
+                }
+            }
+        },
+
+        handleLockLost(takenOver) {
+            if (BranchProxy.lockLost) return;
+            BranchProxy.lockLost = true;
+            if (this.heartbeatTimerHandle) clearInterval(this.heartbeatTimerHandle);
+            LockTimer.stop();
+            LockTimer.renderChip(null);
+            const msg = takenOver
+                ? 'Your previous session was claimed by another author. Your in-progress work is archived in revisions (admin can recover it). Refresh to start a new session.'
+                : 'Your edit lock was released. Refresh to take it back.';
+            enterReadOnlyMode(msg);
+            this.renderBanner('lost', null);
+            Toast.show(takenOver ? 'Lock claimed by another author.' : 'Lock lost.', 'error');
+        },
+
+        async forceUnlock() {
+            if (!confirm(
+                'Force-break the current edit lock? The other writer\'s unsaved changes ' +
+                'will be archived as a revision (recoverable from admin), ' +
+                'but they will lose their session. Continue?'
+            )) return;
+            try {
+                await API.post(`/api/v1/roadmap/${roadmapId}/lock/break/`, {});
+                Toast.show('Lock broken. Refresh to acquire.', 'success');
+                window.location.reload();
+            } catch (err) {
+                const errData = await err.response?.json().catch(() => null);
+                Toast.show(errData?.error || 'Failed to break lock.', 'error');
+            }
+        },
+
+        async save() {
+            if (BranchProxy.lockLost) {
+                Toast.show('Lock has been lost. Refresh to edit.', 'error');
+                return;
+            }
+            await BranchProxy.pushNow();
+            try {
+                setSaveStatus('saving');
+                const result = await API.post(
+                    `/api/v1/roadmap/${roadmapId}/lock/merge/`,
+                    { branch_payload: BranchProxy.toWirePayload() }
+                );
+                if (result.lock_lost) {
+                    this.handleLockLost(true);
+                    return;
+                }
+                hasUnsaved = false;
+                setSaveStatus('saved');
+                Toast.show(result.summary || 'Saved.', 'success');
+                setTimeout(() => window.location.reload(), 500);
+            } catch (err) {
+                const errData = await err.response?.json().catch(() => null);
+                if (errData?.lock_lost || err.response?.status === 409) {
+                    this.handleLockLost(true);
+                    return;
+                }
+                setSaveStatus('error');
+                Toast.show(errData?.error || 'Save failed. Your changes are still in the branch.', 'error');
+            }
+        },
+
+        async release() {
+            if (BranchProxy.lockLost) return;
+            try {
+                if (BranchProxy.pushTimer) {
+                    await BranchProxy.pushNow();
+                }
+                await API.post(`/api/v1/roadmap/${roadmapId}/lock/release/`, {});
+            } catch (err) {
+                // Best-effort release; lock auto-expires anyway.
+            }
+        },
+
+        renderBanner(state, lock) {
+            const banner = document.getElementById('lock-banner');
+            if (!banner) return;
+            banner.classList.remove(
+                'hidden',
+                'border-success/40', 'bg-success/10',
+                'border-info/40', 'bg-info/10',
+                'border-warning/40', 'bg-warning/10',
+                'border-error/40', 'bg-error/10',
+            );
+            const msg = banner.querySelector('.lock-banner-msg');
+            const action = banner.querySelector('.lock-banner-action');
+            if (action) action.innerHTML = '';
+
+            if (state === 'hidden') {
+                banner.classList.add('hidden');
+                return;
+            }
+            if (state === 'resumed-stale') {
+                banner.classList.add('border-info/40', 'bg-info/10');
+                msg.textContent = 'Welcome back — your previous session was idle and is now resumed. Your branch is intact.';
+                return;
+            }
+            if (state === 'idle-critical') {
+                banner.classList.add('border-warning/40', 'bg-warning/10');
+                msg.textContent = 'Session about to go stale. Your branch is safe — others can take over the lock unless you interact.';
+                return;
+            }
+            if (state === 'hardcap-warning') {
+                banner.classList.add('border-warning/40', 'bg-warning/10');
+                msg.textContent = 'You\'ve been editing for nearly an hour. Consider clicking Save to checkpoint your progress.';
+                return;
+            }
+            if (state === 'conflict' && lock) {
+                banner.classList.add('border-warning/40', 'bg-warning/10');
+                const mins = Math.floor((lock.seconds_until_expiry || 0) / 60);
+                msg.textContent = lock.is_stale
+                    ? `Locked by ${lock.holder_username || 'another author'} (idle). Reload to take over — their branch will be archived.`
+                    : `Locked by ${lock.holder_username || 'another author'} (expires in ~${mins} min). Editor is read-only.`;
+                if (action && canPublish && !lock.is_stale) {
+                    action.innerHTML = '<button id="force-unlock-btn" class="btn btn-xs btn-warning">Force unlock</button>';
+                    action.querySelector('#force-unlock-btn').addEventListener('click', () => this.forceUnlock());
+                }
+                return;
+            }
+            if (state === 'lost') {
+                banner.classList.add('border-error/40', 'bg-error/10');
+                msg.textContent = 'Lock lost. Editor is read-only. Refresh to start a new session.';
+                return;
+            }
+        },
+    };
+
+    function enterReadOnlyMode(reason) {
+        editorEl.querySelectorAll('input, textarea, select, button').forEach(el => {
+            if (el.closest('[data-readonly-exempt]')) return;
+            el.disabled = true;
+        });
+        editorEl.classList.add('roadmap-editor-readonly');
+    }
+
+    /**
+     * Render the "Owned by X" badge on a section row and apply a writer-
+     * scoping read-only state if the current user can't edit it.
+     *
+     * @param rowEl  The DOM node representing the row (step card or trophy guide).
+     * @param ownerId  Profile id of the row's owner (null for ownerless / fresh).
+     * @param prefix  CSS prefix used in the row's owner-badge classnames
+     *                (e.g. "step-owner" or "trophy-guide-owner").
+     * @returns boolean — whether the current user can edit this row.
+     */
+    function applyOwnership(rowEl, ownerId, prefix) {
+        const isOwnerless = !ownerId;
+        const isMine = ownerId === viewerProfileId;
+        const canEdit = bypassOwnershipScope || isOwnerless || isMine;
+
+        const badge = rowEl.querySelector(`.${prefix}-badge`);
+        if (badge) {
+            const profile = ownerId ? profilesById[ownerId] : null;
+            if (!profile) {
+                // Ownerless: hide badge entirely.
+                badge.classList.add('hidden');
+                badge.classList.remove('inline-flex');
+            } else {
+                badge.classList.remove('hidden');
+                badge.classList.add('inline-flex');
+                const nameEl = badge.querySelector(`.${prefix}-name`);
+                const avatarEl = badge.querySelector(`.${prefix}-avatar`);
+                const fallbackEl = badge.querySelector(`.${prefix}-icon-fallback`);
+                if (nameEl) nameEl.textContent = isMine ? 'You' : profile.display_name;
+                if (avatarEl && profile.avatar_url) {
+                    avatarEl.src = profile.avatar_url;
+                    avatarEl.classList.remove('hidden');
+                    if (fallbackEl) {
+                        fallbackEl.classList.add('hidden');
+                        fallbackEl.classList.remove('flex');
+                    }
+                } else if (fallbackEl) {
+                    fallbackEl.textContent = (profile.display_name || '?').slice(0, 1).toUpperCase();
+                    fallbackEl.classList.remove('hidden');
+                    fallbackEl.classList.add('flex');
+                    if (avatarEl) avatarEl.classList.add('hidden');
+                }
+                // Color the pill: muted for editable, warning tone when locked
+                // out, success-y when it's mine.
+                badge.classList.remove(
+                    'bg-base-300/40', 'text-base-content/60',
+                    'bg-warning/15', 'text-warning',
+                    'bg-success/15', 'text-success',
+                );
+                if (!canEdit) {
+                    badge.classList.add('bg-warning/15', 'text-warning');
+                } else if (isMine) {
+                    badge.classList.add('bg-success/15', 'text-success');
+                } else {
+                    badge.classList.add('bg-base-300/40', 'text-base-content/60');
+                }
+            }
+        }
+
+        if (!canEdit) {
+            rowEl.classList.add('opacity-60');
+            rowEl.querySelectorAll('input, textarea, button').forEach(el => {
+                if (el.closest('[data-readonly-exempt]')) return;
+                el.disabled = true;
+            });
+        }
+        return canEdit;
+    }
 
     // ------------------------------------------------------------------ //
     //  Save Status
@@ -69,17 +773,28 @@
         }
     }
 
+    /**
+     * Legacy compatibility shim. The editor was originally written to mutate
+     * live records via per-field/per-row REST endpoints; we keep all those
+     * call sites unchanged but now route them through BranchProxy, which
+     * mutates the in-memory branch_payload and schedules a single debounced
+     * /lock/branch/ push. Publish toggles still hit the live endpoint
+     * (publisher-only, server creates a published/unpublished revision).
+     */
     async function apiCall(method, url, body) {
-        setSaveStatus('saving');
+        if (url.includes(`/api/v1/roadmap/${roadmapId}/publish/`)) {
+            try {
+                return await API[method](url, body);
+            } catch (err) {
+                const errData = await err.response?.json().catch(() => null);
+                Toast.show(errData?.error || 'Publish action failed.', 'error');
+                throw err;
+            }
+        }
         try {
-            const result = await API[method](url, body);
-            setSaveStatus('saved');
-            return result;
+            return BranchProxy.handle(method, url, body);
         } catch (err) {
-            setSaveStatus('error');
-            const errData = await err.response?.json().catch(() => null);
-            const msg = errData?.error || 'An error occurred.';
-            Toast.show(msg, 'error');
+            Toast.show(err.message || 'An error occurred.', 'error');
             throw err;
         }
     }
@@ -210,6 +925,11 @@
             deleteStep(step.id);
         });
 
+        // Render ownership badge + apply writer-scoping read-only state.
+        // Writers can only edit steps they own (or untouched/ownerless ones);
+        // editors and publishers bypass this.
+        applyOwnership(el, step.created_by_id || null, 'step-owner');
+
         return el;
     }
 
@@ -280,6 +1000,8 @@
                 description: result.description,
                 youtube_url: result.youtube_url || '',
                 order: result.order,
+                created_by_id: result.created_by_id,
+                last_edited_by_id: result.last_edited_by_id,
                 trophy_ids: [],
             });
             renderSteps(tabId);
@@ -367,6 +1089,44 @@
                 debouncedSave();
             });
         });
+
+        // Per-tab gating: render the General Tips owner badge / disable the
+        // textarea for writers who don't own this tab; lock the YouTube URL
+        // input to publishers only.
+        tabsData.forEach(tabData => {
+            applyTabFieldGates(tabData);
+        });
+    }
+
+    function applyTabFieldGates(tabData) {
+        const tabId = tabData.id;
+        const tipsCard = document.querySelector(`.general-tips-card[data-tab-id="${tabId}"]`);
+        const tipsInput = document.querySelector(`.general-tips-input[data-tab-id="${tabId}"]`);
+        const youtubeCard = document.querySelector(`.youtube-guide-card[data-tab-id="${tabId}"]`);
+        const youtubeInput = document.querySelector(`.youtube-url-input[data-tab-id="${tabId}"]`);
+
+        // General Tips: writer-or-tab-owner can edit. Editor+ bypasses.
+        if (tipsCard && tipsInput) {
+            const ownerId = tabData.created_by_id || null;
+            const canEdit = applyOwnership(tipsCard, ownerId, 'general-tips-owner');
+            if (!canEdit) {
+                tipsInput.disabled = true;
+            }
+        }
+
+        // YouTube URL: publisher-only. Always-locked for writers and editors,
+        // regardless of tab ownership.
+        if (youtubeCard && youtubeInput) {
+            if (!canPublish) {
+                youtubeInput.disabled = true;
+                youtubeCard.classList.add('opacity-60');
+                // Disable any future formatting toolbar buttons inside this card too.
+                youtubeCard.querySelectorAll('button').forEach(b => {
+                    if (b.closest('[data-readonly-exempt]')) return;
+                    b.disabled = true;
+                });
+            }
+        }
     }
 
     // ------------------------------------------------------------------ //
@@ -526,6 +1286,12 @@
                     debouncedSave();
                 });
             });
+
+            // Render ownership badge + apply writer-scoping read-only state.
+            // Editors and publishers bypass; writers may only edit their own
+            // (or untouched/ownerless) guides.
+            const guideOwnerId = (typeof guideData === 'object' && guideData.created_by_id) || null;
+            applyOwnership(el, guideOwnerId, 'trophy-guide-owner');
 
             container.appendChild(el);
         });
@@ -929,7 +1695,11 @@
     //  Initialization
     // ------------------------------------------------------------------ //
 
-    function init() {
+    async function init() {
+        // Acquire the lock first; if it's held by someone else the rest of
+        // the editor still renders but inputs are disabled.
+        await LockController.init();
+
         initTabs();
         initAddStepButtons();
         initTabFields();
@@ -938,6 +1708,7 @@
         initFormattingToolbars();
         initKeyboardShortcuts();
         initAutoResize();
+        initSaveCancelButtons();
 
         // Render all tabs
         tabsData.forEach(tab => {
@@ -946,13 +1717,45 @@
             updateTrophyGuideCounter(tab.id);
         });
 
-        // Warn on navigation with unsaved changes
+        // Reset any input wiring that BranchProxy.lockLost flipped before render
+        if (BranchProxy.lockLost) {
+            enterReadOnlyMode('Editor is read-only.');
+        }
+
+        // Warn on navigation with unsaved changes; release lock on close.
         window.addEventListener('beforeunload', (e) => {
             if (hasUnsaved) {
                 e.preventDefault();
                 e.returnValue = '';
             }
+            // Best-effort release — fires sendBeacon if available so the
+            // request survives the unload.
+            if (!BranchProxy.lockLost && navigator.sendBeacon) {
+                const csrfToken = window.PlatPursuit.CSRFToken?.get?.();
+                const blob = new Blob([JSON.stringify({})], { type: 'application/json' });
+                // sendBeacon doesn't support custom headers; the release endpoint
+                // doesn't strictly need CSRF since lock ownership is verified server-side.
+                navigator.sendBeacon(`/api/v1/roadmap/${roadmapId}/lock/release/`, blob);
+            }
         });
+    }
+
+    function initSaveCancelButtons() {
+        const saveBtn = document.getElementById('roadmap-save-btn');
+        const cancelBtn = document.getElementById('roadmap-cancel-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => LockController.save());
+        }
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', async () => {
+                if (hasUnsaved && !confirm(
+                    'Discard your unsaved branch and exit the editor? '
+                    + 'You will lose any changes made since the last save.'
+                )) return;
+                await LockController.release();
+                window.location.href = `/games/${editorEl.dataset.gameSlug || ''}/`;
+            });
+        }
     }
 
     if (document.readyState === 'loading') {

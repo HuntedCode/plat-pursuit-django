@@ -4,7 +4,7 @@
 
 ## Overview
 
-The roadmap system provides structured game guides surfaced as dedicated pages. One roadmap per game (Concept), tabbed by trophy group (base game + DLCs). Each trophy group tab gets its own detail page URL. Staff-only authoring via a dedicated editor page.
+The roadmap system provides structured game guides surfaced as dedicated pages. One roadmap per game (Concept), tabbed by trophy group (base game + DLCs). Each trophy group tab gets its own detail page URL. Authoring is gated by a three-tier role system (writer/editor/publisher) on top of a guide-level edit lock and permanent revision history — see the [Roadmap Roles, Locks & Revisions](roadmap-roles-and-revisions.md) doc for the authoring flow.
 
 Replaces the previous checklist system (DB tables retained, UI removed).
 

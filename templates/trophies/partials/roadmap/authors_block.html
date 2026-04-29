@@ -1,0 +1,51 @@
+{% load static %}
+{# Roadmap contributors block. Variants: full (avatar + name list), compact (avatars + tooltip). #}
+{% if authors %}
+    {% if variant == 'compact' %}
+        <div class="flex items-center gap-1 text-xs text-base-content/60" title="Roadmap contributors">
+            <span class="hidden md:inline">By</span>
+            <div class="flex -space-x-2">
+                {% for author in authors|slice:":5" %}
+                    <a href="{% url 'profile_detail' author.psn_username %}"
+                       class="block w-6 h-6 rounded-full ring-2 ring-base-200 overflow-hidden bg-base-300 hover:z-10 transition-transform hover:scale-110"
+                       title="{{ author.display_psn_username|default:author.psn_username }}">
+                        {% if author.avatar_url %}
+                            <img src="{{ author.avatar_url }}" alt="{{ author.psn_username }}" class="w-full h-full object-cover">
+                        {% else %}
+                            <span class="flex items-center justify-center w-full h-full text-[10px] font-bold text-base-content/60">
+                                {{ author.psn_username|slice:":1"|upper }}
+                            </span>
+                        {% endif %}
+                    </a>
+                {% endfor %}
+            </div>
+            {% if authors|length > 5 %}
+                <span class="text-xs text-base-content/50">+{{ authors|length|add:"-5" }}</span>
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="flex items-start gap-2 flex-wrap text-xs md:text-sm text-base-content/70">
+            <span class="font-semibold text-base-content/80 shrink-0">
+                Written by {{ authors|length|pluralize:"author,authors" }}:
+            </span>
+            <div class="flex items-center gap-2 flex-wrap">
+                {% for author in authors %}
+                    <a href="{% url 'profile_detail' author.psn_username %}"
+                       class="flex items-center gap-1.5 hover:text-primary transition-colors group">
+                        <span class="block w-5 h-5 rounded-full ring-1 ring-base-300 overflow-hidden bg-base-300 group-hover:ring-primary/40 transition-all">
+                            {% if author.avatar_url %}
+                                <img src="{{ author.avatar_url }}" alt="{{ author.psn_username }}" class="w-full h-full object-cover">
+                            {% else %}
+                                <span class="flex items-center justify-center w-full h-full text-[10px] font-bold text-base-content/60">
+                                    {{ author.psn_username|slice:":1"|upper }}
+                                </span>
+                            {% endif %}
+                        </span>
+                        <span class="font-medium">{{ author.display_psn_username|default:author.psn_username }}</span>
+                    </a>
+                    {% if not forloop.last %}<span class="text-base-content/30">·</span>{% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+{% endif %}

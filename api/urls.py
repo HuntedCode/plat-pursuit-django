@@ -60,7 +60,7 @@ from .game_family_views import (
 )
 from .subscription_admin_views import SubscriptionAdminActionView, SubscriptionAdminUserDetailView
 from .fundraiser_views import CreateDonationView, ClaimBadgeView, UpdateClaimStatusView
-from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, DashboardPreviewToggleView, StatsPageDataView
+from .dashboard_views import DashboardModuleDataView, DashboardConfigUpdateView, DashboardModuleReorderView, StatsPageDataView
 from .title_views import EquipTitleAPIView
 from .user_settings_views import UpdateTimezoneAPIView, UpdateQuickSettingsAPIView
 from .tutorial_views import WelcomeTourDismissAPIView, GameDetailTourDismissAPIView, BadgeDetailTourDismissAPIView
@@ -86,6 +86,10 @@ from .roadmap_views import (
     RoadmapTabUpdateView, RoadmapStepListCreateView, RoadmapStepDetailView,
     RoadmapStepReorderView, RoadmapStepTrophyView, RoadmapTrophyGuideView,
     RoadmapPublishView, RoadmapImageUploadView,
+)
+from .roadmap_lock_views import (
+    RoadmapLockAcquireView, RoadmapLockHeartbeatView, RoadmapLockBranchView,
+    RoadmapLockReleaseView, RoadmapLockBreakView, RoadmapLockMergeView,
 )
 from .profile_card_views import (
     ProfileCardHTMLView, ProfileCardPNGView,
@@ -278,7 +282,6 @@ urlpatterns = [
     path('dashboard/module/<str:slug>/', DashboardModuleDataView.as_view(), name='dashboard-module-data'),
     path('dashboard/config/', DashboardConfigUpdateView.as_view(), name='dashboard-config-update'),
     path('dashboard/reorder/', DashboardModuleReorderView.as_view(), name='dashboard-reorder'),
-    path('dashboard/preview-toggle/', DashboardPreviewToggleView.as_view(), name='dashboard-preview-toggle'),
 
     # Stats page endpoints
     path('stats/premium/', StatsPageDataView.as_view(), name='stats-premium-data'),
@@ -335,4 +338,11 @@ urlpatterns = [
     path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/trophy-guides/<int:trophy_id>/', RoadmapTrophyGuideView.as_view(), name='roadmap-trophy-guide'),
     path('roadmap/<int:roadmap_id>/publish/', RoadmapPublishView.as_view(), name='roadmap-publish'),
     path('roadmap/upload-image/', RoadmapImageUploadView.as_view(), name='roadmap-image-upload'),
+    # Lock + branch-and-merge endpoints
+    path('roadmap/<int:roadmap_id>/lock/acquire/', RoadmapLockAcquireView.as_view(), name='roadmap-lock-acquire'),
+    path('roadmap/<int:roadmap_id>/lock/heartbeat/', RoadmapLockHeartbeatView.as_view(), name='roadmap-lock-heartbeat'),
+    path('roadmap/<int:roadmap_id>/lock/branch/', RoadmapLockBranchView.as_view(), name='roadmap-lock-branch'),
+    path('roadmap/<int:roadmap_id>/lock/release/', RoadmapLockReleaseView.as_view(), name='roadmap-lock-release'),
+    path('roadmap/<int:roadmap_id>/lock/break/', RoadmapLockBreakView.as_view(), name='roadmap-lock-break'),
+    path('roadmap/<int:roadmap_id>/lock/merge/', RoadmapLockMergeView.as_view(), name='roadmap-lock-merge'),
 ]

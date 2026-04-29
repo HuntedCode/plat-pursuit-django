@@ -6,13 +6,33 @@
 {% block content %}
 {{ tabs_data|json_script:"roadmap-tabs-data" }}
 {{ trophies_by_group|json_script:"roadmap-trophies-data" }}
+{{ profiles_by_id|json_script:"roadmap-profiles-data" }}
 <div id="roadmap-editor"
-     data-roadmap-id="{{ roadmap.id }}">
+     data-roadmap-id="{{ roadmap.id }}"
+     data-game-slug="{{ game.np_communication_id }}"
+     data-author-role="{{ author_role }}"
+     data-author-can-delete="{{ author_can_delete|yesno:'true,false' }}"
+     data-author-can-publish="{{ author_can_publish|yesno:'true,false' }}"
+     data-viewer-profile-id="{{ viewer_profile_id }}">
 
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ═══ Page Header Card ═══ #}
-    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    {# ═══ Lock Banner ═══ #}
+    <div id="lock-banner" class="hidden card border-2 mb-3" data-readonly-exempt>
+        <div class="card-body p-2 md:p-3">
+            <div class="flex items-center gap-3 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                <span class="lock-banner-msg text-xs md:text-sm flex-1 min-w-0"></span>
+                <span class="lock-banner-action shrink-0"></span>
+            </div>
+        </div>
+    </div>
+
+    {# ═══ Page Header Card (sticky so timer chip + Save/Cancel stay reachable) ═══ #}
+    {# `top` matches the existing sidebar-ad sticky pattern so the navbar (z-50) #}
+    {# doesn't occlude this header (z-30). #}
+    <div class="sticky z-30 card bg-base-200/95 backdrop-blur border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3"
+         style="top: calc(var(--chrome-height, 5rem) + 0.5rem)">
         <div class="card-body p-3 md:p-4">
             <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2 flex-wrap flex-1 min-w-0">
@@ -24,29 +44,49 @@
                         <svg id="save-icon" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                         <span id="save-text">Saved</span>
                     </span>
+                    {# Live lock-timer chip with custom hover-tooltip (no native title #}
+                    {# attribute — that one flickers on every 1s tick while hovering). #}
+                    <span id="lock-timer-chip"
+                          class="hidden items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] md:text-xs font-mono shrink-0 cursor-help relative group"
+                          data-readonly-exempt
+                          aria-label="Lock timer — typing extends idle">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span class="lock-timer-label">--:--</span>
+                        <span class="lock-timer-tooltip pointer-events-none absolute top-full right-0 mt-1.5 hidden group-hover:block whitespace-nowrap bg-base-300 text-base-content text-xs font-normal rounded px-2 py-1 shadow-lg z-50"></span>
+                    </span>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <a href="{% url 'roadmap_detail' game.np_communication_id %}?preview=true" class="btn btn-sm btn-ghost border border-base-300 gap-1" target="_blank">
+                    <a href="{% url 'roadmap_detail' game.np_communication_id %}?preview=true" class="btn btn-sm btn-ghost border border-base-300 gap-1" target="_blank" data-readonly-exempt>
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
                         </svg>
                         <span class="hidden md:inline">Preview</span>
                     </a>
-                    {% if roadmap.status == 'draft' %}
-                        <button id="publish-btn" class="btn btn-sm btn-success gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            <span class="hidden md:inline">Publish</span>
-                        </button>
-                    {% else %}
-                        <button id="unpublish-btn" class="btn btn-sm btn-warning gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
-                            </svg>
-                            <span class="hidden md:inline">Unpublish</span>
-                        </button>
+                    <button id="roadmap-cancel-btn" class="btn btn-sm btn-ghost border border-base-300 gap-1">
+                        <span class="hidden md:inline">Cancel</span>
+                        <span class="md:hidden">×</span>
+                    </button>
+                    <button id="roadmap-save-btn" class="btn btn-sm btn-primary gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        <span class="hidden md:inline">Save</span>
+                    </button>
+                    {% if author_can_publish %}
+                        {% if roadmap.status == 'draft' %}
+                            <button id="publish-btn" class="btn btn-sm btn-success gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                <span class="hidden md:inline">Publish</span>
+                            </button>
+                        {% else %}
+                            <button id="unpublish-btn" class="btn btn-sm btn-warning gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                                </svg>
+                                <span class="hidden md:inline">Unpublish</span>
+                            </button>
+                        {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -159,11 +199,18 @@
         </div>
 
         {# ─── General Tips ─── #}
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="general-tips-card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 transition-opacity"
+             data-tab-id="{{ tab.id }}">
             <div class="card-body p-3 md:p-5 lg:p-7">
-                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1">
+                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1 flex-wrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
                     General Tips
+                    {# Owner badge — populated by JS from profilesById. #}
+                    <span class="general-tips-owner-badge hidden items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-normal" data-readonly-exempt>
+                        <img class="general-tips-owner-avatar hidden w-3.5 h-3.5 rounded-full object-cover" alt="">
+                        <span class="general-tips-owner-icon-fallback hidden w-3.5 h-3.5 rounded-full bg-base-300 items-center justify-center text-[8px] font-bold"></span>
+                        <span class="general-tips-owner-name"></span>
+                    </span>
                 </h2>
                 <p class="text-xs text-base-content/40 mb-3">Advice and things to know before starting. Supports markdown formatting.</p>
                 {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
@@ -174,15 +221,16 @@
             </div>
         </div>
 
-        {# ─── YouTube Embed ─── #}
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        {# ─── YouTube Embed (publisher-only field) ─── #}
+        <div class="youtube-guide-card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 transition-opacity"
+             data-tab-id="{{ tab.id }}">
             <div class="card-body p-3 md:p-5 lg:p-7">
-                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1">
+                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1 flex-wrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     YouTube Guide
-                    <span class="badge badge-xs badge-ghost font-normal">Optional</span>
+                    <span class="badge badge-xs badge-info font-normal" data-readonly-exempt>Publisher only</span>
                 </h2>
-                <p class="text-xs text-base-content/40 mb-3">Link your PlatPursuit YouTube guide for this game.</p>
+                <p class="text-xs text-base-content/40 mb-3">Link the official PlatPursuit YouTube guide for this game. Reserved for publisher curation.</p>
                 <input type="url"
                        class="input input-bordered w-full text-sm youtube-url-input"
                        data-tab-id="{{ tab.id }}"
@@ -211,15 +259,21 @@
 
 {# ─── Step Template (cloned by JS) ─── #}
 <template id="step-template">
-    <div class="step-card rounded-lg border border-base-content/5 border-l-4 border-l-primary/40 bg-white/[0.03] p-3 md:p-4" data-step-id="" data-item-id="">
+    <div class="step-card rounded-lg border border-base-content/5 border-l-4 border-l-primary/40 bg-white/[0.03] p-3 md:p-4 transition-opacity" data-step-id="" data-item-id="">
         <div class="flex items-start gap-3">
             <div class="step-handle cursor-grab shrink-0 mt-1 text-base-content/30 hover:text-base-content/60">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/></svg>
             </div>
             <div class="flex-1 min-w-0 space-y-2">
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="step-number badge badge-primary badge-sm font-bold shrink-0"></span>
-                    <input type="text" class="input input-bordered input-sm w-full font-semibold step-title-input" placeholder="Step title..." maxlength="200">
+                    <input type="text" class="input input-bordered input-sm flex-1 min-w-0 font-semibold step-title-input" placeholder="Step title..." maxlength="200">
+                    {# Owner badge — populated by JS from profilesById. Hidden for ownerless rows. #}
+                    <span class="step-owner-badge hidden items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] shrink-0" data-readonly-exempt>
+                        <img class="step-owner-avatar hidden w-3.5 h-3.5 rounded-full object-cover" alt="">
+                        <span class="step-owner-icon-fallback hidden w-3.5 h-3.5 rounded-full bg-base-300 items-center justify-center text-[8px] font-bold"></span>
+                        <span class="step-owner-name"></span>
+                    </span>
                 </div>
                 {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
                 <textarea class="textarea textarea-bordered w-full text-sm step-desc-input auto-resize" rows="2" placeholder="Describe what to do in this step..."></textarea>
@@ -255,11 +309,17 @@
 
 {# ─── Trophy Guide Row Template ─── #}
 <template id="trophy-guide-template">
-    <details class="trophy-guide-row collapse collapse-arrow border border-base-content/5 rounded-lg bg-white/[0.02]" data-trophy-id="">
+    <details class="trophy-guide-row collapse collapse-arrow border border-base-content/5 rounded-lg bg-white/[0.02] transition-opacity" data-trophy-id="">
         <summary class="collapse-title py-2 min-h-0 flex items-center gap-2">
             <img src="" alt="" class="w-7 h-7 rounded object-cover shrink-0 trophy-guide-icon">
             <span class="text-sm font-medium trophy-guide-name truncate"></span>
             <span class="badge badge-xs trophy-guide-type shrink-0"></span>
+            {# Owner badge — populated by JS. Hidden for ownerless rows. #}
+            <span class="trophy-guide-owner-badge hidden items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] shrink-0" data-readonly-exempt>
+                <img class="trophy-guide-owner-avatar hidden w-3 h-3 rounded-full object-cover" alt="">
+                <span class="trophy-guide-owner-icon-fallback hidden w-3 h-3 rounded-full bg-base-300 items-center justify-center text-[7px] font-bold"></span>
+                <span class="trophy-guide-owner-name"></span>
+            </span>
             <span class="trophy-guide-status badge badge-xs badge-ghost ml-auto shrink-0"></span>
         </summary>
         <div class="collapse-content px-3 pb-3">

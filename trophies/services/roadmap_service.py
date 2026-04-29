@@ -625,3 +625,90 @@ class RoadmapService:
         roadmap.status = 'draft'
         roadmap.save(update_fields=['status', 'updated_at'])
         return roadmap, None
+
+    # ------------------------------------------------------------------ #
+    #  Snapshot (canonical JSON serialization of a roadmap)
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def snapshot_roadmap(roadmap):
+        """Serialize a roadmap and all nested content to the canonical JSON shape.
+
+        Used both as the initial branch_payload when a lock is acquired and as
+        the `snapshot` field on RoadmapRevision when an explicit save merges.
+        The shape is versioned via `payload_version` so the merge service can
+        refuse unknown versions and migrations can rewrite older snapshots.
+        """
+        from trophies.models import (
+            RoadmapEditLock, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
+        )
+        from django.db.models import Prefetch
+
+        tabs_qs = (
+            roadmap.tabs
+            .select_related('concept_trophy_group')
+            .prefetch_related(
+                Prefetch(
+                    'steps',
+                    queryset=RoadmapStep.objects.prefetch_related(
+                        Prefetch(
+                            'step_trophies',
+                            queryset=RoadmapStepTrophy.objects.order_by('order'),
+                        )
+                    ).order_by('order'),
+                ),
+                Prefetch(
+                    'trophy_guides',
+                    queryset=TrophyGuide.objects.order_by('order', 'trophy_id'),
+                ),
+            )
+        )
+
+        return {
+            'payload_version': RoadmapEditLock.PAYLOAD_VERSION,
+            'roadmap_id': roadmap.id,
+            'status': roadmap.status,
+            'tabs': [
+                {
+                    'id': tab.id,
+                    'concept_trophy_group_id': tab.concept_trophy_group_id,
+                    'general_tips': tab.general_tips,
+                    'youtube_url': tab.youtube_url,
+                    'difficulty': tab.difficulty,
+                    'estimated_hours': tab.estimated_hours,
+                    'missable_count': tab.missable_count,
+                    'online_required': tab.online_required,
+                    'min_playthroughs': tab.min_playthroughs,
+                    'created_by_id': tab.created_by_id,
+                    'last_edited_by_id': tab.last_edited_by_id,
+                    'steps': [
+                        {
+                            'id': step.id,
+                            'title': step.title,
+                            'description': step.description,
+                            'youtube_url': step.youtube_url,
+                            'order': step.order,
+                            'created_by_id': step.created_by_id,
+                            'last_edited_by_id': step.last_edited_by_id,
+                            'trophy_ids': [st.trophy_id for st in step.step_trophies.all()],
+                        }
+                        for step in tab.steps.all()
+                    ],
+                    'trophy_guides': [
+                        {
+                            'id': tg.id,
+                            'trophy_id': tg.trophy_id,
+                            'body': tg.body,
+                            'order': tg.order,
+                            'is_missable': tg.is_missable,
+                            'is_online': tg.is_online,
+                            'is_unobtainable': tg.is_unobtainable,
+                            'created_by_id': tg.created_by_id,
+                            'last_edited_by_id': tg.last_edited_by_id,
+                        }
+                        for tg in tab.trophy_guides.all()
+                    ],
+                }
+                for tab in tabs_qs
+            ],
+        }

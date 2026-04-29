@@ -1,9 +1,13 @@
 """
-Roadmap API views (staff-only).
+Roadmap API views (role-gated).
 
 Handles REST endpoints for roadmap editing: tab updates, step CRUD,
 step-trophy associations, trophy guides, and publish/unpublish.
 All business logic lives in RoadmapService.
+
+Coarse access is gated by `IsRoadmapAuthor` (writer+); the publish endpoint
+overrides `min_roadmap_role` to 'publisher'. Fine-grained per-section scoping
+(writers may only edit their own sections) lives in the merge service.
 """
 import logging
 import uuid
@@ -12,10 +16,10 @@ from django.core.files.storage import default_storage
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.permissions import IsRoadmapAuthor
 from trophies.models import Roadmap, RoadmapTab, RoadmapStep
 from trophies.services.roadmap_service import RoadmapService
 
@@ -52,6 +56,17 @@ def _get_roadmap_and_tab(roadmap_id, tab_id):
     return roadmap, tab, None
 
 
+def _require_editor(request):
+    """Return a 403 Response if the requester lacks the editor role, else None."""
+    profile = getattr(request.user, 'profile', None)
+    if profile is None or not profile.has_roadmap_role('editor'):
+        return Response(
+            {'error': 'Editor role required for this action.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 # ------------------------------------------------------------------ #
 #  Tab
 # ------------------------------------------------------------------ #
@@ -59,7 +74,7 @@ def _get_roadmap_and_tab(roadmap_id, tab_id):
 class RoadmapTabUpdateView(APIView):
     """PATCH: Update a tab's content fields and/or guide metadata."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
 
     def patch(self, request, roadmap_id, tab_id):
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
@@ -97,7 +112,7 @@ class RoadmapTabUpdateView(APIView):
 class RoadmapStepListCreateView(APIView):
     """GET: List steps for a tab. POST: Create a new step."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
 
     def get(self, request, roadmap_id, tab_id):
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
@@ -151,7 +166,7 @@ class RoadmapStepListCreateView(APIView):
 class RoadmapStepDetailView(APIView):
     """PATCH: Update a step. DELETE: Remove a step."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
 
     def patch(self, request, roadmap_id, tab_id, step_id):
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
@@ -183,6 +198,9 @@ class RoadmapStepDetailView(APIView):
         })
 
     def delete(self, request, roadmap_id, tab_id, step_id):
+        forbidden = _require_editor(request)
+        if forbidden:
+            return forbidden
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
         if err:
             return err
@@ -201,11 +219,14 @@ class RoadmapStepDetailView(APIView):
 
 
 class RoadmapStepReorderView(APIView):
-    """POST: Reorder steps within a tab."""
+    """POST: Reorder steps within a tab. Editor role required."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
 
     def post(self, request, roadmap_id, tab_id):
+        forbidden = _require_editor(request)
+        if forbidden:
+            return forbidden
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
         if err:
             return err
@@ -231,7 +252,7 @@ class RoadmapStepReorderView(APIView):
 class RoadmapStepTrophyView(APIView):
     """PUT: Replace trophy associations for a step."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
 
     def put(self, request, roadmap_id, tab_id, step_id):
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
@@ -265,7 +286,7 @@ class RoadmapStepTrophyView(APIView):
 class RoadmapTrophyGuideView(APIView):
     """PUT: Create/update a trophy guide. DELETE: Remove a trophy guide."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
 
     def put(self, request, roadmap_id, tab_id, trophy_id):
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
@@ -296,6 +317,9 @@ class RoadmapTrophyGuideView(APIView):
         })
 
     def delete(self, request, roadmap_id, tab_id, trophy_id):
+        forbidden = _require_editor(request)
+        if forbidden:
+            return forbidden
         roadmap, tab, err = _get_roadmap_and_tab(roadmap_id, tab_id)
         if err:
             return err
@@ -312,11 +336,18 @@ class RoadmapTrophyGuideView(APIView):
 # ------------------------------------------------------------------ #
 
 class RoadmapPublishView(APIView):
-    """POST: Toggle roadmap publish status."""
+    """POST: Toggle roadmap publish status. Publisher role required.
+
+    Creates a `published` or `unpublished` RoadmapRevision so the status
+    change is visible in the revision timeline.
+    """
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
+    min_roadmap_role = 'publisher'
 
     def post(self, request, roadmap_id):
+        from trophies.models import RoadmapRevision
+
         try:
             roadmap = Roadmap.objects.get(pk=roadmap_id)
         except Roadmap.DoesNotExist:
@@ -329,8 +360,12 @@ class RoadmapPublishView(APIView):
 
         if action == 'publish':
             roadmap, error = RoadmapService.publish_roadmap(roadmap_id)
+            revision_action = RoadmapRevision.ACTION_PUBLISHED
+            summary = "Published roadmap"
         elif action == 'unpublish':
             roadmap, error = RoadmapService.unpublish_roadmap(roadmap_id)
+            revision_action = RoadmapRevision.ACTION_UNPUBLISHED
+            summary = "Unpublished roadmap"
         else:
             return Response(
                 {'error': 'Invalid action. Use "publish" or "unpublish".'},
@@ -339,6 +374,14 @@ class RoadmapPublishView(APIView):
 
         if error:
             return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+
+        RoadmapRevision.objects.create(
+            roadmap=roadmap,
+            author=request.user.profile,
+            action_type=revision_action,
+            snapshot=RoadmapService.snapshot_roadmap(roadmap),
+            summary=summary,
+        )
 
         return Response({
             'status': roadmap.status,
@@ -352,7 +395,7 @@ class RoadmapPublishView(APIView):
 class RoadmapImageUploadView(APIView):
     """POST: Upload an image for use in roadmap markdown content."""
     authentication_classes = [SessionAuthentication]
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsRoadmapAuthor]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):

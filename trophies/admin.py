@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapTab, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -19,6 +19,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "account_id",
         "user",
         "user_is_premium",
+        "roadmap_role",
         "last_synced",
         "sync_status",
         "sync_progress_value",
@@ -37,7 +38,7 @@ class ProfileAdmin(admin.ModelAdmin):
         "game_detail_tour_completed_at",
         "badge_detail_tour_completed_at",
     )
-    list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium",)
+    list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium", "roadmap_role",)
     search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
@@ -53,7 +54,7 @@ class ProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Core Info",
-            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "is_linked", "psn_history_public", "guidelines_agreed", "tour_completed_at", "game_detail_tour_completed_at", "badge_detail_tour_completed_at", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
+            {"fields": ("psn_username", "display_psn_username", "account_id", "np_id", "user", "user_is_premium", "roadmap_role", "is_linked", "psn_history_public", "guidelines_agreed", "tour_completed_at", "game_detail_tour_completed_at", "badge_detail_tour_completed_at", "hide_hiddens", "discord_id", "discord_linked_at", "is_discord_verified", "verification_code")},
         ),
         (
             "Profile Details",
@@ -1475,13 +1476,69 @@ class RoadmapStepTrophyAdmin(admin.ModelAdmin):
 
 @admin.register(TrophyGuide)
 class TrophyGuideAdmin(admin.ModelAdmin):
-    list_display = ['id', 'tab', 'trophy_id', 'body_preview']
-    list_select_related = ('tab__roadmap__concept',)
-    raw_id_fields = ['tab']
+    list_display = ['id', 'tab', 'trophy_id', 'body_preview', 'created_by']
+    list_select_related = ('tab__roadmap__concept', 'created_by')
+    raw_id_fields = ['tab', 'created_by', 'last_edited_by']
 
     def body_preview(self, obj):
         return obj.body[:80] + '...' if len(obj.body) > 80 else obj.body
     body_preview.short_description = 'Body'
+
+
+@admin.register(RoadmapEditLock)
+class RoadmapEditLockAdmin(admin.ModelAdmin):
+    list_display = ['id', 'roadmap', 'holder', 'acquired_at', 'last_heartbeat', 'expires_at', 'is_expired_flag']
+    list_select_related = ('roadmap__concept', 'holder')
+    raw_id_fields = ['roadmap', 'holder']
+    readonly_fields = ['acquired_at', 'last_heartbeat', 'expires_at', 'branch_payload']
+    actions = ['force_release']
+
+    def is_expired_flag(self, obj):
+        return obj.is_expired()
+    is_expired_flag.boolean = True
+    is_expired_flag.short_description = 'Expired?'
+
+    @admin.action(description='Force-release selected locks (admin override)')
+    def force_release(self, request, queryset):
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(request, f'{count} lock(s) released.', messages.SUCCESS)
+
+
+@admin.register(RoadmapRevision)
+class RoadmapRevisionAdmin(admin.ModelAdmin):
+    list_display = ['id', 'roadmap', 'author', 'action_type', 'summary', 'created_at']
+    list_select_related = ('roadmap__concept', 'author')
+    list_filter = ['action_type']
+    raw_id_fields = ['roadmap', 'author']
+    readonly_fields = ['created_at', 'snapshot']
+    search_fields = ['roadmap__concept__unified_title', 'summary']
+    date_hierarchy = 'created_at'
+    actions = ['restore_selected_revision']
+
+    @admin.action(description='Restore live roadmap to selected revision (only works on a single selection)')
+    def restore_selected_revision(self, request, queryset):
+        from trophies.services.roadmap_merge_service import MergeError, restore_revision
+        if queryset.count() != 1:
+            self.message_user(
+                request, 'Select exactly one revision to restore.', messages.ERROR
+            )
+            return
+        revision = queryset.first()
+        actor = getattr(request.user, 'profile', None)
+        if actor is None:
+            self.message_user(request, 'Acting user has no Profile.', messages.ERROR)
+            return
+        try:
+            new_rev = restore_revision(revision, actor)
+        except MergeError as e:
+            self.message_user(request, str(e), messages.ERROR)
+            return
+        self.message_user(
+            request,
+            f'Restored revision #{revision.id}. New revision #{new_rev.id} logs the restore.',
+            messages.SUCCESS,
+        )
 
 
 # ---------- Gamification Admin ----------
@@ -3198,16 +3255,24 @@ _IGDB_ADMIN_OBJECT_NAMES = frozenset({
     'GameEngine', 'ConceptEngine', 'EngineCompany',
 })
 
+_ROADMAP_ADMIN_OBJECT_NAMES = frozenset({
+    'Roadmap', 'RoadmapTab', 'RoadmapStep', 'RoadmapStepTrophy', 'TrophyGuide',
+    'RoadmapEditLock', 'RoadmapRevision',
+})
+
 _original_get_app_list = admin.site.get_app_list
 
 
 def _platpursuit_get_app_list(request, app_label=None):
-    """Return the admin index app list, splitting trophies into two sections.
+    """Return the admin index app list, splitting trophies into sections.
 
-    Trophies gets carved into "IGDB & Enrichment" (matching + normalized
-    metadata models) and "Trophies" (everything else). Other apps are
-    passed through unchanged. Internally all these models still belong
-    to the `trophies` app_label — we only reshape the index display.
+    Trophies gets carved into:
+      - "Roadmap System": authoring + lock/session + history models
+      - "IGDB & Enrichment": matching + normalized metadata models
+      - "Trophies": everything else
+    Other apps are passed through unchanged. Internally all these models
+    still belong to the `trophies` app_label — we only reshape the index
+    display.
     """
     app_list = _original_get_app_list(request, app_label)
     result = []
@@ -3215,8 +3280,26 @@ def _platpursuit_get_app_list(request, app_label=None):
         if app['app_label'] != 'trophies':
             result.append(app)
             continue
+        roadmap_models = [m for m in app['models'] if m['object_name'] in _ROADMAP_ADMIN_OBJECT_NAMES]
         igdb_models = [m for m in app['models'] if m['object_name'] in _IGDB_ADMIN_OBJECT_NAMES]
-        other_models = [m for m in app['models'] if m['object_name'] not in _IGDB_ADMIN_OBJECT_NAMES]
+        other_models = [
+            m for m in app['models']
+            if m['object_name'] not in _ROADMAP_ADMIN_OBJECT_NAMES
+            and m['object_name'] not in _IGDB_ADMIN_OBJECT_NAMES
+        ]
+        if roadmap_models:
+            # Order roadmap models semantically: authoring → lock → history.
+            authoring_order = [
+                'Roadmap', 'RoadmapTab', 'RoadmapStep', 'TrophyGuide',
+                'RoadmapStepTrophy', 'RoadmapEditLock', 'RoadmapRevision',
+            ]
+            order_idx = {name: i for i, name in enumerate(authoring_order)}
+            roadmap_models.sort(key=lambda m: order_idx.get(m['object_name'], 99))
+            result.append({
+                **app,
+                'name': 'Roadmap System',
+                'models': roadmap_models,
+            })
         if igdb_models:
             result.append({
                 **app,
