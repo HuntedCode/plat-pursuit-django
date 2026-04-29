@@ -21,7 +21,7 @@ The four tracked stats are intentionally redundant (a platinum is a trophy; an U
 | `core/management/commands/post_community_trophy_tracker.py` | Cron entrypoint: compute -> store -> post -> mark posted |
 | `api/community_stats_views.py` | `/today/`, `/<date>/`, `/records/` read-only public endpoints |
 | `api/urls.py` | URL routes (under `/api/community-stats/`) |
-| `trophies/discord_utils/discord_notifications.py` | Reused `queue_webhook_send` for Discord delivery |
+| `trophies/discord_utils/discord_notifications.py` | Reused `PROXIES` config for the synchronous webhook POST |
 
 ## Data Model
 
@@ -62,8 +62,8 @@ A `(profile, earned_trophy)` pair counts toward a day's totals when:
 5. `compute_day_stats()` runs the single aggregate query and saves the four stats to the row.
 6. `get_current_records(exclude_pk=day.pk)` fetches the prior maxima for each stat.
 7. `build_embed_payload()` constructs the Discord embed with NEW RECORD badges where applicable. Embed color flips to gold (`0xFFD700`) on any record-breaking stat, otherwise platinum brand blue (`0x003791`).
-8. `queue_webhook_send()` enqueues the payload on the existing `webhook_queue` background thread. Rate-limit / retry / proxy concerns are handled there.
-9. `posted_at` is set after the queue call returns. Failures before this point leave the row unposted; the next manual run picks up where it left off.
+8. `_post_webhook_direct()` issues a synchronous `requests.post(...)` to `DISCORD_PLATINUM_WEBHOOK_URL`. Any non-2xx response (or transport exception) raises `CommandError`, which surfaces the failure in Render's cron UI and leaves the row's `posted_at` NULL for retry on the next run.
+9. `posted_at` is set ONLY after a confirmed 2xx response. The trophies queue/worker pattern is intentionally NOT used: it's designed for long-running processes where the daemon worker has time to drain after each enqueue. A management command exits the moment `handle()` returns, killing the daemon mid-flight and silently dropping queued payloads.
 
 ### Live Today Endpoint
 
@@ -92,7 +92,7 @@ All three return JSON. AllowAny permissions: aggregate community data, no PII.
 
 - **PlatBot**: Future slash commands (`/trophystats yesterday`, `/trophystats today`, `/trophystats records`) consume the three API endpoints above. No PlatPursuit changes required when those commands ship.
 - **`refresh_profiles` cron** (see [cron-jobs.md](../guides/cron-jobs.md)): Discord-verified profiles refresh every 12h (was 24h, dropped specifically for this feature so trophies earned in the final hour of an ET day are reliably synced before the 12:30 PM ET post).
-- **`trophies/discord_utils/discord_notifications.py`**: Reused for webhook delivery. The same channel that receives platinum and badge notifications also receives the daily tracker. To split into a dedicated channel, change the `webhook_url` argument in the management command.
+- **`trophies/discord_utils/discord_notifications.py`**: Reused only for its `PROXIES` config so dev/prod proxy setups stay consistent. The actual webhook POST is synchronous (`requests.post`), NOT through the existing `queue_webhook_send` worker. The same channel that receives platinum and badge notifications also receives the daily tracker via `DISCORD_PLATINUM_WEBHOOK_URL`. To split into a dedicated channel, change the env var the command reads.
 
 ## Gotchas and Pitfalls
 

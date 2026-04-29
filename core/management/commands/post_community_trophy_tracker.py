@@ -4,6 +4,13 @@ Compute and post the daily community trophy tracker to Discord.
 Scheduled to run twice via Render cron (16:30 UTC + 17:30 UTC) to handle
 DST without DST-aware logic. Whichever fires first at the right ET time
 succeeds; the second is a no-op via the `posted_at` idempotency gate.
+
+Webhook posting uses a SYNCHRONOUS direct POST (not the trophies queue/
+worker). Reason: this is a one-shot management command. The queue's
+daemon worker thread dies abruptly when the parent process exits, which
+can drop messages mid-flight before the HTTP request lands. Direct POST
+also surfaces HTTP errors as CommandError instead of swallowing them in
+the worker's logger, so cron failures are visible in Render's UI.
 """
 import json
 import logging
@@ -23,7 +30,7 @@ from core.services.community_trophy_tracker import (
     eligible_profile_count,
     get_current_records,
 )
-from trophies.discord_utils.discord_notifications import PROXIES, queue_webhook_send
+from trophies.discord_utils.discord_notifications import PROXIES
 
 logger = logging.getLogger(__name__)
 
@@ -125,12 +132,14 @@ class Command(BaseCommand):
         prior_records = get_current_records(exclude_pk=day.pk)
         payload = build_embed_payload(day, prior_records=prior_records)
 
-        try:
-            queue_webhook_send(payload, webhook_url=settings.DISCORD_PLATINUM_WEBHOOK_URL)
-        except Exception as e:
-            logger.exception("Failed to queue community trophy tracker webhook")
-            raise CommandError(f"Webhook queue failed: {e}")
+        self._post_webhook_direct(
+            payload,
+            settings.DISCORD_PLATINUM_WEBHOOK_URL,
+            error_label="Community trophy tracker webhook",
+        )
 
+        # posted_at is set ONLY after a confirmed 2xx response, so a failed
+        # POST leaves the row available for retry on the next run.
         day.posted_at = timezone.now()
         day.save(update_fields=['posted_at'])
         self.stdout.write(self.style.SUCCESS(
@@ -200,21 +209,30 @@ class Command(BaseCommand):
         self.stdout.write("--- TEST PREVIEW: embed payload ---")
         self.stdout.write(json.dumps(payload, indent=2, ensure_ascii=False))
 
-        # Direct synchronous POST. Bypasses the production queue/worker so any
-        # failure surfaces immediately in the terminal instead of being swallowed
-        # by the daemon thread's logger. Test sends are one-off; the queue's
-        # rate-limit + retry plumbing isn't needed here.
-        try:
-            response = requests.post(webhook_url, json=payload, proxies=PROXIES, timeout=10)
-        except requests.RequestException as e:
-            logger.exception("Test webhook direct POST raised")
-            raise CommandError(f"Test webhook POST failed: {e}")
-
-        if response.status_code >= 400:
-            raise CommandError(
-                f"Test webhook returned HTTP {response.status_code}: {response.text[:500]}"
-            )
-
+        response = self._post_webhook_direct(
+            payload, webhook_url, error_label="Test webhook"
+        )
         self.stdout.write(self.style.SUCCESS(
             f"Test preview delivered ({response.status_code}). Check the test channel."
         ))
+
+    def _post_webhook_direct(self, payload, webhook_url, *, error_label="Webhook"):
+        """Synchronous direct POST to a Discord webhook URL.
+
+        Used by both the production daily post and the --test-data preview.
+        See the module docstring for why this bypasses the trophies queue/
+        worker pattern. Raises CommandError on transport failure or any 4xx/5xx
+        response so cron jobs report the failure and `posted_at` is not
+        flipped on a row whose post never landed.
+        """
+        try:
+            response = requests.post(webhook_url, json=payload, proxies=PROXIES, timeout=10)
+        except requests.RequestException as e:
+            logger.exception(f"{error_label} direct POST raised")
+            raise CommandError(f"{error_label} POST failed: {e}")
+
+        if response.status_code >= 400:
+            raise CommandError(
+                f"{error_label} returned HTTP {response.status_code}: {response.text[:500]}"
+            )
+        return response
