@@ -1,0 +1,63 @@
+{% load static custom_filters roadmap_tags %}
+{# Top-level Roadmap CTA card. Sits above the Community card so the roadmap is the page's #}
+{# loudest secondary action after the trophy list. Per-CTG panels reuse the .community-tab #}
+{# class names so the DLC tab bars in this card and the Community card swap together via    #}
+{# the shared JS at the bottom of community_tabs_section.html.                              #}
+
+{% if community_tabs %}
+<div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral mt-4">
+    <div class="card-body p-3 md:p-5 lg:p-7">
+
+        {# ── Section Header ── #}
+        <h4 class="text-xs font-semibold text-base-content/60 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            Trophy Roadmap
+        </h4>
+
+        {% if community_tabs|length > 1 %}
+        {# DLC tab bar — synced with the Community card via shared .community-tab-* classes #}
+        <div class="flex gap-1 p-1 bg-white/[0.03] rounded-lg border border-base-content/5 mb-4 overflow-x-auto" role="tablist">
+            {% for ct in community_tabs %}
+                <button role="tab"
+                        class="community-tab-btn flex-1 shrink-0 min-w-max whitespace-nowrap text-center px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                               {% if forloop.first %}bg-primary text-primary-content shadow-sm{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
+                        data-ctg-id="{{ ct.ctg.id }}"
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                        aria-controls="roadmap-cta-panel-{{ ct.ctg.id }}">
+                    {{ ct.ctg.display_name }}
+                </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Per-CTG Roadmap Panels ── #}
+        {% for ct in community_tabs %}
+            <div id="roadmap-cta-panel-{{ ct.ctg.id }}"
+                 class="community-tab-panel {% if not forloop.first %}hidden{% endif %}"
+                 data-ctg-id="{{ ct.ctg.id }}">
+                {% with rdm_tab=roadmap_tabs_by_ctg|get_item:ct.ctg.id %}
+                    {% if rdm_tab and rdm_tab.steps.all or rdm_tab.trophy_guides.all %}
+                        {% include 'trophies/partials/game_detail/roadmap_cta_filled.html' with tab=rdm_tab %}
+                    {% else %}
+                        {% include 'trophies/partials/game_detail/roadmap_cta_empty.html' with ctg=ct.ctg %}
+                    {% endif %}
+                {% endwith %}
+            </div>
+        {% endfor %}
+
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Click-anywhere-to-navigate on the filled-state card. Ignores clicks on
+    // nested anchors/buttons (Edit, author avatars, View Full Roadmap button).
+    document.querySelectorAll('.roadmap-cta-link').forEach(function(el) {
+        el.addEventListener('click', function(e) {
+            if (e.target.closest('a, button')) return;
+            window.location.href = el.dataset.href;
+        });
+    });
+});
+</script>
+{% endif %}

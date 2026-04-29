@@ -19,7 +19,10 @@
             {% include 'trophies/partials/game_detail/game_detail_header.html' %}
         </section>
 
-    {# ── Community: Ratings + Roadmap (shared DLC tabs) ── #}
+    {# ── Roadmap CTA: top-level promoted card so the roadmap isn't buried inside Community ── #}
+    {% include 'trophies/partials/game_detail/roadmap_cta_card.html' %}
+
+    {# ── Community: Ratings + Reviews (shared DLC tabs sync with Roadmap card above) ── #}
     <div id="community-tabs-section" class="mt-4">
         {% include 'trophies/partials/game_detail/community_tabs_section.html' %}
     </div>
