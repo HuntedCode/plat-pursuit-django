@@ -38,6 +38,7 @@ class RoadmapService:
             return (
                 Roadmap.objects
                 .filter(concept=concept, status='published')
+                .select_related('edit_lock', 'edit_lock__holder')
                 .prefetch_related(
                     Prefetch(
                         'tabs',
@@ -79,6 +80,7 @@ class RoadmapService:
         return (
             Roadmap.objects
             .filter(concept=concept)
+            .select_related('edit_lock', 'edit_lock__holder')
             .prefetch_related(
                 Prefetch(
                     'tabs',

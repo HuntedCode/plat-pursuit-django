@@ -3935,6 +3935,24 @@ class Roadmap(models.Model):
     def is_draft(self):
         return self.status == 'draft'
 
+    @property
+    def active_lock(self):
+        """Return the edit lock iff currently held by a real session (not stale).
+
+        Cached on the instance per request. Pages that surface lock status in
+        their UI (game detail, roadmap detail) should select_related the
+        'edit_lock' to avoid an extra query.
+        """
+        if hasattr(self, '_active_lock_cache'):
+            return self._active_lock_cache
+        try:
+            lock = self.edit_lock
+        except RoadmapEditLock.DoesNotExist:
+            self._active_lock_cache = None
+            return None
+        self._active_lock_cache = None if lock.is_expired() else lock
+        return self._active_lock_cache
+
     def contributors(self):
         """Return distinct Profiles who created or last-edited any part of this roadmap.
 

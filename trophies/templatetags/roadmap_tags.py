@@ -41,3 +41,32 @@ def can_edit_roadmap(user, roadmap):
     if profile is None:
         return False
     return can_view_editor(profile, roadmap)
+
+
+@register.inclusion_tag('trophies/partials/roadmap/edit_button.html')
+def roadmap_edit_button(user, roadmap, game, size='xs'):
+    """Render the role + lock-aware Edit button for a roadmap.
+
+    Visible states:
+      - Authoring allowed, no active lock: regular "Edit" button
+      - Authoring allowed, active lock by self: "Continue editing →"
+        (the writer is mid-session, encourage them to resume)
+      - Authoring allowed, active lock by another author: read-only
+        "Editing: <username>" indicator (no Edit button — they'd just hit
+        a 409 in the editor)
+      - Authoring blocked (e.g. published guide for non-publisher): hidden
+    """
+    can_edit = can_edit_roadmap(user, roadmap)
+    profile = getattr(user, 'profile', None) if getattr(user, 'is_authenticated', False) else None
+    active_lock = roadmap.active_lock if roadmap else None
+    held_by_self = bool(active_lock and profile and active_lock.holder_id == profile.id)
+    held_by_other = bool(active_lock and not held_by_self)
+    return {
+        'can_edit': can_edit,
+        'roadmap': roadmap,
+        'game': game,
+        'size': size,  # 'xs' | 'sm'
+        'active_lock': active_lock,
+        'held_by_self': held_by_self,
+        'held_by_other': held_by_other,
+    }

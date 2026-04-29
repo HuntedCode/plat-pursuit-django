@@ -583,7 +583,15 @@
                 hasUnsaved = false;
                 setSaveStatus('saved');
                 Toast.show(result.summary || 'Saved.', 'success');
-                setTimeout(() => window.location.reload(), 500);
+                // Save = save & exit. The merge service released the lock;
+                // redirecting to the public detail page (rather than reloading
+                // the editor) avoids re-acquiring a fresh 1-hour lock when the
+                // writer is finished. They can navigate back any time to keep
+                // editing, which will acquire a new lock then.
+                const slug = editorEl.dataset.gameSlug || '';
+                setTimeout(() => {
+                    window.location.href = slug ? `/games/${slug}/roadmap/` : '/';
+                }, 500);
             } catch (err) {
                 const errData = await err.response?.json().catch(() => null);
                 if (errData?.lock_lost || err.response?.status === 409) {
@@ -1728,14 +1736,26 @@
                 e.preventDefault();
                 e.returnValue = '';
             }
-            // Best-effort release — fires sendBeacon if available so the
-            // request survives the unload.
-            if (!BranchProxy.lockLost && navigator.sendBeacon) {
-                const csrfToken = window.PlatPursuit.CSRFToken?.get?.();
-                const blob = new Blob([JSON.stringify({})], { type: 'application/json' });
-                // sendBeacon doesn't support custom headers; the release endpoint
-                // doesn't strictly need CSRF since lock ownership is verified server-side.
-                navigator.sendBeacon(`/api/v1/roadmap/${roadmapId}/lock/release/`, blob);
+            // Best-effort release using fetch + keepalive (modern equivalent
+            // of sendBeacon, but supports custom headers so we can pass the
+            // CSRF token DRF SessionAuthentication requires; sendBeacon was
+            // silently 403'ing the release endpoint).
+            if (!BranchProxy.lockLost) {
+                try {
+                    const csrfToken = window.PlatPursuit.CSRFToken?.get?.() || '';
+                    fetch(`/api/v1/roadmap/${roadmapId}/lock/release/`, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': csrfToken,
+                            'Content-Type': 'application/json',
+                        },
+                        body: '{}',
+                        keepalive: true,
+                        credentials: 'same-origin',
+                    });
+                } catch (err) {
+                    // Lock auto-expires anyway; best-effort.
+                }
             }
         });
     }
