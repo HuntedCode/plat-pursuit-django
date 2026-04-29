@@ -121,6 +121,18 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             )
         )
 
+        # Per-tab counts of online / unobtainable trophy guides, surfaced in the
+        # metrics strip alongside the existing Yes/No flags.
+        online_count = 0
+        unobtainable_count = 0
+        for tg in tab.trophy_guides.all():
+            if tg.is_online:
+                online_count += 1
+            if tg.is_unobtainable:
+                unobtainable_count += 1
+        context['online_trophy_count'] = online_count
+        context['unobtainable_trophy_count'] = unobtainable_count
+
         # Header background (used in header card only, not full-page)
         context['header_bg_url'] = getattr(concept, 'bg_url', None) or ''
 
