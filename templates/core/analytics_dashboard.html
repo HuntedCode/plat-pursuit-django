@@ -16,9 +16,7 @@
         </p>
       </div>
 
-      {# Range selector + filters (querystring-driven). The lag param is only
-         appended when explicitly set to 0 (the non-default off state); the
-         24h default is implicit. #}
+      {% comment %}Range selector + filters (querystring-driven). The lag param is only appended when explicitly set to 0 (the non-default off state); the 24h default is implicit.{% endcomment %}
       <div class="flex flex-wrap items-center gap-1.5">
         {% for opt in range_options %}
           <a href="?range={{ opt.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours == 0 %}&exclude_recent_hours=0{% endif %}"
@@ -44,9 +42,7 @@
           {% if include_bots %}Bots: ON{% else %}Bots: OFF{% endif %}
         </a>
 
-        {# Recent-tail buffer toggle. 24h by default so the un-classified bot
-           tail (sessions newer than the behavioral cron's last pass) doesn't
-           pollute the report. Click to disable when you need real-time data. #}
+        {% comment %}Recent-tail buffer toggle. 24h by default so the un-classified bot tail (sessions newer than the behavioral cron's last pass) doesn't pollute the report. Click to disable when you need real-time data.{% endcomment %}
         <a href="?range={{ window.key }}{% if page_type_filter %}&page_type={{ page_type_filter }}{% endif %}{% if include_bots %}&include_bots=1{% endif %}{% if window.exclude_recent_hours > 0 %}&exclude_recent_hours=0{% endif %}"
            class="px-3 py-1.5 rounded-lg text-xs md:text-sm border transition-colors
                   {% if window.exclude_recent_hours == 0 %}
@@ -362,9 +358,7 @@
       {% endif %}
     </div>
 
-    {# Recap engagement callout. Not a strict funnel: share-card slide
-       impressions can fire multiple times per page view, so the share %
-       can exceed 100. Read these as relative engagement signal. #}
+    {% comment %}Recap engagement callout. Not a strict funnel: share-card slide impressions can fire multiple times per page view, so the share % can exceed 100. Read these as relative engagement signal.{% endcomment %}
     <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
       <h2 class="text-base md:text-lg font-bold text-base-content mb-3">Monthly Recap Engagement</h2>
       <div class="space-y-2">

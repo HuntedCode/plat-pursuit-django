@@ -28,8 +28,7 @@
                                  class="max-w-full max-h-full object-contain" />
                         </div>
                     {% elif hero_cover %}
-                        {# Fallback when company has no logo but we do have
-                           representative cover art from one of their games. #}
+                        {% comment %}Fallback when company has no logo but we do have representative cover art from one of their games.{% endcomment %}
                         <img src="{{ hero_cover }}" alt="{{ object.name }}"
                              class="w-full h-full object-cover object-top" />
                     {% else %}
@@ -151,8 +150,7 @@
                     {% endif %}
 
                     {% if company_rating_count %}
-                        {# Community stats strip. Matches the "Your Progress"
-                           visual rhythm — same eyebrow label + cell grid. #}
+                        {% comment %}Community stats strip. Matches the "Your Progress" visual rhythm, same eyebrow label + cell grid.{% endcomment %}
                         <div class="flex items-center gap-2 justify-center sm:justify-start mb-2 mt-4 md:mt-5">
                             <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-base-content/50">Community Stats</span>
                             <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-base-content/15 to-transparent"></div>
