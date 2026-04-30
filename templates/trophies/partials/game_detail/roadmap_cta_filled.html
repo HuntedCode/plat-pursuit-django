@@ -30,7 +30,10 @@
                     {% endwith %}
                 </div>
             </div>
-            {% roadmap_edit_button request.user roadmap game size='xs' %}
+            <div class="flex items-center gap-1.5 shrink-0">
+                {% roadmap_preview_button request.user roadmap game size='xs' %}
+                {% roadmap_edit_button request.user roadmap game size='xs' %}
+            </div>
         </div>
 
         {# Stat chip strip — only renders chips with real data #}

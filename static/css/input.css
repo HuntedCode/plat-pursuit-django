@@ -1391,6 +1391,14 @@
 /* Smooth Scrolling */
 html {
   scroll-behavior: smooth;
+  /*
+   * Reserve room at the top of the viewport for the sticky navbar + hub
+   * sub-nav so anchor jumps and Element.scrollIntoView() don't drop the
+   * target underneath them. --chrome-height is set by static/js/main.js
+   * (alignStickyChrome) and tracks the actual measured chrome height; the
+   * fallback covers the pre-JS render.
+   */
+  scroll-padding-top: calc(var(--chrome-height, 5rem) + 1.5rem);
 }
 
 /* Unified Item Creator */

@@ -50,6 +50,24 @@
                     [&_strong]:text-base-content/90 [&_strong]:font-semibold
                     [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
                     [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ guide.body|render_markdown }}</div>
+        {% if guide.gallery_images %}
+        <div class="roadmap-gallery mt-3 grid {% if guide.gallery_images|length == 1 %}grid-cols-1{% else %}grid-cols-2 md:grid-cols-3{% endif %} gap-2">
+            {% for img in guide.gallery_images %}
+            {# Use a div + !block override for the gallery item — daisyUI's   #}
+            {# `.card figure` rule applies `display: flex` with row layout,   #}
+            {# which would render the figcaption to the right of the image.  #}
+            <div class="roadmap-gallery-item flex flex-col">
+                <img src="{{ img.url }}" alt="{{ img.alt }}"
+                     {% if img.caption %}title="{{ img.caption }}"{% elif img.alt %}title="{{ img.alt }}"{% endif %}
+                     loading="lazy"
+                     class="w-full h-auto rounded-lg border border-base-content/10 cursor-pointer hover:opacity-80 transition-opacity object-cover {% if guide.gallery_images|length > 1 %}aspect-video{% endif %}">
+                {% if img.caption %}
+                <p class="mt-1 text-xs italic text-base-content/55 px-0.5">{{ img.caption }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
 </details>
 {% endwith %}

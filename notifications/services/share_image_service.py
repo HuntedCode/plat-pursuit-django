@@ -130,7 +130,7 @@ class ShareImageService:
         try:
             poppins_bold = cls.FONT_DIR / 'Poppins-Bold.ttf'
             poppins_semibold = cls.FONT_DIR / 'Poppins-SemiBold.ttf'
-            inter_regular = cls.FONT_DIR / 'Inter_24pt-Regular.ttf'
+            inter_regular = cls.FONT_DIR / 'Inter-Regular.ttf'
 
             if poppins_bold.exists():
                 fonts['title_large'] = ImageFont.truetype(str(poppins_bold), font_sizes['title_large'])

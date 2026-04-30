@@ -69,6 +69,24 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         if not tab:
             raise Http404("Roadmap not found.")
 
+        # When the previewing author holds an active edit lock with a draft
+        # branch, overlay it onto the in-memory tab so the preview reflects
+        # uncommitted edits (saves a round-trip of merge → preview → revert).
+        branch_applied = False
+        if preview_mode and roadmap is not None:
+            from trophies.models import RoadmapEditLock
+            lock = (
+                RoadmapEditLock.objects
+                .filter(roadmap=roadmap, holder=user.profile)
+                .first()
+            )
+            if lock is not None and not lock.is_expired():
+                payload = lock.branch_payload
+                if isinstance(payload, dict) and payload.get('tabs'):
+                    RoadmapService.apply_branch_overlay(tab, payload)
+                    branch_applied = True
+        context['roadmap_branch_preview'] = branch_applied
+
         context['tab'] = tab
         context['roadmap'] = roadmap
         context['active_trophy_group_id'] = trophy_group_id
@@ -249,6 +267,7 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
                     'description': step.description,
                     'youtube_url': step.youtube_url,
                     'order': step.order,
+                    'gallery_images': list(step.gallery_images or []),
                     'created_by_id': step.created_by_id,
                     'last_edited_by_id': step.last_edited_by_id,
                     'trophy_ids': list(
@@ -261,6 +280,7 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
                     'is_missable': tg.is_missable,
                     'is_online': tg.is_online,
                     'is_unobtainable': tg.is_unobtainable,
+                    'gallery_images': list(tg.gallery_images or []),
                     'created_by_id': tg.created_by_id,
                     'last_edited_by_id': tg.last_edited_by_id,
                 }

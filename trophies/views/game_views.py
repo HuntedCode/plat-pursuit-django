@@ -936,9 +936,21 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             and user.is_staff
         )
         context['roadmap_preview_mode'] = roadmap_preview
+        # Writers+ get a staff-only "Workshop" CTA showing draft state, lock
+        # info, coverage stats, and notes — independent of the public preview
+        # toggle. They also see unpublished roadmaps the public can't.
+        viewer_profile = getattr(user, 'profile', None) if user.is_authenticated else None
+        is_roadmap_author = (
+            viewer_profile is not None
+            and viewer_profile.has_roadmap_role('writer')
+        )
+        context['is_roadmap_author'] = is_roadmap_author
         if game.concept:
             from trophies.services.roadmap_service import RoadmapService
-            if roadmap_preview:
+            # Authors see drafts + previews + published; everyone else sees
+            # only published. The preview toggle still works for is_staff
+            # users who lack a roadmap role.
+            if roadmap_preview or is_roadmap_author:
                 roadmap = RoadmapService.get_roadmap_for_preview(game.concept)
             else:
                 roadmap = RoadmapService.get_roadmap_for_display(game.concept)
@@ -949,15 +961,25 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                     for tab in roadmap.tabs.all()
                 }
                 context['available_tabs'] = RoadmapService.get_available_tabs(
-                    game.concept, include_drafts=roadmap_preview
+                    game.concept, include_drafts=roadmap_preview or is_roadmap_author,
                 )
             else:
                 context['roadmap_tabs_by_ctg'] = {}
                 context['available_tabs'] = []
+
+            # Workshop summary for the staff CTA. Computed even when there's
+            # no roadmap so the placeholder can render concept stats + Create.
+            if is_roadmap_author:
+                context['roadmap_workshop'] = RoadmapService.get_workshop_summary(
+                    roadmap, game, viewer_profile=viewer_profile,
+                )
+            else:
+                context['roadmap_workshop'] = None
         else:
             context['roadmap'] = None
             context['roadmap_tabs_by_ctg'] = {}
             context['available_tabs'] = []
+            context['roadmap_workshop'] = None
 
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)

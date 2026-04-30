@@ -599,54 +599,28 @@
             else if (e.key === 'ArrowRight') showImage(currentIndex + 1);
         });
 
-        // ── Trophy guide galleries: pull images to bottom grid ──
-
-        container.querySelectorAll('.trophy-guide-item').forEach((guide) => {
-            const proseBlock = guide.querySelector('[class*="leading-relaxed"]');
-            if (!proseBlock) return;
-
-            const imgs = Array.from(proseBlock.querySelectorAll('img'));
-            if (!imgs.length) return;
-
-            // Remove images from prose flow
-            imgs.forEach((img) => {
-                // Remove the wrapping <p> if img is the only child
-                const parent = img.parentElement;
-                if (parent && parent.tagName === 'P' && parent.children.length === 1 && parent.textContent.trim() === '') {
-                    parent.remove();
-                } else {
-                    img.remove();
-                }
-            });
-
-            // Build gallery grid at the bottom of the guide body
-            const galleryContainer = guide.querySelector('[class*="leading-relaxed"]').parentElement;
-            const gallery = document.createElement('div');
-            gallery.className = imgs.length === 1
-                ? 'mt-3'
-                : 'mt-3 grid grid-cols-2 md:grid-cols-3 gap-2';
-
-            imgs.forEach((img, i) => {
-                // Reset process_markdown's block styling for grid layout
-                img.style.cssText = '';
-                img.className = 'w-full h-auto rounded-lg border border-base-content/10 cursor-pointer hover:opacity-80 transition-opacity object-cover';
-
-                if (imgs.length > 1) {
-                    img.classList.add('aspect-video');
-                }
-
-                img.addEventListener('click', () => open(imgs, i));
-                gallery.appendChild(img);
-            });
-
-            galleryContainer.appendChild(gallery);
-        });
-
-        // ── Step description images: inline, single-click fullscreen ──
-
-        container.querySelectorAll('.roadmap-step-details [class*="leading-relaxed"] img').forEach((img) => {
+        // ── Inline body images: click-to-fullscreen, no extraction ──
+        // Body images live wherever the writer placed them in the markdown.
+        // Galleries are rendered separately from `gallery_images` (see below).
+        container.querySelectorAll('[class*="leading-relaxed"] img').forEach((img) => {
+            // Browsers don't surface `alt` as a hover tooltip — only `title`.
+            // Backfill `title` from `alt` so older inline images (uploaded
+            // before the markdown generator started always emitting a title)
+            // still show something on hover.
+            if (!img.title && img.alt) img.title = img.alt;
             img.classList.add('cursor-pointer', 'hover:opacity-80', 'transition-opacity');
             img.addEventListener('click', () => open([img], 0));
+        });
+
+        // ── Structured galleries: per-trophy-guide / per-step thumbnail
+        // grids rendered server-side from gallery_images. Each gallery is
+        // its own slideshow group.
+        container.querySelectorAll('.roadmap-gallery').forEach((gallery) => {
+            const imgs = Array.from(gallery.querySelectorAll('img'));
+            if (!imgs.length) return;
+            imgs.forEach((img, i) => {
+                img.addEventListener('click', () => open(imgs, i));
+            });
         });
     }
 

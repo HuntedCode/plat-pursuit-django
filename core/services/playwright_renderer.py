@@ -209,9 +209,9 @@ def _build_font_faces():
 
     font_faces = []
     font_map = {
-        'Inter_24pt-Regular.ttf': ('Inter', 'normal', '400'),
-        'Inter_24pt-SemiBold.ttf': ('Inter', 'normal', '600'),
-        'Inter_24pt-Bold.ttf': ('Inter', 'normal', '700'),
+        'Inter-Regular.ttf': ('Inter', 'normal', '400'),
+        'Inter-SemiBold.ttf': ('Inter', 'normal', '600'),
+        'Inter-Bold.ttf': ('Inter', 'normal', '700'),
         'Poppins-Regular.ttf': ('Poppins', 'normal', '400'),
         'Poppins-SemiBold.ttf': ('Poppins', 'normal', '600'),
         'Poppins-Bold.ttf': ('Poppins', 'normal', '700'),

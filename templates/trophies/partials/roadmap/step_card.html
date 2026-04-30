@@ -27,6 +27,24 @@
                             [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ step.description|render_markdown }}</div>
             {% endif %}
 
+            {% if step.gallery_images %}
+            <div class="roadmap-gallery mt-3 grid {% if step.gallery_images|length == 1 %}grid-cols-1{% else %}grid-cols-2 md:grid-cols-3{% endif %} gap-2">
+                {% for img in step.gallery_images %}
+                {# div + flex-col instead of <figure> — daisyUI's .card figure #}
+                {# rule would otherwise render the caption next to the image. #}
+                <div class="roadmap-gallery-item flex flex-col">
+                    <img src="{{ img.url }}" alt="{{ img.alt }}"
+                         {% if img.caption %}title="{{ img.caption }}"{% elif img.alt %}title="{{ img.alt }}"{% endif %}
+                         loading="lazy"
+                         class="w-full h-auto rounded-lg border border-base-content/10 cursor-pointer hover:opacity-80 transition-opacity object-cover {% if step.gallery_images|length > 1 %}aspect-video{% endif %}">
+                    {% if img.caption %}
+                    <p class="mt-1 text-xs italic text-base-content/55 px-0.5">{{ img.caption }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% with step_trophies=step.step_trophies.all %}
             {% if step_trophies %}
                 <div class="{% if step.description %}mt-3 pt-3 border-t border-base-content/5{% endif %} grid grid-cols-1 lg:grid-cols-2 gap-2">

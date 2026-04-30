@@ -393,7 +393,14 @@ class RoadmapPublishView(APIView):
 # ------------------------------------------------------------------ #
 
 class RoadmapImageUploadView(APIView):
-    """POST: Upload an image for use in roadmap markdown content."""
+    """POST: Upload an image for use in roadmap markdown content.
+
+    Form fields:
+        image       Required. The file to upload.
+        watermark   Optional. 'true' (default) to bake the
+                    `www.platpursuit.com` watermark into the bottom-right
+                    corner; 'false' to skip it.
+    """
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsRoadmapAuthor]
     parser_classes = [MultiPartParser, FormParser]
@@ -406,8 +413,7 @@ class RoadmapImageUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Validate and optimize using existing utilities
-        from trophies.image_utils import validate_image, optimize_image
+        from trophies.image_utils import process_roadmap_image, validate_image
 
         try:
             validate_image(image)
@@ -417,12 +423,19 @@ class RoadmapImageUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        optimized = optimize_image(image)
+        watermark_raw = (request.data.get('watermark') or 'true').strip().lower()
+        watermark = watermark_raw not in ('false', '0', 'no', 'off')
 
-        # Save to storage with unique filename
-        ext = image.name.rsplit('.', 1)[-1].lower() if '.' in image.name else 'jpg'
-        filename = f"roadmaps/images/{uuid.uuid4().hex[:12]}_{image.name}"
-        saved_path = default_storage.save(filename, optimized)
+        processed = process_roadmap_image(image, watermark=watermark)
+
+        filename = f"roadmaps/images/{uuid.uuid4().hex[:12]}_{processed.name}"
+        saved_path = default_storage.save(filename, processed)
         url = default_storage.url(saved_path)
 
-        return Response({'url': url}, status=status.HTTP_201_CREATED)
+        # Encode the watermark state into the returned URL as a query param
+        # so the editor can read it back when opening the image in edit
+        # mode. Source of truth lives next to the URL itself; we don't
+        # otherwise persist this flag.
+        url += ('&wm=' if '?' in url else '?wm=') + ('1' if watermark else '0')
+
+        return Response({'url': url, 'watermarked': watermark}, status=status.HTTP_201_CREATED)

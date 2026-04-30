@@ -215,6 +215,116 @@ class RoadmapService:
         return tab, roadmap
 
     @staticmethod
+    def apply_branch_overlay(tab, branch_payload):
+        """Mutate an in-memory RoadmapTab to reflect uncommitted branch state.
+
+        Used by author preview to show unsaved edits without merging them
+        to live records. Replaces the tab's prefetched `steps` and
+        `trophy_guides` caches with payload-derived instances and updates
+        scalar tab fields. Steps that exist only in the branch (id=null in
+        payload, treated as new) are returned as transient, unsaved
+        RoadmapStep instances; deleted steps are dropped from the list.
+
+        Safe to call only on a tab that was prefetched via
+        `_build_tab_prefetch()`. The tab and its children are NEVER
+        persisted as a side effect.
+
+        Args:
+            tab: A RoadmapTab instance with prefetched steps + trophy_guides.
+            branch_payload: dict matching `RoadmapEditLock.branch_payload`.
+
+        Returns:
+            The same `tab` instance, mutated in place.
+        """
+        from trophies.models import RoadmapStep, RoadmapStepTrophy, TrophyGuide
+        from trophies.services.roadmap_merge_service import (
+            EDITOR_TAB_FIELDS, PUBLISHER_TAB_FIELDS, WRITER_TAB_FIELDS,
+        )
+
+        if not isinstance(branch_payload, dict):
+            return tab
+        payload_tabs = branch_payload.get('tabs')
+        if not isinstance(payload_tabs, list):
+            return tab
+
+        tab_payload = next(
+            (t for t in payload_tabs if isinstance(t, dict) and t.get('id') == tab.id),
+            None,
+        )
+        if tab_payload is None:
+            return tab
+
+        for fld in WRITER_TAB_FIELDS + EDITOR_TAB_FIELDS + PUBLISHER_TAB_FIELDS:
+            if fld in tab_payload:
+                value = tab_payload[fld]
+                if value is None and isinstance(getattr(tab, fld, None), str):
+                    value = ''
+                setattr(tab, fld, value)
+
+        live_steps_by_id = {s.id: s for s in tab.steps.all()}
+        overlay_steps = []
+        # Negative synthetic IDs for any new payload step that didn't carry
+        # one (the editor sends id=null on the wire). These IDs need to be
+        # unique across the overlay so HTML anchors and progress dict keys
+        # don't collide.
+        synthetic_id = -1_000_000
+        for index, step_payload in enumerate(tab_payload.get('steps', [])):
+            sid = step_payload.get('id')
+            if isinstance(sid, int) and sid in live_steps_by_id:
+                step = live_steps_by_id[sid]
+            else:
+                synthetic_id -= 1
+                step = RoadmapStep(tab=tab, id=synthetic_id)
+
+            for fld in ('title', 'description', 'youtube_url'):
+                if fld in step_payload:
+                    setattr(step, fld, step_payload[fld] or '')
+            step.order = step_payload.get('order', index)
+            if 'gallery_images' in step_payload:
+                step.gallery_images = list(step_payload.get('gallery_images') or [])
+
+            trophy_ids = step_payload.get('trophy_ids')
+            if trophy_ids is not None:
+                transient_st = [
+                    RoadmapStepTrophy(step=step, trophy_id=int(tid), order=i)
+                    for i, tid in enumerate(trophy_ids)
+                ]
+                if not hasattr(step, '_prefetched_objects_cache'):
+                    step._prefetched_objects_cache = {}
+                step._prefetched_objects_cache['step_trophies'] = transient_st
+            overlay_steps.append(step)
+
+        live_guides_by_id = {g.id: g for g in tab.trophy_guides.all()}
+        overlay_guides = []
+        for guide_payload in tab_payload.get('trophy_guides', []):
+            gid = guide_payload.get('id')
+            if isinstance(gid, int) and gid in live_guides_by_id:
+                guide = live_guides_by_id[gid]
+            else:
+                guide = TrophyGuide(
+                    tab=tab,
+                    trophy_id=int(guide_payload.get('trophy_id') or 0),
+                )
+            if 'trophy_id' in guide_payload and guide_payload['trophy_id'] is not None:
+                guide.trophy_id = int(guide_payload['trophy_id'])
+            if 'body' in guide_payload:
+                guide.body = guide_payload['body'] or ''
+            for flag in ('is_missable', 'is_online', 'is_unobtainable'):
+                if flag in guide_payload:
+                    setattr(guide, flag, bool(guide_payload[flag]))
+            if 'order' in guide_payload:
+                guide.order = guide_payload['order']
+            if 'gallery_images' in guide_payload:
+                guide.gallery_images = list(guide_payload.get('gallery_images') or [])
+            overlay_guides.append(guide)
+
+        if not hasattr(tab, '_prefetched_objects_cache'):
+            tab._prefetched_objects_cache = {}
+        tab._prefetched_objects_cache['steps'] = overlay_steps
+        tab._prefetched_objects_cache['trophy_guides'] = overlay_guides
+        return tab
+
+    @staticmethod
     def get_tab_for_preview(concept, trophy_group_id='default'):
         """Get a roadmap tab for staff preview regardless of publish status.
 
@@ -690,6 +800,7 @@ class RoadmapService:
                             'description': step.description,
                             'youtube_url': step.youtube_url,
                             'order': step.order,
+                            'gallery_images': list(step.gallery_images or []),
                             'created_by_id': step.created_by_id,
                             'last_edited_by_id': step.last_edited_by_id,
                             'trophy_ids': [st.trophy_id for st in step.step_trophies.all()],
@@ -705,6 +816,7 @@ class RoadmapService:
                             'is_missable': tg.is_missable,
                             'is_online': tg.is_online,
                             'is_unobtainable': tg.is_unobtainable,
+                            'gallery_images': list(tg.gallery_images or []),
                             'created_by_id': tg.created_by_id,
                             'last_edited_by_id': tg.last_edited_by_id,
                         }
@@ -713,4 +825,112 @@ class RoadmapService:
                 }
                 for tab in tabs_qs
             ],
+        }
+
+    @staticmethod
+    def get_workshop_summary(roadmap, game, viewer_profile=None):
+        """Compute the staff-facing operational summary for a roadmap.
+
+        Surfaces the data the writing team wants to see on the game detail
+        page without entering the editor: status, last edit, lock state,
+        per-CTG coverage stats, contributor list, and notes counts.
+
+        Args:
+            roadmap: A Roadmap instance, or None for "no roadmap yet".
+            game: The Game whose detail page is rendering. Used to resolve
+                trophy counts per CTG (concept stacks share trophy lists, so
+                any game in the concept gives accurate totals).
+            viewer_profile: The current viewer's Profile, used to compute
+                their open mentions. May be None.
+        """
+        from collections import Counter
+        from trophies.models import RoadmapEditLock, RoadmapNote
+        from trophies.services.roadmap_note_service import parse_mention_usernames
+
+        if roadmap is None:
+            return {
+                'has_roadmap': False,
+                'status': None,
+                'is_published': False,
+            }
+
+        try:
+            active_lock = roadmap.edit_lock
+            if active_lock and active_lock.is_expired():
+                active_lock = None
+        except RoadmapEditLock.DoesNotExist:
+            active_lock = None
+
+        # Trophy counts per `trophy_group_id` string, sourced from the
+        # current game's trophies. Concept stacks share trophy structure,
+        # so counting on any one game gives the right denominator.
+        trophy_counts_by_group = dict(Counter(
+            game.trophies.values_list('trophy_group_id', flat=True)
+        ))
+
+        tabs = list(
+            roadmap.tabs
+            .select_related('concept_trophy_group')
+            .prefetch_related('steps', 'trophy_guides')
+        )
+
+        METADATA_FIELDS = ('difficulty', 'estimated_hours', 'missable_count',
+                           'online_required', 'min_playthroughs')
+        tab_summaries = []
+        total_steps = 0
+        total_guides = 0
+        total_trophies = 0
+        for tab in tabs:
+            step_count = tab.steps.count()
+            guide_count = tab.trophy_guides.count()
+            ctg_total = trophy_counts_by_group.get(
+                tab.concept_trophy_group.trophy_group_id, 0
+            )
+            metadata_filled = sum(
+                1 for f in METADATA_FIELDS if getattr(tab, f, None) not in (None, 0)
+            )
+            tab_summaries.append({
+                'ctg': tab.concept_trophy_group,
+                'step_count': step_count,
+                'guide_count': guide_count,
+                'trophy_total': ctg_total,
+                'guide_pct': round(guide_count / ctg_total * 100) if ctg_total else 0,
+                'metadata_filled': metadata_filled,
+                'metadata_total': len(METADATA_FIELDS),
+                'has_general_tips': bool(tab.general_tips),
+            })
+            total_steps += step_count
+            total_guides += guide_count
+            total_trophies += ctg_total
+
+        # Notes summary. "My open mentions" re-parses each open note body
+        # for the viewer's handle. Cheap at typical guide volumes (sub-50
+        # notes); avoids a structured mentions table.
+        open_notes = list(
+            RoadmapNote.objects
+            .filter(roadmap=roadmap, status=RoadmapNote.STATUS_OPEN)
+            .only('body')
+        )
+        my_mentions = 0
+        if viewer_profile is not None and viewer_profile.psn_username:
+            handle = viewer_profile.psn_username.lower()
+            for note in open_notes:
+                if handle in {h.lower() for h in parse_mention_usernames(note.body)}:
+                    my_mentions += 1
+
+        return {
+            'has_roadmap': True,
+            'status': roadmap.status,
+            'is_published': roadmap.status == 'published',
+            'updated_at': roadmap.updated_at,
+            'created_at': roadmap.created_at,
+            'active_lock': active_lock,
+            'contributors': roadmap.contributors(),
+            'tabs': tab_summaries,
+            'total_steps': total_steps,
+            'total_guides': total_guides,
+            'total_trophies': total_trophies,
+            'overall_guide_pct': round(total_guides / total_trophies * 100) if total_trophies else 0,
+            'open_notes_count': len(open_notes),
+            'my_open_mentions': my_mentions,
         }

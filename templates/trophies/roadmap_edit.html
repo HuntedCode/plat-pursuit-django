@@ -316,6 +316,19 @@
                         <div class="trophy-picker grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-60 overflow-y-auto"></div>
                     </div>
                 </details>
+                {# Gallery section — wired up by RoadmapEditor.GalleryController. #}
+                <div class="gallery-section" data-target-kind="step" data-target-id="">
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <span class="text-[0.6rem] text-base-content/40 uppercase tracking-wider font-semibold">Gallery
+                            <span class="gallery-count-badge badge badge-xs badge-ghost ml-1">0</span>
+                        </span>
+                        <button type="button" class="gallery-add-btn btn btn-ghost btn-xs gap-1 text-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                            Add image
+                        </button>
+                    </div>
+                    <div class="gallery-grid grid grid-cols-3 md:grid-cols-4 gap-1.5"></div>
+                </div>
             </div>
             <button class="btn btn-ghost btn-xs text-error/60 hover:text-error delete-step-btn shrink-0 mt-1" title="Delete step">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -367,8 +380,40 @@
             </div>
             {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
             <textarea class="textarea textarea-bordered w-full text-sm trophy-guide-body auto-resize" rows="3" placeholder="Tips and walkthrough for this trophy..."></textarea>
+            <div class="gallery-section mt-2" data-target-kind="trophy_guide" data-target-id="">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="text-[0.6rem] text-base-content/40 uppercase tracking-wider font-semibold">Gallery
+                        <span class="gallery-count-badge badge badge-xs badge-ghost ml-1">0</span>
+                    </span>
+                    <button type="button" class="gallery-add-btn btn btn-ghost btn-xs gap-1 text-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Add image
+                    </button>
+                </div>
+                <div class="gallery-grid grid grid-cols-3 md:grid-cols-4 gap-1.5"></div>
+            </div>
         </div>
     </details>
+</template>
+
+{# ─── Inline Image Pill Template (for the formatting toolbar's strip) ─── #}
+<template id="inline-image-pill-template">
+    <button type="button" class="inline-image-pill btn btn-ghost btn-xs gap-1 px-1.5 border border-base-content/10 hover:border-primary/40">
+        <img class="inline-image-pill-thumb w-4 h-4 rounded object-cover bg-base-300/30" alt="">
+        <span class="inline-image-pill-alt text-[10px] truncate max-w-[120px]"></span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+    </button>
+</template>
+
+{# ─── Gallery Thumbnail Template ─── #}
+<template id="gallery-thumb-template">
+    <div class="gallery-thumb relative group rounded-lg border border-base-content/10 overflow-hidden cursor-grab" data-item-id="">
+        <img class="gallery-thumb-img w-full aspect-square object-cover bg-base-300/30" alt="">
+        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <button type="button" class="gallery-thumb-edit btn btn-xs btn-primary" title="Edit image">Edit</button>
+        </div>
+        <div class="gallery-thumb-caption hidden absolute inset-x-0 bottom-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5 truncate"></div>
+    </div>
 </template>
 
 {# ─── General Notes Drawer ─── #}
@@ -425,6 +470,89 @@
         </div>
     </div>
 </template>
+
+{# ─── Image Uploader Modal ─── #}
+{# Single shared modal opened from two paths: the toolbar's image button     #}
+{# (inserts inline markdown into a textarea) and a gallery section's         #}
+{# "Add image" button (appends to a step or trophy guide's gallery_images).  #}
+{# Also opens in edit mode for already-inserted images: prefills fields and  #}
+{# offers Save / Replace file / Delete instead of upload.                    #}
+<div id="image-upload-modal"
+     class="hidden fixed inset-0 z-50 items-center justify-center bg-black/50"
+     data-readonly-exempt>
+    <div class="bg-base-200 border-2 border-base-300 rounded-xl shadow-2xl w-[90vw] max-w-md flex flex-col max-h-[92vh]">
+        <div class="flex items-center justify-between p-3 border-b border-base-300 shrink-0">
+            <h3 id="image-upload-title" class="text-sm font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                <span id="image-upload-title-text">Insert Image</span>
+            </h3>
+            <button type="button" id="image-upload-close" class="btn btn-ghost btn-xs btn-circle">&times;</button>
+        </div>
+
+        <div class="p-4 space-y-4 overflow-y-auto">
+            {# File picker / drop zone #}
+            <label id="image-upload-dropzone"
+                   class="block cursor-pointer rounded-lg border-2 border-dashed border-base-content/15 hover:border-primary/40 hover:bg-white/[0.03] transition-colors p-4 text-center">
+                <input type="file" id="image-upload-file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden">
+                <div id="image-upload-empty" class="space-y-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 mx-auto text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <div class="text-sm font-medium">Click to choose an image, or drop one here</div>
+                    <div class="text-[10px] text-base-content/50">JPG, PNG, WebP, or GIF (up to 5MB)</div>
+                </div>
+                <div id="image-upload-preview" class="hidden space-y-2">
+                    <img id="image-upload-preview-img" class="max-h-40 mx-auto rounded-lg border border-base-content/10" alt="Preview">
+                    <div id="image-upload-filename" class="text-xs text-base-content/60 truncate"></div>
+                    <div id="image-upload-replace-hint" class="text-[10px] text-primary">Click to choose a different image</div>
+                </div>
+            </label>
+
+            {# Alt text — required #}
+            <div>
+                <label class="block text-xs font-medium text-base-content/70 mb-1">
+                    Alt text <span class="text-error">*</span>
+                </label>
+                <input type="text" id="image-upload-alt" class="input input-bordered input-sm w-full" placeholder="Describe the image for screen readers" maxlength="200" required>
+                <div class="text-[10px] text-base-content/40 mt-1">Required for accessibility. Also shown as a hover tooltip.</div>
+            </div>
+
+            {# Caption / hover tooltip. Label and hint adapt to the mode:    #}
+            {# gallery items render the value as a figcaption; inline images #}
+            {# use it as the markdown title attribute (browser tooltip).     #}
+            <div id="image-upload-caption-wrap">
+                <label class="block text-xs font-medium text-base-content/70 mb-1">
+                    <span id="image-upload-caption-label-text">Caption</span>
+                    <span class="text-base-content/40">(optional)</span>
+                </label>
+                <input type="text" id="image-upload-caption" class="input input-bordered input-sm w-full" placeholder="Short note about this image" maxlength="300">
+                <p id="image-upload-caption-hint" class="text-[10px] text-base-content/40 mt-1">Optional. Shown below the thumbnail.</p>
+            </div>
+
+            {# Watermark toggle. Always visible; disabled in edit mode until #}
+            {# a replacement file is picked (the watermark is baked into the #}
+            {# saved file, so it can only change on a fresh upload).         #}
+            <div id="image-upload-watermark-wrap">
+                <label id="image-upload-watermark-label" class="flex items-start gap-2 cursor-pointer rounded-lg border border-base-content/10 hover:border-primary/30 hover:bg-white/[0.03] transition-colors p-2">
+                    <input type="checkbox" id="image-upload-watermark" class="checkbox checkbox-primary checkbox-xs mt-0.5" checked>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs font-semibold">Add www.platpursuit.com watermark</div>
+                        <div class="text-[10px] text-base-content/50">Baked into the lower-right corner of the saved image. Recommended for original screenshots.</div>
+                        <div id="image-upload-watermark-permanent-hint" class="text-[10px] text-warning/80 mt-1 font-medium">Heads up: this choice is permanent. Changing it later requires uploading a new image.</div>
+                        <div id="image-upload-watermark-locked-hint" class="hidden text-[10px] text-warning mt-1">Replace the file to change the watermark. It is baked into the saved image and can't be removed after upload.</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2 p-3 border-t border-base-300 shrink-0">
+            <span id="image-upload-status" class="text-[10px] text-base-content/50"></span>
+            <div class="flex items-center gap-2">
+                <button type="button" id="image-upload-delete" class="btn btn-ghost btn-sm text-error hidden">Delete</button>
+                <button type="button" id="image-upload-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+                <button type="button" id="image-upload-submit" class="btn btn-primary btn-sm" disabled>Upload &amp; Insert</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {# ─── Single note row template (cloned by JS for each note within a thread) ─── #}
 <template id="note-row-template">

@@ -43,6 +43,34 @@ def can_edit_roadmap(user, roadmap):
     return can_view_editor(profile, roadmap)
 
 
+@register.inclusion_tag('trophies/partials/roadmap/preview_button.html')
+def roadmap_preview_button(user, roadmap, game, size='xs'):
+    """Render a "View Preview" button for any author-role user.
+
+    Preview is read-only and doesn't acquire an edit lock, so it's safe
+    to expose alongside (or in place of) the Edit button.
+
+    Hidden when:
+      - the viewer isn't authenticated or lacks the writer role,
+      - no roadmap exists yet (nothing to preview),
+      - the roadmap is already published (writers can just visit the
+        normal public roadmap page in that case — preview adds nothing).
+    """
+    if not getattr(user, 'is_authenticated', False) or roadmap is None:
+        return {'show': False}
+    if roadmap.status == 'published':
+        return {'show': False}
+    profile = getattr(user, 'profile', None)
+    if profile is None or not profile.has_roadmap_role('writer'):
+        return {'show': False}
+    return {
+        'show': True,
+        'roadmap': roadmap,
+        'game': game,
+        'size': size,
+    }
+
+
 @register.inclusion_tag('trophies/partials/roadmap/edit_button.html')
 def roadmap_edit_button(user, roadmap, game, size='xs'):
     """Render the role + lock-aware Edit button for a roadmap.

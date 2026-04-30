@@ -4056,6 +4056,9 @@ class RoadmapStep(models.Model):
     description = models.TextField(blank=True)
     youtube_url = models.URLField(blank=True)
     order = models.PositiveIntegerField(default=0)
+    # Ordered list of {url, alt, caption}. Rendered as a thumbnail grid below
+    # the step description. Inline images live inside `description` markdown.
+    gallery_images = models.JSONField(default=list, blank=True)
     created_by = models.ForeignKey(
         Profile, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='authored_roadmap_steps',
@@ -4109,6 +4112,9 @@ class TrophyGuide(models.Model):
     is_missable = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)
     is_unobtainable = models.BooleanField(default=False)
+    # Ordered list of {url, alt, caption}. Rendered as a thumbnail grid below
+    # the guide body. Inline images live inside `body` markdown.
+    gallery_images = models.JSONField(default=list, blank=True)
     created_by = models.ForeignKey(
         Profile, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='authored_trophy_guides',

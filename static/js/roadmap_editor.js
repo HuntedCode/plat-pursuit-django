@@ -215,6 +215,7 @@
                     youtube_url: body.youtube_url || '',
                     order: tab.steps.length,
                     trophy_ids: [],
+                    gallery_images: [],
                     // Stamp the viewer as owner client-side so the badge says
                     // "You" immediately. Server stamps the actual created_by
                     // on merge using the merging profile's id.
@@ -284,12 +285,20 @@
                 }
                 let guide = tab.trophy_guides.find(g => g.trophy_id === trophyId);
                 const incomingBody = body.body || '';
-                // Empty body deletes the guide (matching legacy endpoint behavior).
+                // Empty body deletes the guide UNLESS it carries gallery
+                // images (galleries are independent of body text and shouldn't
+                // disappear because the writer cleared the prose).
                 if (!incomingBody.trim()) {
-                    if (guide) {
+                    const hasGallery = guide && Array.isArray(guide.gallery_images) && guide.gallery_images.length > 0;
+                    if (guide && !hasGallery) {
                         tab.trophy_guides = tab.trophy_guides.filter(g => g.trophy_id !== trophyId);
+                        this.schedulePush();
+                        return null;
                     }
-                    this.schedulePush();
+                    if (guide) {
+                        guide.body = '';
+                        this.schedulePush();
+                    }
                     return null;
                 }
                 if (!guide) {
@@ -301,6 +310,7 @@
                         is_missable: false,
                         is_online: false,
                         is_unobtainable: false,
+                        gallery_images: [],
                         // Stamp viewer as owner client-side; server re-stamps on merge.
                         created_by_id: viewerProfileId,
                         last_edited_by_id: viewerProfileId,
@@ -757,6 +767,7 @@
                 description: s.description,
                 youtube_url: s.youtube_url,
                 order: s.order,
+                gallery_images: Array.isArray(s.gallery_images) ? s.gallery_images.slice() : [],
                 created_by_id: s.created_by_id,
                 last_edited_by_id: s.last_edited_by_id,
                 trophy_ids: s.trophy_ids || [],
@@ -771,6 +782,7 @@
                     is_missable: !!tg.is_missable,
                     is_online: !!tg.is_online,
                     is_unobtainable: !!tg.is_unobtainable,
+                    gallery_images: Array.isArray(tg.gallery_images) ? tg.gallery_images.slice() : [],
                     created_by_id: tg.created_by_id,
                     last_edited_by_id: tg.last_edited_by_id,
                 };
@@ -987,6 +999,12 @@
         tabData.steps.forEach((step, index) => {
             const el = createStepElement(step, index + 1, tabData.trophy_group_id);
             container.appendChild(el);
+            const gallerySection = el.querySelector('.gallery-section');
+            if (gallerySection) {
+                GalleryController.mountSection(gallerySection, {
+                    kind: 'step', id: step.id, tabId,
+                });
+            }
         });
 
         initDragReorder(tabId);
@@ -1064,6 +1082,13 @@
         // Writers can only edit steps they own (or untouched/ownerless ones);
         // editors and publishers bypass this.
         applyOwnership(el, step.created_by_id || null, 'step-owner');
+
+        // Drag-reorder is editor+ only. Hide the handle for writers so the
+        // grab cursor doesn't suggest an action they can't actually perform.
+        if (!bypassOwnershipScope) {
+            const handle = el.querySelector('.step-handle');
+            if (handle) handle.classList.add('hidden');
+        }
 
         return el;
     }
@@ -1164,7 +1189,13 @@
         // Destroy existing manager for this tab
         if (dragManagers[tabId]) {
             dragManagers[tabId].destroy?.();
+            delete dragManagers[tabId];
         }
+
+        // Reorder is editor+ only on the server. Don't initialize the
+        // SortableJS instance for writers — otherwise drags appear to
+        // succeed in the DOM while the API rejects with 403.
+        if (!bypassOwnershipScope) return;
 
         dragManagers[tabId] = new window.PlatPursuit.DragReorderManager({
             container: container,
@@ -1444,6 +1475,13 @@
             applyOwnership(el, guideOwnerId, 'trophy-guide-owner');
 
             container.appendChild(el);
+
+            const gallerySection = el.querySelector('.gallery-section');
+            if (gallerySection) {
+                GalleryController.mountSection(gallerySection, {
+                    kind: 'trophy_guide', id: t.trophy_id, tabId,
+                });
+            }
         });
 
         // Re-mount note indicators on the freshly-rendered trophy guide rows.
@@ -1736,42 +1774,942 @@
     }
 
     // ------------------------------------------------------------------ //
-    //  Image Upload
+    //  Image Upload Modal + Gallery Controller
+    //
+    //  The modal is a single shared component used in four modes:
+    //   - inline-insert: insert markdown image at textarea cursor.
+    //   - inline-edit:   modify the markdown image at the textarea cursor.
+    //   - gallery-insert: append to a step or trophy_guide gallery.
+    //   - gallery-edit:   modify a gallery item by index.
+    //
+    //  Inline images live as `![alt](url "caption")` markdown inside the
+    //  textarea body. Gallery images live as structured rows in the entry's
+    //  `gallery_images` JSONField, rendered as a thumbnail grid below the
+    //  prose. The two paths are intentionally distinct: inline images flow
+    //  with text, gallery images are a curated grid with reorder support.
     // ------------------------------------------------------------------ //
 
-    function uploadImage(textarea) {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/jpeg,image/png,image/webp,image/gif';
+    // Returns true / false if the URL carries an explicit `?wm=1|0` flag,
+    // null otherwise. The upload API stamps the flag on every new upload,
+    // so a missing flag means an older image whose state we don't know.
+    function parseWatermarkFromUrl(url) {
+        if (!url) return null;
+        const qIdx = url.indexOf('?');
+        if (qIdx === -1) return null;
+        try {
+            const params = new URLSearchParams(url.slice(qIdx + 1));
+            const v = params.get('wm');
+            if (v === '1') return true;
+            if (v === '0') return false;
+            return null;
+        } catch (e) {
+            return null;
+        }
+    }
 
-        input.addEventListener('change', async () => {
-            const file = input.files[0];
+    function findImageTokenAtCursor(textarea) {
+        if (!textarea || textarea.tagName !== 'TEXTAREA') return null;
+        const RE = /!\[([^\]\n]*)\]\(([^)\s"']+)(?:\s+"([^"]*)")?\)/g;
+        const value = textarea.value;
+        const cursor = textarea.selectionStart;
+        let match;
+        while ((match = RE.exec(value)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (cursor >= start && cursor <= end) {
+                return {
+                    start, end,
+                    alt: match[1] || '',
+                    url: match[2] || '',
+                    title: match[3] || '',
+                };
+            }
+        }
+        return null;
+    }
+
+    const ImageUploadModal = {
+        modal: null,
+        state: null,
+
+        init() {
+            this.modal = document.getElementById('image-upload-modal');
+            if (!this.modal) return;
+
+            this._fileInput().addEventListener('change', () => this._onFilePicked(this._fileInput().files[0]));
+            this._submitBtn().addEventListener('click', () => this._onSubmit());
+            this._deleteBtn().addEventListener('click', () => this._onDelete());
+            this._cancelBtn().addEventListener('click', () => this.close());
+            this._closeBtn().addEventListener('click', () => this.close());
+            this._watermark().addEventListener('change', () => this._refreshPreviewWatermark());
+
+            // Drop zone is the entire dotted area + supports drops over it.
+            const dropzone = this._dropzone();
+            ['dragenter', 'dragover'].forEach((evt) => {
+                dropzone.addEventListener(evt, (e) => {
+                    if (!e.dataTransfer?.types?.includes('Files')) return;
+                    e.preventDefault();
+                    dropzone.classList.add('border-primary/50', 'bg-white/[0.05]');
+                });
+            });
+            ['dragleave', 'drop'].forEach((evt) => {
+                dropzone.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    dropzone.classList.remove('border-primary/50', 'bg-white/[0.05]');
+                });
+            });
+            dropzone.addEventListener('drop', (e) => {
+                const file = e.dataTransfer?.files?.[0];
+                if (file) this._onFilePicked(file);
+            });
+
+            // Live alt-text validation: enable submit only when alt is present
+            // (and either a file is chosen for insert mode or we already have a URL for edit mode).
+            this._altInput().addEventListener('input', () => this._refreshSubmitState());
+
+            // Escape closes (only when open). Backdrop clicks intentionally
+            // do NOT close — the writer is filling out a form with text
+            // selection, so an accidental drag past the modal edge shouldn't
+            // wipe their work. They use Cancel or X to dismiss.
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this._isOpen()) this.close();
+            });
+        },
+
+        open(opts = {}) {
+            if (!this.modal) return;
+            if (BranchProxy.lockLost) {
+                Toast.show('Editor is read-only — lock has been lost.', 'warning');
+                return;
+            }
+            this.state = {
+                mode: opts.mode || 'inline-insert',
+                textarea: opts.textarea || null,
+                imageToken: opts.imageToken || null,
+                galleryTarget: opts.galleryTarget || null,
+                galleryIndex: typeof opts.galleryIndex === 'number' ? opts.galleryIndex : null,
+                currentItem: opts.currentItem || null,
+                selectedFile: null,
+            };
+            this._renderForState();
+            this.modal.classList.remove('hidden');
+            this.modal.classList.add('flex');
+            if (opts.prefilledFile) this._onFilePicked(opts.prefilledFile);
+            // Focus alt for fast editing
+            setTimeout(() => this._altInput().focus(), 50);
+        },
+
+        close() {
+            if (!this.modal) return;
+            this.modal.classList.add('hidden');
+            this.modal.classList.remove('flex');
+            this.state = null;
+            this._reset();
+        },
+
+        _isOpen() { return this.modal && !this.modal.classList.contains('hidden'); },
+        _q(sel) { return this.modal.querySelector(sel); },
+        _fileInput() { return this._q('#image-upload-file'); },
+        _altInput() { return this._q('#image-upload-alt'); },
+        _captionInput() { return this._q('#image-upload-caption'); },
+        _watermark() { return this._q('#image-upload-watermark'); },
+        _submitBtn() { return this._q('#image-upload-submit'); },
+        _deleteBtn() { return this._q('#image-upload-delete'); },
+        _cancelBtn() { return this._q('#image-upload-cancel'); },
+        _closeBtn() { return this._q('#image-upload-close'); },
+        _dropzone() { return this._q('#image-upload-dropzone'); },
+        _statusEl() { return this._q('#image-upload-status'); },
+        _titleText() { return this._q('#image-upload-title-text'); },
+        _captionWrap() { return this._q('#image-upload-caption-wrap'); },
+        _watermarkWrap() { return this._q('#image-upload-watermark-wrap'); },
+        _empty() { return this._q('#image-upload-empty'); },
+        _preview() { return this._q('#image-upload-preview'); },
+        _previewImg() { return this._q('#image-upload-preview-img'); },
+        _filename() { return this._q('#image-upload-filename'); },
+        _replaceHint() { return this._q('#image-upload-replace-hint'); },
+
+        _reset() {
+            this._fileInput().value = '';
+            this._altInput().value = '';
+            this._captionInput().value = '';
+            this._watermark().checked = true;
+            this._empty().classList.remove('hidden');
+            this._preview().classList.add('hidden');
+            this._previewImg().src = '';
+            this._filename().textContent = '';
+            this._submitBtn().disabled = true;
+            this._statusEl().textContent = '';
+            this._cancelBtn().disabled = false;
+            this._deleteBtn().classList.add('hidden');
+            this._deleteBtn().disabled = false;
+        },
+
+        _renderForState() {
+            this._reset();
+            const s = this.state;
+            const isEdit = s.mode.endsWith('-edit');
+            const isGallery = s.mode.startsWith('gallery-');
+
+            this._titleText().textContent = isEdit
+                ? 'Edit Image'
+                : (isGallery ? 'Add Gallery Image' : 'Insert Image');
+
+            // Caption is always optional. For gallery items it renders as a
+            // figcaption below the thumbnail; for inline images it becomes
+            // the markdown title attribute (hover tooltip). When the writer
+            // leaves it blank we fall back to the alt text so there's
+            // always something on hover.
+            this._captionWrap().style.display = '';
+            const captionLabel = this.modal.querySelector('#image-upload-caption-label-text');
+            const captionHint = this.modal.querySelector('#image-upload-caption-hint');
+            if (captionLabel) {
+                captionLabel.textContent = isGallery ? 'Caption' : 'Hover tooltip';
+            }
+            if (captionHint) {
+                captionHint.textContent = isGallery
+                    ? 'Optional. Shown below the thumbnail.'
+                    : 'Optional. Shown when readers hover the image. Leave blank to use the alt text.';
+            }
+
+            // Watermark is always visible. In edit mode without a replacement
+            // file it's disabled with a hint, because the watermark is baked
+            // into the saved file and can only change on a fresh upload.
+            this._watermarkWrap().style.display = '';
+
+            this._submitBtn().textContent = isEdit
+                ? 'Save'
+                : (isGallery ? 'Upload & Add' : 'Upload & Insert');
+
+            if (isEdit) {
+                const item = s.imageToken || s.currentItem || {};
+                this._altInput().value = item.alt || '';
+                this._captionInput().value = item.title || item.caption || '';
+                if (item.url) {
+                    this._previewImg().src = item.url;
+                    this._filename().textContent = '(current image)';
+                    this._empty().classList.add('hidden');
+                    this._preview().classList.remove('hidden');
+                }
+                this._replaceHint().textContent = 'Click to replace with a different image';
+                this._deleteBtn().classList.remove('hidden');
+
+                // Reflect the actual saved watermark state. Default to
+                // checked when we have no signal (older images).
+                const known = parseWatermarkFromUrl(item.url);
+                this._watermark().checked = known === false ? false : true;
+                this.state.knownWatermark = known;
+                this._setWatermarkInteractivity(false);
+            } else {
+                this._replaceHint().textContent = 'Click to choose a different image';
+                this._watermark().checked = true;
+                this.state.knownWatermark = null;
+                this._setWatermarkInteractivity(true);
+            }
+
+            this._refreshSubmitState();
+        },
+
+        // Toggle the watermark control between active and dimmed-with-hint.
+        // Hint surfaces in edit mode (no file picked yet) so the writer
+        // understands the baked-in nature of the watermark.
+        _setWatermarkInteractivity(enabled) {
+            const checkbox = this._watermark();
+            const label = this.modal.querySelector('#image-upload-watermark-label');
+            const lockedHint = this.modal.querySelector('#image-upload-watermark-locked-hint');
+            const permanentHint = this.modal.querySelector('#image-upload-watermark-permanent-hint');
+            checkbox.disabled = !enabled;
+            if (enabled) {
+                label?.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                label?.classList.add('cursor-pointer');
+                lockedHint?.classList.add('hidden');
+                permanentHint?.classList.remove('hidden');
+            } else {
+                label?.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                label?.classList.remove('cursor-pointer');
+                lockedHint?.classList.remove('hidden');
+                permanentHint?.classList.add('hidden');
+                if (lockedHint) {
+                    const known = this.state?.knownWatermark;
+                    if (known === true) {
+                        lockedHint.textContent = 'This image was uploaded with a watermark. Replace the file to remove or change it.';
+                    } else if (known === false) {
+                        lockedHint.textContent = 'This image was uploaded without a watermark. Replace the file to add one.';
+                    } else {
+                        lockedHint.textContent = "Replace the file to change the watermark. It is baked into the saved image and can't be removed after upload.";
+                    }
+                }
+            }
+        },
+
+        _refreshSubmitState() {
+            if (!this.state) return;
+            const altOk = !!this._altInput().value.trim();
+            const isEdit = this.state.mode.endsWith('-edit');
+            const hasImage = isEdit
+                ? (!!this.state.selectedFile || !!(this.state.imageToken?.url || this.state.currentItem?.url))
+                : !!this.state.selectedFile;
+            this._submitBtn().disabled = !(altOk && hasImage);
+        },
+
+        _onFilePicked(file) {
             if (!file) return;
-
             if (file.size > 5 * 1024 * 1024) {
                 Toast.show('Image must be under 5MB.', 'error');
                 return;
             }
+            if (!file.type.startsWith('image/')) {
+                Toast.show("That file isn't an image.", 'error');
+                return;
+            }
+            this.state.selectedFile = file;
+            this.state.previewRawUrl = null;
+            this.state.previewWatermarkedUrl = null;
+            // In edit mode, picking a replacement file means the new file
+            // will be processed. Re-enable the watermark control and seed
+            // it with the existing image's choice so the writer's earlier
+            // preference is preserved on re-upload.
+            if (this.state.mode.endsWith('-edit')) {
+                this._setWatermarkInteractivity(true);
+                const known = this.state.knownWatermark;
+                this._watermark().checked = known === false ? false : true;
+            }
 
-            setSaveStatus('saving');
-            try {
-                const formData = new FormData();
-                formData.append('image', file);
+            // Default alt text to filename (writer can override).
+            const baseName = file.name.replace(/\.[^.]+$/, '');
+            if (!this._altInput().value.trim()) this._altInput().value = baseName;
 
-                const result = await API.postFormData('/api/v1/roadmap/upload-image/', formData);
-                if (result?.url) {
-                    applyFormat(textarea, '![', `](${result.url})`, file.name.replace(/\.[^.]+$/, ''));
-                    setSaveStatus('saved');
-                    Toast.show('Image uploaded.', 'success');
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                if (this.state?.selectedFile !== file) return;
+                const rawUrl = e.target.result;
+                this.state.previewRawUrl = rawUrl;
+                // Pre-bake the watermarked variant so toggling is instant.
+                try {
+                    this.state.previewWatermarkedUrl = await this._composeWatermarkedDataUrl(rawUrl);
+                } catch (err) {
+                    // Canvas / decode failure — preview without watermark
+                    // is fine; the actual upload still gets the real one.
+                    this.state.previewWatermarkedUrl = rawUrl;
                 }
+                if (this.state?.selectedFile !== file) return;
+                this._refreshPreviewWatermark();
+            };
+            reader.readAsDataURL(file);
+
+            this._filename().textContent = file.name;
+            this._empty().classList.add('hidden');
+            this._preview().classList.remove('hidden');
+            this._refreshSubmitState();
+        },
+
+        _refreshPreviewWatermark() {
+            if (!this.state) return;
+            const watermarked = this._watermark().checked;
+            const url = watermarked
+                ? (this.state.previewWatermarkedUrl || this.state.previewRawUrl)
+                : (this.state.previewRawUrl || this.state.previewWatermarkedUrl);
+            if (url) this._previewImg().src = url;
+        },
+
+        // Mirror of trophies.image_utils._apply_watermark just for the
+        // preview thumbnail — same text, same proportional sizing, same
+        // bottom-right placement. Server is still the source of truth for
+        // what gets persisted.
+        async _composeWatermarkedDataUrl(rawDataUrl) {
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = rawDataUrl;
+            });
+
+            // Cap canvas size at the same 2400px the server applies, scaled
+            // proportionally — keeps the preview cheap on huge phone photos.
+            const MAX = 2400;
+            let w = img.naturalWidth;
+            let h = img.naturalHeight;
+            if (w > MAX || h > MAX) {
+                const ratio = Math.min(MAX / w, MAX / h);
+                w = Math.round(w * ratio);
+                h = Math.round(h * ratio);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, w, h);
+
+            // Keep the canvas preview in lockstep with the Pillow output in
+            // trophies/image_utils.py: same percentages, same Bold weight,
+            // same right-bottom anchoring so descenders sit inside the
+            // margin.
+            const FONT_SIZE_PCT = 0.025;
+            const MARGIN_PCT = 0.015;
+            const SHADOW_PCT = 0.0015;
+
+            const text = 'www.platpursuit.com';
+            const fontSize = Math.max(20, Math.round(w * FONT_SIZE_PCT));
+            // Match the server's bundled font (Poppins-Bold). Falls back to
+            // Inter, then system-ui — the actual saved file is always
+            // rendered with Poppins-Bold by Pillow.
+            ctx.font = `700 ${fontSize}px "Poppins", "Inter", system-ui, sans-serif`;
+            ctx.textBaseline = 'alphabetic';
+            ctx.textAlign = 'right';
+
+            const margin = Math.max(10, Math.round(w * MARGIN_PCT));
+            const shadowOffset = Math.max(2, Math.round(w * SHADOW_PCT));
+            // Estimate descender depth so the visible bottom of the glyphs
+            // (not the baseline) lands `margin` pixels from the bottom edge.
+            // Inter's descender depth is about 22% of font size.
+            const descender = Math.round(fontSize * 0.22);
+            const x = w - margin;
+            const y = h - margin - descender;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+            ctx.fillText(text, x + shadowOffset, y + shadowOffset);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.fillText(text, x, y);
+
+            return canvas.toDataURL('image/jpeg', 0.88);
+        },
+
+        async _uploadCurrentFile() {
+            const formData = new FormData();
+            formData.append('image', this.state.selectedFile);
+            formData.append('watermark', this._watermark().checked ? 'true' : 'false');
+            const result = await API.postFormData('/api/v1/roadmap/upload-image/', formData);
+            if (!result?.url) throw new Error('Upload returned no URL.');
+            return result.url;
+        },
+
+        async _onSubmit() {
+            const altText = this._altInput().value.trim();
+            if (!altText) {
+                this._altInput().focus();
+                Toast.show('Alt text is required.', 'warning');
+                return;
+            }
+            const captionText = this._captionInput().value.trim();
+            const s = this.state;
+
+            this._submitBtn().disabled = true;
+            this._cancelBtn().disabled = true;
+            this._deleteBtn().disabled = true;
+            this._statusEl().textContent = s.selectedFile ? 'Uploading...' : 'Saving...';
+            setSaveStatus('saving');
+
+            try {
+                let url;
+                if (s.selectedFile) {
+                    url = await this._uploadCurrentFile();
+                } else {
+                    url = s.imageToken?.url || s.currentItem?.url || '';
+                }
+                if (!url) throw new Error('Missing image URL.');
+
+                if (s.mode.startsWith('inline-')) {
+                    this._applyInlineMarkdown({ url, alt: altText, caption: captionText });
+                } else {
+                    this._applyGalleryUpdate({ url, alt: altText, caption: captionText });
+                }
+
+                this.close();
+                setSaveStatus('saved');
+                Toast.show(s.mode.endsWith('-edit') ? 'Image updated.' : 'Image added.', 'success');
             } catch (err) {
                 setSaveStatus('error');
                 const errData = await err.response?.json().catch(() => null);
-                Toast.show(errData?.error || 'Image upload failed.', 'error');
+                Toast.show(errData?.error || 'Image save failed.', 'error');
+                this._statusEl().textContent = '';
+                this._submitBtn().disabled = false;
+                this._cancelBtn().disabled = false;
+                this._deleteBtn().disabled = false;
+            }
+        },
+
+        _onDelete() {
+            const s = this.state;
+            if (!s) return;
+            if (!confirm('Delete this image? This cannot be undone.')) return;
+            if (s.mode === 'inline-edit') {
+                this._removeInlineToken();
+            } else if (s.mode === 'gallery-edit') {
+                GalleryController.removeImage(s.galleryTarget, s.galleryIndex);
+            }
+            this.close();
+            setSaveStatus('saved');
+            Toast.show('Image deleted.', 'success');
+        },
+
+        _applyInlineMarkdown({ url, alt, caption }) {
+            const ta = this.state.textarea;
+            if (!ta) return;
+            const safeAlt = (alt || '').replace(/[\[\]]/g, '');
+            // Always emit a title so the browser shows a hover tooltip.
+            // Caption wins when set; otherwise alt does double duty.
+            const titleText = (caption || alt || '').replace(/"/g, '\\"');
+            const md = titleText
+                ? `![${safeAlt}](${url} "${titleText}")`
+                : `![${safeAlt}](${url})`;
+
+            if (this.state.mode === 'inline-edit' && this.state.imageToken) {
+                const tok = this.state.imageToken;
+                const v = ta.value;
+                ta.value = v.substring(0, tok.start) + md + v.substring(tok.end);
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+                const pos = tok.start + md.length;
+                ta.focus();
+                ta.setSelectionRange(pos, pos);
+            } else {
+                applyFormat(ta, md, '', '');
+            }
+        },
+
+        _removeInlineToken() {
+            const ta = this.state.textarea;
+            const tok = this.state.imageToken;
+            if (!ta || !tok) return;
+            const v = ta.value;
+            // If the token sits alone on a line (preceded only by whitespace
+            // and followed by a newline), eat the trailing newline so the
+            // surrounding paragraphs don't develop a blank line ghost.
+            let end = tok.end;
+            if (v[end] === '\n') end += 1;
+            ta.value = v.substring(0, tok.start) + v.substring(end);
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.focus();
+            ta.setSelectionRange(tok.start, tok.start);
+        },
+
+        _applyGalleryUpdate({ url, alt, caption }) {
+            const s = this.state;
+            if (s.mode === 'gallery-insert') {
+                GalleryController.appendImage(s.galleryTarget, { url, alt, caption });
+            } else if (s.mode === 'gallery-edit') {
+                GalleryController.updateImage(s.galleryTarget, s.galleryIndex, { url, alt, caption });
+            }
+        },
+    };
+
+    // ------------------------------------------------------------------ //
+    //  Gallery Controller
+    //
+    //  Manages the per-step / per-trophy-guide gallery sections. Owns the
+    //  "Add image" button, edit affordances on thumbnails, drag reorder,
+    //  and persistence back into BranchProxy.state. The structured gallery
+    //  is the canonical home for non-inline images; the merge service
+    //  applies the field directly to the live row on Save.
+    // ------------------------------------------------------------------ //
+
+    const GalleryController = {
+        init() {
+            // No-op: sections are wired lazily as steps + trophy guides render.
+        },
+
+        mountSection(section, target) {
+            if (!section) return;
+            section.dataset.targetKind = target.kind;
+            section.dataset.targetId = String(target.id);
+            section.dataset.tabId = String(target.tabId);
+            this._wireSection(section);
+            this.refresh(section);
+        },
+
+        _wireSection(section) {
+            if (section.dataset.galleryWired === 'true') return;
+            section.dataset.galleryWired = 'true';
+
+            const addBtn = section.querySelector('.gallery-add-btn');
+            if (addBtn) {
+                addBtn.addEventListener('click', () => {
+                    const target = this._readTarget(section);
+                    if (!target) return;
+                    ImageUploadModal.open({
+                        mode: 'gallery-insert',
+                        galleryTarget: target,
+                    });
+                });
+            }
+        },
+
+        _readTarget(section) {
+            const kind = section.dataset.targetKind;
+            const id = parseInt(section.dataset.targetId, 10);
+            const tabId = parseInt(section.dataset.tabId, 10) || activeTabId;
+            if (!kind || Number.isNaN(id)) return null;
+            return { kind, id, tabId };
+        },
+
+        // Returns the BranchProxy entry that owns this gallery, lazily
+        // creating a placeholder trophy guide if the writer is adding the
+        // first image to a not-yet-bodied guide.
+        _entryFor(target, { create } = {}) {
+            const tab = (BranchProxy.state.tabs || []).find(t => t.id === target.tabId);
+            if (!tab) return null;
+            if (target.kind === 'step') {
+                const step = (tab.steps || []).find(s => s.id === target.id);
+                if (step && !Array.isArray(step.gallery_images)) step.gallery_images = [];
+                return step;
+            }
+            if (target.kind === 'trophy_guide') {
+                let guide = (tab.trophy_guides || []).find(g => g.trophy_id === target.id);
+                if (!guide && create) {
+                    guide = {
+                        id: BranchProxy.nextId(),
+                        trophy_id: target.id,
+                        body: '',
+                        order: tab.trophy_guides.length,
+                        is_missable: false,
+                        is_online: false,
+                        is_unobtainable: false,
+                        gallery_images: [],
+                        created_by_id: viewerProfileId,
+                        last_edited_by_id: viewerProfileId,
+                    };
+                    tab.trophy_guides.push(guide);
+                }
+                if (guide && !Array.isArray(guide.gallery_images)) guide.gallery_images = [];
+                return guide;
+            }
+            return null;
+        },
+
+        appendImage(target, item) {
+            const entry = this._entryFor(target, { create: true });
+            if (!entry) return;
+            entry.gallery_images.push(this._normalize(item));
+            BranchProxy.schedulePush();
+            this.refresh(this._sectionFor(target));
+        },
+
+        updateImage(target, index, item) {
+            const entry = this._entryFor(target);
+            if (!entry || !Array.isArray(entry.gallery_images)) return;
+            if (index < 0 || index >= entry.gallery_images.length) return;
+            entry.gallery_images[index] = this._normalize(item);
+            BranchProxy.schedulePush();
+            this.refresh(this._sectionFor(target));
+        },
+
+        removeImage(target, index) {
+            const entry = this._entryFor(target);
+            if (!entry || !Array.isArray(entry.gallery_images)) return;
+            if (index < 0 || index >= entry.gallery_images.length) return;
+            entry.gallery_images.splice(index, 1);
+            BranchProxy.schedulePush();
+            this.refresh(this._sectionFor(target));
+        },
+
+        reorderImages(target, newOrder) {
+            const entry = this._entryFor(target);
+            if (!entry || !Array.isArray(entry.gallery_images)) return;
+            const next = newOrder.map(i => entry.gallery_images[i]).filter(Boolean);
+            entry.gallery_images = next;
+            BranchProxy.schedulePush();
+        },
+
+        _normalize(item) {
+            return {
+                url: (item.url || '').trim(),
+                alt: (item.alt || '').trim().slice(0, 200),
+                caption: (item.caption || '').trim().slice(0, 300),
+            };
+        },
+
+        _sectionFor(target) {
+            return document.querySelector(
+                `.gallery-section[data-target-kind="${target.kind}"][data-target-id="${target.id}"]`
+            );
+        },
+
+        refresh(section) {
+            if (!section) return;
+            const target = this._readTarget(section);
+            if (!target) return;
+            const entry = this._entryFor(target);
+            const gallery = (entry?.gallery_images) || [];
+
+            const grid = section.querySelector('.gallery-grid');
+            const countBadge = section.querySelector('.gallery-count-badge');
+            const template = document.getElementById('gallery-thumb-template');
+            if (!grid || !template) return;
+
+            grid.innerHTML = '';
+            if (countBadge) countBadge.textContent = gallery.length;
+
+            gallery.forEach((item, index) => {
+                const node = template.content.firstElementChild.cloneNode(true);
+                node.dataset.itemId = String(index);
+                const img = node.querySelector('.gallery-thumb-img');
+                img.src = item.url;
+                img.alt = item.alt || '';
+                if (item.caption) img.title = item.caption;
+                if (item.caption) {
+                    const cap = node.querySelector('.gallery-thumb-caption');
+                    cap.textContent = item.caption;
+                    cap.classList.remove('hidden');
+                }
+                const editBtn = node.querySelector('.gallery-thumb-edit');
+                editBtn.addEventListener('click', () => {
+                    ImageUploadModal.open({
+                        mode: 'gallery-edit',
+                        galleryTarget: target,
+                        galleryIndex: index,
+                        currentItem: item,
+                    });
+                });
+                grid.appendChild(node);
+            });
+
+            // Tear down the previous SortableJS instance for this section so
+            // we don't stack multiple listeners on the same grid each refresh.
+            if (section._galleryDragManager) {
+                section._galleryDragManager.destroy?.();
+                section._galleryDragManager = null;
+            }
+            if (gallery.length > 1 && window.PlatPursuit?.DragReorderManager) {
+                section._galleryDragManager = new window.PlatPursuit.DragReorderManager({
+                    container: grid,
+                    itemSelector: '.gallery-thumb',
+                    onReorder: (itemId, newPosition, allItemIds) => {
+                        const newOrder = allItemIds.map(id => parseInt(id, 10));
+                        this.reorderImages(target, newOrder);
+                        // Re-render so the dataset indices match the new positions.
+                        this.refresh(section);
+                    },
+                });
+            }
+        },
+    };
+
+    // ------------------------------------------------------------------ //
+    //  Inline Image Strip + Toolbar Edit-Mode
+    //
+    //  Renders a small pill per `![alt](url)` token below each formatting
+    //  toolbar — click a pill to edit that specific image regardless of
+    //  cursor position. Also drives the toolbar's image button into
+    //  "Edit image" mode (icon swap + label) when the cursor is inside an
+    //  image token, so the writer learns the cursor-based shortcut by
+    //  seeing the button transform under their fingers.
+    // ------------------------------------------------------------------ //
+
+    function findAllImageTokens(textarea) {
+        if (!textarea || textarea.tagName !== 'TEXTAREA') return [];
+        const RE = /!\[([^\]\n]*)\]\(([^)\s"']+)(?:\s+"([^"]*)")?\)/g;
+        const v = textarea.value;
+        const tokens = [];
+        let m;
+        while ((m = RE.exec(v)) !== null) {
+            tokens.push({
+                start: m.index,
+                end: m.index + m[0].length,
+                alt: m[1] || '',
+                url: m[2] || '',
+                title: m[3] || '',
+            });
+        }
+        return tokens;
+    }
+
+    const InlineImageStrip = {
+        init() {
+            // Refresh on text edits + cursor moves. Bubble through document
+            // so dynamically rendered step / trophy guide rows are covered
+            // automatically without per-row wiring.
+            document.addEventListener('input', (e) => {
+                if (e.target?.tagName === 'TEXTAREA') this.refreshFor(e.target);
+            });
+            document.addEventListener('focusin', (e) => {
+                if (e.target?.tagName === 'TEXTAREA') this.refreshFor(e.target);
+            });
+            // selectionchange fires on the document for caret moves; the
+            // active element is the source. Cheap to filter.
+            document.addEventListener('selectionchange', () => {
+                const ta = document.activeElement;
+                if (ta?.tagName === 'TEXTAREA') this.refreshFor(ta);
+            });
+            // Initial pass for textareas pre-populated with content.
+            this.refreshAll();
+        },
+
+        refreshAll() {
+            document.querySelectorAll('#roadmap-editor textarea').forEach(ta => {
+                this.refreshFor(ta);
+            });
+        },
+
+        refreshFor(textarea) {
+            if (!textarea?.closest('#roadmap-editor')) return;
+            const toolbar = this._toolbarFor(textarea);
+            if (!toolbar) return;
+            const strip = this._stripFor(toolbar);
+            this._renderStrip(strip, textarea);
+            this._refreshImageButton(toolbar, textarea);
+        },
+
+        _toolbarFor(textarea) {
+            // Walk previous siblings within the same parent first (most
+            // common: <toolbar> + <textarea> in the same wrapper).
+            let el = textarea.previousElementSibling;
+            while (el) {
+                if (el.classList?.contains('formatting-toolbar')) return el;
+                el = el.previousElementSibling;
+            }
+            // Fall back to a search up the parent chain — covers cases where
+            // a strip wrapper has been inserted between toolbar and textarea.
+            let parent = textarea.parentElement;
+            while (parent && parent.id !== 'roadmap-editor') {
+                const tb = parent.querySelector('.formatting-toolbar');
+                if (tb && parent.contains(textarea)) return tb;
+                parent = parent.parentElement;
+            }
+            return null;
+        },
+
+        _stripFor(toolbar) {
+            // The strip is a sibling immediately after the toolbar.
+            let el = toolbar.nextElementSibling;
+            while (el) {
+                if (el.classList?.contains('inline-images-strip')) return el;
+                if (el.classList?.contains('formatting-toolbar')) return null;
+                el = el.nextElementSibling;
+            }
+            return null;
+        },
+
+        _renderStrip(strip, textarea) {
+            if (!strip) return;
+            const tokens = findAllImageTokens(textarea);
+            // Wipe and rebuild the pill list. The label span stays.
+            strip.querySelectorAll('.inline-image-pill').forEach(p => p.remove());
+
+            if (!tokens.length) {
+                strip.classList.add('hidden');
+                strip.classList.remove('flex');
+                return;
+            }
+            strip.classList.remove('hidden');
+            strip.classList.add('flex');
+
+            const template = document.getElementById('inline-image-pill-template');
+            if (!template) return;
+
+            tokens.forEach((tok) => {
+                const pill = template.content.firstElementChild.cloneNode(true);
+                const thumb = pill.querySelector('.inline-image-pill-thumb');
+                const altSpan = pill.querySelector('.inline-image-pill-alt');
+                thumb.src = tok.url;
+                thumb.alt = tok.alt || '';
+                const label = tok.alt || tok.url.split('/').pop() || '(image)';
+                altSpan.textContent = label;
+                pill.title = `Edit image: ${tok.alt || tok.url}`;
+                pill.addEventListener('click', () => {
+                    // Re-scan in case the source has shifted since render.
+                    const fresh = findAllImageTokens(textarea).find(
+                        t => t.url === tok.url && t.start === tok.start
+                    ) || tok;
+                    ImageUploadModal.open({
+                        mode: 'inline-edit',
+                        textarea,
+                        imageToken: fresh,
+                    });
+                });
+                strip.appendChild(pill);
+            });
+        },
+
+        _refreshImageButton(toolbar, textarea) {
+            const btn = toolbar.querySelector('[data-fmt="image"]');
+            if (!btn) return;
+            const iconDefault = btn.querySelector('.image-icon-default');
+            const iconEdit = btn.querySelector('.image-icon-edit');
+            const label = btn.querySelector('.image-btn-label');
+            // Only show edit-mode if the cursor is in this textarea AND
+            // sits inside an image token. Otherwise stay in insert mode.
+            const inToken = (document.activeElement === textarea)
+                ? findImageTokenAtCursor(textarea) : null;
+
+            if (inToken) {
+                btn.classList.add('btn-active', 'text-primary');
+                btn.title = 'Edit image at cursor';
+                iconDefault?.classList.add('hidden');
+                iconEdit?.classList.remove('hidden');
+                label?.classList.remove('hidden');
+            } else {
+                btn.classList.remove('btn-active', 'text-primary');
+                btn.title = 'Upload Image';
+                iconDefault?.classList.remove('hidden');
+                iconEdit?.classList.add('hidden');
+                label?.classList.add('hidden');
+            }
+        },
+    };
+
+    // Toolbar image button + cursor-in-token edit detection.
+    function uploadImage(textarea) {
+        const tok = findImageTokenAtCursor(textarea);
+        if (tok) {
+            ImageUploadModal.open({
+                mode: 'inline-edit',
+                textarea,
+                imageToken: tok,
+            });
+        } else {
+            ImageUploadModal.open({
+                mode: 'inline-insert',
+                textarea,
+            });
+        }
+    }
+
+    // Drag-drop a file onto a textarea, or paste an image from the clipboard.
+    // Both pre-fill the modal in inline-insert mode at the focused textarea.
+    function initImageDropAndPaste() {
+        document.addEventListener('paste', (e) => {
+            const ta = e.target;
+            if (!ta || ta.tagName !== 'TEXTAREA') return;
+            if (!ta.closest('#roadmap-editor')) return;
+            if (BranchProxy.lockLost) return;
+            const items = e.clipboardData?.items || [];
+            for (const item of items) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        e.preventDefault();
+                        ImageUploadModal.open({
+                            mode: 'inline-insert',
+                            textarea: ta,
+                            prefilledFile: file,
+                        });
+                        return;
+                    }
+                }
             }
         });
 
-        input.click();
+        document.addEventListener('dragover', (e) => {
+            const ta = e.target?.closest?.('textarea');
+            if (!ta || !ta.closest('#roadmap-editor')) return;
+            if (e.dataTransfer?.types?.includes('Files')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        });
+        document.addEventListener('drop', (e) => {
+            const ta = e.target?.closest?.('textarea');
+            if (!ta || !ta.closest('#roadmap-editor')) return;
+            if (BranchProxy.lockLost) return;
+            const file = e.dataTransfer?.files?.[0];
+            if (file && file.type.startsWith('image/')) {
+                e.preventDefault();
+                ImageUploadModal.open({
+                    mode: 'inline-insert',
+                    textarea: ta,
+                    prefilledFile: file,
+                });
+            }
+        });
     }
 
     // ------------------------------------------------------------------ //
@@ -1859,6 +2797,10 @@
         initMetadataFields();
         initPublishButtons();
         initFormattingToolbars();
+        ImageUploadModal.init();
+        GalleryController.init();
+        initImageDropAndPaste();
+        InlineImageStrip.init();
         initKeyboardShortcuts();
         initAutoResize();
         initSaveCancelButtons();
@@ -1869,6 +2811,10 @@
             renderTrophyGuides(tab.id);
             updateTrophyGuideCounter(tab.id);
         });
+
+        // Now that step + trophy guide textareas exist, populate the inline
+        // image strips for any pre-existing markdown image tokens.
+        InlineImageStrip.refreshAll();
 
         // Reset any input wiring that BranchProxy.lockLost flipped before render
         if (BranchProxy.lockLost) {

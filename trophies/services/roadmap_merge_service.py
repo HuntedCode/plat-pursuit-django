@@ -207,6 +207,7 @@ def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: 
                 description=step_payload.get('description') or '',
                 youtube_url=step_payload.get('youtube_url') or '',
                 order=step_payload.get('order', index),
+                gallery_images=_normalize_gallery(step_payload.get('gallery_images')),
                 created_by_id=profile.id,
                 last_edited_by_id=profile.id,
             )
@@ -238,6 +239,15 @@ def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: 
                 if new_value != current:
                     dirty_fields.append((field_name, new_value))
 
+        # Diff gallery_images (full-list replace).
+        new_gallery = step_payload.get('gallery_images')
+        gallery_changed = False
+        if new_gallery is not None:
+            normalized = _normalize_gallery(new_gallery)
+            if normalized != list(live_step.gallery_images or []):
+                dirty_fields.append(('gallery_images', normalized))
+                gallery_changed = True
+
         # Diff trophy associations.
         new_trophy_ids = step_payload.get('trophy_ids')
         existing_trophy_ids = list(
@@ -248,7 +258,7 @@ def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: 
             and list(new_trophy_ids) != existing_trophy_ids
         )
 
-        if not dirty_fields and not trophies_changed:
+        if not dirty_fields and not trophies_changed and not gallery_changed:
             continue
 
         if not _can_edit_authored(profile, live_step.created_by_id, is_editor):
@@ -293,6 +303,33 @@ def _replace_step_trophies(step: RoadmapStep, trophy_ids) -> None:
     ])
 
 
+_GALLERY_FIELDS = ('url', 'alt', 'caption')
+
+
+def _normalize_gallery(value) -> list:
+    """Coerce a gallery_images payload into a clean list of {url, alt, caption}.
+
+    Drops items without a usable `url`, truncates strings, ignores extra keys
+    that the editor client may send. Persisting normalized data keeps the
+    JSON shape stable for downstream readers.
+    """
+    if not isinstance(value, list):
+        return []
+    out = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        url = (item.get('url') or '').strip()
+        if not url:
+            continue
+        out.append({
+            'url': url[:500],
+            'alt': (item.get('alt') or '').strip()[:200],
+            'caption': (item.get('caption') or '').strip()[:300],
+        })
+    return out
+
+
 def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is_editor: bool, changes: _ChangeCounts) -> None:
     live_guides = {tg.id: tg for tg in live_tab.trophy_guides.all()}
     explicit_payload_ids = set()
@@ -309,6 +346,7 @@ def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is
                 is_missable=bool(guide_payload.get('is_missable', False)),
                 is_online=bool(guide_payload.get('is_online', False)),
                 is_unobtainable=bool(guide_payload.get('is_unobtainable', False)),
+                gallery_images=_normalize_gallery(guide_payload.get('gallery_images')),
                 created_by_id=profile.id,
                 last_edited_by_id=profile.id,
             )
@@ -340,6 +378,11 @@ def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is
                 current = getattr(live_guide, field_name)
                 if new_value != current:
                     dirty_fields.append((field_name, new_value))
+
+        if 'gallery_images' in guide_payload:
+            normalized = _normalize_gallery(guide_payload.get('gallery_images'))
+            if normalized != list(live_guide.gallery_images or []):
+                dirty_fields.append(('gallery_images', normalized))
 
         if not dirty_fields:
             continue

@@ -14,8 +14,13 @@
     <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="quote" title="Quote">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
     </button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="image" title="Upload Image">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+    {# Image button: default state inserts a new image; when the cursor sits  #}
+    {# inside an existing markdown image token JS swaps the icon to a pencil  #}
+    {# and adds an "Edit image" label to make the edit affordance obvious.    #}
+    <button type="button" class="fmt-btn fmt-image-btn btn btn-ghost btn-xs gap-1" data-fmt="image" title="Upload Image">
+        <svg xmlns="http://www.w3.org/2000/svg" class="image-icon-default w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" class="image-icon-edit w-3.5 h-3.5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        <span class="image-btn-label hidden text-[10px] font-semibold">Edit image</span>
     </button>
     <div class="w-px h-4 bg-base-content/10 mx-0.5"></div>
     <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="trophy-link" title="Link to Trophy Guide">
@@ -27,4 +32,10 @@
             <span class="hidden md:inline text-xs">Help</span>
         </button>
     </div>
+</div>
+{# Inline-images strip: one pill per `![...](...)` token in the body below. #}
+{# JS shows/hides this and populates pills as the writer types. Click a pill #}
+{# to open the edit modal for that specific image (cursor position ignored). #}
+<div class="inline-images-strip hidden mb-2 items-center gap-1.5 flex-wrap">
+    <span class="text-[10px] text-base-content/40 shrink-0 px-1">Inline images:</span>
 </div>

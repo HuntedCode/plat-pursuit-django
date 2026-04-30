@@ -1,0 +1,40 @@
+# Mark binary asset extensions explicitly so Git never tries to normalize
+# their line endings. The Inter_24pt-*.ttf files were silently corrupted
+# by a CRLF round-trip on a Windows checkout once already; this prevents
+# that class of mistake from recurring on any future binary.
+
+# Fonts
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.bmp binary
+*.tiff binary
+
+# Documents and archives
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.7z binary
+
+# Audio / video (in case any get added)
+*.mp3 binary
+*.mp4 binary
+*.webm binary
+*.mov binary
+*.wav binary
+
+# Database dumps and other opaque blobs
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
