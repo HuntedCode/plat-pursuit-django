@@ -149,10 +149,10 @@
     "fields": {
       "name": "roadmap_note_mention",
       "notification_type": "roadmap_note_mention",
-      "title_template": "💬 {author_username} mentioned you on {game_title}",
+      "title_template": "💬 {author_username} mentioned you on {game_title}{ctg_label}",
       "message_template": "{target_label} — “{body_excerpt}”",
       "icon": "💬",
-      "action_url_template": "/games/{game_slug}/roadmap/edit/?note={note_id}",
+      "action_url_template": "/games/{game_slug}/roadmap/{trophy_group_id}/edit/?note={note_id}",
       "action_text": "View note",
       "auto_trigger_enabled": true,
       "trigger_event": "roadmap_note_mention",

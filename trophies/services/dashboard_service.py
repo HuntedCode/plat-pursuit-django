@@ -13,7 +13,7 @@ import inspect
 import logging
 from collections import Counter, defaultdict
 from django.core.cache import cache
-from django.db.models import F, FloatField, ExpressionWrapper, Q
+from django.db.models import Count, F, FloatField, ExpressionWrapper, Q
 
 logger = logging.getLogger(__name__)
 
@@ -1394,18 +1394,26 @@ def provide_roadmap_recommendations(profile, settings=None):
     if not unplatted_concept_ids:
         return {'roadmaps': [], 'has_data': False}
 
+    # One Roadmap per (concept, CTG) now. We surface the most-recently
+    # updated published roadmap per concept and roll up step counts across
+    # all of that concept's published roadmaps.
     qs = (
         Roadmap.objects
         .filter(status='published', concept_id__in=unplatted_concept_ids)
         .select_related('concept')
-        .prefetch_related('tabs__steps')
-        .order_by('-updated_at')[:limit]
+        .prefetch_related('steps')
+        .order_by('-updated_at')[:limit * 4]  # over-fetch since we dedupe by concept
     )
 
+    seen_concept_ids = set()
     roadmaps = []
     for rm in qs:
+        if rm.concept_id in seen_concept_ids:
+            continue
+        seen_concept_ids.add(rm.concept_id)
+        if len(roadmaps) >= limit:
+            break
         concept = rm.concept
-        # Find a game np_communication_id for this concept (any will do, prefer most recent)
         np_id = (
             ProfileGame.objects.filter(profile=profile, game__concept_id=concept.id)
             .order_by('-last_played_date_time')
@@ -1415,20 +1423,25 @@ def provide_roadmap_recommendations(profile, settings=None):
         if not np_id:
             continue
 
-        # Count tabs and steps for the roadmap summary
-        tab_count = 0
-        step_count = 0
-        for tab in rm.tabs.all():
-            tab_count += 1
-            step_count += tab.steps.count()
+        # Roll up step counts across every published roadmap for this concept.
+        sibling_step_count = (
+            Roadmap.objects
+            .filter(status='published', concept=concept)
+            .aggregate(total=Count('steps'))
+        )['total'] or 0
+        sibling_count = (
+            Roadmap.objects
+            .filter(status='published', concept=concept)
+            .count()
+        )
 
         roadmaps.append({
             'game_name': concept.unified_title,
             'icon_url': concept.concept_icon_url or '',
             'np_communication_id': np_id,
             'updated_at': rm.updated_at,
-            'tab_count': tab_count,
-            'step_count': step_count,
+            'tab_count': sibling_count,
+            'step_count': sibling_step_count,
         })
 
     return {'roadmaps': roadmaps, 'has_data': bool(roadmaps)}

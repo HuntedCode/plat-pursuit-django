@@ -1,5 +1,5 @@
 {% load custom_filters %}
-{# Desktop sticky sidebar TOC. Expects: tab (with prefetched steps), progress, profile_earned, roadmap_trophies #}
+{# Desktop sticky sidebar TOC. Expects: roadmap (with prefetched steps), progress, profile_earned, roadmap_trophies #}
 
 <style>
 .roadmap-toc-nav::-webkit-scrollbar{display:none}
@@ -16,7 +16,7 @@
                 Contents
             </h3>
             <ul class="space-y-1">
-                {% if tab.general_tips or tab.youtube_url %}
+                {% if roadmap.general_tips or roadmap.youtube_url %}
                 <li>
                     <a href="#overview" data-toc-link class="block text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors">
                         Overview
@@ -24,7 +24,7 @@
                 </li>
                 {% endif %}
 
-                {% with steps=tab.steps.all %}
+                {% with steps=roadmap.steps.all %}
                 {% if steps %}
                 <li class="toc-collapsible-section">
                     <button class="toc-section-toggle flex items-center justify-between w-full text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors text-left" data-toc-section-target="toc-roadmap-steps">
@@ -52,7 +52,7 @@
                 {% endif %}
                 {% endwith %}
 
-                {% with guides=tab.trophy_guides.all %}
+                {% with guides=roadmap.trophy_guides.all %}
                 {% if guides %}
                 <li class="toc-collapsible-section pt-1 border-t border-base-content/5 mt-1">
                     <button class="toc-section-toggle flex items-center justify-between w-full text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors text-left" data-toc-section-target="toc-trophy-guides">

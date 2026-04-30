@@ -33,16 +33,16 @@
         {# ── Per-CTG Roadmap Panels ── #}
         {# Dispatcher: writers+ get the Workshop CTA on unpublished or       #}
         {# non-existent roadmaps. Everyone else (and staff on published      #}
-        {# roadmaps) sees the public filled/empty CTA.                       #}
+        {# roadmaps) sees the public filled/empty CTA.                      #}
         {% for ct in community_tabs %}
             <div id="roadmap-cta-panel-{{ ct.ctg.id }}"
                  class="community-tab-panel {% if not forloop.first %}hidden{% endif %}"
                  data-ctg-id="{{ ct.ctg.id }}">
-                {% with rdm_tab=roadmap_tabs_by_ctg|get_item:ct.ctg.id %}
-                    {% if is_roadmap_author and not roadmap_workshop.is_published %}
-                        {% include 'trophies/partials/game_detail/roadmap_cta_staff.html' with ctg=ct.ctg %}
-                    {% elif rdm_tab and rdm_tab.steps.all or rdm_tab.trophy_guides.all %}
-                        {% include 'trophies/partials/game_detail/roadmap_cta_filled.html' with tab=rdm_tab %}
+                {% with rdm=roadmaps_by_ctg|get_item:ct.ctg.id workshop=workshops_by_ctg|get_item:ct.ctg.id %}
+                    {% if is_roadmap_author and workshop and not workshop.is_published %}
+                        {% include 'trophies/partials/game_detail/roadmap_cta_staff.html' with ctg=ct.ctg roadmap=rdm workshop=workshop %}
+                    {% elif rdm and rdm.steps.all or rdm.trophy_guides.all %}
+                        {% include 'trophies/partials/game_detail/roadmap_cta_filled.html' with roadmap=rdm %}
                     {% else %}
                         {% include 'trophies/partials/game_detail/roadmap_cta_empty.html' with ctg=ct.ctg %}
                     {% endif %}

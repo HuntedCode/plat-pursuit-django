@@ -1,11 +1,12 @@
 """
 Roadmap views: public detail page and role-gated editor.
 
-The detail page provides a full guide experience with sticky TOC, scrollspy,
-progress tracking, and per-DLC pages. The editor is gated to authors with at
-least the `writer` roadmap_role (independent of Django is_staff). Writers and
-editors are additionally blocked from editing published guides; only
-publishers may edit a guide that is currently live.
+Each ConceptTrophyGroup gets its own Roadmap. Public viewers can only see
+published roadmaps; writers+ also see drafts via `?preview=true`. The
+detail page provides the full guide experience with sticky TOC, scrollspy,
+progress, and metadata. The editor is gated to authors with at least the
+`writer` roadmap_role on UNPUBLISHED roadmaps; published roadmaps are
+publisher-only at the editor entry point.
 """
 import logging
 
@@ -26,9 +27,12 @@ logger = logging.getLogger('psn_api')
 class RoadmapDetailView(ProfileHotbarMixin, DetailView):
     """Public roadmap detail page for a specific trophy group.
 
-    Serves the full guide experience with sticky TOC, progress tracking,
-    and guide metadata. Each DLC/trophy group gets its own page.
-    Base game is served at /games/<id>/roadmap/, DLC at /games/<id>/roadmap/<group>/.
+    Each CTG (base game + each DLC) is its own Roadmap and renders at its
+    own URL: `/games/<id>/roadmap/` (base, default) or
+    `/games/<id>/roadmap/<group>/` (DLC). When the requested CTG isn't
+    published, we fall back to the first published roadmap on the same
+    concept (writers shipping DLC-first or base-only stay reachable from
+    the canonical URL); if nothing is published, 404.
     """
     model = Game
     template_name = 'trophies/roadmap_detail.html'
@@ -44,36 +48,79 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             raise Http404("Game has no concept.")
         return game
 
+    def get(self, request, *args, **kwargs):
+        """Override to handle the b -> a routing fallback before render.
+
+        Standard DetailView.get() resolves the object then calls
+        get_context_data. We need the redirect decision (when the
+        requested CTG isn't published but another one is) to happen
+        BEFORE we commit to rendering.
+        """
+        self.object = self.get_object()
+        user = request.user
+        requested_group_id = kwargs.get('trophy_group_id', 'default')
+
+        preview_mode = self._is_preview_mode(request)
+        if not preview_mode:
+            # Public path: if the requested CTG isn't published, redirect
+            # to the first published roadmap on this concept.
+            roadmap, resolved_group_id, redirected = (
+                RoadmapService.resolve_public_target(
+                    self.object.concept, requested_group_id,
+                )
+            )
+            if roadmap is None:
+                raise Http404("No published roadmap available.")
+            if redirected:
+                # Redirect to the canonical URL for the resolved CTG.
+                if resolved_group_id == 'default':
+                    return redirect('roadmap_detail', self.object.np_communication_id)
+                return redirect(
+                    'roadmap_detail_dlc',
+                    self.object.np_communication_id,
+                    resolved_group_id,
+                )
+            self._cached_roadmap = roadmap
+            self._resolved_group_id = resolved_group_id
+        else:
+            # Preview path: writer+ sees any-status roadmap. No fallback —
+            # the writer is asking for THIS specific CTG.
+            roadmap = RoadmapService.get_roadmap_for_preview(
+                self.object.concept, requested_group_id,
+            )
+            if not roadmap:
+                raise Http404("Roadmap not found.")
+            self._cached_roadmap = roadmap
+            self._resolved_group_id = requested_group_id
+
+        return super().get(request, *args, **kwargs)
+
+    def _is_preview_mode(self, request):
+        user = request.user
+        return (
+            request.GET.get('preview') == 'true'
+            and user.is_authenticated
+            and getattr(user, 'profile', None) is not None
+            and user.profile.has_roadmap_role('writer')
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         game = self.object
         concept = game.concept
         user = self.request.user
-        trophy_group_id = self.kwargs.get('trophy_group_id', 'default')
+        roadmap = self._cached_roadmap
+        trophy_group_id = self._resolved_group_id
+        preview_mode = self._is_preview_mode(self.request)
 
-        # Author preview support: any role >= writer can preview drafts.
-        preview_mode = (
-            self.request.GET.get('preview') == 'true'
-            and user.is_authenticated
-            and getattr(user, 'profile', None) is not None
-            and user.profile.has_roadmap_role('writer')
-        )
         context['roadmap_preview_mode'] = preview_mode
 
-        # Fetch the specific tab + roadmap
-        if preview_mode:
-            tab, roadmap = RoadmapService.get_tab_for_preview(concept, trophy_group_id)
-        else:
-            tab, roadmap = RoadmapService.get_tab_for_display(concept, trophy_group_id)
-
-        if not tab:
-            raise Http404("Roadmap not found.")
-
         # When the previewing author holds an active edit lock with a draft
-        # branch, overlay it onto the in-memory tab so the preview reflects
-        # uncommitted edits (saves a round-trip of merge → preview → revert).
+        # branch, overlay it onto the in-memory roadmap so the preview
+        # reflects uncommitted edits (saves a round-trip of merge -> preview
+        # -> revert).
         branch_applied = False
-        if preview_mode and roadmap is not None:
+        if preview_mode:
             from trophies.models import RoadmapEditLock
             lock = (
                 RoadmapEditLock.objects
@@ -82,26 +129,27 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             )
             if lock is not None and not lock.is_expired():
                 payload = lock.branch_payload
-                if isinstance(payload, dict) and payload.get('tabs'):
-                    RoadmapService.apply_branch_overlay(tab, payload)
+                if isinstance(payload, dict):
+                    RoadmapService.apply_branch_overlay(roadmap, payload)
                     branch_applied = True
         context['roadmap_branch_preview'] = branch_applied
 
-        context['tab'] = tab
         context['roadmap'] = roadmap
         context['active_trophy_group_id'] = trophy_group_id
 
-        # DLC navigation strip
-        context['available_tabs'] = RoadmapService.get_available_tabs(
-            concept, include_drafts=preview_mode
+        # DLC navigation strip: enumerate roadmaps under this concept.
+        # Public sees only published; authors in preview mode see drafts too.
+        context['available_ctgs'] = RoadmapService.get_available_ctgs(
+            concept, include_drafts=preview_mode,
         )
 
-        # Resolve trophy display data for trophies referenced in steps/guides
+        # Resolve trophy display data for trophies referenced in the
+        # roadmap's steps + trophy guides.
         roadmap_trophy_ids = set()
-        for step in tab.steps.all():
+        for step in roadmap.steps.all():
             for st in step.step_trophies.all():
                 roadmap_trophy_ids.add(st.trophy_id)
-        for tg in tab.trophy_guides.all():
+        for tg in roadmap.trophy_guides.all():
             roadmap_trophy_ids.add(tg.trophy_id)
 
         if roadmap_trophy_ids:
@@ -115,7 +163,7 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         else:
             context['roadmap_trophies'] = {}
 
-        # Profile earned data + progress computation
+        # Profile earned data + progress computation.
         profile_earned = {}
         if (user.is_authenticated and hasattr(user, 'profile')
                 and user.profile and user.profile.is_linked):
@@ -130,20 +178,20 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
                 for e in earned_qs
             }
         context['profile_earned'] = profile_earned
-        context['progress'] = RoadmapService.compute_progress(tab, profile_earned)
+        context['progress'] = RoadmapService.compute_progress(roadmap, profile_earned)
 
-        # Community rating averages for this trophy group
+        # Community rating averages for this trophy group.
         context['community_averages'] = (
             RatingService.get_cached_community_averages_for_group(
-                concept, tab.concept_trophy_group
+                concept, roadmap.concept_trophy_group,
             )
         )
 
-        # Per-tab counts of online / unobtainable trophy guides, surfaced in the
-        # metrics strip alongside the existing Yes/No flags.
+        # Per-roadmap counts of online / unobtainable trophy guides,
+        # surfaced in the metrics strip alongside the existing flags.
         online_count = 0
         unobtainable_count = 0
-        for tg in tab.trophy_guides.all():
+        for tg in roadmap.trophy_guides.all():
             if tg.is_online:
                 online_count += 1
             if tg.is_unobtainable:
@@ -151,20 +199,20 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         context['online_trophy_count'] = online_count
         context['unobtainable_trophy_count'] = unobtainable_count
 
-        # Header background (used in header card only, not full-page)
+        # Header background.
         context['header_bg_url'] = getattr(concept, 'bg_url', None) or ''
 
-        # Breadcrumbs
-        group_name = tab.concept_trophy_group.display_name
+        # Breadcrumbs.
+        group_name = roadmap.concept_trophy_group.display_name
         context['breadcrumb'] = [
             {'text': 'Games', 'url': '/games/'},
             {'text': game.title_name, 'url': f'/games/{game.np_communication_id}/'},
             {'text': f'Roadmap: {group_name}'},
         ]
 
-        # SEO
-        step_count = len(tab.steps.all())
-        guide_count = len(tab.trophy_guides.all())
+        # SEO.
+        step_count = len(roadmap.steps.all())
+        guide_count = len(roadmap.trophy_guides.all())
         context['seo_description'] = (
             f"Trophy roadmap for {game.title_name} ({group_name}). "
             f"{step_count} steps, {guide_count} trophy guides."
@@ -175,19 +223,23 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
 
 
 class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
-    """Role-gated roadmap editor page.
+    """Role-gated roadmap editor page (per-CTG).
 
-    Open to any user with at least the `writer` roadmap role on UNPUBLISHED
-    guides. Published guides are publisher-only — writers and editors who try
-    to open the editor on a live guide are redirected back to the detail page
-    with a flash explaining why. Per-action permission scoping (writer-only-
-    edits-own-sections, editor-only deletes, publisher-only status toggle) is
-    enforced server-side in the merge / publish endpoints, with the editor UI
-    hiding affordances the current role lacks.
+    URL: `/games/<np>/roadmap/edit/` (base) or
+         `/games/<np>/roadmap/<group_id>/edit/` (DLC).
+
+    Open to any user with at least the `writer` roadmap role on
+    UNPUBLISHED roadmaps. Published roadmaps are publisher-only at the
+    editor entry point: writers and editors who try to open the editor on
+    a live roadmap are redirected back to the detail page with a flash
+    explaining why. Per-action permission scoping (writer-only-edits-own-
+    sections, editor-only deletes, publisher-only status toggle) is
+    enforced server-side in the merge / publish endpoints, with the
+    editor UI hiding affordances the current role lacks.
 
     Note: ProfileHotbarMixin is intentionally NOT mixed in. The hotbar
-    competes with the sticky page header for vertical space and adds noise
-    that's irrelevant to authoring (sync status, queue position, etc.).
+    competes with the sticky page header for vertical space and adds
+    noise that's irrelevant to authoring.
     """
     model = Game
     template_name = 'trophies/roadmap_edit.html'
@@ -200,19 +252,33 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
             raise Http404("Game has no concept.")
         return game
 
+    def _trophy_group_id(self):
+        return self.kwargs.get('trophy_group_id', 'default')
+
     def get(self, request, *args, **kwargs):
         # Defense in depth: even though templates hide the Edit button on
-        # published guides for non-publishers, anyone with the URL can hit
-        # this view. Block at the top of GET before rendering.
+        # published roadmaps for non-publishers, anyone with the URL can
+        # hit this view. Block at the top of GET before rendering.
         self.object = self.get_object()
-        roadmap = RoadmapService.get_roadmap_for_editor(self.object.concept)
+        roadmap = RoadmapService.get_roadmap_for_editor(
+            self.object.concept, self._trophy_group_id(),
+        )
+        if roadmap is None:
+            raise Http404("Trophy group not found.")
         if not can_view_editor(request.user.profile, roadmap):
             messages.warning(
                 request,
-                'This guide is published — only publishers can edit it directly. '
-                'Ask a publisher to unpublish first if you need to make changes.',
+                'This roadmap is published. Only publishers can edit it directly. '
+                'Ask a publisher to unpublish it first if you need to make changes.',
             )
-            return redirect('roadmap_detail', self.object.np_communication_id)
+            if self._trophy_group_id() == 'default':
+                return redirect('roadmap_detail', self.object.np_communication_id)
+            return redirect(
+                'roadmap_detail_dlc',
+                self.object.np_communication_id,
+                self._trophy_group_id(),
+            )
+        self._cached_roadmap = roadmap
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
@@ -221,94 +287,148 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         game = self.object
         concept = game.concept
-
-        # Get or create roadmap with all nested data
-        roadmap = RoadmapService.get_roadmap_for_editor(concept)
+        roadmap = self._cached_roadmap
+        ctg = roadmap.concept_trophy_group
         context['roadmap'] = roadmap
 
-        # Build trophy data for the picker, organized by trophy_group_id
-        trophies_by_group = {}
-        for trophy in game.trophies.order_by('trophy_group_id', 'trophy_id'):
-            group_id = trophy.trophy_group_id
-            if group_id not in trophies_by_group:
-                trophies_by_group[group_id] = []
-            trophies_by_group[group_id].append({
-                'trophy_id': trophy.trophy_id,
-                'name': trophy.trophy_name,
-                'detail': trophy.trophy_detail or '',
-                'type': trophy.trophy_type,
-                'icon_url': trophy.trophy_icon_url or '',
-            })
-        context['trophies_by_group'] = trophies_by_group
+        # Trophy data for the picker, scoped to the roadmap's CTG (only
+        # trophies in this group are pickable since the roadmap is
+        # per-CTG now).
+        trophies_in_group_serialized = [
+            {
+                'trophy_id': t.trophy_id,
+                'name': t.trophy_name,
+                'detail': t.trophy_detail or '',
+                'type': t.trophy_type,
+                'icon_url': t.trophy_icon_url or '',
+            }
+            for t in (
+                game.trophies
+                .filter(trophy_group_id=ctg.trophy_group_id)
+                .order_by('trophy_id')
+            )
+        ]
+        context['trophies_in_group'] = trophies_in_group_serialized
+        # Legacy compatibility for the existing editor JS, which reads a
+        # `{trophy_group_id: [...]}` dict. One key here since the editor
+        # now operates on a single CTG per session.
+        context['trophies_by_group'] = {
+            ctg.trophy_group_id: trophies_in_group_serialized,
+        }
 
-        # Build tab data for JS initialization. Each step/guide carries its
-        # `created_by_id` so the JS can render an "Owned by X" badge and lock
-        # the inputs for writers who don't own the row. Profile display info
-        # lives in a separate lookup map (`profiles_by_id`) so duplicate
-        # profiles aren't spammed across steps.
+        # Build the flat roadmap_data block for JS init.
         referenced_profile_ids = set()
 
         def _track(profile_id):
             if profile_id:
                 referenced_profile_ids.add(profile_id)
 
-        tabs_data = []
-        for tab in roadmap.tabs.all():
-            ctg = tab.concept_trophy_group
-            _track(tab.created_by_id)
-            _track(tab.last_edited_by_id)
-            steps_data = []
-            for step in tab.steps.all():
-                _track(step.created_by_id)
-                _track(step.last_edited_by_id)
-                steps_data.append({
-                    'id': step.id,
-                    'title': step.title,
-                    'description': step.description,
-                    'youtube_url': step.youtube_url,
-                    'order': step.order,
-                    'gallery_images': list(step.gallery_images or []),
-                    'created_by_id': step.created_by_id,
-                    'last_edited_by_id': step.last_edited_by_id,
-                    'trophy_ids': list(
-                        step.step_trophies.order_by('order').values_list('trophy_id', flat=True)
-                    ),
-                })
-            trophy_guides_data = {
-                tg.trophy_id: {
-                    'body': tg.body,
-                    'is_missable': tg.is_missable,
-                    'is_online': tg.is_online,
-                    'is_unobtainable': tg.is_unobtainable,
-                    'gallery_images': list(tg.gallery_images or []),
-                    'created_by_id': tg.created_by_id,
-                    'last_edited_by_id': tg.last_edited_by_id,
-                }
-                for tg in tab.trophy_guides.all()
-            }
-            for tg in tab.trophy_guides.all():
-                _track(tg.created_by_id)
-                _track(tg.last_edited_by_id)
-            tabs_data.append({
-                'id': tab.id,
-                'trophy_group_id': ctg.trophy_group_id,
-                'display_name': ctg.display_name,
-                'general_tips': tab.general_tips,
-                'youtube_url': tab.youtube_url,
-                'difficulty': tab.difficulty,
-                'estimated_hours': tab.estimated_hours,
-                'missable_count': tab.missable_count,
-                'online_required': tab.online_required,
-                'min_playthroughs': tab.min_playthroughs,
-                'created_by_id': tab.created_by_id,
-                'last_edited_by_id': tab.last_edited_by_id,
-                'steps': steps_data,
-                'trophy_guides': trophy_guides_data,
-            })
-        context['tabs_data'] = tabs_data
+        _track(roadmap.created_by_id)
+        _track(roadmap.last_edited_by_id)
 
-        # Profile lookup for ownership badges. One query, regardless of how
-        # many steps/guides reference profiles.
+        steps_data = []
+        for step in roadmap.steps.all():
+            _track(step.created_by_id)
+            _track(step.last_edited_by_id)
+            steps_data.append({
+                'id': step.id,
+                'title': step.title,
+                'description': step.description,
+                'youtube_url': step.youtube_url,
+                'order': step.order,
+                'gallery_images': list(step.gallery_images or []),
+                'created_by_id': step.created_by_id,
+                'last_edited_by_id': step.last_edited_by_id,
+                'trophy_ids': list(
+                    step.step_trophies.order_by('order').values_list('trophy_id', flat=True)
+                ),
+            })
+
+        trophy_guides_data = {}
+        for tg in roadmap.trophy_guides.all():
+            _track(tg.created_by_id)
+            _track(tg.last_edited_by_id)
+            trophy_guides_data[tg.trophy_id] = {
+                'id': tg.id,
+                'body': tg.body,
+                'is_missable': tg.is_missable,
+                'is_online': tg.is_online,
+                'is_unobtainable': tg.is_unobtainable,
+                'gallery_images': list(tg.gallery_images or []),
+                'created_by_id': tg.created_by_id,
+                'last_edited_by_id': tg.last_edited_by_id,
+            }
+
+        roadmap_data = {
+            'id': roadmap.id,
+            'concept_trophy_group_id': ctg.id,
+            'trophy_group_id': ctg.trophy_group_id,
+            'display_name': ctg.display_name,
+            'status': roadmap.status,
+            'general_tips': roadmap.general_tips,
+            'youtube_url': roadmap.youtube_url,
+            'difficulty': roadmap.difficulty,
+            'estimated_hours': roadmap.estimated_hours,
+            'missable_count': roadmap.missable_count,
+            'online_required': roadmap.online_required,
+            'min_playthroughs': roadmap.min_playthroughs,
+            'created_by_id': roadmap.created_by_id,
+            'last_edited_by_id': roadmap.last_edited_by_id,
+            'steps': steps_data,
+            'trophy_guides': trophy_guides_data,
+        }
+        context['roadmap_data'] = roadmap_data
+        # Legacy compatibility shim: existing editor JS still reads
+        # `tabsData` as a 1-element list of tab-shaped dicts. Wrap the
+        # roadmap so the JS can keep operating until it's rewritten for
+        # the flat shape. Once the JS migrates this can be deleted.
+        context['tabs_data_legacy'] = [roadmap_data]
+
+        # CTG nav: every CTG on the concept in stable sort order. The
+        # active one renders as a primary pill in place, the rest as
+        # quick links — same positions regardless of which CTG is
+        # currently active so the bar layout doesn't jump when writers
+        # switch between base / DLC. Clicking a "Not started" link
+        # silently get_or_creates the empty Roadmap on the editor view.
+        from trophies.models import Roadmap as RoadmapModel, RoadmapEditLock
+
+        roadmaps_by_ctg_id = {
+            r.concept_trophy_group_id: r
+            for r in (
+                RoadmapModel.objects
+                .filter(concept=concept)
+                .select_related('concept_trophy_group')
+            )
+        }
+        # One query for every lock on this concept's roadmaps so we can
+        # mark tabs as "Resuming" when the viewer holds the lock.
+        viewer_lock_roadmap_ids = set(
+            RoadmapEditLock.objects
+            .filter(
+                roadmap__concept=concept,
+                holder=self.request.user.profile,
+            )
+            .values_list('roadmap_id', flat=True)
+        )
+
+        ctg_nav = []
+        for ctg_obj in concept.concept_trophy_groups.all().order_by(
+            'sort_order', 'trophy_group_id',
+        ):
+            sib = roadmaps_by_ctg_id.get(ctg_obj.id)
+            ctg_nav.append({
+                'trophy_group_id': ctg_obj.trophy_group_id,
+                'display_name': ctg_obj.display_name,
+                'roadmap_id': sib.id if sib else None,
+                'status': sib.status if sib else None,
+                'has_roadmap': sib is not None,
+                'held_by_viewer': bool(sib and sib.id in viewer_lock_roadmap_ids),
+                'is_active': ctg_obj.id == ctg.id,
+            })
+        context['ctg_nav'] = ctg_nav
+
+        # Profile lookup for ownership badges. One query, regardless of
+        # how many steps/guides reference profiles.
         profiles_by_id = {}
         if referenced_profile_ids:
             for p in Profile.objects.filter(id__in=referenced_profile_ids).only(
@@ -321,43 +441,31 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
                 }
         context['profiles_by_id'] = profiles_by_id
 
-        # Breadcrumb
+        # Breadcrumb.
         context['breadcrumb'] = [
             {'text': 'Games', 'url': '/games/'},
             {'text': game.title_name, 'url': f'/games/{game.np_communication_id}/'},
-            {'text': 'Edit Roadmap'},
+            {'text': f'Edit Roadmap: {ctg.display_name}'},
         ]
 
         context['game'] = game
         context['concept'] = concept
 
-        # Role flags for the editor UI: hide delete affordances for writers,
-        # hide publish toggle for non-publishers. Server-side merge/publish
-        # endpoints enforce these as well.
+        # Role flags for the editor UI.
         profile = self.request.user.profile
         context['author_role'] = profile.roadmap_role
         context['author_can_delete'] = profile.has_roadmap_role('editor')
         context['author_can_publish'] = profile.has_roadmap_role('publisher')
-        # JS needs the viewer's profile id to apply writer-scoping (lock
-        # inputs on sections owned by other writers). Editor+ bypasses the
-        # lock; writers only see their own sections as editable.
         context['viewer_profile_id'] = profile.id
 
-        # Notes — surface unread count for the heads-up banner. The actual
-        # notes are fetched client-side via /api/v1/roadmap/<id>/notes/ on
-        # editor init; we don't inline them in tabs_data because they're
-        # decoupled from the lock + branch flow.
+        # Notes unread count for the heads-up banner.
         from trophies.services import roadmap_note_service
         context['notes_unread_count'] = roadmap_note_service.unread_count(
             profile=profile, roadmap=roadmap,
         )
 
         # Mention autocomplete: pre-load ALL profiles with writer-or-higher
-        # role so the JS can filter purely client-side. The team is small
-        # enough that fetching the whole list once per page is cheaper and
-        # snappier than a debounced search endpoint. Order by role tier
-        # (publishers first, then editors, then writers) and within each by
-        # username — gives a sensible default ranking when prefixes tie.
+        # role so the JS can filter purely client-side.
         ROLE_ORDER = {'publisher': 0, 'editor': 1, 'writer': 2}
         mention_qs = Profile.objects.filter(
             roadmap_role__in=['writer', 'editor', 'publisher']

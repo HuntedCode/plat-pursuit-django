@@ -1,5 +1,5 @@
 {% load custom_filters %}
-{# Mobile collapsible TOC dropdown. Expects: tab (with prefetched steps), progress, profile_earned, roadmap_trophies #}
+{# Mobile collapsible TOC dropdown. Expects: roadmap (with prefetched steps), progress, profile_earned, roadmap_trophies #}
 
 <div class="roadmap-mobile-toc">
     <button class="roadmap-toc-toggle w-full flex items-center justify-between gap-2 p-2.5 rounded-lg bg-base-200/70 border-2 border-base-300 text-sm font-medium text-base-content/70 hover:text-base-content transition-colors">
@@ -11,7 +11,7 @@
     </button>
     <div class="roadmap-toc-dropdown hidden mt-1 rounded-lg bg-base-200/90 border-2 border-base-300 p-2 shadow-lg max-h-[60vh] overflow-y-auto">
         <ul class="space-y-0.5">
-            {% if tab.general_tips or tab.youtube_url %}
+            {% if roadmap.general_tips or roadmap.youtube_url %}
             <li>
                 <a href="#overview" class="roadmap-toc-link block text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors">
                     Overview
@@ -19,7 +19,7 @@
             </li>
             {% endif %}
 
-            {% with steps=tab.steps.all %}
+            {% with steps=roadmap.steps.all %}
             {% if steps %}
             <li class="toc-collapsible-section">
                 <button class="toc-section-toggle flex items-center justify-between w-full text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors text-left" data-toc-section-target="toc-mobile-roadmap-steps">
@@ -46,7 +46,7 @@
             {% endif %}
             {% endwith %}
 
-            {% with guides=tab.trophy_guides.all %}
+            {% with guides=roadmap.trophy_guides.all %}
             {% if guides %}
             <li class="toc-collapsible-section pt-1 border-t border-base-content/5 mt-1">
                 <button class="toc-section-toggle flex items-center justify-between w-full text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors text-left" data-toc-section-target="toc-mobile-trophy-guides">

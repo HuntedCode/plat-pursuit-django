@@ -1,8 +1,8 @@
 {% load custom_filters %}
-{# At-a-glance metadata card: author assessment + community consensus. Expects: tab, community_averages #}
+{# At-a-glance metadata card: author assessment + community consensus. Expects: roadmap, community_averages #}
 
 {% with has_community=community_averages %}
-{% if tab or has_community %}
+{% if roadmap or has_community %}
 <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
     <div class="card-body p-3 md:p-4 lg:p-5">
         <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -19,32 +19,32 @@
                     Author Assessment
                 </h3>
                 <div class="grid grid-cols-3 gap-1.5">
-                    {% if tab.difficulty %}
+                    {% if roadmap.difficulty %}
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                        <div class="text-lg font-black {% if tab.difficulty <= 3 %}text-success{% elif tab.difficulty <= 6 %}text-warning{% else %}text-error{% endif %}">{{ tab.difficulty }}<span class="text-xs font-medium text-base-content/30">/10</span></div>
+                        <div class="text-lg font-black {% if roadmap.difficulty <= 3 %}text-success{% elif roadmap.difficulty <= 6 %}text-warning{% else %}text-error{% endif %}">{{ roadmap.difficulty }}<span class="text-xs font-medium text-base-content/30">/10</span></div>
                         <div class="text-[0.6rem] text-base-content/40 font-medium">Difficulty</div>
                     </div>
                     {% endif %}
 
-                    {% if tab.estimated_hours %}
+                    {% if roadmap.estimated_hours %}
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                        <div class="text-lg font-black {% if tab.estimated_hours <= 15 %}text-success{% elif tab.estimated_hours <= 50 %}text-base-content/80{% elif tab.estimated_hours <= 100 %}text-warning{% else %}text-error{% endif %}">~{{ tab.estimated_hours }}<span class="text-xs font-medium text-base-content/30">h</span></div>
+                        <div class="text-lg font-black {% if roadmap.estimated_hours <= 15 %}text-success{% elif roadmap.estimated_hours <= 50 %}text-base-content/80{% elif roadmap.estimated_hours <= 100 %}text-warning{% else %}text-error{% endif %}">~{{ roadmap.estimated_hours }}<span class="text-xs font-medium text-base-content/30">h</span></div>
                         <div class="text-[0.6rem] text-base-content/40 font-medium">Time to Plat</div>
                     </div>
                     {% endif %}
 
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                        <div class="text-lg font-black {% if tab.min_playthroughs <= 1 %}text-success{% elif tab.min_playthroughs <= 3 %}text-base-content/80{% elif tab.min_playthroughs < 10 %}text-warning{% else %}text-error{% endif %}">{{ tab.min_playthroughs }}<span class="text-xs font-medium text-base-content/30">x</span></div>
+                        <div class="text-lg font-black {% if roadmap.min_playthroughs <= 1 %}text-success{% elif roadmap.min_playthroughs <= 3 %}text-base-content/80{% elif roadmap.min_playthroughs < 10 %}text-warning{% else %}text-error{% endif %}">{{ roadmap.min_playthroughs }}<span class="text-xs font-medium text-base-content/30">x</span></div>
                         <div class="text-[0.6rem] text-base-content/40 font-medium">Playthroughs</div>
                     </div>
 
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                        <div class="text-lg font-black {% if tab.missable_count %}text-warning{% else %}text-success{% endif %}">{{ tab.missable_count|default:"0" }}</div>
+                        <div class="text-lg font-black {% if roadmap.missable_count %}text-warning{% else %}text-success{% endif %}">{{ roadmap.missable_count|default:"0" }}</div>
                         <div class="text-[0.6rem] text-base-content/40 font-medium">Missable</div>
                     </div>
 
                     <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 text-center">
-                        <div class="text-lg font-black {% if tab.online_required %}text-warning{% else %}text-success{% endif %}">{% if tab.online_required %}Yes{% else %}No{% endif %}{% if online_trophy_count %} <span class="text-xs font-medium text-base-content/40">({{ online_trophy_count }})</span>{% endif %}</div>
+                        <div class="text-lg font-black {% if roadmap.online_required %}text-warning{% else %}text-success{% endif %}">{% if roadmap.online_required %}Yes{% else %}No{% endif %}{% if online_trophy_count %} <span class="text-xs font-medium text-base-content/40">({{ online_trophy_count }})</span>{% endif %}</div>
                         <div class="text-[0.6rem] text-base-content/40 font-medium">Online</div>
                     </div>
 

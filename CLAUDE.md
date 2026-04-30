@@ -107,9 +107,9 @@ Currently handled by `absorb()`:
 - ConceptEngine (move to target, skip duplicates by engine_id)
 - ConceptFranchise (move to target, skip duplicates by franchise_id)
 - Concept.title_ids (merged/deduplicated)
-- Roadmap (move source roadmap if target has none, re-point tabs to target's CTGs; if both have one, target's wins and source's roadmap + its `RoadmapEditLock` + `RoadmapRevision` rows cascade-delete with the source roadmap)
+- Roadmaps (per-CTG: each Concept may have N Roadmaps, one per ConceptTrophyGroup. Each source roadmap is matched to a surviving CTG by `trophy_group_id` and re-pointed; if the target concept already has a roadmap for that CTG the source's roadmap cascade-deletes with the source concept)
 
-Note: `RoadmapEditLock`, `RoadmapRevision`, and the `created_by`/`last_edited_by` FKs on `RoadmapTab`/`RoadmapStep`/`TrophyGuide` all FK to `Roadmap` or `Profile`, not `Concept` directly, so they don't need their own absorb branches. They follow `Roadmap` automatically.
+Note: `RoadmapEditLock`, `RoadmapRevision`, `RoadmapNote`, `RoadmapNoteRead`, and the `created_by`/`last_edited_by` FKs on `RoadmapStep`/`TrophyGuide` all FK to `Roadmap` or `Profile`, not `Concept` directly, so they don't need their own absorb branches. They follow `Roadmap` automatically.
 
 ---
 

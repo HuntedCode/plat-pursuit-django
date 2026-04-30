@@ -40,6 +40,70 @@ from trophies.services.roadmap_service import RoadmapService
 logger = logging.getLogger('psn_api')
 
 
+def _flat_to_legacy(flat_payload):
+    """Wrap a v2 flat payload as a legacy {payload_version: 1, tabs: [tab]}.
+
+    Compatibility shim for the editor JS. The editor still expects the
+    old multi-tab shape; we wrap the per-CTG roadmap as a single-tab list
+    so it can keep operating until the JS is rewritten for the flat shape.
+    """
+    if not isinstance(flat_payload, dict):
+        return flat_payload
+    tab = {
+        'id': flat_payload.get('roadmap_id'),
+        'concept_trophy_group_id': flat_payload.get('concept_trophy_group_id'),
+        'general_tips': flat_payload.get('general_tips') or '',
+        'youtube_url': flat_payload.get('youtube_url') or '',
+        'difficulty': flat_payload.get('difficulty'),
+        'estimated_hours': flat_payload.get('estimated_hours'),
+        'missable_count': flat_payload.get('missable_count', 0),
+        'online_required': flat_payload.get('online_required', False),
+        'min_playthroughs': flat_payload.get('min_playthroughs', 1),
+        'created_by_id': flat_payload.get('created_by_id'),
+        'last_edited_by_id': flat_payload.get('last_edited_by_id'),
+        'steps': flat_payload.get('steps') or [],
+        'trophy_guides': flat_payload.get('trophy_guides') or [],
+    }
+    return {
+        'payload_version': 1,
+        'roadmap_id': flat_payload.get('roadmap_id'),
+        'status': flat_payload.get('status', 'draft'),
+        'tabs': [tab],
+    }
+
+
+def _legacy_to_flat(legacy_payload):
+    """Unwrap a legacy {tabs: [tab]} shape into a flat v2 payload.
+
+    Picks the first (and only) tab. Per-CTG roadmaps mean the editor only
+    ever sends a single-element tabs array; if more arrive we drop the
+    extras since they don't belong to this session's CTG anyway.
+    """
+    if not isinstance(legacy_payload, dict):
+        return legacy_payload
+    tabs = legacy_payload.get('tabs')
+    if not isinstance(tabs, list) or not tabs:
+        return None  # malformed
+    tab = tabs[0]
+    return {
+        'payload_version': RoadmapEditLock.PAYLOAD_VERSION,
+        'roadmap_id': legacy_payload.get('roadmap_id') or tab.get('id'),
+        'concept_trophy_group_id': tab.get('concept_trophy_group_id'),
+        'status': legacy_payload.get('status', 'draft'),
+        'general_tips': tab.get('general_tips') or '',
+        'youtube_url': tab.get('youtube_url') or '',
+        'difficulty': tab.get('difficulty'),
+        'estimated_hours': tab.get('estimated_hours'),
+        'missable_count': tab.get('missable_count', 0),
+        'online_required': tab.get('online_required', False),
+        'min_playthroughs': tab.get('min_playthroughs', 1),
+        'created_by_id': tab.get('created_by_id'),
+        'last_edited_by_id': tab.get('last_edited_by_id'),
+        'steps': tab.get('steps') or [],
+        'trophy_guides': tab.get('trophy_guides') or [],
+    }
+
+
 def _serialize_lock(lock, viewer_profile):
     return {
         'roadmap_id': lock.roadmap_id,
@@ -107,7 +171,7 @@ class RoadmapLockAcquireView(APIView):
                 lock.heartbeat()
                 return Response({
                     'lock': _serialize_lock(lock, profile),
-                    'branch_payload': lock.branch_payload,
+                    'branch_payload': _flat_to_legacy(lock.branch_payload),
                     'reacquired': False,
                     'resumed_stale': was_stale,
                 })
@@ -138,7 +202,7 @@ class RoadmapLockAcquireView(APIView):
             )
             return Response({
                 'lock': _serialize_lock(new_lock, profile),
-                'branch_payload': new_lock.branch_payload,
+                'branch_payload': _flat_to_legacy(new_lock.branch_payload),
                 'reacquired': True,
                 'resumed_stale': False,
                 'archived_predecessor_revision_id': archived_revision_id,
@@ -185,12 +249,26 @@ class RoadmapLockBranchView(APIView):
         roadmap = _get_roadmap(roadmap_id)
         profile = request.user.profile
 
-        payload = request.data.get('branch_payload')
-        if not isinstance(payload, dict):
+        incoming = request.data.get('branch_payload')
+        if not isinstance(incoming, dict):
             return Response(
                 {'error': 'branch_payload must be an object.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Accept legacy v1 (tabs[]) shape from the editor and unwrap to
+        # the flat v2 shape used by storage + merge. Once the JS is
+        # rewritten this translation can come out.
+        if incoming.get('payload_version') == 1:
+            payload = _legacy_to_flat(incoming)
+            if payload is None:
+                return Response(
+                    {'error': 'Legacy payload missing tabs[].'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            payload = incoming
+
         if payload.get('payload_version') != RoadmapEditLock.PAYLOAD_VERSION:
             return Response(
                 {'error': f'Expected payload_version={RoadmapEditLock.PAYLOAD_VERSION}.'},
@@ -206,7 +284,7 @@ class RoadmapLockBranchView(APIView):
             if not lock.is_held_by(profile):
                 return Response({'lock_lost': True}, status=status.HTTP_409_CONFLICT)
 
-            # Held by self (active or stale) → write the branch and refresh timers.
+            # Held by self (active or stale) -> write the branch and refresh timers.
             lock.branch_payload = payload
             lock.last_heartbeat = timezone.now()
             lock.expires_at = lock._compute_expires_at()
@@ -279,12 +357,22 @@ class RoadmapLockMergeView(APIView):
         roadmap = _get_roadmap(roadmap_id)
         profile = request.user.profile
 
-        payload = request.data.get('branch_payload')
-        if payload is not None and not isinstance(payload, dict):
+        incoming = request.data.get('branch_payload')
+        if incoming is not None and not isinstance(incoming, dict):
             return Response(
                 {'error': 'branch_payload must be an object.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Same legacy translation as branch PATCH.
+        if isinstance(incoming, dict) and incoming.get('payload_version') == 1:
+            payload = _legacy_to_flat(incoming)
+            if payload is None:
+                return Response(
+                    {'error': 'Legacy payload missing tabs[].'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            payload = incoming
 
         try:
             with transaction.atomic():

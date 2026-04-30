@@ -133,10 +133,11 @@
         },
 
         findRowForNote(note) {
-            if (note.target_kind === 'tab') {
-                return document.querySelector(
-                    `.general-tips-card[data-tab-id="${note.target_tab_id}"]`
-                );
+            // 'tab' kind was folded into 'guide' when each CTG became its
+            // own roadmap; treat both as guide-level (the General Tips
+            // card on the current page).
+            if (note.target_kind === 'tab' || note.target_kind === 'guide') {
+                return document.querySelector('.general-tips-card');
             }
             if (note.target_kind === 'step') {
                 return document.querySelector(
@@ -144,17 +145,11 @@
                 );
             }
             if (note.target_kind === 'trophy_guide') {
-                // Trophy ids can repeat across tabs, so disambiguate by
-                // walking up from the trophy guide row's container.
-                const candidates = document.querySelectorAll(
+                // Each editor session is per-CTG so a trophy_id matches
+                // at most one row on the page.
+                return document.querySelector(
                     `.trophy-guide-row[data-trophy-id="${note.target_trophy_id}"]`
                 );
-                for (const row of candidates) {
-                    const container = row.closest('.trophy-guides-container');
-                    if (container && parseInt(container.dataset.tabId, 10) === note.target_tab_id) {
-                        return row;
-                    }
-                }
             }
             return null;
         },
@@ -178,14 +173,17 @@
             this.byTarget.clear();
             this.notes.forEach(n => {
                 let key;
-                if (n.target_kind === 'guide') key = 'guide';
-                else if (n.target_kind === 'tab') key = `tab:${n.target_tab_id}`;
+                // Per-CTG roadmaps collapsed the 'tab' kind into 'guide' (a
+                // tab IS its roadmap now). Old notes with kind='tab' are
+                // wiped by the migration so we only encounter 'guide' /
+                // 'step' / 'trophy_guide' going forward.
+                if (n.target_kind === 'guide' || n.target_kind === 'tab') key = 'guide';
                 else if (n.target_kind === 'step') key = `step:${n.target_step_id}`;
-                // Trophy_guide notes are matched to rendered rows by
-                // (tab_id, trophy_id) rather than the underlying TrophyGuide
-                // pk, since rows render even for trophies without a guide.
+                // Trophy_guide notes are keyed by trophy_id alone now,
+                // since each editor session is on a single CTG (no need
+                // to disambiguate by tab anymore).
                 else if (n.target_kind === 'trophy_guide')
-                    key = `trophy_guide:${n.target_tab_id}:${n.target_trophy_id}`;
+                    key = `trophy_guide:${n.target_trophy_id}`;
                 else return;
                 if (!this.byTarget.has(key)) this.byTarget.set(key, []);
                 this.byTarget.get(key).push(n);
@@ -276,21 +274,17 @@
             });
             document.querySelectorAll('.trophy-guide-row').forEach(row => {
                 const trophyId = parseInt(row.dataset.trophyId, 10);
-                const tabId = parseInt(
-                    row.closest('.trophy-guides-container')?.dataset.tabId, 10
-                );
-                if (!isNaN(trophyId) && !isNaN(tabId)) {
-                    // Composite targetId: (tabId, trophyId). Server resolves
-                    // to a TrophyGuide via get_or_create on this pair, so
-                    // notes work even for trophies that don't have a guide
-                    // body written yet.
-                    this.mountIndicator(row, 'trophy_guide', `${tabId}:${trophyId}`);
+                if (!isNaN(trophyId)) {
+                    // Each editor session is per-CTG, so the trophy_id
+                    // alone identifies the row. Server resolves to a
+                    // TrophyGuide via get_or_create on (roadmap, trophy_id).
+                    this.mountIndicator(row, 'trophy_guide', trophyId);
                 }
             });
-            // Tab notes attach to the General Tips card per tab.
+            // Tab-level notes are now roadmap-level ('guide'). One General
+            // Tips card per page.
             document.querySelectorAll('.general-tips-card').forEach(row => {
-                const tabId = parseInt(row.dataset.tabId, 10);
-                if (!isNaN(tabId)) this.mountIndicator(row, 'tab', tabId);
+                this.mountIndicator(row, 'tab', null);
             });
         },
 
@@ -430,15 +424,20 @@
                 Toast.show('Write something before posting.', 'warning');
                 return;
             }
-            const payload = { body, target_kind: kind };
-            if (kind === 'tab') payload.target_tab_id = targetId;
+            // Per-CTG roadmaps collapsed the 'tab' note kind into 'guide'
+            // (a note on a tab IS a note on its roadmap now). Translate
+            // to keep the existing UI handlers working unchanged.
+            let serverKind = kind;
+            if (kind === 'tab') {
+                serverKind = 'guide';
+            }
+            const payload = { body, target_kind: serverKind };
             if (kind === 'step') payload.target_step_id = targetId;
             if (kind === 'trophy_guide') {
-                // Composite targetId — split into tab + trophy_id so the
-                // server can get_or_create the underlying TrophyGuide row.
-                const [tabId, trophyId] = String(targetId).split(':').map(Number);
-                payload.target_tab_id = tabId;
-                payload.target_trophy_id = trophyId;
+                // Composite targetId — split off the trophy_id (the tab
+                // half is irrelevant now since roadmap === tab).
+                const parts = String(targetId).split(':').map(Number);
+                payload.target_trophy_id = parts.length > 1 ? parts[1] : parts[0];
             }
             try {
                 const note = await API.post(`/api/v1/roadmap/${roadmapId}/notes/`, payload);
@@ -631,11 +630,11 @@
     // ------------------------------------------------------------------ //
 
     function noteTargetId(note) {
-        if (note.target_kind === 'tab') return note.target_tab_id;
         if (note.target_kind === 'step') return note.target_step_id;
         if (note.target_kind === 'trophy_guide') {
-            // Match the composite key used by mountIndicator/byTarget.
-            return `${note.target_tab_id}:${note.target_trophy_id}`;
+            // Trophy_guide notes are keyed by trophy_id alone now (each
+            // editor session is per-CTG, no need to disambiguate).
+            return note.target_trophy_id;
         }
         return null;
     }

@@ -932,27 +932,33 @@ class Concept(models.Model):
                 ctg.concept = self
                 ctg.save(update_fields=['concept'])
 
-        # Roadmap: move if target has none, re-point tabs to target's CTGs
-        try:
-            source_roadmap = other.roadmap
-        except Roadmap.DoesNotExist:
-            source_roadmap = None
-
-        if source_roadmap:
-            if not Roadmap.objects.filter(concept=self).exists():
-                source_roadmap.concept = self
-                source_roadmap.save(update_fields=['concept'])
-                # Re-point tabs to target concept's CTGs (source CTG duplicates will cascade-delete)
-                target_ctgs = {
-                    ctg.trophy_group_id: ctg
-                    for ctg in self.concept_trophy_groups.all()
-                }
-                for tab in source_roadmap.tabs.select_related('concept_trophy_group').all():
-                    target_ctg = target_ctgs.get(tab.concept_trophy_group.trophy_group_id)
-                    if target_ctg and target_ctg != tab.concept_trophy_group:
-                        tab.concept_trophy_group = target_ctg
-                        tab.save(update_fields=['concept_trophy_group'])
-            # else: target already has a roadmap; source's cascades with concept deletion
+        # Roadmaps: per-CTG. For each source roadmap, re-point its CTG to the
+        # equivalent surviving CTG on self (matched by trophy_group_id) and
+        # move the roadmap to self. If self already has a roadmap for that
+        # CTG the source one is left in place to cascade-delete with `other`.
+        target_ctgs_by_group_id = {
+            ctg.trophy_group_id: ctg
+            for ctg in self.concept_trophy_groups.all()
+        }
+        existing_roadmap_ctg_ids = set(
+            self.roadmaps.values_list('concept_trophy_group_id', flat=True)
+        )
+        for source_roadmap in other.roadmaps.select_related('concept_trophy_group').all():
+            target_ctg = target_ctgs_by_group_id.get(
+                source_roadmap.concept_trophy_group.trophy_group_id
+            )
+            if target_ctg is None:
+                # No equivalent CTG on self — let the source roadmap cascade
+                # away with `other`.
+                continue
+            if target_ctg.id in existing_roadmap_ctg_ids:
+                # Self already covers this CTG — keep self's, drop source's
+                # via cascade.
+                continue
+            source_roadmap.concept = self
+            source_roadmap.concept_trophy_group = target_ctg
+            source_roadmap.save(update_fields=['concept', 'concept_trophy_group'])
+            existing_roadmap_ctg_ids.add(target_ctg.id)
 
         # Reviews: re-point non-duplicate (keyed by profile + concept_trophy_group)
         existing_review_keys = set(
@@ -3900,32 +3906,74 @@ class ProfileCardSettings(models.Model):
 # ---------- Roadmap System ----------
 
 class Roadmap(models.Model):
-    """Staff-authored game guide/roadmap, one per Concept.
+    """Staff-authored guide for one ConceptTrophyGroup (base game OR a single DLC).
 
-    Contains ordered steps, general tips, trophy guides, and optional
-    YouTube embeds, organized into tabs per ConceptTrophyGroup (base game + DLCs).
+    Each CTG of a concept has its own Roadmap so base + DLCs can publish,
+    lock, and be authored independently. Concept-level navigation (the DLC
+    strip on the detail page) joins them by `concept`.
     """
-    concept = models.OneToOneField(
-        Concept, on_delete=models.CASCADE, related_name='roadmap'
+    concept = models.ForeignKey(
+        Concept, on_delete=models.CASCADE, related_name='roadmaps',
+    )
+    concept_trophy_group = models.ForeignKey(
+        ConceptTrophyGroup, on_delete=models.CASCADE, related_name='roadmaps',
     )
     created_by = models.ForeignKey(
         Profile, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='authored_roadmaps'
+        related_name='authored_roadmaps',
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_roadmaps',
     )
     status = models.CharField(
         max_length=20, default='draft',
-        choices=[('draft', 'Draft'), ('published', 'Published')]
+        choices=[('draft', 'Draft'), ('published', 'Published')],
+    )
+    general_tips = models.TextField(blank=True)
+    youtube_url = models.URLField(blank=True)
+
+    # Author-supplied metadata, distinct from community ratings.
+    difficulty = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(10)],
+        help_text='Author-assessed difficulty (1-10). Distinct from community ratings.',
+    )
+    estimated_hours = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text='Author-estimated hours to complete this trophy group.',
+    )
+    missable_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Number of missable trophies in this group.',
+    )
+    online_required = models.BooleanField(
+        default=False,
+        help_text='Whether online play is required for trophies in this group.',
+    )
+    min_playthroughs = models.PositiveSmallIntegerField(
+        default=1,
+        help_text='Minimum playthroughs required for all trophies.',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        unique_together = ['concept', 'concept_trophy_group']
         indexes = [
             models.Index(fields=['status'], name='roadmap_status_idx'),
+            models.Index(
+                fields=['concept', 'concept_trophy_group'],
+                name='roadmap_concept_ctg_idx',
+            ),
+        ]
+        ordering = [
+            'concept_trophy_group__sort_order',
+            'concept_trophy_group__trophy_group_id',
         ]
 
     def __str__(self):
-        return f"Roadmap: {self.concept.unified_title}"
+        return f"Roadmap: {self.concept.unified_title} ({self.concept_trophy_group.display_name})"
 
     @property
     def is_published(self):
@@ -3956,28 +4004,26 @@ class Roadmap(models.Model):
     def contributors(self):
         """Return distinct Profiles who created or last-edited any part of this roadmap.
 
-        Unions: roadmap.created_by, plus created_by/last_edited_by across all
-        Tabs, Steps, and TrophyGuides. Cached on the instance per request.
+        Unions: roadmap.created_by, roadmap.last_edited_by, and the
+        created_by/last_edited_by of every Step and TrophyGuide on this
+        roadmap. Cached on the instance per request.
         """
         if not hasattr(self, '_contributors_cache'):
             profile_ids = set()
             if self.created_by_id:
                 profile_ids.add(self.created_by_id)
-            for tab in self.tabs.all():
-                if tab.created_by_id:
-                    profile_ids.add(tab.created_by_id)
-                if tab.last_edited_by_id:
-                    profile_ids.add(tab.last_edited_by_id)
-                for step in tab.steps.all():
-                    if step.created_by_id:
-                        profile_ids.add(step.created_by_id)
-                    if step.last_edited_by_id:
-                        profile_ids.add(step.last_edited_by_id)
-                for guide in tab.trophy_guides.all():
-                    if guide.created_by_id:
-                        profile_ids.add(guide.created_by_id)
-                    if guide.last_edited_by_id:
-                        profile_ids.add(guide.last_edited_by_id)
+            if self.last_edited_by_id:
+                profile_ids.add(self.last_edited_by_id)
+            for step in self.steps.all():
+                if step.created_by_id:
+                    profile_ids.add(step.created_by_id)
+                if step.last_edited_by_id:
+                    profile_ids.add(step.last_edited_by_id)
+            for guide in self.trophy_guides.all():
+                if guide.created_by_id:
+                    profile_ids.add(guide.created_by_id)
+                if guide.last_edited_by_id:
+                    profile_ids.add(guide.last_edited_by_id)
             if not profile_ids:
                 self._contributors_cache = []
             else:
@@ -3988,69 +4034,14 @@ class Roadmap(models.Model):
         return self._contributors_cache
 
 
-class RoadmapTab(models.Model):
-    """One tab per ConceptTrophyGroup within a roadmap (base game + each DLC).
-
-    Stores per-tab content: general tips prose and optional YouTube embed URL.
-    Steps and trophy guides are child models.
-    """
-    roadmap = models.ForeignKey(
-        Roadmap, on_delete=models.CASCADE, related_name='tabs'
-    )
-    concept_trophy_group = models.ForeignKey(
-        ConceptTrophyGroup, on_delete=models.CASCADE, related_name='roadmap_tabs'
-    )
-    general_tips = models.TextField(blank=True)
-    youtube_url = models.URLField(blank=True)
-
-    # Guide metadata -- staff/author assessment, distinct from community ratings
-    difficulty = models.PositiveSmallIntegerField(
-        null=True, blank=True,
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
-        help_text="Author-assessed difficulty (1-10). Distinct from community ratings."
-    )
-    estimated_hours = models.PositiveSmallIntegerField(
-        null=True, blank=True,
-        help_text="Author-estimated hours to complete this trophy group."
-    )
-    missable_count = models.PositiveSmallIntegerField(
-        default=0,
-        help_text="Number of missable trophies in this group."
-    )
-    online_required = models.BooleanField(
-        default=False,
-        help_text="Whether online play is required for trophies in this group."
-    )
-    min_playthroughs = models.PositiveSmallIntegerField(
-        default=1,
-        help_text="Minimum playthroughs required for all trophies."
-    )
-    created_by = models.ForeignKey(
-        Profile, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='authored_roadmap_tabs',
-        help_text='Profile that first wrote this tab\'s content fields. Used for writer-ownership scoping.'
-    )
-    last_edited_by = models.ForeignKey(
-        Profile, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='last_edited_roadmap_tabs',
-    )
-
-    class Meta:
-        unique_together = ['roadmap', 'concept_trophy_group']
-        ordering = ['concept_trophy_group__sort_order', 'concept_trophy_group__trophy_group_id']
-
-    def __str__(self):
-        return f"Tab: {self.concept_trophy_group.display_name} ({self.roadmap})"
-
-
 class RoadmapStep(models.Model):
-    """An ordered high-level stage/step within a roadmap tab.
+    """An ordered high-level stage/step within a roadmap.
 
     Examples: 'Complete first playthrough', 'Clean up collectibles'.
     Each step can have associated trophies via RoadmapStepTrophy.
     """
-    tab = models.ForeignKey(
-        RoadmapTab, on_delete=models.CASCADE, related_name='steps'
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='steps',
     )
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -4098,13 +4089,13 @@ class RoadmapStepTrophy(models.Model):
 
 
 class TrophyGuide(models.Model):
-    """Per-trophy guide text within a roadmap tab.
+    """Per-trophy guide text within a roadmap.
 
-    Every trophy in a trophy group can have its own mini guide section
-    with tips and walkthrough text.
+    Every trophy in the roadmap's trophy group can have its own mini guide
+    section with tips and walkthrough text.
     """
-    tab = models.ForeignKey(
-        RoadmapTab, on_delete=models.CASCADE, related_name='trophy_guides'
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='trophy_guides',
     )
     trophy_id = models.IntegerField()
     body = models.TextField()
@@ -4126,11 +4117,11 @@ class TrophyGuide(models.Model):
     )
 
     class Meta:
-        unique_together = ['tab', 'trophy_id']
+        unique_together = ['roadmap', 'trophy_id']
         ordering = ['order']
 
     def __str__(self):
-        return f"TrophyGuide: tab={self.tab_id}, trophy_id={self.trophy_id}"
+        return f"TrophyGuide: roadmap={self.roadmap_id}, trophy_id={self.trophy_id}"
 
 
 class RoadmapEditLock(models.Model):
@@ -4145,7 +4136,11 @@ class RoadmapEditLock(models.Model):
     """
     IDLE_TIMEOUT = timedelta(minutes=15)
     HARD_CAP = timedelta(hours=1)
-    PAYLOAD_VERSION = 1
+    # v2 collapsed RoadmapTab into Roadmap (one Roadmap per CTG). The branch
+    # payload is now a flat per-roadmap snapshot rather than a `tabs[]`
+    # wrapper, so v1 payloads are not migration-compatible and must be
+    # discarded.
+    PAYLOAD_VERSION = 2
 
     roadmap = models.OneToOneField(
         Roadmap, on_delete=models.CASCADE, related_name='edit_lock'
@@ -4269,17 +4264,16 @@ class RoadmapRevision(models.Model):
 class RoadmapNote(models.Model):
     """Author-only back-channel notes on a roadmap.
 
-    Notes are meta-content (discussion between authors) — they live entirely
-    outside the lock + branch + revision flow. Posting a note never requires
-    holding the edit lock; any writer+ can leave one any time, including
-    while another author is mid-session. Notes are NOT serialized into
-    revision snapshots — they're discussion, not guide state.
+    Notes are meta-content (discussion between authors), separate from the
+    lock + branch + revision flow. Posting a note never requires holding the
+    edit lock; any writer+ can leave one any time, including while another
+    author is mid-session. Notes are NOT serialized into revision snapshots
+    because they're discussion, not guide state.
 
-    A note can attach to one of four targets:
-      - the guide as a whole (`target_kind='guide'`)
-      - a tab's content (`target_kind='tab'`, `target_tab` set) — surfaced
-        on the General Tips card since that's the natural anchor; in practice
-        notes here cover the tab's general_tips / metadata discussion.
+    Three target kinds:
+      - the roadmap as a whole (`target_kind='guide'`) — covers what was
+        previously split between "guide" and "tab" before each CTG became
+        its own roadmap. Surfaced via the General Notes drawer.
       - a specific RoadmapStep (`target_kind='step'`, `target_step` set)
       - a specific TrophyGuide (`target_kind='trophy_guide'`, `target_trophy_guide` set)
 
@@ -4287,12 +4281,10 @@ class RoadmapNote(models.Model):
     surfaces them.
     """
     TARGET_GUIDE = 'guide'
-    TARGET_TAB = 'tab'
     TARGET_STEP = 'step'
     TARGET_TROPHY_GUIDE = 'trophy_guide'
     TARGET_KIND_CHOICES = [
         (TARGET_GUIDE, 'Guide'),
-        (TARGET_TAB, 'Tab'),
         (TARGET_STEP, 'Step'),
         (TARGET_TROPHY_GUIDE, 'Trophy guide'),
     ]
@@ -4305,13 +4297,9 @@ class RoadmapNote(models.Model):
     ]
 
     roadmap = models.ForeignKey(
-        Roadmap, on_delete=models.CASCADE, related_name='notes'
+        Roadmap, on_delete=models.CASCADE, related_name='notes',
     )
     target_kind = models.CharField(max_length=20, choices=TARGET_KIND_CHOICES)
-    target_tab = models.ForeignKey(
-        'RoadmapTab', on_delete=models.CASCADE, null=True, blank=True,
-        related_name='notes',
-    )
     target_step = models.ForeignKey(
         'RoadmapStep', on_delete=models.CASCADE, null=True, blank=True,
         related_name='notes',
@@ -4340,7 +4328,6 @@ class RoadmapNote(models.Model):
         ordering = ['created_at']
         indexes = [
             models.Index(fields=['roadmap', 'status', 'created_at'], name='roadmap_note_thread_idx'),
-            models.Index(fields=['target_tab'], name='roadmap_note_tab_idx'),
             models.Index(fields=['target_step'], name='roadmap_note_step_idx'),
             models.Index(fields=['target_trophy_guide'], name='roadmap_note_guide_idx'),
             models.Index(fields=['author', '-created_at'], name='roadmap_note_author_idx'),
@@ -4349,10 +4336,9 @@ class RoadmapNote(models.Model):
             # Enforce that target_<kind> FK is set iff target_kind matches.
             models.CheckConstraint(
                 condition=(
-                    models.Q(target_kind='guide', target_tab__isnull=True, target_step__isnull=True, target_trophy_guide__isnull=True)
-                    | models.Q(target_kind='tab', target_tab__isnull=False, target_step__isnull=True, target_trophy_guide__isnull=True)
-                    | models.Q(target_kind='step', target_tab__isnull=True, target_step__isnull=False, target_trophy_guide__isnull=True)
-                    | models.Q(target_kind='trophy_guide', target_tab__isnull=True, target_step__isnull=True, target_trophy_guide__isnull=False)
+                    models.Q(target_kind='guide', target_step__isnull=True, target_trophy_guide__isnull=True)
+                    | models.Q(target_kind='step', target_step__isnull=False, target_trophy_guide__isnull=True)
+                    | models.Q(target_kind='trophy_guide', target_step__isnull=True, target_trophy_guide__isnull=False)
                 ),
                 name='roadmap_note_target_consistency',
             ),

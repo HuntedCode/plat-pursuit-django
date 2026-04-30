@@ -3,11 +3,11 @@
 {# roadmap": title row + author byline + Edit button, stat chip strip, 3-step preview, and a   #}
 {# prominent "View Full Roadmap" button. Wrapper has the .roadmap-cta-link hook so clicking    #}
 {# anywhere on the card (outside nested links/buttons) navigates to the roadmap detail page.   #}
-{# Expects: tab (RoadmapTab), roadmap, game, roadmap_preview_mode                              #}
+{# Expects: roadmap (per-CTG Roadmap), game, roadmap_preview_mode                             #}
 
-{% with steps=tab.steps.all guides=tab.trophy_guides.all %}
+{% with steps=roadmap.steps.all guides=roadmap.trophy_guides.all %}
 <div class="roadmap-cta-link cursor-pointer group rounded-lg overflow-hidden border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-base-200/40 shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/25 hover:border-primary/50 transition-all duration-300"
-     data-href="{% if tab.concept_trophy_group.trophy_group_id == 'default' %}{% url 'roadmap_detail' game.np_communication_id %}{% else %}{% url 'roadmap_detail_dlc' game.np_communication_id tab.concept_trophy_group.trophy_group_id %}{% endif %}{% if roadmap_preview_mode %}?preview=true{% endif %}">
+     data-href="{% if roadmap.concept_trophy_group.trophy_group_id == 'default' %}{% url 'roadmap_detail' game.np_communication_id %}{% else %}{% url 'roadmap_detail_dlc' game.np_communication_id roadmap.concept_trophy_group.trophy_group_id %}{% endif %}{% if roadmap_preview_mode %}?preview=true{% endif %}">
 
     {# ══ Top zone: title row + stat chips ══ #}
     <div class="p-3 md:p-4 lg:p-5 border-b border-primary/15 bg-gradient-to-r from-primary/12 via-primary/6 to-transparent">
@@ -48,37 +48,37 @@
                 {{ guides|length }} trophy guide{{ guides|length|pluralize }}
             </span>
             {% endif %}
-            {% if tab.estimated_hours %}
+            {% if roadmap.estimated_hours %}
             <span class="badge badge-sm bg-base-content/5 text-base-content/70 border-base-content/15 gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                ~{{ tab.estimated_hours }}h
+                ~{{ roadmap.estimated_hours }}h
             </span>
             {% endif %}
-            {% if tab.difficulty %}
+            {% if roadmap.difficulty %}
             <span class="badge badge-sm bg-base-content/5 text-base-content/70 border-base-content/15 gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-                Difficulty {{ tab.difficulty }}/10
+                Difficulty {{ roadmap.difficulty }}/10
             </span>
             {% endif %}
-            {% if tab.missable_count %}
+            {% if roadmap.missable_count %}
             <span class="badge badge-sm bg-warning/15 text-warning border-warning/30 gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                {{ tab.missable_count }} missable{{ tab.missable_count|pluralize }}
+                {{ roadmap.missable_count }} missable{{ roadmap.missable_count|pluralize }}
             </span>
             {% endif %}
-            {% if tab.online_required %}
+            {% if roadmap.online_required %}
             <span class="badge badge-sm bg-info/15 text-info border-info/30 gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
                 Online required
             </span>
             {% endif %}
-            {% if tab.min_playthroughs and tab.min_playthroughs > 1 %}
+            {% if roadmap.min_playthroughs and roadmap.min_playthroughs > 1 %}
             <span class="badge badge-sm bg-base-content/5 text-base-content/70 border-base-content/15 gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-                {{ tab.min_playthroughs }} playthroughs
+                {{ roadmap.min_playthroughs }} playthroughs
             </span>
             {% endif %}
-            {% if tab.youtube_url %}
+            {% if roadmap.youtube_url %}
             <span class="badge badge-sm bg-base-content/5 text-base-content/70 border-base-content/15 gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                 Video walkthrough

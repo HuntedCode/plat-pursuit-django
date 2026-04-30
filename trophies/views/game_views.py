@@ -929,16 +929,15 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         concept_context = self._build_concept_context(game)
         context.update(concept_context)
 
-        # Roadmap data for game detail CTA card (content now on dedicated page)
+        # Roadmap data for game detail CTA card (content now on dedicated page).
+        # Each CTG gets its own Roadmap, so we surface per-CTG state for the
+        # dispatcher template to pick (filled / empty / staff workshop).
         roadmap_preview = (
             self.request.GET.get('preview') == 'true'
             and user.is_authenticated
             and user.is_staff
         )
         context['roadmap_preview_mode'] = roadmap_preview
-        # Writers+ get a staff-only "Workshop" CTA showing draft state, lock
-        # info, coverage stats, and notes — independent of the public preview
-        # toggle. They also see unpublished roadmaps the public can't.
         viewer_profile = getattr(user, 'profile', None) if user.is_authenticated else None
         is_roadmap_author = (
             viewer_profile is not None
@@ -946,40 +945,38 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         )
         context['is_roadmap_author'] = is_roadmap_author
         if game.concept:
+            from trophies.models import Roadmap
             from trophies.services.roadmap_service import RoadmapService
-            # Authors see drafts + previews + published; everyone else sees
-            # only published. The preview toggle still works for is_staff
-            # users who lack a roadmap role.
-            if roadmap_preview or is_roadmap_author:
-                roadmap = RoadmapService.get_roadmap_for_preview(game.concept)
-            else:
-                roadmap = RoadmapService.get_roadmap_for_display(game.concept)
-            context['roadmap'] = roadmap
-            if roadmap:
-                context['roadmap_tabs_by_ctg'] = {
-                    tab.concept_trophy_group_id: tab
-                    for tab in roadmap.tabs.all()
-                }
-                context['available_tabs'] = RoadmapService.get_available_tabs(
-                    game.concept, include_drafts=roadmap_preview or is_roadmap_author,
-                )
-            else:
-                context['roadmap_tabs_by_ctg'] = {}
-                context['available_tabs'] = []
+            # Authors see drafts; non-authors see only published.
+            include_drafts = roadmap_preview or is_roadmap_author
+            roadmap_qs = (
+                Roadmap.objects
+                .filter(concept=game.concept)
+                .select_related('concept_trophy_group')
+                .prefetch_related(*RoadmapService._build_roadmap_prefetch())
+            )
+            if not include_drafts:
+                roadmap_qs = roadmap_qs.filter(status='published')
+            roadmaps_by_ctg_id = {
+                r.concept_trophy_group_id: r for r in roadmap_qs
+            }
+            context['roadmaps_by_ctg'] = roadmaps_by_ctg_id
 
-            # Workshop summary for the staff CTA. Computed even when there's
-            # no roadmap so the placeholder can render concept stats + Create.
+            # Workshop summary per CTG for the staff CTA. Built for every
+            # CTG (even ones without a roadmap yet) so the placeholder can
+            # render "We haven't started this one yet" with a Create button.
+            workshop_by_ctg_id = {}
             if is_roadmap_author:
-                context['roadmap_workshop'] = RoadmapService.get_workshop_summary(
-                    roadmap, game, viewer_profile=viewer_profile,
-                )
-            else:
-                context['roadmap_workshop'] = None
+                ctgs = list(game.concept.concept_trophy_groups.all())
+                for ctg in ctgs:
+                    rm = roadmaps_by_ctg_id.get(ctg.id)
+                    workshop_by_ctg_id[ctg.id] = RoadmapService.get_workshop_summary(
+                        rm, game, viewer_profile=viewer_profile,
+                    )
+            context['workshops_by_ctg'] = workshop_by_ctg_id
         else:
-            context['roadmap'] = None
-            context['roadmap_tabs_by_ctg'] = {}
-            context['available_tabs'] = []
-            context['roadmap_workshop'] = None
+            context['roadmaps_by_ctg'] = {}
+            context['workshops_by_ctg'] = {}
 
         # Build user rating context (if earned platinum)
         rating_context = self._build_rating_context(user, game)

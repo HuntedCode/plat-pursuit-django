@@ -12,12 +12,24 @@ the desired guide state). When the user clicks Save, this service:
 5. Creates a `RoadmapRevision` snapshot.
 6. Releases the lock.
 
+The branch payload is flat per-roadmap (each CTG has its own Roadmap, so
+there's no `tabs[]` wrapper):
+
+    {
+      "payload_version": 2,
+      "roadmap_id": ...,
+      "status": "draft" | "published",
+      "general_tips": ..., "youtube_url": ..., "difficulty": ..., ...,
+      "steps": [{"id": ..., "title": ..., "description": ..., ...}, ...],
+      "trophy_guides": [{"id": ..., "trophy_id": ..., ...}, ...],
+    }
+
 A failure at any step rolls back the transaction and surfaces a `MergeError`.
 """
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from django.db import transaction
@@ -28,7 +40,6 @@ from trophies.models import (
     RoadmapRevision,
     RoadmapStep,
     RoadmapStepTrophy,
-    RoadmapTab,
     TrophyGuide,
 )
 from trophies.services.roadmap_service import RoadmapService
@@ -36,23 +47,23 @@ from trophies.services.roadmap_service import RoadmapService
 logger = logging.getLogger('psn_api')
 
 
-# Tab fields by required role tier.
+# Fields by required role tier.
 #
-# - WRITER_TAB_FIELDS: writer-or-tab-owner can edit (general_tips is the
-#   primary authoring surface; we want writers to be able to contribute).
-# - EDITOR_TAB_FIELDS: editor-or-higher (author-judgment metadata that
+# - WRITER_FIELDS: writer-or-roadmap-owner can edit. `general_tips` is the
+#   primary authoring surface and we want writers to contribute to it.
+# - EDITOR_FIELDS: editor-or-higher (author-judgment metadata that
 #   shouldn't move freely between writers).
-# - PUBLISHER_TAB_FIELDS: publisher-only (curated/featured content like the
+# - PUBLISHER_FIELDS: publisher-only (curated/featured content like the
 #   official PlatPursuit YouTube guide that isn't open to author submissions).
-WRITER_TAB_FIELDS = ('general_tips',)
-EDITOR_TAB_FIELDS = (
+WRITER_FIELDS = ('general_tips',)
+EDITOR_FIELDS = (
     'difficulty',
     'estimated_hours',
     'missable_count',
     'online_required',
     'min_playthroughs',
 )
-PUBLISHER_TAB_FIELDS = ('youtube_url',)
+PUBLISHER_FIELDS = ('youtube_url',)
 
 
 class MergeError(Exception):
@@ -61,31 +72,28 @@ class MergeError(Exception):
 
 @dataclass
 class _ChangeCounts:
-    tab_content_updates: int = 0
-    tab_metadata_updates: int = 0
+    content_updates: int = 0
+    metadata_updates: int = 0
     step_creates: int = 0
     step_updates: int = 0
     step_deletes: int = 0
     guide_creates: int = 0
     guide_updates: int = 0
     guide_deletes: int = 0
-    affected_tabs: set = field(default_factory=set)
 
     def any(self) -> bool:
-        return any(
-            (
-                self.tab_content_updates,
-                self.tab_metadata_updates,
-                self.step_creates,
-                self.step_updates,
-                self.step_deletes,
-                self.guide_creates,
-                self.guide_updates,
-                self.guide_deletes,
-            )
-        )
+        return any((
+            self.content_updates,
+            self.metadata_updates,
+            self.step_creates,
+            self.step_updates,
+            self.step_deletes,
+            self.guide_creates,
+            self.guide_updates,
+            self.guide_deletes,
+        ))
 
-    def summary(self, tab_label_lookup) -> str:
+    def summary(self, ctg_label: str = '') -> str:
         parts = []
         if self.step_creates:
             parts.append(f"added {self.step_creates} step{'s' if self.step_creates != 1 else ''}")
@@ -105,20 +113,17 @@ class _ChangeCounts:
             parts.append(
                 f"deleted {self.guide_deletes} trophy guide{'s' if self.guide_deletes != 1 else ''}"
             )
-        if self.tab_content_updates:
-            parts.append(f"updated {self.tab_content_updates} tab content")
-        if self.tab_metadata_updates:
-            parts.append(f"updated {self.tab_metadata_updates} tab metadata")
+        if self.content_updates:
+            parts.append("updated tips/content")
+        if self.metadata_updates:
+            parts.append("updated metadata")
 
         if not parts:
             return "No changes"
 
         text = ", ".join(parts).capitalize()
-        if len(self.affected_tabs) == 1:
-            (only_tab_id,) = self.affected_tabs
-            label = tab_label_lookup.get(only_tab_id, '')
-            if label:
-                text = f"{text} in '{label}'"
+        if ctg_label:
+            text = f"{text} in '{ctg_label}'"
         return text[:200]
 
 
@@ -129,80 +134,116 @@ def _can_edit_authored(profile, owner_id, is_editor) -> bool:
     return owner_id is None or owner_id == profile.id
 
 
-def _apply_tab(live_tab: RoadmapTab, tab_payload: dict, profile, is_editor: bool, changes: _ChangeCounts) -> None:
+_GALLERY_FIELDS = ('url', 'alt', 'caption')
+
+
+def _normalize_gallery(value) -> list:
+    """Coerce a gallery_images payload into a clean list of {url, alt, caption}.
+
+    Drops items without a usable `url`, truncates strings, ignores extra keys
+    that the editor client may send. Persisting normalized data keeps the
+    JSON shape stable for downstream readers.
+    """
+    if not isinstance(value, list):
+        return []
+    out = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        url = (item.get('url') or '').strip()
+        if not url:
+            continue
+        out.append({
+            'url': url[:500],
+            'alt': (item.get('alt') or '').strip()[:200],
+            'caption': (item.get('caption') or '').strip()[:300],
+        })
+    return out
+
+
+def _replace_step_trophies(step: RoadmapStep, trophy_ids) -> None:
+    """Replace the step's trophy associations to match the payload list."""
+    step.step_trophies.all().delete()
+    RoadmapStepTrophy.objects.bulk_create([
+        RoadmapStepTrophy(step=step, trophy_id=int(tid), order=i)
+        for i, tid in enumerate(trophy_ids or [])
+    ])
+
+
+def _apply_roadmap_fields(
+    live_roadmap: Roadmap, payload: dict, profile, is_editor: bool,
+    changes: _ChangeCounts,
+) -> None:
+    """Apply scalar fields (tips, metadata, youtube) with role gating."""
     is_publisher = profile.has_roadmap_role('publisher')
 
-    # Tab content: writer-or-owner gate.
     content_dirty = False
-    for field_name in WRITER_TAB_FIELDS:
-        if field_name in tab_payload:
-            new_value = tab_payload[field_name] or ''
-            current = getattr(live_tab, field_name) or ''
+    for field_name in WRITER_FIELDS:
+        if field_name in payload:
+            new_value = payload[field_name] or ''
+            current = getattr(live_roadmap, field_name) or ''
             if new_value != current:
-                if not _can_edit_authored(profile, live_tab.created_by_id, is_editor):
+                if not _can_edit_authored(
+                    profile, live_roadmap.created_by_id, is_editor,
+                ):
                     raise MergeError(
-                        f"Writers can only edit tab content fields they own. "
-                        f"Tab {live_tab.id} ('{live_tab.concept_trophy_group.display_name}') "
-                        f"has a different owner."
+                        f"Writers can only edit roadmap content fields they own. "
+                        f"This roadmap has a different owner."
                     )
-                setattr(live_tab, field_name, new_value)
+                setattr(live_roadmap, field_name, new_value)
                 content_dirty = True
 
-    # Tab metadata: editor+.
     metadata_dirty = False
-    for field_name in EDITOR_TAB_FIELDS:
-        if field_name in tab_payload:
-            new_value = tab_payload[field_name]
-            current = getattr(live_tab, field_name)
+    for field_name in EDITOR_FIELDS:
+        if field_name in payload:
+            new_value = payload[field_name]
+            current = getattr(live_roadmap, field_name)
             if new_value != current:
                 if not is_editor:
                     raise MergeError(
-                        f"Editor role required to change tab metadata field "
+                        f"Editor role required to change metadata field "
                         f"'{field_name}'."
                     )
-                setattr(live_tab, field_name, new_value)
+                setattr(live_roadmap, field_name, new_value)
                 metadata_dirty = True
 
-    # Publisher-only fields (e.g. official YouTube guide URL).
     publisher_dirty = False
-    for field_name in PUBLISHER_TAB_FIELDS:
-        if field_name in tab_payload:
-            new_value = tab_payload[field_name] or ''
-            current = getattr(live_tab, field_name) or ''
+    for field_name in PUBLISHER_FIELDS:
+        if field_name in payload:
+            new_value = payload[field_name] or ''
+            current = getattr(live_roadmap, field_name) or ''
             if new_value != current:
                 if not is_publisher:
                     raise MergeError(
                         f"Publisher role required to change '{field_name}'. "
                         f"This field is reserved for curated content."
                     )
-                setattr(live_tab, field_name, new_value)
+                setattr(live_roadmap, field_name, new_value)
                 publisher_dirty = True
 
     if content_dirty or metadata_dirty or publisher_dirty:
-        if live_tab.created_by_id is None:
-            live_tab.created_by_id = profile.id
-        live_tab.last_edited_by_id = profile.id
-        live_tab.save()
+        if live_roadmap.created_by_id is None:
+            live_roadmap.created_by_id = profile.id
+        live_roadmap.last_edited_by_id = profile.id
+        live_roadmap.save()
         if content_dirty:
-            changes.tab_content_updates += 1
+            changes.content_updates += 1
         if metadata_dirty or publisher_dirty:
-            changes.tab_metadata_updates += 1
-        changes.affected_tabs.add(live_tab.id)
-
-    _apply_steps(live_tab, tab_payload.get('steps', []), profile, is_editor, changes)
-    _apply_trophy_guides(live_tab, tab_payload.get('trophy_guides', []), profile, is_editor, changes)
+            changes.metadata_updates += 1
 
 
-def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: bool, changes: _ChangeCounts) -> None:
-    live_steps = {step.id: step for step in live_tab.steps.all()}
-    payload_step_ids = set()
+def _apply_steps(
+    live_roadmap: Roadmap, steps_payload: list, profile, is_editor: bool,
+    changes: _ChangeCounts,
+) -> None:
+    live_steps = {step.id: step for step in live_roadmap.steps.all()}
 
     for index, step_payload in enumerate(steps_payload):
         step_id = step_payload.get('id')
         # New step.
         if step_id is None:
             step = RoadmapStep.objects.create(
-                tab=live_tab,
+                roadmap=live_roadmap,
                 title=(step_payload.get('title') or '').strip(),
                 description=step_payload.get('description') or '',
                 youtube_url=step_payload.get('youtube_url') or '',
@@ -213,22 +254,20 @@ def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: 
             )
             _replace_step_trophies(step, step_payload.get('trophy_ids', []))
             changes.step_creates += 1
-            changes.affected_tabs.add(live_tab.id)
             continue
 
         if step_id not in live_steps:
-            # Step in payload references an id that doesn't exist on this tab.
-            # Treat as a phantom; ignore rather than fail the whole merge.
+            # Step in payload references an id that doesn't exist on this
+            # roadmap. Treat as a phantom; ignore rather than fail the
+            # whole merge.
             logger.warning(
-                "Roadmap merge: payload referenced step id %s not in tab %s; skipping.",
-                step_id, live_tab.id,
+                "Roadmap merge: payload referenced step id %s not in roadmap %s; skipping.",
+                step_id, live_roadmap.id,
             )
             continue
 
         live_step = live_steps[step_id]
-        payload_step_ids.add(step_id)
 
-        # Diff fields.
         dirty_fields = []
         for field_name in ('title', 'description', 'youtube_url', 'order'):
             if field_name in step_payload:
@@ -274,11 +313,11 @@ def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: 
         live_step.last_edited_by_id = profile.id
         live_step.save()
         changes.step_updates += 1
-        changes.affected_tabs.add(live_tab.id)
 
-    # Anything in live but missing from payload's existing-id set is a deletion.
-    # The branch_payload represents the FULL desired guide state (seeded from
-    # a live snapshot on lock acquire), so absence means delete. Editor-only.
+    # Anything in live but missing from payload's existing-id set is a
+    # deletion. The branch_payload represents the FULL desired guide state
+    # (seeded from a live snapshot on lock acquire), so absence means delete.
+    # Editor-only.
     explicit_payload_ids = {
         s.get('id') for s in steps_payload if s.get('id') is not None
     }
@@ -291,47 +330,13 @@ def _apply_steps(live_tab: RoadmapTab, steps_payload: list, profile, is_editor: 
             )
         RoadmapStep.objects.filter(id__in=actually_deleted).delete()
         changes.step_deletes += len(actually_deleted)
-        changes.affected_tabs.add(live_tab.id)
 
 
-def _replace_step_trophies(step: RoadmapStep, trophy_ids) -> None:
-    """Replace the step's trophy associations to match the payload list."""
-    step.step_trophies.all().delete()
-    RoadmapStepTrophy.objects.bulk_create([
-        RoadmapStepTrophy(step=step, trophy_id=int(tid), order=i)
-        for i, tid in enumerate(trophy_ids or [])
-    ])
-
-
-_GALLERY_FIELDS = ('url', 'alt', 'caption')
-
-
-def _normalize_gallery(value) -> list:
-    """Coerce a gallery_images payload into a clean list of {url, alt, caption}.
-
-    Drops items without a usable `url`, truncates strings, ignores extra keys
-    that the editor client may send. Persisting normalized data keeps the
-    JSON shape stable for downstream readers.
-    """
-    if not isinstance(value, list):
-        return []
-    out = []
-    for item in value:
-        if not isinstance(item, dict):
-            continue
-        url = (item.get('url') or '').strip()
-        if not url:
-            continue
-        out.append({
-            'url': url[:500],
-            'alt': (item.get('alt') or '').strip()[:200],
-            'caption': (item.get('caption') or '').strip()[:300],
-        })
-    return out
-
-
-def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is_editor: bool, changes: _ChangeCounts) -> None:
-    live_guides = {tg.id: tg for tg in live_tab.trophy_guides.all()}
+def _apply_trophy_guides(
+    live_roadmap: Roadmap, guides_payload: list, profile, is_editor: bool,
+    changes: _ChangeCounts,
+) -> None:
+    live_guides = {tg.id: tg for tg in live_roadmap.trophy_guides.all()}
     explicit_payload_ids = set()
 
     for guide_payload in guides_payload:
@@ -339,7 +344,7 @@ def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is
         if guide_id is None:
             # New trophy guide.
             TrophyGuide.objects.create(
-                tab=live_tab,
+                roadmap=live_roadmap,
                 trophy_id=int(guide_payload['trophy_id']),
                 body=guide_payload.get('body') or '',
                 order=guide_payload.get('order', 0),
@@ -351,15 +356,14 @@ def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is
                 last_edited_by_id=profile.id,
             )
             changes.guide_creates += 1
-            changes.affected_tabs.add(live_tab.id)
             continue
 
         explicit_payload_ids.add(guide_id)
 
         if guide_id not in live_guides:
             logger.warning(
-                "Roadmap merge: payload referenced guide id %s not in tab %s; skipping.",
-                guide_id, live_tab.id,
+                "Roadmap merge: payload referenced guide id %s not in roadmap %s; skipping.",
+                guide_id, live_roadmap.id,
             )
             continue
 
@@ -398,7 +402,6 @@ def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is
         live_guide.last_edited_by_id = profile.id
         live_guide.save()
         changes.guide_updates += 1
-        changes.affected_tabs.add(live_tab.id)
 
     actually_deleted = set(live_guides.keys()) - explicit_payload_ids
     if actually_deleted:
@@ -409,7 +412,6 @@ def _apply_trophy_guides(live_tab: RoadmapTab, guides_payload: list, profile, is
             )
         TrophyGuide.objects.filter(id__in=actually_deleted).delete()
         changes.guide_deletes += len(actually_deleted)
-        changes.affected_tabs.add(live_tab.id)
 
 
 def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
@@ -421,9 +423,8 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
         raise MergeError(f"Unsupported payload version {lock.payload_version}")
 
     payload = lock.branch_payload or {}
-    payload_tabs = payload.get('tabs') if isinstance(payload, dict) else None
-    if not isinstance(payload_tabs, list):
-        raise MergeError("Branch payload missing 'tabs' list.")
+    if not isinstance(payload, dict):
+        raise MergeError("Branch payload is malformed.")
 
     is_editor = profile.has_roadmap_role('editor')
 
@@ -435,31 +436,29 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
         if not current_lock.is_held_by(profile):
             raise MergeError("Lock is no longer held by you.")
 
-        roadmap = Roadmap.objects.select_for_update().get(pk=current_lock.roadmap_id)
+        roadmap = (
+            Roadmap.objects
+            .select_for_update()
+            .select_related('concept_trophy_group')
+            .get(pk=current_lock.roadmap_id)
+        )
 
         # Published guides are publisher-only. A lock on a published guide
         # could only be held by a non-publisher if the guide was published
         # while their session was active, or if a check elsewhere was bypassed.
         if roadmap.status == 'published' and not profile.has_roadmap_role('publisher'):
             raise MergeError(
-                "This guide is published — only publishers can merge changes. "
+                "This guide is published. Only publishers can merge changes. "
                 "Ask a publisher to unpublish before saving."
             )
 
-        live_tabs_qs = roadmap.tabs.select_related('concept_trophy_group').prefetch_related(
-            'steps__step_trophies', 'trophy_guides',
-        )
-        live_tabs = {tab.id: tab for tab in live_tabs_qs}
-        tab_label_lookup = {
-            tid: tab.concept_trophy_group.display_name for tid, tab in live_tabs.items()
-        }
-
         changes = _ChangeCounts()
-        for tab_payload in payload_tabs:
-            live_tab = live_tabs.get(tab_payload.get('id'))
-            if live_tab is None:
-                continue
-            _apply_tab(live_tab, tab_payload, profile, is_editor, changes)
+        _apply_roadmap_fields(roadmap, payload, profile, is_editor, changes)
+        _apply_steps(roadmap, payload.get('steps') or [], profile, is_editor, changes)
+        _apply_trophy_guides(
+            roadmap, payload.get('trophy_guides') or [],
+            profile, is_editor, changes,
+        )
 
         if changes.any():
             roadmap.save(update_fields=['updated_at'])
@@ -470,7 +469,7 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
             author=profile,
             action_type=RoadmapRevision.ACTION_EDITED,
             snapshot=snapshot,
-            summary=changes.summary(tab_label_lookup),
+            summary=changes.summary(roadmap.concept_trophy_group.display_name),
         )
         current_lock.delete()
         return revision
@@ -479,19 +478,23 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
 def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
     """Restore live roadmap state to match revision.snapshot. Editor-only.
 
-    Strategy: clear the roadmap's Steps and TrophyGuides, reset Tab fields, then
-    recreate Steps + TrophyGuides from the snapshot. Tabs are not deleted (they
-    are tied to ConceptTrophyGroups), only their fields are reset.
+    Strategy: clear the roadmap's Steps and TrophyGuides, reset scalar
+    fields, then recreate Steps + TrophyGuides from the snapshot. The
+    snapshot uses the v2 flat shape; pre-v2 snapshots cannot be restored
+    cleanly and are rejected.
 
-    Returns a new `restored` RoadmapRevision so the restore itself is auditable.
+    Returns a new `restored` RoadmapRevision so the restore itself is
+    auditable.
     """
     if not actor.has_roadmap_role('editor'):
         raise MergeError("Editor role required to restore a revision.")
 
     snapshot = revision.snapshot or {}
-    snapshot_tabs = snapshot.get('tabs')
-    if not isinstance(snapshot_tabs, list):
-        raise MergeError("Revision snapshot is malformed.")
+    if snapshot.get('payload_version') != RoadmapEditLock.PAYLOAD_VERSION:
+        raise MergeError(
+            "This revision predates the per-CTG roadmap split and can't be "
+            "restored under the current schema."
+        )
 
     with transaction.atomic():
         roadmap = Roadmap.objects.select_for_update().get(pk=revision.roadmap_id)
@@ -508,56 +511,45 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
         except RoadmapEditLock.DoesNotExist:
             pass
 
-        live_tabs = {tab.id: tab for tab in roadmap.tabs.all()}
+        for field_name in WRITER_FIELDS + EDITOR_FIELDS + PUBLISHER_FIELDS:
+            if field_name in snapshot:
+                setattr(roadmap, field_name, snapshot[field_name])
+        if 'created_by_id' in snapshot:
+            roadmap.created_by_id = snapshot['created_by_id']
+        roadmap.last_edited_by_id = actor.id
+        roadmap.save()
 
-        for tab_snapshot in snapshot_tabs:
-            tab_id = tab_snapshot.get('id')
-            tab = live_tabs.get(tab_id)
-            if tab is None:
-                logger.warning(
-                    "Restore: snapshot tab id %s no longer exists on roadmap %s; skipping.",
-                    tab_id, roadmap.id,
-                )
-                continue
+        roadmap.steps.all().delete()
+        for step_snapshot in snapshot.get('steps', []):
+            step = RoadmapStep.objects.create(
+                roadmap=roadmap,
+                title=step_snapshot.get('title') or '',
+                description=step_snapshot.get('description') or '',
+                youtube_url=step_snapshot.get('youtube_url') or '',
+                order=step_snapshot.get('order', 0),
+                gallery_images=_normalize_gallery(step_snapshot.get('gallery_images')),
+                created_by_id=step_snapshot.get('created_by_id'),
+                last_edited_by_id=actor.id,
+            )
+            _replace_step_trophies(step, step_snapshot.get('trophy_ids', []))
 
-            for field_name in WRITER_TAB_FIELDS + EDITOR_TAB_FIELDS:
-                if field_name in tab_snapshot:
-                    setattr(tab, field_name, tab_snapshot[field_name])
-            tab.created_by_id = tab_snapshot.get('created_by_id')
-            tab.last_edited_by_id = actor.id
-            tab.save()
+        roadmap.trophy_guides.all().delete()
+        for guide_snapshot in snapshot.get('trophy_guides', []):
+            TrophyGuide.objects.create(
+                roadmap=roadmap,
+                trophy_id=int(guide_snapshot['trophy_id']),
+                body=guide_snapshot.get('body') or '',
+                order=guide_snapshot.get('order', 0),
+                is_missable=bool(guide_snapshot.get('is_missable', False)),
+                is_online=bool(guide_snapshot.get('is_online', False)),
+                is_unobtainable=bool(guide_snapshot.get('is_unobtainable', False)),
+                gallery_images=_normalize_gallery(guide_snapshot.get('gallery_images')),
+                created_by_id=guide_snapshot.get('created_by_id'),
+                last_edited_by_id=actor.id,
+            )
 
-            tab.steps.all().delete()
-            for step_snapshot in tab_snapshot.get('steps', []):
-                step = RoadmapStep.objects.create(
-                    tab=tab,
-                    title=step_snapshot.get('title') or '',
-                    description=step_snapshot.get('description') or '',
-                    youtube_url=step_snapshot.get('youtube_url') or '',
-                    order=step_snapshot.get('order', 0),
-                    created_by_id=step_snapshot.get('created_by_id'),
-                    last_edited_by_id=actor.id,
-                )
-                _replace_step_trophies(step, step_snapshot.get('trophy_ids', []))
-
-            tab.trophy_guides.all().delete()
-            for guide_snapshot in tab_snapshot.get('trophy_guides', []):
-                TrophyGuide.objects.create(
-                    tab=tab,
-                    trophy_id=int(guide_snapshot['trophy_id']),
-                    body=guide_snapshot.get('body') or '',
-                    order=guide_snapshot.get('order', 0),
-                    is_missable=bool(guide_snapshot.get('is_missable', False)),
-                    is_online=bool(guide_snapshot.get('is_online', False)),
-                    is_unobtainable=bool(guide_snapshot.get('is_unobtainable', False)),
-                    created_by_id=guide_snapshot.get('created_by_id'),
-                    last_edited_by_id=actor.id,
-                )
-
-        if 'status' in snapshot and snapshot['status'] != roadmap.status:
-            # Status restore is intentionally left to the publisher action,
-            # not the restore. Don't change publish state implicitly.
-            pass
+        # Status restore is intentionally left to the publisher action,
+        # not the restore. Don't change publish state implicitly.
 
         roadmap.save(update_fields=['updated_at'])
 

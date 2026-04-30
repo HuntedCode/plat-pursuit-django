@@ -83,8 +83,6 @@ from .review_views import (
     GroupRatingView,
 )
 from .roadmap_views import (
-    RoadmapTabUpdateView, RoadmapStepListCreateView, RoadmapStepDetailView,
-    RoadmapStepReorderView, RoadmapStepTrophyView, RoadmapTrophyGuideView,
     RoadmapPublishView, RoadmapImageUploadView,
 )
 from .roadmap_lock_views import (
@@ -336,13 +334,10 @@ urlpatterns = [
     path('reviews/<int:review_id>/replies/', ReviewReplyListView.as_view(), name='review-reply-list'),
     path('reviews/replies/<int:reply_id>/', ReviewReplyDetailView.as_view(), name='review-reply-detail'),
 
-    # Roadmap endpoints (staff-only)
-    path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/', RoadmapTabUpdateView.as_view(), name='roadmap-tab-update'),
-    path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/steps/', RoadmapStepListCreateView.as_view(), name='roadmap-step-list'),
-    path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/steps/reorder/', RoadmapStepReorderView.as_view(), name='roadmap-step-reorder'),
-    path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/steps/<int:step_id>/', RoadmapStepDetailView.as_view(), name='roadmap-step-detail'),
-    path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/steps/<int:step_id>/trophies/', RoadmapStepTrophyView.as_view(), name='roadmap-step-trophies'),
-    path('roadmap/<int:roadmap_id>/tab/<int:tab_id>/trophy-guides/<int:trophy_id>/', RoadmapTrophyGuideView.as_view(), name='roadmap-trophy-guide'),
+    # Roadmap endpoints (staff-only). Per-tab/step/guide CRUD lives entirely
+    # in the editor's BranchProxy now — every edit flows through the
+    # lock/branch/merge cycle below, so we no longer expose direct
+    # mutations as separate URLs.
     path('roadmap/<int:roadmap_id>/publish/', RoadmapPublishView.as_view(), name='roadmap-publish'),
     path('roadmap/upload-image/', RoadmapImageUploadView.as_view(), name='roadmap-image-upload'),
     # Lock + branch-and-merge endpoints

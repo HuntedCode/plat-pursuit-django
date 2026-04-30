@@ -27,19 +27,16 @@ logger = logging.getLogger('psn_api')
 def _serialize_note(note: RoadmapNote, viewer_profile) -> dict:
     author = note.author
     resolver = note.resolved_by
-    # For trophy_guide notes, expose the (tab_id, trophy_id) composite the
-    # editor uses to match notes to rendered rows. The server still stores
-    # a TrophyGuide FK; we hydrate the pair from the related row.
-    target_tab_id = note.target_tab_id
+    # For trophy_guide notes, expose the trophy_id the editor uses to match
+    # notes to rendered rows. The server stores a TrophyGuide FK; we hydrate
+    # the trophy_id from the related row.
     target_trophy_id = None
     if note.target_kind == RoadmapNote.TARGET_TROPHY_GUIDE and note.target_trophy_guide_id:
-        target_tab_id = note.target_trophy_guide.tab_id if note.target_trophy_guide else None
         target_trophy_id = note.target_trophy_guide.trophy_id if note.target_trophy_guide else None
     return {
         'id': note.id,
         'roadmap_id': note.roadmap_id,
         'target_kind': note.target_kind,
-        'target_tab_id': target_tab_id,
         'target_step_id': note.target_step_id,
         'target_trophy_guide_id': note.target_trophy_guide_id,
         'target_trophy_id': target_trophy_id,
@@ -115,12 +112,8 @@ class RoadmapNoteListCreateView(APIView):
             qs = qs.filter(status=status_filter)
 
         target_kind = request.query_params.get('target_kind')
-        if target_kind in ('guide', 'tab', 'step', 'trophy_guide'):
+        if target_kind in ('guide', 'step', 'trophy_guide'):
             qs = qs.filter(target_kind=target_kind)
-
-        target_tab_id = request.query_params.get('target_tab_id')
-        if target_tab_id:
-            qs = qs.filter(target_tab_id=target_tab_id)
 
         target_step_id = request.query_params.get('target_step_id')
         if target_step_id:
@@ -140,7 +133,6 @@ class RoadmapNoteListCreateView(APIView):
 
         body = request.data.get('body', '')
         target_kind = request.data.get('target_kind', RoadmapNote.TARGET_GUIDE)
-        target_tab_id = request.data.get('target_tab_id')
         target_step_id = request.data.get('target_step_id')
         target_trophy_guide_id = request.data.get('target_trophy_guide_id')
         target_trophy_id = request.data.get('target_trophy_id')
@@ -151,7 +143,6 @@ class RoadmapNoteListCreateView(APIView):
                 author=viewer,
                 body=body,
                 target_kind=target_kind,
-                target_tab_id=target_tab_id,
                 target_step_id=target_step_id,
                 target_trophy_guide_id=target_trophy_guide_id,
                 target_trophy_id=target_trophy_id,

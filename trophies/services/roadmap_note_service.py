@@ -28,7 +28,6 @@ from trophies.models import (
     RoadmapNote,
     RoadmapNoteRead,
     RoadmapStep,
-    RoadmapTab,
     TrophyGuide,
 )
 
@@ -88,41 +87,33 @@ def _resolve_target_label(note: 'RoadmapNote') -> str:
 
     Examples:
       - guide-level: "general notes"
-      - tab: "Base Game — General Tips"
-      - step: "Base Game › Step: Final Boss"
-      - trophy guide: "Base Game › Trophy: Cleared the Tutorial"
+      - step: "Base Game > Step: Final Boss"
+      - trophy guide: "Base Game > Trophy: Cleared the Tutorial"
     """
     if note.target_kind == RoadmapNote.TARGET_GUIDE:
         return 'general notes'
 
-    if note.target_kind == RoadmapNote.TARGET_TAB:
-        tab = note.target_tab
-        if tab:
-            tab_name = tab.concept_trophy_group.display_name
-            return f'{tab_name} — General Tips'
-        return 'a tab'
-
     if note.target_kind == RoadmapNote.TARGET_STEP:
         step = note.target_step
         if step:
-            tab_name = step.tab.concept_trophy_group.display_name
+            ctg_name = step.roadmap.concept_trophy_group.display_name
             step_title = (step.title or '').strip() or 'untitled step'
-            return f'{tab_name} › Step: {step_title}'
+            return f'{ctg_name} > Step: {step_title}'
         return 'a step'
 
     if note.target_kind == RoadmapNote.TARGET_TROPHY_GUIDE:
         guide = note.target_trophy_guide
         if guide:
-            tab_name = guide.tab.concept_trophy_group.display_name
+            ctg_name = guide.roadmap.concept_trophy_group.display_name
             # Resolve the trophy name from any matching game in the concept
             # (trophy_id is consistent across PS4/PS5 stacks within a concept).
             trophy_name = None
             try:
-                game = guide.tab.roadmap.concept.games.first()
+                game = guide.roadmap.concept.games.first()
                 if game:
                     trophy = game.trophies.filter(
                         trophy_id=guide.trophy_id,
-                        trophy_group_id=guide.tab.concept_trophy_group.trophy_group_id,
+                        trophy_group_id=guide.roadmap.concept_trophy_group.trophy_group_id,
                     ).only('trophy_name').first()
                     if trophy:
                         trophy_name = trophy.trophy_name
@@ -130,8 +121,8 @@ def _resolve_target_label(note: 'RoadmapNote') -> str:
                 # Trophy lookup is best-effort cosmetic enrichment.
                 trophy_name = None
             if trophy_name:
-                return f'{tab_name} › Trophy: {trophy_name}'
-            return f'{tab_name} › Trophy #{guide.trophy_id}'
+                return f'{ctg_name} > Trophy: {trophy_name}'
+            return f'{ctg_name} > Trophy #{guide.trophy_id}'
         return 'a trophy guide'
 
     return 'a note'
@@ -220,6 +211,24 @@ def notify_new_mentions(note: 'RoadmapNote', *, prior_body: Optional[str] = None
         or getattr(concept, 'unified_title', '')
         or 'a roadmap'
     )
+    # Roadmap is per-CTG, so the action URL must include the CTG so the
+    # notification deep-link opens the correct editor. The path-form
+    # /games/<slug>/roadmap/<group>/edit/ accepts 'default' for base.
+    trophy_group_id = (
+        roadmap.concept_trophy_group.trophy_group_id
+        if roadmap.concept_trophy_group_id else 'default'
+    )
+    ctg_display_name = (
+        roadmap.concept_trophy_group.display_name
+        if roadmap.concept_trophy_group_id else ''
+    )
+    # Show the CTG name parenthetically in the title only when it's not
+    # the base game, so base-game mentions stay concise but DLC mentions
+    # are unambiguous about which section.
+    ctg_label = (
+        f' ({ctg_display_name})'
+        if trophy_group_id != 'default' and ctg_display_name else ''
+    )
     base_context = {
         'author_username': (
             note.author.display_psn_username or note.author.psn_username
@@ -229,6 +238,9 @@ def notify_new_mentions(note: 'RoadmapNote', *, prior_body: Optional[str] = None
         'game_slug': getattr(game, 'np_communication_id', '') if game else '',
         'note_id': note.id,
         'roadmap_id': roadmap.id,
+        'trophy_group_id': trophy_group_id,
+        'ctg_display_name': ctg_display_name,
+        'ctg_label': ctg_label,
         'target_label': target_label,
         'body_excerpt': body_excerpt,
     }
@@ -271,7 +283,6 @@ def notify_new_mentions(note: 'RoadmapNote', *, prior_body: Optional[str] = None
 def create_note(
     *, roadmap: Roadmap, author: Profile, body: str,
     target_kind: str,
-    target_tab_id: Optional[int] = None,
     target_step_id: Optional[int] = None,
     target_trophy_guide_id: Optional[int] = None,
     target_trophy_id: Optional[int] = None,
@@ -280,10 +291,10 @@ def create_note(
 
     For TARGET_TROPHY_GUIDE the caller can pass either:
       - `target_trophy_guide_id` (a TrophyGuide pk, for programmatic access), or
-      - `(target_tab_id, target_trophy_id)` — used by the editor since trophy
-        guide rows render for every trophy in the group, including those
-        that don't have a TrophyGuide DB row yet. We resolve this pair via
-        `get_or_create` on (tab, trophy_id) so leaving a note doesn't
+      - `target_trophy_id` (a PSN trophy_id) — used by the editor since
+        trophy guide rows render for every trophy in the group, including
+        those that don't have a TrophyGuide DB row yet. We resolve via
+        `get_or_create` on (roadmap, trophy_id) so leaving a note doesn't
         require pre-writing a guide body. Django's TextField permits ''
         at the DB level, so empty-body guides are valid.
     """
@@ -293,58 +304,45 @@ def create_note(
     if len(body) > 5000:
         raise NoteError("Note body is too long (max 5000 characters).")
 
-    target_tab = None
     target_step = None
     target_trophy_guide = None
 
     if target_kind == RoadmapNote.TARGET_GUIDE:
-        if target_tab_id or target_step_id or target_trophy_guide_id:
+        if target_step_id or target_trophy_guide_id or target_trophy_id is not None:
             raise NoteError("Guide-level notes can't have a target id.")
-    elif target_kind == RoadmapNote.TARGET_TAB:
-        if not target_tab_id:
-            raise NoteError("Tab note requires a target_tab_id.")
-        try:
-            target_tab = RoadmapTab.objects.select_related('roadmap').get(pk=target_tab_id)
-        except RoadmapTab.DoesNotExist:
-            raise NoteError("Target tab not found.")
-        if target_tab.roadmap_id != roadmap.id:
-            raise NoteError("Target tab does not belong to this roadmap.")
     elif target_kind == RoadmapNote.TARGET_STEP:
         if not target_step_id:
             raise NoteError("Step note requires a target_step_id.")
         try:
-            target_step = RoadmapStep.objects.select_related('tab__roadmap').get(pk=target_step_id)
+            target_step = RoadmapStep.objects.select_related('roadmap').get(pk=target_step_id)
         except RoadmapStep.DoesNotExist:
             raise NoteError("Target step not found.")
-        if target_step.tab.roadmap_id != roadmap.id:
+        if target_step.roadmap_id != roadmap.id:
             raise NoteError("Target step does not belong to this roadmap.")
     elif target_kind == RoadmapNote.TARGET_TROPHY_GUIDE:
         if target_trophy_guide_id:
             # Direct-id path: programmatic access by TrophyGuide.pk.
             try:
-                target_trophy_guide = TrophyGuide.objects.select_related('tab__roadmap').get(
+                target_trophy_guide = TrophyGuide.objects.select_related('roadmap').get(
                     pk=target_trophy_guide_id
                 )
             except TrophyGuide.DoesNotExist:
                 raise NoteError("Target trophy guide not found.")
-            if target_trophy_guide.tab.roadmap_id != roadmap.id:
+            if target_trophy_guide.roadmap_id != roadmap.id:
                 raise NoteError("Target trophy guide does not belong to this roadmap.")
-        elif target_tab_id and target_trophy_id is not None:
-            # Editor path: get-or-create by (tab, trophy_id). Lets writers
-            # leave notes on trophies that don't have a written guide yet.
-            try:
-                tab = RoadmapTab.objects.get(pk=target_tab_id, roadmap=roadmap)
-            except RoadmapTab.DoesNotExist:
-                raise NoteError("Target tab not found in this roadmap.")
+        elif target_trophy_id is not None:
+            # Editor path: get-or-create by (roadmap, trophy_id). Lets
+            # writers leave notes on trophies that don't have a written
+            # guide yet.
             target_trophy_guide, _ = TrophyGuide.objects.get_or_create(
-                tab=tab,
+                roadmap=roadmap,
                 trophy_id=int(target_trophy_id),
                 defaults={'body': ''},
             )
         else:
             raise NoteError(
                 "Trophy-guide note requires either target_trophy_guide_id "
-                "or (target_tab_id + target_trophy_id)."
+                "or target_trophy_id."
             )
     else:
         raise NoteError(f"Unknown target_kind '{target_kind}'.")
@@ -354,7 +352,6 @@ def create_note(
         author=author,
         body=body,
         target_kind=target_kind,
-        target_tab=target_tab,
         target_step=target_step,
         target_trophy_guide=target_trophy_guide,
     )

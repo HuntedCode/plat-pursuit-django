@@ -4,7 +4,12 @@
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
-{{ tabs_data|json_script:"roadmap-tabs-data" }}
+{# Editor still consumes the legacy 1-tab list shape until the editor JS  #}
+{# is rewritten for the flat per-roadmap payload (v2). The wrappers       #}
+{# around `roadmap_data` and `trophies_by_group` keep the existing        #}
+{# controller untouched in the meantime.                                  #}
+{{ tabs_data_legacy|json_script:"roadmap-tabs-data" }}
+{{ roadmap_data|json_script:"roadmap-data" }}
 {{ trophies_by_group|json_script:"roadmap-trophies-data" }}
 {{ profiles_by_id|json_script:"roadmap-profiles-data" }}
 {{ mentionable_authors|json_script:"roadmap-mentionable-authors" }}
@@ -117,18 +122,44 @@
         </div>
     </div>
 
-    {# ═══ Tab Bar ═══ #}
-    <div id="roadmap-tabs" class="flex gap-1 p-1 bg-base-200/60 rounded-box border-2 border-base-300 mb-3" role="tablist">
-        {% for tab in roadmap.tabs.all %}
-            <button role="tab"
-                    class="roadmap-tab-btn flex-1 flex items-center justify-center gap-1.5 px-2 md:px-3 py-2 md:py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200
-                           {% if forloop.first %}bg-primary text-primary-content shadow-sm{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
-                    data-tab-id="{{ tab.id }}"
-                    data-group-id="{{ tab.concept_trophy_group.trophy_group_id }}"
-                    aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
-                    aria-controls="tab-panel-{{ tab.id }}">
-                {{ tab.concept_trophy_group.display_name }}
-            </button>
+    {# ═══ CTG selector ═══ #}
+    {# Each editor session is per-CTG. Every CTG on the concept renders   #}
+    {# in the same stable order regardless of which one is active, so the #}
+    {# bar doesn't reshuffle when writers swap between base / DLC. The    #}
+    {# active CTG is styled as a primary pill in place; the rest are      #}
+    {# quick links with status badges (Live / Draft / Not started, plus   #}
+    {# "Resuming" when the viewer already holds the lock).                #}
+    <div id="roadmap-tabs" class="flex gap-1 p-1 bg-base-200/60 rounded-box border-2 border-base-300 mb-3 overflow-x-auto" role="tablist">
+        {% for entry in ctg_nav %}
+            {% if entry.is_active %}
+                <span class="roadmap-tab-btn flex-1 flex items-center justify-center gap-1.5 px-2 md:px-3 py-2 md:py-2.5 rounded-lg text-xs lg:text-sm font-medium bg-primary text-primary-content shadow-sm whitespace-nowrap"
+                      data-tab-id="{{ roadmap.id }}"
+                      data-group-id="{{ roadmap.concept_trophy_group.trophy_group_id }}"
+                      aria-selected="true">
+                    {{ entry.display_name }}
+                </span>
+            {% else %}
+                {% if entry.trophy_group_id == 'default' %}
+                    {% url 'roadmap_edit' game.np_communication_id as entry_url %}
+                {% else %}
+                    {% url 'roadmap_edit_ctg' game.np_communication_id entry.trophy_group_id as entry_url %}
+                {% endif %}
+                <a href="{{ entry_url }}"
+                   class="flex-1 flex items-center justify-center gap-1.5 px-2 md:px-3 py-2 md:py-2.5 rounded-lg text-xs lg:text-sm font-medium transition-all duration-200 whitespace-nowrap
+                          {% if not entry.has_roadmap %}text-base-content/35 italic hover:text-base-content/60 hover:bg-base-300/30 border border-dashed border-base-content/15{% else %}text-base-content/60 hover:text-base-content hover:bg-base-300/50{% endif %}"
+                   title="{% if entry.has_roadmap %}Switch to {{ entry.display_name }} editor{% else %}Start a roadmap for {{ entry.display_name }}{% endif %}">
+                    {{ entry.display_name }}
+                    {% if entry.held_by_viewer %}
+                        <span class="badge badge-xs badge-warning">Resuming</span>
+                    {% elif entry.status == 'published' %}
+                        <span class="badge badge-xs badge-success">Live</span>
+                    {% elif entry.has_roadmap %}
+                        <span class="badge badge-xs badge-ghost">Draft</span>
+                    {% else %}
+                        <span class="badge badge-xs badge-ghost border border-base-content/20">Not started</span>
+                    {% endif %}
+                </a>
+            {% endif %}
         {% endfor %}
     </div>
 
@@ -137,14 +168,12 @@
         {% include 'trophies/partials/roadmap/formatting_help.html' %}
     </div>
 
-    {# ═══ Tab Panels ═══ #}
-    {% for tab in roadmap.tabs.all %}
-    <div id="tab-panel-{{ tab.id }}"
+    {# ═══ Editor Panel (single CTG per session) ═══ #}
+    <div id="tab-panel-{{ roadmap.id }}"
          role="tabpanel"
-         aria-labelledby="tab-{{ tab.id }}"
-         class="roadmap-tab-panel {% if not forloop.first %}hidden{% endif %}"
-         data-tab-id="{{ tab.id }}"
-         data-group-id="{{ tab.concept_trophy_group.trophy_group_id }}">
+         class="roadmap-tab-panel"
+         data-tab-id="{{ roadmap.id }}"
+         data-group-id="{{ roadmap.concept_trophy_group.trophy_group_id }}">
 
         {# ─── Guide Metadata (editor+ only) ─── #}
         <div class="guide-metadata-card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 transition-opacity">
@@ -161,28 +190,28 @@
                         <label class="text-xs text-base-content/50 font-medium mb-1 block">Difficulty (1-10)</label>
                         <input type="number" min="1" max="10"
                                class="input input-bordered input-sm w-full metadata-input"
-                               data-tab-id="{{ tab.id }}" data-field="difficulty"
+                               data-tab-id="{{ roadmap.id }}" data-field="difficulty"
                                placeholder="-">
                     </div>
                     <div>
                         <label class="text-xs text-base-content/50 font-medium mb-1 block">Est. Hours</label>
                         <input type="number" min="1" max="9999"
                                class="input input-bordered input-sm w-full metadata-input"
-                               data-tab-id="{{ tab.id }}" data-field="estimated_hours"
+                               data-tab-id="{{ roadmap.id }}" data-field="estimated_hours"
                                placeholder="-">
                     </div>
                     <div>
                         <label class="text-xs text-base-content/50 font-medium mb-1 block">Missable Trophies</label>
                         <input type="number" min="0" max="999"
                                class="input input-bordered input-sm w-full metadata-input"
-                               data-tab-id="{{ tab.id }}" data-field="missable_count"
+                               data-tab-id="{{ roadmap.id }}" data-field="missable_count"
                                placeholder="0">
                     </div>
                     <div>
                         <label class="text-xs text-base-content/50 font-medium mb-1 block">Min Playthroughs</label>
                         <input type="number" min="1" max="99"
                                class="input input-bordered input-sm w-full metadata-input"
-                               data-tab-id="{{ tab.id }}" data-field="min_playthroughs"
+                               data-tab-id="{{ roadmap.id }}" data-field="min_playthroughs"
                                placeholder="1">
                     </div>
                     <div class="flex flex-col">
@@ -190,7 +219,7 @@
                         <label class="label cursor-pointer justify-start gap-2 p-0 mt-1">
                             <input type="checkbox"
                                    class="toggle toggle-sm toggle-primary metadata-toggle"
-                                   data-tab-id="{{ tab.id }}" data-field="online_required">
+                                   data-tab-id="{{ roadmap.id }}" data-field="online_required">
                             <span class="label-text text-xs online-required-label">No</span>
                         </label>
                     </div>
@@ -206,15 +235,15 @@
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
                         Steps / Stages
                     </h2>
-                    <button class="btn btn-sm btn-primary add-step-btn" data-tab-id="{{ tab.id }}">
+                    <button class="btn btn-sm btn-primary add-step-btn" data-tab-id="{{ roadmap.id }}">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
                         Add Step
                     </button>
                 </div>
-                <p class="text-xs text-base-content/40 mb-3">High-level directions for completing the game. Drag to reorder. Descriptions support markdown.</p>
+                <p class="text-xs text-base-content/40 mb-3">High-level directions for completing this section. Drag to reorder. Descriptions support markdown.</p>
 
-                <div class="steps-container space-y-3" data-tab-id="{{ tab.id }}">
-                    {# Steps rendered by JS from tabs_data_json #}
+                <div class="steps-container space-y-3" data-tab-id="{{ roadmap.id }}">
+                    {# Steps rendered by JS from the data block at the top of the page. #}
                 </div>
 
                 <div class="steps-empty-state hidden text-center py-8">
@@ -225,7 +254,7 @@
 
         {# ─── General Tips ─── #}
         <div class="general-tips-card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 transition-opacity"
-             data-tab-id="{{ tab.id }}">
+             data-tab-id="{{ roadmap.id }}">
             <div class="card-body p-3 md:p-5 lg:p-7">
                 <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1 flex-wrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
@@ -242,26 +271,26 @@
                 <p class="text-xs text-base-content/40 mb-3">Advice and things to know before starting. Supports markdown formatting.</p>
                 {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
                 <textarea class="textarea textarea-bordered w-full text-sm general-tips-input auto-resize"
-                          data-tab-id="{{ tab.id }}"
+                          data-tab-id="{{ roadmap.id }}"
                           rows="4"
-                          placeholder="General tips, advice, and things to know before starting this game...">{{ tab.general_tips }}</textarea>
+                          placeholder="General tips, advice, and things to know before starting this game...">{{ roadmap.general_tips }}</textarea>
             </div>
         </div>
 
         {# ─── YouTube Embed (publisher-only field) ─── #}
         <div class="youtube-guide-card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 transition-opacity"
-             data-tab-id="{{ tab.id }}">
+             data-tab-id="{{ roadmap.id }}">
             <div class="card-body p-3 md:p-5 lg:p-7">
                 <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1 flex-wrap">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     YouTube Guide
                     <span class="badge badge-xs badge-info font-normal" data-readonly-exempt>Publisher only</span>
                 </h2>
-                <p class="text-xs text-base-content/40 mb-3">Link the official PlatPursuit YouTube guide for this game. Reserved for publisher curation.</p>
+                <p class="text-xs text-base-content/40 mb-3">Link the official PlatPursuit YouTube guide for this section. Reserved for publisher curation.</p>
                 <input type="url"
                        class="input input-bordered w-full text-sm youtube-url-input"
-                       data-tab-id="{{ tab.id }}"
-                       value="{{ tab.youtube_url }}"
+                       data-tab-id="{{ roadmap.id }}"
+                       value="{{ roadmap.youtube_url }}"
                        placeholder="https://www.youtube.com/watch?v=...">
             </div>
         </div>
@@ -273,15 +302,14 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
                     Trophy Guides
                 </h2>
-                <p class="text-xs text-base-content/40 mb-3 trophy-guide-counter" data-tab-id="{{ tab.id }}">Individual tips for each trophy. Supports markdown.</p>
-                <div class="trophy-guides-container space-y-2" data-tab-id="{{ tab.id }}" data-group-id="{{ tab.concept_trophy_group.trophy_group_id }}">
+                <p class="text-xs text-base-content/40 mb-3 trophy-guide-counter" data-tab-id="{{ roadmap.id }}">Individual tips for each trophy. Supports markdown.</p>
+                <div class="trophy-guides-container space-y-2" data-tab-id="{{ roadmap.id }}" data-group-id="{{ roadmap.concept_trophy_group.trophy_group_id }}">
                     {# Trophy guide rows rendered by JS #}
                 </div>
             </div>
         </div>
 
     </div>
-    {% endfor %}
 </div>
 
 {# ─── Step Template (cloned by JS) ─── #}

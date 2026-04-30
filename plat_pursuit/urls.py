@@ -75,7 +75,13 @@ urlpatterns = [
     path('games/lucky/', RandomGameView.as_view(), name='random_game'),
     path('games/flagged/', FlaggedGamesView.as_view(), name='flagged_games'),
     path('games/recently-added/', RecentlyAddedView.as_view(), name='recently_added'),
+    # Editor: per-CTG. The bare /edit/ form opens the base-game roadmap;
+    # the /<group_id>/edit/ form opens a specific DLC's roadmap. Each is
+    # its own session/lock so DLC writers don't block base-game writers.
+    # Path order matters: /edit/ before /<group_id>/ so 'edit' isn't
+    # captured as a trophy_group_id.
     path('games/<str:np_communication_id>/roadmap/edit/', RoadmapEditorView.as_view(), name='roadmap_edit'),
+    path('games/<str:np_communication_id>/roadmap/<str:trophy_group_id>/edit/', RoadmapEditorView.as_view(), name='roadmap_edit_ctg'),
     path('games/<str:np_communication_id>/roadmap/', RoadmapDetailView.as_view(), name='roadmap_detail'),
     path('games/<str:np_communication_id>/roadmap/<str:trophy_group_id>/', RoadmapDetailView.as_view(), name='roadmap_detail_dlc'),
 

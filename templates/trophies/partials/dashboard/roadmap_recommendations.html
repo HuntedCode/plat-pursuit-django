@@ -36,7 +36,8 @@
                         <div class="flex-1 min-w-0">
                             <div class="font-semibold text-sm line-clamp-1 pr-1 group-hover:text-primary transition-colors mb-0.5">{{ rm.game_name }}</div>
                             <div class="text-xs text-base-content/40 flex items-center gap-2">
-                                <span>{{ rm.tab_count }} tab{{ rm.tab_count|pluralize }}</span>
+                                {# tab_count is now the count of published per-CTG roadmaps for the concept (base + each DLC). #}
+                                <span>{{ rm.tab_count }} section{{ rm.tab_count|pluralize }}</span>
                                 <span class="text-base-content/20">·</span>
                                 <span>{{ rm.step_count }} step{{ rm.step_count|pluralize }}</span>
                             </div>

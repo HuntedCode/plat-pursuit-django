@@ -532,9 +532,12 @@ class Command(BaseCommand):
         # --- Engagement (flags that reassignment has user-visible consequences) ---
         ratings_count = concept.user_ratings.count()
         reviews_count = concept.reviews.count()
-        has_roadmap = hasattr(concept, 'roadmap')
-        if ratings_count or reviews_count or has_roadmap:
-            roadmap_note = ', roadmap present' if has_roadmap else ''
+        roadmap_count = concept.roadmaps.count()
+        if ratings_count or reviews_count or roadmap_count:
+            roadmap_note = (
+                f', {roadmap_count} roadmap section{"s" if roadmap_count != 1 else ""}'
+                if roadmap_count else ''
+            )
             self.stdout.write(
                 f'  [Engaged]   {ratings_count} rating(s), {reviews_count} review(s){roadmap_note}'
             )

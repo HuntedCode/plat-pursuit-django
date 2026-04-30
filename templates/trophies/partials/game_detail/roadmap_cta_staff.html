@@ -1,13 +1,11 @@
 {% load static custom_filters humanize roadmap_tags %}
-{# Staff-only "Roadmap Workshop" CTA. Replaces the public CTA (filled or    #}
-{# empty) for any user with the writer+ role when the roadmap is NOT yet    #}
-{# published. Surfaces the operational data the writing team needs — status, #}
-{# last edit, lock state, coverage, notes — without forcing them into the   #}
-{# editor (which would acquire a lock).                                      #}
-{# Expects: ctg, game, roadmap, roadmap_workshop, request                   #}
+{# Staff-only "Roadmap Workshop" CTA. Replaces the public CTA (filled or  #}
+{# empty) for any user with the writer+ role when the roadmap for this   #}
+{# CTG is NOT yet published. Surfaces the operational data the writing   #}
+{# team needs (status, last edit, lock state, coverage, notes) without   #}
+{# forcing them into the editor (which would acquire a lock).            #}
+{# Expects: ctg, game, roadmap, workshop, request                        #}
 
-{% with workshop=roadmap_workshop %}
-{% with rdm_tab=roadmap_tabs_by_ctg|get_item:ctg.id %}
 <div class="rounded-lg border-2 border-warning/35 bg-gradient-to-br from-warning/5 via-base-200/60 to-base-200/40 shadow-md shadow-warning/5 p-3 md:p-4 lg:p-5">
 
     {# ── Header row ── #}
@@ -29,13 +27,13 @@
                 {% if workshop.has_roadmap %}
                     Last edited {{ workshop.updated_at|naturaltime }}.
                 {% else %}
-                    No one has authored this roadmap yet. Public hunters see the request flow.
+                    No one has authored this section yet. Public hunters see the request flow.
                 {% endif %}
             </p>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
-            {% roadmap_preview_button request.user roadmap game size='xs' %}
-            {% roadmap_edit_button request.user roadmap game size='xs' %}
+            {% roadmap_preview_button request.user roadmap game size='xs' ctg=ctg %}
+            {% roadmap_edit_button request.user roadmap game size='xs' ctg=ctg %}
         </div>
     </div>
 
@@ -58,43 +56,33 @@
             <span class="text-base-content/75">
                 {{ workshop.open_notes_count }} open note{{ workshop.open_notes_count|pluralize }}
                 {% if workshop.my_open_mentions %}
-                    <span class="ml-1 text-warning font-semibold">— {{ workshop.my_open_mentions }} mention{{ workshop.my_open_mentions|pluralize }} you</span>
+                    <span class="ml-1 text-warning font-semibold">- {{ workshop.my_open_mentions }} mention{{ workshop.my_open_mentions|pluralize }} you</span>
                 {% endif %}
             </span>
         </div>
         {% endif %}
 
         {# ── Coverage stats ── #}
-        {% if rdm_tab %}
-            {% for t in workshop.tabs %}
-                {% if t.ctg.id == ctg.id %}
-                <div class="rounded-md border border-base-content/10 bg-white/[0.02] p-2.5 mb-3">
-                    <div class="flex items-center justify-between gap-2 mb-1.5">
-                        <span class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">Coverage</span>
-                        <span class="text-[10px] text-base-content/45">{{ t.guide_count }} / {{ t.trophy_total }} guides written</span>
-                    </div>
-                    {% if t.trophy_total %}
-                    <div class="w-full h-1.5 rounded-full bg-base-content/10 overflow-hidden">
-                        <div class="h-full bg-warning/70 transition-all" style="width: {{ t.guide_pct }}%;"></div>
-                    </div>
-                    {% endif %}
-                    <div class="flex flex-wrap items-center gap-1.5 mt-2">
-                        <span class="badge badge-xs bg-base-content/5 border border-base-content/15 text-base-content/65">{{ t.step_count }} step{{ t.step_count|pluralize }}</span>
-                        <span class="badge badge-xs bg-base-content/5 border border-base-content/15 text-base-content/65">Metadata: {{ t.metadata_filled }}/{{ t.metadata_total }}</span>
-                        {% if t.has_general_tips %}
-                            <span class="badge badge-xs bg-success/15 text-success border border-success/30">Tips written</span>
-                        {% else %}
-                            <span class="badge badge-xs bg-base-content/5 border border-base-content/15 text-base-content/55">No tips yet</span>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-            {% endfor %}
-        {% else %}
-            <div class="rounded-md border border-dashed border-base-content/15 bg-base-content/[0.02] p-2.5 mb-3 text-xs text-base-content/55">
-                Roadmap exists but this trophy group has no tab yet. Open the editor to seed it.
+        <div class="rounded-md border border-base-content/10 bg-white/[0.02] p-2.5 mb-3">
+            <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">Coverage</span>
+                <span class="text-[10px] text-base-content/45">{{ workshop.guide_count }} / {{ workshop.trophy_total }} guides written</span>
             </div>
-        {% endif %}
+            {% if workshop.trophy_total %}
+            <div class="w-full h-1.5 rounded-full bg-base-content/10 overflow-hidden">
+                <div class="h-full bg-warning/70 transition-all" style="width: {{ workshop.guide_pct }}%;"></div>
+            </div>
+            {% endif %}
+            <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                <span class="badge badge-xs bg-base-content/5 border border-base-content/15 text-base-content/65">{{ workshop.step_count }} step{{ workshop.step_count|pluralize }}</span>
+                <span class="badge badge-xs bg-base-content/5 border border-base-content/15 text-base-content/65">Metadata: {{ workshop.metadata_filled }}/{{ workshop.metadata_total }}</span>
+                {% if workshop.has_general_tips %}
+                    <span class="badge badge-xs bg-success/15 text-success border border-success/30">Tips written</span>
+                {% else %}
+                    <span class="badge badge-xs bg-base-content/5 border border-base-content/15 text-base-content/55">No tips yet</span>
+                {% endif %}
+            </div>
+        </div>
 
         {# ── Contributors ── #}
         {% if workshop.contributors %}
@@ -107,10 +95,8 @@
         {# ── No roadmap yet (placeholder for staff) ── #}
         <div class="rounded-md border border-dashed border-base-content/15 bg-base-content/[0.02] p-3 mb-2 text-xs md:text-sm text-base-content/65">
             <p class="mb-1">We haven't started this one yet.</p>
-            <p class="text-base-content/45 text-[11px] md:text-xs">When you click <strong>Edit</strong> above we'll seed a fresh roadmap for this concept and drop you straight into the editor.</p>
+            <p class="text-base-content/45 text-[11px] md:text-xs">When you click <strong>Edit</strong> above we'll seed a fresh roadmap for this trophy group and drop you straight into the editor.</p>
         </div>
     {% endif %}
 
 </div>
-{% endwith %}
-{% endwith %}
