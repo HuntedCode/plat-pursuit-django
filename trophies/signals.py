@@ -85,6 +85,92 @@ def update_game_played_count_on_delete(sender, instance, **kwargs):
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Incremental Profile.total_<type> counter maintenance.
+#
+# Replaces the EarnedTrophy aggregate query that used to live in
+# profile_stats_service.update_profile_trophy_counts (lines 77-82). That
+# query was the same fan-out shape as the trophy.earned_count recompute
+# we extracted in step 1: per-profile-scoped, but tens of thousands of
+# rows for active hunters, multiplied by N concurrent sync_completes.
+#
+# Profile.total_trophies, total_unearned, and avg_progress are still
+# recomputed by update_profile_trophy_counts() because they depend on
+# the user's hide_hiddens / hide_zeros settings (filter changes can't
+# be caught by EarnedTrophy signals). Those queries are cheap — they
+# sum the already-denormalized ProfileGame.earned_trophies_count fields.
+#
+# The daily recalc_profile_counters cron reconciles all four type counters
+# from scratch as a drift-correction safety net.
+# ──────────────────────────────────────────────────────────────────────
+
+_TROPHY_TYPE_TO_PROFILE_FIELD = {
+    'bronze': 'total_bronzes',
+    'silver': 'total_silvers',
+    'gold': 'total_golds',
+    'platinum': 'total_plats',
+}
+
+
+def _resolve_trophy_type(instance):
+    """Read trophy type from the instance, preferring a sync-stamped attribute
+    over the FK lookup. Sync paths set `_trophy_type` on the EarnedTrophy
+    before calling save() so this signal doesn't re-issue a SELECT for the
+    Trophy row. Non-sync paths (admin actions, cascade deletes) fall back
+    to the lazy FK access."""
+    cached = getattr(instance, '_trophy_type', None)
+    if cached:
+        return cached
+    try:
+        return instance.trophy.trophy_type
+    except Exception:
+        return None
+
+
+@receiver(post_save, sender=EarnedTrophy, dispatch_uid="update_profile_type_counts_on_save")
+def update_profile_type_counts_on_save(sender, instance, created, **kwargs):
+    """Maintain Profile.total_bronzes/silvers/golds/plats on EarnedTrophy save."""
+    if created:
+        if not instance.earned:
+            return
+        type_field = _TROPHY_TYPE_TO_PROFILE_FIELD.get(_resolve_trophy_type(instance))
+        if type_field:
+            Profile.objects.filter(pk=instance.profile_id).update(
+                **{type_field: F(type_field) + 1}
+            )
+        return
+
+    prev = getattr(instance, '_previous_earned', None)
+    if prev is None:
+        return  # daily reconcile fixes drift
+
+    type_field = _TROPHY_TYPE_TO_PROFILE_FIELD.get(_resolve_trophy_type(instance))
+    if not type_field:
+        return
+
+    if prev is False and instance.earned is True:
+        Profile.objects.filter(pk=instance.profile_id).update(
+            **{type_field: F(type_field) + 1}
+        )
+    elif prev is True and instance.earned is False:
+        Profile.objects.filter(pk=instance.profile_id, **{f'{type_field}__gt': 0}).update(
+            **{type_field: F(type_field) - 1}
+        )
+
+
+@receiver(post_delete, sender=EarnedTrophy, dispatch_uid="update_profile_type_counts_on_delete")
+def update_profile_type_counts_on_delete(sender, instance, **kwargs):
+    """Decrement Profile.total_<type> when an earned row is removed."""
+    if not instance.earned:
+        return
+    type_field = _TROPHY_TYPE_TO_PROFILE_FIELD.get(_resolve_trophy_type(instance))
+    if not type_field:
+        return
+    Profile.objects.filter(pk=instance.profile_id, **{f'{type_field}__gt': 0}).update(
+        **{type_field: F(type_field) - 1}
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Profile premium transitions: keep profile showcases in sync with premium
 # tier. Runs for every path that changes user_is_premium (subscription
 # webhooks, admin toggles, management commands, shell edits).

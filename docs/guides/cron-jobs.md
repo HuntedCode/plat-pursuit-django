@@ -16,6 +16,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
+| 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
@@ -104,6 +105,17 @@ historical pass after Phase 3's rematch run.
 - **Dependencies**: None. Read-heavy; ideally runs in a low-traffic window.
 - **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
 - **Failure impact**: `Trophy.earn_rate` and `Game.played_count` get up to 24 hours stale from the daily run alone. With the incremental signal updates layered on top (see [signal-driven counter updates](../architecture/data-model.md)), values stay live in steady state and the cron acts purely as a drift-correction safety net. Rerun manually if a one-day gap is unacceptable.
+
+### recalc_profile_counters
+
+- **Schedule**: Daily, 03:30 UTC (after `recalc_earn_rates`)
+- **Command**: `python manage.py recalc_profile_counters`
+- **What it does**: Reconciles the four denormalized per-profile type counters (`Profile.total_bronzes`, `total_silvers`, `total_golds`, `total_plats`) against EarnedTrophy ground truth. Uses bulk `GROUP BY` aggregates with chunked processing (default 200 profiles/chunk) and a wall-clock budget (default 30 min).
+- **Why it exists**: Those four counters are now maintained incrementally via `EarnedTrophy` post-save / post-delete signals (see `trophies/signals.py`). The signal path catches the common case but does not catch updates that bypass it: `bulk_create` / `bulk_update` / `queryset.update()` on `EarnedTrophy`, or signal handler exceptions. This cron is the drift-correction safety net so users never see counters drifted up or down for long.
+- **Note**: `Profile.total_trophies`, `total_unearned`, and `avg_progress` are NOT recomputed here — they're filter-respecting (hide_hiddens / hide_zeros) and are recomputed on demand via `update_profile_trophy_counts()` from sync_complete and the profile settings POST.
+- **Dependencies**: None. Read-heavy; off-peak window.
+- **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
+- **Failure impact**: Type counters drift up to 24h until the next run if signals miss something. Users with active trophy hunting could see slightly off bronze/silver/gold/plat counts during that window. No user-facing breakage.
 
 ### update_shovelware
 

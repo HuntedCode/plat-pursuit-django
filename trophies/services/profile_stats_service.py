@@ -6,7 +6,7 @@ This service manages denormalized profile statistics:
 - Game counts and completion statistics
 - Average progress calculations
 """
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum
 from django.db.models.functions import Coalesce
 
 
@@ -32,35 +32,41 @@ def update_profile_games(profile):
 
 def update_profile_trophy_counts(profile):
     """
-    Update denormalized trophy counts and average progress for a profile.
+    Update filter-respecting profile totals.
 
-    This function recalculates and stores:
-    - total_trophies: Total earned trophies
-    - total_unearned: Total unearned trophies
-    - total_bronzes: Count of earned bronze trophies
-    - total_silvers: Count of earned silver trophies
-    - total_golds: Count of earned gold trophies
-    - total_plats: Count of earned platinum trophies
-    - avg_progress: Average completion percentage across all games
+    Updates:
+    - total_trophies: Sum of ProfileGame.earned_trophies_count (filtered)
+    - total_unearned: Sum of ProfileGame.unearned_trophies_count (filtered)
+    - avg_progress: Derived from the above
 
     Respects profile settings:
-    - hide_hiddens: Excludes hidden games from calculations if enabled
-    - hide_zeros: Excludes games with 0 trophies if enabled
+    - hide_hiddens: Excludes hidden games from totals
+    - hide_zeros: Excludes games with 0 trophies from totals
+
+    The four type counters (total_bronzes/silvers/golds/plats) are NOT
+    updated here — they're maintained incrementally by the EarnedTrophy
+    signals in trophies/signals.py and reconciled by the daily
+    `recalc_profile_counters` cron. They're unfiltered totals so the
+    signal-based maintenance is correct regardless of the filter toggles.
+
+    Used by:
+    - PSN sync_complete (token_keeper) — refresh totals after sync writes
+      new ProfileGame.earned_trophies_count values in Phase 1.
+    - Profile settings POST (users/views) — recompute when the user
+      toggles hide_hiddens / hide_zeros, since the filter changed.
 
     Args:
         profile: Profile instance to update
     """
-    from trophies.models import EarnedTrophy, ProfileGame
+    from trophies.models import ProfileGame
 
     trophy_totals = ProfileGame.objects.filter(profile=profile)
 
-    # Apply profile filters
     if profile.hide_hiddens:
         trophy_totals = trophy_totals.filter(user_hidden=False)
     if profile.hide_zeros:
         trophy_totals = trophy_totals.exclude(earned_trophies_count=0)
 
-    # Aggregate trophy counts from ProfileGame denormalized fields
     aggregates = trophy_totals.aggregate(
         unearned=Coalesce(Sum('unearned_trophies_count'), 0),
         earned=Coalesce(Sum('earned_trophies_count'), 0),
@@ -68,28 +74,11 @@ def update_profile_trophy_counts(profile):
 
     total_earned = aggregates['earned']
     total_unearned = aggregates['unearned']
-
-    # Calculate average progress
     total = total_earned + total_unearned
     avg_progress = (total_earned / total * 100) if total > 0 else 0.0
 
-    # Update trophy counts by type using single aggregation query
-    trophy_counts = EarnedTrophy.objects.filter(profile=profile, earned=True).aggregate(
-        bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
-        silver=Count('id', filter=Q(trophy__trophy_type='silver')),
-        gold=Count('id', filter=Q(trophy__trophy_type='gold')),
-        platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
-    )
-
     profile.total_trophies = total_earned
     profile.total_unearned = total_unearned
-    profile.total_bronzes = trophy_counts['bronze']
-    profile.total_silvers = trophy_counts['silver']
-    profile.total_golds = trophy_counts['gold']
-    profile.total_plats = trophy_counts['platinum']
     profile.avg_progress = avg_progress
 
-    profile.save(update_fields=[
-        'total_trophies', 'total_unearned', 'total_bronzes',
-        'total_silvers', 'total_golds', 'total_plats', 'avg_progress'
-    ])
+    profile.save(update_fields=['total_trophies', 'total_unearned', 'avg_progress'])

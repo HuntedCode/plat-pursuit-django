@@ -501,6 +501,10 @@ class PsnApiService:
                 "user_hidden": False,
             },
         )
+        # Stamp the trophy type so the post_save signal handlers maintaining
+        # Trophy.earned_count and Profile.total_<type> counters can read it
+        # without an extra SELECT for the Trophy row. See trophies/signals.py.
+        earned_trophy._trophy_type = trophy.trophy_type
 
         # Detect earned flip (unearned -> earned) for notification purposes
         is_earned_flip = (not created) and earned_trophy.earned == False and trophy_data.earned == True
