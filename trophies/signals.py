@@ -2,9 +2,86 @@ import logging
 from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Stage, Profile
+from trophies.models import UserBadge, UserBadgeProgress, Stage, Profile, EarnedTrophy, ProfileGame
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Incremental counter maintenance for Trophy.earned_count and
+# Game.played_count. The daily `recalc_earn_rates` cron is the source of
+# truth and reconciles drift; these signals keep the counters live in
+# steady state so users see accurate values between cron runs.
+#
+# Notes:
+# - Trophy.earn_rate (= earned_count / played_count) is NOT updated here.
+#   It's a derived value, refreshed by the daily cron. Up-to-24h-stale
+#   percentages are acceptable; updating it incrementally would require
+#   touching every trophy in a game when its played_count moves.
+# - Sync paths stamp `_previous_earned` on the EarnedTrophy instance
+#   before calling .save() so the post_save handler can detect transitions
+#   without a SELECT (the existing pre_save handler that tracks this is
+#   suppressed during sync for performance — see trophies/sync_utils.py).
+# - bulk_create / bulk_update do not fire these signals (Django default).
+#   The cron compensates for any rows touched that way.
+# ──────────────────────────────────────────────────────────────────────
+
+
+@receiver(post_save, sender=EarnedTrophy, dispatch_uid="update_trophy_earned_count_on_save")
+def update_trophy_earned_count_on_save(sender, instance, created, **kwargs):
+    """Increment/decrement Trophy.earned_count when an EarnedTrophy flips."""
+    from trophies.models import Trophy
+
+    if created:
+        if instance.earned:
+            Trophy.objects.filter(pk=instance.trophy_id).update(
+                earned_count=F('earned_count') + 1
+            )
+        return
+
+    prev = getattr(instance, '_previous_earned', None)
+    # No previous-state hint means we cannot tell what changed. Daily cron
+    # reconciliation will fix any drift; skipping here is safer than guessing.
+    if prev is None:
+        return
+
+    if prev is False and instance.earned is True:
+        Trophy.objects.filter(pk=instance.trophy_id).update(
+            earned_count=F('earned_count') + 1
+        )
+    elif prev is True and instance.earned is False:
+        Trophy.objects.filter(pk=instance.trophy_id, earned_count__gt=0).update(
+            earned_count=F('earned_count') - 1
+        )
+
+
+@receiver(post_delete, sender=EarnedTrophy, dispatch_uid="update_trophy_earned_count_on_delete")
+def update_trophy_earned_count_on_delete(sender, instance, **kwargs):
+    """Decrement Trophy.earned_count when an earned row is removed."""
+    if instance.earned:
+        from trophies.models import Trophy
+        Trophy.objects.filter(pk=instance.trophy_id, earned_count__gt=0).update(
+            earned_count=F('earned_count') - 1
+        )
+
+
+@receiver(post_save, sender=ProfileGame, dispatch_uid="update_game_played_count_on_save")
+def update_game_played_count_on_save(sender, instance, created, **kwargs):
+    """Increment Game.played_count when a profile picks up a new game."""
+    if created:
+        from trophies.models import Game
+        Game.objects.filter(pk=instance.game_id).update(
+            played_count=F('played_count') + 1
+        )
+
+
+@receiver(post_delete, sender=ProfileGame, dispatch_uid="update_game_played_count_on_delete")
+def update_game_played_count_on_delete(sender, instance, **kwargs):
+    """Decrement Game.played_count when a profile-game link is removed."""
+    from trophies.models import Game
+    Game.objects.filter(pk=instance.game_id, played_count__gt=0).update(
+        played_count=F('played_count') - 1
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────

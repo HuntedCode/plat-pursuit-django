@@ -517,6 +517,11 @@ class PsnApiService:
             )
 
         if not created:
+            # Stamp the previous earned value so the post_save signal that
+            # maintains Trophy.earned_count can detect transitions without
+            # needing the (sync-suppressed) capture_earned_trophy_previous_state
+            # pre_save handler. See trophies/signals.py for the consumer.
+            earned_trophy._previous_earned = earned_trophy.earned
             earned_trophy.earned = trophy_data.earned
             earned_trophy.trophy_hidden = trophy_data.trophy_hidden
             earned_trophy.progress = trophy_data.progress
