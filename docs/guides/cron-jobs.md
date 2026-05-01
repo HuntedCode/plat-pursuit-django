@@ -15,6 +15,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
+| 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
@@ -93,6 +94,16 @@ job replaces it; linking happens inline on every match acceptance. A
 one-shot backfill (`backfill_game_families_from_igdb`) exists for the
 historical pass after Phase 3's rematch run.
 - **Failure impact**: New cross-generation game relationships are not automatically discovered. Existing families remain intact.
+
+### recalc_earn_rates
+
+- **Schedule**: Daily, 03:00 UTC
+- **Command**: `python manage.py recalc_earn_rates`
+- **What it does**: Recomputes `Game.played_count` and `Trophy.earned_count` / `Trophy.earn_rate` site-wide using bulk `GROUP BY` aggregates. Processes games in chunks (default 200/chunk) and only `bulk_update`s rows whose values actually changed. Hard caps wall time via `--max-minutes` (default 30) so the cron can't run away.
+- **Why it exists**: These global aggregates used to be recomputed inline on every per-profile `sync_complete` job (in `psn_api_service.update_profilegame_stats`). Under concurrent sync completions that pattern fanned out into many simultaneous full-table aggregation queries, pegging DB CPU and starving the web service of capacity until containers OOM'd (May 2026 incident). Decoupling this into a single daily reconcile run was the structural fix.
+- **Dependencies**: None. Read-heavy; ideally runs in a low-traffic window.
+- **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
+- **Failure impact**: `Trophy.earn_rate` and `Game.played_count` get up to 24 hours stale from the daily run alone. With the incremental signal updates layered on top (see [signal-driven counter updates](../architecture/data-model.md)), values stay live in steady state and the cron acts purely as a drift-correction safety net. Rerun manually if a one-day gap is unacceptable.
 
 ### update_shovelware
 

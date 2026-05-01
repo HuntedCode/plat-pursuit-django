@@ -650,64 +650,18 @@ class PsnApiService:
             logger.info(f"Updated batch of {len(batch)} ProfileGames.")
         logger.info(f"Updated {total_pgs} ProfileGames.")
 
-        unique_game_ids = sorted(unique_game_ids)
-        total_games = len(unique_game_ids)
-
-        # Bulk-read aggregated stats (read-only queries, no row locks).
-        played_counts = dict(
-            ProfileGame.objects.filter(game_id__in=unique_game_ids)
-            .values('game_id').annotate(cnt=Count('id'))
-            .values_list('game_id', 'cnt')
-        )
-        earned_counts = dict(
-            EarnedTrophy.objects.filter(trophy__game_id__in=unique_game_ids, earned=True)
-            .values('trophy_id').annotate(cnt=Count('id'))
-            .values_list('trophy_id', 'cnt')
-        )
-        all_trophies = list(
-            Trophy.objects.filter(game_id__in=unique_game_ids)
-            .only('id', 'game_id', 'earned_count', 'earn_rate')
-        )
-
-        # Group trophies by game_id for per-game processing.
-        trophies_by_game = defaultdict(list)
-        for t in all_trophies:
-            trophies_by_game[t.game_id].append(t)
-
-        # Per-game updates: each bulk_update touches only one game's trophies
-        # (~20-50 rows), making deadlocks impossible since Trophy rows are
-        # unique per game and concurrent calls for different profiles can't
-        # overlap on the same game's trophies.
-        games_to_update = []
-        total_trophies_updated = 0
-        for game_id in unique_game_ids:
-            pc = played_counts.get(game_id, 0)
-            games_to_update.append((game_id, pc))
-
-            changed = []
-            for trophy in trophies_by_game.get(game_id, []):
-                ec = earned_counts.get(trophy.id, 0)
-                er = ec / pc if pc > 0 else 0.0
-                if trophy.earned_count != ec or trophy.earn_rate != er:
-                    trophy.earned_count = ec
-                    trophy.earn_rate = er
-                    changed.append(trophy)
-            if changed:
-                Trophy.objects.bulk_update(changed, ['earned_count', 'earn_rate'])
-                total_trophies_updated += len(changed)
-
-        # Game.played_count: batch update (single table, no cross-table lock risk).
-        for i in range(0, len(games_to_update), batch_size):
-            batch = games_to_update[i:i + batch_size]
-            game_objs = []
-            for game_id, pc in batch:
-                g = Game(id=game_id, played_count=pc)
-                game_objs.append(g)
-            Game.objects.bulk_update(game_objs, ['played_count'])
-        logger.info(f"Updated {total_trophies_updated} Trophies.")
+        # NOTE: Trophy.earned_count / earn_rate / Game.played_count used to be
+        # recomputed inline here on every sync_complete. Under concurrent
+        # sync_completes, those global GROUP BY queries fanned out into
+        # massive contention and pegged DB CPU until the web container OOM'd
+        # (May 2026 incident). Those aggregates are global stats that don't
+        # need real-time updates per-profile — they're now reconciled by the
+        # daily `recalc_earn_rates` cron, with incremental signal updates
+        # keeping them live between cron runs. See
+        # docs/guides/cron-jobs.md#recalc_earn_rates.
 
         duration = time.time() - start_time
-        logger.info(f"Completed stats update for {len(profilegame_ids)} ProfileGames ({total_games} unique games) in {duration:.2f}s")
+        logger.info(f"Completed per-profile stats update for {len(profilegame_ids)} ProfileGames in {duration:.2f}s")
             
     
     @classmethod
