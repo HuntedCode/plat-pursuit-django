@@ -2179,12 +2179,25 @@ class TokenKeeper:
                 logger.exception(f"Exception recovery also failed for {game.title_name} (Title ID {title_id.title_id}): {recovery_err}")
 
     def _try_igdb_enrich(self, concept):
-        """Best-effort IGDB enrichment for a newly created concept."""
+        """Best-effort IGDB enrichment for a newly created concept.
+
+        On miss, write a `no_match` marker so the concept is not silently
+        skipped by future default enrichment passes. The weekly retry cron
+        (`enrich_from_igdb --missing-or-no-match`) re-attempts these later.
+        """
+        from trophies.services.igdb_service import IGDBService
         try:
-            from trophies.services.igdb_service import IGDBService
-            IGDBService.enrich_concept(concept)
+            match = IGDBService.enrich_concept(concept)
         except Exception:
             logger.exception(f"IGDB enrichment failed for concept {concept.concept_id}")
+            return
+        if match is None:
+            try:
+                IGDBService.record_no_match(concept)
+            except Exception:
+                logger.exception(
+                    f"Failed to record no_match marker for concept {concept.concept_id}"
+                )
 
     @staticmethod
     def _pending_igdb_enrich_key(profile_id) -> str:
