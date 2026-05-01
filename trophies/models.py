@@ -693,6 +693,19 @@ class Game(models.Model):
         if not self.title_platform:
             return 'Unknown'
         return ', '.join(self.title_platform)
+
+    @property
+    def controller_icon_set(self):
+        """Which controller-icon asset set to render in roadmap markdown.
+
+        Returns 'ps5' if the game ships on PS5, otherwise 'ps4' (covers PS4,
+        PS3, Vita, and missing-platform fallbacks). Only the system-button
+        glyphs (Share/Create, Options, Touchpad) actually differ between sets;
+        face buttons, D-pad, triggers, and sticks are shared.
+        """
+        if self.title_platform and 'PS5' in self.title_platform:
+            return 'ps5'
+        return 'ps4'
     
     @property
     def regions_display(self):

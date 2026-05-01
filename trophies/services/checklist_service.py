@@ -8,6 +8,8 @@ import re
 import bleach
 import markdown2
 
+from trophies.util_modules.controller_icons import render_shortcodes
+
 MARKDOWN_EXTRAS = [
     'strike',
     'fenced-code-blocks',
@@ -36,14 +38,24 @@ class ChecklistService:
     ALLOWED_HTML_ATTRS = ALLOWED_HTML_ATTRS
 
     @staticmethod
-    def process_markdown(text):
-        """Process markdown text to HTML with sanitization."""
+    def process_markdown(text, icon_set='ps4'):
+        """Process markdown text to HTML with sanitization.
+
+        ``icon_set`` selects the PlayStation controller-icon variant for
+        ``:shortcode:`` tokens (``'ps4'`` or ``'ps5'``). Pass the value of
+        ``Game.controller_icon_set`` from the calling context so glyphs match
+        the game's hardware.
+        """
         if not text or not text.strip():
             return ''
 
         try:
             # Pre-process: Convert __text__ to <u>text</u> for underline
             text = re.sub(r'(?<![_\w])__([^_\n]+?)__(?![_\w])', r'<u>\1</u>', text)
+
+            # Replace controller-icon shortcodes (:square:, :l2:, etc.) before
+            # markdown processing so the injected <img> survives untouched.
+            text = render_shortcodes(text, icon_set=icon_set)
 
             html_output = markdown2.markdown(text, extras=MARKDOWN_EXTRAS)
 
@@ -53,6 +65,19 @@ class ChecklistService:
                 attributes=ALLOWED_HTML_ATTRS,
                 protocols=['http', 'https'],
                 strip=True
+            )
+
+            # Loose-list fix: markdown2 wraps every item of a list in <p> when
+            # any blank line appears between items. With list-inside styling +
+            # paragraph margin, that strands the bullet on a line above its text.
+            # Strip the wrapper for single-paragraph items; the tempered inner
+            # group refuses to match across <p>/</p> so multi-paragraph items
+            # are left untouched.
+            clean_html = re.sub(
+                r'<li>\s*<p>((?:(?!<p>|</p>).)*)</p>\s*</li>',
+                r'<li>\1</li>',
+                clean_html,
+                flags=re.DOTALL,
             )
 
             # Style links: external get target="_blank", internal anchors stay on-page
@@ -77,8 +102,11 @@ class ChecklistService:
             clean_html = re.sub(r'<ul>', r'<ul class="list-disc list-inside ml-4 my-2 space-y-1">', clean_html)
             clean_html = re.sub(r'<ol>', r'<ol class="list-decimal list-inside ml-4 my-2 space-y-1">', clean_html)
             clean_html = re.sub(r'<p>', r'<p class="my-2">', clean_html)
+            # Style large content images, but skip <img> that already carry a
+            # class attribute (controller-icon shortcodes ship with class="ps-icon"
+            # and would break with a duplicate class attribute).
             clean_html = re.sub(
-                r'<img ',
+                r'<img (?![^>]*class=)',
                 r'<img class="rounded-lg border border-base-content/10 max-w-full md:max-w-[75%] h-auto my-3 mx-auto block" ',
                 clean_html
             )

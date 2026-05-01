@@ -1709,6 +1709,19 @@ html {
 .trophy-mention[data-trophy-type="silver"]   { --trophy-mention-color: #9ca3af; }
 .trophy-mention[data-trophy-type="bronze"]   { --trophy-mention-color: var(--color-accent); }
 
+/* PlayStation controller-icon shortcodes (e.g. :square:, :l2:) rendered inline
+   with surrounding text. Sized to read as a glyph alongside letters, not as a
+   chunky illustration. The Kenney SVGs have ~12% internal padding inside their
+   64x64 viewBox, so a 1em height puts the visible button at roughly cap-height. */
+.ps-icon {
+  display: inline-block;
+  height: 1.25em;
+  width: auto;
+  vertical-align: -0.25em;
+  margin: 0;
+  user-select: none;
+}
+
 /* Scroll indicator bounce */
 @keyframes scroll-bounce {
   0%, 100% { transform: translateY(0); opacity: 0.5; }

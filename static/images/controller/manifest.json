@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "label": "Face Buttons",
+      "shortcodes": ["square", "triangle", "circle", "cross"]
+    },
+    {
+      "label": "D-Pad",
+      "shortcodes": ["dpad", "dpad-up", "dpad-down", "dpad-left", "dpad-right"]
+    },
+    {
+      "label": "Shoulders & Triggers",
+      "shortcodes": ["l1", "l2", "r1", "r2", "l3", "r3"]
+    },
+    {
+      "label": "Analog Sticks",
+      "shortcodes": ["lstick", "rstick"]
+    },
+    {
+      "label": "System",
+      "shortcodes": ["options", "share", "touchpad", "create", "mute"]
+    }
+  ],
+  "shortcodes": {
+    "square":     {"label": "Square",         "set": "shared"},
+    "triangle":   {"label": "Triangle",       "set": "shared"},
+    "circle":     {"label": "Circle",         "set": "shared"},
+    "cross":      {"label": "Cross (X)",      "set": "shared"},
+    "dpad":       {"label": "D-Pad",          "set": "shared"},
+    "dpad-up":    {"label": "D-Pad Up",       "set": "shared"},
+    "dpad-down":  {"label": "D-Pad Down",     "set": "shared"},
+    "dpad-left":  {"label": "D-Pad Left",     "set": "shared"},
+    "dpad-right": {"label": "D-Pad Right",    "set": "shared"},
+    "l1":         {"label": "L1",             "set": "shared"},
+    "l2":         {"label": "L2",             "set": "shared"},
+    "l3":         {"label": "L3",             "set": "shared"},
+    "r1":         {"label": "R1",             "set": "shared"},
+    "r2":         {"label": "R2",             "set": "shared"},
+    "r3":         {"label": "R3",             "set": "shared"},
+    "lstick":     {"label": "Left Stick",     "set": "shared"},
+    "rstick":     {"label": "Right Stick",    "set": "shared"},
+    "options":    {"label": "Options",        "set": "platform"},
+    "share":      {"label": "Share / Create", "set": "platform"},
+    "touchpad":   {"label": "Touchpad",       "set": "platform"},
+    "create":     {"label": "Create (PS5)",   "set": "shared"},
+    "mute":       {"label": "Mute (PS5)",     "set": "shared"}
+  },
+  "aliases": {
+    "x":           "cross",
+    "o":           "circle",
+    "left-stick":  "lstick",
+    "right-stick": "rstick",
+    "up":          "dpad-up",
+    "down":        "dpad-down",
+    "left":        "dpad-left",
+    "right":       "dpad-right"
+  }
+}

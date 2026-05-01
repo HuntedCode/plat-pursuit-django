@@ -19,7 +19,8 @@
      data-author-role="{{ author_role }}"
      data-author-can-delete="{{ author_can_delete|yesno:'true,false' }}"
      data-author-can-publish="{{ author_can_publish|yesno:'true,false' }}"
-     data-viewer-profile-id="{{ viewer_profile_id }}">
+     data-viewer-profile-id="{{ viewer_profile_id }}"
+     data-controller-icon-set="{{ game.controller_icon_set }}">
 
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
@@ -609,4 +610,5 @@
 {% block js_scripts %}
 <script src="{% static 'js/roadmap_editor.js' %}"></script>
 <script src="{% static 'js/roadmap_notes.js' %}"></script>
+<script src="{% static 'js/controller_icons.js' %}"></script>
 {% endblock %}
