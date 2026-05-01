@@ -17,6 +17,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
+| Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
 | Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
 | Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
@@ -112,6 +113,15 @@ historical pass after Phase 3's rematch run.
 - **Idempotency**: Fully safe to re-run. The `CommunityTrophyDay.posted_at` field gates against double-posts. Use `--force-repost` to override (e.g., after editing a row in the admin to fix a bad post). Use `--dry-run` to preview the embed JSON without writing to the DB or posting.
 - **Failure impact**: That day's tracker post is skipped. The data is reconstructable any time later by running `python manage.py post_community_trophy_tracker --date=YYYY-MM-DD`. Records are not lost (they're computed from stored rows on every post).
 
+### enrich_from_igdb (weekly retry)
+
+- **Schedule**: Weekly, Saturday 09:00 UTC
+- **Command**: `python manage.py enrich_from_igdb --missing-or-no-match --max-minutes 60`
+- **What it does**: Re-runs the IGDB matching pipeline against the union of (a) concepts that have no IGDBMatch row at all and (b) concepts whose IGDBMatch row is `status='no_match'`. Oldest first by `IGDBMatch.last_synced_at` (NULLS FIRST), so concepts that were never attempted process before stale `no_match` rows. The `--max-minutes 60` cap exits the loop cleanly after 60 minutes regardless of remaining backlog, keeping Render billing predictable. New games not yet in IGDB on first sync get re-attempted on every weekly run until they appear and match. See [IGDB Integration](../architecture/igdb-integration.md#management-commands) for the full flag inventory.
+- **Dependencies**: None. Pure IGDB work, no PSN dependency. Shares the distributed Redis rate limiter (3 req/sec) with any inline sync-time enrichment running concurrently.
+- **Idempotency**: Fully safe to re-run. Successful matches are written via `process_match`; failed matches go through `record_no_match`, which refuses to overwrite any non-`no_match` status. Re-running mid-week (e.g., manually via web shell) only refreshes `last_synced_at` on already-tried concepts.
+- **Failure impact**: The `no_match` backlog grows. No user-facing impact until the backlog gets stale enough that recently-released games take longer to enrich after their IGDB entry appears. A skipped week can be recovered by manually running the same command (no `--max-minutes` if you want to drain the full queue).
+
 ### cleanup_old_analytics
 
 - **Schedule**: Weekly (recommended)
@@ -193,7 +203,8 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
                         post_community_trophy_tracker (16:30 + 17:30 UTC, DST safety net)
 
 
-    WEEKLY ─────────── cleanup_old_analytics --force       [Sunday]
+    WEEKLY ─────────── enrich_from_igdb --missing-or-no-match --max-minutes 60  [Saturday 09:00 UTC]
+                        cleanup_old_analytics --force       [Sunday]
                         send_weekly_digest                  [Monday 08:00 UTC]
 
 

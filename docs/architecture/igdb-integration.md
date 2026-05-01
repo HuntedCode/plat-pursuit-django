@@ -254,7 +254,7 @@ Idempotence: re-running the command against the same auto-accepted pool refreshe
 In `token_keeper.py`, when `_job_sync_title_id` creates a NEW concept (either via `PsnApiService.create_concept_from_details()` or as a stub default concept), enrichment is **deferred** to the end of the sync rather than fired inline.
 
 1. `_defer_igdb_enrich(profile_id, concept)` adds `concept.id` to a per-profile Redis set: `profile:{profile_id}:pending_igdb_enrich` (TTL 6h as a crash safety net).
-2. `_job_sync_complete` drains the set at its `igdb_enrich` phase (runs before the health check) and calls `IGDBService.enrich_concept(concept)` for each queued concept.
+2. `_job_sync_complete` drains the set at its `igdb_enrich` phase (runs before the health check) and calls `IGDBService.enrich_concept(concept)` for each queued concept via `_try_igdb_enrich`. When matching returns no result, `_try_igdb_enrich` calls `IGDBService.record_no_match(concept)` so the concept is recorded as `no_match` rather than left without any IGDBMatch row. This keeps sync-side enrichment symmetric with the management-command path and ensures the weekly retry cron (`enrich_from_igdb --missing-or-no-match`) can find these concepts on later runs.
 
 The deferral matters for concepts that end up with multiple sibling Games attached during a single sync: the Phase 2 matching pipeline's `_pick_search_title` needs the full game set in memory to distinguish a single-game concept from a multi-game compilation. Firing enrichment inline after only the first Game was attached produced misleading matches on bundle concepts.
 
@@ -262,7 +262,7 @@ Properties:
 - Only fires for newly created concepts (not existing ones).
 - Fires for all concepts including `PP_` stubs. Stubs benefit the most from IGDB enrichment because they lack PSN-side metadata.
 - If Redis is unreachable, `_defer_igdb_enrich` falls back to inline `_try_igdb_enrich` so enrichment still happens.
-- If `_job_sync_complete` never fires (sync crashed), the default `python manage.py enrich_from_igdb` cron pass picks up the concepts on its next run — no recovery path needed.
+- If `_job_sync_complete` never fires (sync crashed), the weekly `enrich_from_igdb --missing-or-no-match` cron picks up any concepts left without an IGDBMatch row.
 
 ## Integration Points
 
@@ -294,6 +294,8 @@ Properties:
 - **Raw response storage**: The `raw_response` JSONField stores the full IGDB API response (5-20KB per game). Tier 2 data can be parsed later without re-querying.
 - **no_match never overwrites real matches**: `IGDBService.record_no_match()` checks for an existing IGDBMatch first and bails if its status is anything other than `no_match`. This means if `--all` is run and a previously-accepted concept temporarily fails to match (transient IGDB hiccup), the accepted row is preserved. The summary still counts it as `no_match` since the matcher returned nothing, but the DB is left untouched.
 
+- **Sync-side enrichment writes `no_match` markers too**: `_try_igdb_enrich` in `token_keeper.py` calls `record_no_match()` whenever `enrich_concept()` returns None. Before this was added, sync-time miss-matches left concepts with no IGDBMatch row at all, which caused them to be picked up repeatedly by the default `enrich_from_igdb` queryset on every manual run. Now they get a `no_match` marker on first attempt and are only re-tried by the weekly `--missing-or-no-match` cron (or an explicit `--retry-no-match`).
+
 ## Management Commands
 
 | Command | Purpose | Typical Usage |
@@ -301,7 +303,9 @@ Properties:
 | `enrich_from_igdb` (default) | Enrich concepts without any IGDBMatch row (skips `no_match` markers) | `python manage.py enrich_from_igdb` |
 | `enrich_from_igdb --concept-id X` | Enrich a single concept | `python manage.py enrich_from_igdb --concept-id 12345` |
 | `enrich_from_igdb --refresh` | Re-fetch IGDB data for all accepted matches | `python manage.py enrich_from_igdb --refresh` |
-| `enrich_from_igdb --retry-no-match` | Re-run matching against concepts previously recorded as `no_match` | `python manage.py enrich_from_igdb --retry-no-match` |
+| `enrich_from_igdb --retry-no-match` | Re-run matching against concepts previously recorded as `no_match`, oldest first by `last_synced_at` | `python manage.py enrich_from_igdb --retry-no-match` |
+| `enrich_from_igdb --missing-or-no-match` | Re-run matching against the union of concepts with no IGDBMatch row plus concepts marked `no_match`, oldest first (NULLS FIRST). Used by the weekly retry cron. | `python manage.py enrich_from_igdb --missing-or-no-match --max-minutes 60` |
+| `enrich_from_igdb --max-minutes N` | Hard runtime cap. Loop exits cleanly with a partial summary once N minutes have elapsed. Pairs with `--missing-or-no-match` for predictable Render cron billing. | `python manage.py enrich_from_igdb --missing-or-no-match --max-minutes 60` |
 | `enrich_from_igdb --search "query"` | Search IGDB and display results | `python manage.py enrich_from_igdb --search "Batman Arkham Knight"` |
 | `enrich_from_igdb --manual ID --concept-id X` | Manually assign an IGDB game | `python manage.py enrich_from_igdb --concept-id 200472 --manual 5503` |
 | `enrich_from_igdb --review` | Show pending matches with alternatives | `python manage.py enrich_from_igdb --review` |
