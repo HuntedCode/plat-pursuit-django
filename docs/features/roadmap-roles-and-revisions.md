@@ -75,7 +75,8 @@ enforced by the merge service. The constants live in
 |---|---|
 | `RoadmapStep`, `TrophyGuide` content (title, body, etc.) | writer-if-owner / editor-or-higher |
 | `RoadmapTab.general_tips` | writer-if-tab-owner / editor-or-higher (`WRITER_TAB_FIELDS`) |
-| `RoadmapTab` metadata (difficulty, estimated_hours, missable_count, online_required, min_playthroughs) | editor-or-higher (`EDITOR_TAB_FIELDS`) |
+| `RoadmapTab` metadata (difficulty, estimated_hours, min_playthroughs) | editor-or-higher (`EDITOR_TAB_FIELDS`) |
+| `RoadmapTab.missable_count`, `online_required` | not editable — derived from per-trophy `is_missable` / `is_online` flags |
 | `RoadmapTab.youtube_url` | publisher-only (`PUBLISHER_TAB_FIELDS`) — reserved for curated official PlatPursuit YouTube guides |
 | `Roadmap.status` | publisher-only |
 
@@ -87,8 +88,9 @@ A "section" is a `RoadmapStep` or `TrophyGuide` (both carry a `created_by`
 that the writer-scoping rule keys off of). Tabs are auto-created from
 `ConceptTrophyGroup` and follow the same first-author-wins rule for content
 fields (`general_tips`, `youtube_url`); tab metadata fields (`difficulty`,
-`estimated_hours`, `missable_count`, `online_required`, `min_playthroughs`)
-are editor+ only.
+`estimated_hours`, `min_playthroughs`) are editor+ only. `missable_count`
+and `online_required` are derived from per-trophy flags and not directly
+editable.
 
 ## File Map
 

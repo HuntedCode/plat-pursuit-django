@@ -285,18 +285,39 @@
                 }
                 let guide = tab.trophy_guides.find(g => g.trophy_id === trophyId);
                 const incomingBody = body.body || '';
+                const incomingPhase = (body.phase || '').trim();
                 // Empty body deletes the guide UNLESS it carries gallery
-                // images (galleries are independent of body text and shouldn't
-                // disappear because the writer cleared the prose).
+                // images OR a phase tag (both are independent of body text and
+                // shouldn't disappear because the writer cleared the prose,
+                // or chose to tag a trophy without writing notes for it yet).
                 if (!incomingBody.trim()) {
                     const hasGallery = guide && Array.isArray(guide.gallery_images) && guide.gallery_images.length > 0;
-                    if (guide && !hasGallery) {
+                    const keepForPhase = !!incomingPhase || (guide && guide.phase);
+                    if (guide && !hasGallery && !keepForPhase) {
                         tab.trophy_guides = tab.trophy_guides.filter(g => g.trophy_id !== trophyId);
                         this.schedulePush();
                         return null;
                     }
+                    if (!guide && incomingPhase) {
+                        // Phase-only first save: create a stub guide with no body.
+                        guide = {
+                            id: this.nextId(),
+                            trophy_id: trophyId,
+                            body: '',
+                            order: tab.trophy_guides.length,
+                            is_missable: false,
+                            is_online: false,
+                            is_unobtainable: false,
+                            phase: '',
+                            gallery_images: [],
+                            created_by_id: viewerProfileId,
+                            last_edited_by_id: viewerProfileId,
+                        };
+                        tab.trophy_guides.push(guide);
+                    }
                     if (guide) {
                         guide.body = '';
+                        if ('phase' in body) guide.phase = incomingPhase;
                         this.schedulePush();
                     }
                     return null;
@@ -310,6 +331,7 @@
                         is_missable: false,
                         is_online: false,
                         is_unobtainable: false,
+                        phase: '',
                         gallery_images: [],
                         // Stamp viewer as owner client-side; server re-stamps on merge.
                         created_by_id: viewerProfileId,
@@ -321,6 +343,7 @@
                 if ('is_missable' in body) guide.is_missable = !!body.is_missable;
                 if ('is_online' in body) guide.is_online = !!body.is_online;
                 if ('is_unobtainable' in body) guide.is_unobtainable = !!body.is_unobtainable;
+                if ('phase' in body) guide.phase = incomingPhase;
                 this.schedulePush();
                 return {
                     trophy_id: guide.trophy_id, body: guide.body,
@@ -754,8 +777,6 @@
             existing.youtube_url = branchTab.youtube_url || '';
             existing.difficulty = branchTab.difficulty;
             existing.estimated_hours = branchTab.estimated_hours;
-            existing.missable_count = branchTab.missable_count;
-            existing.online_required = branchTab.online_required;
             existing.min_playthroughs = branchTab.min_playthroughs;
             existing.created_by_id = branchTab.created_by_id;
             existing.last_edited_by_id = branchTab.last_edited_by_id;
@@ -782,6 +803,7 @@
                     is_missable: !!tg.is_missable,
                     is_online: !!tg.is_online,
                     is_unobtainable: !!tg.is_unobtainable,
+                    phase: tg.phase || '',
                     gallery_images: Array.isArray(tg.gallery_images) ? tg.gallery_images.slice() : [],
                     created_by_id: tg.created_by_id,
                     last_edited_by_id: tg.last_edited_by_id,
@@ -870,7 +892,7 @@
 
         if (!canEdit) {
             rowEl.classList.add('opacity-60');
-            rowEl.querySelectorAll('input, textarea, button').forEach(el => {
+            rowEl.querySelectorAll('input, textarea, button, select').forEach(el => {
                 if (el.closest('[data-readonly-exempt]')) return;
                 el.disabled = true;
             });
@@ -1047,6 +1069,13 @@
             icon.alt = t.name;
 
             item.querySelector('.trophy-picker-name').textContent = t.name;
+
+            // Trophy description under the name, hidden when empty.
+            const pickerDetail = item.querySelector('.trophy-picker-detail');
+            if (pickerDetail && t.detail) {
+                pickerDetail.textContent = t.detail;
+                pickerDetail.style.display = '';
+            }
 
             const typeBadge = item.querySelector('.trophy-picker-type');
             typeBadge.textContent = t.type;
@@ -1307,12 +1336,6 @@
                 const val = tab[field];
                 if (val !== null && val !== undefined) input.value = val;
             });
-            document.querySelectorAll(`.metadata-toggle[data-tab-id="${tab.id}"]`).forEach(toggle => {
-                const field = toggle.dataset.field;
-                toggle.checked = !!tab[field];
-                const label = toggle.closest('label')?.querySelector('.online-required-label');
-                if (label) label.textContent = toggle.checked ? 'Yes' : 'No';
-            });
         });
 
         // Debounced save for number inputs
@@ -1331,25 +1354,12 @@
             });
         });
 
-        // Immediate save for toggle
-        document.querySelectorAll('.metadata-toggle').forEach(toggle => {
-            const tabId = parseInt(toggle.dataset.tabId, 10);
-            const field = toggle.dataset.field;
-
-            toggle.addEventListener('change', async () => {
-                const label = toggle.closest('label')?.querySelector('.online-required-label');
-                if (label) label.textContent = toggle.checked ? 'Yes' : 'No';
-                const body = {};
-                body[field] = toggle.checked;
-                await apiCall('patch', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/`, body);
-            });
-        });
-
         // Editor-only gate. Tab metadata fields (difficulty, estimated_hours,
-        // missable_count, online_required, min_playthroughs) are gated to
-        // editor+ on the server. Surface that to writers by disabling the
-        // inputs and toning down the card so they aren't confused about why
-        // saves on these fields fail.
+        // min_playthroughs) are gated to editor+ on the server. Surface that
+        // to writers by disabling the inputs and toning down the card so they
+        // aren't confused about why saves on these fields fail. (Missable
+        // count and online-required are no longer fields here — they're
+        // derived from per-trophy flags.)
         if (!canDelete) {
             document.querySelectorAll('.guide-metadata-card').forEach(card => {
                 card.classList.add('opacity-60');
@@ -1390,6 +1400,16 @@
 
             el.querySelector('.trophy-guide-name').textContent = t.name;
 
+            // PSN trophy description, shown muted under the name so writers
+            // can scan their list and identify the trophy without expanding.
+            // Default style="display:none" on the span; clear it when we have
+            // text. Inline style trumps Tailwind class cascade unconditionally.
+            const detailEl = el.querySelector('.trophy-guide-detail');
+            if (detailEl && t.detail) {
+                detailEl.textContent = t.detail;
+                detailEl.style.display = '';
+            }
+
             const typeBadge = el.querySelector('.trophy-guide-type');
             typeBadge.textContent = t.type;
             typeBadge.classList.add(TROPHY_TYPE_COLORS[t.type] || 'badge-ghost');
@@ -1408,6 +1428,24 @@
                     cb.checked = true;
                 }
             });
+
+            // Load phase select. Platinum trophies don't get a phase — they
+            // auto-pop when everything else is earned and render in their own
+            // pinned section at the top of the published view. Hide the phase
+            // controls on platinum rows and surface the small inline note.
+            const phaseSelect = el.querySelector('.trophy-guide-phase');
+            const isPlatinumRow = t.type === 'platinum';
+            if (isPlatinumRow) {
+                const phaseControls = el.querySelector('.phase-controls');
+                if (phaseControls) phaseControls.classList.add('hidden');
+                const platinumNote = el.querySelector('.platinum-phase-note');
+                if (platinumNote) {
+                    platinumNote.classList.remove('hidden');
+                    platinumNote.classList.add('inline-flex');
+                }
+            } else if (phaseSelect && typeof guideData === 'object' && guideData.phase) {
+                phaseSelect.value = guideData.phase;
+            }
 
             if (body) {
                 statusBadge.textContent = 'Written';
@@ -1432,16 +1470,18 @@
             const debouncedSave = debounce(async () => {
                 const currentBody = textarea.value;
                 const flags = getFlags();
+                const phase = phaseSelect ? phaseSelect.value : '';
                 await apiCall('put', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/trophy-guides/${t.trophy_id}/`, {
                     body: currentBody,
+                    phase: phase,
                     ...flags,
                 });
 
                 // Update status badge and local state
                 const tabData = tabsData.find(td => td.id === tabId);
                 if (tabData) {
-                    if (currentBody.trim()) {
-                        tabData.trophy_guides[t.trophy_id] = { body: currentBody, ...flags };
+                    if (currentBody.trim() || phase) {
+                        tabData.trophy_guides[t.trophy_id] = { body: currentBody, phase, ...flags };
                     } else {
                         delete tabData.trophy_guides[t.trophy_id];
                     }
@@ -1467,6 +1507,13 @@
                     debouncedSave();
                 });
             });
+
+            if (phaseSelect && !isPlatinumRow) {
+                phaseSelect.addEventListener('change', () => {
+                    setSaveStatus('unsaved');
+                    debouncedSave();
+                });
+            }
 
             // Render ownership badge + apply writer-scoping read-only state.
             // Editors and publishers bypass; writers may only edit their own

@@ -68,7 +68,7 @@
                         </li>
                         {% for guide in guides %}
                             {% with trophy=roadmap_trophies|get_item:guide.trophy_id %}
-                        <li class="toc-trophy-entry" data-trophy-name="{% if trophy %}{{ trophy.trophy_name|lower }}{% endif %}">
+                        <li class="toc-trophy-entry" data-trophy-id="{{ guide.trophy_id }}" data-trophy-name="{% if trophy %}{{ trophy.trophy_name|lower }}{% endif %}">
                             <a href="#trophy-guide-{{ guide.trophy_id }}" data-toc-link class="flex items-center gap-1.5 text-xs py-0.5 px-1.5 rounded text-base-content/40 hover:text-base-content hover:bg-white/[0.04] transition-colors"
                                title="{{ trophy.trophy_name }}">
                                 {% if trophy %}

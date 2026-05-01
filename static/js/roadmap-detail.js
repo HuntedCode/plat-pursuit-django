@@ -163,6 +163,21 @@
                     const name = entry.dataset.trophyName || '';
                     entry.style.display = !query || name.includes(query) ? '' : 'none';
                 });
+
+                // Hide phase headers whose entries are all filtered out by
+                // the search; otherwise empty phase chips would float around.
+                // Walk siblings between each header and the next, count matches.
+                list.querySelectorAll('.toc-phase-header').forEach(header => {
+                    let next = header.nextElementSibling;
+                    let visibleCount = 0;
+                    while (next && !next.classList.contains('toc-phase-header')) {
+                        if (next.classList.contains('toc-trophy-entry') && next.style.display !== 'none') {
+                            visibleCount += 1;
+                        }
+                        next = next.nextElementSibling;
+                    }
+                    header.style.display = (query && visibleCount === 0) ? 'none' : '';
+                });
             });
         });
     }
@@ -317,10 +332,231 @@
         // Track active flag filter (only one at a time, toggle off to clear)
         let activeFlag = null;
 
+        // Phase metadata for grouped sort (label, emoji, order). Optional —
+        // grouped sort just falls back to default if not present.
+        const phasesRaw = JSON.parse(document.getElementById('roadmap-trophy-phases')?.textContent || '[]');
+        const phaseMeta = {};
+        const phaseOrder = {};
+        phasesRaw.forEach((p, idx) => {
+            phaseMeta[p.key] = p;
+            phaseOrder[p.key] = idx;
+        });
+        // Untagged trophies sort to the end under an "Other" header.
+        phaseOrder[''] = phasesRaw.length;
+
+        function clearPhaseHeaders() {
+            list.querySelectorAll('.phase-section-header').forEach(h => h.remove());
+        }
+
+        // Persistent collapse state for TOC phase sections, keyed by phase key
+        // (e.g. 'story', 'challenge', 'platinum'). Survives across re-renders
+        // triggered by filter changes so toggling a flag doesn't expand
+        // sections the user already collapsed.
+        const collapsedPhases = new Set();
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => (
+                {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+            ));
+        }
+
+        // Apply current collapse state to a TOC ul: rotate chevrons, hide
+        // entries between a collapsed header and the next header.
+        function applyTOCCollapseState(tocUl) {
+            tocUl.querySelectorAll('.toc-phase-header').forEach(header => {
+                const phaseKey = header.dataset.phaseKey;
+                const collapsed = collapsedPhases.has(phaseKey);
+                const chevron = header.querySelector('.toc-phase-chevron');
+                if (chevron) chevron.classList.toggle('-rotate-90', collapsed);
+                let next = header.nextElementSibling;
+                while (next && !next.classList.contains('toc-phase-header')) {
+                    next.classList.toggle('toc-phase-collapsed', collapsed);
+                    next = next.nextElementSibling;
+                }
+            });
+        }
+
+        // Mirror the main list's order + visibility into both TOCs (sidebar +
+        // mobile). Authors expect the table of contents to reflect what
+        // they're actually seeing — when phase grouping reorders trophies or
+        // a flag filter hides half of them, the TOC moves in lockstep.
+        // The TOC search input uses inline style.display so its overrides
+        // remain compatible with the .hidden class we toggle here.
+        // For phase-grouped sort, headers render as small text rows that
+        // collapse their group on click.
+        function syncTOCFromList() {
+            const sequence = [];
+            Array.from(list.children).forEach(el => {
+                if (el.classList.contains('phase-section-header')) {
+                    sequence.push({
+                        kind: 'header',
+                        phaseKey: el.dataset.phaseKey || 'other',
+                        emoji: el.dataset.phaseEmoji || '·',
+                        label: el.dataset.phaseLabel || 'Other',
+                        count: el.dataset.phaseCount || '0',
+                    });
+                } else if (el.classList.contains('trophy-guide-item')) {
+                    sequence.push({
+                        kind: 'item',
+                        trophyId: el.dataset.order,
+                        hidden: el.classList.contains('hidden'),
+                    });
+                }
+            });
+
+            document.querySelectorAll('#toc-trophy-guides, #toc-mobile-trophy-guides').forEach(tocUl => {
+                tocUl.querySelectorAll('.toc-phase-header').forEach(h => h.remove());
+
+                const entriesByTrophy = new Map();
+                tocUl.querySelectorAll('.toc-trophy-entry').forEach(entry => {
+                    entriesByTrophy.set(entry.dataset.trophyId, entry);
+                });
+
+                sequence.forEach(s => {
+                    if (s.kind === 'header') {
+                        const li = document.createElement('li');
+                        li.className = 'toc-phase-header mt-2 first:mt-1 border-t border-base-content/5 pt-1.5';
+                        li.dataset.phaseKey = s.phaseKey;
+                        li.innerHTML = `
+                            <button type="button" class="toc-phase-toggle w-full flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-base-content/45 hover:text-base-content/80 px-1.5 py-0.5 rounded hover:bg-white/[0.04] transition-colors">
+                                <span class="shrink-0">${s.emoji}</span>
+                                <span class="truncate">${escapeHtml(s.label)}</span>
+                                <span class="text-base-content/30 font-normal normal-case tracking-normal">(${s.count})</span>
+                                <svg class="toc-phase-chevron w-3 h-3 ml-auto shrink-0 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                            </button>
+                        `;
+                        tocUl.appendChild(li);
+                    } else {
+                        const tocEntry = entriesByTrophy.get(s.trophyId);
+                        if (!tocEntry) return;
+                        tocUl.appendChild(tocEntry);
+                        tocEntry.classList.toggle('hidden', s.hidden);
+                    }
+                });
+
+                applyTOCCollapseState(tocUl);
+            });
+        }
+
+        // Event delegation for phase header collapse toggle. Attached once on
+        // each TOC ul; survives the rebuild-on-sort cycle since headers are
+        // children of the ul, not the ul itself.
+        document.querySelectorAll('#toc-trophy-guides, #toc-mobile-trophy-guides').forEach(tocUl => {
+            tocUl.addEventListener('click', (e) => {
+                const header = e.target.closest('.toc-phase-header');
+                if (!header || !tocUl.contains(header)) return;
+                const phaseKey = header.dataset.phaseKey;
+                if (!phaseKey) return;
+                if (collapsedPhases.has(phaseKey)) {
+                    collapsedPhases.delete(phaseKey);
+                } else {
+                    collapsedPhases.add(phaseKey);
+                }
+                // Apply to BOTH TOCs so sidebar + mobile stay in sync.
+                document.querySelectorAll('#toc-trophy-guides, #toc-mobile-trophy-guides').forEach(applyTOCCollapseState);
+            });
+        });
+
+        function renderGroupedByPhase(items, hideEarned) {
+            clearPhaseHeaders();
+
+            // Pull platinums out — they always pin to a "Platinum" section
+            // at the top regardless of any phase tag they may have inherited.
+            // Phase tagging is hidden for platinum trophies in the editor, but
+            // we filter defensively here in case a stale value exists.
+            const platinums = items.filter(i => i.dataset.type === 'platinum');
+            const others = items.filter(i => i.dataset.type !== 'platinum');
+
+            // Stable sort: by phase order, then preserve original data-order within phase.
+            others.sort((a, b) => {
+                const aPhase = a.dataset.phase || '';
+                const bPhase = b.dataset.phase || '';
+                const diff = (phaseOrder[aPhase] ?? 999) - (phaseOrder[bPhase] ?? 999);
+                if (diff !== 0) return diff;
+                return parseInt(a.dataset.order || 0) - parseInt(b.dataset.order || 0);
+            });
+
+            // Compute visibility per item (used by both platinum and others).
+            function visibleFor(item) {
+                if (hideEarned && item.dataset.earned === '1') return false;
+                if (activeFlag && item.dataset[activeFlag] !== '1') return false;
+                return true;
+            }
+
+            function makeHeader(phaseKey, emoji, label, count, badgeClass) {
+                const header = document.createElement('div');
+                header.className = 'phase-section-header flex items-center gap-2 mt-4 first:mt-0 mb-1 pl-1';
+                // Data attributes let the TOC sync extract metadata without parsing
+                // the visible text — and let collapse state key off a stable id.
+                header.dataset.phaseKey = phaseKey;
+                header.dataset.phaseEmoji = emoji;
+                header.dataset.phaseLabel = label;
+                header.dataset.phaseCount = count;
+                header.dataset.phaseBadgeClass = badgeClass;
+                header.innerHTML = `
+                    <span class="badge badge-sm ${badgeClass} font-semibold gap-1">${emoji} ${label}</span>
+                    <span class="text-xs text-base-content/40">${count}</span>
+                    <div class="flex-1 h-px bg-base-content/10 ml-1"></div>
+                `;
+                return header;
+            }
+
+            // Platinum section first. Render the header only if at least one
+            // platinum is visible after filtering, but ALWAYS re-append all
+            // platinum items so DOM order is correct on the next render cycle
+            // (filter toggles trigger a re-render and rely on stable order).
+            const visiblePlatinums = platinums.filter(visibleFor);
+            if (visiblePlatinums.length > 0) {
+                list.appendChild(makeHeader('platinum', '🏆', 'Platinum', visiblePlatinums.length, 'badge-info'));
+            }
+            platinums.forEach(p => {
+                list.appendChild(p);
+                p.classList.toggle('hidden', !visibleFor(p));
+            });
+
+            // Then phase sections for the rest.
+            const visibility = others.map(visibleFor);
+            const sections = new Map();
+            others.forEach((item, idx) => {
+                const key = item.dataset.phase || '';
+                if (!sections.has(key)) {
+                    const meta = phaseMeta[key] || { label: 'Other', emoji: '·', badge_class: 'badge-ghost' };
+                    sections.set(key, { ...meta, key, count: 0 });
+                }
+                if (visibility[idx]) sections.get(key).count += 1;
+            });
+
+            sections.forEach((section, key) => {
+                // Render the header only if any item in this phase is visible
+                // after filtering. But ALWAYS re-append items and apply the
+                // .hidden class — otherwise items in a fully-filtered-out
+                // phase keep their previous DOM position and stale visibility
+                // class, which then breaks TOC mirroring on the next render.
+                if (section.count > 0) {
+                    list.appendChild(makeHeader(key || 'other', section.emoji, section.label, section.count, section.badge_class));
+                }
+                others.forEach((item, idx) => {
+                    if ((item.dataset.phase || '') !== key) return;
+                    list.appendChild(item);
+                    item.classList.toggle('hidden', !visibility[idx]);
+                });
+            });
+
+            syncTOCFromList();
+        }
+
         function sortAndFilter() {
             const items = Array.from(list.querySelectorAll('.trophy-guide-item'));
             const sortBy = sortSelect ? sortSelect.value : 'default';
             const hideEarned = earnedFilter ? earnedFilter.checked : false;
+
+            if (sortBy === 'phase') {
+                renderGroupedByPhase(items, hideEarned);
+                return;
+            }
+
+            // Non-grouped modes: ensure any leftover section headers are gone.
+            clearPhaseHeaders();
 
             // Sort
             const typeOrder = { platinum: 0, gold: 1, silver: 2, bronze: 3 };
@@ -350,6 +586,8 @@
                 if (activeFlag && item.dataset[activeFlag] !== '1') hidden = true;
                 item.classList.toggle('hidden', hidden);
             });
+
+            syncTOCFromList();
         }
 
         if (sortSelect) sortSelect.addEventListener('change', sortAndFilter);

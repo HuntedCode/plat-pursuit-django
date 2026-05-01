@@ -5,6 +5,7 @@
 {% block meta_description %}{{ seo_description }}{% endblock %}
 
 {% block content %}
+{{ trophy_phases|json_script:"roadmap-trophy-phases" }}
 <div id="roadmap-detail">
 
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -150,6 +151,7 @@
                                     <option value="rarity">Rarity</option>
                                     <option value="earned">Earned First</option>
                                     <option value="unearned">Unearned First</option>
+                                    <option value="phase">By Recommended Phase</option>
                                 </select>
                                 <label class="trophy-guide-earned-filter flex items-center gap-1 cursor-pointer text-xs text-base-content/50 hover:text-base-content/70">
                                     <input type="checkbox" class="checkbox checkbox-xs">

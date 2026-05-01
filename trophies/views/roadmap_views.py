@@ -219,6 +219,11 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         )
 
         context['game'] = game
+        # Phase metadata for the always-visible phase pill on each card and
+        # the "By recommended phase" sort option in the toolbar.
+        from trophies.util_modules.trophy_phases import phases_for_template, phases_by_key
+        context['trophy_phases'] = phases_for_template()
+        context['trophy_phases_by_key'] = phases_by_key()
         return context
 
 
@@ -354,6 +359,7 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
                 'is_missable': tg.is_missable,
                 'is_online': tg.is_online,
                 'is_unobtainable': tg.is_unobtainable,
+                'phase': tg.phase or '',
                 'gallery_images': list(tg.gallery_images or []),
                 'created_by_id': tg.created_by_id,
                 'last_edited_by_id': tg.last_edited_by_id,
@@ -369,8 +375,6 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
             'youtube_url': roadmap.youtube_url,
             'difficulty': roadmap.difficulty,
             'estimated_hours': roadmap.estimated_hours,
-            'missable_count': roadmap.missable_count,
-            'online_required': roadmap.online_required,
             'min_playthroughs': roadmap.min_playthroughs,
             'created_by_id': roadmap.created_by_id,
             'last_edited_by_id': roadmap.last_edited_by_id,
@@ -484,5 +488,9 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
             ),
             key=lambda a: (ROLE_ORDER.get(a['role'], 99), a['username']),
         )
+
+        # Phase metadata for the editor's per-trophy-guide phase dropdown.
+        from trophies.util_modules.trophy_phases import phases_for_template
+        context['trophy_phases'] = phases_for_template()
 
         return context

@@ -14,7 +14,9 @@ Replaces the previous checklist system (DB tables retained, UI removed).
 One-to-one with Concept. Has `status` (draft/published) and `created_by` (Profile).
 
 ### RoadmapTab
-One per ConceptTrophyGroup within a roadmap. Stores content fields (`general_tips`, `youtube_url`) and guide metadata fields (`difficulty`, `estimated_hours`, `missable_count`, `online_required`, `min_playthroughs`). Auto-created when the editor page loads.
+One per ConceptTrophyGroup within a roadmap. Stores content fields (`general_tips`, `youtube_url`) and guide metadata fields (`difficulty`, `estimated_hours`, `min_playthroughs`). Auto-created when the editor page loads.
+
+`online_required` and `missable_count` are **derived properties** computed from the per-trophy `is_online` and `is_missable` flags rather than stored fields. They roll up automatically — tag a single trophy as missable and the roadmap's missable count goes up by one without the author needing to keep a separate total in sync.
 
 **Guide metadata** is the author's assessment, distinct from community ratings (`UserConceptRating`). Metadata is displayed as a badge strip at the top of the roadmap detail page, labeled "Author Assessment" to avoid confusion.
 

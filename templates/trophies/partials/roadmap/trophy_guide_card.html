@@ -10,6 +10,7 @@
         data-missable="{% if guide.is_missable %}1{% else %}0{% endif %}"
         data-online="{% if guide.is_online %}1{% else %}0{% endif %}"
         data-unobtainable="{% if guide.is_unobtainable %}1{% else %}0{% endif %}"
+        data-phase="{{ guide.phase|default:'' }}"
         class="trophy-guide-item group rounded-lg border overflow-hidden transition-[border-color,box-shadow] duration-200
                {% if earned_data.earned %}border-success/20 border-l-4 border-l-success/50 bg-success/[0.03] hover:border-success/30 hover:shadow-md hover:shadow-success/5{% else %}border-base-content/5 bg-white/[0.03] hover:border-primary/20 hover:shadow-md hover:shadow-primary/5{% endif %}">
     <summary class="flex items-center gap-3 p-3 cursor-pointer hover:bg-white/[0.02] transition-colors list-none [&::-webkit-details-marker]:hidden">
@@ -23,14 +24,23 @@
             {% endif %}
         </div>
         <div class="flex-1 min-w-0">
+            {# Row 1: type icon + name + phase pill. Type was a text badge in the #}
+            {# previous design; condensed to a colored trophy glyph so the title  #}
+            {# row stays compact and the bucket pill can sit alongside the name.  #}
             <div class="flex items-center gap-2">
+                {% if trophy.trophy_type == 'platinum' %}
+                {% include 'partials/icons/trophy_cup.html' with size='w-4 h-4' color='currentColor' extra_class='shrink-0 text-info' %}
+                {% elif trophy.trophy_type == 'gold' %}
+                {% include 'partials/icons/trophy_cup.html' with size='w-4 h-4' color='currentColor' extra_class='shrink-0 text-warning' %}
+                {% elif trophy.trophy_type == 'silver' %}
+                {% include 'partials/icons/trophy_cup.html' with size='w-4 h-4' color='currentColor' extra_class='shrink-0 text-base-content/50' %}
+                {% else %}
+                {% include 'partials/icons/trophy_cup.html' with size='w-4 h-4' color='currentColor' extra_class='shrink-0 text-orange-500' %}
+                {% endif %}
                 <span class="text-sm md:text-base font-semibold truncate {% if not earned_data.earned %}text-base-content/70{% endif %}">{{ trophy.trophy_name }}</span>
-                <span class="badge badge-xs shrink-0 {% if trophy.trophy_type == 'platinum' %}badge-info{% elif trophy.trophy_type == 'gold' %}badge-warning{% elif trophy.trophy_type == 'silver' %}badge-ghost{% else %}badge-accent{% endif %}">{{ trophy.trophy_type|title }}</span>
-                {% if guide.is_missable or guide.is_online or guide.is_unobtainable %}<span class="w-px h-3 bg-base-content/15 shrink-0"></span>{% endif %}
-                {% if guide.is_missable %}<span class="badge badge-xs badge-warning shrink-0 gap-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>Missable</span>{% endif %}
-                {% if guide.is_online %}<span class="badge badge-xs badge-info shrink-0 gap-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0"/></svg>Online</span>{% endif %}
-                {% if guide.is_unobtainable %}<span class="badge badge-xs badge-error shrink-0 gap-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>Unobtainable</span>{% endif %}
+                {% if guide.phase and trophy.trophy_type != 'platinum' %}{% with phase_meta=trophy_phases_by_key|get_item:guide.phase %}{% if phase_meta %}<span class="phase-pill badge badge-xs shrink-0 gap-0.5 {{ phase_meta.badge_class }}" title="Phase: {{ phase_meta.label }}">{{ phase_meta.emoji }} {{ phase_meta.label }}</span>{% endif %}{% endwith %}{% endif %}
             </div>
+            {# Row 2: description only. Phase is back in row 1 with the title. #}
             {% if trophy.trophy_detail %}
             <p class="text-xs text-base-content/35 italic mt-0.5 line-clamp-2 pr-1">{{ trophy.trophy_detail }}</p>
             {% endif %}
@@ -39,6 +49,14 @@
         <div class="w-8 h-8 md:w-9 md:h-9 rounded bg-base-300/30 shrink-0"></div>
         <div class="flex-1 min-w-0">
             <span class="text-sm md:text-base font-semibold">Trophy #{{ guide.trophy_id }}</span>
+        </div>
+        {% endif %}
+        {# Right cluster: warning flags (icon-only, consistent column for scanning) + chevron. #}
+        {% if guide.is_missable or guide.is_online or guide.is_unobtainable %}
+        <div class="flex items-center gap-1 shrink-0">
+            {% if guide.is_missable %}<span class="badge badge-sm badge-warning px-1" title="Missable" aria-label="Missable"><svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></span>{% endif %}
+            {% if guide.is_online %}<span class="badge badge-sm badge-info px-1" title="Online required" aria-label="Online required"><svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0"/></svg></span>{% endif %}
+            {% if guide.is_unobtainable %}<span class="badge badge-sm badge-error px-1" title="Unobtainable" aria-label="Unobtainable"><svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg></span>{% endif %}
         </div>
         {% endif %}
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-base-content/30 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>

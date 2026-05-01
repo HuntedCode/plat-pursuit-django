@@ -59,8 +59,6 @@ WRITER_FIELDS = ('general_tips',)
 EDITOR_FIELDS = (
     'difficulty',
     'estimated_hours',
-    'missable_count',
-    'online_required',
     'min_playthroughs',
 )
 PUBLISHER_FIELDS = ('youtube_url',)
@@ -135,6 +133,19 @@ def _can_edit_authored(profile, owner_id, is_editor) -> bool:
 
 
 _GALLERY_FIELDS = ('url', 'alt', 'caption')
+
+
+def _validate_phase(value) -> str:
+    """Coerce a phase tag to one of the curated keys, or empty string.
+
+    Unknown values are silently dropped (rather than raising) so a stale
+    client that sends a deprecated phase doesn't break the save. Blank /
+    None / non-string inputs all collapse to '' (unphased).
+    """
+    from trophies.util_modules.trophy_phases import PHASE_ORDER
+    if not value or not isinstance(value, str):
+        return ''
+    return value if value in PHASE_ORDER else ''
 
 
 def _normalize_gallery(value) -> list:
@@ -351,6 +362,7 @@ def _apply_trophy_guides(
                 is_missable=bool(guide_payload.get('is_missable', False)),
                 is_online=bool(guide_payload.get('is_online', False)),
                 is_unobtainable=bool(guide_payload.get('is_unobtainable', False)),
+                phase=_validate_phase(guide_payload.get('phase')),
                 gallery_images=_normalize_gallery(guide_payload.get('gallery_images')),
                 created_by_id=profile.id,
                 last_edited_by_id=profile.id,
@@ -371,7 +383,7 @@ def _apply_trophy_guides(
 
         dirty_fields = []
         for field_name in (
-            'body', 'order', 'is_missable', 'is_online', 'is_unobtainable',
+            'body', 'order', 'is_missable', 'is_online', 'is_unobtainable', 'phase',
         ):
             if field_name in guide_payload:
                 new_value = guide_payload[field_name]
@@ -379,6 +391,8 @@ def _apply_trophy_guides(
                     new_value = new_value or ''
                 if field_name in ('is_missable', 'is_online', 'is_unobtainable'):
                     new_value = bool(new_value)
+                if field_name == 'phase':
+                    new_value = _validate_phase(new_value)
                 current = getattr(live_guide, field_name)
                 if new_value != current:
                     dirty_fields.append((field_name, new_value))
@@ -543,6 +557,7 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
                 is_missable=bool(guide_snapshot.get('is_missable', False)),
                 is_online=bool(guide_snapshot.get('is_online', False)),
                 is_unobtainable=bool(guide_snapshot.get('is_unobtainable', False)),
+                phase=_validate_phase(guide_snapshot.get('phase')),
                 gallery_images=_normalize_gallery(guide_snapshot.get('gallery_images')),
                 created_by_id=guide_snapshot.get('created_by_id'),
                 last_edited_by_id=actor.id,

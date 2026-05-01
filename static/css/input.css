@@ -1715,11 +1715,19 @@ html {
    64x64 viewBox, so a 1em height puts the visible button at roughly cap-height. */
 .ps-icon {
   display: inline-block;
-  height: 1.25em;
+  height: 1.75em;
   width: auto;
-  vertical-align: -0.25em;
+  vertical-align: -0.35em;
   margin: 0;
   user-select: none;
+}
+
+/* TOC phase-collapsed state: hides entries that follow a collapsed header.
+   The roadmap-detail.js collapse handler walks siblings between two
+   `.toc-phase-header` rows and toggles this class. Combined with the
+   chevron rotation it gives a tight expand/collapse affordance. */
+.toc-phase-collapsed {
+  display: none;
 }
 
 /* Scroll indicator bounce */

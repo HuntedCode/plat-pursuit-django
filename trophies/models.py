@@ -3956,14 +3956,6 @@ class Roadmap(models.Model):
         null=True, blank=True,
         help_text='Author-estimated hours to complete this trophy group.',
     )
-    missable_count = models.PositiveSmallIntegerField(
-        default=0,
-        help_text='Number of missable trophies in this group.',
-    )
-    online_required = models.BooleanField(
-        default=False,
-        help_text='Whether online play is required for trophies in this group.',
-    )
     min_playthroughs = models.PositiveSmallIntegerField(
         default=1,
         help_text='Minimum playthroughs required for all trophies.',
@@ -3995,6 +3987,25 @@ class Roadmap(models.Model):
     @property
     def is_draft(self):
         return self.status == 'draft'
+
+    @property
+    def online_required(self):
+        """True if any trophy guide on this roadmap is flagged is_online.
+
+        Derived rather than stored to keep the rollup in lockstep with the
+        per-trophy flags writers actually set. If you tag a single trophy as
+        online, the roadmap surfaces "Online required" automatically.
+        """
+        return self.trophy_guides.filter(is_online=True).exists()
+
+    @property
+    def missable_count(self):
+        """Count of trophy guides on this roadmap flagged is_missable.
+
+        Derived for the same reason as ``online_required`` — single source of
+        truth is the per-trophy flag. Authors don't separately fill this in.
+        """
+        return self.trophy_guides.filter(is_missable=True).count()
 
     @property
     def active_lock(self):
@@ -4116,6 +4127,12 @@ class TrophyGuide(models.Model):
     is_missable = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)
     is_unobtainable = models.BooleanField(default=False)
+    # Optional phase tag — when in the playthrough this trophy belongs.
+    # Choices defined in trophies/util_modules/trophy_phases.py. Blank = unphased.
+    phase = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='Recommended phase of the playthrough (story / grindy / endgame / etc).'
+    )
     # Ordered list of {url, alt, caption}. Rendered as a thumbnail grid below
     # the guide body. Inline images live inside `body` markdown.
     gallery_images = models.JSONField(default=list, blank=True)

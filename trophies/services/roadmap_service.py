@@ -313,6 +313,8 @@ class RoadmapService:
             for flag in ('is_missable', 'is_online', 'is_unobtainable'):
                 if flag in guide_payload:
                     setattr(guide, flag, bool(guide_payload[flag]))
+            if 'phase' in guide_payload:
+                guide.phase = guide_payload.get('phase') or ''
             if 'order' in guide_payload:
                 guide.order = guide_payload['order']
             if 'gallery_images' in guide_payload:
@@ -448,8 +450,6 @@ class RoadmapService:
             'youtube_url': rm.youtube_url,
             'difficulty': rm.difficulty,
             'estimated_hours': rm.estimated_hours,
-            'missable_count': rm.missable_count,
-            'online_required': rm.online_required,
             'min_playthroughs': rm.min_playthroughs,
             'created_by_id': rm.created_by_id,
             'last_edited_by_id': rm.last_edited_by_id,
@@ -476,6 +476,7 @@ class RoadmapService:
                     'is_missable': tg.is_missable,
                     'is_online': tg.is_online,
                     'is_unobtainable': tg.is_unobtainable,
+                    'phase': tg.phase or '',
                     'gallery_images': list(tg.gallery_images or []),
                     'created_by_id': tg.created_by_id,
                     'last_edited_by_id': tg.last_edited_by_id,
@@ -527,8 +528,7 @@ class RoadmapService:
         )
 
         METADATA_FIELDS = (
-            'difficulty', 'estimated_hours', 'missable_count',
-            'online_required', 'min_playthroughs',
+            'difficulty', 'estimated_hours', 'min_playthroughs',
         )
         step_count = roadmap.steps.count()
         guide_count = roadmap.trophy_guides.count()
