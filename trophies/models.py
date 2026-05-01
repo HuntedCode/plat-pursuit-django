@@ -4431,6 +4431,7 @@ class Company(models.Model):
         indexes = [
             models.Index(fields=['name'], name='company_name_idx'),
             models.Index(fields=['igdb_id'], name='company_igdb_id_idx'),
+            models.Index(fields=['country'], name='company_country_idx'),
         ]
 
     def logo_url(self, size='logo_med'):
@@ -4503,6 +4504,14 @@ class ConceptCompany(models.Model):
             models.Index(fields=['company'], name='conceptcompany_company_idx'),
             models.Index(fields=['is_developer'], name='conceptcompany_dev_idx'),
             models.Index(fields=['is_publisher'], name='conceptcompany_pub_idx'),
+            # Composite indexes powering the per-role Exists() subqueries on
+            # the company browse page. Each one lets the planner satisfy
+            # "this company has at least one ConceptCompany with role=X" via
+            # a single index seek instead of a heap scan.
+            models.Index(fields=['company', 'is_developer'], name='cc_company_dev_idx'),
+            models.Index(fields=['company', 'is_publisher'], name='cc_company_pub_idx'),
+            models.Index(fields=['company', 'is_porting'], name='cc_company_port_idx'),
+            models.Index(fields=['company', 'is_supporting'], name='cc_company_support_idx'),
         ]
 
     def __str__(self):

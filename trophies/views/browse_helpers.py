@@ -4,12 +4,15 @@ from datetime import timedelta
 
 from django.db.models import (
     Q, F, Subquery, OuterRef, Value, IntegerField, FloatField, Avg, Case,
-    When, Count, OrderBy,
+    When, Count, OrderBy, Exists,
 )
 from django.db.models.functions import Coalesce, Lower, Cast
 from django.utils import timezone
 
-from trophies.models import Badge, Trophy, UserConceptRating
+from trophies.models import (
+    Badge, Trophy, UserConceptRating, Stage, ConceptGenre, ConceptTheme,
+    ConceptEngine,
+)
 
 
 def get_badge_picker_context(request):
@@ -150,26 +153,40 @@ def apply_game_browse_filters(qs, form, sort_val=''):
             qs = qs.filter(title_name__istartswith=letter)
 
     # --- Quick filters ---
+    # Each multi-relation filter below uses Exists() instead of
+    # .filter(...).distinct(). Stacking .distinct() over chained joins on
+    # large datasets explodes the planner; Exists short-circuits at the
+    # first matching row and keeps the outer cardinality at one row per
+    # Game.
     if form.cleaned_data.get('show_only_platinum'):
-        qs = qs.filter(trophies__trophy_type='platinum').distinct()
+        qs = qs.filter(Exists(
+            Trophy.objects.filter(game=OuterRef('pk'), trophy_type='platinum')
+        ))
     if form.cleaned_data.get('filter_shovelware'):
         qs = qs.exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
 
     badge_series = form.cleaned_data.get('badge_series')
     if badge_series:
-        qs = qs.filter(
-            concept__stages__series_slug=badge_series,
-            concept__stages__series_slug__in=Badge.objects.filter(
-                is_live=True,
-            ).values_list('series_slug', flat=True),
-        ).distinct()
+        live_slugs = Badge.objects.filter(
+            is_live=True,
+        ).values_list('series_slug', flat=True)
+        qs = qs.filter(Exists(
+            Stage.objects.filter(
+                concepts=OuterRef('concept_id'),
+                series_slug=badge_series,
+                series_slug__in=live_slugs,
+            )
+        ))
     elif form.cleaned_data.get('in_badge'):
         live_slugs = Badge.objects.filter(
             is_live=True,
         ).values_list('series_slug', flat=True)
-        qs = qs.filter(
-            concept__stages__series_slug__in=live_slugs,
-        ).distinct()
+        qs = qs.filter(Exists(
+            Stage.objects.filter(
+                concepts=OuterRef('concept_id'),
+                series_slug__in=live_slugs,
+            )
+        ))
 
     # --- Community flag filters (hide wins on conflict) ---
     if form.cleaned_data.get('hide_delisted'):
@@ -259,16 +276,28 @@ def apply_game_browse_filters(qs, form, sort_val=''):
             hours_q &= Q(_community_hours__lte=float(comm_hi))
         qs = qs.filter(hours_q)
 
-    # --- Genre / Theme / Engine filters ---
+    # --- Genre / Theme / Engine filters (Exists, see note above) ---
     genres = form.cleaned_data.get('genres')
     if genres:
-        qs = qs.filter(concept__concept_genres__genre_id__in=genres).distinct()
+        qs = qs.filter(Exists(
+            ConceptGenre.objects.filter(
+                concept_id=OuterRef('concept_id'), genre_id__in=genres,
+            )
+        ))
     themes = form.cleaned_data.get('themes')
     if themes:
-        qs = qs.filter(concept__concept_themes__theme_id__in=themes).distinct()
+        qs = qs.filter(Exists(
+            ConceptTheme.objects.filter(
+                concept_id=OuterRef('concept_id'), theme_id__in=themes,
+            )
+        ))
     engine = form.cleaned_data.get('engine')
     if engine:
-        qs = qs.filter(concept__concept_engines__engine_id=engine).distinct()
+        qs = qs.filter(Exists(
+            ConceptEngine.objects.filter(
+                concept_id=OuterRef('concept_id'), engine_id=engine,
+            )
+        ))
 
     return qs, annotations_applied
 

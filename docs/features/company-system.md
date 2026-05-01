@@ -45,7 +45,15 @@ Three notable departures from the franchise pattern, each driven by what compani
 - `version_count` — distinct Games (individual PSN trophy lists). A game on both PS4 and PS5 counts as 2 versions of 1 game.
 - Three cover-art subqueries (`representative_title_image`, `representative_igdb_cover_id`, `representative_title_icon`) ordered newest-first, built via `game_grouping_service.representative_*_subquery` factories so they share code with franchise pages.
 
-Filters from `CompanySearchForm` then layer on: text search on name, role checkboxes, country (ISO numeric match), platform, genres, badge series. Sort options include alphabetical, most/fewest games, highest avg rating, most players, most plats earned.
+Filters from `CompanySearchForm` then layer on: text search on name, role checkboxes, country (ISO numeric dropdown populated from companies that actually have a country recorded), platform, genres, badge series. Sort options include alphabetical, most/fewest games, highest avg rating, most players, most plats earned.
+
+### Browse Filter Performance
+
+Each multi-relation filter (role, platform, genres, badge series) is applied as an independent `Exists()` subquery against `ConceptCompany`, NOT as a chained `.filter().distinct()` over `company_concepts__...`. Combining multiple `.filter()` calls over reverse-FK paths makes Django emit separate join aliases per filter, multiplying the row count before `.distinct()` collapses it. On prod-scale data (thousands of companies, hundreds of thousands of games) this exploded the planner and the page would never finish loading. `Exists()` short-circuits at the first matching row per company and removes the need for `.distinct()` entirely.
+
+Sort annotations (`avg_rating`, `total_players`, `plats_earned`) likewise run as `Subquery` aggregates rather than deep-path `Avg`/`Sum`/`Count` annotations. The old form ran on top of the filtered join and double-counted (e.g. summed `played_count` once per layered filter), so the new Subquery form is also a correctness fix.
+
+Composite indexes on `ConceptCompany` — `(company, is_developer)`, `(company, is_publisher)`, `(company, is_porting)`, `(company, is_supporting)` — let each role-Exists run as a single index seek. `Company.country` also has a btree index supporting the new dropdown filter.
 
 ### Detail Page: Role Grouping
 

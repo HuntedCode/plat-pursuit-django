@@ -85,6 +85,17 @@
                         </label>
                     {% endfor %}
                 </div>
+
+                {# Country filter dropdown. Populated from companies that have a known country in CompanySearchForm.__init__. #}
+                <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                    <label for="company-country" class="text-xs text-base-content/40 self-center">Country:</label>
+                    <select id="company-country" name="country"
+                            class="select select-bordered select-xs md:select-sm w-full md:w-64">
+                        {% for value, display in form.country.field.choices %}
+                            <option value="{{ value }}" {% if value|stringformat:"s" == selected_country %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
         <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />

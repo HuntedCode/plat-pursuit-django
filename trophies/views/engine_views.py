@@ -11,7 +11,9 @@ all three "tag-style" browse pages.
 import logging
 
 from core.services.tracking import track_page_view
-from django.db.models import Q, F, Count, Avg
+from django.db.models import (
+    Q, F, Count, Avg, Subquery, OuterRef, IntegerField, FloatField,
+)
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.urls import reverse_lazy
@@ -19,7 +21,7 @@ from django.views.generic import TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
 from trophies.services import game_grouping_service as grouping
-from ..models import GameEngine, Game
+from ..models import GameEngine, Game, ConceptEngine
 from .genre_views import TagDetailBaseView
 
 logger = logging.getLogger("psn_api")
@@ -49,13 +51,25 @@ class EngineListView(ProfileHotbarMixin, TemplateView):
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
 
-        games_path = 'engine_concepts__concept__games'
+        # Each annotation runs as its own Subquery scoped through this
+        # engine's ConceptEngine rows. Keeps the outer queryset shape at one
+        # row per engine and avoids piling deep joins onto the sort.
+        def _engine_subquery(output_field, **agg_kwargs):
+            agg_name, agg_expr = next(iter(agg_kwargs.items()))
+            return Subquery(
+                ConceptEngine.objects.filter(engine=OuterRef('pk'))
+                .values('engine')
+                .annotate(**{agg_name: agg_expr})
+                .values(agg_name)[:1],
+                output_field=output_field,
+            )
+
         # Require at least 2 linked games: historical data had one-off noise
         # (e.g. Photoshop incorrectly listed first for some obscure title).
         # Two-game minimum drops that noise without hiding legitimate niche
         # engines.
         items = GameEngine.objects.annotate(
-            game_count=Count(games_path, distinct=True),
+            game_count=_engine_subquery(IntegerField(), c=Count('concept__games', distinct=True)),
         ).filter(game_count__gte=2)
 
         if query:
@@ -65,20 +79,28 @@ class EngineListView(ProfileHotbarMixin, TemplateView):
             items = items.order_by('-game_count', Lower('name'))
         elif sort_val == 'avg_rating':
             items = items.annotate(
-                _avg_rating=Avg(games_path + '__concept__user_ratings__overall_rating'),
+                _avg_rating=_engine_subquery(
+                    FloatField(),
+                    v=Avg('concept__user_ratings__overall_rating',
+                          filter=Q(concept__user_ratings__concept_trophy_group__isnull=True)),
+                ),
             ).order_by(F('_avg_rating').desc(nulls_last=True), Lower('name'))
         elif sort_val == 'players':
             items = items.annotate(
-                _total_players=Count(games_path + '__played_by', distinct=True),
-            ).order_by('-_total_players', Lower('name'))
+                _total_players=_engine_subquery(
+                    IntegerField(),
+                    c=Count('concept__games__played_by', distinct=True),
+                ),
+            ).order_by(F('_total_players').desc(nulls_last=True), Lower('name'))
         elif sort_val == 'plats_earned':
             items = items.annotate(
-                _total_plats=Count(
-                    games_path + '__played_by',
-                    filter=Q(**{games_path + '__played_by__has_plat': True}),
-                    distinct=True,
+                _total_plats=_engine_subquery(
+                    IntegerField(),
+                    c=Count('concept__games__played_by',
+                            filter=Q(concept__games__played_by__has_plat=True),
+                            distinct=True),
                 ),
-            ).order_by('-_total_plats', Lower('name'))
+            ).order_by(F('_total_plats').desc(nulls_last=True), Lower('name'))
         else:
             items = items.order_by(Lower('name'))
 
@@ -152,7 +174,6 @@ class EngineDetailView(TagDetailBaseView):
             all_games = list(
                 Game.objects.filter(self.get_tag_filter())
                 .select_related('concept__igdb_match')
-                .distinct()
             )
             profile = (
                 getattr(self.request.user, 'profile', None)

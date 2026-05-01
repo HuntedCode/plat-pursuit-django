@@ -1,5 +1,5 @@
 from core.services.tracking import track_page_view
-from django.db.models import Count, Subquery, OuterRef, Q, Exists
+from django.db.models import Count, Subquery, OuterRef, Q, Exists, IntegerField
 from django.db.models.functions import Lower
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
@@ -81,7 +81,7 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         #    stay hidden to avoid duplicate-looking entries.
 
         # Subquery: this collection has at least one concept with zero
-        # franchise-type links. Outer ref = the Franchise (collection) row.
+        # franchise-type links.
         orphan_concept_exists = Exists(
             ConceptFranchise.objects.filter(
                 franchise=OuterRef('pk'),
@@ -90,16 +90,37 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             )
         )
 
-        # The main-link filter. Used twice: once to restrict which links
-        # contribute to game_count/version_count, and once in the outer filter.
-        main_link_filter = (
-            Q(source_type='franchise', franchise_concepts__is_main=True)
-            | Q(source_type='collection')
+        # Eligibility check via Exists: a franchise row is browse-visible if
+        # it's a collection OR has at least one is_main link. Express this
+        # without the multi-relation outer .filter() that previously forced a
+        # final .distinct() and exploded the planner on large data.
+        eligible_link_exists = Exists(
+            ConceptFranchise.objects.filter(
+                franchise=OuterRef('pk'), is_main=True,
+            )
         )
 
+        # Per-franchise game_count / version_count via Subquery so each row
+        # carries its own scoped count instead of joining the outer query
+        # against franchise_concepts. This keeps the outer queryset at one
+        # row per franchise.
+        def _per_franchise_count(field, distinct=True, extra_filter=None):
+            qs = ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
+            if extra_filter is not None:
+                qs = qs.filter(extra_filter)
+            return Subquery(
+                qs.values('franchise')
+                .annotate(c=Count(field, distinct=distinct))
+                .values('c')[:1],
+                output_field=IntegerField(),
+            )
+
+        # Restrict counts to the "main" set for franchise rows; collections
+        # have no is_main concept so allow any link.
+        main_only_filter = Q(franchise__source_type='collection') | Q(is_main=True)
+
         qs = super().get_queryset().filter(
-            Q(source_type='franchise', franchise_concepts__is_main=True)
-            | Q(source_type='collection')
+            Q(source_type='collection') | eligible_link_exists,
         ).annotate(
             # game_count: distinct IGDB game IDs (the true "game" count).
             # Two concepts sharing the same igdb_id (e.g. PS3 and PS4
@@ -107,17 +128,13 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             # match are excluded (NULL igdb_id ignored by COUNT DISTINCT)
             # which slightly undercounts, but in practice nearly all
             # concepts in franchise/collection pages have IGDB matches.
-            game_count=Count(
-                'franchise_concepts__concept__igdb_match__igdb_id',
-                filter=main_link_filter,
-                distinct=True,
+            game_count=_per_franchise_count(
+                'concept__igdb_match__igdb_id', extra_filter=main_only_filter,
             ),
             # version_count: distinct Games, i.e. individual PSN records
             # (a game on both PS4 and PS5 counts as 2 versions of 1 game).
-            version_count=Count(
-                'franchise_concepts__concept__games',
-                filter=main_link_filter,
-                distinct=True,
+            version_count=_per_franchise_count(
+                'concept__games', extra_filter=main_only_filter,
             ),
             **_franchise_cover_annotations(main_only=True),
             has_orphan_concept=orphan_concept_exists,
@@ -127,7 +144,7 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             # franchise-type link). Prevents duplicate-looking entries.
             Q(source_type='franchise', version_count__gt=0)
             | Q(source_type='collection', version_count__gt=0, has_orphan_concept=True),
-        ).distinct()
+        )
 
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
@@ -258,24 +275,37 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
         # franchise page, or vice versa). Detected via shared concepts: any
         # Franchise row that links to at least one concept in this franchise.
         opposite_type = 'collection' if franchise.source_type == 'franchise' else 'franchise'
+
+        # Find candidate related franchises via Exists (a row matches if any
+        # of its links touches one of this franchise's concepts), then
+        # annotate counts as Subqueries to avoid joining the outer row with
+        # franchise_concepts a second time.
+        def _related_count(field, distinct=True):
+            return Subquery(
+                ConceptFranchise.objects.filter(franchise=OuterRef('pk'))
+                .values('franchise')
+                .annotate(c=Count(field, distinct=distinct))
+                .values('c')[:1],
+                output_field=IntegerField(),
+            )
+
         related_entries = list(
             Franchise.objects.filter(
                 source_type=opposite_type,
-                franchise_concepts__concept_id__in=Subquery(concept_ids_subq),
+            ).filter(
+                Exists(ConceptFranchise.objects.filter(
+                    franchise=OuterRef('pk'),
+                    concept_id__in=Subquery(concept_ids_subq),
+                ))
             )
             .exclude(pk=franchise.pk)
             .annotate(
-                related_game_count=Count(
-                    'franchise_concepts__concept', distinct=True,
-                ),
-                related_version_count=Count(
-                    'franchise_concepts__concept__games', distinct=True,
-                ),
+                related_game_count=_related_count('concept'),
+                related_version_count=_related_count('concept__games'),
                 # Collections never have is_main=True, so allow any link.
                 **_franchise_cover_annotations(main_only=False),
             )
             .filter(related_version_count__gt=0)
-            .distinct()
             .order_by(Lower('name'))
         )
 

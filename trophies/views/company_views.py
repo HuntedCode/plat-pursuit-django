@@ -1,14 +1,17 @@
 import logging
 
 from core.services.tracking import track_page_view
-from django.db.models import Q, F, Count, Avg, Sum, Prefetch, Subquery
+from django.db.models import (
+    Q, F, Count, Avg, Sum, Prefetch, Subquery, OuterRef, Exists, FloatField,
+    IntegerField,
+)
 from django.db.models.functions import Lower
 from django.urls import reverse_lazy
 from django.views.generic import ListView, DetailView
 
 from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from trophies.services import game_grouping_service as grouping
-from ..models import Company, ConceptCompany, Game, UserConceptRating
+from ..models import Company, ConceptCompany, Game, UserConceptRating, ProfileGame
 from ..forms import CompanySearchForm
 
 logger = logging.getLogger("psn_api")
@@ -56,7 +59,6 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
     def get_queryset(self):
         qs = super().get_queryset().annotate(
-            # game_count: distinct IGDB-unified games (one row per concept).
             # game_count: distinct IGDB game IDs (the true "game" count).
             # Two concepts sharing the same igdb_id count as ONE game.
             game_count=Count('company_concepts__concept__igdb_match__igdb_id', distinct=True),
@@ -76,70 +78,111 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
             if query:
                 qs = qs.filter(name__icontains=query)
+            if country:
+                # Company.country is ISO 3166-1 numeric (IntegerField). The
+                # form coerces choices to strings; cast back here.
+                try:
+                    qs = qs.filter(country=int(country))
+                except (TypeError, ValueError):
+                    pass
+
+            # Each filter below uses an independent Exists() subquery against
+            # ConceptCompany. Doing one Exists per filter preserves "any-link"
+            # semantics (a company matches if SOME of its links satisfy each
+            # criterion, not necessarily the same link), and avoids the join
+            # cardinality explosion we'd get from chained .filter().distinct()
+            # over multi-relation paths.
             if roles:
                 role_q = Q()
                 for role in roles:
                     if role == 'developer':
-                        role_q |= Q(company_concepts__is_developer=True)
+                        role_q |= Q(is_developer=True)
                     elif role == 'publisher':
-                        role_q |= Q(company_concepts__is_publisher=True)
+                        role_q |= Q(is_publisher=True)
                     elif role == 'porting':
-                        role_q |= Q(company_concepts__is_porting=True)
+                        role_q |= Q(is_porting=True)
                     elif role == 'supporting':
-                        role_q |= Q(company_concepts__is_supporting=True)
-                qs = qs.filter(role_q).distinct()
-            if country:
-                qs = qs.filter(country__iexact=country)
+                        role_q |= Q(is_supporting=True)
+                qs = qs.filter(Exists(
+                    ConceptCompany.objects.filter(company=OuterRef('pk')).filter(role_q)
+                ))
 
-            # Platform filter (companies with games on selected platforms)
             platforms = form.cleaned_data.get('platform')
             if platforms:
                 platform_q = Q()
                 for plat in platforms:
-                    platform_q |= Q(company_concepts__concept__games__title_platform__contains=plat)
-                qs = qs.filter(platform_q).distinct()
+                    platform_q |= Q(concept__games__title_platform__contains=plat)
+                qs = qs.filter(Exists(
+                    ConceptCompany.objects.filter(company=OuterRef('pk')).filter(platform_q)
+                ))
 
-            # Genre filter
             genres = form.cleaned_data.get('genres')
             if genres:
-                qs = qs.filter(
-                    company_concepts__concept__concept_genres__genre_id__in=genres,
-                ).distinct()
+                qs = qs.filter(Exists(
+                    ConceptCompany.objects.filter(
+                        company=OuterRef('pk'),
+                        concept__concept_genres__genre_id__in=genres,
+                    )
+                ))
 
-            # Badge series filter
             badge_series = form.cleaned_data.get('badge_series')
             if badge_series:
                 from ..models import Badge
-                qs = qs.filter(
-                    company_concepts__concept__stages__series_slug=badge_series,
-                    company_concepts__concept__stages__series_slug__in=Badge.objects.filter(
-                        is_live=True,
-                    ).values_list('series_slug', flat=True),
-                ).distinct()
+                live_slugs = Badge.objects.filter(
+                    is_live=True,
+                ).values_list('series_slug', flat=True)
+                qs = qs.filter(Exists(
+                    ConceptCompany.objects.filter(
+                        company=OuterRef('pk'),
+                        concept__stages__series_slug=badge_series,
+                        concept__stages__series_slug__in=live_slugs,
+                    )
+                ))
 
             if sort_val == 'games':
                 order = ['-game_count', Lower('name')]
             elif sort_val == 'games_inv':
                 order = ['game_count', Lower('name')]
             elif sort_val == 'avg_rating':
+                # Subquery avoids the join multiplication that would skew the
+                # average when other filters are layered on top.
                 qs = qs.annotate(
-                    _avg_rating=Avg('company_concepts__concept__user_ratings__overall_rating'),
+                    _avg_rating=Subquery(
+                        UserConceptRating.objects.filter(
+                            concept__concept_companies__company=OuterRef('pk'),
+                            concept_trophy_group__isnull=True,
+                        ).values('concept__concept_companies__company')
+                        .annotate(v=Avg('overall_rating'))
+                        .values('v')[:1],
+                        output_field=FloatField(),
+                    ),
                 )
                 order = [F('_avg_rating').desc(nulls_last=True), Lower('name')]
             elif sort_val == 'total_players':
                 qs = qs.annotate(
-                    _total_players=Sum('company_concepts__concept__games__played_count'),
+                    _total_players=Subquery(
+                        Game.objects.filter(
+                            concept__concept_companies__company=OuterRef('pk'),
+                        ).values('concept__concept_companies__company')
+                        .annotate(s=Sum('played_count'))
+                        .values('s')[:1],
+                        output_field=IntegerField(),
+                    ),
                 )
                 order = [F('_total_players').desc(nulls_last=True), Lower('name')]
             elif sort_val == 'plats_earned':
                 qs = qs.annotate(
-                    _total_plats=Count(
-                        'company_concepts__concept__games__played_by',
-                        filter=Q(company_concepts__concept__games__played_by__has_plat=True),
-                        distinct=True,
+                    _total_plats=Subquery(
+                        ProfileGame.objects.filter(
+                            game__concept__concept_companies__company=OuterRef('pk'),
+                            has_plat=True,
+                        ).values('game__concept__concept_companies__company')
+                        .annotate(c=Count('id'))
+                        .values('c')[:1],
+                        output_field=IntegerField(),
                     ),
                 )
-                order = ['-_total_plats', Lower('name')]
+                order = [F('_total_plats').desc(nulls_last=True), Lower('name')]
 
         return qs.order_by(*order)
 
@@ -153,6 +196,7 @@ class CompanyListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         context['selected_roles'] = self.request.GET.getlist('role')
         context['selected_platforms'] = self.request.GET.getlist('platform')
         context['selected_genres'] = self.request.GET.getlist('genres')
+        context['selected_country'] = self.request.GET.get('country', '')
 
         context['seo_description'] = (
             "Browse PlayStation game developers and publishers on Platinum Pursuit. "

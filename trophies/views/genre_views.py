@@ -1,7 +1,10 @@
 import logging
 
 from core.services.tracking import track_page_view
-from django.db.models import Q, F, Count, Avg, Subquery, OuterRef, Prefetch, Value, IntegerField, FloatField, Case, When
+from django.db.models import (
+    Q, F, Count, Avg, Subquery, OuterRef, Prefetch, Value, IntegerField,
+    FloatField, Case, When,
+)
 from django.db.models.functions import Lower
 from django.http import Http404
 from django.urls import reverse_lazy
@@ -10,6 +13,7 @@ from django.views.generic import ListView, TemplateView
 from trophies.mixins import ProfileHotbarMixin, HtmxListMixin
 from ..models import (
     Genre, Theme, Game, Trophy, Badge, UserConceptRating, ProfileGame,
+    ConceptGenre, ConceptTheme,
 )
 from ..forms import GameSearchForm
 from trophies.util_modules.constants import ALL_PLATFORMS
@@ -38,43 +42,72 @@ class GenreThemeListView(ProfileHotbarMixin, TemplateView):
 
         context['active_tab'] = active_tab
 
+        # Pick the through-model and concept join field for whichever tab is
+        # active. Each Subquery scoped through this row's tag → ConceptX →
+        # Concept → Game keeps the outer query shape simple (one row per tag).
         if active_tab == 'themes':
-            games_path = 'theme_concepts__concept__games'
-            items = Theme.objects.annotate(
-                game_count=Count(games_path, distinct=True),
-            ).filter(game_count__gt=0)
+            ThroughModel = ConceptTheme
+            tag_field = 'theme'
+            items = Theme.objects.all()
             context['item_type'] = 'theme'
             context['detail_url_name'] = 'theme_detail'
         else:
-            games_path = 'genre_concepts__concept__games'
-            items = Genre.objects.annotate(
-                game_count=Count(games_path, distinct=True),
-            ).filter(game_count__gt=0)
+            ThroughModel = ConceptGenre
+            tag_field = 'genre'
+            items = Genre.objects.all()
             context['item_type'] = 'genre'
             context['detail_url_name'] = 'genre_detail'
+
+        def _through_subquery(*aggregate_args, **aggregate_kwargs):
+            """Build a Subquery scoped to this tag row.
+
+            Each annotation needs to count/avg something across this tag's
+            ConceptGenre/ConceptTheme rows. Wrapping each one in its own
+            Subquery keeps the outer queryset shape at one row per tag, so
+            chained sort annotations don't pile joins onto each other.
+            """
+            agg_name, agg_expr = next(iter(aggregate_kwargs.items()))
+            return Subquery(
+                ThroughModel.objects.filter(**{tag_field: OuterRef('pk')})
+                .values(tag_field)
+                .annotate(**{agg_name: agg_expr})
+                .values(agg_name)[:1],
+                output_field=aggregate_args[0] if aggregate_args else IntegerField(),
+            )
+
+        items = items.annotate(
+            game_count=_through_subquery(IntegerField(), c=Count('concept__games', distinct=True)),
+        ).filter(game_count__gt=0)
 
         if query:
             items = items.filter(name__icontains=query)
 
-        # Sort
         if sort_val == 'games':
             items = items.order_by('-game_count', 'name')
         elif sort_val == 'avg_rating':
             items = items.annotate(
-                _avg_rating=Avg(games_path + '__concept__user_ratings__overall_rating'),
+                _avg_rating=_through_subquery(
+                    FloatField(),
+                    v=Avg('concept__user_ratings__overall_rating',
+                          filter=Q(concept__user_ratings__concept_trophy_group__isnull=True)),
+                ),
             ).order_by(F('_avg_rating').desc(nulls_last=True), 'name')
         elif sort_val == 'players':
             items = items.annotate(
-                _total_players=Count(games_path + '__played_by', distinct=True),
-            ).order_by('-_total_players', 'name')
+                _total_players=_through_subquery(
+                    IntegerField(),
+                    c=Count('concept__games__played_by', distinct=True),
+                ),
+            ).order_by(F('_total_players').desc(nulls_last=True), 'name')
         elif sort_val == 'plats_earned':
             items = items.annotate(
-                _total_plats=Count(
-                    games_path + '__played_by',
-                    filter=Q(**{games_path + '__played_by__has_plat': True}),
-                    distinct=True,
+                _total_plats=_through_subquery(
+                    IntegerField(),
+                    c=Count('concept__games__played_by',
+                            filter=Q(concept__games__played_by__has_plat=True),
+                            distinct=True),
                 ),
-            ).order_by('-_total_plats', 'name')
+            ).order_by(F('_total_plats').desc(nulls_last=True), 'name')
         else:
             items = items.order_by('name')
 
@@ -105,7 +138,10 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
         return self._filter_form
 
     def get_queryset(self):
-        qs = Game.objects.filter(self.get_tag_filter()).distinct()
+        # No .distinct() needed — Game.concept is a FK (1:1) and the through
+        # tables enforce unique_together on (concept, tag), so the tag filter
+        # produces one row per matching Game.
+        qs = Game.objects.filter(self.get_tag_filter())
         form = self.get_filter_form()
 
         if form.is_valid():
@@ -128,7 +164,7 @@ class TagDetailBaseView(HtmxListMixin, ProfileHotbarMixin, ListView):
         # Total unfiltered game count for this tag (used in header flavor text)
         context['total_game_count'] = Game.objects.filter(
             self.get_tag_filter()
-        ).distinct().count()
+        ).count()
 
         form = self.get_filter_form()
         context['form'] = form

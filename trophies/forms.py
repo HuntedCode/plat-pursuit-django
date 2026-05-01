@@ -148,7 +148,9 @@ class CompanySearchForm(forms.Form):
         ],
         required=False, label='Roles',
     )
-    country = forms.CharField(required=False, label='Country')
+    country = forms.ChoiceField(
+        choices=[('', 'All Countries')], required=False, label='Country',
+    )
     platform = forms.MultipleChoiceField(
         choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')],
         required=False, label='Platforms',
@@ -170,7 +172,8 @@ class CompanySearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from trophies.models import Genre, Badge
+        from trophies.models import Genre, Badge, Company
+        from trophies.util_modules.countries import country_info
         try:
             self.fields['genres'].choices = list(
                 Genre.objects.values_list('id', 'name').order_by('name')
@@ -182,6 +185,38 @@ class CompanySearchForm(forms.Form):
                 (b.series_slug, b.display_series or b.name)
                 for b in badge_qs
             ]
+
+            # Country choices: only countries that actually have a company,
+            # rendered as "🇺🇸 United States" via the ISO numeric→name util.
+            # Unknown numeric codes (gaps in our ISO table) are dropped.
+            #
+            # ``.order_by()`` clears Company.Meta.ordering — without it Django
+            # leaves ORDER BY name in the SQL alongside SELECT DISTINCT
+            # country, which breaks DISTINCT on Postgres. Then we dedupe in
+            # Python by display name as a final safety net (covers any
+            # historical numeric codes that resolve to the same country).
+            country_codes = (
+                Company.objects.exclude(country__isnull=True)
+                .order_by()
+                .values_list('country', flat=True)
+                .distinct()
+            )
+            seen_names: set[str] = set()
+            country_options: list[tuple[str, str, str]] = []
+            for code in country_codes:
+                info = country_info(code)
+                if not info:
+                    continue
+                flag, name = info
+                if name in seen_names:
+                    continue
+                seen_names.add(name)
+                country_options.append((str(code), f'{flag} {name}', name))
+            country_options.sort(key=lambda opt: opt[2])
+            self.fields['country'].choices = (
+                [('', 'All Countries')]
+                + [(value, label) for value, label, _name in country_options]
+            )
         except Exception:
             pass
 
