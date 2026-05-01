@@ -1,7 +1,9 @@
 import re
+import time
 from datetime import datetime, timezone as dt_timezone
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import F, Q
 
 from trophies.models import Concept, IGDBMatch, Stage
 from trophies.services.igdb_service import IGDBService, IGDB_PLATFORM_NAMES
@@ -32,7 +34,18 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--retry-no-match', action='store_true',
-            help='Re-process concepts previously recorded as no_match',
+            help='Re-process concepts previously recorded as no_match (oldest first)',
+        )
+        parser.add_argument(
+            '--missing-or-no-match', action='store_true',
+            help='Re-process concepts with no IGDBMatch row OR status=no_match, '
+                 'oldest first by last_synced_at (NULLS FIRST). Used by the weekly retry cron.',
+        )
+        parser.add_argument(
+            '--max-minutes', type=int, metavar='N', default=None,
+            help='Hard runtime cap for the enrichment loop. Exits cleanly with a '
+                 'partial summary once N minutes have elapsed. Intended for the '
+                 'weekly --missing-or-no-match cron so Render billing stays bounded.',
         )
         parser.add_argument(
             '--refresh', action='store_true',
@@ -975,16 +988,26 @@ class Command(BaseCommand):
             ).values_list('concept_id', flat=True)
             concepts = Concept.objects.filter(id__in=concept_ids)
         elif options['retry_no_match']:
-            concept_ids = IGDBMatch.objects.filter(
-                status='no_match'
-            ).values_list('concept_id', flat=True)
-            concepts = Concept.objects.filter(id__in=concept_ids)
+            concepts = (
+                Concept.objects
+                .filter(igdb_match__status='no_match')
+                .order_by('igdb_match__last_synced_at')
+            )
+        elif options['missing_or_no_match']:
+            # Union: concepts with no IGDBMatch row + concepts marked no_match.
+            # Oldest-first by last_synced_at so missing rows (NULL) process
+            # first and stale no_match rows rotate through across weekly runs.
+            concepts = (
+                Concept.objects
+                .filter(Q(igdb_match__isnull=True) | Q(igdb_match__status='no_match'))
+                .order_by(F('igdb_match__last_synced_at').asc(nulls_first=True))
+            )
         elif options['all'] or force:
             concepts = Concept.objects.all()
         else:
             # Default: missing — concepts with no IGDBMatch row at all.
             # no_match rows count as "tried already" and are excluded; use
-            # --retry-no-match to re-attempt them.
+            # --retry-no-match or --missing-or-no-match to re-attempt them.
             matched_ids = IGDBMatch.objects.values_list('concept_id', flat=True)
             concepts = Concept.objects.exclude(id__in=matched_ids)
 
@@ -1005,7 +1028,15 @@ class Command(BaseCommand):
             'errors': 0,
         }
 
+        max_minutes = options.get('max_minutes')
+        max_seconds = max_minutes * 60 if max_minutes else None
+        loop_start = time.monotonic()
+        capped_at = None
+
         for i, concept in enumerate(concepts.iterator()):
+            if max_seconds is not None and (time.monotonic() - loop_start) >= max_seconds:
+                capped_at = i
+                break
             try:
                 # Capture the search input the pipeline will use so we can
                 # surface it in the per-concept output line. _pick_search_title
@@ -1055,6 +1086,15 @@ class Command(BaseCommand):
                     f'  [{i + 1}/{total}] ERROR {concept.concept_id} '
                     f'"{concept.unified_title}": {e}'
                 ))
+
+        if capped_at is not None:
+            elapsed = time.monotonic() - loop_start
+            remaining = max(total - capped_at, 0)
+            self.stdout.write(self.style.WARNING(
+                f'\nReached --max-minutes cap of {max_minutes} min '
+                f'({elapsed/60:.1f} min elapsed) after {capped_at} concept(s); '
+                f'{remaining} remaining will be picked up on the next run.'
+            ))
 
         self._print_summary(summary, total, dry_run)
 
