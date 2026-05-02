@@ -1715,13 +1715,18 @@
     //  Formatting Toolbar
     // ------------------------------------------------------------------ //
 
+    // `shortcut` is the keyboard combo handled by initKeyboardShortcuts. Format:
+    // `[shift+]<key>` (Ctrl/Cmd is implicit). Headings deliberately omitted —
+    // Ctrl+2/3/4 conflict with browser tab switching, and authors typically
+    // pick a heading level once per section, not often enough to justify a
+    // bespoke combo.
     const FORMAT_MAP = {
-        bold:      { before: '**', after: '**', placeholder: 'bold text' },
-        italic:    { before: '*',  after: '*',  placeholder: 'italic text' },
-        underline: { before: '__', after: '__', placeholder: 'underlined text' },
-        strike:    { before: '~~', after: '~~', placeholder: 'strikethrough' },
-        spoiler:   { before: '||', after: '||', placeholder: 'spoiler text' },
-        link:      { before: '[',  after: '](url)', placeholder: 'link text' },
+        bold:      { before: '**', after: '**', placeholder: 'bold text', shortcut: 'b' },
+        italic:    { before: '*',  after: '*',  placeholder: 'italic text', shortcut: 'i' },
+        underline: { before: '__', after: '__', placeholder: 'underlined text', shortcut: 'u' },
+        strike:    { before: '~~', after: '~~', placeholder: 'strikethrough', shortcut: 'shift+s' },
+        spoiler:   { before: '||', after: '||', placeholder: 'spoiler text', shortcut: 'shift+x' },
+        link:      { before: '[',  after: '](url)', placeholder: 'link text', shortcut: 'k' },
         list:      { linePrefix: '- ' },
         quote:     { linePrefix: '> ' },
         h2:        { linePrefix: '## ' },
@@ -1751,6 +1756,33 @@
         return toolbarEl.parentElement?.querySelector('textarea') || null;
     }
 
+    // Insert/replace text via execCommand instead of textarea.value = ... so
+    // the browser preserves its native undo stack (Ctrl+Z works after the
+    // operation). Setting `.value` directly wipes the undo history; so does
+    // setRangeText. execCommand('insertText') is the only widely-supported
+    // path that preserves it. Spec-deprecated but every browser still ships
+    // it and there's no replacement that meets the same need.
+    //
+    // Helper: inserts `text` at the textarea's CURRENT selection, replacing
+    // any selected range. Returns the post-insert cursor position so callers
+    // can adjust selection afterward (e.g. to highlight inner content).
+    function insertTextPreservingUndo(textarea, text) {
+        textarea.focus();
+        const ok = document.execCommand('insertText', false, text);
+        if (!ok) {
+            // Fallback for environments where execCommand fails (rare). Loses
+            // undo but keeps the editor functional.
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            textarea.value =
+                textarea.value.substring(0, start) + text + textarea.value.substring(end);
+            const cursor = start + text.length;
+            textarea.setSelectionRange(cursor, cursor);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        return textarea.selectionEnd;
+    }
+
     function applyFormat(textarea, before, after, placeholder) {
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -1758,16 +1790,11 @@
         const selected = text.substring(start, end) || placeholder;
         const replacement = before + selected + after;
 
-        // Direct value manipulation (reliable across all browsers)
-        textarea.value = text.substring(0, start) + replacement + text.substring(end);
-
-        // Position cursor to select the inserted text
-        const cursorStart = start + before.length;
-        const cursorEnd = cursorStart + selected.length;
-        textarea.focus();
+        const insertEnd = insertTextPreservingUndo(textarea, replacement);
+        // Position cursor to select the inner text (between `before` and `after`).
+        const cursorEnd = insertEnd - after.length;
+        const cursorStart = cursorEnd - selected.length;
         textarea.setSelectionRange(cursorStart, cursorEnd);
-
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function applyLinePrefix(textarea, prefix) {
@@ -1775,12 +1802,14 @@
         const text = textarea.value;
         const lineStart = text.lastIndexOf('\n', start - 1) + 1;
 
-        textarea.value = text.substring(0, lineStart) + prefix + text.substring(lineStart);
-        const newPos = start + prefix.length;
+        // Move cursor to the start of the current line (collapsed selection),
+        // insert the prefix there, then move cursor back to where the user was
+        // (now shifted right by the prefix length).
         textarea.focus();
+        textarea.setSelectionRange(lineStart, lineStart);
+        insertTextPreservingUndo(textarea, prefix);
+        const newPos = start + prefix.length;
         textarea.setSelectionRange(newPos, newPos);
-
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     // Pad needed to insert at `pos` so it's preceded by a blank line (i.e.
@@ -1823,16 +1852,16 @@
         const trailingPad = trailingBlankLinePad(text, start, true);
         const replacement = leadingPad + template + trailingPad;
 
-        textarea.value = text.substring(0, start) + replacement + text.substring(start);
+        // Insert at cursor (collapsed selection — no replace range).
+        textarea.focus();
+        textarea.setSelectionRange(start, start);
+        insertTextPreservingUndo(textarea, replacement);
 
         // Select the first "Header" cell so the writer can immediately
         // overtype with their first column name.
         const firstHeaderStart = start + leadingPad.length + '| '.length;
         const firstHeaderEnd = firstHeaderStart + 'Header'.length;
-        textarea.focus();
         textarea.setSelectionRange(firstHeaderStart, firstHeaderEnd);
-
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function insertCallout(textarea, type) {
@@ -1857,17 +1886,16 @@
         const trailingPad = trailingBlankLinePad(text, end, false);
         const replacement = leadingPad + template + trailingPad;
 
-        textarea.value = text.substring(0, start) + replacement + text.substring(end);
+        // Insert at cursor — selection (if any) gets replaced by the wrapped
+        // template, since execCommand inserts in place of the active range.
+        insertTextPreservingUndo(textarea, replacement);
 
         // Drop the cursor on the body so the writer can immediately edit. If
         // they had no selection, select the placeholder so they can overtype.
         const headerLen = leadingPad.length + `> [!${type}]\n> `.length;
         const bodyStart = start + headerLen;
         const bodyEnd = bodyStart + (selected ? selected.length : placeholder.length);
-        textarea.focus();
         textarea.setSelectionRange(bodyStart, bodyEnd);
-
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
     function initFormattingToolbars() {
@@ -2502,11 +2530,12 @@
 
             if (this.state.mode === 'inline-edit' && this.state.imageToken) {
                 const tok = this.state.imageToken;
-                const v = ta.value;
-                ta.value = v.substring(0, tok.start) + md + v.substring(tok.end);
-                ta.dispatchEvent(new Event('input', { bubbles: true }));
-                const pos = tok.start + md.length;
+                // Replace the existing image token by selecting it and inserting.
+                // execCommand preserves native undo so Ctrl+Z reverts the swap.
                 ta.focus();
+                ta.setSelectionRange(tok.start, tok.end);
+                insertTextPreservingUndo(ta, md);
+                const pos = tok.start + md.length;
                 ta.setSelectionRange(pos, pos);
             } else {
                 applyFormat(ta, md, '', '');
@@ -2523,9 +2552,11 @@
             // surrounding paragraphs don't develop a blank line ghost.
             let end = tok.end;
             if (v[end] === '\n') end += 1;
-            ta.value = v.substring(0, tok.start) + v.substring(end);
-            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            // Select the token (plus any swallowed newline) and insert empty
+            // string. Preserves undo so Ctrl+Z restores the deleted image.
             ta.focus();
+            ta.setSelectionRange(tok.start, end);
+            insertTextPreservingUndo(ta, '');
             ta.setSelectionRange(tok.start, tok.start);
         },
 
@@ -2963,23 +2994,38 @@
     //  Keyboard Shortcuts
     // ------------------------------------------------------------------ //
 
+    // Shortcut keys map to FORMAT_MAP entry names. Ctrl/Cmd is implicit.
+    // `shift+<key>` requires Shift; bare `<key>` requires no Shift. Lookup is
+    // built once at module load from FORMAT_MAP.shortcut entries plus the
+    // dedicated insertTable binding (which lives outside FORMAT_MAP).
+    const SHORTCUT_TABLE = (() => {
+        const table = {};
+        Object.entries(FORMAT_MAP).forEach(([key, def]) => {
+            if (def.shortcut) table[def.shortcut] = key;
+        });
+        return table;
+    })();
+
     function initKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
             if (!e.ctrlKey && !e.metaKey) return;
-
             const textarea = document.activeElement;
             if (!textarea || textarea.tagName !== 'TEXTAREA') return;
+            if (!textarea.closest('#roadmap-editor')) return;
 
-            let fmt;
-            switch (e.key.toLowerCase()) {
-                case 'b': fmt = FORMAT_MAP.bold; break;
-                case 'i': fmt = FORMAT_MAP.italic; break;
-                case 'u': fmt = FORMAT_MAP.underline; break;
-                default: return;
-            }
+            const combo = (e.shiftKey ? 'shift+' : '') + e.key.toLowerCase();
+            const action = SHORTCUT_TABLE[combo];
+            if (!action) return;
 
             e.preventDefault();
-            wrapSelection(textarea, fmt.before, fmt.after, fmt.placeholder);
+
+            const fmt = FORMAT_MAP[action];
+            if (!fmt) return;
+            if (fmt.linePrefix) {
+                applyLinePrefix(textarea, fmt.linePrefix);
+            } else {
+                applyFormat(textarea, fmt.before, fmt.after, fmt.placeholder);
+            }
         });
     }
 

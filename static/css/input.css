@@ -1925,6 +1925,18 @@ html {
   display: none;
 }
 
+/* Formatting toolbar is position:sticky by default so it stays reachable as
+   the author scrolls long step / general-tips bodies. Inside a daisyUI
+   .collapse container (trophy guide rows), the collapse's `overflow: hidden`
+   makes the row the sticky scroll context — the toolbar's `top: <header>`
+   then resolves relative to the row, displacing it down INTO the textarea.
+   Disabling sticky there keeps the toolbar at its natural position; trophy
+   guide bodies are short enough that scroll-into-textarea isn't a real
+   concern there anyway. */
+.collapse .formatting-toolbar {
+  position: static !important;
+}
+
 /* Click-to-zoom lightbox for roadmap content images. Created lazily by
    PlatPursuit.Lightbox in utils.js the first time an eligible image is
    clicked, then reused. Single overlay covers the viewport with a centered

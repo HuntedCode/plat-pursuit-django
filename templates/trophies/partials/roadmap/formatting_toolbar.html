@@ -9,14 +9,14 @@ Each icon button carries matching `title` (tooltip) and `aria-label`
 (screen reader) text. flex-wrap on the container lets the toolbar
 collapse to multiple rows at narrow viewports without overflowing.
 {% endcomment %}
-<div class="formatting-toolbar flex items-center flex-wrap gap-0.5 mb-1 p-1 rounded-lg bg-white/[0.03] border border-base-content/5">
+<div class="formatting-toolbar sticky z-20 flex items-center flex-wrap gap-0.5 mb-1 p-1 rounded-lg bg-base-200/95 backdrop-blur border border-base-content/10 shadow-sm" style="top: calc(var(--chrome-height, 5rem) + 5rem)">
 
     {# ─── Group 1: Inline emphasis ─────────────────────────── #}
     <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold" data-fmt="bold" title="Bold (Ctrl+B)" aria-label="Bold">B</button>
     <button type="button" class="fmt-btn btn btn-ghost btn-xs italic" data-fmt="italic" title="Italic (Ctrl+I)" aria-label="Italic"><em>I</em></button>
     <button type="button" class="fmt-btn btn btn-ghost btn-xs underline" data-fmt="underline" title="Underline (Ctrl+U)" aria-label="Underline">U</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs line-through" data-fmt="strike" title="Strikethrough" aria-label="Strikethrough">S</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="spoiler" title="Spoiler" aria-label="Spoiler">
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs line-through" data-fmt="strike" title="Strikethrough (Ctrl+Shift+S)" aria-label="Strikethrough">S</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="spoiler" title="Spoiler (Ctrl+Shift+X)" aria-label="Spoiler">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
     </button>
 
@@ -67,7 +67,7 @@ collapse to multiple rows at narrow viewports without overflowing.
     <div class="w-px h-4 bg-base-content/20 mx-0.5"></div>
 
     {# ─── Group 3: Inserts ─────────────────────────────────── #}
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="link" title="Insert link" aria-label="Insert link">
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="link" title="Insert link (Ctrl+K)" aria-label="Insert link">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
     </button>
     {# Image button: default state inserts a new image; when the cursor sits   #}

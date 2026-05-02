@@ -60,24 +60,34 @@
         ));
     }
 
-    function insertAtCursor(textarea, text) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const value = textarea.value;
-        textarea.value = value.substring(0, start) + text + value.substring(end);
-        const caret = start + text.length;
+    // Use execCommand('insertText') instead of textarea.value = ... so the
+    // browser's native undo stack is preserved. Setting `.value` directly
+    // wipes undo history; execCommand is the only widely-supported path that
+    // doesn't. Spec-deprecated but every browser still supports it. Same
+    // pattern as roadmap_editor.js's insertTextPreservingUndo.
+    function execInsert(textarea, text) {
         textarea.focus();
-        textarea.setSelectionRange(caret, caret);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        const ok = document.execCommand('insertText', false, text);
+        if (!ok) {
+            // Fallback for environments where execCommand fails.
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            textarea.value =
+                textarea.value.substring(0, start) + text + textarea.value.substring(end);
+            const caret = start + text.length;
+            textarea.setSelectionRange(caret, caret);
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
+    function insertAtCursor(textarea, text) {
+        execInsert(textarea, text);
     }
 
     function replaceRange(textarea, from, to, text) {
-        const value = textarea.value;
-        textarea.value = value.substring(0, from) + text + value.substring(to);
-        const caret = from + text.length;
         textarea.focus();
-        textarea.setSelectionRange(caret, caret);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.setSelectionRange(from, to);
+        execInsert(textarea, text);
     }
 
     // ------------------------------------------------------------------ //
@@ -86,11 +96,14 @@
     const Picker = {
         panelEl: null,
         targetTextarea: null,
+        anchorEl: null,
+        _trackHandler: null,
 
         async open(textarea, anchorEl) {
             const manifest = await loadManifest();
             if (!manifest) return;
             this.targetTextarea = textarea;
+            this.anchorEl = anchorEl;
             if (!this.panelEl) {
                 this.panelEl = this._build(manifest);
                 document.body.appendChild(this.panelEl);
@@ -104,11 +117,25 @@
             }
             this._reposition(anchorEl);
             this.panelEl.classList.remove('hidden');
+            // Stick to the anchor button as the page scrolls / resizes — without
+            // this the fixed-positioned picker stays at its initial viewport
+            // coords while the button moves out from under it. Capture-phase
+            // listener on window catches scroll inside any nested container.
+            if (!this._trackHandler) {
+                this._trackHandler = () => {
+                    if (this._isVisible() && this.anchorEl) {
+                        this._reposition(this.anchorEl);
+                    }
+                };
+                window.addEventListener('scroll', this._trackHandler, { capture: true, passive: true });
+                window.addEventListener('resize', this._trackHandler);
+            }
         },
 
         close() {
             if (this.panelEl) this.panelEl.classList.add('hidden');
             this.targetTextarea = null;
+            this.anchorEl = null;
         },
 
         _isVisible() {
