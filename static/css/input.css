@@ -1763,6 +1763,12 @@ html {
      Full base-content + bold gives a visible weight + contrast bump. */
   @apply text-base-content font-bold;
 }
+.prose-roadmap em {
+  /* Same color logic as strong: body is /90 so italic at default opacity is
+     visually flat. Full base-content gives italicized in-game item names and
+     short quoted phrases enough presence to read as intentional emphasis. */
+  @apply text-base-content;
+}
 .prose-roadmap a {
   @apply text-primary underline decoration-primary/30;
 }
