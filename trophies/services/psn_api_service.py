@@ -521,11 +521,15 @@ class PsnApiService:
             )
 
         if not created:
-            # Stamp the previous earned value so the post_save signal that
-            # maintains Trophy.earned_count can detect transitions without
-            # needing the (sync-suppressed) capture_earned_trophy_previous_state
-            # pre_save handler. See trophies/signals.py for the consumer.
-            earned_trophy._previous_earned = earned_trophy.earned
+            # Stamp the previous earned value so the post_save signals that
+            # maintain Trophy.earned_count and Profile.total_<type> can detect
+            # transitions during sync. We use `_sync_previous_earned` (not
+            # `_previous_earned`) deliberately: the existing pre_save handler
+            # in notifications/signals.py overwrites `_previous_earned` to
+            # None during sync to disable the post_save notification handler,
+            # which would otherwise clobber any stamp we put on that name.
+            # See trophies/signals.py for the consumer.
+            earned_trophy._sync_previous_earned = earned_trophy.earned
             earned_trophy.earned = trophy_data.earned
             earned_trophy.trophy_hidden = trophy_data.trophy_hidden
             earned_trophy.progress = trophy_data.progress

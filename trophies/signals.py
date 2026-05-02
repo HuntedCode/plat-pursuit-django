@@ -27,6 +27,25 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 
 
+def _resolve_previous_earned(instance):
+    """Read the previous earned state of an EarnedTrophy from the instance.
+
+    Prefers `_sync_previous_earned` (stamped by sync code in
+    psn_api_service.create_or_update_earned_trophy_from_trophy_data) over
+    `_previous_earned` (set by the notifications app's pre_save handler).
+
+    The two names are intentionally distinct: during sync, the pre_save
+    handler overwrites `_previous_earned` to None so the post_save
+    notification handler doesn't double-fire (sync queues notifications
+    via DeferredNotificationService instead). That clobber breaks our
+    counter-maintenance signals if they read `_previous_earned`, hence
+    the sync-specific stamp.
+    """
+    if hasattr(instance, '_sync_previous_earned'):
+        return instance._sync_previous_earned
+    return getattr(instance, '_previous_earned', None)
+
+
 @receiver(post_save, sender=EarnedTrophy, dispatch_uid="update_trophy_earned_count_on_save")
 def update_trophy_earned_count_on_save(sender, instance, created, **kwargs):
     """Increment/decrement Trophy.earned_count when an EarnedTrophy flips."""
@@ -39,7 +58,7 @@ def update_trophy_earned_count_on_save(sender, instance, created, **kwargs):
             )
         return
 
-    prev = getattr(instance, '_previous_earned', None)
+    prev = _resolve_previous_earned(instance)
     # No previous-state hint means we cannot tell what changed. Daily cron
     # reconciliation will fix any drift; skipping here is safer than guessing.
     if prev is None:
@@ -139,7 +158,7 @@ def update_profile_type_counts_on_save(sender, instance, created, **kwargs):
             )
         return
 
-    prev = getattr(instance, '_previous_earned', None)
+    prev = _resolve_previous_earned(instance)
     if prev is None:
         return  # daily reconcile fixes drift
 
