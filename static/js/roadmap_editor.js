@@ -908,30 +908,36 @@
     const saveText = document.getElementById('save-text');
     const saveStatus = document.getElementById('save-status');
 
+    // Labels prefixed with "Auto-" so the autosave chip stays linguistically
+    // distinct from the manual Save button — both surface "save" state but
+    // operate on different layers (branch vs live roadmap). The cursor-help +
+    // tooltip on the chip explains the distinction in full.
     function setSaveStatus(state) {
         if (!saveStatus) return;
+        // Keep cursor-help so the explanatory tooltip on the parent stays.
+        const baseClass = 'flex items-center gap-1 text-xs ml-auto shrink-0 cursor-help';
         switch (state) {
             case 'saving':
-                saveStatus.className = 'flex items-center gap-1 text-xs text-warning/70 ml-auto shrink-0';
+                saveStatus.className = `${baseClass} text-warning/70`;
                 saveIcon.innerHTML = '<circle class="animate-spin origin-center" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="40 60"/>';
-                saveText.textContent = 'Saving...';
+                saveText.textContent = 'Auto-saving…';
                 break;
             case 'saved':
-                saveStatus.className = 'flex items-center gap-1 text-xs text-success/70 ml-auto shrink-0';
+                saveStatus.className = `${baseClass} text-success/70`;
                 saveIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>';
-                saveText.textContent = 'Saved';
+                saveText.textContent = 'Auto-saved';
                 hasUnsaved = false;
                 break;
             case 'unsaved':
-                saveStatus.className = 'flex items-center gap-1 text-xs text-warning/70 ml-auto shrink-0';
+                saveStatus.className = `${baseClass} text-warning/70`;
                 saveIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01"/>';
                 saveText.textContent = 'Unsaved';
                 hasUnsaved = true;
                 break;
             case 'error':
-                saveStatus.className = 'flex items-center gap-1 text-xs text-error/70 ml-auto shrink-0';
+                saveStatus.className = `${baseClass} text-error/70`;
                 saveIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>';
-                saveText.textContent = 'Error';
+                saveText.textContent = 'Auto-save error';
                 break;
         }
     }
@@ -1029,6 +1035,17 @@
             }
         });
 
+        // First step's "up" and last step's "down" buttons are no-ops, so
+        // disable them visually. Updated here (not in createStepElement)
+        // because position depends on the full list being rendered.
+        const stepCards = container.querySelectorAll('.step-card');
+        stepCards.forEach((card, idx) => {
+            const upBtn = card.querySelector('.step-move-up');
+            const downBtn = card.querySelector('.step-move-down');
+            if (upBtn) upBtn.disabled = idx === 0;
+            if (downBtn) downBtn.disabled = idx === stepCards.length - 1;
+        });
+
         initDragReorder(tabId);
 
         // Notes module mounts the 💬 N indicator on each step row. Lazy
@@ -1107,19 +1124,60 @@
             deleteStep(step.id);
         });
 
+        // Up/down reorder buttons are wired via event delegation in
+        // initFormattingToolbars (one listener for the whole editor). For
+        // non-editor+ users we actually REMOVE the column so the controls
+        // don't render at all — applyOwnership's button-disable sweep would
+        // otherwise leave them visible-but-dead, which the user reported as
+        // misleading.
+
         // Render ownership badge + apply writer-scoping read-only state.
         // Writers can only edit steps they own (or untouched/ownerless ones);
         // editors and publishers bypass this.
         applyOwnership(el, step.created_by_id || null, 'step-owner');
 
-        // Drag-reorder is editor+ only. Hide the handle for writers so the
-        // grab cursor doesn't suggest an action they can't actually perform.
+        // Reorder (drag + up/down) is editor+ only. Strip the whole reorder
+        // column for writers so the grab cursor + arrow buttons don't suggest
+        // actions they can't actually perform.
         if (!bypassOwnershipScope) {
-            const handle = el.querySelector('.step-handle');
-            if (handle) handle.classList.add('hidden');
+            const reorderCol = el.querySelector('.step-reorder-controls');
+            if (reorderCol) reorderCol.remove();
         }
 
         return el;
+    }
+
+    async function moveStep(stepId, direction) {
+        // Editor+ only. Writers don't see the buttons but defend in case
+        // markup is tampered with.
+        if (!bypassOwnershipScope) return;
+
+        const tabData = tabsData.find(t => t.id === activeTabId);
+        if (!tabData || !tabData.steps) return;
+
+        const idx = tabData.steps.findIndex(s => s.id === stepId);
+        if (idx < 0) return;
+        const newIdx = idx + direction;
+        if (newIdx < 0 || newIdx >= tabData.steps.length) return;
+
+        // Build the post-swap step ID list and reuse the same endpoint the
+        // drag handler hits. Local state updates only on success so a 403
+        // / network failure leaves the visible order in sync with the API.
+        const newSteps = tabData.steps.slice();
+        const [moved] = newSteps.splice(idx, 1);
+        newSteps.splice(newIdx, 0, moved);
+        const stepIds = newSteps.map(s => s.id);
+
+        try {
+            await apiCall('post', `/api/v1/roadmap/${roadmapId}/tab/${activeTabId}/steps/reorder/`, {
+                step_ids: stepIds,
+            });
+        } catch (e) {
+            return;
+        }
+
+        tabData.steps = newSteps;
+        renderSteps(activeTabId);
     }
 
     async function saveStep(stepId, el) {
@@ -1171,6 +1229,25 @@
                 const tabId = parseInt(btn.dataset.tabId, 10);
                 await addStep(tabId);
             });
+        });
+    }
+
+    // Event-delegated reorder. Per-element listeners attached during
+    // createStepElement weren't surviving re-renders consistently; delegation
+    // sidesteps that and gives us one listener for the whole editor. The
+    // up/down columns are removed (not hidden) for non-editor+ users in
+    // createStepElement, so the dispatch never fires for them anyway.
+    function initStepReorderButtons() {
+        editorEl.addEventListener('click', (e) => {
+            const upBtn = e.target.closest('.step-move-up');
+            const downBtn = e.target.closest('.step-move-down');
+            const btn = upBtn || downBtn;
+            if (!btn || btn.disabled) return;
+            const card = btn.closest('.step-card');
+            if (!card) return;
+            const stepId = parseInt(card.dataset.stepId, 10);
+            if (Number.isNaN(stepId)) return;
+            moveStep(stepId, upBtn ? -1 : 1);
         });
     }
 
@@ -1560,12 +1637,24 @@
         }
     }
 
+    // Save tooltip wording depends on publish state — published roadmaps push
+    // changes live to readers immediately, draft roadmaps stay invisible until
+    // a publisher publishes them. Kept here so it stays in sync with the
+    // template's initial server-rendered tooltip in roadmap_edit.html.
+    const SAVE_TOOLTIP_PUBLISHED = 'Commit your draft branch to the live roadmap. Readers will see your changes immediately.';
+    const SAVE_TOOLTIP_DRAFT = "Commit your draft branch to the live roadmap. The roadmap is still in draft, so readers won't see your changes until a publisher publishes it.";
+
     function updatePublishUI(newStatus) {
         const badge = document.getElementById('status-badge');
         if (badge) {
             badge.textContent = newStatus.charAt(0).toUpperCase() + newStatus.slice(1);
             badge.classList.toggle('badge-warning', newStatus === 'draft');
             badge.classList.toggle('badge-success', newStatus === 'published');
+        }
+
+        const saveBtn = document.getElementById('roadmap-save-btn');
+        if (saveBtn) {
+            saveBtn.title = newStatus === 'published' ? SAVE_TOOLTIP_PUBLISHED : SAVE_TOOLTIP_DRAFT;
         }
 
         // Swap the publish/unpublish button
@@ -2951,6 +3040,7 @@
 
         initTabs();
         initAddStepButtons();
+        initStepReorderButtons();
         initTabFields();
         initMetadataFields();
         initPublishButtons();

@@ -321,6 +321,12 @@ class RoadmapService:
                 guide.gallery_images = list(guide_payload.get('gallery_images') or [])
             overlay_guides.append(guide)
 
+        # Sort by trophy_id so brand-new branch guides (which BranchProxy
+        # appends to the end of the payload) land in the same canonical
+        # position the editor and published-view sort UI expect, instead of
+        # showing up out-of-order under the rest of the list in preview.
+        overlay_guides.sort(key=lambda g: g.trophy_id)
+
         if not hasattr(roadmap, '_prefetched_objects_cache'):
             roadmap._prefetched_objects_cache = {}
         roadmap._prefetched_objects_cache['steps'] = overlay_steps
