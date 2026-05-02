@@ -1631,6 +1631,7 @@
         italic:    { before: '*',  after: '*',  placeholder: 'italic text' },
         underline: { before: '__', after: '__', placeholder: 'underlined text' },
         strike:    { before: '~~', after: '~~', placeholder: 'strikethrough' },
+        spoiler:   { before: '||', after: '||', placeholder: 'spoiler text' },
         link:      { before: '[',  after: '](url)', placeholder: 'link text' },
         list:      { linePrefix: '- ' },
         quote:     { linePrefix: '> ' },

@@ -1730,6 +1730,45 @@ html {
   display: none;
 }
 
+/* Discord-style ||spoiler|| spans (rendered server-side by checklist_service
+   when enable_spoilers=True; toggled by PlatPursuit.SpoilerToggle). Hidden
+   state paints text the same color as the fill so the words disappear into
+   the bar; revealed state restores inherited color and a subtle tint so the
+   reader can re-click to re-hide. */
+.spoiler {
+  background-color: oklch(20% 0.005 280);
+  color: oklch(20% 0.005 280);
+  padding: 0 0.25em;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease, outline-color 0.15s ease;
+  outline: 1px solid transparent;
+  outline-offset: 1px;
+}
+/* Hover ring shows the exact extent of the spoiler without revealing content.
+   On wrapped inline spans the browser draws the outline around each line
+   fragment, so multi-line spoilers are clearly bounded. */
+.spoiler:hover {
+  outline-color: oklch(70% 0.15 250 / 0.7);
+}
+.spoiler:focus-visible {
+  outline: 2px solid oklch(70% 0.15 250);
+  outline-offset: 2px;
+}
+.spoiler.revealed {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  user-select: text;
+}
+.spoiler.revealed:hover {
+  outline-color: oklch(70% 0.15 250 / 0.45);
+}
+/* Spoilered controller icons / images shouldn't leak through the bar. */
+.spoiler:not(.revealed) img {
+  visibility: hidden;
+}
+
 /* Scroll indicator bounce */
 @keyframes scroll-bounce {
   0%, 100% { transform: translateY(0); opacity: 0.5; }

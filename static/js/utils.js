@@ -1420,6 +1420,53 @@ const CoachMarks = (function() {
     };
 })();
 
+/* ---------------------------------------------------------------------------
+ * SpoilerToggle
+ *
+ * Click/keyboard handler for ||spoiler|| spans rendered server-side by
+ * checklist_service.process_markdown(enable_spoilers=True). One delegated
+ * listener pair on document.body covers every spoiler on every page (roadmap
+ * detail, game detail's inline roadmap section, editor preview), and stays
+ * idempotent so re-init after dynamic re-renders is a no-op.
+ *
+ * Reveal state is in-memory only: no localStorage, no per-trophy persistence.
+ * Refreshing the page re-hides everything, matching PSNProfiles/Discord. The
+ * `aria-pressed` attribute mirrors the visible state for screen readers.
+ * --------------------------------------------------------------------------- */
+const SpoilerToggle = (() => {
+    let initialized = false;
+
+    function toggle(el) {
+        const revealed = el.classList.toggle('revealed');
+        el.setAttribute('aria-pressed', revealed ? 'true' : 'false');
+        el.setAttribute('title', revealed ? 'Click to hide' : 'Click to reveal');
+    }
+
+    return {
+        init() {
+            if (initialized) return;
+            initialized = true;
+            document.body.addEventListener('click', (e) => {
+                const sp = e.target.closest('.spoiler');
+                if (sp) toggle(sp);
+            });
+            document.body.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const sp = e.target.closest?.('.spoiler');
+                if (!sp) return;
+                e.preventDefault();
+                toggle(sp);
+            });
+        },
+    };
+})();
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => SpoilerToggle.init());
+} else {
+    SpoilerToggle.init();
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1437,3 +1484,4 @@ window.PlatPursuit.LeaderboardUtils = LeaderboardUtils;
 window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
 window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
 window.PlatPursuit.CoachMarks = CoachMarks;
+window.PlatPursuit.SpoilerToggle = SpoilerToggle;

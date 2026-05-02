@@ -67,7 +67,7 @@
                     [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
                     [&_strong]:text-base-content/90 [&_strong]:font-semibold
                     [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
-                    [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ guide.body|render_markdown:game.controller_icon_set }}</div>
+                    [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ guide.body|render_roadmap_markdown:game.controller_icon_set }}</div>
         {% if guide.gallery_images %}
         <div class="roadmap-gallery mt-3 grid {% if guide.gallery_images|length == 1 %}grid-cols-1{% else %}grid-cols-2 md:grid-cols-3{% endif %} gap-2">
             {% for img in guide.gallery_images %}

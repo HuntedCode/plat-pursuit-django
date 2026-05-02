@@ -62,6 +62,15 @@ Roadmap migration is handled after CTG migration in `absorb()`. If the target co
 - Publish/unpublish toggle
 - Preview link opens the roadmap detail page with `?preview=true`
 
+### Markdown Features (Roadmap-Scoped)
+
+Roadmap markdown bodies (general tips, step descriptions, trophy guides) are rendered through the `render_roadmap_markdown` template filter, which calls `ChecklistService.process_markdown(text, icon_set, enable_spoilers=True)`. Two extensions on top of the standard markdown pass:
+
+- **Controller-icon shortcodes**: `:square:`, `:triangle:`, `:l2:`, `:dpad-up:`, etc., resolved to inline SVG glyphs via `trophies/util_modules/controller_icons.py`. The `icon_set` argument (`'ps4'` or `'ps5'`) is sourced from `Game.controller_icon_set` and selects the platform variant.
+- **Spoiler tags**: Discord-style `||hidden text||` wraps content in a click-to-reveal span. Multi-token (bold, links, controller icons) and multi-line content inside `||...||` is supported via non-greedy DOTALL matching. Literal `||` inside fenced code blocks survives because `_apply_spoilers` splits on `<code>`/`<pre>` regions before substituting.
+
+The plain `render_markdown` filter (used by reviews, etc.) does NOT enable spoilers, keeping the syntax scoped to roadmap surfaces. Reveal state is in-memory only via `PlatPursuit.SpoilerToggle` in `static/js/utils.js` (no localStorage; refresh re-hides).
+
 ### Game Detail Page (CTA)
 - Top-level Roadmap card sits directly under the game header, above the Community card. Promoted out of the Community section so it can't be missed during a scroll-by.
 - Filled state is a primary-tinted card with a stat chip strip (steps, guides, estimated hours, difficulty, missables, online required, playthroughs, video walkthrough — chips only render when the underlying field has data), a 3-step "Walkthrough Preview" list with overflow indicator, and a prominent "View Full Roadmap" button. Author byline (compact avatars) sits next to the title; staff Edit button is right-aligned.

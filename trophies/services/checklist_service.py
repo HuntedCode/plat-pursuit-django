@@ -38,13 +38,17 @@ class ChecklistService:
     ALLOWED_HTML_ATTRS = ALLOWED_HTML_ATTRS
 
     @staticmethod
-    def process_markdown(text, icon_set='ps4'):
+    def process_markdown(text, icon_set='ps4', enable_spoilers=False):
         """Process markdown text to HTML with sanitization.
 
         ``icon_set`` selects the PlayStation controller-icon variant for
         ``:shortcode:`` tokens (``'ps4'`` or ``'ps5'``). Pass the value of
         ``Game.controller_icon_set`` from the calling context so glyphs match
         the game's hardware.
+
+        ``enable_spoilers`` opts in to Discord-style ``||spoiler||`` syntax.
+        Off by default so callers like reviews keep their existing behavior;
+        roadmap templates pass ``True`` via ``render_roadmap_markdown``.
         """
         if not text or not text.strip():
             return ''
@@ -111,9 +115,46 @@ class ChecklistService:
                 clean_html
             )
 
+            if enable_spoilers:
+                clean_html = _apply_spoilers(clean_html)
+
             return clean_html.strip()
         except Exception:
             import logging
             logging.getLogger('psn_api').exception("Markdown processing failed")
             from trophies.util_modules.language import escape_html
             return escape_html(text)
+
+
+# Match Discord's ``||spoiler||`` syntax. Non-greedy + DOTALL so a single
+# spoiler can wrap inline markup (bold, links, controller icons) and even span
+# lines if an author breaks the content across them.
+_SPOILER_RE = re.compile(r'\|\|(.+?)\|\|', re.DOTALL)
+# Split on code/pre regions so literal ``||`` inside a fenced block stays raw.
+# bleach has already balanced these tags, so a simple non-greedy alternation is
+# sufficient.
+_CODE_REGION_RE = re.compile(
+    r'(<(?:code|pre)\b[^>]*>.*?</(?:code|pre)>)',
+    re.DOTALL | re.IGNORECASE,
+)
+_SPOILER_REPLACEMENT = (
+    r'<span class="spoiler" role="button" tabindex="0" '
+    r'aria-pressed="false" aria-label="Spoiler, click to reveal" '
+    r'title="Click to reveal">\1</span>'
+)
+
+
+def _apply_spoilers(html):
+    """Wrap ``||text||`` runs in spoiler spans, leaving code blocks alone.
+
+    Runs after bleach so we don't have to add ``span`` to the allowlist (which
+    would let authors hand-write their own spans). The transform splits the
+    document on code/pre regions and only rewrites the parts in between, so
+    fenced code containing literal ``||`` survives unchanged.
+    """
+    parts = _CODE_REGION_RE.split(html)
+    # Even-indexed parts are outside code; odd-indexed are the captured code
+    # regions themselves and must be left untouched.
+    for i in range(0, len(parts), 2):
+        parts[i] = _SPOILER_RE.sub(_SPOILER_REPLACEMENT, parts[i])
+    return ''.join(parts)

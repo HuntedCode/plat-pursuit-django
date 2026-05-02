@@ -31,3 +31,21 @@ def render_markdown(text, icon_set='ps4'):
     # mark_safe() is valid here because bleach strips all non-allowlisted HTML.
     html = ChecklistService.process_markdown(text, icon_set=icon_set)
     return mark_safe(html)
+
+
+@register.filter(name='render_roadmap_markdown')
+def render_roadmap_markdown(text, icon_set='ps4'):
+    """Render markdown for roadmap content, with ``||spoiler||`` support.
+
+    Same sanitization guarantees as :func:`render_markdown`; the only
+    difference is that Discord-style spoilers are enabled. Use this filter on
+    roadmap-owned fields (trophy guides, step descriptions, general tips) so
+    spoiler syntax stays scoped to the roadmap surface and doesn't leak into
+    reviews or other markdown callers.
+    """
+    if not text:
+        return ''
+    html = ChecklistService.process_markdown(
+        text, icon_set=icon_set, enable_spoilers=True,
+    )
+    return mark_safe(html)
