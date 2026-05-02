@@ -1694,6 +1694,33 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    function insertTable(textarea) {
+        const start = textarea.selectionStart;
+        const text = textarea.value;
+        const template =
+            '| Header | Header |\n' +
+            '|--------|--------|\n' +
+            '| Cell   | Cell   |\n' +
+            '| Cell   | Cell   |\n';
+
+        // Drop the template on its own paragraph: leading newline if not at
+        // the start of a line, no trailing newline since the template ends
+        // with one already.
+        const needsLead = start > 0 && text[start - 1] !== '\n';
+        const replacement = (needsLead ? '\n' : '') + template;
+
+        textarea.value = text.substring(0, start) + replacement + text.substring(start);
+
+        // Select the first "Header" cell so the writer can immediately
+        // overtype with their first column name.
+        const firstHeaderStart = start + (needsLead ? 1 : 0) + '| '.length;
+        const firstHeaderEnd = firstHeaderStart + 'Header'.length;
+        textarea.focus();
+        textarea.setSelectionRange(firstHeaderStart, firstHeaderEnd);
+
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
     function insertCallout(textarea, type) {
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -1752,6 +1779,12 @@
             // Image upload button
             if (fmtKey === 'image') {
                 uploadImage(textarea);
+                return;
+            }
+
+            // Table button: insert 2x2 GFM pipe-table starter at cursor.
+            if (fmtKey === 'table') {
+                insertTable(textarea);
                 return;
             }
 

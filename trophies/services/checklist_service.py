@@ -15,6 +15,11 @@ MARKDOWN_EXTRAS = [
     'fenced-code-blocks',
     'cuddled-lists',
     'break-on-newline',
+    # GFM-style pipe tables. Authors can use `|:--|` etc. on the separator
+    # row for column alignment; markdown2 emits `style="text-align:..."` for
+    # those cases, which we convert to Tailwind utility classes pre-bleach
+    # so 'style' can stay off the attribute allowlist.
+    'tables',
 ]
 
 ALLOWED_HTML_TAGS = [
@@ -26,6 +31,9 @@ ALLOWED_HTML_TAGS = [
     # title hierarchy; h2/h3/h4 cover the realistic depth needed inside a
     # roadmap or trophy-guide body.
     'h2', 'h3', 'h4',
+    # Pipe-table family. thead/tbody are emitted by markdown2's tables extra
+    # and would be silently stripped without explicit allowlisting.
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
 ]
 
 ALLOWED_HTML_ATTRS = {
@@ -68,6 +76,18 @@ class ChecklistService:
 
             html_output = markdown2.markdown(text, extras=MARKDOWN_EXTRAS)
 
+            # markdown2's tables extra emits inline `style="text-align:..."`
+            # for `:--`/`--:`/`:--:` alignment markers. Allowing the `style`
+            # attribute through bleach would open up a broad XSS surface, so
+            # convert to Tailwind utility classes (which are already allowed
+            # via the wildcard `*: ['class']` rule) before sanitization.
+            html_output = re.sub(
+                r'<(t[hd]) style="text-align:\s*(left|right|center);?">',
+                r'<\1 class="text-\2">',
+                html_output,
+                flags=re.IGNORECASE,
+            )
+
             clean_html = bleach.clean(
                 html_output,
                 tags=ALLOWED_HTML_TAGS,
@@ -95,6 +115,17 @@ class ChecklistService:
             # plain blockquotes (anything not opening with a [!TYPE] marker)
             # still get the regular styling pass.
             clean_html = _apply_callouts(clean_html)
+
+            # Wrap tables in a scrollable container so wide tables (collectible
+            # lists, build comparisons) overflow horizontally on phone widths
+            # instead of breaking out of the card. The wrapper class also gets
+            # rounded corners + a subtle border in the prose-roadmap CSS.
+            clean_html = re.sub(
+                r'(<table\b[^>]*>.*?</table>)',
+                r'<div class="prose-roadmap-table-wrap">\1</div>',
+                clean_html,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
 
             # Style links: external get target="_blank", internal anchors stay on-page
             def _style_link(m):

@@ -1846,6 +1846,32 @@ html {
   @apply text-secondary;
 }
 
+/* GFM-style pipe tables. Rendered when an author writes a markdown table; the
+   `tables` extra produces semantic table/thead/tbody/tr/th/td which we style
+   GitHub-minimal: header row with a subtle background tint, thin horizontal
+   dividers between body rows, no vertical borders. The
+   `prose-roadmap-table-wrap` div is added by the post-bleach pass and gives
+   wide tables horizontal scroll without busting out of their card. */
+.prose-roadmap .prose-roadmap-table-wrap {
+  @apply my-4 overflow-x-auto rounded-md border border-base-content/10;
+}
+.prose-roadmap table {
+  @apply w-full border-collapse text-sm;
+}
+.prose-roadmap thead {
+  @apply bg-base-300/30;
+}
+.prose-roadmap th {
+  @apply text-left font-semibold px-3 py-2 text-base-content;
+}
+.prose-roadmap td {
+  @apply px-3 py-2 align-top;
+}
+/* Divider between body rows only — header is separated visually by its bg. */
+.prose-roadmap tbody tr + tr {
+  @apply border-t border-base-content/10;
+}
+
 /* Discord-style ||spoiler|| spans (rendered server-side by checklist_service
    when enable_spoilers=True; toggled by PlatPursuit.SpoilerToggle). Hidden
    state paints text the same color as the fill so the words disappear into
