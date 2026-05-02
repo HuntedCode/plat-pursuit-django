@@ -68,6 +68,7 @@ Roadmap markdown bodies (general tips, step descriptions, trophy guides) are ren
 
 - **Controller-icon shortcodes**: `:square:`, `:triangle:`, `:l2:`, `:dpad-up:`, etc., resolved to inline SVG glyphs via `trophies/util_modules/controller_icons.py`. The `icon_set` argument (`'ps4'` or `'ps5'`) is sourced from `Game.controller_icon_set` and selects the platform variant.
 - **Spoiler tags**: Discord-style `||hidden text||` wraps content in a click-to-reveal span. Multi-token (bold, links, controller icons) and multi-line content inside `||...||` is supported via non-greedy DOTALL matching. Literal `||` inside fenced code blocks survives because `_apply_spoilers` splits on `<code>`/`<pre>` regions before substituting.
+- **Callouts**: GitHub-style blockquote markers (`> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`, `> [!IMPORTANT]`) on the first line of a blockquote convert the whole quote into a colored callout box (`<div class="callout callout-{type}">`). Body content can include any other supported markdown — lists, images, links, controller icons, spoilers. The transform runs in `_apply_callouts` after bleach but before the generic blockquote-styling regex, so plain blockquotes (no `[!TYPE]` opener) keep their default treatment.
 
 The plain `render_markdown` filter (used by reviews, etc.) does NOT enable spoilers, keeping the syntax scoped to roadmap surfaces. Reveal state is in-memory only via `PlatPursuit.SpoilerToggle` in `static/js/utils.js` (no localStorage; refresh re-hides).
 

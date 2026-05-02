@@ -1787,6 +1787,65 @@ html {
   @apply text-xs uppercase tracking-wider font-semibold text-base-content/60 mt-3 mb-1 first:mt-0;
 }
 
+/* GitHub-style callouts: NOTE / TIP / WARNING / IMPORTANT. Rendered by
+   checklist_service._apply_callouts as `<div class="callout callout-{type}">`
+   when an author opens a blockquote with `> [!TYPE]`. Each variant gets a
+   left border, tinted background, and an icon-bearing header so they read as
+   "this paragraph wants your attention" without screaming louder than the
+   trophy hunt itself. */
+.prose-roadmap .callout {
+  @apply my-4 rounded-md border-l-4 border border-base-content/5 bg-white/[0.02] px-4 py-3;
+}
+.prose-roadmap .callout-header {
+  @apply flex items-center gap-1.5 mb-1.5 font-semibold text-sm;
+}
+.prose-roadmap .callout-label {
+  @apply tracking-wide;
+}
+.prose-roadmap .callout-body > *:first-child {
+  margin-top: 0;
+}
+.prose-roadmap .callout-body > *:last-child {
+  margin-bottom: 0;
+}
+/* Tighten paragraph spacing inside callouts so they don't feel cavernous. */
+.prose-roadmap .callout-body p {
+  @apply mb-2 last:mb-0;
+}
+
+/* NOTE: blue. Generic background info. */
+.prose-roadmap .callout-note {
+  @apply border-l-info bg-info/[0.05];
+}
+.prose-roadmap .callout-note .callout-header {
+  @apply text-info;
+}
+
+/* TIP: green. Strategy advice. */
+.prose-roadmap .callout-tip {
+  @apply border-l-success bg-success/[0.05];
+}
+.prose-roadmap .callout-tip .callout-header {
+  @apply text-success;
+}
+
+/* WARNING: amber. Heads-up worth slowing down for. */
+.prose-roadmap .callout-warning {
+  @apply border-l-warning bg-warning/[0.05];
+}
+.prose-roadmap .callout-warning .callout-header {
+  @apply text-warning;
+}
+
+/* IMPORTANT: purple. Critical info — don't skip. Uses secondary so the page
+   doesn't end up with two yellow callout types side-by-side. */
+.prose-roadmap .callout-important {
+  @apply border-l-secondary bg-secondary/[0.05];
+}
+.prose-roadmap .callout-important .callout-header {
+  @apply text-secondary;
+}
+
 /* Discord-style ||spoiler|| spans (rendered server-side by checklist_service
    when enable_spoilers=True; toggled by PlatPursuit.SpoilerToggle). Hidden
    state paints text the same color as the fill so the words disappear into
@@ -1824,6 +1883,34 @@ html {
 /* Spoilered controller icons / images shouldn't leak through the bar. */
 .spoiler:not(.revealed) img {
   visibility: hidden;
+}
+/* Image-only spoilers (||![alt](url)||): a plain inline span around a block
+   image generates tiny empty clickable fragments above and below it. The
+   block variant matches the image's bounding box exactly so there's a single
+   coherent bar to click. visibility:hidden on the inner image preserves the
+   layout box, so the wrapper auto-sizes to whatever the image would have
+   occupied. Tag added by checklist_service._build_spoiler.
+
+   Sizing flow: the wrapper takes the same max-width caps the image normally
+   carries (max-w-full mobile, max-w-[75%] desktop) and uses width:fit-content
+   to shrink to actual image content. The image then fills the wrapper at
+   100%, since leaving its own 75% cap in place would create empty space
+   inside the wrapper on either side. */
+.spoiler-block {
+  @apply block mx-auto my-3 max-w-full md:max-w-[75%] overflow-hidden;
+  width: fit-content;
+  padding: 0;
+  border-radius: 0.5rem;
+}
+.spoiler-block img {
+  /* Override the global image-styling pass: wrapper now owns sizing /
+     centering / corner radius, so the inner image just fills it edge-to-edge. */
+  max-width: 100%;
+  width: auto;
+  margin: 0;
+  display: block;
+  border: 0;
+  border-radius: 0;
 }
 
 /* Scroll indicator bounce */

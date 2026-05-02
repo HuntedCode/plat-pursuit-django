@@ -1694,6 +1694,42 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    function insertCallout(textarea, type) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        const selected = text.substring(start, end);
+        const placeholder = `Your ${type.toLowerCase()} text here.`;
+        const body = selected || placeholder;
+
+        // Each line of the body needs to start with "> " for markdown to keep
+        // it inside the same blockquote (so the [!TYPE] marker on line 1
+        // stays grouped with the body lines). Multi-line selections respect
+        // existing line breaks.
+        const wrappedBody = body.split('\n').map((line) => `> ${line}`).join('\n');
+        const template = `> [!${type}]\n${wrappedBody}`;
+
+        // If we're not at the start of a line, add a leading newline so the
+        // template doesn't fuse with whatever's before it. Same on the trailing
+        // edge so the next line of the author's content stays separate.
+        const needsLead = start > 0 && text[start - 1] !== '\n';
+        const needsTrail = end < text.length && text[end] !== '\n';
+        const replacement =
+            (needsLead ? '\n' : '') + template + (needsTrail ? '\n' : '');
+
+        textarea.value = text.substring(0, start) + replacement + text.substring(end);
+
+        // Drop the cursor on the body so the writer can immediately edit. If
+        // they had no selection, select the placeholder so they can overtype.
+        const headerLen = (needsLead ? 1 : 0) + `> [!${type}]\n> `.length;
+        const bodyStart = start + headerLen;
+        const bodyEnd = bodyStart + (selected ? selected.length : placeholder.length);
+        textarea.focus();
+        textarea.setSelectionRange(bodyStart, bodyEnd);
+
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
     function initFormattingToolbars() {
         // Formatting buttons
         document.addEventListener('click', (e) => {
@@ -1716,6 +1752,20 @@
             // Image upload button
             if (fmtKey === 'image') {
                 uploadImage(textarea);
+                return;
+            }
+
+            // Callout dropdown items: data-fmt="callout-note" / -tip / -warning
+            // / -important. Insert the > [!TYPE]\n> body template at the cursor.
+            if (fmtKey && fmtKey.startsWith('callout-')) {
+                const type = fmtKey.slice('callout-'.length).toUpperCase();
+                insertCallout(textarea, type);
+                // Close the daisyUI dropdown after picking. Blurring the
+                // active element is the lightest way to do this without
+                // hooking the menu's open state directly.
+                if (document.activeElement && document.activeElement.blur) {
+                    document.activeElement.blur();
+                }
                 return;
             }
 

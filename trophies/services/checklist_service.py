@@ -89,6 +89,13 @@ class ChecklistService:
                 flags=re.DOTALL,
             )
 
+            # GitHub-style callouts: convert blockquotes whose first paragraph
+            # opens with [!NOTE]/[!TIP]/[!WARNING]/[!IMPORTANT] into a styled
+            # callout div. Done BEFORE the blockquote-styling regex below so
+            # plain blockquotes (anything not opening with a [!TYPE] marker)
+            # still get the regular styling pass.
+            clean_html = _apply_callouts(clean_html)
+
             # Style links: external get target="_blank", internal anchors stay on-page
             def _style_link(m):
                 pre, href, post = m.group(1), m.group(2), m.group(3)
@@ -142,11 +149,125 @@ _CODE_REGION_RE = re.compile(
     r'(<(?:code|pre)\b[^>]*>.*?</(?:code|pre)>)',
     re.DOTALL | re.IGNORECASE,
 )
-_SPOILER_REPLACEMENT = (
-    r'<span class="spoiler" role="button" tabindex="0" '
-    r'aria-pressed="false" aria-label="Spoiler, click to reveal" '
-    r'title="Click to reveal">\1</span>'
+# Image-only spoiler content: a single <img> with optional surrounding
+# whitespace or <br>. Inline spoiler spans wrapping a block image generate
+# tiny clickable line-fragments above and below the image (because <span> is
+# inline but the img has display:block). Detecting this case lets us swap to
+# a block-level wrapper that matches the image's bounding box.
+_SPOILER_IMAGE_ONLY_RE = re.compile(
+    r'\s*(?:<br\s*/?>\s*)*<img\b[^>]*>\s*(?:<br\s*/?>\s*)*',
+    re.IGNORECASE,
 )
+
+
+# GitHub-style callout markers: ``> [!NOTE]`` / ``[!TIP]`` / ``[!WARNING]`` /
+# ``[!IMPORTANT]`` on the first line of a blockquote. The blockquote element
+# itself is the wrapper; markdown2 renders the marker as plain text inside the
+# first ``<p>``, which we then strip and replace the whole blockquote with a
+# semantic ``<div class="callout callout-{type}">`` so the styling pipeline
+# treats it differently from a plain quote.
+_CALLOUT_RE = re.compile(
+    r'<blockquote>\s*<p>\s*\[!(NOTE|TIP|WARNING|IMPORTANT)\]\s*'
+    r'(?:<br\s*/?>)?\s*'   # optional <br> after the marker (break-on-newline)
+    r'(.*?)</p>\s*'        # rest of the first <p> (may be empty if marker was alone)
+    r'(.*?)</blockquote>', # any subsequent <p>/list/etc. inside the blockquote
+    re.DOTALL | re.IGNORECASE,
+)
+
+# Icons sized to sit in a tight callout header next to the type label. Match
+# the stroke style used elsewhere in the app (Heroicons-ish, stroke-width=2).
+_CALLOUT_ICONS = {
+    'note': (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="callout-icon w-4 h-4" '
+        'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        '<path stroke-linecap="round" stroke-linejoin="round" '
+        'd="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+    ),
+    'tip': (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="callout-icon w-4 h-4" '
+        'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        '<path stroke-linecap="round" stroke-linejoin="round" '
+        'd="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657'
+        'l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19'
+        'a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>'
+    ),
+    'warning': (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="callout-icon w-4 h-4" '
+        'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        '<path stroke-linecap="round" stroke-linejoin="round" '
+        'd="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3'
+        'L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>'
+    ),
+    'important': (
+        '<svg xmlns="http://www.w3.org/2000/svg" class="callout-icon w-4 h-4" '
+        'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        '<path stroke-linecap="round" stroke-linejoin="round" '
+        'd="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6'
+        'M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14'
+        'c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>'
+    ),
+}
+
+
+def _build_callout(match):
+    """Replacement function for ``_CALLOUT_RE``.
+
+    Splits the captured blockquote into the header (icon + label) and body
+    (remaining HTML, with any inline content from the marker line preserved
+    as its own paragraph). Output is a div with semantic classes so CSS can
+    style each type independently.
+    """
+    callout_type = match.group(1).lower()
+    inline_after_marker = match.group(2).strip()
+    rest_paragraphs = match.group(3).strip()
+
+    body_parts = []
+    if inline_after_marker:
+        body_parts.append(f'<p>{inline_after_marker}</p>')
+    if rest_paragraphs:
+        body_parts.append(rest_paragraphs)
+    body_html = ''.join(body_parts) or '<p></p>'
+
+    icon_svg = _CALLOUT_ICONS.get(callout_type, '')
+    label = callout_type.title()
+
+    return (
+        f'<div class="callout callout-{callout_type}">'
+        f'<div class="callout-header">{icon_svg}'
+        f'<span class="callout-label">{label}</span></div>'
+        f'<div class="callout-body">{body_html}</div>'
+        f'</div>'
+    )
+
+
+def _apply_callouts(html):
+    """Convert ``> [!TYPE]`` blockquotes into semantic callout divs.
+
+    Runs between the loose-list fix and the blockquote-styling regex so plain
+    blockquotes still get their generic styling, but ones that opened with a
+    ``[!TYPE]`` marker emerge as a different element entirely. Available types:
+    NOTE, TIP, WARNING, IMPORTANT.
+    """
+    return _CALLOUT_RE.sub(_build_callout, html)
+
+
+def _build_spoiler(match):
+    """Replacement for ``_SPOILER_RE``.
+
+    Emits an inline ``<span class="spoiler">`` for the common text case, but
+    swaps to ``spoiler-block`` when the captured content is a single image
+    with optional whitespace/<br>. The image variant is needed because the
+    inner ``<img>`` has ``display: block`` (from the existing image-styling
+    pass), which makes a plain inline span generate empty clickable line
+    fragments above and below the image instead of a single block-aligned bar.
+    """
+    content = match.group(1)
+    extra_class = ' spoiler-block' if _SPOILER_IMAGE_ONLY_RE.fullmatch(content) else ''
+    return (
+        f'<span class="spoiler{extra_class}" role="button" tabindex="0" '
+        f'aria-pressed="false" aria-label="Spoiler, click to reveal" '
+        f'title="Click to reveal">{content}</span>'
+    )
 
 
 def _apply_spoilers(html):
@@ -161,5 +282,5 @@ def _apply_spoilers(html):
     # Even-indexed parts are outside code; odd-indexed are the captured code
     # regions themselves and must be left untouched.
     for i in range(0, len(parts), 2):
-        parts[i] = _SPOILER_RE.sub(_SPOILER_REPLACEMENT, parts[i])
+        parts[i] = _SPOILER_RE.sub(_build_spoiler, parts[i])
     return ''.join(parts)
