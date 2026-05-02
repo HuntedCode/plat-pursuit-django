@@ -3995,17 +3995,21 @@ class Roadmap(models.Model):
         Derived rather than stored to keep the rollup in lockstep with the
         per-trophy flags writers actually set. If you tag a single trophy as
         online, the roadmap surfaces "Online required" automatically.
+
+        Uses ``.all()`` (not ``.filter()``) so the author preview path works:
+        the branch overlay swaps in a Python list via _prefetched_objects_cache,
+        which ``.all()`` honors but ``.filter()`` would bypass.
         """
-        return self.trophy_guides.filter(is_online=True).exists()
+        return any(g.is_online for g in self.trophy_guides.all())
 
     @property
     def missable_count(self):
         """Count of trophy guides on this roadmap flagged is_missable.
 
-        Derived for the same reason as ``online_required`` — single source of
-        truth is the per-trophy flag. Authors don't separately fill this in.
+        Derived for the same reason as ``online_required``. Iterates ``.all()``
+        for prefetch + branch-overlay compatibility (see ``online_required``).
         """
-        return self.trophy_guides.filter(is_missable=True).count()
+        return sum(1 for g in self.trophy_guides.all() if g.is_missable)
 
     @property
     def active_lock(self):
