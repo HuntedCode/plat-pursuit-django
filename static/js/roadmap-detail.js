@@ -628,12 +628,22 @@
             return null;
         }
 
+        // Update only the inner .roadmap-expand-label so the icon SVGs
+        // (visible on mobile) don't get clobbered by textContent reassignment.
+        // Also flip data-state on the button so CSS swaps which icon shows
+        // (chevron-double-down for "expand", chevron-double-up for "collapse").
+        function setExpandLabel(btn, text) {
+            const label = btn.querySelector('.roadmap-expand-label') || btn;
+            label.textContent = text;
+            btn.dataset.state = text === 'Collapse All' ? 'collapse' : 'expand';
+        }
+
         function syncLabel(btn) {
             const details = getDetails(btn.dataset.target);
             if (!details || !details.length) return;
             const openCount = Array.from(details).filter((d) => d.open && !d.classList.contains('hidden')).length;
             const visibleCount = Array.from(details).filter((d) => !d.classList.contains('hidden')).length;
-            btn.textContent = openCount > visibleCount / 2 ? 'Collapse All' : 'Expand All';
+            setExpandLabel(btn, openCount > visibleCount / 2 ? 'Collapse All' : 'Expand All');
         }
 
         document.querySelectorAll('.roadmap-expand-toggle').forEach((btn) => {
@@ -654,7 +664,7 @@
                     }
                 });
 
-                btn.textContent = shouldOpen ? 'Collapse All' : 'Expand All';
+                setExpandLabel(btn, shouldOpen ? 'Collapse All' : 'Expand All');
             });
         });
     }

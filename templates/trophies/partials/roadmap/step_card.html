@@ -40,7 +40,17 @@
 
             {% with step_trophies=step.step_trophies.all %}
             {% if step_trophies %}
-                <div class="{% if step.description %}mt-3 pt-3 border-t border-base-content/5{% endif %} grid grid-cols-1 lg:grid-cols-2 gap-2">
+                {# Small section label so the trophy chips read as a labeled  #}
+                {# block ("here are the trophies tied to this step") rather    #}
+                {# than as a stranded grid of chips below the prose. Matches   #}
+                {# the small-caps section pattern used elsewhere on the page.  #}
+                <div class="{% if step.description %}mt-3 pt-3 border-t border-base-content/5{% endif %}">
+                    <p class="text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/40 mb-2 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                        Trophies in this step
+                        <span class="font-normal text-base-content/30 normal-case tracking-normal">({{ step_trophies|length }})</span>
+                    </p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-2">
                     {% for st in step_trophies %}
                         {% with trophy=roadmap_trophies|get_item:st.trophy_id earned_data=profile_earned|get_item:st.trophy_id %}
                         {% if trophy %}
@@ -66,6 +76,7 @@
                         {% endif %}
                         {% endwith %}
                     {% endfor %}
+                </div>
                 </div>
             {% endif %}
             {% endwith %}

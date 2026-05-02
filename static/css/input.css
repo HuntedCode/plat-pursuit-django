@@ -1916,6 +1916,15 @@ html {
 .spoiler:not(.revealed) img {
   visibility: hidden;
 }
+/* Roadmap expand/collapse-all button: two icons live inside the button (one
+   for "expand" intent, one for "collapse"); CSS hides whichever doesn't match
+   the current data-state set by roadmap-detail.js. Keeps the icon synced with
+   the text label without JS having to swap SVG markup. */
+.roadmap-expand-toggle[data-state="expand"] .roadmap-expand-icon-collapse,
+.roadmap-expand-toggle[data-state="collapse"] .roadmap-expand-icon-expand {
+  display: none;
+}
+
 /* Click-to-zoom lightbox for roadmap content images. Created lazily by
    PlatPursuit.Lightbox in utils.js the first time an eligible image is
    clicked, then reused. Single overlay covers the viewport with a centered
