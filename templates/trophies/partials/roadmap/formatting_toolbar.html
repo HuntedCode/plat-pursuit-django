@@ -1,39 +1,48 @@
-{# Compact markdown formatting toolbar. Place directly above a textarea. #}
-<div class="formatting-toolbar flex items-center gap-0.5 mb-1 p-1 rounded-lg bg-white/[0.03] border border-base-content/5">
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold" data-fmt="bold" title="Bold (Ctrl+B)">B</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs italic" data-fmt="italic" title="Italic (Ctrl+I)"><em>I</em></button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs underline" data-fmt="underline" title="Underline (Ctrl+U)">U</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs line-through" data-fmt="strike" title="Strikethrough">S</button>
-    {# Spoiler: wraps selection in ||...||. Discord-style click-to-reveal in published view. #}
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="spoiler" title="Spoiler (||text||)">
+{% comment %}
+Markdown formatting toolbar. Place directly above a textarea. Buttons are
+organized into four semantic groups separated by dividers:
+  1. Inline emphasis  — B / I / U / S / Spoiler
+  2. Block structure  — H2 / H3 / H4 / List / Quote / Table / Callout
+  3. Inserts          — Link / Image / Controller / Trophy link
+  4. Meta             — Help (right-aligned)
+Each icon button carries matching `title` (tooltip) and `aria-label`
+(screen reader) text. flex-wrap on the container lets the toolbar
+collapse to multiple rows at narrow viewports without overflowing.
+{% endcomment %}
+<div class="formatting-toolbar flex items-center flex-wrap gap-0.5 mb-1 p-1 rounded-lg bg-white/[0.03] border border-base-content/5">
+
+    {# ─── Group 1: Inline emphasis ─────────────────────────── #}
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold" data-fmt="bold" title="Bold (Ctrl+B)" aria-label="Bold">B</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs italic" data-fmt="italic" title="Italic (Ctrl+I)" aria-label="Italic"><em>I</em></button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs underline" data-fmt="underline" title="Underline (Ctrl+U)" aria-label="Underline">U</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs line-through" data-fmt="strike" title="Strikethrough" aria-label="Strikethrough">S</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="spoiler" title="Spoiler" aria-label="Spoiler">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
     </button>
-    <div class="w-px h-4 bg-base-content/10 mx-0.5"></div>
-    {# Block-level: headings + line-prefix formatters. h2/h3/h4 prepend hashes #}
-    {# to the current line; sized small so they read as a single-token group. #}
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold" data-fmt="h2" title="Heading 2">H2</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold text-[0.65rem]" data-fmt="h3" title="Heading 3">H3</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-semibold text-[0.6rem] uppercase tracking-wider" data-fmt="h4" title="Heading 4">H4</button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="link" title="Link">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-    </button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="list" title="Bullet List">
+
+    <div class="w-px h-4 bg-base-content/20 mx-0.5"></div>
+
+    {# ─── Group 2: Block structure ─────────────────────────── #}
+    {# Headings, lists, quotes, tables, callouts. H2/H3/H4 use equal sizing #}
+    {# (was a typography demo before) so the row scans as uniform tap targets. #}
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold text-xs" data-fmt="h2" title="Heading 2" aria-label="Heading 2">H2</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold text-xs" data-fmt="h3" title="Heading 3" aria-label="Heading 3">H3</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs font-bold text-xs" data-fmt="h4" title="Heading 4" aria-label="Heading 4">H4</button>
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="list" title="Bulleted list" aria-label="Bulleted list">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="quote" title="Quote">
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="quote" title="Quote" aria-label="Quote">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
     </button>
-    {# Table: drops a 2x2 GFM pipe-table starter at the cursor. #}
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="table" title="Insert table">
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="table" title="Insert table" aria-label="Insert table">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16M8 4v16M16 4v16"/></svg>
     </button>
-    {# Callout dropdown: opens a menu of 4 callout types (note/tip/warning/   #}
-    {# important). Click a type and JS inserts the > [!TYPE]\n> body template #}
-    {# at the cursor. Single button keeps the toolbar compact while still     #}
-    {# exposing all four variants discoverably.                                #}
+    {# Callout dropdown: chevron-down signals it opens a menu (vs single-action #}
+    {# icon buttons elsewhere on the row).                                      #}
     <div class="dropdown">
-        <button type="button" tabindex="0" class="fmt-callout-toggle btn btn-ghost btn-xs" title="Insert callout">
+        <button type="button" tabindex="0" class="fmt-callout-toggle btn btn-ghost btn-xs gap-0.5" title="Insert callout" aria-label="Insert callout" aria-haspopup="true">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
         </button>
         <ul tabindex="0" class="dropdown-content menu menu-sm bg-base-200 border border-base-300 rounded-md shadow-lg z-50 w-44 p-1 mt-1">
             <li><button type="button" class="fmt-btn flex items-center gap-2 text-info" data-fmt="callout-note">
@@ -54,15 +63,22 @@
             </button></li>
         </ul>
     </div>
-    {# Image button: default state inserts a new image; when the cursor sits  #}
-    {# inside an existing markdown image token JS swaps the icon to a pencil  #}
-    {# and adds an "Edit image" label to make the edit affordance obvious.    #}
-    <button type="button" class="fmt-btn fmt-image-btn btn btn-ghost btn-xs gap-1" data-fmt="image" title="Upload Image">
+
+    <div class="w-px h-4 bg-base-content/20 mx-0.5"></div>
+
+    {# ─── Group 3: Inserts ─────────────────────────────────── #}
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="link" title="Insert link" aria-label="Insert link">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+    </button>
+    {# Image button: default state inserts a new image; when the cursor sits   #}
+    {# inside an existing markdown image token JS swaps the icon to a pencil   #}
+    {# and adds an "Edit image" label to make the edit affordance obvious.     #}
+    <button type="button" class="fmt-btn fmt-image-btn btn btn-ghost btn-xs gap-1" data-fmt="image" title="Insert image" aria-label="Insert image">
         <svg xmlns="http://www.w3.org/2000/svg" class="image-icon-default w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         <svg xmlns="http://www.w3.org/2000/svg" class="image-icon-edit w-3.5 h-3.5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
         <span class="image-btn-label hidden text-[10px] font-semibold">Edit image</span>
     </button>
-    <button type="button" class="fmt-btn fmt-controller-btn btn btn-ghost btn-xs" data-fmt="controller" title="Insert controller button">
+    <button type="button" class="fmt-btn fmt-controller-btn btn btn-ghost btn-xs" data-fmt="controller" title="Insert controller button" aria-label="Insert controller button">
         {# DualSense silhouette: wide body with two grip horns, two thumbsticks #}
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 7 H18 Q21 7 21 10 V13 Q21 17 17 17 Q14 17 13 15 L12 14 L11 15 Q10 17 7 17 Q3 17 3 13 V10 Q3 7 6 7 Z"/>
@@ -70,12 +86,13 @@
             <circle cx="15" cy="11" r="1"/>
         </svg>
     </button>
-    <div class="w-px h-4 bg-base-content/10 mx-0.5"></div>
-    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="trophy-link" title="Link to Trophy Guide">
+    <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="trophy-link" title="Insert trophy link" aria-label="Insert trophy link">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
     </button>
+
+    {# ─── Group 4: Meta (right-aligned) ────────────────────── #}
     <div class="ml-auto">
-        <button type="button" class="fmt-help-toggle btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/70 gap-1" title="Formatting Help">
+        <button type="button" class="fmt-help-toggle btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/70 gap-1" title="Formatting help" aria-label="Formatting help">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span class="hidden md:inline text-xs">Help</span>
         </button>

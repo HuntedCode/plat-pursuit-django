@@ -1694,6 +1694,29 @@
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    // Pad needed to insert at `pos` so it's preceded by a blank line (i.e.
+    // an empty line above). Markdown needs blank-line separation between
+    // most block-level elements; without it consecutive callouts merge into
+    // one big blockquote and tables glue onto a preceding line.
+    function leadingBlankLinePad(text, pos) {
+        if (pos === 0) return '';
+        if (text[pos - 1] !== '\n') return '\n\n';
+        if (pos === 1) return '';
+        if (text[pos - 2] === '\n') return '';
+        return '\n';
+    }
+
+    // Pad needed AFTER the inserted block to ensure a blank line follows.
+    // `templateEndsWithNewline` flags whether the template already contributes
+    // its own trailing \n (table does, callout doesn't).
+    function trailingBlankLinePad(text, pos, templateEndsWithNewline) {
+        if (pos >= text.length) return '';
+        if (text[pos] === '\n') {
+            return templateEndsWithNewline ? '' : '\n';
+        }
+        return templateEndsWithNewline ? '\n' : '\n\n';
+    }
+
     function insertTable(textarea) {
         const start = textarea.selectionStart;
         const text = textarea.value;
@@ -1703,17 +1726,19 @@
             '| Cell   | Cell   |\n' +
             '| Cell   | Cell   |\n';
 
-        // Drop the template on its own paragraph: leading newline if not at
-        // the start of a line, no trailing newline since the template ends
-        // with one already.
-        const needsLead = start > 0 && text[start - 1] !== '\n';
-        const replacement = (needsLead ? '\n' : '') + template;
+        // Tables need blank-line separation on both sides — without a blank
+        // line above, the table glues onto the previous line and stops being
+        // recognized as a table; without one below, the next block (text,
+        // another callout, etc.) merges in.
+        const leadingPad = leadingBlankLinePad(text, start);
+        const trailingPad = trailingBlankLinePad(text, start, true);
+        const replacement = leadingPad + template + trailingPad;
 
         textarea.value = text.substring(0, start) + replacement + text.substring(start);
 
         // Select the first "Header" cell so the writer can immediately
         // overtype with their first column name.
-        const firstHeaderStart = start + (needsLead ? 1 : 0) + '| '.length;
+        const firstHeaderStart = start + leadingPad.length + '| '.length;
         const firstHeaderEnd = firstHeaderStart + 'Header'.length;
         textarea.focus();
         textarea.setSelectionRange(firstHeaderStart, firstHeaderEnd);
@@ -1736,19 +1761,18 @@
         const wrappedBody = body.split('\n').map((line) => `> ${line}`).join('\n');
         const template = `> [!${type}]\n${wrappedBody}`;
 
-        // If we're not at the start of a line, add a leading newline so the
-        // template doesn't fuse with whatever's before it. Same on the trailing
-        // edge so the next line of the author's content stays separate.
-        const needsLead = start > 0 && text[start - 1] !== '\n';
-        const needsTrail = end < text.length && text[end] !== '\n';
-        const replacement =
-            (needsLead ? '\n' : '') + template + (needsTrail ? '\n' : '');
+        // Callouts MUST have blank-line separation on both sides — without
+        // that, consecutive callouts merge into a single blockquote and only
+        // the first [!TYPE] marker is recognized by the renderer.
+        const leadingPad = leadingBlankLinePad(text, start);
+        const trailingPad = trailingBlankLinePad(text, end, false);
+        const replacement = leadingPad + template + trailingPad;
 
         textarea.value = text.substring(0, start) + replacement + text.substring(end);
 
         // Drop the cursor on the body so the writer can immediately edit. If
         // they had no selection, select the placeholder so they can overtype.
-        const headerLen = (needsLead ? 1 : 0) + `> [!${type}]\n> `.length;
+        const headerLen = leadingPad.length + `> [!${type}]\n> `.length;
         const bodyStart = start + headerLen;
         const bodyEnd = bodyStart + (selected ? selected.length : placeholder.length);
         textarea.focus();
