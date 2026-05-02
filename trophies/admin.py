@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Collectibles, CollectibleType, CollectibleArea, Collectible, UserCollectibleProgress, CollectiblesEditLock, CollectiblesRevision
 
 
 # Register your models here.
@@ -3256,6 +3256,115 @@ class EngineCompanyAdmin(admin.ModelAdmin):
     raw_id_fields = ('engine', 'company')
 
 
+# ---------- Collectibles Admin ----------
+# Phase 1 admin surface for the Collectibles sub-page system. Editor UI is
+# deferred to Phase 2; until then, staff can build a Collectibles page
+# end-to-end via these admin views for early testing.
+
+class CollectibleTypeInline(admin.TabularInline):
+    model = CollectibleType
+    extra = 0
+    ordering = ['order']
+    fields = ('name', 'slug', 'color', 'order')
+    prepopulated_fields = {'slug': ('name',)}
+
+
+class CollectibleAreaInline(admin.TabularInline):
+    model = CollectibleArea
+    extra = 0
+    ordering = ['order']
+    fields = ('name', 'slug', 'order')
+    prepopulated_fields = {'slug': ('name',)}
+
+
+@admin.register(Collectibles)
+class CollectiblesAdmin(admin.ModelAdmin):
+    list_display = ['id', 'concept', 'status', 'item_count', 'created_by', 'updated_at']
+    list_select_related = ('concept', 'created_by')
+    list_filter = ['status']
+    search_fields = ['concept__unified_title']
+    raw_id_fields = ['concept', 'created_by', 'last_edited_by']
+    readonly_fields = ['created_at', 'updated_at']
+    inlines = [CollectibleTypeInline, CollectibleAreaInline]
+
+    def item_count(self, obj):
+        return obj.items.count()
+    item_count.short_description = 'Items'
+
+
+@admin.register(CollectibleType)
+class CollectibleTypeAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'slug', 'collectibles', 'color', 'order']
+    list_select_related = ('collectibles__concept',)
+    list_filter = ['color']
+    search_fields = ['name', 'slug', 'collectibles__concept__unified_title']
+    raw_id_fields = ['collectibles']
+    prepopulated_fields = {'slug': ('name',)}
+
+
+@admin.register(CollectibleArea)
+class CollectibleAreaAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'slug', 'collectibles', 'order']
+    list_select_related = ('collectibles__concept',)
+    search_fields = ['name', 'slug', 'collectibles__concept__unified_title']
+    raw_id_fields = ['collectibles']
+    prepopulated_fields = {'slug': ('name',)}
+
+
+@admin.register(Collectible)
+class CollectibleAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'name', 'collectibles', 'type', 'area',
+        'is_missable', 'is_dlc', 'is_postgame', 'order',
+    ]
+    list_select_related = ('collectibles__concept', 'type', 'area')
+    list_filter = ['type', 'area', 'is_missable', 'is_dlc', 'is_postgame']
+    search_fields = ['name', 'description', 'collectibles__concept__unified_title']
+    raw_id_fields = ['collectibles', 'type', 'area', 'created_by', 'last_edited_by']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(UserCollectibleProgress)
+class UserCollectibleProgressAdmin(admin.ModelAdmin):
+    list_display = ['id', 'profile', 'collectible', 'found_at']
+    list_select_related = ('profile', 'collectible__type', 'collectible__collectibles__concept')
+    raw_id_fields = ['profile', 'collectible']
+    readonly_fields = ['found_at']
+    search_fields = ['profile__psn_username', 'collectible__name']
+    date_hierarchy = 'found_at'
+
+
+@admin.register(CollectiblesEditLock)
+class CollectiblesEditLockAdmin(admin.ModelAdmin):
+    list_display = ['id', 'collectibles', 'holder', 'acquired_at', 'last_heartbeat', 'expires_at', 'is_expired_flag']
+    list_select_related = ('collectibles__concept', 'holder')
+    raw_id_fields = ['collectibles', 'holder']
+    readonly_fields = ['acquired_at', 'last_heartbeat', 'expires_at', 'branch_payload']
+    actions = ['force_release']
+
+    def is_expired_flag(self, obj):
+        return obj.is_expired()
+    is_expired_flag.boolean = True
+    is_expired_flag.short_description = 'Expired?'
+
+    @admin.action(description='Force-release selected locks (admin override)')
+    def force_release(self, request, queryset):
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(request, f'{count} lock(s) released.', messages.SUCCESS)
+
+
+@admin.register(CollectiblesRevision)
+class CollectiblesRevisionAdmin(admin.ModelAdmin):
+    list_display = ['id', 'collectibles', 'author', 'action_type', 'summary', 'created_at']
+    list_select_related = ('collectibles__concept', 'author')
+    list_filter = ['action_type']
+    raw_id_fields = ['collectibles', 'author']
+    readonly_fields = ['created_at', 'snapshot']
+    search_fields = ['collectibles__concept__unified_title', 'summary']
+    date_hierarchy = 'created_at'
+
+
 # ---------- Admin index grouping ----------
 # Split the trophies app's model list on the admin index page into a
 # dedicated "IGDB & Enrichment" subsection. Models still live under the
@@ -3277,6 +3386,12 @@ _ROADMAP_ADMIN_OBJECT_NAMES = frozenset({
     'RoadmapNote', 'RoadmapNoteRead',
 })
 
+_COLLECTIBLES_ADMIN_OBJECT_NAMES = frozenset({
+    'Collectibles', 'CollectibleType', 'CollectibleArea', 'Collectible',
+    'UserCollectibleProgress',
+    'CollectiblesEditLock', 'CollectiblesRevision',
+})
+
 _original_get_app_list = admin.site.get_app_list
 
 
@@ -3285,6 +3400,7 @@ def _platpursuit_get_app_list(request, app_label=None):
 
     Trophies gets carved into:
       - "Roadmap System": authoring + lock/session + history models
+      - "Collectibles System": page + types/areas/items + lock/history + user progress
       - "IGDB & Enrichment": matching + normalized metadata models
       - "Trophies": everything else
     Other apps are passed through unchanged. Internally all these models
@@ -3298,10 +3414,12 @@ def _platpursuit_get_app_list(request, app_label=None):
             result.append(app)
             continue
         roadmap_models = [m for m in app['models'] if m['object_name'] in _ROADMAP_ADMIN_OBJECT_NAMES]
+        collectibles_models = [m for m in app['models'] if m['object_name'] in _COLLECTIBLES_ADMIN_OBJECT_NAMES]
         igdb_models = [m for m in app['models'] if m['object_name'] in _IGDB_ADMIN_OBJECT_NAMES]
         other_models = [
             m for m in app['models']
             if m['object_name'] not in _ROADMAP_ADMIN_OBJECT_NAMES
+            and m['object_name'] not in _COLLECTIBLES_ADMIN_OBJECT_NAMES
             and m['object_name'] not in _IGDB_ADMIN_OBJECT_NAMES
         ]
         if roadmap_models:
@@ -3318,6 +3436,20 @@ def _platpursuit_get_app_list(request, app_label=None):
                 **app,
                 'name': 'Roadmap System',
                 'models': roadmap_models,
+            })
+        if collectibles_models:
+            # Same authoring → lock → history → user-state ordering as roadmaps.
+            collectibles_order = [
+                'Collectibles', 'CollectibleType', 'CollectibleArea', 'Collectible',
+                'CollectiblesEditLock', 'CollectiblesRevision',
+                'UserCollectibleProgress',
+            ]
+            order_idx = {name: i for i, name in enumerate(collectibles_order)}
+            collectibles_models.sort(key=lambda m: order_idx.get(m['object_name'], 99))
+            result.append({
+                **app,
+                'name': 'Collectibles System',
+                'models': collectibles_models,
             })
         if igdb_models:
             result.append({
