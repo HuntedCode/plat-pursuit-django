@@ -21,6 +21,11 @@ ALLOWED_HTML_TAGS = [
     'p', 'br', 'strong', 'em', 'u', 'del', 's',
     'ul', 'ol', 'li', 'blockquote', 'code', 'pre',
     'a', 'img',
+    # Section headings authors can use to break up long guides. h1 is
+    # intentionally excluded so authors can't compete with the page's own
+    # title hierarchy; h2/h3/h4 cover the realistic depth needed inside a
+    # roadmap or trophy-guide body.
+    'h2', 'h3', 'h4',
 ]
 
 ALLOWED_HTML_ATTRS = {

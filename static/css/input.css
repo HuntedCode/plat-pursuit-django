@@ -1730,6 +1730,63 @@ html {
   display: none;
 }
 
+/* Shared prose styling for roadmap-rendered markdown content (general tips,
+   step descriptions, trophy guide bodies). Centralized here so the six
+   prose containers across roadmap_detail.html, step_card.html,
+   trophy_guide_card.html, and game_detail/roadmap_section.html stay in
+   visual lockstep — previously each container carried a long inline class
+   soup, with one (trophy_guide_card.html) silently missing the blockquote
+   rule. Tier 1 readability bumps live here too: stronger body contrast,
+   heading support, more breathing room on lists, looser mobile leading. */
+.prose-roadmap {
+  /* Body color: was /75 (too muted for primary content read during play
+     sessions); /90 keeps depth without forcing pure white. */
+  @apply text-sm md:text-base text-base-content/90 max-w-3xl;
+  /* Mobile/tablet got just leading-relaxed before — tight for reading on a
+     phone next to the TV. Step up through loose to the existing 1.75 on lg. */
+  @apply leading-relaxed md:leading-loose lg:leading-[1.75];
+}
+.prose-roadmap p {
+  @apply mb-3;
+}
+.prose-roadmap p:last-child {
+  @apply mb-0;
+}
+.prose-roadmap ul {
+  @apply my-2 ml-4 list-disc space-y-1.5;
+}
+.prose-roadmap ol {
+  @apply my-2 ml-4 list-decimal space-y-1.5;
+}
+.prose-roadmap strong {
+  /* Was /90 + semibold; body is now /90 too, so the old strong barely read.
+     Full base-content + bold gives a visible weight + contrast bump. */
+  @apply text-base-content font-bold;
+}
+.prose-roadmap a {
+  @apply text-primary underline decoration-primary/30;
+}
+.prose-roadmap a:hover {
+  @apply decoration-primary;
+}
+.prose-roadmap blockquote {
+  @apply border-l-4 border-warning/30 pl-4 py-1 my-3 italic text-base-content/65;
+}
+.prose-roadmap code {
+  @apply bg-base-300/40 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+/* Heading scale tuned to live INSIDE cards (not compete with card titles).
+   first:mt-0 keeps the top of a guide body from accidentally pushing down. */
+.prose-roadmap h2 {
+  @apply text-base md:text-lg font-bold text-base-content mt-5 mb-2 first:mt-0;
+}
+.prose-roadmap h3 {
+  @apply text-sm md:text-base font-bold text-base-content mt-4 mb-1.5 first:mt-0;
+}
+.prose-roadmap h4 {
+  @apply text-xs uppercase tracking-wider font-semibold text-base-content/60 mt-3 mb-1 first:mt-0;
+}
+
 /* Discord-style ||spoiler|| spans (rendered server-side by checklist_service
    when enable_spoilers=True; toggled by PlatPursuit.SpoilerToggle). Hidden
    state paints text the same color as the fill so the words disappear into

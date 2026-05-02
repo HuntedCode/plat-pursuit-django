@@ -17,14 +17,7 @@
         </summary>
         <div class="px-3 md:px-4 pt-3 pb-3">
             {% if step.description %}
-                <div class="text-sm md:text-base text-base-content/75 leading-relaxed lg:leading-[1.75] max-w-3xl
-                            [&_p]:mb-3 [&_p:last-child]:mb-0
-                            [&_ul]:my-2 [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:space-y-1
-                            [&_ol]:my-2 [&_ol]:ml-4 [&_ol]:list-decimal [&_ol]:space-y-1
-                            [&_strong]:text-base-content/90 [&_strong]:font-semibold
-                            [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/30 hover:[&_a]:decoration-primary
-                            [&_blockquote]:border-l-4 [&_blockquote]:border-warning/30 [&_blockquote]:pl-4 [&_blockquote]:py-1 [&_blockquote]:my-3 [&_blockquote]:italic [&_blockquote]:text-base-content/60
-                            [&_code]:bg-base-300/40 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-sm [&_code]:font-mono">{{ step.description|render_roadmap_markdown:game.controller_icon_set }}</div>
+                <div class="prose-roadmap">{{ step.description|render_roadmap_markdown:game.controller_icon_set }}</div>
             {% endif %}
 
             {% if step.gallery_images %}

@@ -1635,6 +1635,9 @@
         link:      { before: '[',  after: '](url)', placeholder: 'link text' },
         list:      { linePrefix: '- ' },
         quote:     { linePrefix: '> ' },
+        h2:        { linePrefix: '## ' },
+        h3:        { linePrefix: '### ' },
+        h4:        { linePrefix: '#### ' },
     };
 
     // Track last-focused textarea so toolbar clicks can target it
