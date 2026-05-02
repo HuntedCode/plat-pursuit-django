@@ -1467,6 +1467,101 @@ if (document.readyState === 'loading') {
     SpoilerToggle.init();
 }
 
+/* ---------------------------------------------------------------------------
+ * Lightbox
+ *
+ * Click-to-zoom for images inside roadmap content (.prose-roadmap inline
+ * markdown images and .roadmap-gallery step/guide attachments). Single
+ * delegated handler on document.body — overlay is built lazily on first use,
+ * then reused. Esc or click on the overlay background closes.
+ *
+ * Skipped intentionally:
+ *   - Controller-icon shortcodes (.ps-icon) — they're inline glyphs, not
+ *     content images.
+ *   - Anything inside .spoiler — clicking those should toggle the spoiler
+ *     reveal/re-hide instead of opening a zoomed view. If we lightboxed
+ *     them, both handlers would fire and the UX would fight itself.
+ * --------------------------------------------------------------------------- */
+const Lightbox = (() => {
+    let overlay = null;
+    let initialized = false;
+
+    function buildOverlay() {
+        overlay = document.createElement('div');
+        overlay.className = 'lightbox-overlay hidden';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', 'Image lightbox');
+        overlay.innerHTML = `
+            <button type="button" class="lightbox-close" aria-label="Close lightbox">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+            <img class="lightbox-image" alt="">
+        `;
+        overlay.addEventListener('click', (e) => {
+            // Close on overlay background or close button. Don't close if
+            // the click landed on the image itself — readers expect the
+            // image to be safe to interact with (zoom, drag, save).
+            if (e.target === overlay || e.target.closest('.lightbox-close')) {
+                close();
+            }
+        });
+        document.body.appendChild(overlay);
+    }
+
+    function open(src, alt) {
+        if (!overlay) buildOverlay();
+        const img = overlay.querySelector('.lightbox-image');
+        img.src = src;
+        img.alt = alt || '';
+        overlay.classList.remove('hidden');
+        // Lock body scroll while open so the page doesn't drift behind the
+        // overlay on touch devices.
+        document.body.style.overflow = 'hidden';
+        // Move focus to the close button for keyboard users.
+        overlay.querySelector('.lightbox-close')?.focus();
+    }
+
+    function close() {
+        if (!overlay || overlay.classList.contains('hidden')) return;
+        overlay.classList.add('hidden');
+        document.body.style.overflow = '';
+        const img = overlay.querySelector('.lightbox-image');
+        if (img) img.src = '';
+    }
+
+    return {
+        init() {
+            if (initialized) return;
+            initialized = true;
+            document.body.addEventListener('click', (e) => {
+                const img = e.target.closest('img');
+                if (!img) return;
+                // Only inline content images inside roadmap surfaces.
+                if (!img.closest('.prose-roadmap, .roadmap-gallery')) return;
+                // Skip inline glyphs and spoilered images (see module comment).
+                if (img.classList.contains('ps-icon')) return;
+                if (img.closest('.spoiler')) return;
+                e.preventDefault();
+                open(img.src, img.alt);
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') close();
+            });
+        },
+        open,
+        close,
+    };
+})();
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => Lightbox.init());
+} else {
+    Lightbox.init();
+}
+
 // Export for use in other modules
 window.PlatPursuit = window.PlatPursuit || {};
 window.PlatPursuit.ToastManager = ToastManager;
@@ -1485,3 +1580,4 @@ window.PlatPursuit.ReviewProgressTiers = ReviewProgressTiers;
 window.PlatPursuit.TrophyListRenderer = TrophyListRenderer;
 window.PlatPursuit.CoachMarks = CoachMarks;
 window.PlatPursuit.SpoilerToggle = SpoilerToggle;
+window.PlatPursuit.Lightbox = Lightbox;
