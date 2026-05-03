@@ -20,6 +20,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
+| Weekly (Sunday 07:00 UTC) | `enrich_from_igdb --refresh --max-minutes 90` | Weekly | None |
 | Weekly (Sunday) | `cleanup_old_analytics --force` | Weekly | None |
 | Weekly (Monday 08:00 UTC) | `send_weekly_digest` | Weekly | None |
 | 3rd of month, 00:05 UTC | `generate_monthly_recaps --finalize` | Monthly | All profile syncs for the previous month should be complete |
@@ -145,6 +146,16 @@ historical pass after Phase 3's rematch run.
 - **Idempotency**: Fully safe to re-run. Successful matches are written via `process_match`; failed matches go through `record_no_match`, which refuses to overwrite any non-`no_match` status. Re-running mid-week (e.g., manually via web shell) only refreshes `last_synced_at` on already-tried concepts.
 - **Failure impact**: The `no_match` backlog grows. No user-facing impact until the backlog gets stale enough that recently-released games take longer to enrich after their IGDB entry appears. A skipped week can be recovered by manually running the same command (no `--max-minutes` if you want to drain the full queue).
 
+### enrich_from_igdb (weekly refresh)
+
+- **Schedule**: Weekly, Sunday 07:00 UTC
+- **Command**: `python manage.py enrich_from_igdb --refresh --max-minutes 90`
+- **What it does**: Re-fetches IGDB data for already-accepted matches by `igdb_id` (no re-matching, just data refresh). Picks up new IGDB additions to existing rows: filled-in release-date status info, summary edits, new franchise/collection members, fresh time-to-beat aggregates, etc. Iterates `accepted` + `auto_accepted` rows ordered by `last_synced_at` ASC NULLS FIRST, so the oldest-staled rows refresh first. The `--max-minutes 90` cap means a single run hits roughly 7,000-10,000 matches (IGDB rate limit allows ~120 refreshes/min); consecutive weekly runs naturally roll through the entire catalog. After this finishes, the per-platform release-date field, time-to-beat numbers, and external URLs all reflect IGDB's current state.
+- **Dependencies**: None. Pure IGDB work, no PSN dependency. Shares the distributed Redis rate limiter (3 req/sec) with the Saturday retry job — running them on different days avoids contention.
+- **Idempotency**: Fully safe to re-run. `IGDBService.refresh_match` writes the same fields the original enrichment wrote; calling it twice in a row produces the same data. The oldest-first ordering means a manually-triggered mid-week run pushes the next week's automatic run forward by however many rows it processed (no double work).
+- **Failure impact**: IGDB-side data slowly ages. No user-facing impact for several weeks (IGDB metadata changes slowly), but eventually new franchise relationships, time-to-beat updates, and release-date status data won't surface in PlatPursuit. A skipped week is recovered automatically on the next run since the queue rolls forward.
+- **One-time backfill**: After deploying changes that broaden the IGDB query (new fields requested), run `enrich_from_igdb --refresh` **without** `--max-minutes` from the web shell to drain the entire catalog in one pass (1-2 hours typical). The weekly cron then keeps things fresh from there.
+
 ### cleanup_old_analytics
 
 - **Schedule**: Weekly (recommended)
@@ -227,6 +238,7 @@ The following diagram shows ordering constraints between jobs. Jobs on the same 
 
 
     WEEKLY ─────────── enrich_from_igdb --missing-or-no-match --max-minutes 60  [Saturday 09:00 UTC]
+                        enrich_from_igdb --refresh --max-minutes 90   [Sunday 07:00 UTC]
                         cleanup_old_analytics --force       [Sunday]
                         send_weekly_digest                  [Monday 08:00 UTC]
 

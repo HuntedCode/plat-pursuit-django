@@ -47,8 +47,9 @@ class Command(BaseCommand):
         parser.add_argument(
             '--max-minutes', type=int, metavar='N', default=None,
             help='Hard runtime cap for the enrichment loop. Exits cleanly with a '
-                 'partial summary once N minutes have elapsed. Intended for the '
-                 'weekly --missing-or-no-match cron so Render billing stays bounded.',
+                 'partial summary once N minutes have elapsed. Intended for cron '
+                 'use (--missing-or-no-match and --refresh both honor it) so '
+                 'Render billing stays bounded.',
         )
         parser.add_argument(
             '--refresh', action='store_true',
@@ -838,9 +839,16 @@ class Command(BaseCommand):
     def _handle_refresh(self, options):
         dry_run = options['dry_run']
 
-        matches = IGDBMatch.objects.filter(
-            status__in=('auto_accepted', 'accepted'),
-        ).select_related('concept')
+        # Oldest-first ordering so consecutive runtime-capped runs roll
+        # naturally through the catalog. NULLS FIRST is defensive —
+        # last_synced_at is auto_now_add so should never be null on
+        # saved rows, but the explicit ordering avoids surprises.
+        matches = (
+            IGDBMatch.objects
+            .filter(status__in=('auto_accepted', 'accepted'))
+            .select_related('concept')
+            .order_by(F('last_synced_at').asc(nulls_first=True))
+        )
 
         if options['concept_id']:
             matches = matches.filter(concept__concept_id=options['concept_id'])
@@ -870,11 +878,19 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING('[DRY RUN] No changes will be saved.'))
 
+        max_minutes = options.get('max_minutes')
+        max_seconds = max_minutes * 60 if max_minutes else None
+        loop_start = time.monotonic()
+        capped_at = None
+
         refreshed = 0
         not_found = 0
         errors = 0
 
         for i, igdb_match in enumerate(matches.iterator()):
+            if max_seconds is not None and (time.monotonic() - loop_start) >= max_seconds:
+                capped_at = i
+                break
             try:
                 if dry_run:
                     self.stdout.write(
@@ -904,6 +920,16 @@ class Command(BaseCommand):
                     f'  [{i + 1}/{total}] ERROR {igdb_match.concept.concept_id} '
                     f'"{igdb_match.concept.unified_title}": {e}'
                 ))
+
+        if capped_at is not None:
+            elapsed = time.monotonic() - loop_start
+            remaining = max(total - capped_at, 0)
+            self.stdout.write(self.style.WARNING(
+                f'\nReached --max-minutes cap of {max_minutes} min '
+                f'({elapsed/60:.1f} min elapsed) after {capped_at} match(es); '
+                f'{remaining} remaining will be picked up on the next run '
+                f'(oldest-first ordering naturally rolls through the catalog).'
+            ))
 
         prefix = '[DRY RUN] ' if dry_run else ''
         self.stdout.write('')
