@@ -4850,6 +4850,16 @@ class IGDBMatch(models.Model):
         null=True, blank=True, help_text='100%% completion time in seconds (platinum estimate)'
     )
     igdb_first_release_date = models.DateTimeField(null=True, blank=True)
+    igdb_ps_release_dates = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            'Per-platform PlayStation release dates from IGDB. Sorted by '
+            'date ascending. Format: [{"platform": <int>, "date": "YYYY-MM-DD"}, ...]. '
+            'Populated from raw_response.release_dates by enrichment + backfill. '
+            'Used by the matcher (any-PS-date proximity) and per-platform '
+            'displays in admin review tools.'
+        ),
+    )
     game_engine_name = models.CharField(max_length=100, blank=True)
     igdb_cover_image_id = models.CharField(max_length=100, blank=True)
     franchise_names = models.JSONField(

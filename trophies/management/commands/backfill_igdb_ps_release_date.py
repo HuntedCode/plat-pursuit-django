@@ -1,18 +1,19 @@
-"""Recompute IGDBMatch.igdb_first_release_date from raw_response.
+"""Recompute PlayStation release date fields on IGDBMatch from raw_response.
 
-Historical behavior: enrichment stamped this field with IGDB's global
-`first_release_date`, the earliest worldwide release across any
-platform. For PC-first / multi-platform games (Hollow Knight, Cuphead,
-Hades, Stardew Valley, etc.) that's a PC release months or years
-before the PSN launch — the date didn't reflect the PlayStation
-release at all.
+Backfills two columns:
 
-Fix forward: enrichment now derives the value from the per-platform
-`release_dates` array, filtered to PS_PLATFORM_IDS (with fallback to
-the global `first_release_date` when no PS-specific entries exist).
+  * `igdb_first_release_date` — the earliest PS-platform release date.
+    Historically stamped with IGDB's global `first_release_date` (the
+    earliest worldwide release on any platform), which gave wrong dates
+    for PC-first / multi-platform games (Hollow Knight, Cuphead, Hades,
+    Stardew Valley, etc.) where PC predates PSN by months/years.
 
-This backfill applies the same logic to existing rows, reading the
-already-persisted `raw_response` payload — no IGDB API calls needed.
+  * `igdb_ps_release_dates` — the new per-platform JSON list. Newly
+    introduced in migration 0221; needs initial population on every
+    pre-existing row.
+
+Both values are derived from the per-platform `release_dates` array
+already persisted in `raw_response` — no IGDB API calls needed.
 """
 
 import time
@@ -34,13 +35,16 @@ _DEFERRED_FIELDS = (
     'external_urls',
 )
 
+_UPDATE_FIELDS = ('igdb_first_release_date', 'igdb_ps_release_dates')
+
 
 class Command(BaseCommand):
     help = (
-        "Recompute IGDBMatch.igdb_first_release_date as the earliest "
-        "PlayStation-platform release date from raw_response. Fixes rows "
-        "stamped with IGDB's global first_release_date, which gave "
-        "incorrect dates for PC-first / multi-platform games."
+        "Recompute IGDBMatch.igdb_first_release_date (earliest PS launch) "
+        "and populate IGDBMatch.igdb_ps_release_dates (per-platform list) "
+        "from raw_response.release_dates. Fixes rows previously stamped "
+        "with IGDB's global first_release_date and seeds the new "
+        "per-platform column added in migration 0221."
     )
 
     def add_arguments(self, parser):
@@ -78,59 +82,83 @@ class Command(BaseCommand):
         moved_forward = 0
         moved_backward = 0
         cleared = 0
+        ps_dates_seeded = 0
+        ps_dates_updated = 0
         skipped_unchanged = 0
         skipped_parse_error = 0
         to_update = []
 
         for match in qs.iterator(chunk_size=batch_size):
             raw = match.raw_response or {}
-            ts = IGDBService._earliest_ps_release_timestamp(raw)
 
-            new_value = None
+            # Earliest PS release date.
+            ts = IGDBService._earliest_ps_release_timestamp(raw)
+            new_first = None
             if ts:
                 try:
-                    new_value = datetime.fromtimestamp(ts, tz=dt_timezone.utc)
+                    new_first = datetime.fromtimestamp(ts, tz=dt_timezone.utc)
                 except (ValueError, OSError):
                     skipped_parse_error += 1
                     continue
 
-            current = match.igdb_first_release_date
-            if current == new_value:
+            # Per-platform PS release dates list.
+            new_ps_list = IGDBService._ps_release_dates_for_storage(raw)
+
+            current_first = match.igdb_first_release_date
+            current_ps_list = match.igdb_ps_release_dates or []
+
+            first_changed = current_first != new_first
+            ps_list_changed = current_ps_list != new_ps_list
+
+            if not first_changed and not ps_list_changed:
                 skipped_unchanged += 1
                 continue
 
-            if new_value is None:
-                cleared += 1
-            elif current is None or new_value > current:
-                # PC-first port pattern: PS release later than worldwide first.
-                moved_forward += 1
-            else:
-                # PS-first / earliest PS release predates the previously stored
-                # date. Rare but possible if IGDB's global first_release_date
-                # was wrong or post-dated for some reason.
-                moved_backward += 1
+            # Track which transition happened for first-release-date.
+            if first_changed:
+                if new_first is None:
+                    cleared += 1
+                elif current_first is None or new_first > current_first:
+                    # PC-first port pattern: PS release later than what was stored.
+                    moved_forward += 1
+                else:
+                    # Earliest PS release predates the previously stored date.
+                    # Rare but possible if global first_release_date was wrong.
+                    moved_backward += 1
 
-            match.igdb_first_release_date = new_value
+            if ps_list_changed:
+                if not current_ps_list:
+                    ps_dates_seeded += 1
+                else:
+                    ps_dates_updated += 1
+
+            match.igdb_first_release_date = new_first
+            match.igdb_ps_release_dates = new_ps_list
             to_update.append(match)
 
             if len(to_update) >= batch_size and not dry_run:
-                IGDBMatch.objects.bulk_update(to_update, ['igdb_first_release_date'])
+                IGDBMatch.objects.bulk_update(to_update, list(_UPDATE_FIELDS))
                 to_update = []
 
         if to_update and not dry_run:
-            IGDBMatch.objects.bulk_update(to_update, ['igdb_first_release_date'])
+            IGDBMatch.objects.bulk_update(to_update, list(_UPDATE_FIELDS))
 
         elapsed = time.time() - start
-        total_changed = moved_forward + moved_backward + cleared
+        first_changed_total = moved_forward + moved_backward + cleared
+        ps_changed_total = ps_dates_seeded + ps_dates_updated
         self.stdout.write('')
         self.stdout.write(f'Scan complete in {elapsed:.1f}s.')
-        self.stdout.write(f'  Moved forward (PS later than global): {moved_forward}')
-        self.stdout.write(f'  Moved backward (PS earlier):          {moved_backward}')
-        self.stdout.write(f'  Cleared (no PS or global data):       {cleared}')
-        self.stdout.write(f'  Already correct:                      {skipped_unchanged}')
+        self.stdout.write('  igdb_first_release_date:')
+        self.stdout.write(f'    Moved forward (PS later than global): {moved_forward}')
+        self.stdout.write(f'    Moved backward (PS earlier):          {moved_backward}')
+        self.stdout.write(f'    Cleared (no PS or global data):       {cleared}')
+        self.stdout.write('  igdb_ps_release_dates:')
+        self.stdout.write(f'    Seeded (column was empty):            {ps_dates_seeded}')
+        self.stdout.write(f'    Updated (column had different data):  {ps_dates_updated}')
+        self.stdout.write(f'  Already correct (both fields):          {skipped_unchanged}')
         if skipped_parse_error:
             self.stdout.write(self.style.WARNING(
-                f'  Parse errors:                         {skipped_parse_error}'
+                f'  Parse errors:                           {skipped_parse_error}'
             ))
 
         if dry_run:
@@ -139,5 +167,6 @@ class Command(BaseCommand):
             ))
         else:
             self.stdout.write(self.style.SUCCESS(
-                f'\nApplied {total_changed} field update(s).'
+                f'\nApplied {first_changed_total} first-release-date update(s) '
+                f'and {ps_changed_total} per-platform list update(s).'
             ))

@@ -567,6 +567,13 @@ class Command(BaseCommand):
             f'({match.match_method}, {match.match_confidence:.0%})  '
             f'|  Released: {igdb_released}'
         )
+        ps_dates = match.igdb_ps_release_dates or []
+        if ps_dates:
+            parts = [
+                f'{IGDB_PLATFORM_NAMES.get(e["platform"], str(e["platform"]))} {e["date"]}'
+                for e in ps_dates
+            ]
+            self.stdout.write(f'              IGDB PS dates: {"  |  ".join(parts)}')
 
         igdb_companies = raw.get('involved_companies', []) if raw else []
         igdb_devs = []

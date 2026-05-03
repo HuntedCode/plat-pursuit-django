@@ -50,6 +50,7 @@ Data we extract from the IGDB response and store in dedicated model fields:
 | **Storyline** | IGDBMatch | `igdb_storyline` | Full plot synopsis |
 | **Time to beat** | IGDBMatch | `time_to_beat_hastily`, `_normally`, `_completely` | Speedrun, average, 100% completion (in seconds) |
 | **Release date** | IGDBMatch | `igdb_first_release_date` | Earliest IGDB release date on any PlayStation platform (PS1-PS5, PSP, Vita, PSVR, PSVR2). Falls back to global first release if no PS-specific entries. **Not** IGDB's `first_release_date`, which would give the PC release for PC-first ports. |
+| **Per-platform release dates** | IGDBMatch | `igdb_ps_release_dates` | Sorted list of `{platform: <int>, date: "YYYY-MM-DD"}` for every PS-platform release. Used by the matcher's any-PS-date proximity boost (catches cross-gen remasters where PSN's date matches a later platform launch) and by per-platform displays in admin review tools. Empty list when IGDB has no per-platform `release_dates` entries. |
 | **Game engine (legacy)** | IGDBMatch | `game_engine_name` | Single string, kept for backwards compatibility |
 | **Game engine (normalized)** | GameEngine + ConceptEngine | `name`, `slug`, `description`, `logo_image_id`, `companies` | One normalized row per engine; `companies` M2M via `EngineCompany` |
 | **Cover art** | IGDBMatch | `igdb_cover_image_id` | IGDB image hash for URL construction |

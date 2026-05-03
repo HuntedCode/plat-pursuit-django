@@ -1149,32 +1149,47 @@ class IGDBService:
             elif debug:
                 steps.append(f'skip main-game boost (category={category}, contained={is_contained})')
 
-        # Modifier: release year proximity. Compares PSN's console release
-        # year to IGDB's earliest PS-platform release year (NOT IGDB's
-        # global `first_release_date`, which can be a PC release years
-        # earlier and would wrongly skip the boost for PC-first ports).
-        ps_release_ts = cls._earliest_ps_release_timestamp(igdb_game)
-        if concept.release_date and ps_release_ts:
+        # Modifier: release year proximity. Boost when PSN's console
+        # release year is within ±1 of ANY IGDB PS-platform release year.
+        # Matching against any PS date (not just the earliest) catches
+        # cross-gen remasters where PSN's date corresponds to a later
+        # platform launch (e.g. PS3 2010 + PS5 remaster 2022). Falls
+        # back to global `first_release_date` only when IGDB has no
+        # per-platform release_dates entries at all.
+        ps_release_years = []
+        for _, ts in cls._ps_release_pairs(igdb_game):
             try:
-                igdb_year = datetime.fromtimestamp(
-                    ps_release_ts, tz=dt_timezone.utc
-                ).year
-                concept_year = concept.release_date.year
-                if abs(igdb_year - concept_year) <= 1:
-                    base += 0.05
-                    if debug:
-                        steps.append(f'+0.05 year proximity ({concept_year} vs {igdb_year})')
-                elif debug:
-                    steps.append(f'skip year proximity ({concept_year} vs {igdb_year})')
-            except (ValueError, OSError, AttributeError):
+                ps_release_years.append(
+                    datetime.fromtimestamp(ts, tz=dt_timezone.utc).year
+                )
+            except (ValueError, OSError):
+                pass
+        if not ps_release_years and igdb_game.get('first_release_date'):
+            try:
+                ps_release_years.append(
+                    datetime.fromtimestamp(
+                        igdb_game['first_release_date'], tz=dt_timezone.utc
+                    ).year
+                )
+            except (ValueError, OSError):
+                pass
+
+        if concept.release_date and ps_release_years:
+            concept_year = concept.release_date.year
+            closest_year = min(ps_release_years, key=lambda y: abs(y - concept_year))
+            if abs(closest_year - concept_year) <= 1:
+                base += 0.05
                 if debug:
-                    steps.append(f'skip year proximity (parse error)')
+                    steps.append(f'+0.05 year proximity ({concept_year} vs {closest_year})')
+            elif debug:
+                years_str = ','.join(str(y) for y in sorted(set(ps_release_years)))
+                steps.append(f'skip year proximity ({concept_year} vs PS [{years_str}])')
         elif debug:
             missing = []
             if not concept.release_date:
                 missing.append('concept.release_date')
-            if not ps_release_ts:
-                missing.append('igdb.ps_release_date')
+            if not ps_release_years:
+                missing.append('igdb release_dates / first_release_date')
             steps.append(f'skip year proximity (missing: {",".join(missing)})')
 
         # Modifier: publisher name match
@@ -1513,6 +1528,7 @@ class IGDBService:
                 'time_to_beat_normally': parsed['time_to_beat_normally'],
                 'time_to_beat_completely': parsed['time_to_beat_completely'],
                 'igdb_first_release_date': parsed['first_release_date'],
+                'igdb_ps_release_dates': parsed['ps_release_dates'],
                 'game_engine_name': parsed['game_engine_name'],
                 'igdb_cover_image_id': parsed['cover_image_id'],
                 'franchise_names': parsed['franchise_names'],
@@ -2156,38 +2172,73 @@ class IGDBService:
         """
         return cls._extract_game_category(igdb_data) in (3, 13)
 
-    @staticmethod
-    def _earliest_ps_release_timestamp(igdb_data):
+    @classmethod
+    def _ps_release_pairs(cls, igdb_data):
+        """Yield (platform_id, unix_timestamp) for each PS-platform release.
+
+        Walks `igdb_data['release_dates']` and filters to PS_PLATFORM_IDS.
+        Deduplicates exact (platform, timestamp) repeats — IGDB sometimes
+        lists multiple region rows for the same platform launch with the
+        same date.
+
+        Iterator-based so callers can pick the shape they want:
+        - `min(ts for _, ts in pairs)` for the earliest single value
+        - `list(pairs)` for per-platform display / matching against any date
+        """
+        seen = set()
+        for rd in igdb_data.get('release_dates') or []:
+            plat = rd.get('platform')
+            date = rd.get('date')
+            if plat in PS_PLATFORM_IDS and date is not None:
+                key = (plat, date)
+                if key in seen:
+                    continue
+                seen.add(key)
+                yield key
+
+    @classmethod
+    def _earliest_ps_release_timestamp(cls, igdb_data):
         """Earliest IGDB release-date unix timestamp on any PlayStation platform.
 
-        Walks `igdb_data['release_dates']` (per-platform/region entries
-        from the IGDB query) and filters to PS_PLATFORM_IDS. Returns the
-        minimum unix timestamp found. Falls back to the global
-        `first_release_date` when no PS-specific entries are present
-        (IGDB occasionally has incomplete `release_dates` on older or
-        less-curated rows).
+        Returns the minimum timestamp from `_ps_release_pairs`. Falls
+        back to the global `first_release_date` when no PS-specific
+        entries are present (IGDB occasionally has incomplete
+        `release_dates` on older or less-curated rows).
 
         IGDB does NOT redundantly list PS4/PS5 alongside PSVR/PSVR2 — VR
         games carry only the VR platform. Both VR ids are members of
         PS_PLATFORM_IDS, so VR-only games still get a date here.
 
         This is the right value to compare against PSN's
-        `concept.release_date`, which is always the console release.
-        Using IGDB's global `first_release_date` for that comparison
-        gives misleading deltas for PC-first / multi-platform games
-        (Hollow Knight, Cuphead, Hades, Stardew Valley, etc.) where
-        the worldwide first release predates the PSN release by months
-        or years.
+        `concept.release_date` for the persisted column. The matcher's
+        confidence-scoring path uses the full per-platform list via
+        `_ps_release_pairs` so cross-gen remasters (PS3 2010 + PS5 2022)
+        get a proximity boost when PSN's date matches any platform.
         """
-        ps_dates = []
-        for rd in igdb_data.get('release_dates') or []:
-            plat = rd.get('platform')
-            date = rd.get('date')
-            if plat in PS_PLATFORM_IDS and date:
-                ps_dates.append(date)
-        if ps_dates:
-            return min(ps_dates)
+        timestamps = [ts for _, ts in cls._ps_release_pairs(igdb_data)]
+        if timestamps:
+            return min(timestamps)
         return igdb_data.get('first_release_date')
+
+    @classmethod
+    def _ps_release_dates_for_storage(cls, igdb_data):
+        """Build the IGDBMatch.igdb_ps_release_dates payload from raw IGDB data.
+
+        Returns a list of `{"platform": <int>, "date": "YYYY-MM-DD"}`
+        dicts sorted ascending by date (then platform_id as tiebreaker).
+        Empty list when no PS-platform entries exist; the persisted
+        column stores `[]` rather than null so templates can iterate
+        without a None check.
+        """
+        entries = []
+        for plat, ts in cls._ps_release_pairs(igdb_data):
+            try:
+                iso = datetime.fromtimestamp(ts, tz=dt_timezone.utc).date().isoformat()
+            except (ValueError, OSError):
+                continue
+            entries.append({'platform': plat, 'date': iso})
+        entries.sort(key=lambda e: (e['date'], e['platform']))
+        return entries
 
     # game_type ids that indicate a derivative release pointing at a canonical
     # original via parent_game: 8=Remake, 9=Remaster, 11=Port. DLC (1) and
@@ -2259,9 +2310,9 @@ class IGDBService:
         # Time to beat (fetched separately, injected as _time_to_beat)
         ttb_data = igdb_data.get('_time_to_beat', {})
 
-        # Earliest PlayStation release date. PS-platform-filtered with a
-        # fallback to global `first_release_date` (see
-        # _earliest_ps_release_timestamp for the rationale).
+        # Earliest PlayStation release date (single canonical value for
+        # the persisted column). PS-platform-filtered with a fallback to
+        # global `first_release_date`.
         first_release = None
         raw_date = cls._earliest_ps_release_timestamp(igdb_data)
         if raw_date:
@@ -2269,6 +2320,11 @@ class IGDBService:
                 first_release = datetime.fromtimestamp(raw_date, tz=dt_timezone.utc)
             except (ValueError, OSError):
                 pass
+
+        # Per-platform PS release dates for the new denormalized column.
+        # Empty list when IGDB has no per-platform release_dates for any
+        # PlayStation hardware (data quality varies).
+        ps_release_dates = cls._ps_release_dates_for_storage(igdb_data)
 
         # Game engine
         engines = igdb_data.get('game_engines', [])
@@ -2322,6 +2378,7 @@ class IGDBService:
             'time_to_beat_normally': ttb_data.get('normally'),
             'time_to_beat_completely': ttb_data.get('completely'),
             'first_release_date': first_release,
+            'ps_release_dates': ps_release_dates,
             'game_engine_name': engine_name,
             'cover_image_id': cover_image_id,
             'franchise_names': franchise_names,
@@ -2386,6 +2443,7 @@ class IGDBService:
                 'time_to_beat_normally': None,
                 'time_to_beat_completely': None,
                 'igdb_first_release_date': None,
+                'igdb_ps_release_dates': [],
                 'game_engine_name': '',
                 'igdb_cover_image_id': '',
                 'franchise_names': [],
@@ -2428,6 +2486,7 @@ class IGDBService:
         igdb_match.time_to_beat_normally = parsed['time_to_beat_normally']
         igdb_match.time_to_beat_completely = parsed['time_to_beat_completely']
         igdb_match.igdb_first_release_date = parsed['first_release_date']
+        igdb_match.igdb_ps_release_dates = parsed['ps_release_dates']
         igdb_match.game_engine_name = parsed['game_engine_name']
         igdb_match.igdb_cover_image_id = parsed['cover_image_id']
         igdb_match.franchise_names = parsed['franchise_names']

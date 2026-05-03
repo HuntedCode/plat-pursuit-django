@@ -33,6 +33,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from trophies.models import Concept, IGDBMatch, Game
+from trophies.services.igdb_service import IGDB_PLATFORM_NAMES
 
 
 _WHITESPACE_RE = re.compile(r'\s+')
@@ -468,6 +469,7 @@ class Command(BaseCommand):
                 'concept': concept,
                 'igdb_name': igdb_name,
                 'igdb_release_date': match.igdb_first_release_date,
+                'igdb_ps_release_dates': match.igdb_ps_release_dates or [],
                 'games': games,
                 'is_legacy': is_legacy,
                 'suggested_suffix': suggested_suffix,
@@ -549,6 +551,14 @@ class Command(BaseCommand):
         igdb_date = row['igdb_release_date'].strftime('%Y-%m-%d') if row['igdb_release_date'] else 'unknown'
         date_marker = self._date_match_marker(concept.release_date, row['igdb_release_date'])
         self.stdout.write(f'  Released:      PSN {psn_date}  |  IGDB {igdb_date}{date_marker}')
+
+        ps_dates = row.get('igdb_ps_release_dates') or []
+        if ps_dates:
+            parts = [
+                f'{IGDB_PLATFORM_NAMES.get(e["platform"], str(e["platform"]))} {e["date"]}'
+                for e in ps_dates
+            ]
+            self.stdout.write(f'  IGDB PS dates: {"  |  ".join(parts)}')
 
         mismatches = row['game_mismatches']
         self.stdout.write(f'  Games ({len(row["games"])}, {len(mismatches)} mismatch{"es" if len(mismatches) != 1 else ""}):')
