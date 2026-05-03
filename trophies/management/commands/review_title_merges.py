@@ -29,6 +29,7 @@ Invariants:
 import re
 
 from django.core.management.base import BaseCommand
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from trophies.models import Concept, IGDBMatch, Game
@@ -65,6 +66,29 @@ _IGDBMATCH_DEFERRED_FIELDS = (
     'franchise_names',
     'similar_game_igdb_ids',
     'external_urls',
+)
+
+# Heavy Concept JSON fields. `media` and `descriptions` can each run
+# several KB; with thousands of joined concepts that adds up. Concept.save()
+# reads `unified_title` and `slug`, so neither is in this list.
+_CONCEPT_DEFERRED_FIELDS = (
+    'descriptions',
+    'content_rating',
+    'media',
+    'genres',
+    'subgenres',
+    'igdb_genres',
+    'igdb_themes',
+    'title_ids',
+)
+
+# Heavy Game JSON / URL fields the command never reads. Game.save() only
+# touches `title_name`, so deferring these is safe under `update_fields=`.
+_GAME_DEFERRED_FIELDS = (
+    'region',
+    'title_ids',
+    'title_image',
+    'title_icon_url',
 )
 
 
@@ -157,14 +181,15 @@ class Command(BaseCommand):
         if not options['no_auto_lock']:
             self._auto_lock_matching(options)
 
-        candidates = list(self._build_queue(options))
-        total = len(candidates)
+        # Upper-bound count for the [N/M] display only. The queue
+        # itself is consumed lazily — never materialize it.
+        upper_bound = self._upper_bound_count(options)
 
-        if total == 0:
+        if upper_bound == 0:
             self.stdout.write('No concepts need review. All mismatches resolved or auto-locked.')
             return
 
-        scope = f'{total} concept(s) with title mismatches to review'
+        scope = f'Up to {upper_bound} concept(s) to review (streaming; live mismatch count <= this)'
         if options.get('limit'):
             scope += f' (capped at {options["limit"]})'
         self.stdout.write(scope + '.')
@@ -174,15 +199,22 @@ class Command(BaseCommand):
         )
 
         stats = {'merged': 0, 'left': 0, 'skipped': 0, 'errors': 0}
+        queue_iter = iter(self._build_queue(options))
         idx = 0
+        row = None
 
-        while idx < len(candidates):
+        while True:
             total_acted = stats['merged'] + stats['left'] + stats['skipped']
             if options.get('limit') and total_acted >= options['limit']:
                 break
 
-            row = candidates[idx]
-            self._display_row(idx, total, row)
+            if row is None:
+                try:
+                    row = next(queue_iter)
+                except StopIteration:
+                    break
+
+            self._display_row(idx, upper_bound, row)
             try:
                 action = self._prompt(row).strip()
             except (EOFError, KeyboardInterrupt):
@@ -198,20 +230,17 @@ class Command(BaseCommand):
             if not lower:
                 continue
 
+            consumed = False
             if lower == 'l':
-                if self._perform_leave(row, stats):
-                    pass
-                else:
-                    continue
+                consumed = self._perform_leave(row, stats)
             elif lower == 's':
                 self.stdout.write('  Skipped.')
                 stats['skipped'] += 1
+                consumed = True
             elif lower == 'm':
-                if not self._perform_merge(row, suffix=row['suggested_suffix'], custom_concept_title=None, stats=stats):
-                    continue
+                consumed = self._perform_merge(row, suffix=row['suggested_suffix'], custom_concept_title=None, stats=stats)
             elif lower == 'ms':
-                if not self._perform_merge(row, suffix='', custom_concept_title=None, stats=stats):
-                    continue
+                consumed = self._perform_merge(row, suffix='', custom_concept_title=None, stats=stats)
             elif lower.startswith('me'):
                 remainder = action[2:].strip()
                 if not remainder:
@@ -224,15 +253,18 @@ class Command(BaseCommand):
                 if not remainder:
                     self.stdout.write('  Cancelled (empty title).')
                     continue
-                if not self._perform_merge(row, suffix=None, custom_concept_title=remainder, stats=stats):
-                    continue
+                consumed = self._perform_merge(row, suffix=None, custom_concept_title=remainder, stats=stats)
             else:
                 self.stdout.write(
                     '  Unknown action. [m]/[ms]/[me] <title>/[l]/[s]/[q]'
                 )
                 continue
 
+            if not consumed:
+                continue
+
             idx += 1
+            row = None  # release the row's ORM refs; next iteration fetches fresh.
             self.stdout.write('')
 
         self._print_summary(stats)
@@ -240,6 +272,27 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------
     # Auto-lock pre-pass
     # -------------------------------------------------------------------
+
+    @staticmethod
+    def _base_match_queryset():
+        """Shared trimmed IGDBMatch queryset for auto-lock + queue passes.
+
+        Defers heavy JSON on IGDBMatch and Concept and uses a focused
+        Prefetch for games so each row in memory is a fraction of a
+        full ORM instance. With chunk_size=200 in iterator() Django
+        applies the prefetch per chunk and frees the prior chunk —
+        peak resident memory stays bounded regardless of catalog size.
+        """
+        concept_deferred = tuple(f'concept__{f}' for f in _CONCEPT_DEFERRED_FIELDS)
+        games_qs = Game.objects.defer(*_GAME_DEFERRED_FIELDS)
+        return (
+            IGDBMatch.objects
+            .filter(status__in=('accepted', 'auto_accepted'))
+            .exclude(igdb_name='')
+            .select_related('concept')
+            .defer(*_IGDBMATCH_DEFERRED_FIELDS, *concept_deferred)
+            .prefetch_related(Prefetch('concept__games', queryset=games_qs))
+        )
 
     def _auto_lock_matching(self, options):
         """Auto-resolve concepts whose titles already match IGDB.
@@ -263,14 +316,8 @@ class Command(BaseCommand):
             games to raw IGDB, then lock + mark reviewed. IGDB's form
             wins unconditionally.
         """
-        qs = (
-            IGDBMatch.objects
-            .filter(status__in=('accepted', 'auto_accepted'))
-            .exclude(igdb_name='')
-            .filter(concept__title_reviewed_at__isnull=True)
-            .select_related('concept')
-            .prefetch_related('concept__games')
-            .defer(*_IGDBMATCH_DEFERRED_FIELDS)
+        qs = self._base_match_queryset().filter(
+            concept__title_reviewed_at__isnull=True,
         )
         if options.get('concept_id'):
             qs = qs.filter(concept__concept_id=options['concept_id'])
@@ -370,15 +417,14 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------
 
     def _build_queue(self, options):
-        qs = (
-            IGDBMatch.objects
-            .filter(status__in=('accepted', 'auto_accepted'))
-            .exclude(igdb_name='')
-            .select_related('concept')
-            .prefetch_related('concept__games')
-            .defer(*_IGDBMATCH_DEFERRED_FIELDS)
-            .order_by('concept__concept_id')
-        )
+        """Stream candidate rows one at a time. NEVER materialize this.
+
+        The interactive loop never goes back, so streaming with
+        iterator(chunk_size=200) keeps peak memory at one chunk + the
+        current row regardless of catalog size. Calling list() on this
+        generator defeats the entire purpose.
+        """
+        qs = self._base_match_queryset().order_by('concept__concept_id')
 
         if not options.get('include_reviewed'):
             qs = qs.filter(concept__title_reviewed_at__isnull=True)
@@ -419,7 +465,6 @@ class Command(BaseCommand):
                 continue
 
             yield {
-                'match': match,
                 'concept': concept,
                 'igdb_name': igdb_name,
                 'igdb_release_date': match.igdb_first_release_date,
@@ -429,6 +474,32 @@ class Command(BaseCommand):
                 'concept_mismatch': concept_mismatch,
                 'game_mismatches': game_mismatches,
             }
+
+    def _upper_bound_count(self, options):
+        """Cheap COUNT(*) over the pre-filter queue.
+
+        Indexed on IGDBMatch.status; doesn't fetch any rows. Used only
+        for the [N/M] display in the interactive prompt. Real
+        reviewable count is <= this because mismatch filtering happens
+        in Python after the SQL pass.
+        """
+        qs = (
+            IGDBMatch.objects
+            .filter(status__in=('accepted', 'auto_accepted'))
+            .exclude(igdb_name='')
+        )
+        if not options.get('include_reviewed'):
+            qs = qs.filter(concept__title_reviewed_at__isnull=True)
+        if options.get('concept_id'):
+            qs = qs.filter(concept__concept_id=options['concept_id'])
+        if options.get('badge'):
+            from trophies.models import Stage
+            badge_concept_ids = set(
+                Stage.objects.values_list('concepts__id', flat=True)
+                .exclude(concepts__id=None)
+            )
+            qs = qs.filter(concept_id__in=badge_concept_ids)
+        return qs.count()
 
     @staticmethod
     def _is_legacy(games):
