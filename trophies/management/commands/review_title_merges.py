@@ -484,10 +484,11 @@ class Command(BaseCommand):
             is_mismatch = game in mismatches
             marker = self.style.ERROR(' ≠ IGDB') if is_mismatch else self.style.SUCCESS(' = IGDB')
             lock = '  [lock_title]' if game.lock_title else ''
+            shovelware = self._shovelware_tag(game)
             platforms = ', '.join(game.title_platform or []) or '?'
             comm_id = (game.np_communication_id or '')[:16].ljust(16)
             self.stdout.write(
-                f'    · {platforms:<12} {comm_id} "{game.title_name}"{lock}{marker}'
+                f'    · {platforms:<12} {comm_id} "{game.title_name}"{lock}{shovelware}{marker}'
             )
 
         if row['is_legacy']:
@@ -496,6 +497,19 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(f'  Legacy concept: no')
+
+    def _shovelware_tag(self, game):
+        """Annotation showing shovelware status when flagged.
+
+        auto_flagged shows as [shovelware: auto], manually_flagged as
+        [shovelware: manual]. Other states render nothing — admins only
+        care about positive flags here.
+        """
+        if game.shovelware_status == 'auto_flagged':
+            return self.style.WARNING('  [shovelware: auto]')
+        if game.shovelware_status == 'manually_flagged':
+            return self.style.WARNING('  [shovelware: manual]')
+        return ''
 
     def _prompt(self, row):
         self.stdout.write('')
