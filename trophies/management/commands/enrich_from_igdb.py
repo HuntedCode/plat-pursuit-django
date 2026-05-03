@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timezone as dt_timezone
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import F, Q
+from django.db.models import F, Min, Q
 
 from trophies.models import Concept, IGDBMatch, Stage
 from trophies.services.igdb_service import (
@@ -837,17 +837,25 @@ class Command(BaseCommand):
     # -------------------------------------------------------------------
 
     def _handle_refresh(self, options):
+        """Refresh accepted IGDBMatch rows, deduplicating IGDB API calls.
+
+        Multiple IGDBMatch rows can share an `igdb_id` (regional PSN
+        variants of the same game, PS3+PS4 separate concepts that map
+        to the same IGDB entry, compilation stub artifacts, etc.). We
+        group by `igdb_id`, fetch IGDB data once per group, and apply
+        it to every row in the group. Saves API calls AND keeps shared
+        rows in lockstep (same IGDB response, same last_synced_at).
+
+        Group ordering is by the group's oldest match's last_synced_at
+        (NULLS FIRST), so consecutive runtime-capped runs roll oldest-
+        groups-first through the catalog.
+        """
         dry_run = options['dry_run']
 
-        # Oldest-first ordering so consecutive runtime-capped runs roll
-        # naturally through the catalog. NULLS FIRST is defensive —
-        # last_synced_at is auto_now_add so should never be null on
-        # saved rows, but the explicit ordering avoids surprises.
         matches = (
             IGDBMatch.objects
             .filter(status__in=('auto_accepted', 'accepted'))
             .select_related('concept')
-            .order_by(F('last_synced_at').asc(nulls_first=True))
         )
 
         if options['concept_id']:
@@ -864,81 +872,167 @@ class Command(BaseCommand):
             cutoff = datetime.combine(
                 cutoff_date, datetime.min.time(), tzinfo=dt_timezone.utc
             )
-            matches = matches.filter(last_synced_at__lt=cutoff)
+            # Broadened semantic: include the whole group if ANY of its
+            # matches is older than the cutoff. Refreshing only the
+            # stale members would leave a group's rows out of sync with
+            # the same IGDB id pointing at different last_synced_at
+            # values; the cron's group-level ordering would then keep
+            # re-fetching the group on subsequent runs.
+            stale_group_ids = (
+                matches.filter(last_synced_at__lt=cutoff)
+                .values_list('igdb_id', flat=True)
+                .distinct()
+            )
+            matches = matches.filter(igdb_id__in=list(stale_group_ids))
             self.stdout.write(
-                f'Filtering to matches last synced before {cutoff.isoformat()}.'
+                f'Filtering to groups whose oldest match was synced before {cutoff.isoformat()}.'
             )
 
-        total = matches.count()
-        if total == 0:
+        total_matches = matches.count()
+        if total_matches == 0:
             self.stdout.write('No accepted matches to refresh.')
             return
 
-        self.stdout.write(f'Refreshing {total} IGDB match(es)...')
+        # Distinct igdb_ids ordered by group's oldest match.
+        ids_oldest_first = list(
+            matches
+            .values('igdb_id')
+            .annotate(oldest=Min('last_synced_at'))
+            .order_by(F('oldest').asc(nulls_first=True))
+            .values_list('igdb_id', flat=True)
+        )
+        total_groups = len(ids_oldest_first)
+        share_savings_potential = total_matches - total_groups
+
+        scope_msg = (
+            f'Refreshing {total_matches} IGDB match(es) across {total_groups} '
+            f'unique IGDB id(s)'
+        )
+        if share_savings_potential > 0:
+            scope_msg += (
+                f' — dedup will save up to {share_savings_potential} API call(s) '
+                f'({share_savings_potential / total_matches:.0%}).'
+            )
+        else:
+            scope_msg += '.'
+        self.stdout.write(scope_msg)
+
         if dry_run:
             self.stdout.write(self.style.WARNING('[DRY RUN] No changes will be saved.'))
 
         max_minutes = options.get('max_minutes')
         max_seconds = max_minutes * 60 if max_minutes else None
         loop_start = time.monotonic()
-        capped_at = None
+        capped_after_groups = None
 
         refreshed = 0
         not_found = 0
         errors = 0
+        groups_fetched = 0
+        match_counter = 0
 
-        for i, igdb_match in enumerate(matches.iterator()):
+        for group_idx, igdb_id in enumerate(ids_oldest_first):
             if max_seconds is not None and (time.monotonic() - loop_start) >= max_seconds:
-                capped_at = i
+                capped_after_groups = group_idx
                 break
-            try:
-                if dry_run:
-                    self.stdout.write(
-                        f'  [{i + 1}/{total}] {igdb_match.concept.concept_id} '
-                        f'"{igdb_match.concept.unified_title}" (IGDB #{igdb_match.igdb_id})'
-                    )
-                    refreshed += 1
+
+            group_matches = list(
+                matches.filter(igdb_id=igdb_id)
+                .order_by(F('last_synced_at').asc(nulls_first=True))
+            )
+            group_size = len(group_matches)
+
+            # Fetch IGDB data ONCE per group (or skip in dry-run).
+            igdb_data = None
+            fetch_failed = False
+            if not dry_run:
+                try:
+                    igdb_data = IGDBService.fetch_full_game_data(igdb_id)
+                    groups_fetched += 1
+                except Exception as e:
+                    fetch_failed = True
+                    for igdb_match in group_matches:
+                        match_counter += 1
+                        errors += 1
+                        self.stdout.write(self.style.ERROR(
+                            f'  [{match_counter}/{total_matches}] FETCH ERROR '
+                            f'{igdb_match.concept.concept_id} '
+                            f'"{igdb_match.concept.unified_title}" '
+                            f'(IGDB #{igdb_id}): {e}'
+                        ))
                     continue
 
-                result = IGDBService.refresh_match(igdb_match)
-                if result:
+                if igdb_data is None:
+                    for igdb_match in group_matches:
+                        match_counter += 1
+                        not_found += 1
+                        self.stdout.write(self.style.WARNING(
+                            f'  [{match_counter}/{total_matches}] '
+                            f'{igdb_match.concept.concept_id} '
+                            f'"{igdb_match.concept.unified_title}" '
+                            f'[IGDB #{igdb_id} not found]'
+                        ))
+                    continue
+
+            # Apply to every match in the group.
+            for igdb_match in group_matches:
+                match_counter += 1
+                share_note = ''
+                if group_size > 1:
+                    share_note = f' [shared #{igdb_id}, {group_size} concepts]'
+                try:
+                    if dry_run:
+                        self.stdout.write(
+                            f'  [{match_counter}/{total_matches}] '
+                            f'{igdb_match.concept.concept_id} '
+                            f'"{igdb_match.concept.unified_title}" '
+                            f'(IGDB #{igdb_match.igdb_id}){share_note}'
+                        )
+                        refreshed += 1
+                        continue
+
+                    IGDBService.refresh_match(igdb_match, igdb_data=igdb_data)
                     refreshed += 1
                     self.stdout.write(self.style.SUCCESS(
-                        f'  [{i + 1}/{total}] {igdb_match.concept.concept_id} '
-                        f'"{igdb_match.concept.unified_title}" [refreshed]'
+                        f'  [{match_counter}/{total_matches}] '
+                        f'{igdb_match.concept.concept_id} '
+                        f'"{igdb_match.concept.unified_title}" '
+                        f'[refreshed]{share_note}'
                     ))
-                else:
-                    not_found += 1
-                    self.stdout.write(self.style.WARNING(
-                        f'  [{i + 1}/{total}] {igdb_match.concept.concept_id} '
-                        f'"{igdb_match.concept.unified_title}" [not found on IGDB]'
+                except Exception as e:
+                    errors += 1
+                    self.stdout.write(self.style.ERROR(
+                        f'  [{match_counter}/{total_matches}] APPLY ERROR '
+                        f'{igdb_match.concept.concept_id} '
+                        f'"{igdb_match.concept.unified_title}": {e}'
                     ))
 
-            except Exception as e:
-                errors += 1
-                self.stdout.write(self.style.ERROR(
-                    f'  [{i + 1}/{total}] ERROR {igdb_match.concept.concept_id} '
-                    f'"{igdb_match.concept.unified_title}": {e}'
-                ))
-
-        if capped_at is not None:
+        if capped_after_groups is not None:
             elapsed = time.monotonic() - loop_start
-            remaining = max(total - capped_at, 0)
+            remaining_matches = max(total_matches - match_counter, 0)
+            remaining_groups = max(total_groups - capped_after_groups, 0)
             self.stdout.write(self.style.WARNING(
                 f'\nReached --max-minutes cap of {max_minutes} min '
-                f'({elapsed/60:.1f} min elapsed) after {capped_at} match(es); '
-                f'{remaining} remaining will be picked up on the next run '
-                f'(oldest-first ordering naturally rolls through the catalog).'
+                f'({elapsed/60:.1f} min elapsed) after {capped_after_groups} group(s) / '
+                f'{match_counter} match(es); {remaining_groups} group(s) / '
+                f'{remaining_matches} match(es) remaining will be picked up on '
+                f'the next run (oldest-group-first ordering naturally rolls '
+                f'through the catalog).'
             ))
 
         prefix = '[DRY RUN] ' if dry_run else ''
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS(f'{prefix}IGDB Refresh Complete'))
-        self.stdout.write(f'  Refreshed:  {refreshed}')
+        self.stdout.write(f'  Matches refreshed:  {refreshed}')
+        if not dry_run:
+            self.stdout.write(f'  Groups fetched:     {groups_fetched}')
+            api_calls_saved = max(refreshed - groups_fetched, 0)
+            if api_calls_saved:
+                self.stdout.write(f'  API calls saved:    {api_calls_saved}')
         if not_found:
-            self.stdout.write(self.style.WARNING(f'  Not found:  {not_found}'))
+            self.stdout.write(self.style.WARNING(f'  Not found:          {not_found}'))
         if errors:
-            self.stdout.write(self.style.ERROR(f'  Errors:     {errors}'))
+            self.stdout.write(self.style.ERROR(f'  Errors:             {errors}'))
 
     # -------------------------------------------------------------------
     # Enrich mode: match and enrich concepts

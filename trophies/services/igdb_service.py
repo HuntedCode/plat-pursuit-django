@@ -2597,23 +2597,47 @@ class IGDBService:
         return igdb_match
 
     @classmethod
-    def refresh_match(cls, igdb_match):
+    def fetch_full_game_data(cls, igdb_id):
+        """Fetch IGDB game data + time-to-beat as a single payload.
+
+        Returns the IGDB game dict with `_time_to_beat` injected (the
+        format `_parse_game_data` and `refresh_match` expect), or None
+        if the game doesn't exist on IGDB.
+
+        Use this when applying the same IGDB response to multiple rows
+        (e.g., refreshing a group of IGDBMatch rows that share an
+        igdb_id) — fetch once, pass to `refresh_match(igdb_data=...)`
+        for each row to avoid repeated API calls.
+        """
+        igdb_data = cls.get_game_details(igdb_id)
+        if not igdb_data:
+            return None
+        ttb = cls._fetch_time_to_beat(igdb_id)
+        igdb_data['_time_to_beat'] = ttb
+        return igdb_data
+
+    @classmethod
+    def refresh_match(cls, igdb_match, igdb_data=None):
         """Re-fetch IGDB data for an existing match and update all parsed fields.
 
         Skips the search/matching step entirely since we already have the igdb_id.
         Updates raw_response, all Tier 1 fields, Company records, and Concept fields.
 
+        `igdb_data`: pre-fetched payload (assembled via
+        `fetch_full_game_data`, with `_time_to_beat` injected). When
+        provided, skips the IGDB API fetch — used by the refresh cron
+        to dedupe API calls across IGDBMatch rows that share an
+        igdb_id. When None (the default), this method fetches its own
+        data, preserving the original behavior for solo callers.
+
         Returns:
             IGDBMatch: The updated match record, or None if fetch failed
         """
-        igdb_data = cls.get_game_details(igdb_match.igdb_id)
+        if igdb_data is None:
+            igdb_data = cls.fetch_full_game_data(igdb_match.igdb_id)
         if not igdb_data:
             logger.warning(f'IGDB refresh: game {igdb_match.igdb_id} no longer found')
             return None
-
-        # Fetch time-to-beat separately
-        ttb = cls._fetch_time_to_beat(igdb_match.igdb_id)
-        igdb_data['_time_to_beat'] = ttb
 
         parsed = cls._parse_game_data(igdb_data)
 
