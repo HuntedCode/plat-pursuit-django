@@ -1149,11 +1149,15 @@ class IGDBService:
             elif debug:
                 steps.append(f'skip main-game boost (category={category}, contained={is_contained})')
 
-        # Modifier: release year proximity
-        if concept.release_date and igdb_game.get('first_release_date'):
+        # Modifier: release year proximity. Compares PSN's console release
+        # year to IGDB's earliest PS-platform release year (NOT IGDB's
+        # global `first_release_date`, which can be a PC release years
+        # earlier and would wrongly skip the boost for PC-first ports).
+        ps_release_ts = cls._earliest_ps_release_timestamp(igdb_game)
+        if concept.release_date and ps_release_ts:
             try:
                 igdb_year = datetime.fromtimestamp(
-                    igdb_game['first_release_date'], tz=dt_timezone.utc
+                    ps_release_ts, tz=dt_timezone.utc
                 ).year
                 concept_year = concept.release_date.year
                 if abs(igdb_year - concept_year) <= 1:
@@ -1169,8 +1173,8 @@ class IGDBService:
             missing = []
             if not concept.release_date:
                 missing.append('concept.release_date')
-            if not igdb_game.get('first_release_date'):
-                missing.append('igdb.first_release_date')
+            if not ps_release_ts:
+                missing.append('igdb.ps_release_date')
             steps.append(f'skip year proximity (missing: {",".join(missing)})')
 
         # Modifier: publisher name match
@@ -2152,6 +2156,39 @@ class IGDBService:
         """
         return cls._extract_game_category(igdb_data) in (3, 13)
 
+    @staticmethod
+    def _earliest_ps_release_timestamp(igdb_data):
+        """Earliest IGDB release-date unix timestamp on any PlayStation platform.
+
+        Walks `igdb_data['release_dates']` (per-platform/region entries
+        from the IGDB query) and filters to PS_PLATFORM_IDS. Returns the
+        minimum unix timestamp found. Falls back to the global
+        `first_release_date` when no PS-specific entries are present
+        (IGDB occasionally has incomplete `release_dates` on older or
+        less-curated rows).
+
+        IGDB does NOT redundantly list PS4/PS5 alongside PSVR/PSVR2 — VR
+        games carry only the VR platform. Both VR ids are members of
+        PS_PLATFORM_IDS, so VR-only games still get a date here.
+
+        This is the right value to compare against PSN's
+        `concept.release_date`, which is always the console release.
+        Using IGDB's global `first_release_date` for that comparison
+        gives misleading deltas for PC-first / multi-platform games
+        (Hollow Knight, Cuphead, Hades, Stardew Valley, etc.) where
+        the worldwide first release predates the PSN release by months
+        or years.
+        """
+        ps_dates = []
+        for rd in igdb_data.get('release_dates') or []:
+            plat = rd.get('platform')
+            date = rd.get('date')
+            if plat in PS_PLATFORM_IDS and date:
+                ps_dates.append(date)
+        if ps_dates:
+            return min(ps_dates)
+        return igdb_data.get('first_release_date')
+
     # game_type ids that indicate a derivative release pointing at a canonical
     # original via parent_game: 8=Remake, 9=Remaster, 11=Port. DLC (1) and
     # Expansion (2) also populate parent_game but we don't want to collapse
@@ -2222,9 +2259,11 @@ class IGDBService:
         # Time to beat (fetched separately, injected as _time_to_beat)
         ttb_data = igdb_data.get('_time_to_beat', {})
 
-        # First release date
+        # Earliest PlayStation release date. PS-platform-filtered with a
+        # fallback to global `first_release_date` (see
+        # _earliest_ps_release_timestamp for the rationale).
         first_release = None
-        raw_date = igdb_data.get('first_release_date')
+        raw_date = cls._earliest_ps_release_timestamp(igdb_data)
         if raw_date:
             try:
                 first_release = datetime.fromtimestamp(raw_date, tz=dt_timezone.utc)

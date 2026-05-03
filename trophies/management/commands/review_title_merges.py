@@ -547,10 +547,7 @@ class Command(BaseCommand):
 
         psn_date = concept.release_date.strftime('%Y-%m-%d') if concept.release_date else 'unknown'
         igdb_date = row['igdb_release_date'].strftime('%Y-%m-%d') if row['igdb_release_date'] else 'unknown'
-        date_marker = ''
-        if (concept.release_date and row['igdb_release_date']
-                and psn_date == igdb_date):
-            date_marker = self.style.SUCCESS('  ✓ match')
+        date_marker = self._date_match_marker(concept.release_date, row['igdb_release_date'])
         self.stdout.write(f'  Released:      PSN {psn_date}  |  IGDB {igdb_date}{date_marker}')
 
         mismatches = row['game_mismatches']
@@ -572,6 +569,37 @@ class Command(BaseCommand):
             )
         else:
             self.stdout.write(f'  Legacy concept: no')
+
+    def _date_match_marker(self, psn_dt, igdb_dt):
+        """Annotation comparing PSN concept date to IGDB PS release date.
+
+        Both sides now reference the PlayStation release: PSN's
+        `concept.release_date` is the regional PSN release, and IGDB's
+        `igdb_first_release_date` is the earliest PS-platform release
+        (see IGDBService._earliest_ps_release_timestamp). Exact-day
+        equality should be the common case for clean matches; the
+        year-fallback bands are safety nets for regional release
+        differences and IGDB data quality variance.
+
+          0 days   -> ✓ exact match (green)
+          same yr  -> ✓ same year (green)
+          ±1 year  -> ✓ within 1 year (green; mirrors the +0.05 scorer boost)
+          beyond   -> ~ Ny apart (yellow caution; possible regional
+                       variance or legitimate port/remaster, worth a
+                       second look)
+        """
+        if not psn_dt or not igdb_dt:
+            return ''
+        psn_d = psn_dt.date()
+        igdb_d = igdb_dt.date()
+        if psn_d == igdb_d:
+            return self.style.SUCCESS('  ✓ exact match')
+        if psn_d.year == igdb_d.year:
+            return self.style.SUCCESS('  ✓ same year')
+        years_diff = abs(psn_d.year - igdb_d.year)
+        if years_diff <= 1:
+            return self.style.SUCCESS('  ✓ within 1 year')
+        return self.style.WARNING(f'  ~ {years_diff}y apart')
 
     def _shovelware_tag(self, game):
         """Annotation showing shovelware status when flagged.
