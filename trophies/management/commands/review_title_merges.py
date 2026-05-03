@@ -547,7 +547,11 @@ class Command(BaseCommand):
 
         psn_date = concept.release_date.strftime('%Y-%m-%d') if concept.release_date else 'unknown'
         igdb_date = row['igdb_release_date'].strftime('%Y-%m-%d') if row['igdb_release_date'] else 'unknown'
-        self.stdout.write(f'  Released:      PSN {psn_date}  |  IGDB {igdb_date}')
+        date_marker = ''
+        if (concept.release_date and row['igdb_release_date']
+                and psn_date == igdb_date):
+            date_marker = self.style.SUCCESS('  ✓ match')
+        self.stdout.write(f'  Released:      PSN {psn_date}  |  IGDB {igdb_date}{date_marker}')
 
         mismatches = row['game_mismatches']
         self.stdout.write(f'  Games ({len(row["games"])}, {len(mismatches)} mismatch{"es" if len(mismatches) != 1 else ""}):')
