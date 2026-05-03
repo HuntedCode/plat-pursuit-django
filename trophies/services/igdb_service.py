@@ -49,6 +49,35 @@ VR_HOST_PLATFORM = {
 # IGDB external game category for PlayStation Store
 PLAYSTATION_STORE_CATEGORY = 36
 
+# IGDB release_date_status enum. Tracks the stage a release_dates entry
+# represents. We persist the id (small int) rather than the name so the
+# semantic stays stable even if IGDB renames a status.
+IGDB_RELEASE_STATUS_RELEASE = 1
+IGDB_RELEASE_STATUS_NAMES = {
+    1: 'Release',
+    2: 'Alpha',
+    3: 'Beta',
+    4: 'Early Access',
+    5: 'Offline',
+    6: 'Cancelled',
+    7: 'Rumored',
+    8: 'Delayed',
+}
+
+# IGDB region enum used on release_dates entries. 8=Worldwide is the
+# common case; the named regions appear when a publisher explicitly
+# tracks regional launches (Atlus JP titles, e.g.).
+IGDB_REGION_NAMES = {
+    1: 'Europe',
+    2: 'North America',
+    3: 'Australia',
+    4: 'New Zealand',
+    5: 'Japan',
+    6: 'China',
+    7: 'Asia',
+    8: 'Worldwide',
+}
+
 # Website category mapping for external_urls
 WEBSITE_CATEGORIES = {
     1: 'official',
@@ -111,6 +140,7 @@ GAME_FIELDS = (
     'websites.url, websites.category, '
     'platforms, '
     'release_dates.date, release_dates.platform, release_dates.region, '
+    'release_dates.status.id, release_dates.status.name, '
     'similar_games, '
     'bundles, '
     'parent_game.id, parent_game.name, parent_game.slug, '
@@ -2173,47 +2203,74 @@ class IGDBService:
         return cls._extract_game_category(igdb_data) in (3, 13)
 
     @classmethod
-    def _ps_release_pairs(cls, igdb_data):
-        """Yield (platform_id, unix_timestamp) for each PS-platform release.
+    def _ps_release_records(cls, igdb_data):
+        """Yield a full record dict for each PS-platform release_dates entry.
 
-        Walks `igdb_data['release_dates']` and filters to PS_PLATFORM_IDS.
-        Deduplicates exact (platform, timestamp) repeats — IGDB sometimes
-        lists multiple region rows for the same platform launch with the
-        same date.
+        Format:
+          {"platform": <int>, "timestamp": <unix_int>,
+           "status": <int|None>, "region": <int|None>}
 
-        Iterator-based so callers can pick the shape they want:
-        - `min(ts for _, ts in pairs)` for the earliest single value
-        - `list(pairs)` for per-platform display / matching against any date
+        Captures EVERY PS-platform release_dates entry IGDB returns,
+        including multi-region and multi-stage records (alpha, beta,
+        full release, etc.). Single source of truth for storage,
+        matcher, and display helpers. No per-platform deduplication
+        happens here — that's a display concern, not a storage one.
+
+        IGDB does NOT redundantly list PS4/PS5 alongside PSVR/PSVR2;
+        VR games carry only the VR platform. Both VR ids are members
+        of PS_PLATFORM_IDS, so VR-only games are included.
+
+        `status` is the release_date_status enum id (1=Release,
+        2=Alpha, etc., see IGDB_RELEASE_STATUS_NAMES). Will be None on
+        rows enriched before `release_dates.status` was added to the
+        IGDB query — they need an `enrich_from_igdb --refresh` to
+        populate it.
         """
-        seen = set()
         for rd in igdb_data.get('release_dates') or []:
             plat = rd.get('platform')
             date = rd.get('date')
-            if plat in PS_PLATFORM_IDS and date is not None:
-                key = (plat, date)
-                if key in seen:
-                    continue
-                seen.add(key)
-                yield key
+            if plat not in PS_PLATFORM_IDS or date is None:
+                continue
+            status_obj = rd.get('status') or {}
+            status_id = status_obj.get('id') if isinstance(status_obj, dict) else None
+            yield {
+                'platform': plat,
+                'timestamp': date,
+                'status': status_id,
+                'region': rd.get('region'),
+            }
+
+    @classmethod
+    def _ps_release_pairs(cls, igdb_data):
+        """Yield (platform_id, unix_timestamp) for each distinct PS release entry.
+
+        Lightweight wrapper around `_ps_release_records` for callers
+        that only need platform+date (the matcher, the earliest helper).
+        Deduplicates exact (platform, timestamp) repeats — IGDB's data
+        sometimes carries duplicate rows differing only by metadata we
+        don't care about for matching.
+        """
+        seen = set()
+        for record in cls._ps_release_records(igdb_data):
+            key = (record['platform'], record['timestamp'])
+            if key in seen:
+                continue
+            seen.add(key)
+            yield key
 
     @classmethod
     def _earliest_ps_release_timestamp(cls, igdb_data):
         """Earliest IGDB release-date unix timestamp on any PlayStation platform.
 
-        Returns the minimum timestamp from `_ps_release_pairs`. Falls
-        back to the global `first_release_date` when no PS-specific
-        entries are present (IGDB occasionally has incomplete
-        `release_dates` on older or less-curated rows).
+        Returns the minimum across all PS release_dates entries. Falls
+        back to the global `first_release_date` when IGDB has no
+        per-platform PS data.
 
-        IGDB does NOT redundantly list PS4/PS5 alongside PSVR/PSVR2 — VR
-        games carry only the VR platform. Both VR ids are members of
-        PS_PLATFORM_IDS, so VR-only games still get a date here.
-
-        This is the right value to compare against PSN's
-        `concept.release_date` for the persisted column. The matcher's
-        confidence-scoring path uses the full per-platform list via
-        `_ps_release_pairs` so cross-gen remasters (PS3 2010 + PS5 2022)
-        get a proximity boost when PSN's date matches any platform.
+        Used for the canonical single-value `igdb_first_release_date`
+        column. Note this can anchor to a beta/alpha date for stage-
+        banded releases — that's by design for "first time PSN saw
+        this game on any platform." If you want the actual launch
+        date, read the per-platform display list instead.
         """
         timestamps = [ts for _, ts in cls._ps_release_pairs(igdb_data)]
         if timestamps:
@@ -2222,23 +2279,107 @@ class IGDBService:
 
     @classmethod
     def _ps_release_dates_for_storage(cls, igdb_data):
-        """Build the IGDBMatch.igdb_ps_release_dates payload from raw IGDB data.
+        """Build the IGDBMatch.igdb_ps_release_dates payload.
 
-        Returns a list of `{"platform": <int>, "date": "YYYY-MM-DD"}`
-        dicts sorted ascending by date (then platform_id as tiebreaker).
-        Empty list when no PS-platform entries exist; the persisted
-        column stores `[]` rather than null so templates can iterate
-        without a None check.
+        Captures EVERY distinct PS release_dates entry as
+          {"platform": <int>, "date": "YYYY-MM-DD",
+           "status": <int|None>, "region": <int|None>}
+        sorted ascending by (date, platform, status, region).
+
+        No per-platform dedup — full multi-region / multi-stage
+        fidelity is preserved so future consumers (user-facing pages,
+        analytics, etc.) have the raw data without re-fetching from
+        IGDB. Display helpers collapse this list to one-row-per-
+        platform at render time.
         """
+        seen = set()
         entries = []
-        for plat, ts in cls._ps_release_pairs(igdb_data):
+        for record in cls._ps_release_records(igdb_data):
+            key = (
+                record['platform'],
+                record['timestamp'],
+                record['status'],
+                record['region'],
+            )
+            if key in seen:
+                continue
+            seen.add(key)
             try:
-                iso = datetime.fromtimestamp(ts, tz=dt_timezone.utc).date().isoformat()
+                iso = datetime.fromtimestamp(
+                    record['timestamp'], tz=dt_timezone.utc
+                ).date().isoformat()
             except (ValueError, OSError):
                 continue
-            entries.append({'platform': plat, 'date': iso})
-        entries.sort(key=lambda e: (e['date'], e['platform']))
+            entries.append({
+                'platform': record['platform'],
+                'date': iso,
+                'status': record['status'],
+                'region': record['region'],
+            })
+        entries.sort(key=lambda e: (
+            e['date'], e['platform'], e['status'] or 0, e['region'] or 0,
+        ))
         return entries
+
+    @staticmethod
+    def collapse_ps_release_dates_for_display(ps_release_dates):
+        """Collapse the storage list to one entry per PS platform for display.
+
+        The storage list captures every IGDB record (multi-region,
+        multi-stage, etc.); display surfaces want a single "release
+        date" per platform. Strategy per platform, in priority order:
+
+          1. If any entry has status==Release (id=1), pick the earliest
+             of those. The proper-data branch.
+
+          2. Else, the cross-platform-coincidence heuristic: prefer the
+             date that appears across the most other PS platforms.
+             "Synchronized multi-platform launch" is overwhelmingly
+             the true release; preceding single-platform dates are
+             usually alphas/betas. Tiebreak earliest.
+
+          3. Else (single-platform game with no status info), pick
+             earliest. Best we can do without metadata.
+
+        Returns a list sorted ascending by (date, platform).
+
+        Going forward, status-aware enrichment makes branch #1 the
+        common path. Branch #2 is the fallback for legacy rows whose
+        raw_response was captured before `release_dates.status` was
+        added to the query.
+        """
+        if not ps_release_dates:
+            return []
+
+        # Cross-platform coincidence counts: how many PS platforms
+        # share each date.
+        date_platforms = {}
+        for entry in ps_release_dates:
+            date_platforms.setdefault(entry['date'], set()).add(entry['platform'])
+
+        by_platform = {}
+        for entry in ps_release_dates:
+            by_platform.setdefault(entry['platform'], []).append(entry)
+
+        chosen = []
+        for plat, plat_entries in by_platform.items():
+            release_only = [
+                e for e in plat_entries
+                if e.get('status') == IGDB_RELEASE_STATUS_RELEASE
+            ]
+            if release_only:
+                release_only.sort(key=lambda e: e['date'])
+                chosen.append(release_only[0])
+                continue
+
+            plat_entries.sort(key=lambda e: (
+                -len(date_platforms.get(e['date'], set())),
+                e['date'],
+            ))
+            chosen.append(plat_entries[0])
+
+        chosen.sort(key=lambda e: (e['date'], e['platform']))
+        return chosen
 
     # game_type ids that indicate a derivative release pointing at a canonical
     # original via parent_game: 8=Remake, 9=Remaster, 11=Port. DLC (1) and

@@ -6,7 +6,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F, Q
 
 from trophies.models import Concept, IGDBMatch, Stage
-from trophies.services.igdb_service import IGDBService, IGDB_PLATFORM_NAMES
+from trophies.services.igdb_service import (
+    IGDBService,
+    IGDB_PLATFORM_NAMES,
+)
 
 
 # Token filtering for related-title surfacing. Short tokens and common
@@ -567,11 +570,13 @@ class Command(BaseCommand):
             f'({match.match_method}, {match.match_confidence:.0%})  '
             f'|  Released: {igdb_released}'
         )
-        ps_dates = match.igdb_ps_release_dates or []
-        if ps_dates:
+        ps_dates_display = IGDBService.collapse_ps_release_dates_for_display(
+            match.igdb_ps_release_dates or []
+        )
+        if ps_dates_display:
             parts = [
                 f'{IGDB_PLATFORM_NAMES.get(e["platform"], str(e["platform"]))} {e["date"]}'
-                for e in ps_dates
+                for e in ps_dates_display
             ]
             self.stdout.write(f'              IGDB PS dates: {"  |  ".join(parts)}')
 

@@ -33,7 +33,10 @@ from django.db.models import Prefetch
 from django.utils import timezone
 
 from trophies.models import Concept, IGDBMatch, Game
-from trophies.services.igdb_service import IGDB_PLATFORM_NAMES
+from trophies.services.igdb_service import (
+    IGDB_PLATFORM_NAMES,
+    IGDBService,
+)
 
 
 _WHITESPACE_RE = re.compile(r'\s+')
@@ -549,14 +552,17 @@ class Command(BaseCommand):
 
         psn_date = concept.release_date.strftime('%Y-%m-%d') if concept.release_date else 'unknown'
         igdb_date = row['igdb_release_date'].strftime('%Y-%m-%d') if row['igdb_release_date'] else 'unknown'
-        date_marker = self._date_match_marker(concept.release_date, row['igdb_release_date'])
+        ps_dates_full = row.get('igdb_ps_release_dates') or []
+        ps_dates_display = IGDBService.collapse_ps_release_dates_for_display(ps_dates_full)
+        date_marker = self._date_match_marker(
+            concept.release_date, ps_dates_display, row['igdb_release_date']
+        )
         self.stdout.write(f'  Released:      PSN {psn_date}  |  IGDB {igdb_date}{date_marker}')
 
-        ps_dates = row.get('igdb_ps_release_dates') or []
-        if ps_dates:
+        if ps_dates_display:
             parts = [
                 f'{IGDB_PLATFORM_NAMES.get(e["platform"], str(e["platform"]))} {e["date"]}'
-                for e in ps_dates
+                for e in ps_dates_display
             ]
             self.stdout.write(f'  IGDB PS dates: {"  |  ".join(parts)}')
 
@@ -580,36 +586,59 @@ class Command(BaseCommand):
         else:
             self.stdout.write(f'  Legacy concept: no')
 
-    def _date_match_marker(self, psn_dt, igdb_dt):
-        """Annotation comparing PSN concept date to IGDB PS release date.
+    def _date_match_marker(self, psn_dt, ps_dates_list, igdb_first_dt):
+        """Annotation comparing PSN concept date to IGDB PS release dates.
 
-        Both sides now reference the PlayStation release: PSN's
-        `concept.release_date` is the regional PSN release, and IGDB's
-        `igdb_first_release_date` is the earliest PS-platform release
-        (see IGDBService._earliest_ps_release_timestamp). Exact-day
-        equality should be the common case for clean matches; the
-        year-fallback bands are safety nets for regional release
-        differences and IGDB data quality variance.
+        Compares PSN's date against ALL per-platform PS release dates in
+        `ps_dates_list` (the denormalized column). Catches exact matches
+        on later platform launches that an "earliest only" check would
+        miss — e.g. PSN 2025-05-22 matching the PS4 entry exactly while
+        IGDB's earliest PS date is the PS5 entry months earlier.
 
-          0 days   -> ✓ exact match (green)
-          same yr  -> ✓ same year (green)
-          ±1 year  -> ✓ within 1 year (green; mirrors the +0.05 scorer boost)
-          beyond   -> ~ Ny apart (yellow caution; possible regional
-                       variance or legitimate port/remaster, worth a
-                       second look)
+        Falls back to `igdb_first_dt` when ps_dates_list is empty (rows
+        where IGDB has no per-platform release_dates entries).
+
+          exact day on any platform -> ✓ exact match (PLAT)
+          same year on any platform -> ✓ same year (PLAT)
+          ±1 year on closest         -> ✓ within 1 year
+          beyond                     -> ~ Ny apart (yellow caution)
         """
-        if not psn_dt or not igdb_dt:
+        if not psn_dt:
             return ''
-        psn_d = psn_dt.date()
-        igdb_d = igdb_dt.date()
-        if psn_d == igdb_d:
-            return self.style.SUCCESS('  ✓ exact match')
-        if psn_d.year == igdb_d.year:
-            return self.style.SUCCESS('  ✓ same year')
-        years_diff = abs(psn_d.year - igdb_d.year)
-        if years_diff <= 1:
+
+        candidates = list(ps_dates_list or [])
+        if not candidates and igdb_first_dt:
+            candidates = [{
+                'date': igdb_first_dt.strftime('%Y-%m-%d'),
+                'platform': None,
+            }]
+
+        if not candidates:
+            return ''
+
+        psn_iso = psn_dt.strftime('%Y-%m-%d')
+        psn_year = psn_dt.year
+
+        def label_for(plat_id):
+            if plat_id is None:
+                return ''
+            name = IGDB_PLATFORM_NAMES.get(plat_id, str(plat_id))
+            return f' ({name})'
+
+        for c in candidates:
+            if c['date'] == psn_iso:
+                return self.style.SUCCESS(f'  ✓ exact match{label_for(c.get("platform"))}')
+
+        for c in candidates:
+            if c['date'][:4] == str(psn_year):
+                return self.style.SUCCESS(f'  ✓ same year{label_for(c.get("platform"))}')
+
+        candidate_years = {int(c['date'][:4]) for c in candidates}
+        closest_year = min(candidate_years, key=lambda y: abs(y - psn_year))
+        diff = abs(closest_year - psn_year)
+        if diff <= 1:
             return self.style.SUCCESS('  ✓ within 1 year')
-        return self.style.WARNING(f'  ~ {years_diff}y apart')
+        return self.style.WARNING(f'  ~ {diff}y apart')
 
     def _shovelware_tag(self, game):
         """Annotation showing shovelware status when flagged.
