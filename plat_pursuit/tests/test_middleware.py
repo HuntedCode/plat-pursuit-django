@@ -1,9 +1,12 @@
+from unittest import mock
+
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from plat_pursuit.middleware import (
     BotCanonicalRedirectMiddleware,
     CloudflareOriginGuardMiddleware,
+    MemoryDeltaMiddleware,
 )
 
 
@@ -202,3 +205,48 @@ class CloudflareOriginGuardMiddlewareTests(SimpleTestCase):
         ))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'ok')
+
+
+class MemoryDeltaMiddlewareTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = MemoryDeltaMiddleware(_passthrough)
+
+    def _request(self, path='/'):
+        return self.factory.get(path)
+
+    def test_no_log_when_rss_unavailable(self):
+        # On dev OSes (Windows/macOS) /proc/self/status doesn't exist, so
+        # _read_rss_kb returns 0 and the middleware must be a no-op.
+        with mock.patch('plat_pursuit.middleware._read_rss_kb', return_value=0):
+            with self.assertNoLogs('plat_pursuit.middleware', level='INFO'):
+                response = self.middleware(self._request())
+        self.assertEqual(response.status_code, 200)
+
+    def test_no_log_when_delta_below_threshold(self):
+        # Simulate Linux RSS reads but with a tiny delta (5 MB).
+        rss_values = iter([100_000, 105_000])
+        with mock.patch(
+            'plat_pursuit.middleware._read_rss_kb',
+            side_effect=lambda: next(rss_values),
+        ):
+            with self.assertNoLogs('plat_pursuit.middleware', level='INFO'):
+                self.middleware(self._request())
+
+    def test_log_when_delta_above_threshold(self):
+        # Simulate a 100 MB allocation between the before/after reads.
+        rss_values = iter([100_000, 100_000 + 100 * 1024])  # +100 MB in KB
+        with mock.patch(
+            'plat_pursuit.middleware._read_rss_kb',
+            side_effect=lambda: next(rss_values),
+        ):
+            with self.assertLogs('plat_pursuit.middleware', level='INFO') as captured:
+                self.middleware(self._request('/games/NPWR00352_00/'))
+        self.assertTrue(
+            any('HEAVY_REQUEST' in msg for msg in captured.output),
+            f'expected a HEAVY_REQUEST log line, got: {captured.output}',
+        )
+        self.assertTrue(
+            any('path=/games/NPWR00352_00/' in msg for msg in captured.output),
+            f'expected path in log, got: {captured.output}',
+        )

@@ -234,6 +234,11 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "csp.middleware.CSPMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Wraps every dynamic request so RSS growth is measurable. Logs a
+    # HEAVY_REQUEST line if a single request allocates more than ~50 MB.
+    # Static files served by WhiteNoise above are never measured. See
+    # plat_pursuit/middleware.py for the threshold and output format.
+    "plat_pursuit.middleware.MemoryDeltaMiddleware",
     # Bounces direct-origin requests for profile-scoped URLs back through
     # Cloudflare so Bot Fight Mode / WAF can evaluate them. Runs ahead of
     # the bot redirect so direct-IP scrapers hit CF before any Python-side

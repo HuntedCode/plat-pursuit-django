@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 
 from django.http import HttpResponseRedirect, HttpResponsePermanentRedirect
 from django.utils import timezone
@@ -8,6 +9,73 @@ import pytz
 import threading
 
 logger = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Per-request memory-delta observability.
+#
+# Catches requests that grow the worker's resident set size (RSS) by more
+# than HEAVY_REQUEST_MB, which otherwise show up only as a sudden OOM with
+# no traceable cause. Reads RSS from /proc/self/status (Linux only); on
+# dev OSes that lack /proc the read returns 0 and the middleware is a
+# silent no-op.
+#
+# Threshold is intentionally high (50 MB) so steady-state traffic doesn't
+# generate log noise. When something does cross it, the log line carries
+# enough context (path, method, duration) to localize the offending view
+# without further instrumentation.
+# ──────────────────────────────────────────────────────────────────────
+
+_HEAVY_REQUEST_MB = 50
+
+
+def _read_rss_kb():
+    """Return this process's resident-set size in KB, or 0 on non-Linux."""
+    try:
+        with open('/proc/self/status', 'r') as f:
+            for line in f:
+                if line.startswith('VmRSS:'):
+                    return int(line.split()[1])
+    except (FileNotFoundError, OSError, ValueError):
+        pass
+    return 0
+
+
+class MemoryDeltaMiddleware:
+    """Logs HEAVY_REQUEST lines for requests that allocate above threshold.
+
+    Sampling is per-request, not per-worker. RSS can fluctuate due to
+    Python's allocator behavior (freed memory often stays committed to
+    the process), so the delta is a noisy signal — but a single request
+    growing RSS by >50 MB is meaningful regardless of allocator quirks.
+
+    Output is grep-friendly:
+        HEAVY_REQUEST path=/foo/bar/ method=GET delta_mb=287.4 duration_ms=44824
+
+    Search Render logs for `HEAVY_REQUEST` after any OOM event.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        rss_before_kb = _read_rss_kb()
+        start = time.monotonic()
+        try:
+            return self.get_response(request)
+        finally:
+            rss_after_kb = _read_rss_kb()
+            if rss_before_kb and rss_after_kb:
+                delta_mb = (rss_after_kb - rss_before_kb) / 1024.0
+                if delta_mb >= _HEAVY_REQUEST_MB:
+                    duration_ms = int((time.monotonic() - start) * 1000)
+                    logger.info(
+                        'HEAVY_REQUEST path=%s method=%s delta_mb=%.1f duration_ms=%d',
+                        request.path,
+                        request.method,
+                        delta_mb,
+                        duration_ms,
+                    )
 
 # Thread-local storage for current request
 _thread_locals = threading.local()
