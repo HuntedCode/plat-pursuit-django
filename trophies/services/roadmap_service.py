@@ -245,7 +245,9 @@ class RoadmapService:
         `_build_roadmap_prefetch()`. The roadmap and its children are
         NEVER persisted as a side effect.
         """
-        from trophies.models import RoadmapStep, RoadmapStepTrophy, TrophyGuide
+        from trophies.models import (
+            RoadmapCollectibleType, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
+        )
         from trophies.services.roadmap_merge_service import (
             EDITOR_FIELDS, PUBLISHER_FIELDS, WRITER_FIELDS,
         )
@@ -339,8 +341,35 @@ class RoadmapService:
         # showing up out-of-order under the rest of the list in preview.
         overlay_guides.sort(key=lambda g: g.trophy_id)
 
+        # Collectible types — preview parity for the [[slug]] pill renderer.
+        # Same id/synthetic-id pattern as steps: branch entries with a
+        # matching live id reuse the live instance; new entries materialize
+        # as transient unsaved instances.
+        live_types_by_id = {ct.id: ct for ct in roadmap.collectible_types.all()}
+        overlay_types = []
+        synthetic_type_id = -2_000_000
+        for type_payload in branch_payload.get('collectible_types') or []:
+            cid = type_payload.get('id')
+            if isinstance(cid, int) and cid in live_types_by_id:
+                ctype = live_types_by_id[cid]
+            else:
+                synthetic_type_id -= 1
+                ctype = RoadmapCollectibleType(roadmap=roadmap, id=synthetic_type_id)
+            for fld in ('name', 'slug', 'color', 'icon', 'description'):
+                if fld in type_payload:
+                    setattr(ctype, fld, type_payload[fld] or '')
+            if 'total_count' in type_payload:
+                ctype.total_count = type_payload['total_count']
+            if 'order' in type_payload:
+                ctype.order = type_payload['order']
+            if 'created_by_id' in type_payload:
+                ctype.created_by_id = type_payload['created_by_id']
+            overlay_types.append(ctype)
+        overlay_types.sort(key=lambda t: (t.order, t.id))
+
         if not hasattr(roadmap, '_prefetched_objects_cache'):
             roadmap._prefetched_objects_cache = {}
+        roadmap._prefetched_objects_cache['collectible_types'] = overlay_types
         roadmap._prefetched_objects_cache['steps'] = overlay_steps
         roadmap._prefetched_objects_cache['trophy_guides'] = overlay_guides
         return roadmap
@@ -428,7 +457,8 @@ class RoadmapService:
         migrations can rewrite older snapshots.
         """
         from trophies.models import (
-            RoadmapEditLock, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
+            RoadmapCollectibleType, RoadmapEditLock, RoadmapStep,
+            RoadmapStepTrophy, TrophyGuide,
         )
 
         # Re-fetch with prefetches to guarantee a tight snapshot pass even
@@ -450,6 +480,10 @@ class RoadmapService:
                 Prefetch(
                     'trophy_guides',
                     queryset=TrophyGuide.objects.order_by('order', 'trophy_id'),
+                ),
+                Prefetch(
+                    'collectible_types',
+                    queryset=RoadmapCollectibleType.objects.order_by('order', 'id'),
                 ),
             )
             .first()
@@ -507,6 +541,21 @@ class RoadmapService:
                     'last_edited_by_id': tg.last_edited_by_id,
                 }
                 for tg in rm.trophy_guides.all()
+            ],
+            'collectible_types': [
+                {
+                    'id': ct.id,
+                    'name': ct.name,
+                    'slug': ct.slug,
+                    'color': ct.color,
+                    'icon': ct.icon,
+                    'description': ct.description,
+                    'total_count': ct.total_count,
+                    'order': ct.order,
+                    'created_by_id': ct.created_by_id,
+                    'last_edited_by_id': ct.last_edited_by_id,
+                }
+                for ct in rm.collectible_types.all()
             ],
         }
 

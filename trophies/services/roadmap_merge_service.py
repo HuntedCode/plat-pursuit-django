@@ -25,6 +25,10 @@ there's no `tabs[]` wrapper):
                  "youtube_url": ..., "youtube_channel_name": ..., ...}, ...],
       "trophy_guides": [{"id": ..., "trophy_id": ..., "youtube_url": ...,
                          "youtube_channel_name": ..., ...}, ...],
+      "collectible_types": [{"id": ..., "name": ..., "slug": ...,
+                             "color": ..., "icon": ..., "description": ...,
+                             "total_count": ..., "order": ...,
+                             "created_by_id": ...}, ...],
     }
 
   YouTube channel info is server-derived: the editor never sets the
@@ -42,8 +46,11 @@ from typing import Optional
 
 from django.db import transaction
 
+from django.utils.text import slugify
+
 from trophies.models import (
     Roadmap,
+    RoadmapCollectibleType,
     RoadmapEditLock,
     RoadmapRevision,
     RoadmapStep,
@@ -129,6 +136,9 @@ class _ChangeCounts:
     guide_creates: int = 0
     guide_updates: int = 0
     guide_deletes: int = 0
+    collectible_type_creates: int = 0
+    collectible_type_updates: int = 0
+    collectible_type_deletes: int = 0
 
     def any(self) -> bool:
         return any((
@@ -140,6 +150,9 @@ class _ChangeCounts:
             self.guide_creates,
             self.guide_updates,
             self.guide_deletes,
+            self.collectible_type_creates,
+            self.collectible_type_updates,
+            self.collectible_type_deletes,
         ))
 
     def summary(self, ctg_label: str = '') -> str:
@@ -161,6 +174,18 @@ class _ChangeCounts:
         if self.guide_deletes:
             parts.append(
                 f"deleted {self.guide_deletes} trophy guide{'s' if self.guide_deletes != 1 else ''}"
+            )
+        if self.collectible_type_creates:
+            parts.append(
+                f"added {self.collectible_type_creates} collectible type{'s' if self.collectible_type_creates != 1 else ''}"
+            )
+        if self.collectible_type_updates:
+            parts.append(
+                f"edited {self.collectible_type_updates} collectible type{'s' if self.collectible_type_updates != 1 else ''}"
+            )
+        if self.collectible_type_deletes:
+            parts.append(
+                f"deleted {self.collectible_type_deletes} collectible type{'s' if self.collectible_type_deletes != 1 else ''}"
             )
         if self.content_updates:
             parts.append("updated tips/content")
@@ -513,6 +538,168 @@ def _apply_trophy_guides(
         changes.guide_deletes += len(actually_deleted)
 
 
+def _collectibles_set_owner_id(roadmap: Roadmap) -> Optional[int]:
+    """Return the Profile id that owns the collectible-type set, or None.
+
+    Set ownership is derived from the oldest type's `created_by_id` rather
+    than a stored field, so deletion of all types naturally releases the
+    set for the next writer to claim.
+    """
+    first = (
+        RoadmapCollectibleType.objects
+        .filter(roadmap=roadmap)
+        .exclude(created_by_id__isnull=True)
+        .order_by('id')
+        .first()
+    )
+    return first.created_by_id if first else None
+
+
+def _validate_collectible_color(value) -> str:
+    valid = {choice for choice, _label in RoadmapCollectibleType.COLOR_CHOICES}
+    if value in valid:
+        return value
+    return 'primary'
+
+
+def _apply_collectible_types(
+    live_roadmap: Roadmap, types_payload: list, profile, is_editor: bool,
+    changes: _ChangeCounts,
+) -> None:
+    """Diff and apply the collectible-types branch payload.
+
+    Set-level ownership: the writer who created the FIRST type implicitly
+    owns the whole set. Other writers can't add, edit, or delete until
+    the set is empty again. Editors+ bypass. Owner is derived from the
+    oldest type's created_by_id rather than a stored field.
+
+    Slug is derived from `name` on first save (server-side) and is not
+    accepted from the payload after creation, so existing `[[slug]]`
+    references in markdown can't break by an in-place rename.
+    """
+    live_types = {ct.id: ct for ct in live_roadmap.collectible_types.all()}
+    set_owner_id = _collectibles_set_owner_id(live_roadmap)
+
+    def _enforce_set_ownership():
+        if is_editor:
+            return
+        if set_owner_id is not None and set_owner_id != profile.id:
+            raise MergeError(
+                "This roadmap's collectible types are owned by another writer. "
+                "Editors+ can override."
+            )
+
+    explicit_payload_ids = set()
+    payload_slugs_seen = set()
+
+    for type_payload in types_payload:
+        type_id = type_payload.get('id')
+        raw_name = (type_payload.get('name') or '').strip()
+        if not raw_name:
+            # Silently skip empty rows the editor can produce mid-edit. The
+            # branch payload is the source of truth, so an unfilled stub is
+            # treated as "not yet a real type".
+            continue
+
+        # NEW type.
+        if type_id is None or (isinstance(type_id, int) and type_id < 0):
+            _enforce_set_ownership()
+            slug = slugify(raw_name)[:50] or f'type-{len(live_types) + 1}'
+            # Disambiguate against live-existing AND payload-pending slugs.
+            existing_slugs = {ct.slug for ct in live_types.values()} | payload_slugs_seen
+            base = slug
+            n = 2
+            while slug in existing_slugs:
+                slug = f"{base}-{n}"[:50]
+                n += 1
+            payload_slugs_seen.add(slug)
+            RoadmapCollectibleType.objects.create(
+                roadmap=live_roadmap,
+                name=raw_name[:100],
+                slug=slug,
+                color=_validate_collectible_color(type_payload.get('color')),
+                icon=(type_payload.get('icon') or '')[:4],
+                description=(type_payload.get('description') or '')[:200],
+                total_count=type_payload.get('total_count'),
+                order=type_payload.get('order', len(live_types)),
+                created_by_id=profile.id,
+                last_edited_by_id=profile.id,
+            )
+            changes.collectible_type_creates += 1
+            # First type creator becomes the set owner for subsequent ops
+            # in this same merge pass.
+            if set_owner_id is None:
+                set_owner_id = profile.id
+            continue
+
+        explicit_payload_ids.add(type_id)
+        if type_id not in live_types:
+            logger.warning(
+                "Roadmap merge: payload referenced collectible type id %s not in roadmap %s; skipping.",
+                type_id, live_roadmap.id,
+            )
+            continue
+
+        live_type = live_types[type_id]
+        payload_slugs_seen.add(live_type.slug)
+
+        # Diff editable fields. Slug is intentionally NOT in the diff —
+        # renaming a type keeps the original slug so [[slug]] references
+        # don't silently break.
+        dirty_fields = []
+        if 'name' in type_payload:
+            new_name = (type_payload['name'] or '').strip()[:100]
+            if new_name and new_name != live_type.name:
+                dirty_fields.append(('name', new_name))
+        if 'color' in type_payload:
+            new_color = _validate_collectible_color(type_payload['color'])
+            if new_color != live_type.color:
+                dirty_fields.append(('color', new_color))
+        if 'icon' in type_payload:
+            new_icon = (type_payload['icon'] or '')[:4]
+            if new_icon != live_type.icon:
+                dirty_fields.append(('icon', new_icon))
+        if 'description' in type_payload:
+            new_desc = (type_payload['description'] or '')[:200]
+            if new_desc != live_type.description:
+                dirty_fields.append(('description', new_desc))
+        if 'total_count' in type_payload:
+            new_total = type_payload['total_count']
+            if new_total in ('', None):
+                new_total = None
+            else:
+                try:
+                    new_total = int(new_total)
+                    if new_total < 0:
+                        new_total = None
+                except (TypeError, ValueError):
+                    new_total = None
+            if new_total != live_type.total_count:
+                dirty_fields.append(('total_count', new_total))
+        if 'order' in type_payload:
+            new_order = type_payload['order']
+            if new_order != live_type.order:
+                dirty_fields.append(('order', new_order))
+
+        if not dirty_fields:
+            continue
+
+        _enforce_set_ownership()
+        for field_name, new_value in dirty_fields:
+            setattr(live_type, field_name, new_value)
+        live_type.last_edited_by_id = profile.id
+        live_type.save()
+        changes.collectible_type_updates += 1
+
+    # Anything in live but missing from the payload's existing-id set is
+    # a deletion. Set-owner gate applies; editors+ bypass.
+    actually_deleted = set(live_types.keys()) - explicit_payload_ids
+    if actually_deleted:
+        _enforce_set_ownership()
+        RoadmapCollectibleType.objects.filter(id__in=actually_deleted).delete()
+        changes.collectible_type_deletes += len(actually_deleted)
+
+
 def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
     """Atomically apply lock.branch_payload to live records and create a revision.
 
@@ -556,6 +743,10 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
         _apply_steps(roadmap, payload.get('steps') or [], profile, is_editor, changes)
         _apply_trophy_guides(
             roadmap, payload.get('trophy_guides') or [],
+            profile, is_editor, changes,
+        )
+        _apply_collectible_types(
+            roadmap, payload.get('collectible_types') or [],
             profile, is_editor, changes,
         )
 
@@ -656,6 +847,21 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
                 phase=_validate_phase(guide_snapshot.get('phase')),
                 gallery_images=_normalize_gallery(guide_snapshot.get('gallery_images')),
                 created_by_id=guide_snapshot.get('created_by_id'),
+                last_edited_by_id=actor.id,
+            )
+
+        roadmap.collectible_types.all().delete()
+        for type_snapshot in snapshot.get('collectible_types', []):
+            RoadmapCollectibleType.objects.create(
+                roadmap=roadmap,
+                name=type_snapshot.get('name') or '',
+                slug=type_snapshot.get('slug') or '',
+                color=_validate_collectible_color(type_snapshot.get('color')),
+                icon=type_snapshot.get('icon') or '',
+                description=type_snapshot.get('description') or '',
+                total_count=type_snapshot.get('total_count'),
+                order=type_snapshot.get('order', 0),
+                created_by_id=type_snapshot.get('created_by_id'),
                 last_edited_by_id=actor.id,
             )
 

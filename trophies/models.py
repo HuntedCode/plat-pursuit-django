@@ -4168,6 +4168,63 @@ class TrophyGuide(models.Model):
         return f"TrophyGuide: roadmap={self.roadmap_id}, trophy_id={self.trophy_id}"
 
 
+class RoadmapCollectibleType(models.Model):
+    """A user-defined collectible category for a roadmap.
+
+    Authors define types like "Riddler Trophy" or "Audio Log" once per
+    roadmap, then reference them inline from any markdown text via
+    `[[slug]]` syntax. The reader-side markdown filter swaps those tokens
+    for color-coded pills that bridge scattered mentions across the
+    guide.
+
+    Set-level ownership: the writer who creates the FIRST type for a
+    roadmap implicitly owns the whole set. Other writers can't add,
+    edit, or delete types until the set is empty again. Editors+ bypass.
+    Owner is derived from the oldest type's `created_by_id` rather than
+    a stored field so deletion of all types naturally releases the set
+    for the next writer.
+    """
+    COLOR_CHOICES = [
+        ('primary', 'Primary'),
+        ('secondary', 'Secondary'),
+        ('accent', 'Accent'),
+        ('info', 'Info'),
+        ('success', 'Success'),
+        ('warning', 'Warning'),
+        ('error', 'Error'),
+    ]
+
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='collectible_types',
+    )
+    name = models.CharField(max_length=100)
+    # Slug is derived from `name` on first save and is read-only afterwards
+    # so existing `[[slug]]` references in markdown don't silently break
+    # when a type is renamed.
+    slug = models.SlugField(max_length=50)
+    color = models.CharField(max_length=20, choices=COLOR_CHOICES, default='primary')
+    icon = models.CharField(max_length=4, blank=True, help_text='Optional emoji prefix.')
+    description = models.CharField(max_length=200, blank=True)
+    total_count = models.PositiveIntegerField(null=True, blank=True)
+    order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_collectible_types',
+        help_text='Profile that originally created this type. Set ownership is derived from the oldest type by created_by.',
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_collectible_types',
+    )
+
+    class Meta:
+        unique_together = ['roadmap', 'slug']
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"CollectibleType: roadmap={self.roadmap_id}, slug={self.slug}"
+
+
 class RoadmapEditLock(models.Model):
     """Single-writer guide-level edit lock with idle and absolute-time expiry.
 
