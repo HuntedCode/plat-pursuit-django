@@ -12,10 +12,19 @@ Usage:
     python manage.py profile_render /companies/maximum-entertainment/ --user my_username
     python manage.py profile_render /community/reviews/leisure-suit-larry-box-office-bust-ps3/
     python manage.py profile_render /games/NPWR09337_00/ --top 50
+    python manage.py profile_render /games/NPWR09337_00/ --no-warmup
 
 Notes:
-- A warm-up render runs first so module imports, lazy template loads, and
-  cache misses don't show up in the measured diff.
+- By default a warm-up render runs first so module imports, lazy template
+  loads, and one-time signal/regex compilation don't show up in the diff.
+  This isolates *steady-state* per-request allocations.
+- The warm-up also populates Redis caches (image URLs, game stats, etc.),
+  so the measured render sees a warm cache. If the OOMs you're chasing
+  happen on cache misses (rapid-fire requests against different games),
+  pass --no-warmup to measure the cold-cache path instead.
+- Run both ways and compare. If --no-warmup is dramatically larger, the
+  leak is in the cold-cache build branches. If they're similar, the leak
+  is on the always-runs path.
 - DB query count requires either DEBUG=True or the force_debug_cursor flag,
   which this command toggles for you.
 - The test client bypasses gunicorn but exercises the full Django request
@@ -55,12 +64,22 @@ class Command(BaseCommand):
             default=4,
             help='Stack frames to show per allocation site (default: 4).',
         )
+        parser.add_argument(
+            '--no-warmup',
+            action='store_true',
+            help=(
+                'Skip the warm-up render. Useful for measuring cold-cache '
+                'allocation patterns (matches the prod OOM scenario where '
+                'rapid-fire requests hit different games with empty caches).'
+            ),
+        )
 
     def handle(self, *args, **options):
         url = options['url']
         username = options.get('user')
         top = options['top']
         frames_to_show = options['frames']
+        skip_warmup = options['no_warmup']
 
         client = Client()
         if username:
@@ -74,13 +93,17 @@ class Command(BaseCommand):
 
         connection.force_debug_cursor = True
 
-        # Warm-up render so import / lazy-load cost doesn't pollute the diff.
-        warm = client.get(url)
-        if warm.status_code >= 400:
-            self.stderr.write(self.style.ERROR(
-                f'Warm-up returned status {warm.status_code} for {url}'
-            ))
-            return
+        if not skip_warmup:
+            # Warm-up render so import / lazy-load cost doesn't pollute the
+            # diff. Note: this also populates Redis caches that the measured
+            # render will read instead of rebuilding. Pass --no-warmup to
+            # measure the cold-cache path instead.
+            warm = client.get(url)
+            if warm.status_code >= 400:
+                self.stderr.write(self.style.ERROR(
+                    f'Warm-up returned status {warm.status_code} for {url}'
+                ))
+                return
 
         connection.queries_log.clear()
 
@@ -106,6 +129,7 @@ class Command(BaseCommand):
         self.stdout.write(bar)
         self.stdout.write(f'URL:           {url}')
         self.stdout.write(f'User:          {username or "anonymous"}')
+        self.stdout.write(f'Warm-up:       {"skipped (cold-cache mode)" if skip_warmup else "ran (warm-cache mode)"}')
         self.stdout.write(f'Status:        {response.status_code}')
         self.stdout.write(f'Response size: {response_size:,} bytes ({response_size/1024:.1f} KB)')
         self.stdout.write(f'DB queries:    {n_queries}')
