@@ -117,15 +117,27 @@ class Command(BaseCommand):
 
         connection.force_debug_cursor = True
 
+        # secure=True so SecurityMiddleware doesn't 301 us to https when
+        # SECURE_SSL_REDIRECT is on (i.e. in production).
+        get_kwargs = {'HTTP_HOST': host, 'secure': True}
+
         if not skip_warmup:
             # Warm-up render so import / lazy-load cost doesn't pollute the
             # diff. Note: this also populates Redis caches that the measured
             # render will read instead of rebuilding. Pass --no-warmup to
             # measure the cold-cache path instead.
-            warm = client.get(url, HTTP_HOST=host)
+            warm = client.get(url, **get_kwargs)
             if warm.status_code >= 400:
                 self.stderr.write(self.style.ERROR(
                     f'Warm-up returned status {warm.status_code} for {url}'
+                ))
+                return
+            if warm.status_code in (301, 302):
+                self.stderr.write(self.style.ERROR(
+                    f'Warm-up was redirected ({warm.status_code}) to '
+                    f'{warm.get("Location", "?")} — measured render would '
+                    f'capture only the redirect, not the target view. Pass '
+                    f'the final URL directly.'
                 ))
                 return
 
@@ -133,13 +145,20 @@ class Command(BaseCommand):
 
         tracemalloc.start(25)
         snap_before = tracemalloc.take_snapshot()
-        response = client.get(url, HTTP_HOST=host)
+        response = client.get(url, **get_kwargs)
         snap_after = tracemalloc.take_snapshot()
         tracemalloc.stop()
 
         if response.status_code >= 400:
             self.stderr.write(self.style.ERROR(
                 f'Render returned status {response.status_code}'
+            ))
+            return
+        if response.status_code in (301, 302):
+            self.stderr.write(self.style.ERROR(
+                f'Render was redirected ({response.status_code}) to '
+                f'{response.get("Location", "?")} — diff captured the '
+                f'redirect, not the target view. Pass the final URL directly.'
             ))
             return
 
