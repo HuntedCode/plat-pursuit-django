@@ -21,7 +21,6 @@ from trophies.services.dashboard_service import (
     get_dashboard_tabs,
     get_tabs_for_customize,
     get_server_module_data,
-    get_premium_preview_html,
     VALID_TAB_ICONS,
     MAX_FREE_HIDDEN,
 )
@@ -80,15 +79,15 @@ def build_dashboard_context(request, profile):
     from trophies.themes import get_available_themes_for_grid
     available_themes = get_available_themes_for_grid(include_game_art=False, grouped=True)
 
-    # Pre-render premium module previews for free users
+    # Premium previews disabled (Phase 0). Inline-rendering them against the
+    # showcase profile was allocating 200-2400 MB per dashboard render under
+    # cold cache and triggering web-container OOMs (the May 2026 / homepage
+    # OOM class). The dashboard template renders the upgrade CTA on a
+    # placeholder gradient when preview HTML is missing — visually softer
+    # than the blurred-real-data version but keeps the upsell visible.
+    # Phase 1 will reintroduce previews via hand-crafted sample data per
+    # module (no provider calls, no real user data, no cache cold-miss).
     preview_html = {}
-    if not is_premium:
-        for tab in tabs:
-            for module in tab['modules']:
-                if module.get('is_preview'):
-                    html = get_premium_preview_html(module['slug'])
-                    if html:
-                        preview_html[module['slug']] = html
 
     return {
         'profile': profile,

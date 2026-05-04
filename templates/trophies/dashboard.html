@@ -123,31 +123,35 @@
                      id="module-{{ module.slug }}"
                      class="dashboard-module relative">
                     {% if module.is_preview %}
-                        {# Blurred premium preview with upgrade overlay #}
-                        {% with preview=preview_html|get_item:module.slug %}
-                            {% if preview %}
-                                <div class="relative overflow-hidden rounded-2xl">
+                        {# Premium preview: upgrade CTA always renders. The blurred
+                           sample data is decorative — when missing (Phase 0 with
+                           previews disabled, or future cache miss), we fall back
+                           to a placeholder gradient so the CTA still has body. #}
+                        <div class="relative overflow-hidden rounded-2xl">
+                            {% with preview=preview_html|get_item:module.slug %}
+                                {% if preview %}
                                     <div class="blur-sm pointer-events-none select-none" aria-hidden="true">
                                         {{ preview|safe }}
                                     </div>
-                                    <div class="absolute inset-0 bg-base-200/40 flex flex-col items-center justify-center text-center p-3 md:p-6">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-warning mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                                        </svg>
-                                        <h3 class="text-lg font-bold">{{ module.name }}</h3>
-                                        <p class="text-sm text-base-content/60 mt-1 max-w-sm">{{ module.description }}</p>
-                                        <p class="text-xs text-base-content/30 mt-2">Preview data from the PlatPursuit team</p>
-                                        <a href="{% url 'subscribe' %}" class="btn btn-warning btn-sm mt-3 gap-1">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                                            </svg>
-                                            Upgrade to Premium
-                                        </a>
-                                    </div>
-                                </div>
-                            {% endif %}
-                        {% endwith %}
+                                {% else %}
+                                    <div class="bg-gradient-to-br from-base-200 to-base-300 min-h-[260px]" aria-hidden="true"></div>
+                                {% endif %}
+                            {% endwith %}
+                            <div class="absolute inset-0 bg-base-200/40 flex flex-col items-center justify-center text-center p-3 md:p-6">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-warning mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                                <h3 class="text-lg font-bold">{{ module.name }}</h3>
+                                <p class="text-sm text-base-content/60 mt-1 max-w-sm">{{ module.description }}</p>
+                                <a href="{% url 'subscribe' %}" class="btn btn-warning btn-sm mt-3 gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                    </svg>
+                                    Upgrade to Premium
+                                </a>
+                            </div>
+                        </div>
                     {% elif module.load_strategy == 'server' %}
                         {% with mod_data=server_module_data|get_item:module.slug %}
                             {% include module.template with data=mod_data effective_size=module.effective_size %}
