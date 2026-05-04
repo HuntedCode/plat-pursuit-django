@@ -12,21 +12,30 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Per-request memory-delta observability.
+# Per-request memory observability.
 #
-# Catches requests that grow the worker's resident set size (RSS) by more
-# than HEAVY_REQUEST_MB, which otherwise show up only as a sudden OOM with
-# no traceable cause. Reads RSS from /proc/self/status (Linux only); on
-# dev OSes that lack /proc the read returns 0 and the middleware is a
-# silent no-op.
+# Two complementary signals:
 #
-# Threshold is intentionally high (50 MB) so steady-state traffic doesn't
-# generate log noise. When something does cross it, the log line carries
-# enough context (path, method, duration) to localize the offending view
-# without further instrumentation.
+# 1. HEAVY_REQUEST (post-response) — fires when a single request grew RSS
+#    by more than HEAVY_REQUEST_MB. Tells us which view caused the spike,
+#    *if* the request finishes. Misses the killing request itself because
+#    SIGKILL skips Python's `finally`.
+#
+# 2. REQUEST_START_HOT (pre-response) — fires when the worker is already
+#    above DANGER_RSS_MB at request entry. Once the worker has crossed
+#    that threshold, every subsequent request's path is logged on entry,
+#    so the last line before a gunicorn restart points at the request
+#    that pushed the worker over the OOM ceiling — the one (1) misses.
+#
+# Both read RSS from /proc/self/status (Linux only); on dev OSes that
+# lack /proc the read returns 0 and the middleware is a silent no-op.
+# Below DANGER_RSS_MB the start logger stays quiet (zero per-request
+# overhead beyond the /proc read), so steady-state traffic doesn't flood
+# logs.
 # ──────────────────────────────────────────────────────────────────────
 
 _HEAVY_REQUEST_MB = 50
+_DANGER_RSS_MB = 300
 
 
 def _read_rss_kb():
@@ -42,17 +51,19 @@ def _read_rss_kb():
 
 
 class MemoryDeltaMiddleware:
-    """Logs HEAVY_REQUEST lines for requests that allocate above threshold.
+    """Logs memory observability lines for OOM forensics.
 
-    Sampling is per-request, not per-worker. RSS can fluctuate due to
-    Python's allocator behavior (freed memory often stays committed to
-    the process), so the delta is a noisy signal — but a single request
-    growing RSS by >50 MB is meaningful regardless of allocator quirks.
-
-    Output is grep-friendly:
+    HEAVY_REQUEST fires post-response for requests that allocated >50 MB:
         HEAVY_REQUEST path=/foo/bar/ method=GET delta_mb=287.4 duration_ms=44824
 
-    Search Render logs for `HEAVY_REQUEST` after any OOM event.
+    REQUEST_START_HOT fires pre-response when worker RSS is already above
+    300 MB at request entry — i.e., the worker is in the danger zone and
+    every following request is potentially the OOM trigger:
+        REQUEST_START_HOT path=/foo/bar/ method=GET rss_mb=412.7
+
+    Search Render logs for both tags after any OOM event. The last
+    REQUEST_START_HOT line before a `Starting gunicorn` event identifies
+    the request that pushed the worker over its memory ceiling.
     """
 
     def __init__(self, get_response):
@@ -60,6 +71,13 @@ class MemoryDeltaMiddleware:
 
     def __call__(self, request):
         rss_before_kb = _read_rss_kb()
+        if rss_before_kb and (rss_before_kb / 1024.0) >= _DANGER_RSS_MB:
+            logger.info(
+                'REQUEST_START_HOT path=%s method=%s rss_mb=%.1f',
+                request.path,
+                request.method,
+                rss_before_kb / 1024.0,
+            )
         start = time.monotonic()
         try:
             return self.get_response(request)

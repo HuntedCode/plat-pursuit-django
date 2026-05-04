@@ -235,6 +235,9 @@ class MemoryDeltaMiddlewareTests(SimpleTestCase):
 
     def test_log_when_delta_above_threshold(self):
         # Simulate a 100 MB allocation between the before/after reads.
+        # Start RSS is below the danger threshold (300 MB) so no
+        # REQUEST_START_HOT line should fire — only the post-response
+        # HEAVY_REQUEST line.
         rss_values = iter([100_000, 100_000 + 100 * 1024])  # +100 MB in KB
         with mock.patch(
             'plat_pursuit.middleware._read_rss_kb',
@@ -250,3 +253,32 @@ class MemoryDeltaMiddlewareTests(SimpleTestCase):
             any('path=/games/NPWR00352_00/' in msg for msg in captured.output),
             f'expected path in log, got: {captured.output}',
         )
+
+    def test_request_start_hot_fires_when_worker_is_above_danger_rss(self):
+        # Start at 320 MB (above 300 MB danger threshold), grow by 5 MB only
+        # (below 50 MB heavy threshold) — should log only REQUEST_START_HOT.
+        rss_values = iter([320 * 1024, 325 * 1024])
+        with mock.patch(
+            'plat_pursuit.middleware._read_rss_kb',
+            side_effect=lambda: next(rss_values),
+        ):
+            with self.assertLogs('plat_pursuit.middleware', level='INFO') as captured:
+                self.middleware(self._request('/some/path/'))
+        self.assertTrue(
+            any('REQUEST_START_HOT' in msg for msg in captured.output),
+            f'expected REQUEST_START_HOT, got: {captured.output}',
+        )
+        self.assertFalse(
+            any('HEAVY_REQUEST' in msg for msg in captured.output),
+            f'unexpected HEAVY_REQUEST when delta is small: {captured.output}',
+        )
+
+    def test_request_start_hot_does_not_fire_below_danger_rss(self):
+        # Start at 250 MB, grow by 10 MB — both below thresholds, no logs.
+        rss_values = iter([250 * 1024, 260 * 1024])
+        with mock.patch(
+            'plat_pursuit.middleware._read_rss_kb',
+            side_effect=lambda: next(rss_values),
+        ):
+            with self.assertNoLogs('plat_pursuit.middleware', level='INFO'):
+                self.middleware(self._request('/some/path/'))
