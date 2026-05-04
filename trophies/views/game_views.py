@@ -83,6 +83,13 @@ class GamesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
         qs = qs.select_related(
             'concept', 'concept__igdb_match',
+        ).defer(
+            # IGDBMatch.raw_response is the full IGDB API blob (~30 KB per row).
+            # Browse-style listings paginate many games per page; without this
+            # defer each page would pull hundreds of KB of raw_response payload
+            # that is never used by the card render. See CLAUDE.md "IGDB cover-art
+            # querysets" and the May 2026 OOM postmortem.
+            'concept__igdb_match__raw_response',
         ).prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
         )
@@ -1162,6 +1169,13 @@ class FlaggedGamesView(HtmxListMixin, ProfileHotbarMixin, ListView):
 
         qs = qs.select_related(
             'concept', 'concept__igdb_match',
+        ).defer(
+            # IGDBMatch.raw_response is the full IGDB API blob (~30 KB per row).
+            # Browse-style listings paginate many games per page; without this
+            # defer each page would pull hundreds of KB of raw_response payload
+            # that is never used by the card render. See CLAUDE.md "IGDB cover-art
+            # querysets" and the May 2026 OOM postmortem.
+            'concept__igdb_match__raw_response',
         ).prefetch_related(
             Prefetch('trophies', queryset=Trophy.objects.filter(trophy_type='platinum'), to_attr='platinum_trophy')
         )

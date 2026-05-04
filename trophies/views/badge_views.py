@@ -520,7 +520,18 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['selected_tier_is_plat'] = selected_tier in [1, 3]
 
         stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch('concepts__games', queryset=Game.objects.select_related('concept', 'concept__igdb_match'))
+            Prefetch(
+                'concepts__games',
+                queryset=Game.objects.select_related('concept', 'concept__igdb_match').defer(
+                    # raw_response is the full IGDB API blob (~30 KB per row).
+                    # The badge detail page needs the IGDBMatch row only for
+                    # cover art (igdb_cover_image_id + is_trusted), so loading
+                    # raw_response inflates each game by ~30 KB for nothing —
+                    # multiplied across all stages + concurrent requests, it
+                    # was the trigger for the May 2026 web-server OOM.
+                    'concept__igdb_match__raw_response',
+                ),
+            )
         ))
         context['stage_count'] = len(stages)
 

@@ -221,6 +221,12 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
         games = list(
             Game.objects.filter(concept_id__in=Subquery(concept_ids_subq))
             .select_related('concept__igdb_match')
+            .defer(
+                # See CLAUDE.md: raw_response is the IGDB API blob (~30 KB per
+                # row). Franchise pages can list 30+ versions of every entry;
+                # cover-art rendering only needs igdb_cover_image_id.
+                'concept__igdb_match__raw_response',
+            )
             .order_by('title_name')
         )
 

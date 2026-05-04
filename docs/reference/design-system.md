@@ -588,6 +588,8 @@ For concept-only contexts (badges, reviews, showcases that don't go through a Ga
 
 IGDB cover URLs are constructed on the fly from `IGDBMatch.igdb_cover_image_id`. **Always** include `select_related('concept', 'concept__igdb_match')` (or `most_recent_concept__igdb_match` for badges) on querysets that render covers — IGDB is the first lookup on every render now, so a missing prefetch becomes a guaranteed N+1.
 
+**And always pair the `select_related` with `.defer('concept__igdb_match__raw_response')`** (or the equivalent path: `game__concept__igdb_match__raw_response`, `trophy__game__concept__igdb_match__raw_response`, etc.). `IGDBMatch.raw_response` is the ~30 KB JSON blob of the full IGDB API response per game — it's never accessed by cover-art rendering or any user-facing template, but it gets dragged into the join by `select_related` for free. Across high-volume querysets (browse pages with 30 games, badge detail with 200 games across stages, profile trophy case with 500+ games), the unused payload added up to enough memory pressure to OOM the web container in May 2026. The fix is one chain method per call site; the only place that genuinely needs `raw_response` populated is `stats_service._compute_game_library` for Tier-2 IGDB stats, which opts in via an explicit `.only('raw_response')` on a targeted queryset.
+
 For franchise/company browse cards (aggregated cover art across many games), use the four `representative_*` Subquery annotations from `trophies/services/game_grouping_service.py`: `representative_igdb_cover_id_subquery`, `representative_concept_icon_subquery`, `representative_title_image_subquery`, `representative_title_icon_subquery` — checked in that IGDB-first order in the template.
 
 ---

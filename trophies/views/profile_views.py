@@ -84,7 +84,7 @@ class ProfilesListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         order = [Lower('psn_username')]
 
         # Always prefetch recent platinum (needed by template regardless of form state)
-        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
+        recent_plat_qs = EarnedTrophy.objects.filter(earned=True, trophy__trophy_type='platinum').select_related('trophy', 'trophy__game', 'trophy__game__concept', 'trophy__game__concept__igdb_match').defer('trophy__game__concept__igdb_match__raw_response').order_by(F('earned_date_time').desc(nulls_last=True))[:1]
         qs = qs.prefetch_related(Prefetch('earned_trophy_entries', queryset=recent_plat_qs, to_attr='recent_platinum'))
 
         if form.is_valid():
@@ -1063,6 +1063,11 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
                 ProfileGame.objects
                 .filter(profile=profile)
                 .select_related('game', 'game__concept', 'game__concept__igdb_match')
+                .defer(
+                    # Profile trophy case can list 500+ games; the IGDB raw_response
+                    # blob (~30 KB per row) is unused by the card render.
+                    'game__concept__igdb_match__raw_response',
+                )
                 .order_by(Lower('game__title_name'))
             )
             all_games = [

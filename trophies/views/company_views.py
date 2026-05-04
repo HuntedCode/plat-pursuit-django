@@ -238,7 +238,15 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             ConceptCompany.objects.filter(company=company)
             .select_related('concept')
             .prefetch_related(
-                Prefetch('concept__games', queryset=Game.objects.select_related('concept__igdb_match'))
+                Prefetch(
+                    'concept__games',
+                    queryset=Game.objects.select_related('concept__igdb_match').defer(
+                        # See CLAUDE.md: defer the IGDB raw_response blob from
+                        # cover-art querysets so company-level pages don't pull
+                        # hundreds of KB of unused JSON per render.
+                        'concept__igdb_match__raw_response',
+                    ),
+                )
             )
         )
 

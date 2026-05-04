@@ -111,7 +111,11 @@ def provide_favorite_games(profile, config):
     pg_map = {
         pg.game_id: pg for pg in ProfileGame.objects.filter(
             profile=profile, game_id__in=game_ids,
-        ).select_related('game', 'game__concept', 'game__concept__igdb_match')
+        ).select_related('game', 'game__concept', 'game__concept__igdb_match').defer(
+            # Defer the IGDB raw_response blob — unused by showcase rendering.
+            # See CLAUDE.md "IGDB cover-art querysets".
+            'game__concept__igdb_match__raw_response',
+        )
     }
     # Preserve order from config, drop any missing
     ordered = [pg_map[gid] for gid in game_ids if gid in pg_map]
@@ -285,7 +289,10 @@ def provide_review_showcase(profile, config):
     reviews_map = {
         r.id: r for r in Review.objects.filter(
             id__in=review_ids, profile=profile, is_deleted=False,
-        ).select_related('concept', 'concept__igdb_match', 'concept_trophy_group')
+        ).select_related('concept', 'concept__igdb_match', 'concept_trophy_group').defer(
+            # Defer the IGDB raw_response blob — unused by review-card rendering.
+            'concept__igdb_match__raw_response',
+        )
     }
     ordered = [reviews_map[rid] for rid in review_ids if rid in reviews_map]
     return {

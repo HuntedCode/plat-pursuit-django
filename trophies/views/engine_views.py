@@ -174,6 +174,13 @@ class EngineDetailView(TagDetailBaseView):
             all_games = list(
                 Game.objects.filter(self.get_tag_filter())
                 .select_related('concept__igdb_match')
+                .defer(
+                    # See CLAUDE.md: defer the IGDB raw_response blob from
+                    # cover-art querysets. Engine pages can list every game
+                    # using a particular engine; the JSON blob is ~30 KB/row
+                    # and unused by the card render.
+                    'concept__igdb_match__raw_response',
+                )
             )
             profile = (
                 getattr(self.request.user, 'profile', None)

@@ -1202,6 +1202,7 @@ def provide_time_to_beat_insights(profile):
         ProfileGame.objects
         .filter(profile=profile, has_plat=True, user_hidden=False)
         .select_related('game__concept__igdb_match')
+        .defer('game__concept__igdb_match__raw_response')
         .filter(
             game__concept__igdb_match__time_to_beat_completely__isnull=False,
             game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
@@ -1252,6 +1253,7 @@ def provide_time_to_beat_insights(profile):
             earned_trophies_count__gt=0,
         )
         .select_related('game__concept__igdb_match')
+        .defer('game__concept__igdb_match__raw_response')
         .filter(
             game__concept__igdb_match__time_to_beat_completely__isnull=False,
             game__concept__igdb_match__status__in=('accepted', 'auto_accepted'),
@@ -1827,6 +1829,7 @@ def provide_rate_my_games(profile):
                 .exclude(slug='')
                 .exclude(slug__isnull=True)
                 .select_related('igdb_match')
+                .defer('igdb_match__raw_response')
             )
             for c in concepts:
                 preview_games.append({
