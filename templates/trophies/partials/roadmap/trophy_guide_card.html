@@ -71,10 +71,19 @@
     <div class="bg-black/[0.06] border-t border-base-content/5 rounded-b-lg px-3 pb-3 pt-2">
         {% if guide.body %}
         <div class="prose-roadmap">{{ guide.body|render_roadmap_markdown:game.controller_icon_set }}</div>
-        {% else %}
+        {% elif not guide.youtube_url %}
         {# Placeholder when an author hasn't filled in details yet. Italic + #}
         {# muted so it reads as "nothing here yet" not as actual content.   #}
         <p class="text-xs text-base-content/35 italic py-1">No guide details added yet.</p>
+        {% endif %}
+        {% if guide.youtube_url %}
+        {# Inline embed: visible whenever the trophy row is open. Width capped #}
+        {# so a single video doesn't dominate the card on wide screens. When  #}
+        {# the guide also has body text, add a thin divider + extra spacing   #}
+        {# so the video doesn't feel jammed against the prose.                #}
+        <div class="max-w-2xl mx-auto {% if guide.body %}mt-4 pt-4 border-t border-base-content/10{% else %}mt-3{% endif %}">
+            {% include 'trophies/partials/roadmap/video_embed.html' with youtube_url=guide.youtube_url channel_name=guide.youtube_channel_name channel_url=guide.youtube_channel_url attribution_size='text-[11px]' %}
+        </div>
         {% endif %}
         {% if guide.gallery_images %}
         <div class="roadmap-gallery mt-3 grid {% if guide.gallery_images|length == 1 %}grid-cols-1{% else %}grid-cols-2 md:grid-cols-3{% endif %} gap-2">

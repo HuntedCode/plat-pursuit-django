@@ -84,6 +84,122 @@
     );
 
     /**
+     * Live attribution preview for the YouTube URL inputs (page-level,
+     * step-level, per-trophy). Pairs each `.youtube-attribution-input`
+     * with its sibling `.youtube-attribution-preview` element and runs a
+     * debounced lookup against /api/youtube/attribution-lookup/ as the
+     * author types, showing "Will be attributed to: CHANNEL" beneath the
+     * input. Server still re-resolves on save — the preview is purely
+     * advisory.
+     */
+    const YoutubeAttribution = {
+        // Sit just above the longest field-save debounce (1000ms) so the
+        // per-record save fires first and creates any branch stub the
+        // lookup callback needs to write channel info into. Otherwise a
+        // video-only first save races the lookup and the channel info
+        // gets dropped on the floor.
+        DEBOUNCE_MS: 1200,
+        debouncers: new WeakMap(),
+
+        findPreview(input) {
+            // The preview <p> lives inside a wrapping `.youtube-attribution-group`
+            // so the input itself can be nested under intermediate flex/icon
+            // wrappers (step + per-trophy) without breaking the lookup.
+            const group = input.closest('.youtube-attribution-group');
+            return group?.querySelector('.youtube-attribution-preview') || null;
+        },
+
+        renderPreview(previewEl, message, channelName, channelUrl) {
+            if (!previewEl) return;
+            previewEl.textContent = '';
+            if (!message && !channelName) return;
+            if (message) previewEl.appendChild(document.createTextNode(message));
+            if (channelName) {
+                if (message) previewEl.appendChild(document.createTextNode(' '));
+                let node;
+                if (channelUrl) {
+                    node = document.createElement('a');
+                    node.href = channelUrl;
+                    node.target = '_blank';
+                    node.rel = 'noopener noreferrer';
+                    node.className = 'text-primary hover:underline not-italic font-medium';
+                } else {
+                    node = document.createElement('span');
+                    node.className = 'text-base-content/80 not-italic font-medium';
+                }
+                node.textContent = channelName;
+                previewEl.appendChild(node);
+            }
+        },
+
+        // `onResolve(channelName, channelUrl)` is called whenever the
+        // lookup completes successfully. Used by call sites to push the
+        // resolved attribution into the branch payload so the editor's
+        // ?preview=true overlay can render it without waiting for merge.
+        // Stored per-input via WeakMap so wire() stays a single argument.
+        onResolveByInput: new WeakMap(),
+
+        wire(input, onResolve) {
+            if (!input) return;
+            if (onResolve) this.onResolveByInput.set(input, onResolve);
+            if (input.dataset.ytAttributionWired === '1') return;
+            input.dataset.ytAttributionWired = '1';
+            input.addEventListener('input', () => this.schedule(input));
+        },
+
+        showInitial(input, channelName, channelUrl) {
+            const preview = this.findPreview(input);
+            if (!preview) return;
+            if (channelName) {
+                this.renderPreview(preview, 'Attributed to:', channelName, channelUrl || '');
+            } else {
+                this.renderPreview(preview, '');
+            }
+        },
+
+        schedule(input) {
+            const existing = this.debouncers.get(input);
+            if (existing) clearTimeout(existing);
+            this.debouncers.set(input, setTimeout(() => this.lookup(input), this.DEBOUNCE_MS));
+        },
+
+        async lookup(input) {
+            const url = input.value.trim();
+            const preview = this.findPreview(input);
+            if (!preview) return;
+            const onResolve = this.onResolveByInput.get(input);
+            if (!url) {
+                this.renderPreview(preview, '');
+                if (onResolve) onResolve('', '');
+                return;
+            }
+            this.renderPreview(preview, 'Looking up channel…');
+            try {
+                const data = await API.get(
+                    `/api/v1/youtube/attribution-lookup/?url=${encodeURIComponent(url)}`
+                );
+                // User may have kept typing; abort if value moved on.
+                if (input.value.trim() !== url) return;
+                if (data && data.channel_name) {
+                    this.renderPreview(
+                        preview, 'Will be attributed to:', data.channel_name, data.channel_url || ''
+                    );
+                    if (onResolve) onResolve(data.channel_name, data.channel_url || '');
+                } else {
+                    this.renderPreview(
+                        preview, 'No channel info found — embed will show without attribution.'
+                    );
+                    if (onResolve) onResolve('', '');
+                }
+            } catch {
+                // Lookup is advisory; swallow the error rather than nagging
+                // the author with a toast for what's a non-blocking nicety.
+                this.renderPreview(preview, '');
+            }
+        },
+    };
+
+    /**
      * Maintains the in-memory branch_payload (canonical wire shape) and
      * mutates it in response to legacy-style API calls from the editor UI.
      * A single debounced PATCH /lock/branch/ pushes the latest state.
@@ -213,6 +329,11 @@
                     title: (body.title || '').trim() || 'New Step',
                     description: body.description || '',
                     youtube_url: body.youtube_url || '',
+                    // Channel attribution is server-derived on merge; mirror
+                    // the empty seed so the local state stays schema-symmetric
+                    // with what the server will eventually return.
+                    youtube_channel_name: '',
+                    youtube_channel_url: '',
                     order: tab.steps.length,
                     trophy_ids: [],
                     gallery_images: [],
@@ -286,24 +407,33 @@
                 let guide = tab.trophy_guides.find(g => g.trophy_id === trophyId);
                 const incomingBody = body.body || '';
                 const incomingPhase = (body.phase || '').trim();
+                const incomingYoutubeUrl = (body.youtube_url || '').trim();
                 // Empty body deletes the guide UNLESS it carries gallery
-                // images OR a phase tag (both are independent of body text and
-                // shouldn't disappear because the writer cleared the prose,
-                // or chose to tag a trophy without writing notes for it yet).
+                // images OR a phase tag OR a YouTube URL (all are independent
+                // of body text and shouldn't disappear because the writer
+                // cleared the prose). A guide can be video-only.
                 if (!incomingBody.trim()) {
                     const hasGallery = guide && Array.isArray(guide.gallery_images) && guide.gallery_images.length > 0;
                     const keepForPhase = !!incomingPhase || (guide && guide.phase);
-                    if (guide && !hasGallery && !keepForPhase) {
+                    const keepForVideo = (
+                        ('youtube_url' in body ? !!incomingYoutubeUrl : !!(guide && guide.youtube_url))
+                    );
+                    if (guide && !hasGallery && !keepForPhase && !keepForVideo) {
                         tab.trophy_guides = tab.trophy_guides.filter(g => g.trophy_id !== trophyId);
                         this.schedulePush();
                         return null;
                     }
-                    if (!guide && incomingPhase) {
-                        // Phase-only first save: create a stub guide with no body.
+                    if (!guide && (incomingPhase || incomingYoutubeUrl)) {
+                        // Phase-only or video-only first save: create a stub
+                        // guide with no body so the server has something to
+                        // attach the metadata to.
                         guide = {
                             id: this.nextId(),
                             trophy_id: trophyId,
                             body: '',
+                            youtube_url: '',
+                            youtube_channel_name: '',
+                            youtube_channel_url: '',
                             order: tab.trophy_guides.length,
                             is_missable: false,
                             is_online: false,
@@ -318,6 +448,7 @@
                     if (guide) {
                         guide.body = '';
                         if ('phase' in body) guide.phase = incomingPhase;
+                        if ('youtube_url' in body) guide.youtube_url = incomingYoutubeUrl;
                         this.schedulePush();
                     }
                     return null;
@@ -327,6 +458,9 @@
                         id: this.nextId(),
                         trophy_id: trophyId,
                         body: '',
+                        youtube_url: '',
+                        youtube_channel_name: '',
+                        youtube_channel_url: '',
                         order: tab.trophy_guides.length,
                         is_missable: false,
                         is_online: false,
@@ -344,11 +478,13 @@
                 if ('is_online' in body) guide.is_online = !!body.is_online;
                 if ('is_unobtainable' in body) guide.is_unobtainable = !!body.is_unobtainable;
                 if ('phase' in body) guide.phase = incomingPhase;
+                if ('youtube_url' in body) guide.youtube_url = incomingYoutubeUrl;
                 this.schedulePush();
                 return {
                     trophy_id: guide.trophy_id, body: guide.body,
                     is_missable: guide.is_missable, is_online: guide.is_online,
                     is_unobtainable: guide.is_unobtainable,
+                    youtube_url: guide.youtube_url,
                 };
             }
 
@@ -775,6 +911,8 @@
             // Tab-level content + metadata
             existing.general_tips = branchTab.general_tips || '';
             existing.youtube_url = branchTab.youtube_url || '';
+            existing.youtube_channel_name = branchTab.youtube_channel_name || '';
+            existing.youtube_channel_url = branchTab.youtube_channel_url || '';
             existing.difficulty = branchTab.difficulty;
             existing.estimated_hours = branchTab.estimated_hours;
             existing.min_playthroughs = branchTab.min_playthroughs;
@@ -787,6 +925,8 @@
                 title: s.title,
                 description: s.description,
                 youtube_url: s.youtube_url,
+                youtube_channel_name: s.youtube_channel_name || '',
+                youtube_channel_url: s.youtube_channel_url || '',
                 order: s.order,
                 gallery_images: Array.isArray(s.gallery_images) ? s.gallery_images.slice() : [],
                 created_by_id: s.created_by_id,
@@ -800,6 +940,9 @@
             (branchTab.trophy_guides || []).forEach(tg => {
                 existing.trophy_guides[tg.trophy_id] = {
                     body: tg.body || '',
+                    youtube_url: tg.youtube_url || '',
+                    youtube_channel_name: tg.youtube_channel_name || '',
+                    youtube_channel_url: tg.youtube_channel_url || '',
                     is_missable: !!tg.is_missable,
                     is_online: !!tg.is_online,
                     is_unobtainable: !!tg.is_unobtainable,
@@ -819,7 +962,18 @@
             const ytInput = document.querySelector(
                 `.youtube-url-input[data-tab-id="${tabId}"]`
             );
-            if (ytInput) ytInput.value = existing.youtube_url;
+            if (ytInput) {
+                ytInput.value = existing.youtube_url;
+                // Also push fresh channel info to the preview's data attrs so
+                // the initTabFields() initial-render reads the branch value
+                // rather than the original server-render value (which can be
+                // stale after a prior session edited the URL but didn't merge).
+                const preview = YoutubeAttribution.findPreview(ytInput);
+                if (preview) {
+                    preview.dataset.initialChannelName = existing.youtube_channel_name;
+                    preview.dataset.initialChannelUrl = existing.youtube_channel_url;
+                }
+            }
         });
     }
 
@@ -1115,10 +1269,28 @@
             setSaveStatus('unsaved');
             debouncedStepSave();
         });
-        el.querySelector('.step-youtube-input').addEventListener('input', () => {
+        const stepYoutubeInput = el.querySelector('.step-youtube-input');
+        stepYoutubeInput.addEventListener('input', () => {
             setSaveStatus('unsaved');
             debouncedStepSave();
         });
+        // Live attribution preview. Initial channel info comes from the
+        // branch payload (snapshot-served on lock acquire); the first
+        // paint matches what was saved without an extra round trip. The
+        // onResolve callback pushes resolved channel into branch state so
+        // ?preview=true overlay can render it without waiting for merge.
+        YoutubeAttribution.wire(stepYoutubeInput, (channelName, channelUrl) => {
+            const liveStep = BranchProxy.findStep(activeTabId, step.id);
+            if (!liveStep) return;
+            liveStep.youtube_channel_name = channelName;
+            liveStep.youtube_channel_url = channelUrl;
+            BranchProxy.schedulePush();
+        });
+        YoutubeAttribution.showInitial(
+            stepYoutubeInput,
+            step.youtube_channel_name || '',
+            step.youtube_channel_url || '',
+        );
 
         el.querySelector('.delete-step-btn').addEventListener('click', () => {
             deleteStep(step.id);
@@ -1360,6 +1532,29 @@
                 setSaveStatus('unsaved');
                 debouncedSave();
             });
+
+            // Live attribution preview. The server-rendered initial channel
+            // info comes from the data-* attrs on the preview element so the
+            // first paint matches what's already saved without an extra round
+            // trip; subsequent edits trigger the debounced lookup. The
+            // onResolve callback pushes the resolved channel into the branch
+            // payload so the editor's ?preview=true overlay shows attribution
+            // without needing a full Save -> merge round-trip first.
+            YoutubeAttribution.wire(input, (channelName, channelUrl) => {
+                const tab = BranchProxy.findTab(tabId);
+                if (!tab) return;
+                tab.youtube_channel_name = channelName;
+                tab.youtube_channel_url = channelUrl;
+                BranchProxy.schedulePush();
+            });
+            const preview = YoutubeAttribution.findPreview(input);
+            if (preview) {
+                YoutubeAttribution.showInitial(
+                    input,
+                    preview.dataset.initialChannelName || '',
+                    preview.dataset.initialChannelUrl || '',
+                );
+            }
         });
 
         // Per-tab gating: render the General Tips owner badge / disable the
@@ -1494,8 +1689,11 @@
             const statusBadge = el.querySelector('.trophy-guide-status');
             const guideData = guides[t.trophy_id] || {};
             const body = typeof guideData === 'string' ? guideData : (guideData.body || '');
+            const youtubeUrl = (typeof guideData === 'object' && guideData.youtube_url) || '';
             const textarea = el.querySelector('.trophy-guide-body');
             textarea.value = body;
+            const youtubeInput = el.querySelector('.trophy-guide-youtube-input');
+            if (youtubeInput) youtubeInput.value = youtubeUrl;
 
             // Load flag checkboxes
             const flagCheckboxes = el.querySelectorAll('.trophy-guide-flag');
@@ -1524,7 +1722,7 @@
                 phaseSelect.value = guideData.phase;
             }
 
-            if (body) {
+            if (body || youtubeUrl) {
                 statusBadge.textContent = 'Written';
                 statusBadge.classList.add('badge-success');
             } else {
@@ -1532,7 +1730,7 @@
             }
 
             // Open if has content
-            if (body) {
+            if (body || youtubeUrl) {
                 el.setAttribute('open', '');
             }
 
@@ -1548,23 +1746,29 @@
                 const currentBody = textarea.value;
                 const flags = getFlags();
                 const phase = phaseSelect ? phaseSelect.value : '';
+                const currentYoutubeUrl = youtubeInput ? youtubeInput.value.trim() : '';
                 await apiCall('put', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/trophy-guides/${t.trophy_id}/`, {
                     body: currentBody,
                     phase: phase,
+                    youtube_url: currentYoutubeUrl,
                     ...flags,
                 });
 
-                // Update status badge and local state
+                // Update status badge and local state. The guide is "present"
+                // if any of body, phase, or youtube_url is set (gallery is
+                // tracked separately via GalleryController).
                 const tabData = tabsData.find(td => td.id === tabId);
                 if (tabData) {
-                    if (currentBody.trim() || phase) {
-                        tabData.trophy_guides[t.trophy_id] = { body: currentBody, phase, ...flags };
+                    if (currentBody.trim() || phase || currentYoutubeUrl) {
+                        tabData.trophy_guides[t.trophy_id] = {
+                            body: currentBody, phase, youtube_url: currentYoutubeUrl, ...flags,
+                        };
                     } else {
                         delete tabData.trophy_guides[t.trophy_id];
                     }
                     updateTrophyGuideCounter(tabId);
                 }
-                if (currentBody.trim()) {
+                if (currentBody.trim() || currentYoutubeUrl) {
                     statusBadge.textContent = 'Written';
                     statusBadge.className = 'trophy-guide-status badge badge-xs badge-success ml-auto shrink-0';
                 } else {
@@ -1590,6 +1794,31 @@
                     setSaveStatus('unsaved');
                     debouncedSave();
                 });
+            }
+
+            if (youtubeInput) {
+                youtubeInput.addEventListener('input', () => {
+                    setSaveStatus('unsaved');
+                    debouncedSave();
+                });
+                // Push resolved channel info into the branch payload so
+                // ?preview=true overlay shows attribution before merge.
+                // The guide may not exist in the branch yet (video-only
+                // first save races the lookup); locate-or-noop pattern
+                // falls back to the next debouncedSave to populate.
+                YoutubeAttribution.wire(youtubeInput, (channelName, channelUrl) => {
+                    const tab = BranchProxy.findTab(tabId);
+                    const guide = tab?.trophy_guides?.find(g => g.trophy_id === t.trophy_id);
+                    if (!guide) return;
+                    guide.youtube_channel_name = channelName;
+                    guide.youtube_channel_url = channelUrl;
+                    BranchProxy.schedulePush();
+                });
+                YoutubeAttribution.showInitial(
+                    youtubeInput,
+                    (typeof guideData === 'object' && guideData.youtube_channel_name) || '',
+                    (typeof guideData === 'object' && guideData.youtube_channel_url) || '',
+                );
             }
 
             // Render ownership badge + apply writer-scoping read-only state.

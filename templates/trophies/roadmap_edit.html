@@ -294,11 +294,16 @@
                     <span class="badge badge-xs badge-info font-normal" data-readonly-exempt>Publisher only</span>
                 </h2>
                 <p class="text-xs text-base-content/40 mb-3">Link the official PlatPursuit YouTube guide for this section. Reserved for publisher curation.</p>
-                <input type="url"
-                       class="input input-bordered w-full text-sm youtube-url-input"
-                       data-tab-id="{{ roadmap.id }}"
-                       value="{{ roadmap.youtube_url }}"
-                       placeholder="https://www.youtube.com/watch?v=...">
+                <div class="youtube-attribution-group">
+                    <input type="url"
+                           class="input input-bordered w-full text-sm youtube-url-input youtube-attribution-input"
+                           data-tab-id="{{ roadmap.id }}"
+                           value="{{ roadmap.youtube_url }}"
+                           placeholder="https://www.youtube.com/watch?v=...">
+                    <p class="youtube-attribution-preview text-xs italic mt-1.5 text-base-content/55 min-h-[1rem]"
+                       data-initial-channel-name="{{ roadmap.youtube_channel_name|default:'' }}"
+                       data-initial-channel-url="{{ roadmap.youtube_channel_url|default:'' }}"></p>
+                </div>
             </div>
         </div>
 
@@ -350,9 +355,12 @@
                 </div>
                 {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
                 <textarea class="textarea textarea-bordered w-full text-sm step-desc-input auto-resize" rows="2" placeholder="Describe what to do in this step..."></textarea>
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <input type="url" class="input input-bordered input-xs w-full step-youtube-input" placeholder="YouTube URL (optional)" maxlength="500">
+                <div class="youtube-attribution-group">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <input type="url" class="input input-bordered input-xs w-full step-youtube-input youtube-attribution-input" placeholder="YouTube URL (optional)" maxlength="500">
+                    </div>
+                    <p class="youtube-attribution-preview text-[11px] italic mt-1 ml-5 text-base-content/55 min-h-[0.875rem]"></p>
                 </div>
                 <details class="collapse collapse-arrow border border-base-content/5 rounded-lg bg-white/[0.02]">
                     <summary class="collapse-title text-xs font-medium py-2 min-h-0">
@@ -446,6 +454,13 @@
             </div>
             {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
             <textarea class="textarea textarea-bordered w-full text-sm trophy-guide-body auto-resize" rows="3" placeholder="Tips and walkthrough for this trophy..."></textarea>
+            <div class="mt-2 youtube-attribution-group">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <input type="url" class="input input-bordered input-xs w-full trophy-guide-youtube-input youtube-attribution-input" placeholder="YouTube URL (optional)" maxlength="500">
+                </div>
+                <p class="youtube-attribution-preview text-[11px] italic mt-1 ml-5 text-base-content/55 min-h-[0.875rem]"></p>
+            </div>
             <div class="gallery-section mt-2" data-target-kind="trophy_guide" data-target-id="">
                 <div class="flex items-center justify-between gap-2 mb-1">
                     <span class="text-[0.6rem] text-base-content/40 uppercase tracking-wider font-semibold">Gallery

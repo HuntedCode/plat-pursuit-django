@@ -3945,6 +3945,11 @@ class Roadmap(models.Model):
     )
     general_tips = models.TextField(blank=True)
     youtube_url = models.URLField(blank=True)
+    # Cached YouTube channel info from oEmbed lookup. Populated on save when
+    # youtube_url is set/changed; cleared when youtube_url is cleared. Empty
+    # strings (not null) keep the template-side `{% if %}` checks simple.
+    youtube_channel_name = models.CharField(max_length=200, blank=True)
+    youtube_channel_url = models.URLField(blank=True)
 
     # Author-supplied metadata, distinct from community ratings.
     difficulty = models.PositiveSmallIntegerField(
@@ -4074,6 +4079,8 @@ class RoadmapStep(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     youtube_url = models.URLField(blank=True)
+    youtube_channel_name = models.CharField(max_length=200, blank=True)
+    youtube_channel_url = models.URLField(blank=True)
     order = models.PositiveIntegerField(default=0)
     # Ordered list of {url, alt, caption}. Rendered as a thumbnail grid below
     # the step description. Inline images live inside `description` markdown.
@@ -4127,6 +4134,9 @@ class TrophyGuide(models.Model):
     )
     trophy_id = models.IntegerField()
     body = models.TextField()
+    youtube_url = models.URLField(blank=True)
+    youtube_channel_name = models.CharField(max_length=200, blank=True)
+    youtube_channel_url = models.URLField(blank=True)
     order = models.PositiveIntegerField(default=0)
     is_missable = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)

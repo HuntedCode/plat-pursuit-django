@@ -260,6 +260,12 @@ class RoadmapService:
                 if value is None and isinstance(getattr(roadmap, fld, None), str):
                     value = ''
                 setattr(roadmap, fld, value)
+        # Cached YouTube attribution (server-derived; pushed to branch by
+        # the editor's live oEmbed lookup so the preview overlay matches
+        # what the published render will show).
+        for fld in ('youtube_channel_name', 'youtube_channel_url'):
+            if fld in branch_payload:
+                setattr(roadmap, fld, branch_payload[fld] or '')
 
         # Steps.
         live_steps_by_id = {s.id: s for s in roadmap.steps.all()}
@@ -277,6 +283,9 @@ class RoadmapService:
                 step = RoadmapStep(roadmap=roadmap, id=synthetic_id)
 
             for fld in ('title', 'description', 'youtube_url'):
+                if fld in step_payload:
+                    setattr(step, fld, step_payload[fld] or '')
+            for fld in ('youtube_channel_name', 'youtube_channel_url'):
                 if fld in step_payload:
                     setattr(step, fld, step_payload[fld] or '')
             step.order = step_payload.get('order', index)
@@ -310,6 +319,9 @@ class RoadmapService:
                 guide.trophy_id = int(guide_payload['trophy_id'])
             if 'body' in guide_payload:
                 guide.body = guide_payload['body'] or ''
+            for fld in ('youtube_url', 'youtube_channel_name', 'youtube_channel_url'):
+                if fld in guide_payload:
+                    setattr(guide, fld, guide_payload[fld] or '')
             for flag in ('is_missable', 'is_online', 'is_unobtainable'):
                 if flag in guide_payload:
                     setattr(guide, flag, bool(guide_payload[flag]))
@@ -454,6 +466,8 @@ class RoadmapService:
             'status': rm.status,
             'general_tips': rm.general_tips,
             'youtube_url': rm.youtube_url,
+            'youtube_channel_name': rm.youtube_channel_name,
+            'youtube_channel_url': rm.youtube_channel_url,
             'difficulty': rm.difficulty,
             'estimated_hours': rm.estimated_hours,
             'min_playthroughs': rm.min_playthroughs,
@@ -465,6 +479,8 @@ class RoadmapService:
                     'title': step.title,
                     'description': step.description,
                     'youtube_url': step.youtube_url,
+                    'youtube_channel_name': step.youtube_channel_name,
+                    'youtube_channel_url': step.youtube_channel_url,
                     'order': step.order,
                     'gallery_images': list(step.gallery_images or []),
                     'created_by_id': step.created_by_id,
@@ -478,6 +494,9 @@ class RoadmapService:
                     'id': tg.id,
                     'trophy_id': tg.trophy_id,
                     'body': tg.body,
+                    'youtube_url': tg.youtube_url,
+                    'youtube_channel_name': tg.youtube_channel_name,
+                    'youtube_channel_url': tg.youtube_channel_url,
                     'order': tg.order,
                     'is_missable': tg.is_missable,
                     'is_online': tg.is_online,

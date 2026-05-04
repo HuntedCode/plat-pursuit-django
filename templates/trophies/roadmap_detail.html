@@ -62,25 +62,34 @@
                 </div>
                 {% endif %}
 
+                {# ─── Play Along Guide (Roadmap-level YouTube). Always one  #}
+                {# of PlatPursuit's curated full-platinum walkthroughs, so   #}
+                {# branded as a featured card with primary accent rather     #}
+                {# than the generic "Video Guide" treatment used per-step    #}
+                {# and per-trophy. Author attribution is dropped (it'd read  #}
+                {# "Thanks to PlatPursuit for the video guide!" — weird) and #}
+                {# replaced with a Subscribe-on-YouTube CTA pointed at the   #}
+                {# resolved channel for discoverability.                     #}
                 {% if roadmap.youtube_url %}
-                <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+                <div class="card border-2 border-primary/40 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent shadow-lg shadow-primary/10">
                     <div class="card-body p-3 md:p-5 lg:p-6">
-                        <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            Video Guide
-                        </h2>
-                        <div class="aspect-video rounded-lg overflow-hidden border border-base-content/5 bg-black/20">
-                            {% with embed_url=roadmap.youtube_url|youtube_embed_url %}
-                            {% if embed_url %}
-                                <iframe src="{{ embed_url }}" class="w-full h-full" frameborder="0" referrerpolicy="origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
-                            {% else %}
-                                <a href="{{ roadmap.youtube_url }}" target="_blank" rel="noopener noreferrer" class="flex items-center justify-center gap-2 w-full h-full bg-white/[0.03] text-base-content/60 hover:text-error transition-colors">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <span class="text-sm font-medium">Watch on YouTube</span>
-                                </a>
-                            {% endif %}
-                            {% endwith %}
+                        <div class="flex items-center gap-2 mb-1 flex-wrap">
+                            <span class="badge badge-primary badge-sm gap-1 font-semibold uppercase tracking-wider">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                PlatPursuit Originals
+                            </span>
                         </div>
+                        <h2 class="text-lg lg:text-xl font-bold leading-tight">Play Along Guide</h2>
+                        <p class="text-xs md:text-sm text-base-content/60 mb-3">Follow our complete walkthrough from start to platinum.</p>
+                        {% include 'trophies/partials/roadmap/video_embed.html' with youtube_url=roadmap.youtube_url channel_name='' channel_url='' %}
+                        {% if roadmap.youtube_channel_url %}
+                        <a href="{{ roadmap.youtube_channel_url }}" target="_blank" rel="noopener noreferrer"
+                           class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline mt-2.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                            Subscribe on YouTube
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}

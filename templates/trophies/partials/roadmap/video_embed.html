@@ -1,0 +1,41 @@
+{% comment %}
+Shared YouTube embed for the three roadmap surfaces (page-level Video Guide,
+per-step video, per-trophy video). Renders an <iframe> when the URL parses
+into an embed link, otherwise falls back to a "Watch on YouTube" link.
+
+Inputs:
+  youtube_url      (required) — the raw URL the author pasted
+  channel_name     (optional) — cached author_name from oEmbed; renders the
+                                 "Thanks to CHANNEL" line below the embed
+  channel_url      (optional) — cached author_url from oEmbed
+  aspect_class     (optional) — Tailwind aspect class for the embed container.
+                                 Defaults to `aspect-video`.
+  attribution_size (optional) — `text-xs` (default) or `text-[11px]` for the
+                                 tighter per-trophy / per-step embeds.
+{% endcomment %}
+{% load custom_filters %}
+<div class="{{ aspect_class|default:'aspect-video' }} rounded-lg overflow-hidden border border-base-content/5 bg-black/20">
+    {% with embed_url=youtube_url|youtube_embed_url %}
+    {% if embed_url %}
+        <iframe src="{{ embed_url }}" class="w-full h-full" frameborder="0" referrerpolicy="origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+    {% else %}
+        <a href="{{ youtube_url }}" target="_blank" rel="noopener noreferrer"
+           class="flex items-center justify-center gap-2 w-full h-full bg-white/[0.03] text-base-content/60 hover:text-error transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span class="text-sm font-medium">Watch on YouTube</span>
+        </a>
+    {% endif %}
+    {% endwith %}
+</div>
+{% if channel_name %}
+<p class="{{ attribution_size|default:'text-xs' }} text-base-content/55 italic mt-1.5">
+    Thanks to
+    {% if channel_url %}
+    <a href="{{ channel_url }}" target="_blank" rel="noopener noreferrer"
+       class="text-primary hover:underline not-italic font-medium">{{ channel_name }}</a>
+    {% else %}
+    <span class="text-base-content/80 not-italic font-medium">{{ channel_name }}</span>
+    {% endif %}
+    for the video guide!
+</p>
+{% endif %}

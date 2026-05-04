@@ -20,9 +20,17 @@ there's no `tabs[]` wrapper):
       "roadmap_id": ...,
       "status": "draft" | "published",
       "general_tips": ..., "youtube_url": ..., "difficulty": ..., ...,
-      "steps": [{"id": ..., "title": ..., "description": ..., ...}, ...],
-      "trophy_guides": [{"id": ..., "trophy_id": ..., ...}, ...],
+      "youtube_channel_name": ..., "youtube_channel_url": ...,
+      "steps": [{"id": ..., "title": ..., "description": ...,
+                 "youtube_url": ..., "youtube_channel_name": ..., ...}, ...],
+      "trophy_guides": [{"id": ..., "trophy_id": ..., "youtube_url": ...,
+                         "youtube_channel_name": ..., ...}, ...],
     }
+
+  YouTube channel info is server-derived: the editor never sets the
+  channel_* fields directly. On every merge that changes a youtube_url,
+  the merge service hits YouTube oEmbed and overwrites the cached
+  channel name + URL on the live record (a failed lookup clears them).
 
 A failure at any step rolls back the transaction and surfaces a `MergeError`.
 """
@@ -43,8 +51,51 @@ from trophies.models import (
     TrophyGuide,
 )
 from trophies.services.roadmap_service import RoadmapService
+from trophies.services.youtube_oembed_service import fetch_attribution
 
 logger = logging.getLogger('psn_api')
+
+
+def _resolve_youtube_attribution(youtube_url: str) -> dict:
+    """Look up the channel name + URL for a YouTube link.
+
+    Always returns a dict with both keys so callers can splat it onto a
+    create() call or assign it field-by-field. Empty URL yields empty
+    fields (used to clear attribution when a user removes the URL); a
+    failed oEmbed lookup also yields empty fields so the embed still
+    renders without attribution rather than blocking the save.
+    """
+    if not youtube_url:
+        return {'youtube_channel_name': '', 'youtube_channel_url': ''}
+    result = fetch_attribution(youtube_url)
+    if not result:
+        return {'youtube_channel_name': '', 'youtube_channel_url': ''}
+    return {
+        'youtube_channel_name': result['channel_name'],
+        'youtube_channel_url': result['channel_url'],
+    }
+
+
+def _backfill_attribution_if_missing(record) -> None:
+    """Side-effect: populate cached channel info on records that have a URL
+    but no cached attribution yet, then save just the two cache fields.
+
+    Catches three cases the change-driven path misses:
+      1. Records whose URL was set before the attribution feature shipped.
+      2. Records where a prior oEmbed lookup failed (network, timeout).
+      3. Records being merged with no `youtube_url` change, so the
+         change-driven refresh wouldn't fire on its own.
+
+    Idempotent: once the cache is populated, subsequent calls are no-ops.
+    """
+    if not record.youtube_url or record.youtube_channel_name:
+        return
+    attribution = _resolve_youtube_attribution(record.youtube_url)
+    if not attribution['youtube_channel_name']:
+        return
+    record.youtube_channel_name = attribution['youtube_channel_name']
+    record.youtube_channel_url = attribution['youtube_channel_url']
+    record.save(update_fields=['youtube_channel_name', 'youtube_channel_url'])
 
 
 # Fields by required role tier.
@@ -231,6 +282,10 @@ def _apply_roadmap_fields(
                     )
                 setattr(live_roadmap, field_name, new_value)
                 publisher_dirty = True
+                if field_name == 'youtube_url':
+                    attribution = _resolve_youtube_attribution(new_value)
+                    live_roadmap.youtube_channel_name = attribution['youtube_channel_name']
+                    live_roadmap.youtube_channel_url = attribution['youtube_channel_url']
 
     if content_dirty or metadata_dirty or publisher_dirty:
         if live_roadmap.created_by_id is None:
@@ -241,6 +296,10 @@ def _apply_roadmap_fields(
             changes.content_updates += 1
         if metadata_dirty or publisher_dirty:
             changes.metadata_updates += 1
+
+    # Cache backfill (URL set, no channel cached yet). Independent of the
+    # role-gated save above so it runs even when nothing else changed.
+    _backfill_attribution_if_missing(live_roadmap)
 
 
 def _apply_steps(
@@ -253,15 +312,17 @@ def _apply_steps(
         step_id = step_payload.get('id')
         # New step.
         if step_id is None:
+            new_youtube_url = step_payload.get('youtube_url') or ''
             step = RoadmapStep.objects.create(
                 roadmap=live_roadmap,
                 title=(step_payload.get('title') or '').strip(),
                 description=step_payload.get('description') or '',
-                youtube_url=step_payload.get('youtube_url') or '',
+                youtube_url=new_youtube_url,
                 order=step_payload.get('order', index),
                 gallery_images=_normalize_gallery(step_payload.get('gallery_images')),
                 created_by_id=profile.id,
                 last_edited_by_id=profile.id,
+                **_resolve_youtube_attribution(new_youtube_url),
             )
             _replace_step_trophies(step, step_payload.get('trophy_ids', []))
             changes.step_creates += 1
@@ -288,6 +349,14 @@ def _apply_steps(
                 current = getattr(live_step, field_name)
                 if new_value != current:
                     dirty_fields.append((field_name, new_value))
+                    if field_name == 'youtube_url':
+                        attribution = _resolve_youtube_attribution(new_value)
+                        dirty_fields.append((
+                            'youtube_channel_name', attribution['youtube_channel_name'],
+                        ))
+                        dirty_fields.append((
+                            'youtube_channel_url', attribution['youtube_channel_url'],
+                        ))
 
         # Diff gallery_images (full-list replace).
         new_gallery = step_payload.get('gallery_images')
@@ -309,6 +378,7 @@ def _apply_steps(
         )
 
         if not dirty_fields and not trophies_changed and not gallery_changed:
+            _backfill_attribution_if_missing(live_step)
             continue
 
         if not _can_edit_authored(profile, live_step.created_by_id, is_editor):
@@ -324,6 +394,7 @@ def _apply_steps(
         live_step.last_edited_by_id = profile.id
         live_step.save()
         changes.step_updates += 1
+        _backfill_attribution_if_missing(live_step)
 
     # Anything in live but missing from payload's existing-id set is a
     # deletion. The branch_payload represents the FULL desired guide state
@@ -354,10 +425,12 @@ def _apply_trophy_guides(
         guide_id = guide_payload.get('id')
         if guide_id is None:
             # New trophy guide.
+            new_youtube_url = guide_payload.get('youtube_url') or ''
             TrophyGuide.objects.create(
                 roadmap=live_roadmap,
                 trophy_id=int(guide_payload['trophy_id']),
                 body=guide_payload.get('body') or '',
+                youtube_url=new_youtube_url,
                 order=guide_payload.get('order', 0),
                 is_missable=bool(guide_payload.get('is_missable', False)),
                 is_online=bool(guide_payload.get('is_online', False)),
@@ -366,6 +439,7 @@ def _apply_trophy_guides(
                 gallery_images=_normalize_gallery(guide_payload.get('gallery_images')),
                 created_by_id=profile.id,
                 last_edited_by_id=profile.id,
+                **_resolve_youtube_attribution(new_youtube_url),
             )
             changes.guide_creates += 1
             continue
@@ -383,11 +457,12 @@ def _apply_trophy_guides(
 
         dirty_fields = []
         for field_name in (
-            'body', 'order', 'is_missable', 'is_online', 'is_unobtainable', 'phase',
+            'body', 'youtube_url', 'order',
+            'is_missable', 'is_online', 'is_unobtainable', 'phase',
         ):
             if field_name in guide_payload:
                 new_value = guide_payload[field_name]
-                if field_name == 'body':
+                if field_name in ('body', 'youtube_url'):
                     new_value = new_value or ''
                 if field_name in ('is_missable', 'is_online', 'is_unobtainable'):
                     new_value = bool(new_value)
@@ -396,6 +471,14 @@ def _apply_trophy_guides(
                 current = getattr(live_guide, field_name)
                 if new_value != current:
                     dirty_fields.append((field_name, new_value))
+                    if field_name == 'youtube_url':
+                        attribution = _resolve_youtube_attribution(new_value)
+                        dirty_fields.append((
+                            'youtube_channel_name', attribution['youtube_channel_name'],
+                        ))
+                        dirty_fields.append((
+                            'youtube_channel_url', attribution['youtube_channel_url'],
+                        ))
 
         if 'gallery_images' in guide_payload:
             normalized = _normalize_gallery(guide_payload.get('gallery_images'))
@@ -403,6 +486,7 @@ def _apply_trophy_guides(
                 dirty_fields.append(('gallery_images', normalized))
 
         if not dirty_fields:
+            _backfill_attribution_if_missing(live_guide)
             continue
 
         if not _can_edit_authored(profile, live_guide.created_by_id, is_editor):
@@ -416,6 +500,7 @@ def _apply_trophy_guides(
         live_guide.last_edited_by_id = profile.id
         live_guide.save()
         changes.guide_updates += 1
+        _backfill_attribution_if_missing(live_guide)
 
     actually_deleted = set(live_guides.keys()) - explicit_payload_ids
     if actually_deleted:
@@ -528,6 +613,12 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
         for field_name in WRITER_FIELDS + EDITOR_FIELDS + PUBLISHER_FIELDS:
             if field_name in snapshot:
                 setattr(roadmap, field_name, snapshot[field_name])
+        # Derived/cached fields that piggyback on the role-gated fields
+        # above. Restored from the snapshot rather than re-fetched from
+        # YouTube to keep restore deterministic.
+        for derived_field in ('youtube_channel_name', 'youtube_channel_url'):
+            if derived_field in snapshot:
+                setattr(roadmap, derived_field, snapshot[derived_field] or '')
         if 'created_by_id' in snapshot:
             roadmap.created_by_id = snapshot['created_by_id']
         roadmap.last_edited_by_id = actor.id
@@ -540,6 +631,8 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
                 title=step_snapshot.get('title') or '',
                 description=step_snapshot.get('description') or '',
                 youtube_url=step_snapshot.get('youtube_url') or '',
+                youtube_channel_name=step_snapshot.get('youtube_channel_name') or '',
+                youtube_channel_url=step_snapshot.get('youtube_channel_url') or '',
                 order=step_snapshot.get('order', 0),
                 gallery_images=_normalize_gallery(step_snapshot.get('gallery_images')),
                 created_by_id=step_snapshot.get('created_by_id'),
@@ -553,6 +646,9 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
                 roadmap=roadmap,
                 trophy_id=int(guide_snapshot['trophy_id']),
                 body=guide_snapshot.get('body') or '',
+                youtube_url=guide_snapshot.get('youtube_url') or '',
+                youtube_channel_name=guide_snapshot.get('youtube_channel_name') or '',
+                youtube_channel_url=guide_snapshot.get('youtube_channel_url') or '',
                 order=guide_snapshot.get('order', 0),
                 is_missable=bool(guide_snapshot.get('is_missable', False)),
                 is_online=bool(guide_snapshot.get('is_online', False)),

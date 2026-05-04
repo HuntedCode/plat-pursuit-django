@@ -104,6 +104,7 @@ from .profile_showcase_views import (
 from .community_stats_views import (
     CommunityStatsDayView, CommunityStatsTodayView, CommunityStatsRecordsView,
 )
+from .youtube_views import YouTubeAttributionLookupView
 
 app_name = 'api'
 
@@ -352,6 +353,9 @@ urlpatterns = [
     path('roadmap/<int:roadmap_id>/notes/<int:note_id>/', RoadmapNoteDetailView.as_view(), name='roadmap-notes-detail'),
     path('roadmap/<int:roadmap_id>/notes/<int:note_id>/resolve/', RoadmapNoteResolveView.as_view(), name='roadmap-notes-resolve'),
     path('roadmap/<int:roadmap_id>/notes/mark-read/', RoadmapNoteMarkReadView.as_view(), name='roadmap-notes-mark-read'),
+
+    # YouTube oEmbed proxy for the roadmap editor's live attribution preview.
+    path('youtube/attribution-lookup/', YouTubeAttributionLookupView.as_view(), name='youtube-attribution-lookup'),
 
     # Community Trophy Tracker (public, read-only aggregates)
     path('community-stats/today/', CommunityStatsTodayView.as_view(), name='community-stats-today'),

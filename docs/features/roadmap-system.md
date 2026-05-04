@@ -14,20 +14,28 @@ Replaces the previous checklist system (DB tables retained, UI removed).
 One-to-one with Concept. Has `status` (draft/published) and `created_by` (Profile).
 
 ### RoadmapTab
-One per ConceptTrophyGroup within a roadmap. Stores content fields (`general_tips`, `youtube_url`) and guide metadata fields (`difficulty`, `estimated_hours`, `min_playthroughs`). Auto-created when the editor page loads.
+One per ConceptTrophyGroup within a roadmap. Stores content fields (`general_tips`, `youtube_url`) and guide metadata fields (`difficulty`, `estimated_hours`, `min_playthroughs`). Auto-created when the editor page loads. The two derived fields `youtube_channel_name` and `youtube_channel_url` cache the oEmbed lookup result for the page-level YouTube URL — see "YouTube Attribution" below.
 
 `online_required` and `missable_count` are **derived properties** computed from the per-trophy `is_online` and `is_missable` flags rather than stored fields. They roll up automatically — tag a single trophy as missable and the roadmap's missable count goes up by one without the author needing to keep a separate total in sync.
 
 **Guide metadata** is the author's assessment, distinct from community ratings (`UserConceptRating`). Metadata is displayed as a badge strip at the top of the roadmap detail page, labeled "Author Assessment" to avoid confusion.
 
 ### RoadmapStep
-Ordered stages within a tab. Each has `title`, `description`, `youtube_url`, and `order`.
+Ordered stages within a tab. Each has `title`, `description`, `youtube_url`, and `order`. Step-level YouTube URLs also have cached `youtube_channel_name` / `youtube_channel_url` fields populated by the same oEmbed flow as the page-level video.
 
 ### RoadmapStepTrophy
 Associates trophies with steps by `trophy_id` (IntegerField, not FK to Trophy). Uses PSN trophy_id which is consistent across game stacks within a concept.
 
 ### TrophyGuide
-Per-trophy guide text within a tab. Identified by `trophy_id`. One guide per trophy per tab.
+Per-trophy guide text within a tab. Identified by `trophy_id`. One guide per trophy per tab. Optional `youtube_url` (with cached `youtube_channel_name` / `youtube_channel_url`) for a per-trophy video walkthrough; renders inline beneath the body when the trophy row is expanded. A guide may exist with only a YouTube URL (video-only, no body).
+
+## YouTube Attribution
+
+All three YouTube URL fields (Roadmap, RoadmapStep, TrophyGuide) cache channel info on save via [trophies/services/youtube_oembed_service.py](../../trophies/services/youtube_oembed_service.py). The merge service calls `fetch_attribution(url)` whenever a `youtube_url` is set or changed; the result populates the `youtube_channel_name` and `youtube_channel_url` fields on the same record. A failed lookup (timeout, deleted video, network error) silently leaves the cached fields empty — the embed still renders, just without the "Thanks to CHANNEL" line.
+
+The editor's three YouTube inputs share one debounced live-preview handler (`YoutubeAttribution` in `static/js/roadmap_editor.js`) that hits [`GET /api/youtube/attribution-lookup/`](../reference/api-endpoints.md) as the author types. The preview is purely advisory — the canonical attribution is whatever the server resolves on save, not what the editor displayed.
+
+The shared reader-side render lives in [templates/trophies/partials/roadmap/video_embed.html](../../templates/trophies/partials/roadmap/video_embed.html), used by all three embed surfaces.
 
 ## Architecture
 
@@ -150,6 +158,8 @@ All endpoints require staff authentication via SessionAuthentication + IsAdminUs
 - **Trophy IDs, not FKs**: Roadmap models reference trophies by `trophy_id` (IntegerField), not FK. Deleted trophies won't cascade-delete roadmap associations. Templates handle missing trophies gracefully.
 - **Guide metadata vs. community ratings**: `RoadmapTab.difficulty` is the author's assessment. `UserConceptRating.difficulty` is community-submitted. These are completely separate systems displayed in different locations with different labels.
 - **YouTube URL validation**: Server-side regex validates youtube.com/youtu.be domains. The `youtube_embed_url` template filter extracts video IDs for iframe embedding.
+- **YouTube attribution caching**: The `youtube_channel_name` / `youtube_channel_url` fields are server-derived. Editor JS never writes them to the branch payload — the merge service fetches oEmbed and overwrites on every `youtube_url` change. If you need to refresh stale channel info, clear the URL field, save, then re-paste the URL.
+- **oEmbed timeout is hard-set to 3s**: A slow YouTube response will cause attribution to be saved as empty rather than blocking the merge. The embed still renders correctly without it.
 - **Tab auto-creation**: The editor automatically creates RoadmapTab records for any ConceptTrophyGroups that don't have one.
 - **JSON data injection**: Editor template uses Django's `json_script` tag for safe JSON serialization.
 - **DLC URL routing**: Base game uses `/roadmap/` (no trailing group ID). DLC uses `/roadmap/<group>/`. The `edit/` pattern is registered before these in urls.py, so no shadowing.
