@@ -34,10 +34,24 @@ Notes:
 import linecache
 import tracemalloc
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import connection
 from django.test import Client
+
+
+def _resolve_default_host():
+    """Pick a concrete host from ALLOWED_HOSTS so the test client doesn't
+    get rejected by SecurityMiddleware in production (where 'testserver'
+    is not in ALLOWED_HOSTS). Skips wildcard entries like '.example.com'."""
+    allowed = list(getattr(settings, 'ALLOWED_HOSTS', []) or [])
+    if '*' in allowed:
+        return 'localhost'
+    for host in allowed:
+        if host and not host.startswith('.'):
+            return host
+    return 'localhost'
 
 
 class Command(BaseCommand):
@@ -73,6 +87,15 @@ class Command(BaseCommand):
                 'rapid-fire requests hit different games with empty caches).'
             ),
         )
+        parser.add_argument(
+            '--host',
+            default=None,
+            help=(
+                'Host header to send with the test request. Defaults to the '
+                'first concrete entry in settings.ALLOWED_HOSTS so the '
+                'request passes SecurityMiddleware in production.'
+            ),
+        )
 
     def handle(self, *args, **options):
         url = options['url']
@@ -80,6 +103,7 @@ class Command(BaseCommand):
         top = options['top']
         frames_to_show = options['frames']
         skip_warmup = options['no_warmup']
+        host = options.get('host') or _resolve_default_host()
 
         client = Client()
         if username:
@@ -98,7 +122,7 @@ class Command(BaseCommand):
             # diff. Note: this also populates Redis caches that the measured
             # render will read instead of rebuilding. Pass --no-warmup to
             # measure the cold-cache path instead.
-            warm = client.get(url)
+            warm = client.get(url, HTTP_HOST=host)
             if warm.status_code >= 400:
                 self.stderr.write(self.style.ERROR(
                     f'Warm-up returned status {warm.status_code} for {url}'
@@ -109,7 +133,7 @@ class Command(BaseCommand):
 
         tracemalloc.start(25)
         snap_before = tracemalloc.take_snapshot()
-        response = client.get(url)
+        response = client.get(url, HTTP_HOST=host)
         snap_after = tracemalloc.take_snapshot()
         tracemalloc.stop()
 
@@ -128,6 +152,7 @@ class Command(BaseCommand):
         sub = '-' * 78
         self.stdout.write(bar)
         self.stdout.write(f'URL:           {url}')
+        self.stdout.write(f'Host:          {host}')
         self.stdout.write(f'User:          {username or "anonymous"}')
         self.stdout.write(f'Warm-up:       {"skipped (cold-cache mode)" if skip_warmup else "ran (warm-cache mode)"}')
         self.stdout.write(f'Status:        {response.status_code}')
