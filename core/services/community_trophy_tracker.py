@@ -168,6 +168,8 @@ def build_embed_payload(day: CommunityTrophyDay, prior_records: dict | None = No
         f"🌟 **Ultra Rares:** `{day.total_ultra_rares:,}`{record_badge if records['ultra_rares'] else ''}",
         "",
         f"📊 **PP Score:** `{day.pp_score:,}`{record_badge if records['pp_score'] else ''}",
+        "",
+        "-# *Counts include only Discord-linked Pursuers and exclude shovelware.*",
     ]
 
     color = EMBED_COLOR_RECORD if any(records.values()) else EMBED_COLOR_DEFAULT
