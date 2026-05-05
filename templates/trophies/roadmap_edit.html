@@ -234,6 +234,89 @@
             </div>
         </div>
 
+        {# ─── Collectibles ─── #}
+        {# Authors define the *vocabulary* (areas + types) and the items     #}
+        {# players check off. Sits above Steps because steps and trophies    #}
+        {# can reference [[slug]] tokens, so the vocabulary needs to exist   #}
+        {# first. Each collectible type "owns" one set; first author becomes #}
+        {# the set owner — see Concept.absorb / merge service for details.   #}
+        <div class="collectibles-card card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 transition-opacity"
+             data-tab-id="{{ roadmap.id }}">
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+                    <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 flex-wrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                        Collectibles
+                        <span class="collectibles-set-owner-badge hidden items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-normal" data-readonly-exempt>
+                            <img class="collectibles-set-owner-avatar hidden w-3.5 h-3.5 rounded-full object-cover" alt="">
+                            <span class="collectibles-set-owner-icon-fallback hidden w-3.5 h-3.5 rounded-full bg-base-300 items-center justify-center text-[8px] font-bold"></span>
+                            <span class="collectibles-set-owner-name"></span>
+                        </span>
+                    </h2>
+                </div>
+                <p class="text-xs text-base-content/40 mb-3">
+                    Define the categories of collectibles in this game (e.g. Riddler Trophies, Audio Logs) and the locations players will find them in (areas / chapters). Reference them inline in your guide with <code class="text-[11px] bg-base-300/50 rounded px-1 py-0.5">[[slug]]</code>.
+                </p>
+
+                {# ── Types (vocabulary) ── #}
+                {# Authoring order: types first (you need a type before you can #}
+                {# add an item), then areas (which contain the actual ordered    #}
+                {# item lists). The reader view inverts this — areas drive       #}
+                {# layout, types drive color/icon/filter — but in the editor     #}
+                {# the writer thinks "what categories of collectibles exist"     #}
+                {# before "where do they appear in the playthrough."             #}
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                        <h3 class="text-xs uppercase tracking-wider font-semibold text-base-content/60 flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z"/></svg>
+                            Collectible Types
+                            <span class="collectible-types-count badge badge-xs badge-ghost font-normal">0</span>
+                            <span class="text-[10px] font-normal text-base-content/40 normal-case tracking-normal">(vocabulary — color &amp; icon)</span>
+                        </h3>
+                        <button type="button" class="add-collectible-type-btn btn btn-sm btn-secondary gap-1"
+                                data-tab-id="{{ roadmap.id }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                            Add type
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-base-content/40 mb-2">e.g. Riddler Trophies, Audio Logs. Items go into Areas (below); types decide what color and icon they show with.</p>
+                    <div class="collectible-types-container space-y-2 mt-2"
+                         data-tab-id="{{ roadmap.id }}"
+                         data-group-id="{{ roadmap.concept_trophy_group.trophy_group_id }}">
+                        {# Type cards rendered by JS. #}
+                    </div>
+                    <div class="collectible-types-empty hidden text-center py-4">
+                        <p class="text-base-content/40 text-sm">No collectible types yet. Add one (e.g. Riddler Trophies) to get started.</p>
+                    </div>
+                </div>
+
+                {# ── Areas (locations / chapters) — host the actual items ── #}
+                <div class="border-t border-base-content/5 pt-4">
+                    <div class="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                        <h3 class="text-xs uppercase tracking-wider font-semibold text-base-content/60 flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            Areas / Chapters
+                            <span class="collectible-areas-count badge badge-xs badge-ghost font-normal">0</span>
+                            <span class="text-[10px] font-normal text-base-content/40 normal-case tracking-normal">(playthrough order)</span>
+                        </h3>
+                        <button type="button" class="add-collectible-area-btn btn btn-sm btn-primary gap-1"
+                                data-tab-id="{{ roadmap.id }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                            Add area
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-base-content/40 mb-2">Each area is a sequence of items, mixed types, in the order players will encounter them. e.g. Chapter 1: 3 journals → health upgrade → 2 more journals → mana upgrade.</p>
+                    <div class="collectible-areas-container space-y-2 mt-2"
+                         data-tab-id="{{ roadmap.id }}"
+                         data-group-id="{{ roadmap.concept_trophy_group.trophy_group_id }}">
+                        {# Area cards rendered by JS. An "Unsorted" pseudo-area #}
+                        {# is appended at runtime if any items have area_id=null. #}
+                    </div>
+                    <div class="collectible-areas-empty hidden text-[11px] italic text-base-content/35 mt-1">No areas yet — add one to start placing items.</div>
+                </div>
+            </div>
+        </div>
+
         {# ─── Steps Section ─── #}
         <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
             <div class="card-body p-3 md:p-5 lg:p-7">
@@ -477,6 +560,212 @@
     </details>
 </template>
 
+{# ─── Collectible Area Card Template ─── #}
+{# An area is the playthrough container — Chapter 1, Sewer Tunnels, etc.   #}
+{# Holds a mixed-type, drag-orderable list of items so the author can      #}
+{# mirror the actual encounter sequence (journal, journal, journal,        #}
+{# health upgrade, journal, journal, mana upgrade, ...) instead of being   #}
+{# forced into per-type silos.                                              #}
+<template id="collectible-area-card-template">
+    <details class="collectible-area-card group rounded-lg border border-base-content/10 bg-white/[0.02] overflow-hidden transition-opacity"
+             data-area-id="" data-item-id="">
+        <summary class="flex items-start gap-2 px-3 py-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden bg-white/[0.02] border-b border-base-content/5 group-[:not([open])]:border-b-0">
+            <div class="collectible-area-handle shrink-0 mt-1 cursor-grab text-base-content/30 hover:text-base-content/60" title="Drag to reorder area" aria-label="Drag to reorder area">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/></svg>
+            </div>
+            <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/40 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <input type="text"
+                       class="collectible-area-name-input input input-bordered input-sm flex-1 min-w-0 font-semibold"
+                       placeholder="Area name (e.g. Chapter 1)..."
+                       maxlength="100">
+                <span class="collectible-area-item-count badge badge-xs badge-ghost shrink-0">0 items</span>
+            </div>
+            <button type="button" class="collectible-area-delete-btn btn btn-ghost btn-xs text-error/60 hover:text-error shrink-0 mt-1" title="Delete area" aria-label="Delete area">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 mt-1 text-base-content/30 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-3 py-3">
+            <div class="flex items-center justify-between mb-1.5 flex-wrap gap-2">
+                <h4 class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">Items in this area (in playthrough order)</h4>
+                <div class="flex items-center gap-1">
+                    <button type="button" class="collectible-bulk-toggle-btn btn btn-ghost btn-xs gap-1 text-base-content/60 hover:text-primary" title="Bulk-paste a list of item names">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                        Bulk paste
+                    </button>
+                    <button type="button" class="collectible-add-item-btn btn btn-ghost btn-xs gap-1 text-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Add item
+                    </button>
+                </div>
+            </div>
+
+            {# Bulk-paste textarea (hidden by default; per-area, with type picker). #}
+            <div class="collectible-bulk-paste-wrap hidden mb-2 rounded-md border border-dashed border-base-content/15 bg-white/[0.03] p-2">
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">Type for these items</label>
+                    <select class="collectible-bulk-type-select select select-bordered select-xs h-6 min-h-0 py-0 text-xs"></select>
+                </div>
+                <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">One name per line</label>
+                <textarea class="collectible-bulk-paste-input textarea textarea-bordered textarea-xs w-full text-xs auto-resize"
+                          rows="3"
+                          placeholder="Riddler Trophy 1&#10;Riddler Trophy 2&#10;Riddler Trophy 3"
+                          maxlength="10000"></textarea>
+                <div class="flex items-center justify-end gap-2 mt-1">
+                    <button type="button" class="collectible-bulk-cancel-btn btn btn-ghost btn-xs">Cancel</button>
+                    <button type="button" class="collectible-bulk-apply-btn btn btn-primary btn-xs">Add all</button>
+                </div>
+            </div>
+
+            <div class="collectible-items-container space-y-1.5"></div>
+            <div class="collectible-items-empty text-[11px] italic text-base-content/35 py-2">No items yet — add the first one in playthrough order.</div>
+            <div class="collectible-no-types-hint hidden text-[11px] italic text-warning/80 py-2">Define a Collectible Type above before adding items here.</div>
+        </div>
+    </details>
+</template>
+
+{# ─── Collectible Type Card Template ─── #}
+{# Vocabulary-only: a type is a category like "Riddler Trophies" with a    #}
+{# color, icon, slug, and metadata. Items are NOT authored here — they     #}
+{# live in Areas (above) so authors can sequence mixed types in            #}
+{# playthrough order.                                                      #}
+<template id="collectible-type-template">
+    <details class="collectible-type-card group rounded-lg border border-base-content/10 bg-white/[0.02] overflow-hidden transition-opacity"
+             data-type-id="" data-item-id="">
+        <summary class="flex items-start gap-2 px-3 py-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden bg-white/[0.02] border-b border-base-content/5 group-[:not([open])]:border-b-0">
+            <div class="collectible-type-handle shrink-0 mt-1 cursor-grab text-base-content/30 hover:text-base-content/60" title="Drag to reorder" aria-label="Drag to reorder type">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/></svg>
+            </div>
+            <div class="flex-1 min-w-0 space-y-1.5">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="collectible-type-color-swatch collectible-swatch shrink-0" data-color="primary">
+                        <span class="collectible-type-icon-glyph">🎯</span>
+                    </span>
+                    <input type="text"
+                           class="collectible-type-name-input input input-bordered input-sm flex-1 min-w-0 font-semibold"
+                           placeholder="Collectible type name (e.g. Riddler Trophies)..."
+                           maxlength="100">
+                    <span class="collectible-type-slug-pill hidden text-[10px] font-mono text-base-content/50 bg-base-300/40 rounded px-1.5 py-0.5 shrink-0" title="Slug used for [[slug]] references — stable after creation"></span>
+                </div>
+                <div class="flex items-center gap-2 text-xs flex-wrap">
+                    <label class="flex items-center gap-1 text-base-content/55">
+                        <span class="text-[10px] uppercase tracking-wider">Total</span>
+                        <input type="number" min="0" max="9999"
+                               class="collectible-type-total-input input input-bordered input-xs w-16 text-center"
+                               placeholder="-">
+                    </label>
+                    <span class="w-px h-3 bg-base-content/10"></span>
+                    <span class="text-[10px] uppercase tracking-wider text-base-content/55">Items using this type</span>
+                    <span class="collectible-type-item-count badge badge-xs badge-ghost">0</span>
+                </div>
+            </div>
+            <button type="button" class="collectible-type-delete-btn btn btn-ghost btn-xs text-error/60 hover:text-error shrink-0 mt-1" title="Delete this collectible type" aria-label="Delete collectible type">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 mt-1 text-base-content/30 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-3 py-3 space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">Color</label>
+                    <div class="collectible-type-color-picker flex items-center gap-1 flex-wrap">
+                        <button type="button" class="collectible-color-btn" data-color="primary" title="Primary"></button>
+                        <button type="button" class="collectible-color-btn" data-color="secondary" title="Secondary"></button>
+                        <button type="button" class="collectible-color-btn" data-color="accent" title="Accent"></button>
+                        <button type="button" class="collectible-color-btn" data-color="info" title="Info"></button>
+                        <button type="button" class="collectible-color-btn" data-color="success" title="Success"></button>
+                        <button type="button" class="collectible-color-btn" data-color="warning" title="Warning"></button>
+                        <button type="button" class="collectible-color-btn" data-color="error" title="Error"></button>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">Icon (single emoji or short string)</label>
+                    <input type="text"
+                           class="collectible-type-icon-input input input-bordered input-sm w-full"
+                           placeholder="🎯"
+                           maxlength="8">
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">Short description (shown in tracker tooltip)</label>
+                <input type="text"
+                       class="collectible-type-description-input input input-bordered input-sm w-full"
+                       placeholder="One-liner description, e.g. 'Question marks scattered around Gotham'"
+                       maxlength="200">
+            </div>
+        </div>
+    </details>
+</template>
+
+{# ─── Collectible Item Row Template ─── #}
+{# Compact by default (name + type + flags). Expand chevron reveals the    #}
+{# rich-content panel (markdown body, gallery, youtube). The rich content  #}
+{# reuses the same gallery/auto-resize patterns as trophy guides.          #}
+<template id="collectible-item-template">
+    <div class="collectible-item-row rounded border border-base-content/5 bg-white/[0.03] hover:border-primary/15 transition-colors"
+         data-item-id="" data-item-row-id="">
+        <div class="flex items-start gap-1.5 p-1.5">
+            <button type="button" class="collectible-item-handle cursor-grab text-base-content/25 hover:text-base-content/60 mt-1" title="Drag to reorder within area" aria-label="Drag to reorder item">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/></svg>
+            </button>
+            <span class="collectible-item-type-swatch collectible-swatch shrink-0 mt-0.5" data-color="primary">
+                <span class="collectible-item-type-icon">🎯</span>
+            </span>
+            <div class="flex-1 min-w-0 flex items-center gap-1.5 flex-wrap">
+                <input type="text"
+                       class="collectible-item-name-input input input-bordered input-xs flex-1 min-w-[8rem]"
+                       placeholder="Item name..."
+                       maxlength="200">
+                <select class="collectible-item-type-select select select-bordered select-xs h-7 min-h-0 py-0 text-xs max-w-[10rem]"
+                        title="Collectible type"></select>
+                <label class="flex items-center gap-1 cursor-pointer text-[10px] text-base-content/60">
+                    <input type="checkbox" class="collectible-item-missable checkbox checkbox-xs checkbox-warning" data-flag="is_missable">
+                    Missable
+                </label>
+                <label class="flex items-center gap-1 cursor-pointer text-[10px] text-base-content/60">
+                    <input type="checkbox" class="collectible-item-dlc checkbox checkbox-xs checkbox-info" data-flag="is_dlc">
+                    DLC
+                </label>
+            </div>
+            <button type="button" class="collectible-item-rich-toggle btn btn-ghost btn-xs h-6 min-h-0 px-1.5 text-base-content/40 hover:text-primary gap-0.5" title="Add a guide for this item">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 collectible-item-rich-empty" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 collectible-item-rich-filled hidden text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <span class="collectible-item-rich-toggle-arrow text-[10px] opacity-60">▾</span>
+            </button>
+            <button type="button" class="collectible-item-delete-btn btn btn-ghost btn-xs h-6 min-h-0 px-1 text-error/50 hover:text-error" title="Delete item" aria-label="Delete item">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        {# Rich content panel — hidden by default. #}
+        <div class="collectible-item-rich-panel hidden border-t border-base-content/5 px-2 py-2 space-y-2">
+            {% include 'trophies/partials/roadmap/formatting_toolbar.html' %}
+            <textarea class="textarea textarea-bordered w-full text-xs collectible-item-body auto-resize"
+                      rows="2"
+                      placeholder="Where to find this collectible, how to grab it, anything tricky..."></textarea>
+            <div class="youtube-attribution-group">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <input type="url" class="input input-bordered input-xs w-full collectible-item-youtube-input youtube-attribution-input" placeholder="YouTube URL (optional)" maxlength="500">
+                </div>
+                <p class="youtube-attribution-preview text-[11px] italic mt-1 ml-5 text-base-content/55 min-h-[0.875rem]"></p>
+            </div>
+            <div class="gallery-section" data-target-kind="collectible_item" data-target-id="">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="text-[0.6rem] text-base-content/40 uppercase tracking-wider font-semibold">Gallery
+                        <span class="gallery-count-badge badge badge-xs badge-ghost ml-1">0</span>
+                    </span>
+                    <button type="button" class="gallery-add-btn btn btn-ghost btn-xs gap-1 text-primary">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Add image
+                    </button>
+                </div>
+                <div class="gallery-grid grid grid-cols-3 md:grid-cols-4 gap-1.5"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
 {# ─── Inline Image Pill Template (for the formatting toolbar's strip) ─── #}
 <template id="inline-image-pill-template">
     <button type="button" class="inline-image-pill btn btn-ghost btn-xs gap-1 px-1.5 border border-base-content/10 hover:border-primary/40">
@@ -495,6 +784,44 @@
         </div>
         <div class="gallery-thumb-caption hidden absolute inset-x-0 bottom-0 bg-black/60 text-white text-[10px] px-1.5 py-0.5 truncate"></div>
     </div>
+</template>
+
+{# ─── Collectible Reference Picker ─── #}
+{# Floating popover used by:                                                #}
+{#   1. The formatting toolbar's collectible-insert button (anchored under  #}
+{#      the active textarea).                                               #}
+{#   2. `[[` autocomplete (anchored at the caret).                          #}
+{# Single shared instance; JS positions and shows it on demand. Items       #}
+{# match the order of types in the roadmap; Up/Down arrows + Enter handle   #}
+{# keyboard nav, Esc closes.                                                #}
+<div id="collectible-picker"
+     class="hidden absolute z-50 bg-base-200 border border-base-300 rounded-lg shadow-2xl w-72 max-h-72 overflow-hidden flex flex-col"
+     data-readonly-exempt>
+    <div class="px-2 py-1.5 border-b border-base-300 bg-base-300/40 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m0 0A7 7 0 105.65 5.65a7 7 0 0010.99 11"/></svg>
+        <input type="text" id="collectible-picker-filter"
+               class="bg-transparent border-0 outline-none focus:ring-0 text-xs flex-1 min-w-0 px-0 py-0"
+               placeholder="Filter collectibles..."
+               autocomplete="off">
+    </div>
+    <div id="collectible-picker-list" class="flex-1 overflow-y-auto py-1"></div>
+    <div id="collectible-picker-empty" class="hidden text-center text-xs italic text-base-content/40 py-3">
+        No collectible types defined yet. Add one in the Collectibles section above.
+    </div>
+</div>
+
+{# ─── Collectible picker row template ─── #}
+<template id="collectible-picker-row-template">
+    <button type="button" class="collectible-picker-row w-full text-left px-2 py-1.5 hover:bg-primary/10 focus:bg-primary/15 outline-none flex items-center gap-2 text-xs">
+        <span class="collectible-picker-row-swatch collectible-swatch shrink-0" data-color="primary">
+            <span class="collectible-picker-row-icon">🎯</span>
+        </span>
+        <span class="flex-1 min-w-0">
+            <span class="collectible-picker-row-name font-medium block truncate"></span>
+            <span class="collectible-picker-row-slug font-mono text-[10px] text-base-content/45 block truncate">[[slug]]</span>
+        </span>
+        <span class="collectible-picker-row-count text-[10px] text-base-content/40 shrink-0"></span>
+    </button>
 </template>
 
 {# ─── General Notes Drawer ─── #}

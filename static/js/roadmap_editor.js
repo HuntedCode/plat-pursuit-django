@@ -82,6 +82,138 @@
     const LEGACY_TROPHY_GUIDE_PATTERN = new RegExp(
         `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/trophy-guides/(\\d+)/?$`
     );
+    // Collectibles — purely client-side BranchProxy patterns. The server
+    // never receives these URLs (only the merged branch_payload).
+    const LEGACY_C_AREAS_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/?$`
+    );
+    const LEGACY_C_AREAS_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/reorder/?$`
+    );
+    const LEGACY_C_AREAS_DETAIL_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/?$`
+    );
+    const LEGACY_C_TYPES_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-types/?$`
+    );
+    const LEGACY_C_TYPES_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-types/reorder/?$`
+    );
+    const LEGACY_C_TYPES_DETAIL_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-types/(-?\\d+)/?$`
+    );
+    const LEGACY_C_ITEMS_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-types/(-?\\d+)/items/?$`
+    );
+    const LEGACY_C_ITEMS_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-types/(-?\\d+)/items/reorder/?$`
+    );
+    const LEGACY_C_ITEMS_DETAIL_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-types/(-?\\d+)/items/(-?\\d+)/?$`
+    );
+    // Area-scoped item operations. Items live nested under a type on the
+    // wire (the schema hasn't changed), but authoring is now per-area, so
+    // the URL space mirrors how the editor thinks about them. The handler
+    // resolves the type from the request body or the item's existing
+    // record, then mutates the same nested storage.
+    const LEGACY_C_AREA_ITEMS_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+|null)/items/?$`
+    );
+    const LEGACY_C_AREA_ITEMS_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+|null)/items/reorder/?$`
+    );
+
+    const COLLECTIBLE_COLORS = ['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'];
+    const COLLECTIBLE_DEFAULT_ICON = '🎯';
+    // Used to assign a starter color for new types so a brand-new roadmap
+    // doesn't end up with five primary-colored types. Cycles through the
+    // palette in declaration order.
+    // <summary> activation behavior fires on Space/Enter even when focus
+    // is on a child <input>. The mechanism: Chrome synthesizes a click
+    // event on the summary in response to the key, and that click is
+    // what toggles the surrounding <details>. stopPropagation on the
+    // input's keydown is NOT enough because the synthesized click is
+    // dispatched independently after the key event.
+    //
+    // The reliable fix: a single capture-phase document listener that
+    // suppresses keyboard-synthesized clicks (detail === 0) on a summary
+    // whenever a form control inside that summary has focus. Real mouse
+    // clicks have detail >= 1 and pass through untouched, so the chevron
+    // / label / count badge still toggle the details normally.
+    function _installSummaryKeyToggleSuppression() {
+        if (window.__rmSummaryKeyToggleInstalled) return;
+        window.__rmSummaryKeyToggleInstalled = true;
+        document.addEventListener('click', (e) => {
+            // detail === 0 → synthesized (keyboard-activated) click;
+            // detail >= 1 → real mouse click. Only intercept the former.
+            if (e.detail !== 0) return;
+            const summary = e.target.closest && e.target.closest('summary');
+            if (!summary) return;
+            const focused = document.activeElement;
+            if (!focused || focused === summary || !summary.contains(focused)) return;
+            const tag = focused.tagName;
+            if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+    }
+    _installSummaryKeyToggleSuppression();
+
+    // Defense-in-depth: also stop Space/Enter keydowns from bubbling out
+    // of inputs nested inside summaries. Some browsers / future Chrome
+    // versions may stop synthesizing the click and just bubble the
+    // keydown to summary's activation handler — the keydown guard
+    // catches that path too. Cheap, no downside.
+    function _stopSummaryToggleKeys(inputEl) {
+        if (!inputEl) return;
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+                e.stopPropagation();
+            }
+        });
+    }
+
+    // Default-name format for new collectible items: "<TypeName> #<N>"
+    // where N is one past the existing count of items of that type.
+    // Used by both "Add item" and the type-swap rename path so the
+    // shape stays consistent across surfaces.
+    function _defaultItemName(typeName, existingCount) {
+        const t = (typeName || '').trim() || 'Item';
+        return `${t} #${existingCount + 1}`;
+    }
+
+    // Strict match against the default-name pattern: same type name +
+    // " #" + digits, end of string. Anything else (admin customization,
+    // appended notes, different separator) is treated as user content
+    // and left alone.
+    function _isDefaultItemName(name, typeName) {
+        const t = (typeName || '').trim();
+        if (!t || !name) return false;
+        const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`^${escaped} #\\d+$`).test(name);
+    }
+
+    function _pickNextCollectibleColor(existingTypes) {
+        const taken = new Set((existingTypes || []).map(t => t.color));
+        for (const c of COLLECTIBLE_COLORS) {
+            if (!taken.has(c)) return c;
+        }
+        return 'primary';
+    }
+    // Slugify mirrors Django's slugify enough for client-side preview.
+    // Server still re-runs slugify on merge, so this is just for the
+    // slug pill display while the type is being edited.
+    function _clientSlugify(name) {
+        return (name || '')
+            .toString()
+            .toLowerCase()
+            .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .substring(0, 50);
+    }
 
     /**
      * Live attribution preview for the YouTube URL inputs (page-level,
@@ -248,6 +380,20 @@
         findStep(tabId, stepId) {
             const tab = this.findTab(tabId);
             return tab ? tab.steps.find(s => s.id === stepId) : null;
+        },
+
+        // Locate a collectible item by id across all types in a tab. Items
+        // are nested under their owning type in branch state, but callers
+        // (notably YT-attribution callbacks) only have the item id. Returns
+        // null if the item isn't found in the live branch state.
+        findCollectibleItem(tabId, itemId) {
+            const tab = this.findTab(tabId);
+            if (!tab) return null;
+            for (const ct of (tab.collectible_types || [])) {
+                const it = (ct.items || []).find(i => i.id === itemId);
+                if (it) return it;
+            }
+            return null;
         },
 
         nextId() {
@@ -488,6 +634,332 @@
                 };
             }
 
+            // ── Collectible Areas ──────────────────────────────────────
+            // Areas are roadmap-scoped (not per-step or per-trophy). We
+            // store them on the tab object for legacy-shape symmetry; the
+            // _legacy_to_flat shim lifts them to the top of the v2 payload.
+
+            // Create area: POST /tab/Y/collectible-areas/
+            if ((match = url.match(LEGACY_C_AREAS_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                if (!tab.collectible_areas) tab.collectible_areas = [];
+                const newArea = {
+                    id: this.nextId(),
+                    name: (body.name || '').trim() || 'New Area',
+                    slug: '',  // server assigns on merge; client preview uses name
+                    order: tab.collectible_areas.length,
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                tab.collectible_areas.push(newArea);
+                this.schedulePush();
+                return { ...newArea };
+            }
+
+            // Reorder areas: POST /tab/Y/collectible-areas/reorder/
+            if ((match = url.match(LEGACY_C_AREAS_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const orderedIds = (body.area_ids || []).map(x => parseInt(x, 10));
+                const m2 = {};
+                (tab.collectible_areas || []).forEach(a => { m2[a.id] = a; });
+                tab.collectible_areas = orderedIds.map(id => m2[id]).filter(Boolean);
+                tab.collectible_areas.forEach((a, i) => { a.order = i; });
+                this.schedulePush();
+                return { status: 'ok' };
+            }
+
+            // Update / delete area: PATCH or DELETE /tab/Y/collectible-areas/A/
+            if ((match = url.match(LEGACY_C_AREAS_DETAIL_PATTERN)) && (m === 'patch' || m === 'delete')) {
+                const tabId = parseInt(match[1], 10);
+                const areaId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                if (!tab.collectible_areas) tab.collectible_areas = [];
+                if (m === 'delete') {
+                    tab.collectible_areas = tab.collectible_areas.filter(a => a.id !== areaId);
+                    // Clear references to this area on items in this tab.
+                    // FK is SET_NULL on the server too, so this matches the
+                    // post-merge shape — items become "Unsorted".
+                    (tab.collectible_types || []).forEach(ct => {
+                        (ct.items || []).forEach(it => {
+                            if (it.area_id === areaId) it.area_id = null;
+                        });
+                    });
+                    this.schedulePush();
+                    return null;
+                }
+                const area = tab.collectible_areas.find(a => a.id === areaId);
+                if (!area) throw new Error(`Area ${areaId} not in branch.`);
+                if ('name' in body) area.name = (body.name || '').trim() || area.name;
+                if ('order' in body) area.order = body.order;
+                area.last_edited_by_id = viewerProfileId;
+                this.schedulePush();
+                return { ...area };
+            }
+
+            // ── Collectible Types ──────────────────────────────────────
+
+            // Create type: POST /tab/Y/collectible-types/
+            if ((match = url.match(LEGACY_C_TYPES_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                if (!tab.collectible_types) tab.collectible_types = [];
+                const newType = {
+                    id: this.nextId(),
+                    name: (body.name || '').trim() || 'New Collectible Type',
+                    slug: '',
+                    color: body.color || _pickNextCollectibleColor(tab.collectible_types),
+                    icon: body.icon || COLLECTIBLE_DEFAULT_ICON,
+                    description: '',
+                    total_count: null,
+                    order: tab.collectible_types.length,
+                    items: [],
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                tab.collectible_types.push(newType);
+                this.schedulePush();
+                return { ...newType };
+            }
+
+            // Reorder types: POST /tab/Y/collectible-types/reorder/
+            if ((match = url.match(LEGACY_C_TYPES_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const orderedIds = (body.type_ids || []).map(x => parseInt(x, 10));
+                const m2 = {};
+                (tab.collectible_types || []).forEach(t => { m2[t.id] = t; });
+                tab.collectible_types = orderedIds.map(id => m2[id]).filter(Boolean);
+                tab.collectible_types.forEach((t, i) => { t.order = i; });
+                this.schedulePush();
+                return { status: 'ok' };
+            }
+
+            // Update / delete type: PATCH or DELETE /tab/Y/collectible-types/T/
+            if ((match = url.match(LEGACY_C_TYPES_DETAIL_PATTERN)) && (m === 'patch' || m === 'delete')) {
+                const tabId = parseInt(match[1], 10);
+                const typeId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                if (!tab.collectible_types) tab.collectible_types = [];
+                if (m === 'delete') {
+                    tab.collectible_types = tab.collectible_types.filter(t => t.id !== typeId);
+                    this.schedulePush();
+                    return null;
+                }
+                const ctype = tab.collectible_types.find(t => t.id === typeId);
+                if (!ctype) throw new Error(`Type ${typeId} not in branch.`);
+                if ('name' in body) ctype.name = (body.name || '').trim() || ctype.name;
+                if ('color' in body && COLLECTIBLE_COLORS.includes(body.color)) ctype.color = body.color;
+                if ('icon' in body) ctype.icon = (body.icon || '').slice(0, 8) || COLLECTIBLE_DEFAULT_ICON;
+                if ('description' in body) ctype.description = (body.description || '').slice(0, 200);
+                if ('total_count' in body) {
+                    const tc = body.total_count;
+                    ctype.total_count = (tc === '' || tc == null) ? null : parseInt(tc, 10);
+                }
+                if ('order' in body) ctype.order = body.order;
+                ctype.last_edited_by_id = viewerProfileId;
+                this.schedulePush();
+                return { ...ctype, items: undefined };
+            }
+
+            // ── Collectible Items ──────────────────────────────────────
+
+            // Create item: POST /tab/Y/collectible-types/T/items/
+            if ((match = url.match(LEGACY_C_ITEMS_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const typeId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const ctype = (tab.collectible_types || []).find(t => t.id === typeId);
+                if (!ctype) throw new Error(`Type ${typeId} not in branch.`);
+                if (!ctype.items) ctype.items = [];
+                const newItem = {
+                    id: this.nextId(),
+                    name: (body.name || '').trim() || 'New Item',
+                    area_id: body.area_id != null ? parseInt(body.area_id, 10) : null,
+                    body: '',
+                    youtube_url: '',
+                    youtube_channel_name: '',
+                    youtube_channel_url: '',
+                    gallery_images: [],
+                    is_missable: false,
+                    is_dlc: false,
+                    order: ctype.items.length,
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                ctype.items.push(newItem);
+                this.schedulePush();
+                return { ...newItem };
+            }
+
+            // Reorder items within a type: POST /tab/Y/collectible-types/T/items/reorder/
+            if ((match = url.match(LEGACY_C_ITEMS_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const typeId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const ctype = (tab.collectible_types || []).find(t => t.id === typeId);
+                if (!ctype) throw new Error(`Type ${typeId} not in branch.`);
+                const orderedIds = (body.item_ids || []).map(x => parseInt(x, 10));
+                const m2 = {};
+                (ctype.items || []).forEach(i => { m2[i.id] = i; });
+                ctype.items = orderedIds.map(id => m2[id]).filter(Boolean);
+                ctype.items.forEach((it, i) => { it.order = i; });
+                this.schedulePush();
+                return { status: 'ok' };
+            }
+
+            // ── Area-scoped item operations ────────────────────────────
+            // The author-visible mental model: items belong to areas in
+            // playthrough order, with type as a *property* of the item
+            // (color/icon/slug). Storage stays nested under types because
+            // that's what the snapshot/merge service expects.
+
+            // Create item in area: POST /tab/Y/collectible-areas/A/items/
+            // Body: { type_id, name }. area_id resolves to null if the
+            // path segment is "null" (Unsorted) or to the area's int id.
+            if ((match = url.match(LEGACY_C_AREA_ITEMS_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const areaSeg = match[2];
+                const areaId = areaSeg === 'null' ? null : parseInt(areaSeg, 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const typeId = parseInt(body.type_id, 10);
+                const ctype = (tab.collectible_types || []).find(t => t.id === typeId);
+                if (!ctype) throw new Error(`Type ${typeId} not in branch.`);
+                if (!ctype.items) ctype.items = [];
+                // New item's order = end of the destination area. Items in
+                // other areas keep their orders; this is the only area
+                // we're appending to.
+                const existingInArea = (tab.collectible_types || [])
+                    .flatMap(ct => (ct.items || []).filter(it => (it.area_id ?? null) === areaId));
+                const newItem = {
+                    id: this.nextId(),
+                    name: (body.name || '').trim() || 'New Item',
+                    area_id: areaId,
+                    body: '',
+                    youtube_url: '',
+                    youtube_channel_name: '',
+                    youtube_channel_url: '',
+                    gallery_images: [],
+                    is_missable: false,
+                    is_dlc: false,
+                    order: existingInArea.length,
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                ctype.items.push(newItem);
+                this.schedulePush();
+                return { ...newItem };
+            }
+
+            // Reorder items within an area: POST /tab/Y/collectible-areas/A/items/reorder/
+            // Body: { item_ids: [...] }. The order field is set sequentially
+            // for items in this area only — other areas keep their orders.
+            if ((match = url.match(LEGACY_C_AREA_ITEMS_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const areaSeg = match[2];
+                const areaId = areaSeg === 'null' ? null : parseInt(areaSeg, 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const orderedIds = (body.item_ids || []).map(x => parseInt(x, 10));
+                // Build a flat lookup across all types for this tab.
+                const byId = {};
+                (tab.collectible_types || []).forEach(ct => {
+                    (ct.items || []).forEach(it => { byId[it.id] = it; });
+                });
+                orderedIds.forEach((id, i) => {
+                    const item = byId[id];
+                    if (!item) return;
+                    // Defensive: ignore reorder requests for items not in
+                    // this area (e.g. stale UI). The expected case is all
+                    // ids belong to the area being reordered.
+                    if ((item.area_id ?? null) !== areaId) return;
+                    item.order = i;
+                });
+                this.schedulePush();
+                return { status: 'ok' };
+            }
+
+            // Update / delete item: PATCH or DELETE /tab/Y/collectible-types/T/items/I/
+            //
+            // type_id in the URL is the item's *current* owning type. The
+            // PATCH body may move the item to a new type via `type_id` —
+            // we relocate it across the nested arrays in that case (storage
+            // shape stays as types→items even though authoring is per-area).
+            if ((match = url.match(LEGACY_C_ITEMS_DETAIL_PATTERN)) && (m === 'patch' || m === 'delete')) {
+                const tabId = parseInt(match[1], 10);
+                const typeId = parseInt(match[2], 10);
+                const itemId = parseInt(match[3], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const ctype = (tab.collectible_types || []).find(t => t.id === typeId);
+                if (!ctype) throw new Error(`Type ${typeId} not in branch.`);
+                if (m === 'delete') {
+                    ctype.items = (ctype.items || []).filter(it => it.id !== itemId);
+                    this.schedulePush();
+                    return null;
+                }
+                let item = (ctype.items || []).find(it => it.id === itemId);
+                if (!item) throw new Error(`Item ${itemId} not in branch.`);
+
+                // Detect the area-change case BEFORE mutating, so we know
+                // to recalc the destination order. Same for type-change.
+                const incomingAreaSpecified = 'area_id' in body;
+                const incomingArea = incomingAreaSpecified
+                    ? (body.area_id == null || body.area_id === '' ? null : parseInt(body.area_id, 10))
+                    : (item.area_id ?? null);
+                const incomingTypeSpecified = 'type_id' in body && body.type_id != null;
+                const incomingTypeId = incomingTypeSpecified ? parseInt(body.type_id, 10) : typeId;
+                const oldArea = item.area_id ?? null;
+                const areaChanged = incomingAreaSpecified && incomingArea !== oldArea;
+
+                if ('name' in body) item.name = (body.name || '').trim() || item.name;
+                if (incomingAreaSpecified) item.area_id = incomingArea;
+                if ('body' in body) item.body = body.body || '';
+                if ('youtube_url' in body) item.youtube_url = (body.youtube_url || '').trim();
+                if ('is_missable' in body) item.is_missable = !!body.is_missable;
+                if ('is_dlc' in body) item.is_dlc = !!body.is_dlc;
+                if ('gallery_images' in body) item.gallery_images = body.gallery_images || [];
+                if ('order' in body) item.order = body.order;
+                item.last_edited_by_id = viewerProfileId;
+
+                // Type change: pop the item from the old type's items[] and
+                // push to the new type. Storage shape is types→items; the
+                // FK is implicit in nesting. Server merge re-resolves the
+                // type_id at write time (creates new RoadmapCollectibleItem
+                // rows under the right type) so we just need to keep the
+                // client mirror consistent.
+                if (incomingTypeSpecified && incomingTypeId !== typeId) {
+                    const newType = (tab.collectible_types || []).find(t => t.id === incomingTypeId);
+                    if (newType) {
+                        ctype.items = (ctype.items || []).filter(it => it.id !== itemId);
+                        if (!newType.items) newType.items = [];
+                        newType.items.push(item);
+                    }
+                }
+
+                // Area change: assign order = end of destination area so
+                // the item lands at the bottom of its new bucket. Author
+                // can drag-reorder from there.
+                if (areaChanged) {
+                    const dest = (tab.collectible_types || [])
+                        .flatMap(t => (t.items || []).filter(i => (i.area_id ?? null) === incomingArea && i.id !== itemId));
+                    item.order = dest.length;
+                }
+
+                this.schedulePush();
+                return { ...item };
+            }
+
             throw new Error(`BranchProxy: unhandled ${method.toUpperCase()} ${url}`);
         },
 
@@ -501,6 +973,13 @@
                 (tab.trophy_guides || []).forEach(g => {
                     if (typeof g.id === 'number' && g.id < 0) g.id = null;
                 });
+                // Collectibles: keep negative ids on the wire for areas
+                // and items. The merge service expects negative ids on
+                // newly-created entries (so it can build an `area_id_map`
+                // that translates an item's `area_id: -X` reference to
+                // the freshly inserted area's live id). Types use the
+                // same convention for symmetry; the merge differentiates
+                // create vs. update by `id is None or id < 0`.
             });
             return cloned;
         },
@@ -952,6 +1431,45 @@
                     last_edited_by_id: tg.last_edited_by_id,
                 };
             });
+
+            // Collectibles — branch + tabsData both use lists. Mirror them
+            // verbatim so renderCollectibles can treat tabsData as the
+            // single source of truth for in-DOM rendering decisions.
+            existing.collectible_areas = (branchTab.collectible_areas || []).map(a => ({
+                id: a.id,
+                name: a.name || '',
+                slug: a.slug || '',
+                order: a.order,
+                created_by_id: a.created_by_id,
+                last_edited_by_id: a.last_edited_by_id,
+            }));
+            existing.collectible_types = (branchTab.collectible_types || []).map(ct => ({
+                id: ct.id,
+                name: ct.name || '',
+                slug: ct.slug || '',
+                color: ct.color || 'primary',
+                icon: ct.icon || COLLECTIBLE_DEFAULT_ICON,
+                description: ct.description || '',
+                total_count: ct.total_count,
+                order: ct.order,
+                created_by_id: ct.created_by_id,
+                last_edited_by_id: ct.last_edited_by_id,
+                items: (ct.items || []).map(it => ({
+                    id: it.id,
+                    name: it.name || '',
+                    area_id: it.area_id == null ? null : it.area_id,
+                    body: it.body || '',
+                    youtube_url: it.youtube_url || '',
+                    youtube_channel_name: it.youtube_channel_name || '',
+                    youtube_channel_url: it.youtube_channel_url || '',
+                    gallery_images: Array.isArray(it.gallery_images) ? it.gallery_images.slice() : [],
+                    is_missable: !!it.is_missable,
+                    is_dlc: !!it.is_dlc,
+                    order: it.order,
+                    created_by_id: it.created_by_id,
+                    last_edited_by_id: it.last_edited_by_id,
+                })),
+            }));
 
             // Server-rendered DOM fields that aren't hydrated by any
             // existing init function — push branch values into them.
@@ -2879,6 +3397,19 @@
                 if (guide && !Array.isArray(guide.gallery_images)) guide.gallery_images = [];
                 return guide;
             }
+            if (target.kind === 'collectible_item') {
+                // Collectible items live nested under a type. Find any type
+                // that owns this item id; we don't need the type id from the
+                // caller because item ids are roadmap-unique on the wire.
+                for (const ct of (tab.collectible_types || [])) {
+                    const item = (ct.items || []).find(i => i.id === target.id);
+                    if (item) {
+                        if (!Array.isArray(item.gallery_images)) item.gallery_images = [];
+                        return item;
+                    }
+                }
+                return null;
+            }
             return null;
         },
 
@@ -3305,6 +3836,1070 @@
     }
 
     // ------------------------------------------------------------------ //
+    //  Collectibles (areas + types + items)
+    // ------------------------------------------------------------------ //
+    /**
+     * Per-roadmap collectible vocabulary editor.
+     *
+     * Areas, types, and items are all backed by BranchProxy state via
+     * synthetic legacy URLs. The render functions tear down and rebuild
+     * DOM rows from the in-memory tabsData mirror; field-level edits
+     * patch the branch via debounced saves; reorders use DragReorderManager.
+     *
+     * The controller also owns the formatting-toolbar collectible insert
+     * button and the `[[` autocomplete popover, since both surface the
+     * same picker UI.
+     */
+    const CollectibleController = {
+        // ── Public API ─────────────────────────────────────────────
+        init() {
+            this._wireAreaAddBtn();
+            this._wireTypeAddBtn();
+            this._wireGlobalKeyHandlers();
+            this._wirePicker();
+        },
+
+        renderAll(tabId) {
+            // BranchProxy.state is the canonical store for collectibles;
+            // tabsData is a derived view that the rest of the editor reads
+            // from. Re-mirror on every render so CRUD paths only have to
+            // mutate one store (BranchProxy) and we never paint stale data.
+            this._syncTabsDataFromBranch(tabId);
+            this._renderTypes(tabId);
+            this._renderAreas(tabId);
+            this._refreshFormattingToolbarVisibility(tabId);
+        },
+
+        _syncTabsDataFromBranch(tabId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            const branchTab = (BranchProxy.state?.tabs || []).find(t => t.id === tabId);
+            if (!tab || !branchTab) return;
+            tab.collectible_areas = (branchTab.collectible_areas || []).map(a => ({ ...a }));
+            tab.collectible_types = (branchTab.collectible_types || []).map(ct => ({
+                ...ct,
+                items: (ct.items || []).map(it => ({ ...it })),
+            }));
+        },
+
+        // Flatten items for an area across all types, sorted by `order`.
+        // areaId === null returns the "Unsorted" bucket. Each result item
+        // carries `_typeId/_typeName/_color/_icon` for render convenience.
+        _itemsForArea(tab, areaId) {
+            const out = [];
+            (tab.collectible_types || []).forEach(ct => {
+                (ct.items || []).forEach(it => {
+                    if ((it.area_id ?? null) === areaId) {
+                        out.push({
+                            ...it,
+                            _typeId: ct.id,
+                            _typeName: ct.name || '(unnamed)',
+                            _color: ct.color || 'primary',
+                            _icon: ct.icon || COLLECTIBLE_DEFAULT_ICON,
+                        });
+                    }
+                });
+            });
+            out.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            return out;
+        },
+
+        // True iff any item across all types has area_id === null. Used to
+        // decide whether to render the "Unsorted" pseudo-area card.
+        _hasUnsortedItems(tab) {
+            return (tab.collectible_types || []).some(ct =>
+                (ct.items || []).some(it => (it.area_id ?? null) === null)
+            );
+        },
+
+        // ── Areas rendering ────────────────────────────────────────
+        _renderAreas(tabId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            if (!tab) return;
+            const container = document.querySelector(
+                `.collectible-areas-container[data-tab-id="${tabId}"]`
+            );
+            if (!container) return;
+            container.innerHTML = '';
+
+            const empty = container.parentElement.querySelector('.collectible-areas-empty');
+            const countBadge = container.parentElement.querySelector('.collectible-areas-count');
+            const areas = tab.collectible_areas || [];
+            if (countBadge) countBadge.textContent = String(areas.length);
+
+            const hasUnsorted = this._hasUnsortedItems(tab);
+            // Empty-state visible only when there are no real areas AND no
+            // orphaned items needing the Unsorted bucket.
+            if (empty) empty.classList.toggle('hidden', areas.length > 0 || hasUnsorted);
+
+            areas.forEach(area => {
+                const el = this._buildAreaCard(tabId, tab, area);
+                container.appendChild(el);
+            });
+            // Append a "Unsorted" pseudo-area at the end if any items have
+            // area_id=null. Render-only: the editor doesn't create a real
+            // RoadmapCollectibleArea row for it.
+            if (hasUnsorted) {
+                const el = this._buildAreaCard(tabId, tab, null);
+                container.appendChild(el);
+            }
+
+            this._initAreaDragReorder(tabId);
+        },
+
+        _buildAreaCard(tabId, tab, area) {
+            // `area === null` → render the "Unsorted" pseudo-card (no name
+            // input, no delete, no drag handle, no real id).
+            const tpl = document.getElementById('collectible-area-card-template');
+            const el = tpl.content.firstElementChild.cloneNode(true);
+            const isUnsorted = area === null;
+            const areaId = isUnsorted ? null : area.id;
+            el.dataset.areaId = isUnsorted ? 'null' : String(areaId);
+            if (!isUnsorted) el.dataset.itemId = String(areaId);
+            // Open by default so authors can see items without an extra click.
+            el.open = true;
+
+            const nameInput = el.querySelector('.collectible-area-name-input');
+            const deleteBtn = el.querySelector('.collectible-area-delete-btn');
+            const handle = el.querySelector('.collectible-area-handle');
+
+            if (isUnsorted) {
+                // Hide author-only chrome on the pseudo-card.
+                nameInput.value = 'Unsorted';
+                nameInput.disabled = true;
+                nameInput.classList.add('italic', 'text-base-content/55');
+                deleteBtn?.classList.add('hidden');
+                handle?.classList.add('invisible');
+            } else {
+                nameInput.value = area.name || '';
+                const debounced = debounce(
+                    () => this._patchArea(tabId, areaId, { name: nameInput.value }),
+                    600,
+                );
+                nameInput.addEventListener('input', () => {
+                    setSaveStatus('unsaved');
+                    debounced();
+                });
+                nameInput.addEventListener('click', (e) => e.stopPropagation());
+                _stopSummaryToggleKeys(nameInput);
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._deleteArea(tabId, areaId);
+                });
+            }
+
+            // Items list inside the area
+            const items = this._itemsForArea(tab, areaId);
+            const itemsContainer = el.querySelector('.collectible-items-container');
+            const itemsEmpty = el.querySelector('.collectible-items-empty');
+            const noTypesHint = el.querySelector('.collectible-no-types-hint');
+            const countBadge = el.querySelector('.collectible-area-item-count');
+            countBadge.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
+
+            const types = tab.collectible_types || [];
+            const noTypes = types.length === 0;
+
+            if (items.length === 0) {
+                itemsContainer.classList.add('hidden');
+                if (noTypes) {
+                    itemsEmpty.classList.add('hidden');
+                    noTypesHint.classList.remove('hidden');
+                } else {
+                    itemsEmpty.classList.remove('hidden');
+                    noTypesHint.classList.add('hidden');
+                }
+            } else {
+                itemsContainer.classList.remove('hidden');
+                itemsEmpty.classList.add('hidden');
+                noTypesHint.classList.add('hidden');
+            }
+
+            items.forEach(item => {
+                const row = this._buildItemElement(tabId, tab, item, areaId);
+                itemsContainer.appendChild(row);
+            });
+
+            // Bulk-paste (per-area, with type picker)
+            const bulkBtn = el.querySelector('.collectible-bulk-toggle-btn');
+            const bulkWrap = el.querySelector('.collectible-bulk-paste-wrap');
+            const bulkInput = el.querySelector('.collectible-bulk-paste-input');
+            const bulkApply = el.querySelector('.collectible-bulk-apply-btn');
+            const bulkCancel = el.querySelector('.collectible-bulk-cancel-btn');
+            const bulkTypeSelect = el.querySelector('.collectible-bulk-type-select');
+            this._populateTypeSelect(bulkTypeSelect, types, types[0]?.id);
+            // Disable the bulk-paste path entirely when there are no types.
+            bulkBtn.disabled = noTypes;
+            bulkBtn.title = noTypes
+                ? 'Add a Collectible Type above first'
+                : 'Bulk-paste a list of item names';
+            bulkBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (noTypes) return;
+                bulkWrap.classList.toggle('hidden');
+                if (!bulkWrap.classList.contains('hidden')) bulkInput.focus();
+            });
+            bulkCancel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                bulkInput.value = '';
+                bulkWrap.classList.add('hidden');
+            });
+            bulkApply.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const lines = bulkInput.value
+                    .split('\n')
+                    .map(l => l.trim())
+                    .filter(l => l.length > 0);
+                if (lines.length === 0) return;
+                const typeId = parseInt(bulkTypeSelect.value, 10);
+                if (!typeId) return;
+                bulkApply.disabled = true;
+                try {
+                    const seg = isUnsorted ? 'null' : String(areaId);
+                    for (const line of lines) {
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/items/`,
+                            { type_id: typeId, name: line.slice(0, 200) }
+                        );
+                    }
+                    bulkInput.value = '';
+                    bulkWrap.classList.add('hidden');
+                    Toast.show(`Added ${lines.length} item${lines.length === 1 ? '' : 's'}.`, 'success');
+                    this.renderAll(tabId);
+                } catch (err) {
+                    Toast.show('Failed to add items.', 'error');
+                } finally {
+                    bulkApply.disabled = false;
+                }
+            });
+
+            // Add item button
+            const addBtn = el.querySelector('.collectible-add-item-btn');
+            addBtn.disabled = noTypes;
+            addBtn.title = noTypes ? 'Add a Collectible Type above first' : 'Add an item to this area';
+            addBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (noTypes) return;
+                this._addItemToArea(tabId, areaId);
+            });
+
+            // Per-area item drag reorder, attached after the items list is
+            // populated.
+            this._initItemDragReorderForArea(tabId, areaId, itemsContainer);
+
+            return el;
+        },
+
+        _populateTypeSelect(selectEl, types, currentValue) {
+            selectEl.innerHTML = '';
+            (types || []).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = String(t.id);
+                opt.textContent = `${t.icon || COLLECTIBLE_DEFAULT_ICON} ${t.name || '(unnamed)'}`;
+                selectEl.appendChild(opt);
+            });
+            if (currentValue != null) selectEl.value = String(currentValue);
+        },
+
+        async _addArea(tabId) {
+            try {
+                const created = await apiCall(
+                    'post',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/`,
+                    { name: 'New Area' }
+                );
+                this.renderAll(tabId);
+                // Focus the new chip's input so the writer can immediately type.
+                requestAnimationFrame(() => {
+                    const newChip = document.querySelector(
+                        `.collectible-area-chip[data-area-id="${created.id}"] .collectible-area-name-input`
+                    );
+                    newChip?.focus();
+                    newChip?.select();
+                });
+            } catch (err) {
+                Toast.show('Failed to add area.', 'error');
+            }
+        },
+
+        async _patchArea(tabId, areaId, patch) {
+            try {
+                await apiCall(
+                    'patch',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/`,
+                    patch
+                );
+                // Update local mirror without full re-render to preserve focus.
+                const tab = tabsData.find(t => t.id === tabId);
+                const a = (tab?.collectible_areas || []).find(x => x.id === areaId);
+                if (a && 'name' in patch) a.name = patch.name;
+            } catch (err) {
+                Toast.show('Failed to update area.', 'error');
+            }
+        },
+
+        async _deleteArea(tabId, areaId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            const area = (tab?.collectible_areas || []).find(a => a.id === areaId);
+            const used = (tab?.collectible_types || []).reduce((acc, ct) => {
+                return acc + (ct.items || []).filter(i => i.area_id === areaId).length;
+            }, 0);
+            if (used > 0) {
+                if (!confirm(`Delete "${area?.name || 'this area'}"? ${used} item${used === 1 ? '' : 's'} will become "Unsorted".`)) return;
+            }
+            try {
+                await apiCall(
+                    'delete',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/`
+                );
+                if (tab) {
+                    tab.collectible_areas = (tab.collectible_areas || []).filter(a => a.id !== areaId);
+                    (tab.collectible_types || []).forEach(ct => {
+                        (ct.items || []).forEach(it => {
+                            if (it.area_id === areaId) it.area_id = null;
+                        });
+                    });
+                }
+                this.renderAll(tabId);
+            } catch (err) {
+                Toast.show('Failed to delete area.', 'error');
+            }
+        },
+
+        _initAreaDragReorder(tabId) {
+            const container = document.querySelector(
+                `.collectible-areas-container[data-tab-id="${tabId}"]`
+            );
+            if (!container) return;
+            new window.PlatPursuit.DragReorderManager({
+                container,
+                handleSelector: '.collectible-area-handle',
+                itemSelector: '.collectible-area-card',
+                onReorder: async (_itemId, _pos, allItemIds) => {
+                    // The Unsorted pseudo-card has data-area-id="null" and
+                    // is excluded from the server's reorder set — its sort
+                    // position is conceptually fixed (always at the end).
+                    const realIds = allItemIds.filter(x => x !== 'null').map(x => parseInt(x, 10));
+                    try {
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/reorder/`,
+                            { area_ids: realIds }
+                        );
+                        const tab = tabsData.find(t => t.id === tabId);
+                        if (tab) {
+                            const m = {};
+                            (tab.collectible_areas || []).forEach(a => { m[a.id] = a; });
+                            tab.collectible_areas = realIds.map(id => m[id]).filter(Boolean);
+                            tab.collectible_areas.forEach((a, i) => { a.order = i; });
+                        }
+                    } catch (err) {
+                        Toast.show('Failed to reorder areas.', 'error');
+                    }
+                },
+            });
+        },
+
+        // ── Types rendering ────────────────────────────────────────
+        _renderTypes(tabId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            if (!tab) return;
+            const container = document.querySelector(
+                `.collectible-types-container[data-tab-id="${tabId}"]`
+            );
+            if (!container) return;
+            container.innerHTML = '';
+
+            const empty = container.parentElement.querySelector('.collectible-types-empty');
+            const countBadge = container.parentElement.querySelector('.collectible-types-count');
+            const types = tab.collectible_types || [];
+            if (countBadge) countBadge.textContent = String(types.length);
+            if (empty) empty.classList.toggle('hidden', types.length > 0);
+
+            types.forEach(ct => {
+                const el = this._buildTypeElement(tabId, ct, tab.collectible_areas || []);
+                container.appendChild(el);
+            });
+
+            this._initTypeDragReorder(tabId);
+        },
+
+        _buildTypeElement(tabId, ctype, _areas) {
+            // _areas was used by the legacy per-type items list; kept for
+            // call-site compatibility but unused now (items live in areas).
+            const tpl = document.getElementById('collectible-type-template');
+            const el = tpl.content.firstElementChild.cloneNode(true);
+            el.dataset.typeId = ctype.id;
+            el.dataset.itemId = ctype.id;
+            el.dataset.tabId = tabId;
+
+            // Name + slug pill
+            const nameInput = el.querySelector('.collectible-type-name-input');
+            nameInput.value = ctype.name || '';
+            const slugPill = el.querySelector('.collectible-type-slug-pill');
+            const updateSlugPill = () => {
+                const slug = ctype.slug || _clientSlugify(ctype.name) || '...';
+                slugPill.textContent = `[[${slug}]]`;
+                slugPill.classList.toggle('hidden', !ctype.name);
+            };
+            updateSlugPill();
+
+            // Color swatch + icon glyph in summary
+            const swatch = el.querySelector('.collectible-type-color-swatch');
+            swatch.dataset.color = ctype.color || 'primary';
+            const iconGlyph = el.querySelector('.collectible-type-icon-glyph');
+            iconGlyph.textContent = ctype.icon || COLLECTIBLE_DEFAULT_ICON;
+
+            // Total count + items-using-this-type badge. The badge counts
+            // items still nested under this type in BranchProxy state —
+            // useful as a "what depends on this type" gut-check before
+            // deleting it.
+            const totalInput = el.querySelector('.collectible-type-total-input');
+            totalInput.value = ctype.total_count == null ? '' : String(ctype.total_count);
+            const itemCountBadge = el.querySelector('.collectible-type-item-count');
+            itemCountBadge.textContent = String((ctype.items || []).length);
+
+            // Color picker (in expanded body)
+            const colorPicker = el.querySelector('.collectible-type-color-picker');
+            colorPicker.querySelectorAll('.collectible-color-btn').forEach(btn => {
+                btn.classList.toggle('is-selected', btn.dataset.color === (ctype.color || 'primary'));
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this._patchType(tabId, ctype.id, { color: btn.dataset.color });
+                    colorPicker.querySelectorAll('.collectible-color-btn').forEach(b =>
+                        b.classList.toggle('is-selected', b === btn)
+                    );
+                    swatch.dataset.color = btn.dataset.color;
+                    if (ctype) ctype.color = btn.dataset.color;
+                });
+            });
+
+            // Icon input
+            const iconInput = el.querySelector('.collectible-type-icon-input');
+            iconInput.value = ctype.icon || COLLECTIBLE_DEFAULT_ICON;
+            const debouncedIcon = debounce(() => {
+                const v = iconInput.value.trim().slice(0, 8) || COLLECTIBLE_DEFAULT_ICON;
+                this._patchType(tabId, ctype.id, { icon: v });
+                iconGlyph.textContent = v;
+                ctype.icon = v;
+            }, 500);
+            iconInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedIcon(); });
+
+            // Description input
+            const descInput = el.querySelector('.collectible-type-description-input');
+            descInput.value = ctype.description || '';
+            const debouncedDesc = debounce(() => {
+                const v = descInput.value.slice(0, 200);
+                this._patchType(tabId, ctype.id, { description: v });
+                ctype.description = v;
+            }, 600);
+            descInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedDesc(); });
+
+            // Name editing — also updates slug pill preview
+            const debouncedName = debounce(() => {
+                const v = nameInput.value.trim();
+                this._patchType(tabId, ctype.id, { name: v });
+                ctype.name = v;
+                updateSlugPill();
+            }, 600);
+            nameInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedName(); });
+            nameInput.addEventListener('click', (e) => e.stopPropagation());
+            _stopSummaryToggleKeys(nameInput);
+
+            // Total count
+            const debouncedTotal = debounce(() => {
+                const raw = totalInput.value;
+                const v = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+                this._patchType(tabId, ctype.id, { total_count: v });
+                ctype.total_count = v;
+            }, 500);
+            totalInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedTotal(); });
+            totalInput.addEventListener('click', (e) => e.stopPropagation());
+            _stopSummaryToggleKeys(totalInput);
+
+            // Delete type
+            el.querySelector('.collectible-type-delete-btn').addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const itemsCount = (ctype.items || []).length;
+                const msg = itemsCount > 0
+                    ? `Delete "${ctype.name || 'this type'}" and ${itemsCount} item${itemsCount === 1 ? '' : 's'}? This can't be undone (until you discard the branch).`
+                    : `Delete "${ctype.name || 'this type'}"?`;
+                if (!confirm(msg)) return;
+                this._deleteType(tabId, ctype.id);
+            });
+
+            // Stop summary clicks within these inputs from toggling the <details>.
+            el.querySelector('summary')?.addEventListener('click', (e) => {
+                // Only toggle when the click is on the summary background or chevron.
+                const t = e.target;
+                if (t.closest('input, select, button, .collectible-color-btn')) {
+                    e.preventDefault();
+                }
+            });
+
+            return el;
+        },
+
+        async _addType(tabId) {
+            try {
+                const created = await apiCall(
+                    'post',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/`,
+                    { name: 'New Collectible Type' }
+                );
+                this.renderAll(tabId);
+                requestAnimationFrame(() => {
+                    const card = document.querySelector(
+                        `.collectible-type-card[data-type-id="${created.id}"]`
+                    );
+                    if (card) {
+                        card.open = true;
+                        card.querySelector('.collectible-type-name-input')?.focus();
+                        card.querySelector('.collectible-type-name-input')?.select();
+                    }
+                });
+            } catch (err) {
+                Toast.show('Failed to add collectible type.', 'error');
+            }
+        },
+
+        async _patchType(tabId, typeId, patch) {
+            try {
+                await apiCall(
+                    'patch',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/${typeId}/`,
+                    patch
+                );
+            } catch (err) {
+                Toast.show('Failed to update type.', 'error');
+            }
+        },
+
+        async _deleteType(tabId, typeId) {
+            try {
+                await apiCall(
+                    'delete',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/${typeId}/`
+                );
+                const tab = tabsData.find(t => t.id === tabId);
+                if (tab) {
+                    tab.collectible_types = (tab.collectible_types || []).filter(t => t.id !== typeId);
+                }
+                this.renderAll(tabId);
+            } catch (err) {
+                Toast.show('Failed to delete type.', 'error');
+            }
+        },
+
+        _initTypeDragReorder(tabId) {
+            const container = document.querySelector(
+                `.collectible-types-container[data-tab-id="${tabId}"]`
+            );
+            if (!container) return;
+            new window.PlatPursuit.DragReorderManager({
+                container,
+                handleSelector: '.collectible-type-handle',
+                itemSelector: '.collectible-type-card',
+                onReorder: async (_itemId, _pos, allItemIds) => {
+                    try {
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/reorder/`,
+                            { type_ids: allItemIds.map(x => parseInt(x, 10)) }
+                        );
+                        const tab = tabsData.find(t => t.id === tabId);
+                        if (tab) {
+                            const m = {};
+                            (tab.collectible_types || []).forEach(t => { m[t.id] = t; });
+                            tab.collectible_types = allItemIds.map(id => m[parseInt(id, 10)]).filter(Boolean);
+                            tab.collectible_types.forEach((t, i) => { t.order = i; });
+                        }
+                    } catch (err) {
+                        Toast.show('Failed to reorder types.', 'error');
+                    }
+                },
+            });
+        },
+
+        // ── Items rendering ────────────────────────────────────────
+        // Items are rendered inside their containing area card (not under
+        // a type) so authors see playthrough order. The owning type is a
+        // PROPERTY of the row (color/icon swatch + dropdown selector).
+        // Storage stays nested under types in BranchProxy state — we look
+        // up the current type from the in-memory tab on each interaction.
+
+        _findTypeForItem(tab, itemId) {
+            for (const ct of (tab.collectible_types || [])) {
+                if ((ct.items || []).some(i => i.id === itemId)) return ct;
+            }
+            return null;
+        },
+
+        _buildItemElement(tabId, tab, item, areaId) {
+            // `item` here is enriched with `_typeId/_typeName/_color/_icon`
+            // by `_itemsForArea`. `areaId` is the area this row belongs to
+            // (null for the Unsorted bucket).
+            const tpl = document.getElementById('collectible-item-template');
+            const el = tpl.content.firstElementChild.cloneNode(true);
+            el.dataset.itemId = item.id;
+            el.dataset.itemRowId = item.id;
+            el.dataset.typeId = String(item._typeId);
+
+            // Type swatch (color + icon) reflecting the item's current type
+            const swatch = el.querySelector('.collectible-item-type-swatch');
+            swatch.dataset.color = item._color;
+            const iconSpan = el.querySelector('.collectible-item-type-icon');
+            iconSpan.textContent = item._icon;
+
+            // Name input
+            const nameInput = el.querySelector('.collectible-item-name-input');
+            nameInput.value = item.name || '';
+            const debouncedName = debounce(() => {
+                this._patchItem(tabId, item._typeId, item.id, { name: nameInput.value });
+                item.name = nameInput.value;
+            }, 600);
+            nameInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedName(); });
+
+            // Type dropdown — switching reassigns the owning type. The
+            // BranchProxy handler relocates the item across the nested
+            // collectible_types[*].items[] arrays; the merge service's
+            // pre-pass re-points the FK on the live row. Selecting a new
+            // type triggers a full re-render so the swatch/icon refresh.
+            const typeSelect = el.querySelector('.collectible-item-type-select');
+            this._populateTypeSelect(typeSelect, tab.collectible_types || [], item._typeId);
+            typeSelect.addEventListener('change', () => {
+                const newTypeId = parseInt(typeSelect.value, 10);
+                if (!newTypeId || newTypeId === item._typeId) return;
+                // If the current name still matches the OLD type's
+                // default-name pattern, regenerate the default for the
+                // NEW type. Anything else is treated as admin
+                // customization and left alone.
+                const types = tab.collectible_types || [];
+                const oldType = types.find(t => t.id === item._typeId);
+                const newType = types.find(t => t.id === newTypeId);
+                const patch = { type_id: newTypeId };
+                if (_isDefaultItemName(item.name, oldType?.name)) {
+                    patch.name = _defaultItemName(
+                        newType?.name,
+                        (newType?.items || []).length,
+                    );
+                }
+                this._patchItem(tabId, item._typeId, item.id, patch);
+                // Re-render is the simplest path — swatch, dropdown, and
+                // ownership-state all change at once.
+                this.renderAll(tabId);
+            });
+
+            const missableCb = el.querySelector('.collectible-item-missable');
+            missableCb.checked = !!item.is_missable;
+            missableCb.addEventListener('change', () => {
+                this._patchItem(tabId, item._typeId, item.id, { is_missable: missableCb.checked });
+                item.is_missable = missableCb.checked;
+            });
+            const dlcCb = el.querySelector('.collectible-item-dlc');
+            dlcCb.checked = !!item.is_dlc;
+            dlcCb.addEventListener('change', () => {
+                this._patchItem(tabId, item._typeId, item.id, { is_dlc: dlcCb.checked });
+                item.is_dlc = dlcCb.checked;
+            });
+
+            // Native <label> behavior should already toggle the wrapped
+            // checkbox when the user clicks the text — but something in
+            // the editor is intercepting that flow. Take ownership of
+            // the label-click and toggle manually so the entire label
+            // (text + box + gap) is consistently clickable.
+            [missableCb, dlcCb].forEach(cb => {
+                const label = cb.closest('label');
+                if (!label) return;
+                label.addEventListener('click', (e) => {
+                    // Direct click on the input itself: let the native
+                    // toggle proceed so we don't double-flip.
+                    if (e.target === cb) return;
+                    e.preventDefault();
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            });
+
+            // Rich content panel toggle + indicators
+            const richToggle = el.querySelector('.collectible-item-rich-toggle');
+            const richPanel = el.querySelector('.collectible-item-rich-panel');
+            const richEmptyIcon = el.querySelector('.collectible-item-rich-empty');
+            const richFilledIcon = el.querySelector('.collectible-item-rich-filled');
+            const updateRichIndicator = () => {
+                const hasContent = !!(item.body || item.youtube_url || (item.gallery_images || []).length);
+                richEmptyIcon.classList.toggle('hidden', hasContent);
+                richFilledIcon.classList.toggle('hidden', !hasContent);
+            };
+            updateRichIndicator();
+            richToggle.addEventListener('click', () => {
+                richPanel.classList.toggle('hidden');
+            });
+
+            // Body textarea
+            const bodyTextarea = el.querySelector('.collectible-item-body');
+            bodyTextarea.value = item.body || '';
+            const debouncedBody = debounce(() => {
+                this._patchItem(tabId, item._typeId, item.id, { body: bodyTextarea.value });
+                item.body = bodyTextarea.value;
+                updateRichIndicator();
+            }, 800);
+            bodyTextarea.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedBody(); });
+
+            // YouTube input + attribution
+            const ytInput = el.querySelector('.collectible-item-youtube-input');
+            ytInput.value = item.youtube_url || '';
+            const debouncedYt = debounce(() => {
+                this._patchItem(tabId, item._typeId, item.id, { youtube_url: ytInput.value });
+                item.youtube_url = ytInput.value;
+                updateRichIndicator();
+            }, 800);
+            ytInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedYt(); });
+            // The wire callback fires when the live attribution preview
+            // resolves (debounced ~1.2s after typing). It must update the
+            // *live BranchProxy* record so the autosaved branch payload
+            // carries channel info — `item` here is the flattened render
+            // copy from `_itemsForArea`, not the canonical source. Steps
+            // / trophy guides do the same lookup-and-write pattern.
+            YoutubeAttribution.wire(ytInput, (channelName, channelUrl) => {
+                const liveItem = BranchProxy.findCollectibleItem(tabId, item.id);
+                if (!liveItem) return;
+                liveItem.youtube_channel_name = channelName || '';
+                liveItem.youtube_channel_url = channelUrl || '';
+                BranchProxy.schedulePush();
+            });
+            YoutubeAttribution.showInitial(ytInput, item.youtube_channel_name, item.youtube_channel_url);
+
+            // Gallery section
+            const gallerySection = el.querySelector('.gallery-section');
+            if (gallerySection) {
+                GalleryController.mountSection(gallerySection, {
+                    kind: 'collectible_item', id: item.id, tabId,
+                });
+            }
+
+            // Delete item
+            el.querySelector('.collectible-item-delete-btn').addEventListener('click', () => {
+                if (!confirm(`Delete "${item.name || 'this item'}"?`)) return;
+                this._deleteItem(tabId, item._typeId, item.id);
+            });
+
+            return el;
+        },
+
+        async _addItemToArea(tabId, areaId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            const types = tab?.collectible_types || [];
+            if (types.length === 0) return;
+            // Default new items to the LAST-edited type (heuristic: the
+            // type whose most-recently-touched item lives in this area;
+            // fall back to first type). This makes consecutive "Add item"
+            // clicks within an area "sticky" to whatever type the author
+            // is currently working in.
+            const itemsHere = this._itemsForArea(tab, areaId);
+            const lastTypeId = itemsHere.length > 0
+                ? itemsHere[itemsHere.length - 1]._typeId
+                : types[0].id;
+            // Default name: "<Type> #<N>" where N is one past the existing
+            // global count for that type. Authors usually only need to
+            // tweak the suffix or replace entirely; pre-filling is a
+            // bigger time-saver than an empty input.
+            const ourType = types.find(t => t.id === lastTypeId);
+            const defaultName = _defaultItemName(
+                ourType?.name,
+                (ourType?.items || []).length,
+            );
+            const seg = areaId == null ? 'null' : String(areaId);
+            try {
+                await apiCall(
+                    'post',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/items/`,
+                    { type_id: lastTypeId, name: defaultName }
+                );
+                this.renderAll(tabId);
+                requestAnimationFrame(() => {
+                    // Target the last row in the destination area's items
+                    // container — new items always append, so the tail
+                    // row is the one we just created. More robust than
+                    // querying by id (which could clash with stale ids
+                    // across entity types or fail on type coercion).
+                    const areaCard = document.querySelector(
+                        `.collectible-area-card[data-area-id="${seg}"]`
+                    );
+                    const itemsContainer = areaCard?.querySelector(
+                        '.collectible-items-container'
+                    );
+                    const rows = itemsContainer?.querySelectorAll(
+                        '.collectible-item-row'
+                    );
+                    const lastRow = rows?.[rows.length - 1];
+                    const input = lastRow?.querySelector(
+                        '.collectible-item-name-input'
+                    );
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
+                });
+            } catch (err) {
+                Toast.show('Failed to add item.', 'error');
+            }
+        },
+
+        async _patchItem(tabId, typeId, itemId, patch) {
+            try {
+                await apiCall(
+                    'patch',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/${typeId}/items/${itemId}/`,
+                    patch
+                );
+            } catch (err) {
+                Toast.show('Failed to update item.', 'error');
+            }
+        },
+
+        async _deleteItem(tabId, typeId, itemId) {
+            try {
+                await apiCall(
+                    'delete',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/${typeId}/items/${itemId}/`
+                );
+                this.renderAll(tabId);
+            } catch (err) {
+                Toast.show('Failed to delete item.', 'error');
+            }
+        },
+
+        _initItemDragReorderForArea(tabId, areaId, container) {
+            if (!container) return;
+            const seg = areaId == null ? 'null' : String(areaId);
+            new window.PlatPursuit.DragReorderManager({
+                container,
+                handleSelector: '.collectible-item-handle',
+                itemSelector: '.collectible-item-row',
+                onReorder: async (_itemId, _pos, allItemIds) => {
+                    const itemIds = allItemIds.map(x => parseInt(x, 10));
+                    try {
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/items/reorder/`,
+                            { item_ids: itemIds }
+                        );
+                        // Refresh order on local mirror (handler did it on
+                        // the BranchProxy state, but tabsData is a copy).
+                        this._syncTabsDataFromBranch(tabId);
+                    } catch (err) {
+                        Toast.show('Failed to reorder items.', 'error');
+                    }
+                },
+            });
+        },
+
+        // ── Add buttons ────────────────────────────────────────────
+        _wireAreaAddBtn() {
+            document.querySelectorAll('.add-collectible-area-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tabId = parseInt(btn.dataset.tabId, 10);
+                    this._addArea(tabId);
+                });
+            });
+        },
+
+        _wireTypeAddBtn() {
+            document.querySelectorAll('.add-collectible-type-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tabId = parseInt(btn.dataset.tabId, 10);
+                    this._addType(tabId);
+                });
+            });
+        },
+
+        // ── Formatting toolbar Collectible insert button ───────────
+        _refreshFormattingToolbarVisibility(tabId) {
+            // Show/hide the toolbar's collectible-insert button based on
+            // whether any types are defined. Empty roadmaps don't need the
+            // button — there's nothing to reference.
+            const tab = tabsData.find(t => t.id === tabId);
+            const hasTypes = (tab?.collectible_types || []).length > 0;
+            document.querySelectorAll('.fmt-collectible-btn').forEach(btn => {
+                btn.classList.toggle('hidden', !hasTypes);
+            });
+        },
+
+        // ── Collectible reference picker (toolbar + autocomplete) ──
+        _picker: {
+            el: null, listEl: null, filterEl: null, emptyEl: null,
+            anchorTextarea: null, anchorRange: null, mode: 'toolbar',
+            highlightIdx: 0, filteredTypes: [],
+        },
+
+        _wirePicker() {
+            const el = document.getElementById('collectible-picker');
+            if (!el) return;
+            this._picker.el = el;
+            this._picker.listEl = document.getElementById('collectible-picker-list');
+            this._picker.filterEl = document.getElementById('collectible-picker-filter');
+            this._picker.emptyEl = document.getElementById('collectible-picker-empty');
+
+            this._picker.filterEl.addEventListener('input', () => {
+                this._renderPickerList(this._picker.filterEl.value || '');
+            });
+            this._picker.filterEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this._closePicker();
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this._highlightPickerRow(this._picker.highlightIdx + 1);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this._highlightPickerRow(this._picker.highlightIdx - 1);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const t = this._picker.filteredTypes[this._picker.highlightIdx];
+                    if (t) this._applyPickerSelection(t);
+                }
+            });
+
+            // Toolbar button: opens picker anchored under the active textarea.
+            // Wired here (not in initFormattingToolbars) so the picker is
+            // owned end-to-end by the controller.
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('.fmt-collectible-btn');
+                if (!btn) return;
+                e.preventDefault();
+                const toolbar = btn.closest('.formatting-toolbar');
+                const textarea = getTargetTextarea(toolbar);
+                if (!textarea) return;
+                this._openPickerForToolbar(textarea);
+            });
+
+            // Click-outside / Escape global handler.
+            document.addEventListener('mousedown', (e) => {
+                if (this._picker.el.classList.contains('hidden')) return;
+                if (e.target.closest('#collectible-picker')) return;
+                if (e.target.closest('.fmt-collectible-btn')) return;
+                this._closePicker();
+            });
+        },
+
+        _wireGlobalKeyHandlers() {
+            // `[[` autocomplete: when the writer types `[[` in any roadmap
+            // textarea, open the picker anchored at the caret. Selecting a
+            // type completes the token to `[[slug]]`. Escape closes without
+            // completing.
+            document.addEventListener('input', (e) => {
+                const ta = e.target;
+                if (!(ta instanceof HTMLTextAreaElement)) return;
+                if (!ta.closest('.collectibles-card, .step-card, .trophy-guide-row, .general-tips-card, .collectible-item-rich-panel')) return;
+                const pos = ta.selectionStart;
+                if (pos < 2) return;
+                const justTyped = ta.value.slice(pos - 2, pos);
+                if (justTyped === '[[') {
+                    this._openPickerForAutocomplete(ta);
+                }
+            });
+        },
+
+        _openPickerForToolbar(textarea) {
+            this._picker.mode = 'toolbar';
+            this._picker.anchorTextarea = textarea;
+            this._picker.anchorRange = null;
+            const rect = textarea.getBoundingClientRect();
+            this._showPickerAt(rect.left + window.scrollX, rect.bottom + window.scrollY + 4);
+        },
+
+        _openPickerForAutocomplete(textarea) {
+            this._picker.mode = 'autocomplete';
+            this._picker.anchorTextarea = textarea;
+            // Anchor at caret. We don't have exact pixel caret math here,
+            // so anchor under the textarea — close enough for the dropdown
+            // to feel attached without complex offset measurement.
+            const rect = textarea.getBoundingClientRect();
+            this._showPickerAt(rect.left + window.scrollX, rect.bottom + window.scrollY + 4);
+        },
+
+        _showPickerAt(x, y) {
+            const el = this._picker.el;
+            el.style.top = `${y}px`;
+            el.style.left = `${x}px`;
+            el.classList.remove('hidden');
+            this._picker.filterEl.value = '';
+            this._renderPickerList('');
+            requestAnimationFrame(() => this._picker.filterEl.focus());
+        },
+
+        _closePicker() {
+            this._picker.el.classList.add('hidden');
+            this._picker.anchorTextarea = null;
+        },
+
+        _renderPickerList(query) {
+            const tab = tabsData.find(t => t.id === activeTabId);
+            const types = (tab?.collectible_types || []);
+            const q = (query || '').toLowerCase().trim();
+            this._picker.filteredTypes = q
+                ? types.filter(t => (t.name || '').toLowerCase().includes(q) || (t.slug || _clientSlugify(t.name)).includes(q))
+                : types.slice();
+            this._picker.highlightIdx = 0;
+
+            this._picker.listEl.innerHTML = '';
+            this._picker.emptyEl.classList.toggle('hidden', this._picker.filteredTypes.length > 0);
+
+            const tpl = document.getElementById('collectible-picker-row-template');
+            this._picker.filteredTypes.forEach((ct, idx) => {
+                const row = tpl.content.firstElementChild.cloneNode(true);
+                const swatch = row.querySelector('.collectible-picker-row-swatch');
+                swatch.dataset.color = ct.color || 'primary';
+                row.querySelector('.collectible-picker-row-icon').textContent = ct.icon || COLLECTIBLE_DEFAULT_ICON;
+                row.querySelector('.collectible-picker-row-name').textContent = ct.name || '(unnamed)';
+                const slug = ct.slug || _clientSlugify(ct.name) || 'slug';
+                row.querySelector('.collectible-picker-row-slug').textContent = `[[${slug}]]`;
+                const ic = (ct.items || []).length;
+                row.querySelector('.collectible-picker-row-count').textContent = ic === 0 ? '' : `${ic}`;
+                row.addEventListener('click', () => this._applyPickerSelection(ct));
+                row.addEventListener('mouseenter', () => this._highlightPickerRow(idx));
+                this._picker.listEl.appendChild(row);
+            });
+            this._highlightPickerRow(0);
+        },
+
+        _highlightPickerRow(idx) {
+            const rows = this._picker.listEl.querySelectorAll('.collectible-picker-row');
+            if (rows.length === 0) return;
+            const next = ((idx % rows.length) + rows.length) % rows.length;
+            rows.forEach((r, i) => r.classList.toggle('bg-primary/15', i === next));
+            this._picker.highlightIdx = next;
+            rows[next]?.scrollIntoView({ block: 'nearest' });
+        },
+
+        _applyPickerSelection(ctype) {
+            const ta = this._picker.anchorTextarea;
+            if (!ta) {
+                this._closePicker();
+                return;
+            }
+            const slug = ctype.slug || _clientSlugify(ctype.name) || 'slug';
+            const token = `[[${slug}]]`;
+            if (this._picker.mode === 'autocomplete') {
+                // The writer just typed `[[`; replace those two chars with
+                // the full token so we don't double-up brackets.
+                const pos = ta.selectionStart;
+                const before = ta.value.slice(0, pos - 2);
+                const after = ta.value.slice(pos);
+                ta.value = before + token + after;
+                ta.selectionStart = ta.selectionEnd = (before + token).length;
+            } else {
+                insertTextPreservingUndo(ta, token);
+            }
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.focus();
+            this._closePicker();
+        },
+    };
+
+    // ------------------------------------------------------------------ //
     //  Initialization
     // ------------------------------------------------------------------ //
 
@@ -3327,12 +4922,14 @@
         initKeyboardShortcuts();
         initAutoResize();
         initSaveCancelButtons();
+        CollectibleController.init();
 
         // Render all tabs
         tabsData.forEach(tab => {
             renderSteps(tab.id);
             renderTrophyGuides(tab.id);
             updateTrophyGuideCounter(tab.id);
+            CollectibleController.renderAll(tab.id);
         });
 
         // Now that step + trophy guide textareas exist, populate the inline

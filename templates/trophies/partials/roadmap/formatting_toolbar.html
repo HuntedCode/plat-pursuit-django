@@ -89,6 +89,13 @@ collapse to multiple rows at narrow viewports without overflowing.
     <button type="button" class="fmt-btn btn btn-ghost btn-xs" data-fmt="trophy-link" title="Insert trophy link" aria-label="Insert trophy link">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
     </button>
+    {# Collectible reference: inserts `[[slug]]` for one of the roadmap's       #}
+    {# collectible types. Opens a small picker if 2+ types are defined; with    #}
+    {# only one defined, inserts that slug directly. Disabled / hidden if no    #}
+    {# types exist on this roadmap (no collectibles to reference).              #}
+    <button type="button" class="fmt-btn fmt-collectible-btn btn btn-ghost btn-xs" data-fmt="collectible" title="Insert collectible reference" aria-label="Insert collectible reference">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+    </button>
 
     {# ─── Group 4: Meta (right-aligned) ────────────────────── #}
     <div class="ml-auto">
