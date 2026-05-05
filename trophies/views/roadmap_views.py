@@ -146,6 +146,127 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             ct.slug: ct for ct in roadmap.collectible_types.all()
         }
 
+        # Collectible Tracker context — only built when the roadmap has
+        # at least one type with at least one item. The tracker section
+        # renders from this dict; absence means "no collectibles, hide
+        # the section + the TOC anchor entirely".
+        collectible_areas = list(roadmap.collectible_areas.all())
+        collectible_types = list(roadmap.collectible_types.all())
+        any_items = any(ct.items.all() for ct in collectible_types)
+        if collectible_types and any_items:
+            # Per-viewer found set (logged-in path only). Anonymous viewers
+            # use localStorage on the client; the server doesn't need to
+            # know about their state.
+            found_ids = set()
+            if user.is_authenticated and hasattr(user, 'profile') and user.profile:
+                from trophies.models import UserCollectibleProgress
+                found_ids = set(
+                    UserCollectibleProgress.objects
+                    .filter(profile=user.profile, item__collectible_type__roadmap=roadmap)
+                    .values_list('item_id', flat=True)
+                )
+
+            # Build the rendering shape: each item carries an `is_found` flag
+            # plus its owning type (for color/icon/filter). Areas keep their
+            # order; within each area items are sorted by `order` regardless
+            # of type so the playthrough sequence is preserved (3 journals,
+            # health upgrade, 2 journals, mana upgrade — not type-grouped).
+            # An "Unsorted" pseudo-area collects area_id=None items.
+            UNSORTED_KEY = '__unsorted__'
+            area_buckets = {a.id: {'area': a, 'items': []} for a in collectible_areas}
+            unsorted_bucket = {'area': None, 'items': []}
+
+            type_progress = {}
+            # Roadmap-wide flag aggregates surfaced in the hero subtitle so
+            # the banner answers the actual mid-playthrough question: "what
+            # do I still need to grab before missing my chance?"
+            missable_total = 0
+            missable_found = 0
+            for ctype in collectible_types:
+                items = list(ctype.items.all())
+                # Type-level progress is independent of area; counted here
+                # for the per-type chips and progress bars.
+                if items:
+                    found_for_type = 0
+                    for item in items:
+                        item.is_found = item.id in found_ids
+                        # Annotate with the owning type so the row partial
+                        # can render the swatch/icon without the template
+                        # having to chase another lookup.
+                        item.type_id_ref = ctype.id
+                        item.type_slug_ref = ctype.slug
+                        item.type_name_ref = ctype.name
+                        item.type_color_ref = ctype.color or 'primary'
+                        item.type_icon_ref = ctype.icon or '🎯'
+                        if item.is_found:
+                            found_for_type += 1
+                        if item.is_missable:
+                            missable_total += 1
+                            if item.is_found:
+                                missable_found += 1
+                        bucket = area_buckets.get(item.area_id) if item.area_id else unsorted_bucket
+                        if bucket is None:
+                            # area_id refers to a deleted area (shouldn't happen
+                            # post-merge; SET_NULL keeps refs clean — but safe).
+                            bucket = unsorted_bucket
+                        bucket['items'].append(item)
+                    type_progress[ctype.id] = {
+                        'found': found_for_type,
+                        'total': ctype.total_count if ctype.total_count else len(items),
+                        'item_total': len(items),
+                    }
+                else:
+                    # Type with no items: still surface in the per-type
+                    # progress strip + chip filter, but with zero progress.
+                    type_progress[ctype.id] = {
+                        'found': 0,
+                        'total': ctype.total_count or 0,
+                        'item_total': 0,
+                    }
+
+            # Sort each bucket's items by `order` for playthrough sequence.
+            for bucket in list(area_buckets.values()) + [unsorted_bucket]:
+                bucket['items'].sort(key=lambda it: it.order)
+
+            # Materialize ordered area list, dropping empty ones. Each
+            # bucket gets `is_complete` so the template can render an
+            # already-finished chapter pre-collapsed (no payoff in showing
+            # a 5/5 list expanded by default on a return visit).
+            tracker_areas = []
+            for a in collectible_areas:
+                bucket = area_buckets[a.id]
+                if bucket['items']:
+                    tracker_areas.append({
+                        'key': a.slug,
+                        'area': a,
+                        'items': bucket['items'],
+                        'is_complete': all(it.is_found for it in bucket['items']),
+                    })
+            if unsorted_bucket['items']:
+                tracker_areas.append({
+                    'key': UNSORTED_KEY,
+                    'area': None,
+                    'items': unsorted_bucket['items'],
+                    'is_complete': all(it.is_found for it in unsorted_bucket['items']),
+                })
+
+            # Aggregate progress counters across the whole roadmap. Sum
+            # only types with items (empty types don't change the totals).
+            total_items = sum(tp['item_total'] for tp in type_progress.values())
+            total_found = sum(tp['found'] for tp in type_progress.values())
+
+            context['has_collectibles'] = True
+            context['collectible_types_list'] = collectible_types
+            context['collectible_tracker_areas'] = tracker_areas
+            context['collectible_type_progress'] = type_progress
+            context['collectible_total_items'] = total_items
+            context['collectible_total_found'] = total_found
+            context['collectible_missable_total'] = missable_total
+            context['collectible_missable_found'] = missable_found
+            context['collectible_missable_remaining'] = missable_total - missable_found
+        else:
+            context['has_collectibles'] = False
+
         # DLC navigation strip: enumerate roadmaps under this concept.
         # Public sees only published; authors in preview mode see drafts too.
         context['available_ctgs'] = RoadmapService.get_available_ctgs(

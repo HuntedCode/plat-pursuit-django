@@ -42,7 +42,10 @@ class RoadmapService:
     @staticmethod
     def _build_roadmap_prefetch():
         """Shared prefetch chain for a single Roadmap's children."""
-        from trophies.models import RoadmapStep, RoadmapStepTrophy, TrophyGuide
+        from trophies.models import (
+            RoadmapCollectibleArea, RoadmapCollectibleItem,
+            RoadmapCollectibleType, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
+        )
 
         return [
             Prefetch(
@@ -57,6 +60,23 @@ class RoadmapService:
             Prefetch(
                 'trophy_guides',
                 queryset=TrophyGuide.objects.order_by('order', 'trophy_id'),
+            ),
+            # Collectible vocabulary + items. The reader's Collectibles
+            # Tracker section iterates types -> items -> resolves area FK,
+            # so we need both relations preloaded to avoid N+1 on the
+            # roadmap detail page.
+            Prefetch(
+                'collectible_areas',
+                queryset=RoadmapCollectibleArea.objects.order_by('order', 'id'),
+            ),
+            Prefetch(
+                'collectible_types',
+                queryset=RoadmapCollectibleType.objects.prefetch_related(
+                    Prefetch(
+                        'items',
+                        queryset=RoadmapCollectibleItem.objects.order_by('order', 'id'),
+                    ),
+                ).order_by('order', 'id'),
             ),
         ]
 

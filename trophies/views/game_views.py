@@ -952,6 +952,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         )
         context['is_roadmap_author'] = is_roadmap_author
         if game.concept:
+            from django.db.models import Count
             from trophies.models import Roadmap
             from trophies.services.roadmap_service import RoadmapService
             # Authors see drafts; non-authors see only published.
@@ -961,6 +962,11 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 .filter(concept=game.concept)
                 .select_related('concept_trophy_group')
                 .prefetch_related(*RoadmapService._build_roadmap_prefetch())
+                # `collectibles_count` is the total number of items across
+                # every collectible type on this roadmap. Surfaces as a
+                # stat chip on the CTA card so the player knows up front
+                # whether this roadmap has a collectibles-tracker pillar.
+                .annotate(collectibles_count=Count('collectible_types__items'))
             )
             if not include_drafts:
                 roadmap_qs = roadmap_qs.filter(status='published')

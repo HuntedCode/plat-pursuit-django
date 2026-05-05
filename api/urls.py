@@ -89,6 +89,7 @@ from .roadmap_lock_views import (
     RoadmapLockAcquireView, RoadmapLockHeartbeatView, RoadmapLockBranchView,
     RoadmapLockReleaseView, RoadmapLockBreakView, RoadmapLockMergeView,
 )
+from .collectible_progress_views import CollectibleProgressView
 from .roadmap_note_views import (
     RoadmapNoteListCreateView, RoadmapNoteDetailView,
     RoadmapNoteResolveView, RoadmapNoteMarkReadView,
@@ -353,6 +354,15 @@ urlpatterns = [
     path('roadmap/<int:roadmap_id>/notes/<int:note_id>/', RoadmapNoteDetailView.as_view(), name='roadmap-notes-detail'),
     path('roadmap/<int:roadmap_id>/notes/<int:note_id>/resolve/', RoadmapNoteResolveView.as_view(), name='roadmap-notes-resolve'),
     path('roadmap/<int:roadmap_id>/notes/mark-read/', RoadmapNoteMarkReadView.as_view(), name='roadmap-notes-mark-read'),
+
+    # Collectible progress: per-viewer "found" state for individual items.
+    # Anonymous viewers track this in localStorage; the server only stores
+    # logged-in progress.
+    path(
+        'collectibles/items/<int:item_id>/progress/',
+        CollectibleProgressView.as_view(),
+        name='collectible-progress',
+    ),
 
     # YouTube oEmbed proxy for the roadmap editor's live attribution preview.
     path('youtube/attribution-lookup/', YouTubeAttributionLookupView.as_view(), name='youtube-attribution-lookup'),

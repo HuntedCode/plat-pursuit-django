@@ -873,6 +873,49 @@ def _apply_collectible_types(
                 "Editors+ can override."
             )
 
+    # ── Pre-pass: cross-type item moves ───────────────────────────
+    # Authoring is per-area, so writers reassign an item's type via a
+    # dropdown on the row. The wire payload reflects this by nesting the
+    # item under its NEW type's `items[]`. Without this pre-pass, the
+    # main loop would treat the item as deleted from its old type (since
+    # explicit_payload_ids is built per-type) and ignored under its new
+    # type (since live_items was queried before the move). We fix it by
+    # re-pointing the FK first, then refreshing the per-type prefetch.
+    all_live_items = {
+        item.id: item
+        for ct in live_types.values()
+        for item in ct.items.all()
+    }
+    moved_any = False
+    for type_payload in types_payload:
+        dest_type_id = type_payload.get('id')
+        # Only existing types receive moves; brand-new types get fresh
+        # rows from the main loop's create path.
+        if not (isinstance(dest_type_id, int) and dest_type_id > 0):
+            continue
+        if dest_type_id not in live_types:
+            continue
+        for item_payload in (type_payload.get('items') or []):
+            item_id = item_payload.get('id')
+            if not (isinstance(item_id, int) and item_id > 0):
+                continue
+            live_item = all_live_items.get(item_id)
+            if not live_item:
+                continue
+            if live_item.collectible_type_id != dest_type_id:
+                _enforce_set_ownership()
+                live_item.collectible_type_id = dest_type_id
+                live_item.last_edited_by_id = profile.id
+                live_item.save(update_fields=['collectible_type_id', 'last_edited_by_id'])
+                moved_any = True
+    if moved_any:
+        # Reload type prefetches so the main loop's `live_type.items.all()`
+        # in `_apply_items_for_type` reflects the post-move FK shape.
+        live_types = {
+            ct.id: ct
+            for ct in live_roadmap.collectible_types.prefetch_related('items').all()
+        }
+
     explicit_payload_ids = set()
     payload_slugs_seen = set()
 
