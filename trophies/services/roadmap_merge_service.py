@@ -25,10 +25,19 @@ there's no `tabs[]` wrapper):
                  "youtube_url": ..., "youtube_channel_name": ..., ...}, ...],
       "trophy_guides": [{"id": ..., "trophy_id": ..., "youtube_url": ...,
                          "youtube_channel_name": ..., ...}, ...],
+      "collectible_areas": [{"id": ..., "name": ..., "slug": ...,
+                              "order": ..., "created_by_id": ...}, ...],
       "collectible_types": [{"id": ..., "name": ..., "slug": ...,
                              "color": ..., "icon": ..., "description": ...,
                              "total_count": ..., "order": ...,
-                             "created_by_id": ...}, ...],
+                             "created_by_id": ...,
+                             "items": [{"id": ..., "name": ...,
+                                        "area_id": ..., "body": ...,
+                                        "youtube_url": ...,
+                                        "gallery_images": [...],
+                                        "is_missable": ..., "is_dlc": ...,
+                                        "order": ...,
+                                        "created_by_id": ...}, ...]}, ...],
     }
 
   YouTube channel info is server-derived: the editor never sets the
@@ -50,6 +59,8 @@ from django.utils.text import slugify
 
 from trophies.models import (
     Roadmap,
+    RoadmapCollectibleArea,
+    RoadmapCollectibleItem,
     RoadmapCollectibleType,
     RoadmapEditLock,
     RoadmapRevision,
@@ -139,6 +150,12 @@ class _ChangeCounts:
     collectible_type_creates: int = 0
     collectible_type_updates: int = 0
     collectible_type_deletes: int = 0
+    collectible_area_creates: int = 0
+    collectible_area_updates: int = 0
+    collectible_area_deletes: int = 0
+    collectible_item_creates: int = 0
+    collectible_item_updates: int = 0
+    collectible_item_deletes: int = 0
 
     def any(self) -> bool:
         return any((
@@ -153,6 +170,12 @@ class _ChangeCounts:
             self.collectible_type_creates,
             self.collectible_type_updates,
             self.collectible_type_deletes,
+            self.collectible_area_creates,
+            self.collectible_area_updates,
+            self.collectible_area_deletes,
+            self.collectible_item_creates,
+            self.collectible_item_updates,
+            self.collectible_item_deletes,
         ))
 
     def summary(self, ctg_label: str = '') -> str:
@@ -186,6 +209,30 @@ class _ChangeCounts:
         if self.collectible_type_deletes:
             parts.append(
                 f"deleted {self.collectible_type_deletes} collectible type{'s' if self.collectible_type_deletes != 1 else ''}"
+            )
+        if self.collectible_area_creates:
+            parts.append(
+                f"added {self.collectible_area_creates} collectible area{'s' if self.collectible_area_creates != 1 else ''}"
+            )
+        if self.collectible_area_updates:
+            parts.append(
+                f"edited {self.collectible_area_updates} collectible area{'s' if self.collectible_area_updates != 1 else ''}"
+            )
+        if self.collectible_area_deletes:
+            parts.append(
+                f"deleted {self.collectible_area_deletes} collectible area{'s' if self.collectible_area_deletes != 1 else ''}"
+            )
+        if self.collectible_item_creates:
+            parts.append(
+                f"added {self.collectible_item_creates} collectible item{'s' if self.collectible_item_creates != 1 else ''}"
+            )
+        if self.collectible_item_updates:
+            parts.append(
+                f"edited {self.collectible_item_updates} collectible item{'s' if self.collectible_item_updates != 1 else ''}"
+            )
+        if self.collectible_item_deletes:
+            parts.append(
+                f"deleted {self.collectible_item_deletes} collectible item{'s' if self.collectible_item_deletes != 1 else ''}"
             )
         if self.content_updates:
             parts.append("updated tips/content")
@@ -562,9 +609,241 @@ def _validate_collectible_color(value) -> str:
     return 'primary'
 
 
-def _apply_collectible_types(
-    live_roadmap: Roadmap, types_payload: list, profile, is_editor: bool,
+def _apply_collectible_areas(
+    live_roadmap: Roadmap, areas_payload: list, profile, is_editor: bool,
     changes: _ChangeCounts,
+) -> dict:
+    """Diff and apply the collectible-areas branch payload.
+
+    Returns a mapping {payload_id: live_id} so subsequent item processing
+    can resolve ``area_id`` references that pointed at just-created areas
+    (which had negative ids in the branch). For pre-existing live areas
+    the mapping is identity (id -> id).
+
+    Set-level ownership matches `_apply_collectible_types`. Areas are
+    part of the same author-curated vocabulary, gated by the same owner.
+    """
+    live_areas = {a.id: a for a in live_roadmap.collectible_areas.all()}
+    set_owner_id = _collectibles_set_owner_id(live_roadmap)
+
+    def _enforce_set_ownership():
+        if is_editor:
+            return
+        if set_owner_id is not None and set_owner_id != profile.id:
+            raise MergeError(
+                "This roadmap's collectibles are owned by another writer. "
+                "Editors+ can override."
+            )
+
+    explicit_payload_ids = set()
+    payload_slugs_seen = set()
+    area_id_map = {a.id: a.id for a in live_areas.values()}  # identity for live areas
+
+    for area_payload in areas_payload:
+        area_id = area_payload.get('id')
+        raw_name = (area_payload.get('name') or '').strip()
+        if not raw_name:
+            continue
+
+        # NEW area.
+        if area_id is None or (isinstance(area_id, int) and area_id < 0):
+            _enforce_set_ownership()
+            slug = slugify(raw_name)[:50] or f'area-{len(live_areas) + 1}'
+            existing_slugs = {a.slug for a in live_areas.values()} | payload_slugs_seen
+            base = slug
+            n = 2
+            while slug in existing_slugs:
+                slug = f"{base}-{n}"[:50]
+                n += 1
+            payload_slugs_seen.add(slug)
+            new_area = RoadmapCollectibleArea.objects.create(
+                roadmap=live_roadmap,
+                name=raw_name[:100],
+                slug=slug,
+                order=area_payload.get('order', len(live_areas)),
+                created_by_id=profile.id,
+                last_edited_by_id=profile.id,
+            )
+            changes.collectible_area_creates += 1
+            if area_id is not None:
+                area_id_map[area_id] = new_area.id
+            continue
+
+        explicit_payload_ids.add(area_id)
+        if area_id not in live_areas:
+            logger.warning(
+                "Roadmap merge: payload referenced area id %s not in roadmap %s; skipping.",
+                area_id, live_roadmap.id,
+            )
+            continue
+
+        live_area = live_areas[area_id]
+        payload_slugs_seen.add(live_area.slug)
+
+        # Slug is intentionally NOT in the diff — renaming the display
+        # `name` keeps the original slug so deep-link anchors and existing
+        # item area_id references stay stable.
+        dirty_fields = []
+        if 'name' in area_payload:
+            new_name = (area_payload['name'] or '').strip()[:100]
+            if new_name and new_name != live_area.name:
+                dirty_fields.append(('name', new_name))
+        if 'order' in area_payload:
+            new_order = area_payload['order']
+            if new_order != live_area.order:
+                dirty_fields.append(('order', new_order))
+
+        if not dirty_fields:
+            continue
+
+        _enforce_set_ownership()
+        for field_name, new_value in dirty_fields:
+            setattr(live_area, field_name, new_value)
+        live_area.last_edited_by_id = profile.id
+        live_area.save()
+        changes.collectible_area_updates += 1
+
+    actually_deleted = set(live_areas.keys()) - explicit_payload_ids
+    if actually_deleted:
+        _enforce_set_ownership()
+        RoadmapCollectibleArea.objects.filter(id__in=actually_deleted).delete()
+        changes.collectible_area_deletes += len(actually_deleted)
+        # Items pointing at deleted areas get SET_NULL via FK on_delete,
+        # so they fall back to the trailing "Misc" group on the reader.
+
+    return area_id_map
+
+
+def _apply_items_for_type(
+    live_type: RoadmapCollectibleType, items_payload: list,
+    area_id_map: dict, profile, set_owner_id, is_editor: bool,
+    changes: _ChangeCounts,
+) -> None:
+    """Diff and apply the items array nested under a single collectible type.
+
+    Items mirror TrophyGuide structure (body / gallery / youtube + cached
+    channel attribution). Slug-less identity (use database id), so renames
+    are free. Area FK references are translated through `area_id_map` so
+    new items pointing at brand-new areas resolve to the just-created
+    live area id.
+    """
+    live_items = {item.id: item for item in live_type.items.all()}
+
+    def _enforce_set_ownership():
+        if is_editor:
+            return
+        if set_owner_id is not None and set_owner_id != profile.id:
+            raise MergeError(
+                "This roadmap's collectibles are owned by another writer. "
+                "Editors+ can override."
+            )
+
+    def _resolve_area(payload_area_id):
+        # None or missing → no area. Otherwise look up via the id map.
+        if payload_area_id is None:
+            return None
+        return area_id_map.get(payload_area_id)
+
+    explicit_payload_ids = set()
+
+    for item_payload in items_payload:
+        item_id = item_payload.get('id')
+        raw_name = (item_payload.get('name') or '').strip()
+        if not raw_name:
+            continue
+
+        resolved_area_id = _resolve_area(item_payload.get('area_id'))
+
+        # NEW item.
+        if item_id is None or (isinstance(item_id, int) and item_id < 0):
+            _enforce_set_ownership()
+            new_youtube_url = (item_payload.get('youtube_url') or '').strip()
+            RoadmapCollectibleItem.objects.create(
+                collectible_type=live_type,
+                name=raw_name[:200],
+                area_id=resolved_area_id,
+                body=item_payload.get('body') or '',
+                youtube_url=new_youtube_url,
+                gallery_images=_normalize_gallery(item_payload.get('gallery_images')),
+                is_missable=bool(item_payload.get('is_missable', False)),
+                is_dlc=bool(item_payload.get('is_dlc', False)),
+                order=item_payload.get('order', len(live_items)),
+                created_by_id=profile.id,
+                last_edited_by_id=profile.id,
+                **_resolve_youtube_attribution(new_youtube_url),
+            )
+            changes.collectible_item_creates += 1
+            continue
+
+        explicit_payload_ids.add(item_id)
+        if item_id not in live_items:
+            logger.warning(
+                "Roadmap merge: payload referenced item id %s not in type %s; skipping.",
+                item_id, live_type.id,
+            )
+            continue
+
+        live_item = live_items[item_id]
+
+        dirty_fields = []
+        if 'name' in item_payload:
+            new_name = (item_payload['name'] or '').strip()[:200]
+            if new_name and new_name != live_item.name:
+                dirty_fields.append(('name', new_name))
+        if 'area_id' in item_payload:
+            if resolved_area_id != live_item.area_id:
+                dirty_fields.append(('area_id', resolved_area_id))
+        if 'body' in item_payload:
+            new_body = item_payload['body'] or ''
+            if new_body != live_item.body:
+                dirty_fields.append(('body', new_body))
+        if 'youtube_url' in item_payload:
+            new_url = (item_payload['youtube_url'] or '').strip()
+            if new_url != live_item.youtube_url:
+                dirty_fields.append(('youtube_url', new_url))
+                attribution = _resolve_youtube_attribution(new_url)
+                dirty_fields.append((
+                    'youtube_channel_name', attribution['youtube_channel_name'],
+                ))
+                dirty_fields.append((
+                    'youtube_channel_url', attribution['youtube_channel_url'],
+                ))
+        if 'gallery_images' in item_payload:
+            normalized = _normalize_gallery(item_payload.get('gallery_images'))
+            if normalized != list(live_item.gallery_images or []):
+                dirty_fields.append(('gallery_images', normalized))
+        for flag in ('is_missable', 'is_dlc'):
+            if flag in item_payload:
+                new_value = bool(item_payload[flag])
+                if new_value != getattr(live_item, flag):
+                    dirty_fields.append((flag, new_value))
+        if 'order' in item_payload:
+            new_order = item_payload['order']
+            if new_order != live_item.order:
+                dirty_fields.append(('order', new_order))
+
+        if not dirty_fields:
+            _backfill_attribution_if_missing(live_item)
+            continue
+
+        _enforce_set_ownership()
+        for field_name, new_value in dirty_fields:
+            setattr(live_item, field_name, new_value)
+        live_item.last_edited_by_id = profile.id
+        live_item.save()
+        changes.collectible_item_updates += 1
+        _backfill_attribution_if_missing(live_item)
+
+    actually_deleted = set(live_items.keys()) - explicit_payload_ids
+    if actually_deleted:
+        _enforce_set_ownership()
+        RoadmapCollectibleItem.objects.filter(id__in=actually_deleted).delete()
+        changes.collectible_item_deletes += len(actually_deleted)
+
+
+def _apply_collectible_types(
+    live_roadmap: Roadmap, types_payload: list, area_id_map: dict,
+    profile, is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply the collectible-types branch payload.
 
@@ -576,6 +855,11 @@ def _apply_collectible_types(
     Slug is derived from `name` on first save (server-side) and is not
     accepted from the payload after creation, so existing `[[slug]]`
     references in markdown can't break by an in-place rename.
+
+    Each type's `items` array is recursively processed by
+    `_apply_items_for_type`; area FK references inside items are
+    resolved through ``area_id_map`` so new items pointing at brand-new
+    areas reach their live area id.
     """
     live_types = {ct.id: ct for ct in live_roadmap.collectible_types.all()}
     set_owner_id = _collectibles_set_owner_id(live_roadmap)
@@ -585,7 +869,7 @@ def _apply_collectible_types(
             return
         if set_owner_id is not None and set_owner_id != profile.id:
             raise MergeError(
-                "This roadmap's collectible types are owned by another writer. "
+                "This roadmap's collectibles are owned by another writer. "
                 "Editors+ can override."
             )
 
@@ -601,6 +885,9 @@ def _apply_collectible_types(
             # treated as "not yet a real type".
             continue
 
+        items_payload = type_payload.get('items') or []
+        live_type = None  # populated below; passed to items helper at end
+
         # NEW type.
         if type_id is None or (isinstance(type_id, int) and type_id < 0):
             _enforce_set_ownership()
@@ -613,7 +900,7 @@ def _apply_collectible_types(
                 slug = f"{base}-{n}"[:50]
                 n += 1
             payload_slugs_seen.add(slug)
-            RoadmapCollectibleType.objects.create(
+            live_type = RoadmapCollectibleType.objects.create(
                 roadmap=live_roadmap,
                 name=raw_name[:100],
                 slug=slug,
@@ -630,69 +917,76 @@ def _apply_collectible_types(
             # in this same merge pass.
             if set_owner_id is None:
                 set_owner_id = profile.id
-            continue
+        else:
+            explicit_payload_ids.add(type_id)
+            if type_id not in live_types:
+                logger.warning(
+                    "Roadmap merge: payload referenced collectible type id %s not in roadmap %s; skipping.",
+                    type_id, live_roadmap.id,
+                )
+                continue
 
-        explicit_payload_ids.add(type_id)
-        if type_id not in live_types:
-            logger.warning(
-                "Roadmap merge: payload referenced collectible type id %s not in roadmap %s; skipping.",
-                type_id, live_roadmap.id,
-            )
-            continue
+            live_type = live_types[type_id]
+            payload_slugs_seen.add(live_type.slug)
 
-        live_type = live_types[type_id]
-        payload_slugs_seen.add(live_type.slug)
-
-        # Diff editable fields. Slug is intentionally NOT in the diff —
-        # renaming a type keeps the original slug so [[slug]] references
-        # don't silently break.
-        dirty_fields = []
-        if 'name' in type_payload:
-            new_name = (type_payload['name'] or '').strip()[:100]
-            if new_name and new_name != live_type.name:
-                dirty_fields.append(('name', new_name))
-        if 'color' in type_payload:
-            new_color = _validate_collectible_color(type_payload['color'])
-            if new_color != live_type.color:
-                dirty_fields.append(('color', new_color))
-        if 'icon' in type_payload:
-            new_icon = (type_payload['icon'] or '')[:4]
-            if new_icon != live_type.icon:
-                dirty_fields.append(('icon', new_icon))
-        if 'description' in type_payload:
-            new_desc = (type_payload['description'] or '')[:200]
-            if new_desc != live_type.description:
-                dirty_fields.append(('description', new_desc))
-        if 'total_count' in type_payload:
-            new_total = type_payload['total_count']
-            if new_total in ('', None):
-                new_total = None
-            else:
-                try:
-                    new_total = int(new_total)
-                    if new_total < 0:
-                        new_total = None
-                except (TypeError, ValueError):
+            # Diff editable fields. Slug is intentionally NOT in the diff —
+            # renaming a type keeps the original slug so [[slug]] references
+            # don't silently break.
+            dirty_fields = []
+            if 'name' in type_payload:
+                new_name = (type_payload['name'] or '').strip()[:100]
+                if new_name and new_name != live_type.name:
+                    dirty_fields.append(('name', new_name))
+            if 'color' in type_payload:
+                new_color = _validate_collectible_color(type_payload['color'])
+                if new_color != live_type.color:
+                    dirty_fields.append(('color', new_color))
+            if 'icon' in type_payload:
+                new_icon = (type_payload['icon'] or '')[:4]
+                if new_icon != live_type.icon:
+                    dirty_fields.append(('icon', new_icon))
+            if 'description' in type_payload:
+                new_desc = (type_payload['description'] or '')[:200]
+                if new_desc != live_type.description:
+                    dirty_fields.append(('description', new_desc))
+            if 'total_count' in type_payload:
+                new_total = type_payload['total_count']
+                if new_total in ('', None):
                     new_total = None
-            if new_total != live_type.total_count:
-                dirty_fields.append(('total_count', new_total))
-        if 'order' in type_payload:
-            new_order = type_payload['order']
-            if new_order != live_type.order:
-                dirty_fields.append(('order', new_order))
+                else:
+                    try:
+                        new_total = int(new_total)
+                        if new_total < 0:
+                            new_total = None
+                    except (TypeError, ValueError):
+                        new_total = None
+                if new_total != live_type.total_count:
+                    dirty_fields.append(('total_count', new_total))
+            if 'order' in type_payload:
+                new_order = type_payload['order']
+                if new_order != live_type.order:
+                    dirty_fields.append(('order', new_order))
 
-        if not dirty_fields:
-            continue
+            if dirty_fields:
+                _enforce_set_ownership()
+                for field_name, new_value in dirty_fields:
+                    setattr(live_type, field_name, new_value)
+                live_type.last_edited_by_id = profile.id
+                live_type.save()
+                changes.collectible_type_updates += 1
 
-        _enforce_set_ownership()
-        for field_name, new_value in dirty_fields:
-            setattr(live_type, field_name, new_value)
-        live_type.last_edited_by_id = profile.id
-        live_type.save()
-        changes.collectible_type_updates += 1
+        # Always process items for this type, regardless of whether the
+        # type itself was dirty — items can change independently. We pass
+        # set_owner_id by value at this point; the items helper enforces
+        # the same gate.
+        _apply_items_for_type(
+            live_type, items_payload, area_id_map,
+            profile, set_owner_id, is_editor, changes,
+        )
 
     # Anything in live but missing from the payload's existing-id set is
-    # a deletion. Set-owner gate applies; editors+ bypass.
+    # a deletion. Set-owner gate applies; editors+ bypass. Items cascade
+    # via FK on_delete=CASCADE.
     actually_deleted = set(live_types.keys()) - explicit_payload_ids
     if actually_deleted:
         _enforce_set_ownership()
@@ -745,9 +1039,16 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
             roadmap, payload.get('trophy_guides') or [],
             profile, is_editor, changes,
         )
+        # Areas first so types' nested items can resolve area_id FK
+        # references (negative branch ids translate to live ids via the
+        # returned map).
+        area_id_map = _apply_collectible_areas(
+            roadmap, payload.get('collectible_areas') or [],
+            profile, is_editor, changes,
+        )
         _apply_collectible_types(
             roadmap, payload.get('collectible_types') or [],
-            profile, is_editor, changes,
+            area_id_map, profile, is_editor, changes,
         )
 
         if changes.any():
@@ -850,9 +1151,27 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
                 last_edited_by_id=actor.id,
             )
 
+        # Order matters: areas first so item area_id FK references resolve
+        # against the just-recreated area ids (we map snapshot ids to new
+        # ids the same way the merge service does for branch ids).
+        roadmap.collectible_areas.all().delete()
+        snapshot_to_new_area_id = {}
+        for area_snapshot in snapshot.get('collectible_areas', []):
+            new_area = RoadmapCollectibleArea.objects.create(
+                roadmap=roadmap,
+                name=area_snapshot.get('name') or '',
+                slug=area_snapshot.get('slug') or '',
+                order=area_snapshot.get('order', 0),
+                created_by_id=area_snapshot.get('created_by_id'),
+                last_edited_by_id=actor.id,
+            )
+            snapshot_id = area_snapshot.get('id')
+            if snapshot_id is not None:
+                snapshot_to_new_area_id[snapshot_id] = new_area.id
+
         roadmap.collectible_types.all().delete()
         for type_snapshot in snapshot.get('collectible_types', []):
-            RoadmapCollectibleType.objects.create(
+            new_type = RoadmapCollectibleType.objects.create(
                 roadmap=roadmap,
                 name=type_snapshot.get('name') or '',
                 slug=type_snapshot.get('slug') or '',
@@ -864,6 +1183,27 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
                 created_by_id=type_snapshot.get('created_by_id'),
                 last_edited_by_id=actor.id,
             )
+            for item_snapshot in type_snapshot.get('items', []):
+                snapshot_area_id = item_snapshot.get('area_id')
+                resolved_area_id = (
+                    snapshot_to_new_area_id.get(snapshot_area_id)
+                    if snapshot_area_id is not None else None
+                )
+                RoadmapCollectibleItem.objects.create(
+                    collectible_type=new_type,
+                    name=item_snapshot.get('name') or '',
+                    area_id=resolved_area_id,
+                    body=item_snapshot.get('body') or '',
+                    youtube_url=item_snapshot.get('youtube_url') or '',
+                    youtube_channel_name=item_snapshot.get('youtube_channel_name') or '',
+                    youtube_channel_url=item_snapshot.get('youtube_channel_url') or '',
+                    gallery_images=_normalize_gallery(item_snapshot.get('gallery_images')),
+                    is_missable=bool(item_snapshot.get('is_missable', False)),
+                    is_dlc=bool(item_snapshot.get('is_dlc', False)),
+                    order=item_snapshot.get('order', 0),
+                    created_by_id=item_snapshot.get('created_by_id'),
+                    last_edited_by_id=actor.id,
+                )
 
         # Status restore is intentionally left to the publisher action,
         # not the restore. Don't change publish state implicitly.

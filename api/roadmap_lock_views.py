@@ -61,6 +61,8 @@ def _flat_to_legacy(flat_payload):
         'last_edited_by_id': flat_payload.get('last_edited_by_id'),
         'steps': flat_payload.get('steps') or [],
         'trophy_guides': flat_payload.get('trophy_guides') or [],
+        'collectible_areas': flat_payload.get('collectible_areas') or [],
+        'collectible_types': flat_payload.get('collectible_types') or [],
     }
     return {
         'payload_version': 1,
@@ -76,6 +78,14 @@ def _legacy_to_flat(legacy_payload):
     Picks the first (and only) tab. Per-CTG roadmaps mean the editor only
     ever sends a single-element tabs array; if more arrive we drop the
     extras since they don't belong to this session's CTG anyway.
+
+    NOTE: any new field added to the v2 snapshot/branch payload schema must
+    also be lifted here, or it will be silently dropped on every editor
+    save (the editor still sends `payload_version: 1` for compat with
+    in-flight sessions). YouTube channel cache fields are server-derived
+    and don't need explicit lifting because the merge service re-resolves
+    them. Collectibles split across two top-level arrays since areas are
+    roadmap-scoped (not nested under a tab in the legacy shape either).
     """
     if not isinstance(legacy_payload, dict):
         return legacy_payload
@@ -97,6 +107,8 @@ def _legacy_to_flat(legacy_payload):
         'last_edited_by_id': tab.get('last_edited_by_id'),
         'steps': tab.get('steps') or [],
         'trophy_guides': tab.get('trophy_guides') or [],
+        'collectible_areas': tab.get('collectible_areas') or [],
+        'collectible_types': tab.get('collectible_types') or [],
     }
 
 

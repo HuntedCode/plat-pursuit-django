@@ -246,6 +246,7 @@ class RoadmapService:
         NEVER persisted as a side effect.
         """
         from trophies.models import (
+            RoadmapCollectibleArea, RoadmapCollectibleItem,
             RoadmapCollectibleType, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
         )
         from trophies.services.roadmap_merge_service import (
@@ -341,13 +342,46 @@ class RoadmapService:
         # showing up out-of-order under the rest of the list in preview.
         overlay_guides.sort(key=lambda g: g.trophy_id)
 
-        # Collectible types — preview parity for the [[slug]] pill renderer.
-        # Same id/synthetic-id pattern as steps: branch entries with a
-        # matching live id reuse the live instance; new entries materialize
-        # as transient unsaved instances.
+        # Collectible areas — overlaid as a separate prefetched relation so
+        # the reader's TOC + grouping reflects in-progress edits during
+        # ?preview=true. Synthetic-id base picked far apart from steps and
+        # types to avoid any chance of collision in client-side keying.
+        live_areas_by_id = {a.id: a for a in roadmap.collectible_areas.all()}
+        overlay_areas = []
+        synthetic_area_id = -3_000_000
+        for area_payload in branch_payload.get('collectible_areas') or []:
+            aid = area_payload.get('id')
+            if isinstance(aid, int) and aid in live_areas_by_id:
+                area = live_areas_by_id[aid]
+            else:
+                synthetic_area_id -= 1
+                area = RoadmapCollectibleArea(roadmap=roadmap, id=synthetic_area_id)
+            for fld in ('name', 'slug'):
+                if fld in area_payload:
+                    setattr(area, fld, area_payload[fld] or '')
+            if 'order' in area_payload:
+                area.order = area_payload['order']
+            if 'created_by_id' in area_payload:
+                area.created_by_id = area_payload['created_by_id']
+            overlay_areas.append(area)
+        overlay_areas.sort(key=lambda a: (a.order, a.id))
+
+        # Collectible types + nested items — same id/synthetic-id pattern
+        # as steps. Each type carries its own list of items rather than
+        # items being a flat top-level list; that mirrors the schema and
+        # avoids a separate id-resolution pass.
         live_types_by_id = {ct.id: ct for ct in roadmap.collectible_types.all()}
+        # Pre-fetch live items once so the per-type overlay loop doesn't
+        # issue N queries — one query, then group by parent type id.
+        live_items_by_type = {}
+        for live_item in RoadmapCollectibleItem.objects.filter(
+            collectible_type__roadmap=roadmap,
+        ):
+            live_items_by_type.setdefault(live_item.collectible_type_id, {})[live_item.id] = live_item
+
         overlay_types = []
         synthetic_type_id = -2_000_000
+        synthetic_item_id = -4_000_000
         for type_payload in branch_payload.get('collectible_types') or []:
             cid = type_payload.get('id')
             if isinstance(cid, int) and cid in live_types_by_id:
@@ -364,11 +398,60 @@ class RoadmapService:
                 ctype.order = type_payload['order']
             if 'created_by_id' in type_payload:
                 ctype.created_by_id = type_payload['created_by_id']
+
+            # Per-type item overlay. Uses the same live-id-reuse pattern
+            # so a typo edit on an existing item doesn't lose its
+            # database-assigned id when previewed.
+            live_items_for_this_type = live_items_by_type.get(
+                ctype.id if isinstance(ctype.id, int) and ctype.id > 0 else 0,
+                {},
+            )
+            overlay_items = []
+            for item_payload in type_payload.get('items') or []:
+                iid = item_payload.get('id')
+                if isinstance(iid, int) and iid in live_items_for_this_type:
+                    item = live_items_for_this_type[iid]
+                else:
+                    synthetic_item_id -= 1
+                    item = RoadmapCollectibleItem(
+                        collectible_type=ctype, id=synthetic_item_id,
+                    )
+                for fld in (
+                    'name', 'body',
+                    'youtube_url', 'youtube_channel_name', 'youtube_channel_url',
+                ):
+                    if fld in item_payload:
+                        setattr(item, fld, item_payload[fld] or '')
+                for flag in ('is_missable', 'is_dlc'):
+                    if flag in item_payload:
+                        setattr(item, flag, bool(item_payload[flag]))
+                if 'gallery_images' in item_payload:
+                    item.gallery_images = list(item_payload.get('gallery_images') or [])
+                if 'order' in item_payload:
+                    item.order = item_payload['order']
+                if 'created_by_id' in item_payload:
+                    item.created_by_id = item_payload['created_by_id']
+                if 'area_id' in item_payload:
+                    # Area FK references a live id (positive) OR a synthetic
+                    # id (negative) coined above. Either way we just store
+                    # the int — preview render code resolves it through
+                    # overlay_areas, not the database.
+                    item.area_id = item_payload['area_id']
+                overlay_items.append(item)
+            overlay_items.sort(key=lambda i: (i.order, i.id))
+            # Stash items as a prefetched cache on the type instance so
+            # `ctype.items.all()` returns the overlay rather than hitting
+            # the database for live items that don't reflect the branch.
+            if not hasattr(ctype, '_prefetched_objects_cache'):
+                ctype._prefetched_objects_cache = {}
+            ctype._prefetched_objects_cache['items'] = overlay_items
+
             overlay_types.append(ctype)
         overlay_types.sort(key=lambda t: (t.order, t.id))
 
         if not hasattr(roadmap, '_prefetched_objects_cache'):
             roadmap._prefetched_objects_cache = {}
+        roadmap._prefetched_objects_cache['collectible_areas'] = overlay_areas
         roadmap._prefetched_objects_cache['collectible_types'] = overlay_types
         roadmap._prefetched_objects_cache['steps'] = overlay_steps
         roadmap._prefetched_objects_cache['trophy_guides'] = overlay_guides
@@ -457,6 +540,7 @@ class RoadmapService:
         migrations can rewrite older snapshots.
         """
         from trophies.models import (
+            RoadmapCollectibleArea, RoadmapCollectibleItem,
             RoadmapCollectibleType, RoadmapEditLock, RoadmapStep,
             RoadmapStepTrophy, TrophyGuide,
         )
@@ -482,8 +566,17 @@ class RoadmapService:
                     queryset=TrophyGuide.objects.order_by('order', 'trophy_id'),
                 ),
                 Prefetch(
+                    'collectible_areas',
+                    queryset=RoadmapCollectibleArea.objects.order_by('order', 'id'),
+                ),
+                Prefetch(
                     'collectible_types',
-                    queryset=RoadmapCollectibleType.objects.order_by('order', 'id'),
+                    queryset=RoadmapCollectibleType.objects.prefetch_related(
+                        Prefetch(
+                            'items',
+                            queryset=RoadmapCollectibleItem.objects.order_by('order', 'id'),
+                        )
+                    ).order_by('order', 'id'),
                 ),
             )
             .first()
@@ -542,6 +635,17 @@ class RoadmapService:
                 }
                 for tg in rm.trophy_guides.all()
             ],
+            'collectible_areas': [
+                {
+                    'id': area.id,
+                    'name': area.name,
+                    'slug': area.slug,
+                    'order': area.order,
+                    'created_by_id': area.created_by_id,
+                    'last_edited_by_id': area.last_edited_by_id,
+                }
+                for area in rm.collectible_areas.all()
+            ],
             'collectible_types': [
                 {
                     'id': ct.id,
@@ -554,6 +658,24 @@ class RoadmapService:
                     'order': ct.order,
                     'created_by_id': ct.created_by_id,
                     'last_edited_by_id': ct.last_edited_by_id,
+                    'items': [
+                        {
+                            'id': item.id,
+                            'name': item.name,
+                            'area_id': item.area_id,
+                            'body': item.body,
+                            'youtube_url': item.youtube_url,
+                            'youtube_channel_name': item.youtube_channel_name,
+                            'youtube_channel_url': item.youtube_channel_url,
+                            'gallery_images': list(item.gallery_images or []),
+                            'is_missable': item.is_missable,
+                            'is_dlc': item.is_dlc,
+                            'order': item.order,
+                            'created_by_id': item.created_by_id,
+                            'last_edited_by_id': item.last_edited_by_id,
+                        }
+                        for item in ct.items.all()
+                    ],
                 }
                 for ct in rm.collectible_types.all()
             ],

@@ -4225,6 +4225,146 @@ class RoadmapCollectibleType(models.Model):
         return f"CollectibleType: roadmap={self.roadmap_id}, slug={self.slug}"
 
 
+class RoadmapCollectibleArea(models.Model):
+    """First-class area / chapter grouping for collectibles within a roadmap.
+
+    Authored once per roadmap and selected (not retyped) per item, so the
+    "Chapter 1" you set on Riddler Trophy #1 is byte-for-byte the same
+    "Chapter 1" you pick later for Audio Log #3. That consistency is what
+    drives the reader-side group-by-area sort, the filter chips, and the
+    sticky TOC for the Collectibles section.
+
+    Roadmap-scoped (not type-scoped): a "Chapter 1" container holds items
+    from any type, so authors can navigate "everything in Chapter 1"
+    rather than navigating Riddler Trophies and Audio Logs separately.
+
+    Ownership is set-level (inherited from the parent type's set owner)
+    — areas are part of the same author-curated vocabulary the types
+    are. If you own the collectibles set, you own its areas.
+
+    Slug is derived from `name` on first save and is read-only afterwards
+    so existing items pointing at this area can't get orphaned by a
+    rename. Renaming the display name is fine; the slug stays stable.
+    """
+    roadmap = models.ForeignKey(
+        Roadmap, on_delete=models.CASCADE, related_name='collectible_areas',
+    )
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=50)
+    order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_collectible_areas',
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_collectible_areas',
+    )
+
+    class Meta:
+        unique_together = ['roadmap', 'slug']
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"CollectibleArea: roadmap={self.roadmap_id}, slug={self.slug}"
+
+
+class RoadmapCollectibleItem(models.Model):
+    """A single collectible within a type — the unit a player checks off.
+
+    Authored alongside the parent type in the editor. Structurally mirrors
+    a TrophyGuide row: optional markdown `body`, optional `gallery_images`
+    (inline + thumbnail strip), optional `youtube_url` with cached channel
+    attribution. Collectible-specific fields take the place of the trophy
+    flags / phase pickers: FK to a `RoadmapCollectibleArea`, plus
+    `is_missable` and `is_dlc` booleans.
+
+    Ownership is set-level (inherited from the parent type's set owner).
+    Items do NOT carry their own writer-edit-own gate; if you own the
+    type set on this roadmap, you can edit any item in any type.
+    """
+    collectible_type = models.ForeignKey(
+        RoadmapCollectibleType,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    name = models.CharField(max_length=200)
+    # Optional area FK — null means the item lands in the trailing "Misc"
+    # group. SET_NULL on delete so removing an area orphans items into
+    # Misc rather than nuking the items along with it.
+    area = models.ForeignKey(
+        RoadmapCollectibleArea,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='items',
+    )
+    # Optional rich notes — same markdown render pipeline as TrophyGuide.body.
+    body = models.TextField(blank=True)
+    # YouTube link + cached channel attribution (oEmbed) — same shape as
+    # the existing youtube fields on Roadmap / RoadmapStep / TrophyGuide.
+    youtube_url = models.URLField(blank=True)
+    youtube_channel_name = models.CharField(max_length=200, blank=True)
+    youtube_channel_url = models.URLField(blank=True)
+    # Ordered list of {url, alt, caption} — same shape as roadmap step
+    # and trophy guide galleries. Inline images live inside `body`.
+    gallery_images = models.JSONField(default=list, blank=True)
+    is_missable = models.BooleanField(default=False)
+    is_dlc = models.BooleanField(default=False)
+    order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_collectible_items',
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_collectible_items',
+    )
+
+    class Meta:
+        ordering = ['order', 'id']
+        indexes = [
+            models.Index(
+                fields=['collectible_type', 'order'],
+                name='ci_type_order_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f"CollectibleItem: type={self.collectible_type_id}, name={self.name[:40]!r}"
+
+
+class UserCollectibleProgress(models.Model):
+    """Per-user found state for a collectible item.
+
+    One row per (profile, item) pair when a player has marked the item
+    found. Absence of a row means not found. We intentionally don't model
+    "unfound" rows — toggling off deletes the row — so the table only
+    ever stores positive progress signal.
+
+    Anonymous users persist their progress to localStorage instead; this
+    model only exists for logged-in players who want cross-device sync.
+    """
+    profile = models.ForeignKey(
+        Profile, on_delete=models.CASCADE, related_name='collectible_progress',
+    )
+    item = models.ForeignKey(
+        RoadmapCollectibleItem, on_delete=models.CASCADE, related_name='user_progress',
+    )
+    found_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'item']
+        indexes = [
+            models.Index(
+                fields=['profile', 'item'],
+                name='ci_progress_lookup_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f"UserCollectibleProgress: profile={self.profile_id}, item={self.item_id}"
+
+
 class RoadmapEditLock(models.Model):
     """Single-writer guide-level edit lock with idle and absolute-time expiry.
 
