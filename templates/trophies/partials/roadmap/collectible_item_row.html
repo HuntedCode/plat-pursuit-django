@@ -1,0 +1,118 @@
+{% load custom_filters markdown_filters %}
+{# Single collectible item row. Expects: item (annotated with             #}
+{# type_*_ref), area (or None). Type icon/color come from the item's      #}
+{# annotations so a mixed-type playthrough sequence renders cleanly       #}
+{# without the template having to look anything up.                       #}
+{#                                                                        #}
+{# Interaction: clicking anywhere on the row header marks it found.       #}
+{# The whole row is the toggle target so users can scan-and-tap quickly   #}
+{# without having to hit the small checkbox precisely. The rich panel     #}
+{# (body / gallery / youtube), when present, animates closed on found —   #}
+{# the hint is irrelevant once the item is grabbed, so collapsing it      #}
+{# keeps long lists scannable. CSS in input.css drives the animation     #}
+{# off [data-found="1"]; uncheck to re-expand. A small book-icon hint    #}
+{# in the row header surfaces on found rows with rich content so the     #}
+{# affordance is discoverable.                                            #}
+{#                                                                        #}
+{# Visual identity for type: a colored left edge, period. The body of     #}
+{# the row stays neutral so a mixed-type area (journals + audio logs +    #}
+{# upgrades + weapons) doesn't read as a rainbow. Found state is owned    #}
+{# entirely by data-found CSS rules in input.css: success-tinted border,  #}
+{# 78% opacity, strikethrough name, and a check disc on the swatch. Type  #}
+{# identity stays readable on found rows via the (type-colored) swatch    #}
+{# itself. JS keeps data-found in sync; no class-toggle dance needed.     #}
+<div class="collectible-item-row rounded border border-l-[3px] border-base-content/10 transition-colors"
+     data-item-id="{{ item.id }}"
+     data-type-id="{{ item.type_id_ref }}"
+     data-type-slug="{{ item.type_slug_ref }}"
+     data-color="{{ item.type_color_ref|default:'primary' }}"
+     data-name="{{ item.name }}"
+     data-found="{% if item.is_found %}1{% else %}0{% endif %}"
+     data-missable="{% if item.is_missable %}1{% else %}0{% endif %}"
+     data-dlc="{% if item.is_dlc %}1{% else %}0{% endif %}">
+    <div class="collectible-item-row-header flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
+         role="button"
+         tabindex="0"
+         aria-pressed="{% if item.is_found %}true{% else %}false{% endif %}"
+         aria-label="{% if item.is_found %}Mark {{ item.name }} as not found{% else %}Mark {{ item.name }} as found{% endif %}">
+        {# Checkbox is a visual indicator only — clicks pass through to the #}
+        {# row header so the whole bar is the toggle target. JS keeps its   #}
+        {# `checked` state in sync with the row's data-found attribute.     #}
+        <input type="checkbox"
+               class="collectible-item-checkbox checkbox checkbox-xs checkbox-success pointer-events-none shrink-0"
+               data-item-id="{{ item.id }}"
+               data-type-id="{{ item.type_id_ref }}"
+               {% if item.is_found %}checked{% endif %}
+               tabindex="-1"
+               aria-hidden="true">
+        {# Type swatch — color + icon — sits next to the name so a mixed   #}
+        {# sequence (journal, journal, health upgrade, journal) reads at   #}
+        {# a glance. Same data-color attribute the editor's swatch uses.   #}
+        {# When the row is found, a small green check disc overlays the    #}
+        {# bottom-right of the swatch — same pattern trophy guide cards    #}
+        {# use to mark earned trophies. Identity (color + icon) stays      #}
+        {# visible underneath so type-scanning still works.                 #}
+        <span class="collectible-swatch shrink-0 relative" data-color="{{ item.type_color_ref|default:'primary' }}"
+              title="{{ item.type_name_ref }}">
+            <span>{{ item.type_icon_ref|default:"🎯" }}</span>
+            <span class="collectible-item-found-check absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-success ring-1 ring-base-200 flex items-center justify-center shadow-sm shadow-success/40">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </span>
+        </span>
+        <span class="collectible-item-name flex-1 min-w-0 text-xs md:text-sm truncate">
+            {{ item.name|default:"(unnamed)" }}
+        </span>
+        {% if item.is_missable %}
+        <span class="badge badge-xs badge-warning shrink-0" title="Missable">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </span>
+        {% endif %}
+        {% if item.is_dlc %}
+        <span class="badge badge-xs badge-info shrink-0" title="DLC">DLC</span>
+        {% endif %}
+        {% if item.body or item.youtube_url or item.gallery_images %}
+        {# Discoverability hint shown only on found rows: a small book   #}
+        {# glyph signaling "there's a guide here, uncheck to re-expand". #}
+        {# CSS in input.css hides it on unfound rows (where the guide is #}
+        {# already on display).                                          #}
+        <span class="collectible-item-guide-hint shrink-0 text-base-content/40"
+              title="Guide hidden — uncheck to view"
+              aria-label="This item has a guide hidden by being marked found">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+            </svg>
+        </span>
+        {% endif %}
+    </div>
+    {% if item.body or item.youtube_url or item.gallery_images %}
+    <div class="collectible-item-rich-panel border-t px-2 py-2 space-y-2">
+        {% if item.body %}
+        <div class="prose-roadmap text-xs">{{ item.body|render_roadmap_markdown:game.controller_icon_set|render_collectible_pills:collectibles_by_slug }}</div>
+        {% endif %}
+        {% if item.youtube_url %}
+        {# Same divider treatment trophy guides use: thin top border +     #}
+        {# extra spacing so the video doesn't feel jammed against the      #}
+        {# prose above. No divider when the body is empty (video-only      #}
+        {# rows still get a small `mt-2` from the panel's `space-y-2`).    #}
+        <div class="max-w-2xl mx-auto {% if item.body %}mt-3 pt-3 border-t border-base-content/10{% endif %}">
+            {% include 'trophies/partials/roadmap/video_embed.html' with youtube_url=item.youtube_url channel_name=item.youtube_channel_name channel_url=item.youtube_channel_url attribution_size='text-[11px]' %}
+        </div>
+        {% endif %}
+        {% if item.gallery_images %}
+        <div class="roadmap-gallery grid {% if item.gallery_images|length == 1 %}grid-cols-1{% else %}grid-cols-2 md:grid-cols-3{% endif %} gap-2">
+            {% for img in item.gallery_images %}
+            <div class="roadmap-gallery-item flex flex-col">
+                <img src="{{ img.url }}" alt="{{ img.alt }}"
+                     {% if img.caption %}title="{{ img.caption }}"{% elif img.alt %}title="{{ img.alt }}"{% endif %}
+                     loading="lazy"
+                     class="w-full h-auto rounded-lg border border-base-content/10 cursor-pointer hover:opacity-80 transition-opacity object-cover {% if item.gallery_images|length > 1 %}aspect-video{% endif %}">
+                {% if img.caption %}
+                <p class="mt-1 text-xs italic text-base-content/55 px-0.5">{{ img.caption }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

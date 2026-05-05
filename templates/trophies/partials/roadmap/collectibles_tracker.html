@@ -1,0 +1,236 @@
+{% load custom_filters markdown_filters %}
+{# Collectibles Tracker. Expects:                                          #}
+{#   collectible_types_list, collectible_tracker_areas,                    #}
+{#   collectible_type_progress, collectible_total_items,                   #}
+{#   collectible_total_found, collectibles_by_slug                         #}
+{# JS hooks:                                                               #}
+{#   #collectibles section + data-toc-section makes the TOC pick this up.  #}
+{#   data-collectible-* attributes drive filter / search / sort.           #}
+<section id="collectibles" data-toc-section class="mb-4 md:mb-6">
+    <div class="card bg-base-200/70 border-2 border-base-300 shadow-lg shadow-neutral">
+        <div class="card-body p-3 md:p-5 lg:p-6"
+             id="collectibles-tracker"
+             data-roadmap-id="{{ roadmap.id }}"
+             data-total-items="{{ collectible_total_items }}"
+             data-total-found="{{ collectible_total_found }}"
+             data-viewer-authenticated="{% if user.is_authenticated %}1{% else %}0{% endif %}">
+
+            {# ── Hero progress banner ────────────────────────────────── #}
+            {# Earns its real estate with one piece of info the per-area   #}
+            {# bars don't carry: an at-a-glance count of missable items    #}
+            {# still outstanding. That's the actual mid-playthrough        #}
+            {# question ("can I still get these or have I locked myself    #}
+            {# out?"), so the subtitle answers it directly when there's    #}
+            {# any missable in the roadmap.                                 #}
+            {# When data-complete="1" (every item found), CSS in input.css #}
+            {# swaps in the success palette, scales up the celebration     #}
+            {# emoji, adds a glow ring on the icon disc, and reveals the   #}
+            {# "All collectibles found!" tagline. JS keeps the attribute  #}
+            {# in sync via _recomputeTotals.                                #}
+            <div class="collectibles-hero rounded-xl border border-base-content/10 bg-gradient-to-br from-secondary/10 via-base-200/40 to-primary/[0.06] p-4 md:p-5 mb-4 relative overflow-hidden transition-[background-image,border-color] duration-300"
+                 data-complete="{% if collectible_total_items and collectible_total_found == collectible_total_items %}1{% else %}0{% endif %}">
+                <div class="absolute inset-0 opacity-[0.04] pointer-events-none"
+                     style="background-image: radial-gradient(circle at 20% 30%, currentColor 1px, transparent 1px); background-size: 28px 28px;"></div>
+                <div class="relative flex items-center gap-3 md:gap-4">
+                    <div class="collectibles-hero-icon-disc rounded-xl bg-secondary/15 ring-1 ring-secondary/25 p-2.5 shrink-0 transition-all duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="collectibles-hero-icon w-5 h-5 md:w-6 md:h-6 text-secondary transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-[10px] uppercase tracking-wider font-semibold text-base-content/55">Collectibles Tracker</div>
+                        <div class="text-base md:text-lg font-bold mt-0.5 truncate">
+                            <span class="collectibles-hero-found tabular-nums">{{ collectible_total_found }}</span>
+                            <span class="text-base-content/30">/</span>
+                            <span class="tabular-nums">{{ collectible_total_items }}</span>
+                            <span class="text-xs md:text-sm font-normal text-base-content/55 ml-1">found</span>
+                            <span class="collectibles-hero-celebrate hidden ml-1.5 text-lg md:text-xl align-[-0.15em]">🎉</span>
+                        </div>
+                        {# Mid-playthrough info that actually moves a decision: #}
+                        {# "X missable still need to be grabbed". Hidden when   #}
+                        {# the roadmap has zero missable items, and replaced    #}
+                        {# entirely by the all-clear tagline at 100%.           #}
+                        {% if collectible_missable_total %}
+                        <div class="collectibles-hero-missable text-[11px] md:text-xs mt-1 text-warning/85 font-medium flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span>
+                                <span class="collectibles-hero-missable-remaining tabular-nums">{{ collectible_missable_remaining }}</span>
+                                missable remaining
+                            </span>
+                        </div>
+                        {% endif %}
+                        <div class="collectibles-hero-tagline hidden text-[11px] md:text-xs mt-1 text-success font-semibold tracking-wide">
+                            All collectibles found. Platinum-shaped progress.
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-2xl md:text-3xl font-bold tabular-nums collectibles-hero-percent-wrap transition-colors duration-300">
+                            <span class="collectibles-hero-percent">{% if collectible_total_items %}{% widthratio collectible_total_found collectible_total_items 100 %}{% else %}0{% endif %}</span><span class="text-base-content/40">%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative h-2 bg-base-300/50 rounded-full overflow-hidden mt-3">
+                    <div class="h-full rounded-full bg-gradient-to-r from-secondary via-primary to-success transition-all duration-500 collectibles-hero-progress-bar"
+                         style="width: {% if collectible_total_items %}{% widthratio collectible_total_found collectible_total_items 100 %}{% else %}0{% endif %}%"></div>
+                </div>
+            </div>
+
+            {# ── Per-type progress strip ────────────────────────────── #}
+            {# Each card is the filter chip for its type. Click to scope, #}
+            {# click again to clear. Active state shows the type's color  #}
+            {# in the border + ring. The old controls-bar chip row was a  #}
+            {# duplicate of this UI in pill form — removed in favor of    #}
+            {# a single filter surface (these cards), with a "× Clear"    #}
+            {# affordance in the controls bar that surfaces only when a   #}
+            {# type filter is active.                                      #}
+            {% if collectible_types_list %}
+            <div class="collectibles-progress-strip grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+                {% for ctype in collectible_types_list %}
+                {% with tp=collectible_type_progress|get_item:ctype.id %}
+                {% if tp %}
+                <button type="button"
+                        class="collectible-type-progress-card collectible-type-chip text-left rounded-lg border border-base-content/10 bg-white/[0.025] hover:bg-white/[0.05] hover:border-base-content/20 transition-all px-2.5 py-2"
+                        data-type-filter="{{ ctype.id }}"
+                        data-type-slug="{{ ctype.slug }}"
+                        data-type-name="{{ ctype.name }}"
+                        data-color="{{ ctype.color|default:'primary' }}"
+                        data-complete="{% if tp.item_total and tp.found == tp.item_total %}1{% else %}0{% endif %}"
+                        title="Show only {{ ctype.name }} (click again to show all)">
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="collectible-swatch shrink-0" data-color="{{ ctype.color|default:'primary' }}">
+                            <span>{{ ctype.icon|default:"🎯" }}</span>
+                        </span>
+                        <span class="font-semibold truncate flex-1 min-w-0">{{ ctype.name }}</span>
+                        <span class="text-[11px] tabular-nums text-base-content/60 collectible-type-progress-bar-label" data-type-id="{{ ctype.id }}">
+                            {{ tp.found }}/{{ tp.item_total }}
+                        </span>
+                    </div>
+                    <div class="h-1.5 bg-base-300/40 rounded-full overflow-hidden mt-1.5">
+                        <div class="collectible-type-progress-bar-fill h-full rounded-full transition-all duration-500"
+                             data-type-id="{{ ctype.id }}"
+                             data-color="{{ ctype.color|default:'primary' }}"
+                             style="width: {% if tp.item_total %}{% widthratio tp.found tp.item_total 100 %}{% else %}0{% endif %}%"></div>
+                    </div>
+                </button>
+                {% endif %}
+                {% endwith %}
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# ── Controls bar ──────────────────────────────────────── #}
+            {# Filter status on the left (only shown when a type filter  #}
+            {# is active), utilities on the right.                        #}
+            <div class="flex items-center flex-wrap gap-2 mb-3 pb-2 border-b border-base-content/5">
+                {# "Showing: <type> · Clear" appears only when a type     #}
+                {# filter is active. Click "Clear" to reset to all types. #}
+                {# JS toggles the .hidden class + fills the type name.    #}
+                {# `inline-flex` is added by JS when the button is revealed #}
+                {# (alongside removing `hidden`) so we don't trigger the    #}
+                {# Tailwind lint about `hidden` and `inline-flex` both       #}
+                {# setting `display`.                                        #}
+                <button type="button"
+                        class="collectibles-filter-status hidden items-center gap-1.5 text-[11px] md:text-xs px-2 py-1 rounded-md bg-base-content/5 hover:bg-base-content/10 border border-base-content/10 text-base-content/70 transition-colors"
+                        title="Clear type filter">
+                    <span class="text-base-content/55">Showing:</span>
+                    <span class="collectibles-filter-status-name font-semibold text-base-content/85"></span>
+                    <span class="text-base-content/30">·</span>
+                    <span class="text-base-content/55">Clear</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+
+                <div class="flex items-center gap-1.5 flex-wrap w-full md:w-auto md:ml-auto">
+                    <input type="search"
+                           class="collectibles-search input input-bordered input-xs text-xs w-full md:w-44"
+                           placeholder="Search items..."
+                           aria-label="Search collectibles">
+                    {# Flag filters — mutually exclusive (clicking one    #}
+                    {# de-activates the other). Replaces the old sort     #}
+                    {# dropdown which surfaced re-orders nobody asked     #}
+                    {# for. These show only items flagged Missable / DLC, #}
+                    {# which IS what readers ask for mid-playthrough.     #}
+                    <button type="button"
+                            class="collectibles-flag-filter btn btn-xs btn-ghost border border-base-300 gap-1"
+                            data-flag="missable"
+                            title="Show only missable items">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span>Missable</span>
+                    </button>
+                    <button type="button"
+                            class="collectibles-flag-filter btn btn-xs btn-ghost border border-base-300 gap-1"
+                            data-flag="dlc"
+                            title="Show only DLC items">
+                        <span class="text-[9px] font-bold tracking-wider">DLC</span>
+                    </button>
+                    <label class="collectibles-hide-found flex items-center gap-1.5 cursor-pointer text-xs text-base-content/55 hover:text-base-content/80 py-1 md:py-0">
+                        <input type="checkbox" class="checkbox checkbox-xs">
+                        <span>Hide found</span>
+                    </label>
+                </div>
+            </div>
+
+            {# ── Tracker body: areas → flat ordered items ─────────── #}
+            <div class="collectibles-tracker-body space-y-2">
+                {% for area_bucket in collectible_tracker_areas %}
+                {% with area=area_bucket.area %}
+                {# Already-complete chapters render collapsed: showing a    #}
+                {# 5/5 list expanded by default on a return visit is just   #}
+                {# noise. Reader can re-open via the summary chevron.       #}
+                <details {% if not area_bucket.is_complete %}open{% endif %}
+                         data-toc-section
+                         data-complete="{% if area_bucket.is_complete %}1{% else %}0{% endif %}"
+                         class="collectible-area-group group rounded-lg border border-base-content/10 bg-white/[0.025] overflow-hidden transition-[border-color,background-color] duration-200"
+                         id="collectible-area-{{ area_bucket.key }}"
+                         data-collectible-area-key="{{ area_bucket.key }}">
+                    <summary class="flex items-center gap-2 px-3 py-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden bg-gradient-to-r from-base-300/30 to-transparent border-b border-base-content/5 group-[:not([open])]:border-b-0 hover:from-base-300/40 transition-[background-image] duration-200">
+                        {# Incomplete leading icon: location pin. Hidden on   #}
+                        {# complete chapters in favor of a green check.       #}
+                        <svg xmlns="http://www.w3.org/2000/svg" class="collectible-area-incomplete-icon w-3.5 h-3.5 text-base-content/45 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        {# Complete leading icon: filled check inside a       #}
+                        {# success-tinted disc. Sits in the same column as    #}
+                        {# the pin so the layout doesn't shift.               #}
+                        <span class="collectible-area-complete-icon hidden shrink-0 w-3.5 h-3.5 rounded-full bg-success/20 ring-1 ring-success/40 items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        </span>
+                        <h3 class="collectible-area-title font-semibold text-sm md:text-base flex-1 min-w-0 truncate">
+                            {% if area %}{{ area.name }}{% else %}<span class="italic text-base-content/65">Unsorted</span>{% endif %}
+                        </h3>
+                        {# Complete badge: replaces the progress bar + count  #}
+                        {# label when 100% done. Reads as a clear "this       #}
+                        {# chapter is finished" signal vs. a small "5/5".     #}
+                        <span class="collectible-area-complete-badge hidden items-center gap-1 px-1.5 py-0.5 rounded-full bg-success/15 text-success text-[10px] font-semibold tracking-wide shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            <span>Complete</span>
+                        </span>
+                        {# Inline mini progress bar — quick area-completion   #}
+                        {# read without opening the area or scanning items.   #}
+                        {# Hidden when complete (badge takes over).            #}
+                        <div class="collectible-area-progress hidden md:flex items-center gap-2 shrink-0"
+                             data-area-key="{{ area_bucket.key }}">
+                            <div class="h-1 w-20 bg-base-300/50 rounded-full overflow-hidden">
+                                <div class="collectible-area-progress-fill h-full rounded-full bg-success/70 transition-all duration-500" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <span class="collectible-area-found-label text-[11px] font-medium tabular-nums text-base-content/60 shrink-0"
+                              data-area-key="{{ area_bucket.key }}">
+                            <span class="collectible-area-found-count">0</span>/<span class="collectible-area-total-count">0</span>
+                        </span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-base-content/35 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </summary>
+                    <div class="p-3">
+                        <div class="collectible-items-list space-y-1.5">
+                            {% for item in area_bucket.items %}
+                            {% include 'trophies/partials/roadmap/collectible_item_row.html' with item=item area=area %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </details>
+                {% endwith %}
+                {% endfor %}
+            </div>
+
+            {# Empty-state (shown by JS when filter / search produces no matches). #}
+            <div class="collectibles-empty-state hidden text-center py-8">
+                <p class="text-base-content/40 text-sm">No items match your filters.</p>
+            </div>
+        </div>
+    </div>
+</section>

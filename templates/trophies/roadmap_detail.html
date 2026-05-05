@@ -119,6 +119,11 @@
             </section>
             {% endif %}
 
+            {# ══ Collectibles Tracker ══ #}
+            {% if has_collectibles %}
+            {% include 'trophies/partials/roadmap/collectibles_tracker.html' %}
+            {% endif %}
+
             {# ══ Trophy Guides ══ #}
             {% if guides %}
             <section id="trophy-guides" data-toc-section class="mb-4 md:mb-6">

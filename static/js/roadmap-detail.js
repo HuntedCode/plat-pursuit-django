@@ -123,6 +123,12 @@
                     if (target.classList.contains('hidden')) target.classList.remove('hidden');
                     if (!target.open) target.open = true;
                 }
+                // Collectible area: TOC link to a collapsed (auto-completed)
+                // chapter should pop it open before scrolling, otherwise the
+                // user lands on a closed bar with no items visible.
+                if (target.classList.contains('collectible-area-group') && !target.open) {
+                    target.open = true;
+                }
 
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 history.replaceState(null, '', '#' + targetId);
@@ -139,13 +145,62 @@
             const chevron = btn.querySelector('.toc-section-chevron');
             if (!list) return;
 
+            // Per-list animation lock. Prevents double-clicks during a
+            // transition from queueing up overlapping animations (which
+            // would leave the inline styles in an inconsistent state).
+            let animating = false;
+
             btn.addEventListener('click', (e) => {
                 // Don't collapse if clicking the anchor link inside the button
                 if (e.target.closest('a')) return;
+                if (animating) return;
+                animating = true;
 
                 const isHidden = list.classList.contains('hidden');
-                list.classList.toggle('hidden');
-                if (chevron) chevron.classList.toggle('rotate-180', !isHidden);
+
+                // Same max-height + opacity pattern the chapter <details>
+                // uses, scaled down (TOC lists are short, so the duration
+                // is shorter than the full content collapse). `overflow:
+                // hidden` is needed during the animation so children
+                // don't poke past the shrinking max-height.
+                if (isHidden) {
+                    // Opening
+                    list.classList.remove('hidden');
+                    list.style.maxHeight = '0px';
+                    list.style.opacity = '0';
+                    list.style.overflow = 'hidden';
+                    if (chevron) chevron.classList.toggle('rotate-180', false);
+                    requestAnimationFrame(() => {
+                        list.style.transition = 'max-height 200ms ease-out, opacity 160ms ease-out';
+                        list.style.maxHeight = list.scrollHeight + 'px';
+                        list.style.opacity = '1';
+                    });
+                    setTimeout(() => {
+                        list.style.maxHeight = '';
+                        list.style.opacity = '';
+                        list.style.overflow = '';
+                        list.style.transition = '';
+                        animating = false;
+                    }, 200);
+                } else {
+                    // Closing
+                    list.style.maxHeight = list.scrollHeight + 'px';
+                    list.style.overflow = 'hidden';
+                    if (chevron) chevron.classList.toggle('rotate-180', true);
+                    requestAnimationFrame(() => {
+                        list.style.transition = 'max-height 180ms ease-out, opacity 140ms ease-out';
+                        list.style.maxHeight = '0px';
+                        list.style.opacity = '0';
+                    });
+                    setTimeout(() => {
+                        list.classList.add('hidden');
+                        list.style.maxHeight = '';
+                        list.style.opacity = '';
+                        list.style.overflow = '';
+                        list.style.transition = '';
+                        animating = false;
+                    }, 180);
+                }
             });
         });
     }
@@ -874,6 +929,556 @@
 
     // ── Initialization ─────────────────────────────────────────────────
 
+    // ---------------------------------------------------------------- //
+    //  Collectibles Tracker
+    // ---------------------------------------------------------------- //
+    /**
+     * Reader-side controller for the Collectibles Tracker section.
+     *
+     * Owns:
+     *   - Per-item progress checkboxes (POSTs to API for logged-in users,
+     *     localStorage for anonymous viewers).
+     *   - Filter chips, search box, sort dropdown, hide-found toggle.
+     *   - The rich-content chevron (toggling the details > 'open' attr).
+     *   - Pill click handler: clicking a `[[slug]]` pill scrolls to the
+     *     tracker and highlights items of that type.
+     *
+     * Only mounts when `#collectibles-tracker` is present on the page.
+     */
+    const CollectibleTracker = {
+        rootEl: null,
+        roadmapId: null,
+        // Persistent anon-fallback storage key. Scoped per roadmap id so
+        // someone playing through several games doesn't collide their found
+        // sets across guides.
+        _localKey() { return `pp_collectibles_found_r${this.roadmapId}`; },
+
+        init() {
+            const root = document.getElementById('collectibles-tracker');
+            if (!root) return;
+            this.rootEl = root;
+            this.roadmapId = root.dataset.roadmapId;
+            this._wireRowToggles();
+            this._wireAreaAnimation();
+            this._wireFilters();
+            this._wireFlagFilters();
+            this._wireSearch();
+            this._wireHideFound();
+            this._wirePillClicks();
+            this._restoreAnonProgress();
+            // Initial chip state: every chip has a `data-state="active"` if
+            // its filter is the current selection. The "All" chip starts
+            // active in the template; mirror that into the .is-active class
+            // so the colored ring CSS picks it up.
+            this._setActiveTypeFilter('all');
+            this._recomputeTotals();
+        },
+
+        // ── Found-state row toggles ─────────────────────────────────
+        // Whole row is the single click target. The rich-content panel
+        // (when present) stays visible regardless of found state, so
+        // re-visiting a found item to refresh memory just works. One
+        // unambiguous click action per row.
+        _wireRowToggles() {
+            this.rootEl.querySelectorAll('.collectible-item-row-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const row = header.closest('.collectible-item-row');
+                    if (!row) return;
+                    const itemId = parseInt(row.dataset.itemId, 10);
+                    const next = row.dataset.found !== '1';
+                    this._setItemFound(itemId, next);
+                });
+                // Keyboard accessibility — Space / Enter toggle found.
+                // Tabindex on the header + role=button gets us focus + AT
+                // semantics; this handler completes the keyboard contract.
+                header.addEventListener('keydown', (e) => {
+                    if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        header.click();
+                    }
+                });
+            });
+        },
+
+
+        async _setItemFound(itemId, found, opts = {}) {
+            const row = this.rootEl.querySelector(`.collectible-item-row[data-item-id="${itemId}"]`);
+            if (!row) return;
+            // Optimistic UI flip. Found-state visuals (border, opacity,
+            // strikethrough) are CSS-driven off `[data-found]`, so we
+            // only need to flip the attribute here. The decorative
+            // checkbox stays synced via its `checked` property below.
+            row.dataset.found = found ? '1' : '0';
+            // Visual checkbox (decorative; pointer-events:none so it can't
+            // be clicked directly — JS keeps its `checked` synced to the
+            // row's data-found attribute).
+            const cb = row.querySelector('.collectible-item-checkbox');
+            if (cb) cb.checked = found;
+            // aria-pressed on the row header reflects the toggled state.
+            const header = row.querySelector('.collectible-item-row-header');
+            if (header) {
+                header.setAttribute('aria-pressed', String(found));
+                const name = row.querySelector('.collectible-item-name')?.textContent?.trim() || 'item';
+                header.setAttribute(
+                    'aria-label',
+                    found ? `Mark ${name} as not found` : `Mark ${name} as found`
+                );
+            }
+            // Strikethrough + dim styling on `.collectible-item-name`
+            // is CSS-driven off the row's `[data-found="1"]` selector —
+            // no manual class toggling here.
+            this._recomputeTotals();
+            // When "Hide found" is active, marking an item found should
+            // make it disappear immediately — re-run filters so the row
+            // hides on the next paint instead of leaving a dangling
+            // "found" row in a list that's supposed to hide them.
+            this._applyFilters();
+            // Auto-collapse the parent area if THIS toggle just made it
+            // 100% complete. Only fires on the marking event (not on
+            // every recompute) so a user who manually re-opens a fully
+            // complete area doesn't get fought every keystroke. Caller
+            // can pass `skipAutoCollapse` to suppress (used during anon
+            // localStorage restore at init, where the synchronous final
+            // pass handles collapse without an animation delay).
+            if (found && !opts.skipAutoCollapse) this._maybeCollapseCompletedArea(row);
+
+            // Persist. For logged-in users we POST/DELETE; for anonymous
+            // viewers we stash the id in localStorage. The auth flag is
+            // detected at request time — the API rejects unauth'd writes,
+            // so we route around it.
+            const isAnon = this.rootEl.dataset.viewerAuthenticated !== '1';
+            if (isAnon) {
+                this._writeAnonProgress(itemId, found);
+                return;
+            }
+            try {
+                const url = `/api/v1/collectibles/items/${itemId}/progress/`;
+                if (found) {
+                    await window.PlatPursuit.API.post(url, {});
+                } else {
+                    await window.PlatPursuit.API.delete(url);
+                }
+            } catch (err) {
+                // Try anon fallback so the user's intent survives even if
+                // the API call fails (e.g. they got logged out mid-session).
+                // Rare path, but it beats silently dropping the toggle.
+                this._writeAnonProgress(itemId, found);
+            }
+        },
+
+        // Auto-collapse the row's owning area iff this toggle made it
+        // hit 100% — a small "you finished this chapter" payoff without
+        // a celebration modal. Slight delay so the user sees the
+        // checkbox+strikethrough animate before the area closes.
+        _maybeCollapseCompletedArea(row) {
+            const area = row.closest('.collectible-area-group');
+            if (!area || !area.open) return;
+            const items = area.querySelectorAll('.collectible-item-row');
+            const foundCount = area.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+            if (items.length === 0 || foundCount !== items.length) return;
+            setTimeout(() => {
+                if (area.open && area.querySelectorAll('.collectible-item-row').length ===
+                    area.querySelectorAll('.collectible-item-row[data-found="1"]').length) {
+                    this._animateAreaClose(area);
+                }
+            }, 450);
+        },
+
+        // ── Area details open/close animation ─────────────────────
+        // Same pattern as the page-level `initDetailsAnimation`: hijack
+        // summary clicks, animate the `summary + div` content's
+        // max-height + opacity, then flip `details.open`. Auto-collapse
+        // on chapter completion uses _animateAreaClose directly.
+        _wireAreaAnimation() {
+            this.rootEl.querySelectorAll('.collectible-area-group').forEach(area => {
+                const summary = area.querySelector('summary');
+                if (!summary || summary.dataset.areaAnimWired === '1') return;
+                summary.dataset.areaAnimWired = '1';
+                summary.addEventListener('click', (e) => {
+                    if (area.dataset.animating === '1') {
+                        e.preventDefault();
+                        return;
+                    }
+                    e.preventDefault();
+                    if (area.open) this._animateAreaClose(area);
+                    else this._animateAreaOpen(area);
+                });
+            });
+        },
+
+        _animateAreaClose(area) {
+            const content = area.querySelector('summary + div');
+            if (!content) { area.open = false; return; }
+            area.dataset.animating = '1';
+            content.style.maxHeight = content.scrollHeight + 'px';
+            content.style.overflow = 'hidden';
+            requestAnimationFrame(() => {
+                content.style.transition = 'max-height 220ms ease-out, opacity 180ms ease-out';
+                content.style.maxHeight = '0px';
+                content.style.opacity = '0';
+            });
+            setTimeout(() => {
+                area.open = false;
+                content.style.maxHeight = '';
+                content.style.overflow = '';
+                content.style.opacity = '';
+                content.style.transition = '';
+                delete area.dataset.animating;
+            }, 220);
+        },
+
+        _animateAreaOpen(area) {
+            const content = area.querySelector('summary + div');
+            if (!content) { area.open = true; return; }
+            area.dataset.animating = '1';
+            area.open = true;
+            content.style.overflow = 'hidden';
+            content.style.maxHeight = '0px';
+            content.style.opacity = '0';
+            requestAnimationFrame(() => {
+                content.style.transition = 'max-height 280ms ease-out, opacity 220ms ease-out';
+                content.style.maxHeight = content.scrollHeight + 'px';
+                content.style.opacity = '1';
+            });
+            setTimeout(() => {
+                content.style.maxHeight = '';
+                content.style.overflow = '';
+                content.style.opacity = '';
+                content.style.transition = '';
+                delete area.dataset.animating;
+            }, 280);
+        },
+
+        _readAnonProgress() {
+            try {
+                const raw = localStorage.getItem(this._localKey());
+                return new Set(JSON.parse(raw || '[]'));
+            } catch (_) {
+                return new Set();
+            }
+        },
+
+        _writeAnonProgress(itemId, found) {
+            const set = this._readAnonProgress();
+            if (found) set.add(itemId); else set.delete(itemId);
+            try {
+                localStorage.setItem(this._localKey(), JSON.stringify([...set]));
+            } catch (_) { /* storage full / disabled — no-op */ }
+        },
+
+        _restoreAnonProgress() {
+            // Server already rendered logged-in progress, so we only need
+            // the localStorage path. Detect anon viewers; for them, hydrate
+            // the checkboxes from storage and re-apply visuals.
+            const isAnon = this.rootEl.dataset.viewerAuthenticated !== '1';
+            if (!isAnon) return;
+            const found = this._readAnonProgress();
+            found.forEach(id => {
+                const cb = this.rootEl.querySelector(
+                    `.collectible-item-checkbox[data-item-id="${id}"]`
+                );
+                if (cb && !cb.checked) {
+                    cb.checked = true;
+                    // Trigger visual update via the same code path as user
+                    // toggle, but skip the network call (anon path is local)
+                    // AND skip the area auto-collapse animation — the
+                    // initial-load snap-close pass below handles complete
+                    // areas without the 450ms toggle delay.
+                    this._setItemFound(id, true, { skipAutoCollapse: true });
+                }
+            });
+            // Logged-in viewers get pre-collapsed complete areas server-
+            // side; anon viewers' progress only just landed, so collapse
+            // any newly-complete chapter here. Snap closed (no animation)
+            // since this is initial load — no toggle event for the user
+            // to react to.
+            this.rootEl.querySelectorAll('.collectible-area-group[open]').forEach(area => {
+                const items = area.querySelectorAll('.collectible-item-row');
+                if (items.length === 0) return;
+                const foundCount = area.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+                if (foundCount === items.length) area.open = false;
+            });
+        },
+
+        // ── Total recompute (after a check/uncheck) ────────────────
+        _recomputeTotals() {
+            // Per-area totals + inline progress fill + TOC sync
+            this.rootEl.querySelectorAll('.collectible-area-group').forEach(group => {
+                const items = group.querySelectorAll('.collectible-item-row');
+                const found = group.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+                const total = items.length;
+                const foundEl = group.querySelector('.collectible-area-found-count');
+                const totalEl = group.querySelector('.collectible-area-total-count');
+                if (foundEl) foundEl.textContent = String(found);
+                if (totalEl) totalEl.textContent = String(total);
+                const fill = group.querySelector('.collectible-area-progress-fill');
+                if (fill) {
+                    fill.style.width = total ? `${(found / total) * 100}%` : '0%';
+                }
+                // Mirror the count + complete-checkmark into both TOCs
+                // (sidebar + mobile). data-area-key matches the bucket
+                // key used at server-render time.
+                const key = group.dataset.collectibleAreaKey;
+                if (!key) return;
+                const isComplete = total > 0 && found === total;
+                // Flip data-complete on the area itself — the success
+                // tint, badge swap, and icon swap are all CSS-driven
+                // off this attribute.
+                group.dataset.complete = isComplete ? '1' : '0';
+                document.querySelectorAll(
+                    `.collectible-toc-area-count[data-area-key="${key}"]`
+                ).forEach(el => {
+                    el.querySelector('.collectible-toc-area-found').textContent = String(found);
+                    el.querySelector('.collectible-toc-area-total').textContent = String(total);
+                    el.classList.toggle('hidden', isComplete);
+                });
+                document.querySelectorAll(
+                    `.collectible-toc-area-link[data-area-key="${key}"] .collectible-toc-area-check`
+                ).forEach(el => el.classList.toggle('hidden', !isComplete));
+            });
+            // Per-type totals (chip + progress bar). Counts reflect the
+            // underlying truth, not the current filter state.
+            const typeStats = {};
+            this.rootEl.querySelectorAll('.collectible-item-row').forEach(row => {
+                const t = row.dataset.typeId;
+                typeStats[t] = typeStats[t] || { total: 0, found: 0 };
+                typeStats[t].total += 1;
+                if (row.dataset.found === '1') typeStats[t].found += 1;
+            });
+            Object.keys(typeStats).forEach(t => {
+                const { total, found } = typeStats[t];
+                this.rootEl.querySelectorAll(
+                    `.collectible-type-progress-label[data-type-id="${t}"], .collectible-type-progress-bar-label[data-type-id="${t}"]`
+                ).forEach(el => { el.textContent = `${found}/${total}`; });
+                const bar = this.rootEl.querySelector(`.collectible-type-progress-bar-fill[data-type-id="${t}"]`);
+                if (bar) bar.style.width = total ? `${(found / total) * 100}%` : '0%';
+                // Flip per-type complete state on every chip + progress
+                // card sharing this type id (CSS in input.css paints the
+                // success treatment off [data-complete="1"]).
+                const typeDone = total > 0 && found === total;
+                this.rootEl.querySelectorAll(
+                    `.collectible-type-chip[data-type-filter="${t}"]`
+                ).forEach(el => { el.dataset.complete = typeDone ? '1' : '0'; });
+            });
+            // Roadmap-wide total + hero banner + TOC label
+            const allItems = this.rootEl.querySelectorAll('.collectible-item-row');
+            const total = allItems.length;
+            const allFound = this.rootEl.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+            const pct = total ? Math.round((allFound / total) * 100) : 0;
+            // Hero banner numbers + bar
+            const heroFound = this.rootEl.querySelector('.collectibles-hero-found');
+            if (heroFound) heroFound.textContent = String(allFound);
+            const heroPct = this.rootEl.querySelector('.collectibles-hero-percent');
+            if (heroPct) heroPct.textContent = String(pct);
+            const heroBar = this.rootEl.querySelector('.collectibles-hero-progress-bar');
+            if (heroBar) heroBar.style.width = `${pct}%`;
+            // 100% delight: the 🎉 reveals + bounces, the icon disc
+            // pulses, and the "All collectibles found" tagline appears.
+            // Heavy lifting is done by [data-complete="1"] CSS rules; we
+            // just need to keep `hidden` off the celebration emoji and
+            // flip the data attribute on the hero element below.
+            const heroDone = total > 0 && allFound === total;
+            const celebrate = this.rootEl.querySelector('.collectibles-hero-celebrate');
+            if (celebrate) celebrate.classList.toggle('hidden', !heroDone);
+            // Update the missable-remaining counter when the user toggles
+            // a missable item. Hidden via CSS at 100%, so we don't need
+            // a hide-toggle here — just keep the number current.
+            const missableRemainEl = this.rootEl.querySelector('.collectibles-hero-missable-remaining');
+            if (missableRemainEl) {
+                let missableRemaining = 0;
+                this.rootEl.querySelectorAll('.collectible-item-row[data-missable="1"]').forEach(r => {
+                    if (r.dataset.found !== '1') missableRemaining += 1;
+                });
+                missableRemainEl.textContent = String(missableRemaining);
+            }
+            // Hero banner success treatment (gradient + icon + glow)
+            // driven by [data-complete] in CSS.
+            const hero = this.rootEl.querySelector('.collectibles-hero');
+            if (hero) hero.dataset.complete = heroDone ? '1' : '0';
+            // Legacy progress label (unused after the hero rewrite, but
+            // preserved for any callers that grew dependencies on it).
+            const totalLabel = this.rootEl.querySelector('.collectibles-progress-label');
+            if (totalLabel) totalLabel.textContent = `${allFound}/${total}`;
+            document.querySelectorAll('.toc-collectibles-found').forEach(el => {
+                el.textContent = String(allFound);
+            });
+        },
+
+        // ── Filter chips ───────────────────────────────────────────
+        // Type-filter UI lives on the per-type progress cards (each has
+        // `.collectible-type-chip`). Clicking a card scopes to that
+        // type; clicking the same card again clears back to all. The
+        // controls-bar "Showing: <type> · Clear" button is the second
+        // escape route — surfaced only when a filter is active.
+        _wireFilters() {
+            this.rootEl.querySelectorAll('.collectible-type-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const target = chip.dataset.typeFilter;
+                    const alreadyActive = chip.dataset.state === 'active';
+                    this._setActiveTypeFilter(alreadyActive ? 'all' : target);
+                });
+            });
+            // Clear button in the controls bar — same effect as clicking
+            // the active card a second time.
+            const clearBtn = this.rootEl.querySelector('.collectibles-filter-status');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', () => {
+                    this._setActiveTypeFilter('all');
+                });
+            }
+        },
+
+        _setActiveTypeFilter(target) {
+            this.rootEl.querySelectorAll('.collectible-type-chip').forEach(c => {
+                const match = c.dataset.typeFilter === target;
+                c.dataset.state = match ? 'active' : '';
+                c.classList.toggle('is-active', match);
+            });
+            // Update the "Showing: <type> · Clear" status pill in the
+            // controls bar. `inline-flex` is added/removed alongside
+            // `hidden` so we don't have both display utilities applied
+            // at once (Tailwind lint was complaining).
+            const status = this.rootEl.querySelector('.collectibles-filter-status');
+            if (status) {
+                if (target === 'all') {
+                    status.classList.add('hidden');
+                    status.classList.remove('inline-flex');
+                } else {
+                    const activeChip = this.rootEl.querySelector(
+                        `.collectible-type-chip[data-type-filter="${target}"]`
+                    );
+                    const typeName = activeChip?.dataset.typeName || 'Type';
+                    const nameEl = status.querySelector('.collectibles-filter-status-name');
+                    if (nameEl) nameEl.textContent = typeName;
+                    status.classList.remove('hidden');
+                    status.classList.add('inline-flex');
+                }
+            }
+            this._applyFilters({ typeFilter: target });
+        },
+
+        _wireSearch() {
+            const input = this.rootEl.querySelector('.collectibles-search');
+            if (!input) return;
+            let h = null;
+            input.addEventListener('input', () => {
+                clearTimeout(h);
+                h = setTimeout(() => this._applyFilters(), 150);
+            });
+        },
+
+        _wireHideFound() {
+            const cb = this.rootEl.querySelector('.collectibles-hide-found input[type=checkbox]');
+            if (!cb) return;
+            cb.addEventListener('change', () => this._applyFilters());
+        },
+
+        _activeFilters() {
+            const active = this.rootEl.querySelector('.collectible-type-chip[data-state="active"]');
+            const typeFilter = active?.dataset.typeFilter || 'all';
+            const search = (this.rootEl.querySelector('.collectibles-search')?.value || '').trim().toLowerCase();
+            const hideFound = !!this.rootEl.querySelector('.collectibles-hide-found input[type=checkbox]')?.checked;
+            // At most one flag-only filter active at a time (mutually
+            // exclusive UI: clicking one disables the other in `_wireFlagFilters`).
+            const flagOnlyBtn = this.rootEl.querySelector('.collectibles-flag-filter.is-active');
+            const flagOnly = flagOnlyBtn?.dataset.flag || null;
+            return { typeFilter, search, hideFound, flagOnly };
+        },
+
+        // Animate row out, then apply `hidden`. Showing is instant — a
+        // fade-in costs perceived snappiness and the user just signaled
+        // intent to see more. Re-entrancy: if a row is already mid-fade,
+        // skip; the in-flight setTimeout will land it.
+        _setRowVisible(row, visible) {
+            if (visible) {
+                if (row.classList.contains('hidden') || row.classList.contains('is-fading-out')) {
+                    row.classList.remove('hidden');
+                    row.classList.remove('is-fading-out');
+                }
+                return;
+            }
+            if (row.classList.contains('hidden') || row.classList.contains('is-fading-out')) return;
+            row.classList.add('is-fading-out');
+            setTimeout(() => {
+                if (row.classList.contains('is-fading-out')) {
+                    row.classList.add('hidden');
+                    row.classList.remove('is-fading-out');
+                }
+            }, 220);
+        },
+
+        _applyFilters(override) {
+            const f = Object.assign(this._activeFilters(), override || {});
+            let anyVisible = false;
+            this.rootEl.querySelectorAll('.collectible-item-row').forEach(row => {
+                let visible = true;
+                if (f.typeFilter !== 'all' && row.dataset.typeId !== f.typeFilter) visible = false;
+                if (f.search && !(row.dataset.name || '').toLowerCase().includes(f.search)) visible = false;
+                if (f.hideFound && row.dataset.found === '1') visible = false;
+                if (f.flagOnly === 'missable' && row.dataset.missable !== '1') visible = false;
+                if (f.flagOnly === 'dlc' && row.dataset.dlc !== '1') visible = false;
+                this._setRowVisible(row, visible);
+                if (visible) anyVisible = true;
+            });
+            // Hide whole area groups when none of their rows are visible.
+            this.rootEl.querySelectorAll('.collectible-area-group').forEach(group => {
+                const visibleRows = group.querySelectorAll('.collectible-item-row:not(.hidden)').length;
+                group.classList.toggle('hidden', visibleRows === 0);
+                // Also hide type sub-blocks within the group when their
+                // rows are all filtered out.
+                group.querySelectorAll('.collectible-area-type-block').forEach(block => {
+                    const visibleHere = block.querySelectorAll('.collectible-item-row:not(.hidden)').length;
+                    block.classList.toggle('hidden', visibleHere === 0);
+                });
+            });
+            // Per-type progress cards are now buttons (also act as filter
+            // chips). Keep them all visible — the colored ring on the
+            // active one is the focus-of-attention cue, no need to hide
+            // siblings. (This used to query `.collectibles-progress-strip > div`
+            // when the cards were divs, which would now match nothing.)
+            const empty = this.rootEl.querySelector('.collectibles-empty-state');
+            if (empty) empty.classList.toggle('hidden', anyVisible);
+        },
+
+        // ── Flag filter buttons (Missable / DLC) ──────────────────
+        // Replaces the old sort dropdown. Mutually exclusive: clicking
+        // one toggles it on and turns the other off; clicking again
+        // turns it off entirely (back to "all flags allowed"). State
+        // is read from the `.is-active` class via `_activeFilters`.
+        _wireFlagFilters() {
+            this.rootEl.querySelectorAll('.collectibles-flag-filter').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const wasActive = btn.classList.contains('is-active');
+                    this.rootEl.querySelectorAll('.collectibles-flag-filter').forEach(b => {
+                        b.classList.remove('is-active');
+                    });
+                    if (!wasActive) btn.classList.add('is-active');
+                    this._applyFilters();
+                });
+            });
+        },
+
+
+        // ── Pill click navigation ──────────────────────────────────
+        _wirePillClicks() {
+            // Clicking a `[[slug]]` pill anywhere on the page scrolls to
+            // the tracker and applies that type as the active filter so
+            // the viewer sees the pill's items in context.
+            document.addEventListener('click', (e) => {
+                const pill = e.target.closest('.collectible-pill[data-slug]');
+                if (!pill) return;
+                if (pill.classList.contains('is-broken')) return;
+                e.preventDefault();
+                const slug = pill.dataset.slug;
+                const chip = this.rootEl?.querySelector(
+                    `.collectible-type-chip[data-type-slug="${slug}"]`
+                );
+                if (chip) chip.click();
+                this.rootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        },
+    };
+
     function init() {
         initProgressBar();
         initScrollspy();
@@ -888,6 +1493,7 @@
         initTrophyMentions();
         initTrophyLinkNavigation();
         initImageLightbox();
+        CollectibleTracker.init();
         handleDeepLink();
     }
 
