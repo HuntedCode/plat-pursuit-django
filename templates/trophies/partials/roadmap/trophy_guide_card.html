@@ -70,7 +70,7 @@
     </summary>
     <div class="bg-black/[0.06] border-t border-base-content/5 rounded-b-lg px-3 pb-3 pt-2">
         {% if guide.body %}
-        <div class="prose-roadmap">{{ guide.body|render_roadmap_markdown:game.controller_icon_set }}</div>
+        <div class="prose-roadmap">{{ guide.body|render_roadmap_markdown:game.controller_icon_set|render_collectible_pills:collectibles_by_slug }}</div>
         {% elif not guide.youtube_url %}
         {# Placeholder when an author hasn't filled in details yet. Italic + #}
         {# muted so it reads as "nothing here yet" not as actual content.   #}

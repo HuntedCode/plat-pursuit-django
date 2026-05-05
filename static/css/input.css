@@ -1937,6 +1937,68 @@ html {
   position: static !important;
 }
 
+/* ===== Collectible reference pills =====================================
+   Rendered server-side by `render_collectible_pills` (markdown_filters.py).
+   The token `[[slug]]` in any roadmap markdown surface becomes a small
+   inline span tinted by its type's color. Attribute selectors per color
+   keep classes static (Tailwind JIT detects them at build time) without
+   safelisting seven dynamic class permutations. The same palette powers
+   the editor's row swatches and color picker.
+   ============================================================================ */
+.collectible-pill {
+  @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[0.85em] font-medium align-baseline cursor-pointer transition-colors;
+  white-space: nowrap;
+}
+.collectible-pill .collectible-pill-name {
+  @apply font-semibold;
+}
+.collectible-pill[data-color="primary"]   { @apply bg-primary/15 text-primary border-primary/30 hover:bg-primary/25; }
+.collectible-pill[data-color="secondary"] { @apply bg-secondary/15 text-secondary border-secondary/30 hover:bg-secondary/25; }
+.collectible-pill[data-color="accent"]    { @apply bg-accent/15 text-accent border-accent/30 hover:bg-accent/25; }
+.collectible-pill[data-color="info"]      { @apply bg-info/15 text-info border-info/30 hover:bg-info/25; }
+.collectible-pill[data-color="success"]   { @apply bg-success/15 text-success border-success/30 hover:bg-success/25; }
+.collectible-pill[data-color="warning"]   { @apply bg-warning/15 text-warning border-warning/30 hover:bg-warning/25; }
+.collectible-pill[data-color="error"]     { @apply bg-error/15 text-error border-error/30 hover:bg-error/25; }
+.collectible-pill.is-broken {
+  @apply bg-base-300/40 text-base-content/40 border-base-content/20 italic line-through cursor-help;
+}
+
+/* Editor swatch + picker (small square in each Collectibles row, in the
+   toolbar dropdown, and in the autocomplete). */
+.collectible-swatch {
+  @apply inline-flex items-center justify-center rounded-md border;
+}
+.collectible-swatch[data-color="primary"]   { @apply bg-primary/20 text-primary border-primary/40; }
+.collectible-swatch[data-color="secondary"] { @apply bg-secondary/20 text-secondary border-secondary/40; }
+.collectible-swatch[data-color="accent"]    { @apply bg-accent/20 text-accent border-accent/40; }
+.collectible-swatch[data-color="info"]      { @apply bg-info/20 text-info border-info/40; }
+.collectible-swatch[data-color="success"]   { @apply bg-success/20 text-success border-success/40; }
+.collectible-swatch[data-color="warning"]   { @apply bg-warning/20 text-warning border-warning/40; }
+.collectible-swatch[data-color="error"]     { @apply bg-error/20 text-error border-error/40; }
+
+/* Color-picker buttons inside the add/edit modal. Larger, stronger fill
+   than swatches; selected state ringed. */
+.collectible-color-btn {
+  @apply w-7 h-7 rounded-md border-2 transition-transform hover:scale-110;
+}
+.collectible-color-btn[data-color="primary"]   { @apply bg-primary/40 border-primary/60; }
+.collectible-color-btn[data-color="secondary"] { @apply bg-secondary/40 border-secondary/60; }
+.collectible-color-btn[data-color="accent"]    { @apply bg-accent/40 border-accent/60; }
+.collectible-color-btn[data-color="info"]      { @apply bg-info/40 border-info/60; }
+.collectible-color-btn[data-color="success"]   { @apply bg-success/40 border-success/60; }
+.collectible-color-btn[data-color="warning"]   { @apply bg-warning/40 border-warning/60; }
+.collectible-color-btn[data-color="error"]     { @apply bg-error/40 border-error/60; }
+.collectible-color-btn.is-selected {
+  @apply ring-2 ring-offset-2 ring-offset-base-100;
+}
+.collectible-color-btn.is-selected[data-color="primary"]   { @apply ring-primary; }
+.collectible-color-btn.is-selected[data-color="secondary"] { @apply ring-secondary; }
+.collectible-color-btn.is-selected[data-color="accent"]    { @apply ring-accent; }
+.collectible-color-btn.is-selected[data-color="info"]      { @apply ring-info; }
+.collectible-color-btn.is-selected[data-color="success"]   { @apply ring-success; }
+.collectible-color-btn.is-selected[data-color="warning"]   { @apply ring-warning; }
+.collectible-color-btn.is-selected[data-color="error"]     { @apply ring-error; }
+
 /* Click-to-zoom lightbox for roadmap content images. Created lazily by
    PlatPursuit.Lightbox in utils.js the first time an eligible image is
    clicked, then reused. Single overlay covers the viewport with a centered

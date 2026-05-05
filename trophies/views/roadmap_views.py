@@ -137,6 +137,15 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         context['roadmap'] = roadmap
         context['active_trophy_group_id'] = trophy_group_id
 
+        # Slug -> CollectibleType lookup consumed by the
+        # `render_collectible_pills` template filter to swap [[slug]]
+        # tokens in markdown for color-coded pills. apply_branch_overlay
+        # rebuilds this prefetch in preview mode, so unsaved types from
+        # the current edit session show up too.
+        context['collectibles_by_slug'] = {
+            ct.slug: ct for ct in roadmap.collectible_types.all()
+        }
+
         # DLC navigation strip: enumerate roadmaps under this concept.
         # Public sees only published; authors in preview mode see drafts too.
         context['available_ctgs'] = RoadmapService.get_available_ctgs(
