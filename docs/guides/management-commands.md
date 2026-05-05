@@ -31,7 +31,7 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | `backfill_platted_subgenre_count` | Fix `platted_subgenre_count` on genre challenges and revoke incorrectly awarded `subgenre_progress` milestones. | `--dry-run` | `python manage.py backfill_platted_subgenre_count --dry-run` |
 | `recalculate_gamification` | Recalculate gamification stats (badge XP, tiers, series XP) for one or all profiles. | `--profile`, `--dry-run` | `python manage.py recalculate_gamification --profile Jlowe` |
 | `clean_titles` | Strip TM/registered symbols, normalize Unicode Roman numerals, and remove "trophy set" suffixes from Game, Concept, Trophy, and GameFamily titles. | `--dry-run` | `python manage.py clean_titles --dry-run` |
-| `test_psn` | Test PSN API v3.0.0 connection and fetch sample trophy data. Developer debugging tool with many commented-out endpoint tests. | `psn_username` (positional, default: `abu_abu`) | `python manage.py test_psn myusername` |
+| `psn_probe` | Probe PSN API endpoints directly and dump raw payloads. Troubleshooting tool for sync discrepancies. 12 endpoints: `profile`, `profile_legacy`, `presence`, `region`, `friendship`, `trophy_summary`, `trophy_titles`, `trophy_titles_for_title`, `title_stats`, `trophies`, `trophy_groups_summary`, `game_details`. Requires `NPSSO_TOKEN` in `.env`. | `endpoint` (positional), `--user` (default: `abu_abu`), `--np-comm-id`, `--np-title-id`, `--platform` (default: `PS5`), `--trophy-group-id` (default: `all`), `--include-progress`, `--title-ids`, `--limit`, `--offset`, `--page-size`, `--first` (default: `5`, `0` = all) | `python manage.py psn_probe profile_legacy --user abu_abu` |
 | `backfill_game_regions` | Populate `Game.region` from TitleID region data (loaded by `populate_title_ids`). | `--dry-run`, `--verbose` | `python manage.py backfill_game_regions --dry-run --verbose` |
 | `enforce_az_challenge_rules` | Remove non-completed A-Z challenge slot assignments where the game is now excluded by anti-stack rules. | `--dry-run` | `python manage.py enforce_az_challenge_rules --dry-run` |
 | `check_all_badges` | Full badge recheck for all profiles (or a single user). Reports awarded and revoked badges with before/after diffing. | `--username`, `--dry-run` | `python manage.py check_all_badges --dry-run` |
@@ -193,7 +193,7 @@ Commands for debugging and monitoring. These do not modify data (except where no
 
 | Command | Purpose |
 |---------|---------|
-| `test_psn` | Test PSN API connection and fetch sample data |
+| `psn_probe` | Probe PSN API endpoints directly and dump raw payloads (sync troubleshooting) |
 | `debug_signals` | Inspect signal connections for EarnedTrophy |
 | `test_signals` | Verify platinum notification signal is connected |
 | `test_platinum_signal` | Trigger a real platinum signal (modifies DB) |
