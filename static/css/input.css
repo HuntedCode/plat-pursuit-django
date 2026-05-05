@@ -1999,6 +1999,294 @@ html {
 .collectible-color-btn.is-selected[data-color="warning"]   { @apply ring-warning; }
 .collectible-color-btn.is-selected[data-color="error"]     { @apply ring-error; }
 
+/* Collectible item rich-content panel: opt the formatting toolbar OUT of
+   sticky positioning here. The shared toolbar's `top: chrome + 5rem` is
+   calibrated for the page-level layout (steps, trophy guides — tall
+   textareas, room to pin). Inside a collectible item panel the textarea
+   is short and the parent area card has `overflow-hidden`, which makes
+   sticky descendants pin to a Y that lands inside the textarea below
+   them. Static positioning keeps the toolbar attached just above the
+   textarea like a normal toolbar. */
+.collectible-item-rich-panel .formatting-toolbar {
+  position: static;
+  top: auto;
+}
+
+/* Per-type progress-bar fill on the reader's tracker. Same data-color
+   trick as the swatch / picker — daisyUI tokens via attribute selectors,
+   so Tailwind JIT doesn't have to chase a dynamic `bg-{{ var }}` class. */
+.collectible-type-progress-bar-fill[data-color="primary"]   { @apply bg-primary/70; }
+.collectible-type-progress-bar-fill[data-color="secondary"] { @apply bg-secondary/70; }
+.collectible-type-progress-bar-fill[data-color="accent"]    { @apply bg-accent/70; }
+.collectible-type-progress-bar-fill[data-color="info"]      { @apply bg-info/70; }
+.collectible-type-progress-bar-fill[data-color="success"]   { @apply bg-success/70; }
+.collectible-type-progress-bar-fill[data-color="warning"]   { @apply bg-warning/70; }
+.collectible-type-progress-bar-fill[data-color="error"]     { @apply bg-error/70; }
+
+/* Type identity = colored left edge only. The body of the row stays
+   neutral regardless of type so a mixed-type area (journals + audio
+   logs + upgrades + weapons) reads cleanly instead of as a rainbow.
+   Hover applies a single neutral lift for both found and unfound. */
+.collectible-item-row[data-color="primary"]   { border-left-color: var(--color-primary); }
+.collectible-item-row[data-color="secondary"] { border-left-color: var(--color-secondary); }
+.collectible-item-row[data-color="accent"]    { border-left-color: var(--color-accent); }
+.collectible-item-row[data-color="info"]      { border-left-color: var(--color-info); }
+.collectible-item-row[data-color="success"]   { border-left-color: var(--color-success); }
+.collectible-item-row[data-color="warning"]   { border-left-color: var(--color-warning); }
+.collectible-item-row[data-color="error"]     { border-left-color: var(--color-error); }
+
+/* Neutral hover for all rows (found + unfound). One rule, no rainbow. */
+.collectible-item-row:hover { @apply bg-base-content/[0.04]; }
+
+/* Found state — purely data-attribute driven, no class-toggle dance.
+   Dim the surrounding border slightly (the colored left edge stays put
+   so type identity is preserved), and fade the rest of the row toward
+   the page background. The strikethrough + check-on-swatch + dimmed
+   text in the row markup provide the "this is done" signals. We do NOT
+   wash the body green: that signal triples up with the strikethrough
+   and the swatch check, and creates noise in dense lists. */
+.collectible-item-row[data-found="1"] {
+  @apply border-success/30;
+  opacity: 0.78;
+}
+.collectible-item-row[data-found="1"]:hover {
+  opacity: 1;
+  @apply bg-base-content/[0.04];
+}
+.collectible-item-row[data-found="1"] .collectible-item-name {
+  @apply line-through text-base-content/50;
+}
+
+/* Filter fade-out: when a row is being hidden by an active filter
+   (Hide found, Missable, type filter, etc.), animate opacity AND
+   collapse height/spacing to nothing before applying `hidden`. JS
+   adds `is-fading-out` for ~220ms, then the `hidden` class. Showing
+   is intentionally instant — fading IN feels laggy, fading OUT feels
+   considerate. */
+.collectible-item-row {
+  transition:
+    opacity 180ms ease-out,
+    max-height 220ms ease-out,
+    margin-top 220ms ease-out,
+    margin-bottom 220ms ease-out,
+    padding-top 220ms ease-out,
+    padding-bottom 220ms ease-out,
+    border-width 220ms ease-out,
+    background-color 200ms ease-out,
+    border-color 200ms ease-out;
+  /* Generous max-height so normal rendering isn't capped. Set a
+     concrete value so the transition has something to animate from. */
+  max-height: 4000px;
+  overflow: hidden;
+}
+.collectible-item-row.is-fading-out {
+  opacity: 0;
+  max-height: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  border-top-width: 0;
+  border-bottom-width: 0;
+  pointer-events: none;
+}
+
+/* Rich-content panel: collapses when the row is found. The hint is
+   irrelevant once the item is grabbed, and on a 30-item list with rich
+   panels every kept-open guide is dead vertical space. We animate
+   max-height + opacity + padding + border so the transition is smooth
+   in both directions. The `max-height: 4000px` is a generous ceiling so
+   tall guides aren't capped at rest; the transition only animates when
+   data-found flips, since both states are fully styled (no "from auto"
+   issues). */
+.collectible-item-rich-panel {
+  overflow: hidden;
+  max-height: 4000px;
+  transition:
+    max-height 240ms ease-out,
+    opacity 200ms ease-out,
+    padding-top 240ms ease-out,
+    padding-bottom 240ms ease-out,
+    border-top-width 240ms ease-out;
+}
+.collectible-item-row[data-found="1"] .collectible-item-rich-panel {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-width: 0;
+}
+
+/* Guide-hint icon: small book glyph in the row header that surfaces on
+   found rows whose guide is now collapsed, signaling "there's content
+   here, uncheck to re-expand". Hidden on unfound rows (guide is already
+   on display) and on rows with no rich content (the template only emits
+   it when item.body / youtube_url / gallery_images is present). */
+.collectible-item-row[data-found="0"] .collectible-item-guide-hint {
+  display: none;
+}
+
+/* Found-item corner badge: a small green check disc overlays the type
+   swatch's bottom-right corner when the item is marked found. Mirrors
+   the trophy-guide-card "earned" pattern so the cross-feature visual
+   language stays consistent. Hidden on unfound rows so the swatch
+   reads cleanly as just identity. */
+.collectible-item-row[data-found="0"] .collectible-item-found-check {
+  display: none;
+}
+
+/* Per-type progress card — completed treatment. When every item of
+   one type is found, the card border + progress bar + label flip to
+   success. The type swatch keeps its color so identity stays visible
+   ("Riddler Trophies" still reads as Riddler-tinted, just with a
+   "complete" stamp). The .is-active filter ring (set in the
+   collectible-type-chip block above) still wins via higher specificity
+   since it has more selectors. */
+.collectible-type-progress-card[data-complete="1"] {
+  @apply border-success/40 bg-success/[0.06];
+}
+.collectible-type-progress-card[data-complete="1"] .collectible-type-progress-bar-fill {
+  background-color: oklch(from var(--color-success) l c h);
+  box-shadow: 0 0 6px 0 oklch(from var(--color-success) l c h / 0.45);
+}
+.collectible-type-progress-card[data-complete="1"] .collectible-type-progress-bar-label {
+  @apply text-success;
+}
+/* Smaller controls-bar chip: same idea but lighter — just text-success
+   on the count and a thin success ring so the chip reads "done"
+   without yelling. */
+.collectible-type-chip[data-complete="1"]:not(.collectible-type-progress-card) {
+  @apply border-success/45 text-success;
+}
+.collectible-type-chip[data-complete="1"] .collectible-type-progress-label {
+  @apply text-success;
+}
+
+/* Hero banner — completed (everything found) treatment. The 100%
+   moment is the emotional payoff for a trophy hunter, so we lean in:
+   success palette gradient, glowing ring around the icon disc, the
+   🎉 emoji scales up, the "All collectibles found" tagline reveals,
+   and the missable-remaining counter (now stale at 100%) hides.
+   Driven by data-complete="1" on the .collectibles-hero element;
+   JS keeps it in sync via _recomputeTotals. */
+.collectibles-hero[data-complete="1"] {
+  border-color: oklch(from var(--color-success) l c h / 0.5);
+  background-image: linear-gradient(
+    to bottom right,
+    oklch(from var(--color-success) l c h / 0.22),
+    oklch(from var(--color-success) l c h / 0.10),
+    oklch(from var(--color-base-200) l c h / 0.4)
+  );
+  box-shadow: 0 0 24px -4px oklch(from var(--color-success) l c h / 0.25);
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-icon-disc {
+  @apply bg-success/25 ring-2 ring-success/55;
+  box-shadow: 0 0 16px -2px oklch(from var(--color-success) l c h / 0.6);
+  animation: pp-collectibles-disc-pulse 2.4s ease-in-out infinite;
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-icon {
+  @apply text-success;
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-percent-wrap {
+  @apply text-success;
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-progress-bar {
+  background-image: none;
+  background-color: oklch(from var(--color-success) l c h);
+  box-shadow: 0 0 10px 1px oklch(from var(--color-success) l c h / 0.55);
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-celebrate {
+  display: inline-block;
+  animation: pp-collectibles-celebrate-bounce 1.6s ease-in-out infinite;
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-tagline {
+  display: block;
+}
+.collectibles-hero[data-complete="1"] .collectibles-hero-missable {
+  display: none;
+}
+
+@keyframes pp-collectibles-disc-pulse {
+  0%, 100% { box-shadow: 0 0 12px -2px oklch(from var(--color-success) l c h / 0.45); }
+  50%      { box-shadow: 0 0 20px 0   oklch(from var(--color-success) l c h / 0.7); }
+}
+@keyframes pp-collectibles-celebrate-bounce {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50%      { transform: translateY(-3px) rotate(6deg); }
+}
+
+/* Completed-chapter treatment. When every item in an area is found,
+   the area card paints itself success-tinted, swaps its leading pin
+   icon for a checkmark disc, hides the progress bar + count label
+   (redundant when complete), and surfaces a "Complete" badge. JS in
+   roadmap-detail.js flips data-complete on the toggle event; the
+   template renders it on initial paint based on server-side state. */
+.collectible-area-group[data-complete="1"] {
+  @apply border-success/40 bg-success/[0.04];
+}
+.collectible-area-group[data-complete="1"] > summary {
+  background-image: linear-gradient(
+    to right,
+    oklch(from var(--color-success) l c h / 0.14),
+    transparent
+  );
+}
+.collectible-area-group[data-complete="1"] > summary:hover {
+  background-image: linear-gradient(
+    to right,
+    oklch(from var(--color-success) l c h / 0.20),
+    transparent
+  );
+}
+.collectible-area-group[data-complete="1"] .collectible-area-title {
+  @apply text-success;
+}
+/* Show/hide rules for the swappable summary chrome. */
+.collectible-area-group[data-complete="0"] .collectible-area-complete-icon,
+.collectible-area-group[data-complete="0"] .collectible-area-complete-badge {
+  display: none;
+}
+.collectible-area-group[data-complete="1"] .collectible-area-incomplete-icon,
+.collectible-area-group[data-complete="1"] .collectible-area-progress,
+.collectible-area-group[data-complete="1"] .collectible-area-found-label {
+  display: none;
+}
+.collectible-area-group[data-complete="1"] .collectible-area-complete-icon {
+  display: inline-flex;
+}
+.collectible-area-group[data-complete="1"] .collectible-area-complete-badge {
+  display: inline-flex;
+}
+
+/* Rich-content panel: subtle type-tinted bg + matching top border so
+   the guide section reads as "more of this type" rather than a generic
+   dark stripe. Lower opacity than the row tint so the prose / video
+   stay readable. */
+.collectible-item-row[data-color="primary"]   .collectible-item-rich-panel { @apply bg-primary/[0.05] border-t-primary/20; }
+.collectible-item-row[data-color="secondary"] .collectible-item-rich-panel { @apply bg-secondary/[0.05] border-t-secondary/20; }
+.collectible-item-row[data-color="accent"]    .collectible-item-rich-panel { @apply bg-accent/[0.05] border-t-accent/20; }
+.collectible-item-row[data-color="info"]      .collectible-item-rich-panel { @apply bg-info/[0.05] border-t-info/20; }
+.collectible-item-row[data-color="success"]   .collectible-item-rich-panel { @apply bg-success/[0.05] border-t-success/20; }
+.collectible-item-row[data-color="warning"]   .collectible-item-rich-panel { @apply bg-warning/[0.05] border-t-warning/20; }
+.collectible-item-row[data-color="error"]     .collectible-item-rich-panel { @apply bg-error/[0.05] border-t-error/20; }
+
+/* Active filter chip / progress card: when its type is the current
+   filter selection, lift it visually with a colored ring + bg. JS
+   adds .is-active. */
+.collectible-type-chip.is-active[data-color="primary"]   { @apply ring-2 ring-primary/40 bg-primary/10 border-primary/40; }
+.collectible-type-chip.is-active[data-color="secondary"] { @apply ring-2 ring-secondary/40 bg-secondary/10 border-secondary/40; }
+.collectible-type-chip.is-active[data-color="accent"]    { @apply ring-2 ring-accent/40 bg-accent/10 border-accent/40; }
+.collectible-type-chip.is-active[data-color="info"]      { @apply ring-2 ring-info/40 bg-info/10 border-info/40; }
+.collectible-type-chip.is-active[data-color="success"]   { @apply ring-2 ring-success/40 bg-success/10 border-success/40; }
+.collectible-type-chip.is-active[data-color="warning"]   { @apply ring-2 ring-warning/40 bg-warning/10 border-warning/40; }
+.collectible-type-chip.is-active[data-color="error"]     { @apply ring-2 ring-error/40 bg-error/10 border-error/40; }
+/* "All" chip (no data-color): generic primary-tinted active state. */
+.collectible-type-chip.is-active:not([data-color]) { @apply ring-2 ring-primary/40 bg-primary/10 border-primary/40; }
+
+/* Flag-filter buttons (Missable / DLC) — colored ring matching the
+   flag's semantic color when active. Mirrors the trophy-guide flag
+   filter pattern so the page reads consistently. */
+.collectibles-flag-filter.is-active[data-flag="missable"] { @apply ring-2 ring-warning/50 bg-warning/15 border-warning/50 text-warning; }
+.collectibles-flag-filter.is-active[data-flag="dlc"]      { @apply ring-2 ring-info/50 bg-info/15 border-info/50 text-info; }
+
 /* Click-to-zoom lightbox for roadmap content images. Created lazily by
    PlatPursuit.Lightbox in utils.js the first time an eligible image is
    clicked, then reused. Single overlay covers the viewport with a centered
