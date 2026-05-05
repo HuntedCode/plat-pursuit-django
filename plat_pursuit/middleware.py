@@ -35,7 +35,12 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 
 _HEAVY_REQUEST_MB = 50
-_DANGER_RSS_MB = 300
+# Baseline worker RSS sits ~350 MB on sync workers (Python + Django + app
+# modules + URL conf + parsed templates). The danger threshold is set above
+# that so REQUEST_START_HOT only fires when a worker has actually drifted
+# past its expected ceiling. Pre-fix (gthread + glibc arena fragmentation)
+# this was 300, which alarmed on every request once the leak started.
+_DANGER_RSS_MB = 600
 
 
 def _read_rss_kb():

@@ -7,6 +7,8 @@ from plat_pursuit.middleware import (
     BotCanonicalRedirectMiddleware,
     CloudflareOriginGuardMiddleware,
     MemoryDeltaMiddleware,
+    _DANGER_RSS_MB,
+    _HEAVY_REQUEST_MB,
 )
 
 
@@ -255,9 +257,11 @@ class MemoryDeltaMiddlewareTests(SimpleTestCase):
         )
 
     def test_request_start_hot_fires_when_worker_is_above_danger_rss(self):
-        # Start at 320 MB (above 300 MB danger threshold), grow by 5 MB only
-        # (below 50 MB heavy threshold) — should log only REQUEST_START_HOT.
-        rss_values = iter([320 * 1024, 325 * 1024])
+        # Start above the danger threshold, grow by less than the heavy
+        # threshold — should log only REQUEST_START_HOT.
+        start_kb = (_DANGER_RSS_MB + 20) * 1024
+        end_kb = start_kb + 5 * 1024
+        rss_values = iter([start_kb, end_kb])
         with mock.patch(
             'plat_pursuit.middleware._read_rss_kb',
             side_effect=lambda: next(rss_values),
@@ -274,8 +278,10 @@ class MemoryDeltaMiddlewareTests(SimpleTestCase):
         )
 
     def test_request_start_hot_does_not_fire_below_danger_rss(self):
-        # Start at 250 MB, grow by 10 MB — both below thresholds, no logs.
-        rss_values = iter([250 * 1024, 260 * 1024])
+        # Start below danger, grow by less than the heavy threshold — no logs.
+        start_kb = (_DANGER_RSS_MB - 50) * 1024
+        end_kb = start_kb + 10 * 1024
+        rss_values = iter([start_kb, end_kb])
         with mock.patch(
             'plat_pursuit.middleware._read_rss_kb',
             side_effect=lambda: next(rss_values),
