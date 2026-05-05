@@ -298,10 +298,42 @@ class Command(BaseCommand):
             .prefetch_related(Prefetch('concept__games', queryset=games_qs))
         )
 
+    @staticmethod
+    def _psn_date_matches_any_ps_date(concept, match):
+        """True iff PSN's concept.release_date matches any IGDB PS release date.
+
+        Checks the curated per-platform display list first (one entry
+        per PS platform via collapse_ps_release_dates_for_display) so
+        cross-gen remasters where PSN's date matches a later platform
+        launch still register. Falls back to `igdb_first_release_date`
+        for legacy rows whose `igdb_ps_release_dates` column hasn't
+        been populated yet.
+
+        Day-level comparison via ISO-formatted dates avoids timezone
+        edge cases.
+        """
+        if not concept.release_date:
+            return False
+        psn_iso = concept.release_date.strftime('%Y-%m-%d')
+
+        ps_dates = IGDBService.collapse_ps_release_dates_for_display(
+            match.igdb_ps_release_dates or []
+        )
+        if any(e['date'] == psn_iso for e in ps_dates):
+            return True
+
+        # Legacy fallback only fires when the per-platform column is
+        # empty; otherwise the canonical earliest is already in the
+        # collapsed list above.
+        if not ps_dates and match.igdb_first_release_date:
+            return match.igdb_first_release_date.strftime('%Y-%m-%d') == psn_iso
+
+        return False
+
     def _auto_lock_matching(self, options):
         """Auto-resolve concepts whose titles already match IGDB.
 
-        Two resolution flavours:
+        Three resolution flavours, in priority order:
 
           * EXACT: concept title + every game's title_name are byte-equal
             to IGDB (or IGDB + legacy suffix for the concept). Lock + mark
@@ -319,6 +351,20 @@ class Command(BaseCommand):
             canonical form (IGDB name + legacy suffix if legacy), rewrite
             games to raw IGDB, then lock + mark reviewed. IGDB's form
             wins unconditionally.
+
+          * DATE_CONFIRMED: every game already matches IGDB (byte-equal
+            or normalized) AND PSN's concept.release_date matches some
+            IGDB PS release date exactly, but the concept title still
+            disagrees beyond what the normalizer can collapse. Game-
+            level + date-level agreement is enough additional evidence
+            to auto-rewrite the concept rather than queue for human
+            review. Rewrite concept to canonical, lock + mark reviewed.
+            Catches concepts the admin curated with a longer title
+            (e.g., "Foo Definitive Edition" while games + IGDB both
+            say "Foo") — IGDB authority wins, same semantic as the
+            other two branches. Concepts with curated titles that
+            shouldn't be flattened can pre-set `concept.title_lock`
+            to opt out.
         """
         qs = self._base_match_queryset().filter(
             concept__title_reviewed_at__isnull=True,
@@ -328,6 +374,7 @@ class Command(BaseCommand):
 
         exact_locked = 0
         normalized_merged = 0
+        date_confirmed_merged = 0
         game_lock_count = 0
         now = timezone.now()
 
@@ -368,10 +415,23 @@ class Command(BaseCommand):
 
             concept_ok = concept_exact or concept_norm
             games_ok = games_exact or games_norm
-            if not concept_ok or not games_ok:
+
+            # Date-confirmed escape hatch: games already agree with IGDB
+            # and the release date does too — concept-title rewrite is
+            # safe even when the title diverges beyond the normalizer's
+            # reach.
+            date_confirmed = (
+                games_ok
+                and not concept_ok
+                and self._psn_date_matches_any_ps_date(concept, match)
+            )
+
+            if not games_ok:
+                continue
+            if not concept_ok and not date_confirmed:
                 continue
 
-            needs_rewrite = concept_norm or not games_exact
+            needs_rewrite = concept_norm or not games_exact or date_confirmed
 
             # Apply title rewrites for the case-merge branch.
             concept_fields = []
@@ -398,17 +458,21 @@ class Command(BaseCommand):
                     if 'lock_title' in g_fields:
                         game_lock_count += 1
 
-            if needs_rewrite:
+            if date_confirmed:
+                date_confirmed_merged += 1
+            elif needs_rewrite:
                 normalized_merged += 1
             else:
                 exact_locked += 1
 
-        if exact_locked or normalized_merged:
+        if exact_locked or normalized_merged or date_confirmed_merged:
             parts = []
             if exact_locked:
                 parts.append(f'{exact_locked} exact-match lock(s)')
             if normalized_merged:
                 parts.append(f'{normalized_merged} normalized merge(s)')
+            if date_confirmed_merged:
+                parts.append(f'{date_confirmed_merged} date-confirmed merge(s)')
             parts.append(f'{game_lock_count} game lock(s) applied')
             self.stdout.write(self.style.SUCCESS(
                 'Auto-resolved: ' + '; '.join(parts) + '.'
