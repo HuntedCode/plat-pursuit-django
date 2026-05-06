@@ -110,7 +110,8 @@ User states (from product-identity.md):
 
 - Anonymous: marketing landing leading with badges + the pitch
 - Signed in, no PSN: badge tour + onboarding wall
-- Syncing: "Building your Pursuer..." with badge previews
+- Syncing (first sync): "Your Pursuer is emerging." Real-time view of badge tier earnings, job XP, and Pursuer Level being computed from the user's existing PSN history. See Cross-Cutting Decisions: Retroactive credit on first sync and badge launches. High-conversion moment by design.
+- Syncing (subsequent): standard sync progress with badge progression updates
 - Synced: the Pursuit home as described above
 
 #### 6. IA migration
@@ -205,6 +206,7 @@ After Phase 1 ships and engagement data informs design, Phase 2 adds the first e
 - **Title customization options.** Beyond auto-unlocked titles, allow simple modifications (colors, prefixes). Leverages existing titles infrastructure. Possible premium hook (text styling = premium, base titles = free).
 - **Job category deep-dive views.** Click a category in the radar to see all jobs in that category with comparison / depth. Educational + discovery.
 - **Badge tier progress views.** Within a badge's detail page, a clearer view of which stages are done at which tiers, and what's needed for the next tier. Minor improvement but high-leverage.
+- **Hall of Fame / Top Earners.** A chronological recognition system based on PSN trophy completion timestamps. The first N to earn each badge tier (likely tiered: 1st = "First Earner," 2nd to 10th = "Top 10 Earner," 11th to 50th = "Top 50 Earner") get permanent recognition: an indicator on their gallery and a listing on the badge's detail page Hall of Fame section. Universal across all badges, applies per-tier. Ranking is determined by when the user actually completed the qualifying trophy on PSN (not when PlatPursuit awarded the badge), so the Hall of Fame is a true chronological history of trophy-hunting accomplishment rather than a launch-day-batch artifact. Strong Phase 2 candidate: strengthens the badge ecosystem materially, low infrastructure cost, creates real prestige scarcity.
 
 **Probably NOT yet in Phase 2:** currency, store, quests, frame customization. Those wait for Phase 3 when the engagement-systems layer makes sense as a coherent unit.
 
@@ -259,6 +261,18 @@ The discipline at every Phase 4+ feature: it earns its place by demonstrably sol
 These apply across phases:
 
 **Theme.** The space colony framing from the original vision doc is dropped. Constellation as a *visualization metaphor* (pattern of connected points) survives if it earns Phase 2 inclusion. The brand's primary visual identity is the custom badge artwork, not a sci-fi setting. Specific terminology (Stellar Marks, Star Chart, etc.) depends on whether the constellation visualization survives; if it does, modest space-flavored naming is acceptable for those specific features. If it doesn't, even those names rename to plain English.
+
+**Retroactive credit on first sync and badge launches.** The badge system is the filter that determines which trophies "count." Whenever a user's badge filter expands (whether because they just signed up or because a new badge launched), the system awards full retroactive credit for everything that now passes through the filter. This includes per-trophy XP for contributing trophies, stage-completion XP for stages already complete, and badge tier earnings for tiers already qualified. The natural cap is the badge filter itself: only trophies that contribute to badges generate XP, regardless of when they were earned.
+
+For new users, this means a veteran with significant PSN history walks in as a high-level Pursuer reflecting their actual accomplishments. Their first sync produces a "your character emerged from your history" moment that's a major onboarding and marketing surface.
+
+For existing users when a new badge launches, this means past work that now qualifies gets credit at the same time the badge becomes earnable. Each badge launch becomes a personalized notification ("you already qualify for Bronze tier and earned X XP across Y jobs") for users with relevant history, and a clean invitation for users without it.
+
+The principle: same work, same reward, regardless of when the work was done or when the user joined. The badge filter is the rule; whatever passes through gets full credit. No discounts for retroactive XP. No caps. Veterans rank where their accomplishments place them on leaderboards (separate "growth since signup" leaderboards can exist for community comparison without compromising the headline ranking's accuracy).
+
+**Badge artwork upgrades.** Many badges launch with generic artwork and are later upgraded to custom artwork (currently funded via community fundraising). When a badge receives a custom-art upgrade, all users who already own that badge get the upgraded artwork in their gallery automatically. No XP differential between earning a generic-art badge and a custom-art badge: same work, same reward. The artwork itself is the recognition; mechanical bonuses tied to artwork status would penalize early earners and create manipulation pressure around timing.
+
+Each upgrade should fire a notification to existing earners: "The [Badge Name] you earned in [year] has been upgraded with custom artwork by [artist]. Your gallery has been updated." This is an organic re-engagement event, a satisfying moment, and a celebration of the artwork program. Recognition for fundraisers themselves is handled separately by the existing milestone system (which will get a visual facelift in conjunction with the Phase 3 premium overhaul).
 
 **Premium model.** Phase 1: premium stays as-is. Phase 2: minor premium hooks (e.g., title customization). Phase 3: full premium overhaul (Duolingo-style framing). Phase 4+: stable; new features tag onto the established premium frame.
 
