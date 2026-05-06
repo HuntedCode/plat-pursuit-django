@@ -29,7 +29,8 @@
      data-name="{{ item.name }}"
      data-found="{% if item.is_found %}1{% else %}0{% endif %}"
      data-missable="{% if item.is_missable %}1{% else %}0{% endif %}"
-     data-dlc="{% if item.is_dlc %}1{% else %}0{% endif %}">
+     data-dlc="{% if item.is_dlc %}1{% else %}0{% endif %}"
+     data-has-content="{% if item.body or item.youtube_url or item.gallery_images %}1{% else %}0{% endif %}">
     <div class="collectible-item-row-header flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
          role="button"
          tabindex="0"
@@ -59,7 +60,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             </span>
         </span>
-        <span class="collectible-item-name flex-1 min-w-0 text-xs md:text-sm truncate">
+        <span class="collectible-item-name flex-1 min-w-0 text-xs md:text-sm font-semibold truncate">
             {{ item.name|default:"(unnamed)" }}
         </span>
         {% if item.is_missable %}

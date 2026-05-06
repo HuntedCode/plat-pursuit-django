@@ -2057,6 +2057,35 @@ html {
   @apply line-through text-base-content/50;
 }
 
+/* Content-row card treatment. Empty rows stay as a compact list (the
+   default styling); rows that carry rich content (body / youtube /
+   gallery, marked by data-has-content="1" server-side) earn a
+   stronger border, a subtle shadow, and slightly heavier padding so
+   the eye lands on a clear "card" landmark when scanning. Combined
+   with the bumped items-list `space-y-2`, the boundary between one
+   guide and the next becomes unmistakable — the reader can leave
+   off mid-prose, look up, and immediately spot where the next item
+   begins. The card stays present even when the row is found
+   (panel collapsed) so "this one had a guide" remains visible. */
+.collectible-item-row[data-has-content="1"] {
+  @apply shadow-sm shadow-black/15 border-base-content/15;
+}
+.collectible-item-row[data-has-content="1"] .collectible-item-row-header {
+  @apply py-2;
+}
+/* Slight size bump on the name for content rows — the title-bar feel
+   that distinguishes "card with a guide inside" from "checklist row".
+   Empty rows keep the compact text-xs/sm size. */
+.collectible-item-row[data-has-content="1"] .collectible-item-name {
+  @apply text-sm md:text-base;
+}
+/* Header gets a thin bottom divider when the rich panel is showing,
+   so the title-vs-body hierarchy reads cleanly. Hidden when found
+   (panel collapsed) so the row still reads as one tight card. */
+.collectible-item-row[data-has-content="1"][data-found="0"] .collectible-item-row-header {
+  @apply border-b border-base-content/10;
+}
+
 /* Filter fade-out: when a row is being hidden by an active filter
    (Hide found, Missable, type filter, etc.), animate opacity AND
    collapse height/spacing to nothing before applying `hidden`. JS
