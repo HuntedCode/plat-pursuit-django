@@ -208,32 +208,49 @@
     // ── TOC Trophy Search Filter ──────────────────────────────────────
 
     function initTocTrophySearch() {
-        document.querySelectorAll('.toc-trophy-search').forEach((input) => {
-            input.addEventListener('input', () => {
-                const query = input.value.toLowerCase().trim();
-                const list = input.closest('ul');
-                if (!list) return;
+        // Search + hide-earned both filter the TOC's trophy entries; we
+        // apply them together so flipping one doesn't undo the other.
+        // Each list (sidebar + mobile) gets its own filter state, scoped
+        // to the wrapper `<ul>`.
+        function applyFilters(list) {
+            const searchInput = list.querySelector('.toc-trophy-search');
+            const hideEarnedCb = list.querySelector('.toc-trophy-hide-earned input[type=checkbox]');
+            const query = (searchInput?.value || '').toLowerCase().trim();
+            const hideEarned = !!hideEarnedCb?.checked;
 
-                list.querySelectorAll('.toc-trophy-entry').forEach((entry) => {
-                    const name = entry.dataset.trophyName || '';
-                    entry.style.display = !query || name.includes(query) ? '' : 'none';
-                });
-
-                // Hide phase headers whose entries are all filtered out by
-                // the search; otherwise empty phase chips would float around.
-                // Walk siblings between each header and the next, count matches.
-                list.querySelectorAll('.toc-phase-header').forEach(header => {
-                    let next = header.nextElementSibling;
-                    let visibleCount = 0;
-                    while (next && !next.classList.contains('toc-phase-header')) {
-                        if (next.classList.contains('toc-trophy-entry') && next.style.display !== 'none') {
-                            visibleCount += 1;
-                        }
-                        next = next.nextElementSibling;
-                    }
-                    header.style.display = (query && visibleCount === 0) ? 'none' : '';
-                });
+            list.querySelectorAll('.toc-trophy-entry').forEach((entry) => {
+                const name = entry.dataset.trophyName || '';
+                const isEarned = entry.dataset.earned === '1';
+                let visible = true;
+                if (query && !name.includes(query)) visible = false;
+                if (hideEarned && isEarned) visible = false;
+                entry.style.display = visible ? '' : 'none';
             });
+
+            // Hide phase headers whose entries are all filtered out;
+            // otherwise empty phase chips float around.
+            list.querySelectorAll('.toc-phase-header').forEach(header => {
+                let next = header.nextElementSibling;
+                let visibleCount = 0;
+                while (next && !next.classList.contains('toc-phase-header')) {
+                    if (next.classList.contains('toc-trophy-entry') && next.style.display !== 'none') {
+                        visibleCount += 1;
+                    }
+                    next = next.nextElementSibling;
+                }
+                header.style.display = ((query || hideEarned) && visibleCount === 0) ? 'none' : '';
+            });
+        }
+
+        document.querySelectorAll('.toc-trophy-search').forEach((input) => {
+            const list = input.closest('ul');
+            if (!list) return;
+            input.addEventListener('input', () => applyFilters(list));
+        });
+        document.querySelectorAll('.toc-trophy-hide-earned input[type=checkbox]').forEach((cb) => {
+            const list = cb.closest('ul');
+            if (!list) return;
+            cb.addEventListener('change', () => applyFilters(list));
         });
     }
 
@@ -960,6 +977,7 @@
             this.roadmapId = root.dataset.roadmapId;
             this._wireRowToggles();
             this._wireAreaAnimation();
+            this._wireMarkAllButtons();
             this._wireFilters();
             this._wireFlagFilters();
             this._wireSearch();
@@ -1027,12 +1045,18 @@
             // Strikethrough + dim styling on `.collectible-item-name`
             // is CSS-driven off the row's `[data-found="1"]` selector —
             // no manual class toggling here.
-            this._recomputeTotals();
-            // When "Hide found" is active, marking an item found should
-            // make it disappear immediately — re-run filters so the row
-            // hides on the next paint instead of leaving a dangling
-            // "found" row in a list that's supposed to hide them.
-            this._applyFilters();
+            // Caller can pass `batched: true` to suppress the per-item
+            // recompute + filter pass — used by Mark all / Unmark all
+            // so a 30-item area doesn't thrash the DOM thirty times;
+            // the caller does a single recompute + filter at the end.
+            if (!opts.batched) {
+                this._recomputeTotals();
+                // When "Hide found" is active, marking an item found should
+                // make it disappear immediately — re-run filters so the row
+                // hides on the next paint instead of leaving a dangling
+                // "found" row in a list that's supposed to hide them.
+                this._applyFilters();
+            }
             // Auto-collapse the parent area if THIS toggle just made it
             // 100% complete. Only fires on the marking event (not on
             // every recompute) so a user who manually re-opens a fully
@@ -1082,6 +1106,90 @@
                     this._animateAreaClose(area);
                 }
             }, 450);
+        },
+
+        // ── Bulk Mark all / Unmark all per area ────────────────────
+        // Smart toggle: button label flips between "Mark all as found"
+        // and "Unmark all" depending on whether every item in the area
+        // is already found. Optimistic DOM updates + parallel API
+        // calls so a 30-item area doesn't sequentially POST. Useful
+        // for joining a guide late, or collecting everything in an
+        // area before checking off.
+        _wireMarkAllButtons() {
+            this.rootEl.querySelectorAll('.collectible-area-mark-all-btn').forEach(btn => {
+                btn.addEventListener('click', () => this._handleMarkAll(btn));
+            });
+            // Sync each button's label/icon to current area state at
+            // init time + after every recompute, so the toggle reflects
+            // truth as the user works through items individually.
+            this._refreshMarkAllButtons();
+        },
+
+        _refreshMarkAllButtons() {
+            this.rootEl.querySelectorAll('.collectible-area-mark-all-btn').forEach(btn => {
+                const key = btn.dataset.areaKey;
+                const area = this.rootEl.querySelector(
+                    `.collectible-area-group[data-collectible-area-key="${key}"]`
+                );
+                if (!area) return;
+                const items = area.querySelectorAll('.collectible-item-row');
+                const total = items.length;
+                const foundCount = area.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+                // "All found" = button suggests Unmark; otherwise Mark all.
+                const allFound = total > 0 && foundCount === total;
+                btn.querySelector('.collectible-area-mark-all-icon-mark')
+                    ?.classList.toggle('hidden', allFound);
+                btn.querySelector('.collectible-area-mark-all-icon-unmark')
+                    ?.classList.toggle('hidden', !allFound);
+                const label = btn.querySelector('.collectible-area-mark-all-label');
+                if (label) label.textContent = allFound ? 'Unmark all' : 'Mark all as found';
+                // Disable when there's nothing to do (empty area —
+                // shouldn't happen since empty areas don't render, but
+                // belt-and-suspenders).
+                btn.disabled = total === 0;
+            });
+        },
+
+        async _handleMarkAll(btn) {
+            const key = btn.dataset.areaKey;
+            const area = this.rootEl.querySelector(
+                `.collectible-area-group[data-collectible-area-key="${key}"]`
+            );
+            if (!area) return;
+            const items = Array.from(area.querySelectorAll('.collectible-item-row'));
+            if (items.length === 0) return;
+            const foundCount = area.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+            // If already all found, this click un-marks; otherwise mark
+            // all unfound items as found (skip already-found ones to
+            // avoid redundant API calls).
+            const targetState = foundCount !== items.length;
+            // Disable the button while the batch is in flight to prevent
+            // double-clicks queuing parallel batches.
+            btn.disabled = true;
+            try {
+                const toFlip = items.filter(row => (row.dataset.found === '1') !== targetState);
+                // Parallel: optimistic DOM updates + persistence calls
+                // run concurrently. Each _setItemFound flip would normally
+                // call _recomputeTotals + _applyFilters per item; we
+                // suppress those via { batched: true } and do a single
+                // recompute + filter pass at the end so we don't thrash
+                // the DOM N times.
+                await Promise.all(
+                    toFlip.map(row => this._setItemFound(
+                        parseInt(row.dataset.itemId, 10),
+                        targetState,
+                        { batched: true, skipAutoCollapse: true },
+                    ))
+                );
+            } finally {
+                this._recomputeTotals();
+                this._applyFilters();
+                this._refreshMarkAllButtons();
+                btn.disabled = false;
+                // If we just hit 100% on this area, defer to the same
+                // auto-collapse rule a single check would use.
+                if (targetState) this._maybeCollapseCompletedArea(items[0]);
+            }
         },
 
         // ── Area details open/close animation ─────────────────────
@@ -1302,6 +1410,9 @@
             document.querySelectorAll('.toc-collectibles-found').forEach(el => {
                 el.textContent = String(allFound);
             });
+            // Keep each area's Mark all / Unmark all button label in
+            // sync as the user ticks individual items.
+            this._refreshMarkAllButtons();
         },
 
         // ── Filter chips ───────────────────────────────────────────
@@ -1479,6 +1590,203 @@
         },
     };
 
+    // ── Collectible Pill Hover Tooltips ───────────────────────────────
+    /**
+     * Hover tooltip on `[[slug]]` collectible pills. Singleton element
+     * appended to body, repositioned on hover. Reads the pill's data
+     * attributes for static info (icon, name, color, description) and
+     * computes live progress (X/Y found) by counting matching item
+     * rows in the tracker section. Works wherever pills appear:
+     * Introduction, General Tips, step descriptions, trophy guide
+     * bodies, even inside other collectible items' rich content.
+     */
+    function initCollectiblePillTooltips() {
+        // Bail if there are no pills on the page (no collectibles
+        // defined for this roadmap). Cheap early exit.
+        if (!document.querySelector('.collectible-pill[data-slug]')) return;
+
+        const tooltip = document.createElement('div');
+        tooltip.className = 'collectible-pill-tooltip';
+        tooltip.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(tooltip);
+
+        let activePill = null;
+        let hideTimer = null;
+
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+            ));
+        }
+
+        function render(pill) {
+            const slug = pill.dataset.slug;
+            const color = pill.dataset.color || 'primary';
+            const icon = pill.dataset.icon || '📦';
+            const namePlural = pill.dataset.namePlural || pill.querySelector('.collectible-pill-name')?.textContent || slug;
+            const description = pill.dataset.description || '';
+            // Progress comes from the tracker — count item rows by
+            // type-slug. If no tracker on the page (rare: roadmap with
+            // pills but no items), the progress section is omitted.
+            const items = document.querySelectorAll(`.collectible-item-row[data-type-slug="${slug}"]`);
+            const total = items.length;
+            const found = document.querySelectorAll(
+                `.collectible-item-row[data-type-slug="${slug}"][data-found="1"]`
+            ).length;
+            const pct = total ? Math.round((found / total) * 100) : 0;
+
+            const progressBlock = total > 0 ? `
+                <div class="collectible-pill-tooltip-progress">
+                    <div class="collectible-pill-tooltip-progress-fill"
+                         style="width: ${pct}%"
+                         data-color="${escapeHtml(color)}"></div>
+                </div>
+            ` : '';
+            const countBlock = total > 0
+                ? `<span class="collectible-pill-tooltip-count">${found}/${total}</span>`
+                : '';
+            const descBlock = description
+                ? `<p class="collectible-pill-tooltip-description">${escapeHtml(description)}</p>`
+                : '';
+
+            tooltip.innerHTML = `
+                <div class="collectible-pill-tooltip-header">
+                    <span class="collectible-pill-tooltip-icon">${escapeHtml(icon)}</span>
+                    <span class="collectible-pill-tooltip-name">${escapeHtml(namePlural)}</span>
+                    ${countBlock}
+                </div>
+                ${progressBlock}
+                ${descBlock}
+            `;
+        }
+
+        function position(pill) {
+            // Place below the pill, centered. Snap inside the viewport
+            // if it would overflow. Uses position: fixed (already set
+            // in CSS) so we use viewport-relative coordinates.
+            const r = pill.getBoundingClientRect();
+            // Render once invisibly so we can measure.
+            tooltip.style.left = '0px';
+            tooltip.style.top = '0px';
+            const tr = tooltip.getBoundingClientRect();
+            const margin = 6;
+            let left = r.left + r.width / 2 - tr.width / 2;
+            let top = r.bottom + margin;
+            // Clamp horizontally.
+            left = Math.max(margin, Math.min(left, window.innerWidth - tr.width - margin));
+            // If it overflows the bottom, flip above the pill.
+            if (top + tr.height > window.innerHeight - margin) {
+                top = r.top - tr.height - margin;
+            }
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${top}px`;
+        }
+
+        function show(pill) {
+            if (pill.classList.contains('is-broken')) return;
+            activePill = pill;
+            render(pill);
+            // requestAnimationFrame so the rendered content has measured
+            // dimensions before we position.
+            requestAnimationFrame(() => {
+                if (activePill !== pill) return;
+                position(pill);
+                tooltip.classList.add('is-visible');
+            });
+        }
+
+        function hide() {
+            tooltip.classList.remove('is-visible');
+            activePill = null;
+        }
+
+        document.addEventListener('mouseover', (e) => {
+            const pill = e.target.closest('.collectible-pill[data-slug]');
+            if (!pill || pill === activePill) return;
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            show(pill);
+        });
+        document.addEventListener('mouseout', (e) => {
+            const pill = e.target.closest('.collectible-pill[data-slug]');
+            if (!pill || pill !== activePill) return;
+            // mouseout fires for every descendant transition — moving
+            // from the pill's icon span to its name span fires mouseout
+            // on the icon. If `relatedTarget` is still inside the same
+            // pill, ignore: the cursor hasn't actually left. Without
+            // this check, the tooltip closes whenever the cursor crosses
+            // an internal child boundary (the "only along the edges"
+            // bug).
+            const rt = e.relatedTarget;
+            if (rt && pill.contains(rt)) return;
+            // Tiny delay so brushing past the pill doesn't flicker the
+            // tooltip; long enough that it dismisses quickly when the
+            // user actually moves away.
+            hideTimer = setTimeout(hide, 80);
+        });
+        // Dismiss on scroll — keeps the tooltip from drifting away from
+        // the pill it's anchored to. Cheap to listen with passive.
+        window.addEventListener('scroll', () => {
+            if (activePill) hide();
+        }, { passive: true });
+
+        // Touch / long-press support. On mobile (no hover), regular
+        // tap = navigate to the tracker (default click behavior). A
+        // long press (~400ms) = show the tooltip without navigating.
+        // Subsequent taps (anywhere) dismiss the tooltip; a tap on a
+        // pill also navigates as normal.
+        //
+        // Uses a TIMESTAMP (lastLongPressEndAt) instead of a sticky
+        // boolean flag so the click-suppression window auto-clears.
+        // The earlier flag-based version got stuck "true" when the
+        // synthetic click after touchend didn't fire (browser-dependent),
+        // which left the next genuine tap suppressed too — that's the
+        // "I have to actually press the button to get out of it" bug.
+        let longPressTimer = null;
+        let longPressFired = false;
+        let lastLongPressEndAt = 0;
+        document.addEventListener('touchstart', (e) => {
+            const pill = e.target.closest('.collectible-pill[data-slug]');
+            if (!pill) return;
+            longPressFired = false;
+            if (longPressTimer) clearTimeout(longPressTimer);
+            longPressTimer = setTimeout(() => {
+                longPressFired = true;
+                show(pill);
+                if (navigator.vibrate) navigator.vibrate(8);
+            }, 400);
+        }, { passive: true });
+        document.addEventListener('touchmove', () => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+            if (longPressFired) {
+                // Stamp NOW; the click handler suppresses any click
+                // within the next ~120ms (the synthetic-click window).
+                // Real subsequent taps fall outside this window and
+                // are treated as fresh user actions.
+                lastLongPressEndAt = Date.now();
+                longPressFired = false;
+                e.preventDefault();
+            }
+        });
+        document.addEventListener('click', (e) => {
+            // Suppress only the synthetic click that immediately
+            // follows a long-press touchend. Real later taps are
+            // outside the 120ms window.
+            if (Date.now() - lastLongPressEndAt < 120) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // Any tap after the tooltip is showing dismisses it. The
+            // click then proceeds normally — a tap on the pill itself
+            // navigates as usual; a tap elsewhere just closes the
+            // tooltip.
+            if (activePill) hide();
+        });
+    }
+
     function init() {
         initProgressBar();
         initScrollspy();
@@ -1494,6 +1802,7 @@
         initTrophyLinkNavigation();
         initImageLightbox();
         CollectibleTracker.init();
+        initCollectiblePillTooltips();
         handleDeepLink();
     }
 

@@ -2086,6 +2086,57 @@ html {
   @apply border-b border-base-content/10;
 }
 
+/* Pill hover tooltip — singleton element appended to body, positioned
+   on hover. Shows the type's plural name + live progress bar driven
+   by the tracker's item rows. Type-color accent on the progress fill
+   uses the same data-color attribute selectors the rest of the
+   collectibles palette uses. */
+.collectible-pill-tooltip {
+  position: fixed;
+  z-index: 60;
+  /* Render off-screen at rest so the layout doesn't accidentally pick
+     it up. Visibility flips via .is-visible. */
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
+  min-width: 180px;
+  max-width: 280px;
+  @apply rounded-lg border border-base-content/15 bg-base-200 shadow-lg shadow-black/30 p-2.5;
+}
+.collectible-pill-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.collectible-pill-tooltip-header {
+  @apply flex items-center gap-2 text-xs font-semibold;
+}
+.collectible-pill-tooltip-icon {
+  @apply text-sm shrink-0;
+}
+.collectible-pill-tooltip-name {
+  @apply flex-1 min-w-0 truncate;
+}
+.collectible-pill-tooltip-count {
+  @apply text-[11px] tabular-nums font-medium text-base-content/70 shrink-0;
+}
+.collectible-pill-tooltip-progress {
+  @apply h-1.5 mt-1.5 bg-base-300/50 rounded-full overflow-hidden;
+}
+.collectible-pill-tooltip-progress-fill {
+  @apply h-full rounded-full transition-all duration-300;
+}
+.collectible-pill-tooltip-progress-fill[data-color="primary"]   { @apply bg-primary/80; }
+.collectible-pill-tooltip-progress-fill[data-color="secondary"] { @apply bg-secondary/80; }
+.collectible-pill-tooltip-progress-fill[data-color="accent"]    { @apply bg-accent/80; }
+.collectible-pill-tooltip-progress-fill[data-color="info"]      { @apply bg-info/80; }
+.collectible-pill-tooltip-progress-fill[data-color="success"]   { @apply bg-success/80; }
+.collectible-pill-tooltip-progress-fill[data-color="warning"]   { @apply bg-warning/80; }
+.collectible-pill-tooltip-progress-fill[data-color="error"]     { @apply bg-error/80; }
+.collectible-pill-tooltip-description {
+  @apply text-[11px] italic text-base-content/55 mt-1.5 leading-snug;
+}
+
 /* Filter fade-out: when a row is being hidden by an active filter
    (Hide found, Missable, type filter, etc.), animate opacity AND
    collapse height/spacing to nothing before applying `hidden`. JS
