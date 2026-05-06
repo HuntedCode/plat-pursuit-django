@@ -230,6 +230,6 @@ When this document and the gamification vision doc disagree, this document wins.
 
 ## Related Docs
 
-- [Gamification Vision](gamification-vision.md): The full RPG system spec. Implementation reference. Note: portions reflect older premium-only and "My Pursuit hub" assumptions; this doc supersedes those framings.
+- [Gamification Plan](gamification-plan.md): the layered roll-out plan. Phase 1 is the buildable spec; Phases 2 to 4+ are sketches that earn their place through real user engagement.
 - [Gamification Architecture](../architecture/gamification.md): What's currently shipped (badge XP only).
 - [Hub IA & Sub-Nav](../architecture/ia-and-subnav.md): The existing IA implementation. Will be substantially revised by this initiative (3 hubs + standalone surfaces, not 4 hubs); treat as historical reference for the legacy 4-hub model until rewritten.
