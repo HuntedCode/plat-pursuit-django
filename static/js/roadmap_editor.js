@@ -1705,6 +1705,29 @@
         const tabData = tabsData.find(t => t.id === tabId);
         if (!tabData) return;
 
+        // BranchProxy.state is the canonical store for steps; tabsData is
+        // a derived view that this render path reads from. Re-mirror on
+        // every render so saveStep can keep mutating only BranchProxy and
+        // we never paint stale title/description into the inputs (the bug
+        // that wiped a writer's typed text when Add Step rerendered the
+        // list). Mirrors CollectibleController._syncTabsDataFromBranch.
+        const branchTab = (BranchProxy.state?.tabs || []).find(t => t.id === tabId);
+        if (branchTab) {
+            tabData.steps = (branchTab.steps || []).map(s => ({
+                id: s.id,
+                title: s.title || '',
+                description: s.description || '',
+                youtube_url: s.youtube_url || '',
+                youtube_channel_name: s.youtube_channel_name || '',
+                youtube_channel_url: s.youtube_channel_url || '',
+                order: s.order,
+                gallery_images: Array.isArray(s.gallery_images) ? s.gallery_images.slice() : [],
+                created_by_id: s.created_by_id,
+                last_edited_by_id: s.last_edited_by_id,
+                trophy_ids: s.trophy_ids || [],
+            }));
+        }
+
         const container = document.querySelector(`.steps-container[data-tab-id="${tabId}"]`);
         if (!container) return;
 
@@ -1832,16 +1855,25 @@
             step.youtube_channel_url || '',
         );
 
-        el.querySelector('.delete-step-btn').addEventListener('click', () => {
-            deleteStep(step.id);
-        });
-
-        // Up/down reorder buttons are wired via event delegation in
-        // initFormattingToolbars (one listener for the whole editor). For
-        // non-editor+ users we actually REMOVE the column so the controls
-        // don't render at all — applyOwnership's button-disable sweep would
-        // otherwise leave them visible-but-dead, which the user reported as
-        // misleading.
+        // Delete (and reorder below) is editor+ only on the server. For
+        // writers we strip the delete button entirely rather than let
+        // applyOwnership disable it — and critically, we strip it even on
+        // a writer's OWN step (where applyOwnership would treat it as
+        // editable and leave the button enabled). A writer who clicked
+        // delete on their own step would silently mutate BranchProxy state,
+        // and the next merge would reject with "Editor role required to
+        // delete steps" because the live record's id is missing from the
+        // payload.
+        const deleteBtn = el.querySelector('.delete-step-btn');
+        if (deleteBtn) {
+            if (bypassOwnershipScope) {
+                deleteBtn.addEventListener('click', () => {
+                    deleteStep(step.id);
+                });
+            } else {
+                deleteBtn.remove();
+            }
+        }
 
         // Render ownership badge + apply writer-scoping read-only state.
         // Writers can only edit steps they own (or untouched/ownerless ones);
