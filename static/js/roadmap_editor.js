@@ -358,11 +358,28 @@
             if (!this.state.payload_version) this.state.payload_version = PAYLOAD_VERSION;
             this.dirty = false;
             this.dirtyThisSession = false;
+            // Defensive init for tab-level scalar fields. The PATCH handler
+            // for /tab/X/ filters out keys that aren't already in the tab
+            // dict (`if (k in tab)`) — that's a safety net against typos
+            // in body payloads, but it would silently drop a NEW field added
+            // to the schema if the active lock's branch_payload was stored
+            // BEFORE that field shipped. Pre-seeding the canonical scalar
+            // keys here means an editor session that was acquired pre-deploy
+            // can still autosave new fields after a code refresh, without
+            // requiring the writer to discard their lock and reacquire.
+            const TAB_SCALAR_FIELDS = [
+                'introduction', 'general_tips',
+                'youtube_url', 'youtube_channel_name', 'youtube_channel_url',
+                'difficulty', 'estimated_hours', 'min_playthroughs',
+            ];
             // Resumed sessions can carry over negative-id entries the user
             // created last time. Reset nextLocalId below the lowest existing
             // negative so new sections don't collide with surviving ones.
             let minId = 0;
             (this.state.tabs || []).forEach(tab => {
+                TAB_SCALAR_FIELDS.forEach(f => {
+                    if (!(f in tab)) tab[f] = '';
+                });
                 (tab.steps || []).forEach(s => {
                     if (typeof s.id === 'number' && s.id < minId) minId = s.id;
                 });
@@ -1388,6 +1405,7 @@
             if (!existing) return;
 
             // Tab-level content + metadata
+            existing.introduction = branchTab.introduction || '';
             existing.general_tips = branchTab.general_tips || '';
             existing.youtube_url = branchTab.youtube_url || '';
             existing.youtube_channel_name = branchTab.youtube_channel_name || '';
@@ -1473,6 +1491,10 @@
 
             // Server-rendered DOM fields that aren't hydrated by any
             // existing init function — push branch values into them.
+            const introInput = document.querySelector(
+                `.introduction-input[data-tab-id="${tabId}"]`
+            );
+            if (introInput) introInput.value = existing.introduction;
             const tipsInput = document.querySelector(
                 `.general-tips-input[data-tab-id="${tabId}"]`
             );
@@ -2020,10 +2042,24 @@
     }
 
     // ------------------------------------------------------------------ //
-    //  General Tips & YouTube (debounced autosave)
+    //  Introduction, General Tips & YouTube (debounced autosave)
     // ------------------------------------------------------------------ //
 
     function initTabFields() {
+        document.querySelectorAll('.introduction-input').forEach(textarea => {
+            const tabId = parseInt(textarea.dataset.tabId, 10);
+            const debouncedSave = debounce(async () => {
+                await apiCall('patch', `/api/v1/roadmap/${roadmapId}/tab/${tabId}/`, {
+                    introduction: textarea.value
+                });
+            }, 1000);
+
+            textarea.addEventListener('input', () => {
+                setSaveStatus('unsaved');
+                debouncedSave();
+            });
+        });
+
         document.querySelectorAll('.general-tips-input').forEach(textarea => {
             const tabId = parseInt(textarea.dataset.tabId, 10);
             const debouncedSave = debounce(async () => {
@@ -2085,10 +2121,22 @@
 
     function applyTabFieldGates(tabData) {
         const tabId = tabData.id;
+        const introCard = document.querySelector(`.introduction-card[data-tab-id="${tabId}"]`);
+        const introInput = document.querySelector(`.introduction-input[data-tab-id="${tabId}"]`);
         const tipsCard = document.querySelector(`.general-tips-card[data-tab-id="${tabId}"]`);
         const tipsInput = document.querySelector(`.general-tips-input[data-tab-id="${tabId}"]`);
         const youtubeCard = document.querySelector(`.youtube-guide-card[data-tab-id="${tabId}"]`);
         const youtubeInput = document.querySelector(`.youtube-url-input[data-tab-id="${tabId}"]`);
+
+        // Introduction: writer-or-tab-owner can edit. Editor+ bypasses.
+        // Same rule as General Tips since both live in WRITER_FIELDS.
+        if (introCard && introInput) {
+            const ownerId = tabData.created_by_id || null;
+            const canEdit = applyOwnership(introCard, ownerId, 'introduction-owner');
+            if (!canEdit) {
+                introInput.disabled = true;
+            }
+        }
 
         // General Tips: writer-or-tab-owner can edit. Editor+ bypasses.
         if (tipsCard && tipsInput) {
@@ -4792,7 +4840,7 @@
             document.addEventListener('input', (e) => {
                 const ta = e.target;
                 if (!(ta instanceof HTMLTextAreaElement)) return;
-                if (!ta.closest('.collectibles-card, .step-card, .trophy-guide-row, .general-tips-card, .collectible-item-rich-panel')) return;
+                if (!ta.closest('.collectibles-card, .step-card, .trophy-guide-row, .introduction-card, .general-tips-card, .collectible-item-rich-panel')) return;
                 const pos = ta.selectionStart;
                 if (pos < 2) return;
                 const justTyped = ta.value.slice(pos - 2, pos);
