@@ -11,10 +11,24 @@
     </button>
     <div class="roadmap-toc-dropdown hidden mt-1 rounded-lg bg-base-200/90 border-2 border-base-300 p-2 shadow-lg max-h-[60vh] overflow-y-auto">
         <ul class="space-y-0.5">
-            {% if roadmap.general_tips or roadmap.youtube_url %}
+            {% if roadmap.introduction %}
             <li>
-                <a href="#overview" class="roadmap-toc-link block text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors">
-                    Overview
+                <a href="#introduction" class="roadmap-toc-link block text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors">
+                    Introduction
+                </a>
+            </li>
+            {% endif %}
+            {% if roadmap.general_tips %}
+            <li>
+                <a href="#general-tips" class="roadmap-toc-link block text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors">
+                    General Tips
+                </a>
+            </li>
+            {% endif %}
+            {% if roadmap.youtube_url %}
+            <li>
+                <a href="#play-along-guide" class="roadmap-toc-link block text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors">
+                    "Play Along" Video Guide
                 </a>
             </li>
             {% endif %}

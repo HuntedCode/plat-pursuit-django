@@ -16,10 +16,24 @@
                 Contents
             </h3>
             <ul class="space-y-1">
-                {% if roadmap.general_tips or roadmap.youtube_url %}
+                {% if roadmap.introduction %}
                 <li>
-                    <a href="#overview" data-toc-link class="block text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors">
-                        Overview
+                    <a href="#introduction" data-toc-link class="block text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors">
+                        Introduction
+                    </a>
+                </li>
+                {% endif %}
+                {% if roadmap.general_tips %}
+                <li>
+                    <a href="#general-tips" data-toc-link class="block text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors">
+                        General Tips
+                    </a>
+                </li>
+                {% endif %}
+                {% if roadmap.youtube_url %}
+                <li>
+                    <a href="#play-along-guide" data-toc-link class="block text-sm py-1 px-2 rounded text-base-content/50 hover:text-base-content hover:bg-white/[0.04] transition-colors">
+                        "Play Along" Video Guide
                     </a>
                 </li>
                 {% endif %}
