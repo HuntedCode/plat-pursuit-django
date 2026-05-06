@@ -3943,6 +3943,12 @@ class Roadmap(models.Model):
         max_length=20, default='draft',
         choices=[('draft', 'Draft'), ('published', 'Published')],
     )
+    introduction = models.TextField(
+        blank=True,
+        help_text='Author intro / scope blurb shown at the very top of the '
+                  'roadmap detail page. Reads ahead of General Tips: what this '
+                  'guide covers vs. what to know while playing.',
+    )
     general_tips = models.TextField(blank=True)
     youtube_url = models.URLField(blank=True)
     # Cached YouTube channel info from oEmbed lookup. Populated on save when

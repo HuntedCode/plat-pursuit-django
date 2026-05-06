@@ -52,6 +52,7 @@ def _flat_to_legacy(flat_payload):
     tab = {
         'id': flat_payload.get('roadmap_id'),
         'concept_trophy_group_id': flat_payload.get('concept_trophy_group_id'),
+        'introduction': flat_payload.get('introduction') or '',
         'general_tips': flat_payload.get('general_tips') or '',
         'youtube_url': flat_payload.get('youtube_url') or '',
         'difficulty': flat_payload.get('difficulty'),
@@ -98,6 +99,7 @@ def _legacy_to_flat(legacy_payload):
         'roadmap_id': legacy_payload.get('roadmap_id') or tab.get('id'),
         'concept_trophy_group_id': tab.get('concept_trophy_group_id'),
         'status': legacy_payload.get('status', 'draft'),
+        'introduction': tab.get('introduction') or '',
         'general_tips': tab.get('general_tips') or '',
         'youtube_url': tab.get('youtube_url') or '',
         'difficulty': tab.get('difficulty'),

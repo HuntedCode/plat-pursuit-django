@@ -118,13 +118,15 @@ def _backfill_attribution_if_missing(record) -> None:
 
 # Fields by required role tier.
 #
-# - WRITER_FIELDS: writer-or-roadmap-owner can edit. `general_tips` is the
-#   primary authoring surface and we want writers to contribute to it.
+# - WRITER_FIELDS: writer-or-roadmap-owner can edit. `introduction` and
+#   `general_tips` are the primary authoring surfaces and we want writers
+#   to contribute to them. The intro reads ahead of the tips on the
+#   detail page (welcome / scope), the tips read after (operational notes).
 # - EDITOR_FIELDS: editor-or-higher (author-judgment metadata that
 #   shouldn't move freely between writers).
 # - PUBLISHER_FIELDS: publisher-only (curated/featured content like the
 #   official PlatPursuit YouTube guide that isn't open to author submissions).
-WRITER_FIELDS = ('general_tips',)
+WRITER_FIELDS = ('introduction', 'general_tips')
 EDITOR_FIELDS = (
     'difficulty',
     'estimated_hours',
