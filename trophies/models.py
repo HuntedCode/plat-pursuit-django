@@ -4203,7 +4203,20 @@ class RoadmapCollectibleType(models.Model):
     roadmap = models.ForeignKey(
         Roadmap, on_delete=models.CASCADE, related_name='collectible_types',
     )
-    name = models.CharField(max_length=100)
+    name = models.CharField(
+        max_length=100,
+        help_text='Singular form, used per-item ("Journal", "Riddler Trophy").',
+    )
+    # English pluralization is irregular ("Journal Entry" -> "Journal Entries",
+    # "Riddler Trophy" -> "Riddler Trophies"), so authors enter the plural
+    # explicitly. Falls back to `name` when blank so existing types render
+    # without breaking. Used wherever the type is treated as a category:
+    # filter chips, per-type progress cards, inline `[[slug]]` pills.
+    name_plural = models.CharField(
+        max_length=100, blank=True,
+        help_text='Plural / category form ("Journals", "Journal Entries"). '
+                  'Falls back to the singular name when blank.',
+    )
     # Slug is derived from `name` on first save and is read-only afterwards
     # so existing `[[slug]]` references in markdown don't silently break
     # when a type is renamed.
@@ -4229,6 +4242,16 @@ class RoadmapCollectibleType(models.Model):
 
     def __str__(self):
         return f"CollectibleType: roadmap={self.roadmap_id}, slug={self.slug}"
+
+    @property
+    def display_name_plural(self):
+        """Plural form, falling back to singular when not explicitly set.
+
+        Use anywhere the type reads as a category — filter chips,
+        progress headers, inline `[[slug]]` pills. Single-item references
+        (e.g. an item row labeled "Journal #3") use `.name` directly.
+        """
+        return self.name_plural or self.name
 
 
 class RoadmapCollectibleArea(models.Model):

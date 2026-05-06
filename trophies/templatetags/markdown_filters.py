@@ -99,7 +99,20 @@ def render_collectible_pills(html, collectibles_by_slug):
                 f'</span>'
             )
         icon = (getattr(ctype, 'icon', '') or '📦')
-        name = getattr(ctype, 'name', '') or slug
+        # Inline `[[slug]]` pills always read as a *category* reference
+        # ("see all the [[journals]] in this chapter"), so display the
+        # plural form. Falls back to singular when name_plural is blank
+        # (legacy types from before the field shipped).
+        display = (
+            getattr(ctype, 'display_name_plural', None)
+            or getattr(ctype, 'name_plural', '')
+            or getattr(ctype, 'name', '')
+            or slug
+        )
+        # `data-name` keeps the singular for any UI that wants to refer
+        # to a single instance (currently unused; preserved as an
+        # affordance for future per-item linking).
+        name_singular = getattr(ctype, 'name', '') or slug
         color = getattr(ctype, 'color', 'primary') or 'primary'
         description = getattr(ctype, 'description', '') or ''
         total = getattr(ctype, 'total_count', None)
@@ -108,11 +121,13 @@ def render_collectible_pills(html, collectibles_by_slug):
             f'<span class="collectible-pill" '
             f'data-slug="{escape(slug)}" '
             f'data-color="{escape(color)}" '
-            f'data-name="{escape(name)}" '
+            f'data-name="{escape(name_singular)}" '
+            f'data-name-plural="{escape(display)}" '
+            f'data-icon="{escape(icon)}" '
             f'data-description="{escape(description)}"'
             f'{total_attr}>'
             f'{escape(icon)}'
-            f'<span class="collectible-pill-name">{escape(name)}</span>'
+            f'<span class="collectible-pill-name">{escape(display)}</span>'
             f'</span>'
         )
 

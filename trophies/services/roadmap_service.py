@@ -409,7 +409,7 @@ class RoadmapService:
             else:
                 synthetic_type_id -= 1
                 ctype = RoadmapCollectibleType(roadmap=roadmap, id=synthetic_type_id)
-            for fld in ('name', 'slug', 'color', 'icon', 'description'):
+            for fld in ('name', 'name_plural', 'slug', 'color', 'icon', 'description'):
                 if fld in type_payload:
                     setattr(ctype, fld, type_payload[fld] or '')
             if 'total_count' in type_payload:
@@ -671,6 +671,7 @@ class RoadmapService:
                 {
                     'id': ct.id,
                     'name': ct.name,
+                    'name_plural': ct.name_plural,
                     'slug': ct.slug,
                     'color': ct.color,
                     'icon': ct.icon,

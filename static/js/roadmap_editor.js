@@ -729,6 +729,7 @@
                 const newType = {
                     id: this.nextId(),
                     name: (body.name || '').trim() || 'New Collectible Type',
+                    name_plural: '',
                     slug: '',
                     color: body.color || _pickNextCollectibleColor(tab.collectible_types),
                     icon: body.icon || COLLECTIBLE_DEFAULT_ICON,
@@ -773,6 +774,7 @@
                 const ctype = tab.collectible_types.find(t => t.id === typeId);
                 if (!ctype) throw new Error(`Type ${typeId} not in branch.`);
                 if ('name' in body) ctype.name = (body.name || '').trim() || ctype.name;
+                if ('name_plural' in body) ctype.name_plural = (body.name_plural || '').trim().slice(0, 100);
                 if ('color' in body && COLLECTIBLE_COLORS.includes(body.color)) ctype.color = body.color;
                 if ('icon' in body) ctype.icon = (body.icon || '').slice(0, 8) || COLLECTIBLE_DEFAULT_ICON;
                 if ('description' in body) ctype.description = (body.description || '').slice(0, 200);
@@ -4375,12 +4377,49 @@
             }, 600);
             descInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedDesc(); });
 
-            // Name editing — also updates slug pill preview
+            // Plural form input — used wherever the type reads as a
+            // category (filter chips, progress cards, [[slug]] pill text).
+            // Falls back to `name` server-side when blank, so the field
+            // is genuinely optional. Auto-fill heuristic: when the
+            // singular changes and the plural is still empty, suggest
+            // `name + 's'` as a starting point — author can edit. Only
+            // suggests on input transitions where plural is empty AND
+            // matches the previous "name + s" heuristic, so authors
+            // who set a plural manually never get overwritten.
+            const pluralInput = el.querySelector('.collectible-type-name-plural-input');
+            pluralInput.value = ctype.name_plural || '';
+            const debouncedPlural = debounce(() => {
+                const v = pluralInput.value.trim().slice(0, 100);
+                this._patchType(tabId, ctype.id, { name_plural: v });
+                ctype.name_plural = v;
+            }, 600);
+            pluralInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedPlural(); });
+            pluralInput.addEventListener('click', (e) => e.stopPropagation());
+
+            // Name editing — also updates slug pill preview, and offers
+            // a "naive +s" autofill into the plural input when that
+            // input is still empty / still matches the previous naive
+            // suggestion (so a user who's typed their own plural is
+            // never trampled).
             const debouncedName = debounce(() => {
                 const v = nameInput.value.trim();
                 this._patchType(tabId, ctype.id, { name: v });
                 ctype.name = v;
                 updateSlugPill();
+                // Plural-suggest path. If the user has never edited
+                // the plural OR the current plural equals the old
+                // naive "<oldName>s", refresh it. Otherwise leave alone.
+                const naiveOld = ctype._lastNaivePlural || '';
+                const currentPlural = pluralInput.value.trim();
+                const pluralIsNaiveOrEmpty = (
+                    !currentPlural || currentPlural === naiveOld
+                );
+                if (pluralIsNaiveOrEmpty && v) {
+                    const naiveNew = v + 's';
+                    pluralInput.value = naiveNew;
+                    ctype._lastNaivePlural = naiveNew;
+                    debouncedPlural();
+                }
             }, 600);
             nameInput.addEventListener('input', () => { setSaveStatus('unsaved'); debouncedName(); });
             nameInput.addEventListener('click', (e) => e.stopPropagation());
@@ -4451,8 +4490,55 @@
                     `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/${typeId}/`,
                     patch
                 );
+                // Propagate visible-on-item changes to already-rendered
+                // item rows so the writer doesn't have to refresh to see
+                // a colour or icon swap on the items they've authored.
+                this._propagateTypeChangeToItems(tabId, typeId, patch);
             } catch (err) {
                 Toast.show('Failed to update type.', 'error');
+            }
+        },
+
+        // Walk every rendered item row + type-select dropdown that
+        // references this type, applying whatever subset of metadata
+        // the patch carries. Live update path; the BranchProxy state
+        // already holds the new values, the DOM just lags behind by
+        // default since item cards aren't re-rendered when their
+        // type's metadata changes. Keeps focus + scroll position
+        // stable (vs. a full renderAll() which would close any
+        // expanded type cards the writer is configuring).
+        _propagateTypeChangeToItems(tabId, typeId, patch) {
+            // Item-row swatches: color + icon. data-type-id is set on
+            // the row by _buildItemElement at render time.
+            if ('color' in patch || 'icon' in patch) {
+                const rows = document.querySelectorAll(
+                    `.collectible-item-row[data-type-id="${typeId}"]`
+                );
+                rows.forEach(row => {
+                    if ('color' in patch) {
+                        const swatch = row.querySelector('.collectible-item-type-swatch');
+                        if (swatch) swatch.dataset.color = patch.color;
+                    }
+                    if ('icon' in patch) {
+                        const iconSpan = row.querySelector('.collectible-item-type-icon');
+                        if (iconSpan) iconSpan.textContent = patch.icon || COLLECTIBLE_DEFAULT_ICON;
+                    }
+                });
+            }
+            // Type-select dropdowns (per-item rows + per-area bulk-paste
+            // pickers) include the type's name + icon in each option's
+            // label. Re-populate when name or icon changes so the
+            // dropdown labels stay accurate. Preserve each select's
+            // current selection.
+            if ('name' in patch || 'icon' in patch) {
+                const tab = tabsData.find(t => t.id === tabId);
+                if (!tab) return;
+                document.querySelectorAll(
+                    '.collectible-item-type-select, .collectible-bulk-type-select'
+                ).forEach(sel => {
+                    const currentValue = sel.value;
+                    this._populateTypeSelect(sel, tab.collectible_types || [], currentValue);
+                });
             }
         },
 
@@ -4919,8 +5005,15 @@
             const tab = tabsData.find(t => t.id === activeTabId);
             const types = (tab?.collectible_types || []);
             const q = (query || '').toLowerCase().trim();
+            // Match against name, plural, and slug — typing `[[entries`
+            // should find a "Journal Entry" type whose plural is "Journal
+            // Entries" (or the slug `journal-entry`).
             this._picker.filteredTypes = q
-                ? types.filter(t => (t.name || '').toLowerCase().includes(q) || (t.slug || _clientSlugify(t.name)).includes(q))
+                ? types.filter(t =>
+                    (t.name || '').toLowerCase().includes(q)
+                    || (t.name_plural || '').toLowerCase().includes(q)
+                    || (t.slug || _clientSlugify(t.name)).includes(q)
+                )
                 : types.slice();
             this._picker.highlightIdx = 0;
 
@@ -4933,7 +5026,11 @@
                 const swatch = row.querySelector('.collectible-picker-row-swatch');
                 swatch.dataset.color = ct.color || 'primary';
                 row.querySelector('.collectible-picker-row-icon').textContent = ct.icon || COLLECTIBLE_DEFAULT_ICON;
-                row.querySelector('.collectible-picker-row-name').textContent = ct.name || '(unnamed)';
+                // Picker row shows the plural since the inserted [[slug]]
+                // pill renders as the plural form. Falls back to singular
+                // when the plural isn't set.
+                row.querySelector('.collectible-picker-row-name').textContent =
+                    (ct.name_plural || ct.name || '(unnamed)');
                 const slug = ct.slug || _clientSlugify(ct.name) || 'slug';
                 row.querySelector('.collectible-picker-row-slug').textContent = `[[${slug}]]`;
                 const ic = (ct.items || []).length;

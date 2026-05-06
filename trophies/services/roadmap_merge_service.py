@@ -948,6 +948,7 @@ def _apply_collectible_types(
             live_type = RoadmapCollectibleType.objects.create(
                 roadmap=live_roadmap,
                 name=raw_name[:100],
+                name_plural=(type_payload.get('name_plural') or '').strip()[:100],
                 slug=slug,
                 color=_validate_collectible_color(type_payload.get('color')),
                 icon=(type_payload.get('icon') or '')[:4],
@@ -982,6 +983,13 @@ def _apply_collectible_types(
                 new_name = (type_payload['name'] or '').strip()[:100]
                 if new_name and new_name != live_type.name:
                     dirty_fields.append(('name', new_name))
+            if 'name_plural' in type_payload:
+                # Plural is allowed to be empty (falls back to name at
+                # render time via display_name_plural). No length-check
+                # short-circuit so authors can clear a previously-set value.
+                new_plural = (type_payload['name_plural'] or '').strip()[:100]
+                if new_plural != live_type.name_plural:
+                    dirty_fields.append(('name_plural', new_plural))
             if 'color' in type_payload:
                 new_color = _validate_collectible_color(type_payload['color'])
                 if new_color != live_type.color:
@@ -1219,6 +1227,7 @@ def restore_revision(revision: RoadmapRevision, actor) -> RoadmapRevision:
             new_type = RoadmapCollectibleType.objects.create(
                 roadmap=roadmap,
                 name=type_snapshot.get('name') or '',
+                name_plural=type_snapshot.get('name_plural') or '',
                 slug=type_snapshot.get('slug') or '',
                 color=_validate_collectible_color(type_snapshot.get('color')),
                 icon=type_snapshot.get('icon') or '',
