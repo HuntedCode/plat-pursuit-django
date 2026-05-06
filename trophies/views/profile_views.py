@@ -338,7 +338,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             if plat_status in ['plats', 'plats_100s', 'plats_no_100s']:
                 games_qs = games_qs.platinum_earned()
             elif plat_status in ['no_plats', 'no_plats_100s']:
-                games_qs = games_qs.filter(has_plat=False)
+                games_qs = games_qs.filter(has_plat=False, game__defined_trophies__platinum__gt=0)
             if plat_status in ['100s', 'plats_100s', 'no_plats_100s']:
                 games_qs = games_qs.completed()
             elif plat_status in ['no_100s']:
