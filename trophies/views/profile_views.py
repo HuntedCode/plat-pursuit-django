@@ -309,7 +309,9 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         # Get form data
         query = form.cleaned_data.get('query')
         platforms = form.cleaned_data.get('platform')
-        plat_status = form.cleaned_data.get('plat_status')
+        game_has_plat = form.cleaned_data.get('game_has_plat')
+        plat_earned = form.cleaned_data.get('plat_earned')
+        is_100 = form.cleaned_data.get('is_100')
         sort_val = form.cleaned_data.get('sort')
 
         # Build queryset
@@ -333,18 +335,19 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
             games_qs = games_qs.filter(platform_filter)
             context['selected_platforms'] = platforms
 
-        # Apply plat status filters
-        if plat_status:
-            if plat_status in ['plats', 'plats_100s', 'plats_no_100s']:
-                games_qs = games_qs.platinum_earned()
-            elif plat_status in ['no_plats', 'no_plats_100s']:
-                games_qs = games_qs.filter(has_plat=False, game__defined_trophies__platinum__gt=0)
-            if plat_status in ['100s', 'plats_100s', 'no_plats_100s']:
-                games_qs = games_qs.completed()
-            elif plat_status in ['no_100s']:
-                games_qs = games_qs.exclude(progress=100)
-            if plat_status == 'plats_no_100s':
-                games_qs = games_qs.exclude(progress=100)
+        # Apply plat status filters (three independent axes)
+        if game_has_plat == 'yes':
+            games_qs = games_qs.filter(game__defined_trophies__platinum__gt=0)
+        elif game_has_plat == 'no':
+            games_qs = games_qs.exclude(game__defined_trophies__platinum__gt=0)
+        if plat_earned == 'yes':
+            games_qs = games_qs.filter(has_plat=True)
+        elif plat_earned == 'no':
+            games_qs = games_qs.filter(has_plat=False)
+        if is_100 == 'yes':
+            games_qs = games_qs.filter(progress=100)
+        elif is_100 == 'no':
+            games_qs = games_qs.exclude(progress=100)
 
         # --- Genre / Theme filters ---
         genres = form.cleaned_data.get('genres')

@@ -276,19 +276,32 @@ class ProfileSearchForm(forms.Form):
 class ProfileGamesForm(forms.Form):
     query = forms.CharField(required=False, label='Search by name')
     platform = forms.MultipleChoiceField(choices=[('PS5', 'PS5'), ('PS4', 'PS4'), ('PS3', 'PS3'), ('PSVITA', 'PSVita'), ('PSVR', 'PSVR'), ('PSVR2', 'PSVR2')], required=False, label='Platforms')
-    plat_status = forms.ChoiceField(
+    game_has_plat = forms.ChoiceField(
         choices=[
-            ('all', 'All Games'),
-            ('plats', 'Platinum Earned'),
-            ('no_plats', 'Platinum Not Earned'),
-            ('100s', '100% Complete'),
-            ('no_100s', 'Not 100%'),
-            ('plats_100s', 'Platinum Earned + 100%'),
-            ('no_plats_100s', 'No Platinum, Not 100%'),
-            ('plats_no_100s', 'Platinum Earned, Not 100%'),
+            ('', 'Any'),
+            ('yes', 'Has Platinum'),
+            ('no', 'No Platinum'),
         ],
         required=False,
-        label='Filter',
+        label='Has Platinum',
+    )
+    plat_earned = forms.ChoiceField(
+        choices=[
+            ('', 'Any'),
+            ('yes', 'Earned'),
+            ('no', 'Not Earned'),
+        ],
+        required=False,
+        label='Platinum Earned',
+    )
+    is_100 = forms.ChoiceField(
+        choices=[
+            ('', 'Any'),
+            ('yes', '100%'),
+            ('no', 'Not 100%'),
+        ],
+        required=False,
+        label='100% Complete',
     )
     sort = forms.ChoiceField(
         choices=[

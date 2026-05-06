@@ -53,15 +53,35 @@
                     </div>
                 </div>
 
-                {# Plat status dropdown #}
-                <div>
-                    <label class="text-xs text-base-content/50 block mb-1">Platinum Status</label>
-                    <select name="plat_status" id="id_plat_status"
-                            class="select select-bordered select-sm w-full max-w-xs">
-                        {% for value, display in form.plat_status.field.choices %}
-                            <option value="{{ value }}" {% if request.GET.plat_status == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
+                {# Plat status: three independent axes #}
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-2xl">
+                    <div>
+                        <label class="text-xs text-base-content/50 block mb-1">Has Platinum</label>
+                        <select name="game_has_plat" id="id_game_has_plat"
+                                class="select select-bordered select-sm w-full">
+                            {% for value, display in form.game_has_plat.field.choices %}
+                                <option value="{{ value }}" {% if request.GET.game_has_plat == value %}selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-base-content/50 block mb-1">Platinum Earned</label>
+                        <select name="plat_earned" id="id_plat_earned"
+                                class="select select-bordered select-sm w-full">
+                            {% for value, display in form.plat_earned.field.choices %}
+                                <option value="{{ value }}" {% if request.GET.plat_earned == value %}selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-base-content/50 block mb-1">100% Complete</label>
+                        <select name="is_100" id="id_is_100"
+                                class="select select-bordered select-sm w-full">
+                            {% for value, display in form.is_100.field.choices %}
+                                <option value="{{ value }}" {% if request.GET.is_100 == value %}selected{% endif %}>{{ display }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
 
                 {# Genre chips #}
