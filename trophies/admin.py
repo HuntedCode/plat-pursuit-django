@@ -510,15 +510,31 @@ class ProfileGameAdmin(admin.ModelAdmin):
         "game",
         "game_played_count",
         "progress",
+        "earned_trophies_count",
+        "has_plat",
         "play_duration",
         "last_played_date_time",
         "last_updated_datetime",
     )
     list_select_related = ('profile', 'game')
-    list_filter = ("hidden_flag",)
-    search_fields = ("profile__psn_username", "game__title_name")
+    list_filter = (
+        "user_hidden",
+        "has_plat",
+        "hidden_flag",
+        "game__title_platform",
+    )
+    search_fields = (
+        "profile__psn_username",
+        "profile__display_psn_username",
+        "profile__account_id",
+        "game__title_name",
+        "game__np_communication_id",
+        "game__concept__unified_title",
+        "game__concept__slug",
+    )
     raw_id_fields = ("profile", "game")
     ordering = ("-last_updated_datetime",)
+    date_hierarchy = "last_played_date_time"
 
     def game_played_count(self, obj):
         return obj.game.played_count
