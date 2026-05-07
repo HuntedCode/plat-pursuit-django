@@ -38,10 +38,28 @@ class ProfileAdmin(admin.ModelAdmin):
         "game_detail_tour_completed_at",
         "badge_detail_tour_completed_at",
     )
-    list_filter = ("is_linked", "is_plus", "sync_tier", "sync_status", "user_is_premium", "roadmap_role",)
-    search_fields = ("psn_username", "account_id", "user__username__iexact", "about_me")
+    list_filter = (
+        "is_linked",
+        "is_plus",
+        "sync_tier",
+        "sync_status",
+        "user_is_premium",
+        "roadmap_role",
+        "is_discord_verified",
+        "psn_history_public",
+    )
+    search_fields = (
+        "psn_username",
+        "display_psn_username",
+        "account_id",
+        "np_id",
+        "user__username__iexact",
+        "user__email",
+        "about_me",
+    )
     raw_id_fields = ("user",)
     ordering = ("psn_username",)
+    date_hierarchy = "last_synced"
     actions = [
         'subtract_10_days_and_mark_synced',
         'recheck_badges',
@@ -290,8 +308,28 @@ class GameAdmin(admin.ModelAdmin):
         "has_buggy_trophies",
     )
     list_select_related = ('concept',)
-    list_filter = ("has_trophy_groups", "is_regional", RegionListFilter, 'concept_lock', 'concept_stale', 'shovelware_status', 'shovelware_lock', 'is_delisted', 'is_obtainable', "has_online_trophies", "has_buggy_trophies")
-    search_fields = ("title_name", "np_communication_id")
+    list_filter = (
+        "has_trophy_groups",
+        "is_regional",
+        RegionListFilter,
+        'concept_lock',
+        'concept_stale',
+        'lock_title',
+        'force_title_icon',
+        'shovelware_status',
+        'shovelware_lock',
+        'is_delisted',
+        'is_obtainable',
+        "has_online_trophies",
+        "has_buggy_trophies",
+    )
+    search_fields = (
+        "title_name",
+        "np_communication_id",
+        "concept__unified_title",
+        "concept__concept_id",
+        "concept__slug",
+    )
     ordering = ("title_name",)
     fieldsets = (
         (
@@ -554,8 +592,14 @@ class TrophyAdmin(admin.ModelAdmin):
         "earn_rate",
     )
     list_select_related = ('game',)
-    list_filter = ("trophy_type", "game__title_platform")
-    search_fields = ("trophy_name", "trophy_detail")
+    list_filter = ("trophy_type", "trophy_rarity", "game__title_platform")
+    search_fields = (
+        "trophy_name",
+        "trophy_detail",
+        "game__title_name",
+        "game__np_communication_id",
+        "game__concept__unified_title",
+    )
     raw_id_fields = ("game",)
     ordering = ("trophy_name",)
     fieldsets = (
@@ -605,9 +649,16 @@ class EarnedTrophyAdmin(admin.ModelAdmin):
     )
     list_select_related = ('profile', 'trophy')
     list_filter = ("earned", "trophy_hidden", "earned_date_time", "trophy__trophy_type")
-    search_fields = ("profile__psn_username", "trophy__trophy_name", "trophy__game__title_name")
+    search_fields = (
+        "profile__psn_username",
+        "profile__display_psn_username",
+        "trophy__trophy_name",
+        "trophy__game__title_name",
+        "trophy__game__np_communication_id",
+    )
     raw_id_fields = ("profile", "trophy")
     ordering = ("-last_updated",)
+    date_hierarchy = "earned_date_time"
 
     def trophy_type_display(self, obj):
         return obj.trophy.trophy_type
@@ -625,14 +676,15 @@ class APIAuditLogAdmin(admin.ModelAdmin):
     list_display = ("timestamp", "endpoint", "profile", "status_code", "response_time", "calls_remaining")
     list_select_related = ('profile',)
     list_filter = ("status_code", "timestamp")
-    search_fields = ("endpoint", "profile__psn_username")
+    search_fields = ("endpoint", "profile__psn_username", "profile__display_psn_username")
     ordering = ("-timestamp",)
+    date_hierarchy = "timestamp"
 
 @admin.register(FeaturedGame)
 class FeaturedGameAdmin(admin.ModelAdmin):
     list_display = ('game', 'priority', 'reason', 'start_date', 'end_date')
     list_select_related = ('game',)
-    search_fields = ('game__title_name',)
+    search_fields = ('game__title_name', 'game__np_communication_id')
     list_filter = ('reason',)
     raw_id_fields = ('game',)
 
@@ -640,7 +692,7 @@ class FeaturedGameAdmin(admin.ModelAdmin):
 class FeaturedProfileAdmin(admin.ModelAdmin):
     list_display = ('profile', 'priority', 'reason', 'start_date', 'end_date')
     list_select_related = ('profile',)
-    search_fields = ('profile__psn_username',)
+    search_fields = ('profile__psn_username', 'profile__display_psn_username')
     list_filter = ('reason',)
     raw_id_fields = ('profile',)
 
@@ -698,7 +750,7 @@ class ConceptAdmin(admin.ModelAdmin):
     )
     list_select_related = ('family',)
     list_filter = ('family__is_verified', 'title_lock')
-    search_fields = ('concept_id', 'unified_title', 'family__canonical_name')
+    search_fields = ('concept_id', 'unified_title', 'slug', 'family__canonical_name')
     raw_id_fields = ('family',)
     readonly_fields = ('title_reviewed_at',)
     actions = [
@@ -801,8 +853,14 @@ class UserConceptRatingAdmin(admin.ModelAdmin):
     list_display = ('profile', 'concept', 'difficulty', 'grindiness', 'hours_to_platinum', 'fun_ranking', 'overall_rating', 'created_at', 'updated_at')
     list_select_related = ('profile', 'concept')
     list_filter = ('created_at', 'updated_at')
-    search_fields = ('profile__psn_username', 'concept__unified_title')
+    search_fields = (
+        'profile__psn_username',
+        'profile__display_psn_username',
+        'concept__unified_title',
+        'concept__concept_id',
+    )
     raw_id_fields = ('profile', 'concept')
+    date_hierarchy = 'created_at'
 
 class StageInline(admin.TabularInline):
     model = Stage
@@ -2413,9 +2471,10 @@ class CompanyConceptInline(admin.TabularInline):
 class CompanyAdmin(admin.ModelAdmin):
     list_display = ('name', 'igdb_id', 'country_column', 'parent', 'company_size_display', 'concept_count')
     list_filter = ('company_size',)
-    search_fields = ('name', 'slug')
+    search_fields = ('name', 'slug', 'parent__name')
     raw_id_fields = ('parent', 'changed_company')
     readonly_fields = ('igdb_id', 'created_at', 'updated_at')
+    date_hierarchy = 'created_at'
     inlines = [CompanyConceptInline]
 
     def get_queryset(self, request):
@@ -2681,8 +2740,9 @@ class IGDBMatchAdmin(admin.ModelAdmin):
         'status', 'match_method', 'game_category', 'is_likely_compilation',
         SplittableCompilationFilter, PlatformCoverageFilter,
     )
-    search_fields = ('concept__unified_title', 'igdb_name')
+    search_fields = ('concept__unified_title', 'concept__concept_id', 'igdb_name')
     raw_id_fields = ('concept',)
+    date_hierarchy = 'updated_at'
     readonly_fields = (
         'igdb_id', 'match_confidence', 'match_method', 'raw_response',
         'created_at', 'updated_at', 'last_synced_at',
@@ -3175,11 +3235,13 @@ class ScoutAccountAdmin(admin.ModelAdmin):
         'profile_psn', 'status', 'games_discovered',
         'refresh_frequency_hours', 'last_synced', 'added_by', 'created_at',
     ]
+    list_select_related = ('profile', 'added_by')
     list_filter = ['status']
-    search_fields = ['profile__psn_username', 'staff_notes']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'staff_notes']
     raw_id_fields = ['profile', 'added_by']
     readonly_fields = ['created_at', 'updated_at', 'games_discovered']
     ordering = ['-created_at']
+    date_hierarchy = 'created_at'
     actions = ['activate_selected', 'pause_selected', 'retire_selected', 'trigger_refresh']
 
     fieldsets = (
