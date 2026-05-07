@@ -164,6 +164,7 @@ class DeviceTokenAdmin(admin.ModelAdmin):
     raw_id_fields = ['user']
     readonly_fields = ['created_at', 'last_used']
     ordering = ['-last_used']
+    date_hierarchy = 'last_used'
 
     def token_preview(self, obj):
         return obj.token[:20] + '...' if len(obj.token) > 20 else obj.token

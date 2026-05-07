@@ -51,16 +51,16 @@ _export_siteevents_csv.short_description = "Export selected as CSV"
 
 @admin.register(AnalyticsSession)
 class AnalyticsSessionAdmin(admin.ModelAdmin):
-    list_display = ('session_id', 'user_id', 'created_at', 'last_activity', 'page_count', 'ip_address')
-    list_filter = ('created_at', 'last_activity')
-    search_fields = ('session_id', 'user_id', 'ip_address')
+    list_display = ('session_id', 'user_id', 'is_bot', 'created_at', 'last_activity', 'page_count', 'ip_address')
+    list_filter = ('is_bot', 'created_at', 'last_activity')
+    search_fields = ('session_id', 'user_id', 'ip_address', 'user_agent')
     date_hierarchy = 'created_at'
     ordering = ('-created_at',)
     list_per_page = 100
     actions = [_export_sessions_csv]
     readonly_fields = ('session_id', 'user_id', 'ip_address', 'created_at',
                        'last_activity', 'ended_at', 'page_count',
-                       'referrer', 'user_agent')
+                       'referrer', 'user_agent', 'is_bot')
 
     def has_add_permission(self, request):
         return False

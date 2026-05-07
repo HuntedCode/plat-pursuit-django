@@ -26,9 +26,18 @@ class CustomUserAdmin(UserAdmin):
     # Fields for list view (efficient, searchable)
     list_display = ('email', 'is_linked_to_profile', 'premium_tier', 'subscription_provider', 'email_prefs_summary', 'user_timezone', 'is_staff', 'is_active', 'date_joined')
     list_select_related = ('profile',)
-    list_filter = ('is_staff', 'is_active', 'user_timezone', PSNLinkedFilter)
-    search_fields = ('email',)
+    list_filter = (
+        'is_staff',
+        'is_active',
+        'is_superuser',
+        'premium_tier',
+        'subscription_provider',
+        'user_timezone',
+        PSNLinkedFilter,
+    )
+    search_fields = ('email', 'profile__psn_username', 'profile__display_psn_username')
     ordering = ('email',)
+    date_hierarchy = 'date_joined'
 
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
@@ -86,11 +95,13 @@ class CustomUserAdmin(UserAdmin):
 @admin.register(SubscriptionPeriod)
 class SubscriptionPeriodAdmin(admin.ModelAdmin):
     list_display = ('user', 'started_at', 'ended_at', 'provider', 'duration_days_display', 'notes')
+    list_select_related = ('user',)
     list_filter = ('provider', 'ended_at')
     search_fields = ('user__email', 'notes')
     raw_id_fields = ('user',)
     readonly_fields = ('duration_days_display',)
     ordering = ('-started_at',)
+    date_hierarchy = 'started_at'
 
     def duration_days_display(self, obj):
         return f"{obj.duration_days} days"
