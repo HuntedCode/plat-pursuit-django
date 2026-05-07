@@ -874,8 +874,9 @@ class BadgeAdmin(admin.ModelAdmin):
     list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by')
     list_filter = ['is_live', 'tier', 'badge_type']
     list_editable = ['is_live']
-    search_fields = ['name', 'series_slug']
+    search_fields = ['name', 'series_slug', 'description']
     readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value']
+    date_hierarchy = 'created_at'
     fields = [
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
         'tier', 'badge_type', 'title', 'display_title', 'display_series',
@@ -906,8 +907,8 @@ class BadgeAdmin(admin.ModelAdmin):
 @admin.register(Stage)
 class StageAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'series_slug', 'stage_number', 'title', 'required_tiers', 'has_online_trophies')
-    list_filter = ('series_slug', 'stage_number')
-    search_fields = ('title',)
+    list_filter = ('series_slug', 'stage_number', 'has_online_trophies')
+    search_fields = ('title', 'series_slug')
     autocomplete_fields = ['concepts']
 
 @admin.register(UserBadge)
@@ -915,16 +916,18 @@ class UserBadgeAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'earned_at', 'is_displayed']
     list_select_related = ('profile', 'badge')
     list_filter = ['is_displayed', 'earned_at']
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name', 'badge__series_slug']
     raw_id_fields = ('profile', 'badge')
+    date_hierarchy = 'earned_at'
 
 @admin.register(ProfileBadgeShowcase)
 class ProfileBadgeShowcaseAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'display_order', 'created_at']
     list_select_related = ('profile', 'badge')
     list_filter = ['display_order']
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name']
     raw_id_fields = ('profile', 'badge')
+    date_hierarchy = 'created_at'
 
 
 @admin.register(ProfileShowcase)
@@ -932,7 +935,7 @@ class ProfileShowcaseAdmin(admin.ModelAdmin):
     list_display = ['profile', 'showcase_type', 'sort_order', 'is_active', 'updated_at']
     list_select_related = ('profile',)
     list_filter = ['showcase_type', 'is_active']
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username']
     raw_id_fields = ('profile',)
     readonly_fields = ('created_at', 'updated_at')
     fieldsets = (
@@ -954,7 +957,7 @@ class ProfileShowcaseAdmin(admin.ModelAdmin):
 class UserBadgeProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'completed_concepts', 'progress_value', 'last_checked']
     list_select_related = ('profile', 'badge')
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'badge__name']
     raw_id_fields = ('profile', 'badge')
 
 @admin.register(StageCompletionEvent)
@@ -962,16 +965,22 @@ class StageCompletionEventAdmin(admin.ModelAdmin):
     list_display = ['profile', 'badge', 'stage', 'concept', 'completed_at', 'created_at']
     list_select_related = ('profile', 'badge', 'stage', 'concept')
     list_filter = ['completed_at']
-    search_fields = ['profile__psn_username', 'badge__name']
+    search_fields = [
+        'profile__psn_username',
+        'profile__display_psn_username',
+        'badge__name',
+        'concept__unified_title',
+    ]
     raw_id_fields = ('profile', 'badge', 'stage', 'concept')
     readonly_fields = ('created_at',)
+    date_hierarchy = 'completed_at'
     
 @admin.register(FeaturedGuide)
 class FeaturedGuideAdmin(admin.ModelAdmin):
     list_display = ['concept', 'start_date', 'end_date', 'priority']
     list_select_related = ('concept',)
     list_filter = ['start_date', 'end_date']
-    search_fields = ['concept__unified_title']
+    search_fields = ['concept__unified_title', 'concept__concept_id']
     raw_id_fields = ('concept',)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -996,29 +1005,37 @@ class DeveloperBlacklistAdmin(admin.ModelAdmin):
 @admin.register(Title)
 class TitleAdmin(admin.ModelAdmin):
     list_display = ['name', 'created_at']
+    search_fields = ['name']
+    date_hierarchy = 'created_at'
 
 @admin.register(UserTitle)
 class UserTitleAdmin(admin.ModelAdmin):
     list_display = ['profile', 'title', 'source_type', 'source_id', 'earned_at', 'is_displayed']
     list_select_related = ('profile', 'title')
+    list_filter = ['source_type', 'is_displayed']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'title__name']
     raw_id_fields = ('profile', 'title')
+    date_hierarchy = 'earned_at'
 
 @admin.register(Milestone)
 class MilestoneAdmin(admin.ModelAdmin):
     list_display = ['name', 'title', 'discord_role_id', 'criteria_type', 'criteria_details', 'premium_only', 'required_value', 'earned_count']
+    list_filter = ['premium_only', 'criteria_type']
+    search_fields = ['name']
 
 @admin.register(UserMilestone)
 class UserMilestoneAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'earned_at']
     list_select_related = ('profile', 'milestone')
-    search_fields = ['profile__psn_username', 'milestone__name']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'milestone__name']
     raw_id_fields = ('profile', 'milestone')
+    date_hierarchy = 'earned_at'
 
 @admin.register(UserMilestoneProgress)
 class UserMilestoneProgressAdmin(admin.ModelAdmin):
     list_display = ['profile', 'milestone', 'progress_value', 'last_checked']
     list_select_related = ('profile', 'milestone')
-    search_fields = ['profile__psn_username', 'milestone__name']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'milestone__name']
     raw_id_fields = ('profile', 'milestone')
 
 
@@ -1046,8 +1063,10 @@ class CommentAdmin(admin.ModelAdmin):
     search_fields = [
         'body',
         'profile__psn_username',
+        'profile__display_psn_username',
         'profile__user__email',
-        'concept__concept_name',
+        'concept__unified_title',
+        'concept__concept_id',
     ]
     raw_id_fields = ['profile', 'parent', 'concept']
     readonly_fields = [
@@ -1142,6 +1161,7 @@ class CommentVoteAdmin(admin.ModelAdmin):
     list_filter = ['created_at']
     search_fields = [
         'profile__psn_username',
+        'profile__display_psn_username',
         'comment__body',
     ]
     raw_id_fields = ['comment', 'profile']
@@ -1187,6 +1207,7 @@ class CommentReportAdmin(admin.ModelAdmin):
     search_fields = [
         'comment__body',
         'reporter__psn_username',
+        'reporter__display_psn_username',
         'details',
         'admin_notes',
     ]
@@ -1295,7 +1316,9 @@ class ModerationLogAdmin(admin.ModelAdmin):
     search_fields = [
         'original_body',
         'comment_author__psn_username',
+        'comment_author__display_psn_username',
         'moderator__username',
+        'moderator__email',
         'reason',
         'internal_notes',
     ]
@@ -2007,6 +2030,7 @@ class GameListAdmin(admin.ModelAdmin):
         'name',
         'description',
         'profile__psn_username',
+        'profile__display_psn_username',
     ]
     raw_id_fields = ['profile']
     readonly_fields = [
@@ -2041,10 +2065,11 @@ class GameListLikeAdmin(admin.ModelAdmin):
     list_display = ['id', 'game_list', 'profile', 'created_at']
     list_select_related = ('game_list', 'profile')
     list_filter = ['created_at']
-    search_fields = ['profile__psn_username', 'game_list__name']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username', 'game_list__name']
     raw_id_fields = ['game_list', 'profile']
     readonly_fields = ['created_at']
     ordering = ['-created_at']
+    date_hierarchy = 'created_at'
 
 
 class AZChallengeSlotInline(admin.TabularInline):
@@ -2061,10 +2086,11 @@ class ChallengeAdmin(admin.ModelAdmin):
     list_display = ['id', 'name', 'profile', 'challenge_type', 'filled_count', 'completed_count', 'is_complete', 'is_deleted', 'created_at']
     list_select_related = ('profile',)
     list_filter = ['challenge_type', 'is_complete', 'is_deleted']
-    search_fields = ['name', 'profile__psn_username']
+    search_fields = ['name', 'profile__psn_username', 'profile__display_psn_username']
     raw_id_fields = ['profile']
     readonly_fields = ['created_at', 'updated_at', 'completed_at', 'deleted_at', 'view_count']
     ordering = ['-created_at']
+    date_hierarchy = 'created_at'
     inlines = [AZChallengeSlotInline]
 
 
@@ -2073,7 +2099,13 @@ class AZChallengeSlotAdmin(admin.ModelAdmin):
     list_display = ['id', 'challenge', 'letter', 'game', 'is_completed', 'assigned_at']
     list_select_related = ('challenge', 'game')
     list_filter = ['is_completed', 'letter']
-    search_fields = ['challenge__name', 'challenge__profile__psn_username', 'game__title_name']
+    search_fields = [
+        'challenge__name',
+        'challenge__profile__psn_username',
+        'challenge__profile__display_psn_username',
+        'game__title_name',
+        'game__np_communication_id',
+    ]
     raw_id_fields = ['challenge', 'game']
     readonly_fields = ['completed_at', 'assigned_at']
     ordering = ['challenge', 'letter']
@@ -2159,7 +2191,9 @@ class ReviewAdmin(admin.ModelAdmin):
     search_fields = [
         'body',
         'profile__psn_username',
+        'profile__display_psn_username',
         'concept__unified_title',
+        'concept__concept_id',
     ]
     raw_id_fields = ['profile', 'concept', 'concept_trophy_group']
     readonly_fields = [
@@ -2219,7 +2253,7 @@ class ReviewVoteAdmin(admin.ModelAdmin):
     list_display = ['id', 'review', 'profile', 'vote_type', 'created_at']
     list_select_related = ('review', 'profile')
     list_filter = ['vote_type', 'created_at']
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username']
     raw_id_fields = ['review', 'profile']
     readonly_fields = ['created_at']
     ordering = ['-created_at']
@@ -2232,7 +2266,12 @@ class ReviewReplyAdmin(admin.ModelAdmin):
     list_display = ['id', 'review', 'profile', 'body_preview', 'is_deleted', 'created_at']
     list_select_related = ('review', 'profile')
     list_filter = ['is_deleted', 'is_edited', 'created_at']
-    search_fields = ['body', 'profile__psn_username']
+    search_fields = [
+        'body',
+        'profile__psn_username',
+        'profile__display_psn_username',
+        'review__concept__unified_title',
+    ]
     raw_id_fields = ['review', 'profile']
     readonly_fields = ['created_at', 'updated_at', 'deleted_at']
     ordering = ['-created_at']
@@ -2282,6 +2321,7 @@ class ReviewReportAdmin(admin.ModelAdmin):
     search_fields = [
         'review__body',
         'reporter__psn_username',
+        'reporter__display_psn_username',
         'details',
         'admin_notes',
     ]
@@ -2372,7 +2412,9 @@ class ReviewModerationLogAdmin(admin.ModelAdmin):
     search_fields = [
         'original_body',
         'review_author__psn_username',
+        'review_author__display_psn_username',
         'moderator__username',
+        'moderator__email',
         'reason',
         'internal_notes',
     ]
@@ -2422,10 +2464,17 @@ class GameListItemAdmin(admin.ModelAdmin):
     """Admin interface for game list items."""
     list_display = ['id', 'game_list', 'game', 'position', 'note_preview', 'added_at']
     list_select_related = ('game_list', 'game')
-    search_fields = ['game__title_name', 'game_list__name', 'game_list__profile__psn_username']
+    search_fields = [
+        'game__title_name',
+        'game__np_communication_id',
+        'game_list__name',
+        'game_list__profile__psn_username',
+        'game_list__profile__display_psn_username',
+    ]
     raw_id_fields = ['game_list', 'game']
     readonly_fields = ['added_at']
     ordering = ['game_list', 'position']
+    date_hierarchy = 'added_at'
 
     def note_preview(self, obj):
         if not obj.note:
