@@ -13,8 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import connection, transaction, OperationalError
-from django.db.models import F, Sum, Max
-from django.db.models.functions import Coalesce
+from django.db.models import F
 from psnawp_api import PSNAWP as BasePSNAWP
 from psnawp_api.core.request_builder import RequestBuilder as BaseRequestBuilder
 from psnawp_api.core.authenticator import Authenticator as BaseAuthenticator
@@ -160,7 +159,12 @@ class TokenInstance:
         ]
         for key in expired:
             del self.user_cache[key]
-        logger.info(f"Cleaned {len(expired)} expired users from instance {self.group_id}-{self.instance_id}")
+        # Periodic cache sweep is mostly noise when nothing was expired. Only
+        # surface it at INFO when we actually evicted entries.
+        if expired:
+            logger.info(f"Cleaned {len(expired)} expired users from instance {self.group_id}-{self.instance_id}")
+        else:
+            logger.debug(f"No expired users to clean from instance {self.group_id}-{self.instance_id}")
 
 class TokenKeeper:
     """Singleton: Maintains 3 live PSNAWP instances and handles API requests via pub/sub."""
@@ -572,12 +576,10 @@ class TokenKeeper:
                 args = job_data['args']
                 profile_id = job_data['profile_id']
                 job_start = time.time()
-                logger.info(f"Starting job - {job_type} for profile {profile_id} from queue {queue_name}.")
+                logger.info(f"[profile {profile_id}] {job_type} START queue={queue_name}")
 
                 if job_type == 'sync_profile_data':
                     self._job_sync_profile_data(profile_id)
-                elif job_type == 'sync_trophy_titles':
-                    self._job_sync_trophy_titles(profile_id)
                 elif job_type == 'sync_trophy_groups':
                     self._job_sync_trophy_groups(profile_id, args[0], args[1])
                 elif job_type == 'sync_title_stats':
@@ -598,9 +600,9 @@ class TokenKeeper:
                 # Log slow jobs for monitoring
                 job_duration = time.time() - job_start
                 if job_duration > 300:  # 5 minutes
-                    logger.warning(f"Slow job: {job_type} for profile {profile_id} took {job_duration:.1f}s")
+                    logger.warning(f"[profile {profile_id}] {job_type} SLOW dur={job_duration:.1f}s")
 
-                logger.info(f"Job: {job_type} - Profile: {profile_id} completed successfully in {job_duration:.1f}s")
+                logger.info(f"[profile {profile_id}] {job_type} DONE dur={job_duration:.1f}s")
             except OperationalError as db_err:
                 err_msg = str(db_err).lower()
                 is_lock_error = "deadlock detected" in err_msg or "lock timeout" in err_msg
@@ -682,7 +684,7 @@ class TokenKeeper:
                     # Don't trigger sync_complete if one is already running for this profile
                     sync_complete_key = f"sync_complete_in_progress:{profile_id}"
                     if redis_client.get(sync_complete_key):
-                        logger.info(f"sync_complete already in progress for profile {profile_id}, leaving pending data for follow-up")
+                        logger.info(f"[profile {profile_id}] sync_complete already in progress; pending data preserved")
                     else:
                         raw_pending = redis_client.get(pending_key)
                         try:
@@ -692,9 +694,9 @@ class TokenKeeper:
                             args = [pending_data['touched_profilegame_ids'], pending_data['queue_name']]
                             PSNManager.assign_job('sync_complete', args, profile_id, priority_override=pending_data['queue_name'])
                             redis_client.delete(pending_key)
-                            logger.info(f"Triggered sync_complete for profile {profile_id}")
+                            logger.debug(f"[profile {profile_id}] pending sync_complete triggered")
                         except (json.JSONDecodeError, ValueError, KeyError) as parse_err:
-                            logger.error(f"Failed to parse pending_sync_complete for profile {profile_id}: {parse_err}")
+                            logger.error(f"[profile {profile_id}] pending_sync_complete parse failed: {parse_err}")
             except Exception as e:
                 logger.error(f"Error in _complete_job for profile {profile_id}: {e}")
 
@@ -737,8 +739,8 @@ class TokenKeeper:
                     except (ValueError, TypeError):
                         pass
 
-                # Skip profiles with pending orchestrator jobs (sync_trophy_titles
-                # or profile_refresh hasn't run yet to create the real sync jobs)
+                # Skip profiles with pending orchestrator jobs (profile_refresh
+                # hasn't run yet to create the real sync jobs).
                 if redis_client.get(f"sync_orchestrator_pending:{profile.id}"):
                     continue
 
@@ -1015,6 +1017,16 @@ class TokenKeeper:
                 data = user.get_region()
             elif endpoint == "trophy_titles":
                 data = list(user.trophy_titles(**kwargs))
+            elif endpoint == "trophy_titles_with_count":
+                # Fingerprint helper for the unified profile_refresh orchestrator.
+                # Fetches the first page of trophy_titles and returns
+                # (titles_list, total_item_count). totalItemCount is metadata in
+                # PSN's response (the global count of visible titles for the
+                # account, identical on every page).
+                # See docs/architecture/sync-architecture.md.
+                iterator = user.trophy_titles(**kwargs)
+                titles = list(iterator)
+                data = (titles, iterator._total_item_count)
             elif endpoint == "title_stats":
                 data = list(user.title_stats(**kwargs))
             elif endpoint == "trophies":
@@ -1227,7 +1239,7 @@ class TokenKeeper:
             # but 1s covers any edge cases with connection pooling or replication lag.
             time.sleep(1)
 
-            logger.info(f"Starting complete sync job for {profile_id}...")
+            # (job-worker bookend already logged START; narration line dropped)
 
             # Drain any IGDB enrichments deferred by _job_sync_title_id.
             # By this point every Game for every new concept has been attached,
@@ -1236,289 +1248,14 @@ class TokenKeeper:
             _set_phase('igdb_enrich')
             self._drain_deferred_igdb_enrich(profile_id)
 
-            # Check profile heatlh
+            # Recompute total_hiddens from authoritative DB state. Visibility
+            # reconciliation and trophy-count drift detection happen upstream
+            # in _job_profile_refresh, so by the time we get here the DB is
+            # the source of truth. The trophy/group completeness check below
+            # is the only health-style work left in sync_complete.
             _set_phase('health_check')
-            logger.info(f"Starting health check for {profile_id}...")
-            summary = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_summary')
-            tracked_trophies = PsnApiService.get_profile_trophy_summary(profile)
-
-            earned = summary.earned_trophies
-            summary_total = earned.bronze + earned.silver + earned.gold + earned.platinum
-            total_tracked = tracked_trophies['total'] + profile.total_hiddens
-            profilegame_total = ProfileGame.objects.filter(profile=profile, user_hidden=False).aggregate(earned=Coalesce(Sum('earned_trophies_count'), 0))['earned']
-
-            logger.info(f"Profile {profile_id} health: Summary: {summary_total} | Tracked: {total_tracked} (Hidden: {profile.total_hiddens}) | Profilegame: {profilegame_total} | {summary_total == total_tracked}")
-
-            if summary_total != total_tracked:
-                trophy_titles_to_be_updated = []
-                current_tracked_games = list(ProfileGame.objects.filter(profile=profile))
-                games_to_unhide = []
-                games_needing_groups = []
-                games_needing_concepts = []
-                page_size = 400
-                limit = page_size
-                offset = 0
-                is_full = True
-                has_mismatch = False
-                mismatch_count = 0
-                skipped_mismatch_count = 0
-                pgame_drift_count = 0
-                games_checked = 0
-                MAX_MISMATCH_RETRIES = 3
-
-                # --- Pre-fetch data to avoid N+1 queries in the health check loop ---
-                from django.db.models import Count as _Count, Q as _Q
-
-                # 1. Map np_communication_id -> Game for all known games
-                _game_by_np = {
-                    g.np_communication_id: g
-                    for g in Game.objects.filter(played_by__profile=profile)
-                }
-
-                # 2. Earned trophy counts per game (only total needed for comparison)
-                _earned_by_game = dict(
-                    EarnedTrophy.objects.filter(profile=profile, earned=True)
-                    .values('trophy__game_id')
-                    .annotate(total=_Count('id'))
-                    .values_list('trophy__game_id', 'total')
-                )
-
-                # 3. ProfileGames keyed by game_id
-                _pgame_by_game = {pg.game_id: pg for pg in current_tracked_games}
-
-                # 4. Game IDs missing TrophyGroup records
-                _games_missing_groups = set(
-                    Game.objects.filter(played_by__profile=profile)
-                    .annotate(group_count=_Count('trophy_groups'))
-                    .filter(group_count=0)
-                    .values_list('id', flat=True)
-                )
-
-                while is_full:
-                    titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-                    for title in titles:
-                        game = _game_by_np.get(title.np_communication_id)
-                        if game is None:
-                            # Game not in our DB yet
-                            try:
-                                game = Game.objects.get(np_communication_id=title.np_communication_id)
-                                _game_by_np[title.np_communication_id] = game
-                            except Game.DoesNotExist:
-                                game, _, _ = PsnApiService.create_or_update_game(title)
-                                _game_by_np[title.np_communication_id] = game
-                                _earned_by_game[game.id] = 0
-
-                        # Track concept-less games for resolution after the loop.
-                        # Modern platform games WITH title_ids get queued through
-                        # sync_title_stats for proper concept resolution. Everything
-                        # else (legacy platforms, OR modern games whose PSN
-                        # trophy_titles entry never returned a PPSA/CUSA SKU) has no
-                        # path through sync_title_stats and gets a stub inline.
-                        # Without the empty-title_ids carve-out, those games would
-                        # re-trigger sync_title_stats on every health check forever
-                        # because PSN's title_stats endpoint can't reach them.
-                        if game.concept is None:
-                            has_modern = any(p in TITLE_STATS_SUPPORTED_PLATFORMS for p in game.title_platform)
-                            has_title_ids = bool(game.title_ids)
-                            if has_modern and has_title_ids:
-                                games_needing_concepts.append(game)
-                            else:
-                                try:
-                                    default_concept = Concept.create_default_concept(game)
-                                    game.add_concept(default_concept)
-                                    self._try_igdb_enrich(default_concept)
-                                    logger.info(
-                                        f"Health check: created default concept for {game.title_name} "
-                                        f"({game.np_communication_id})"
-                                    )
-                                except Exception:
-                                    logger.exception(f"Health check: failed to create default concept for {game.title_name}")
-
-                        tracked_total = _earned_by_game.get(game.id, 0)
-
-                        pgame = _pgame_by_game.get(game.id)
-                        if pgame and pgame in current_tracked_games:
-                            current_tracked_games.remove(pgame)
-                            if pgame.user_hidden:
-                                games_to_unhide.append(pgame.game_id)
-
-                        title_total = title.earned_trophies.bronze + title.earned_trophies.silver + title.earned_trophies.gold + title.earned_trophies.platinum
-                        if tracked_total != title_total:
-                            # Circuit breaker: skip games that have been re-synced
-                            # multiple times without resolving the mismatch.
-                            mismatch_retries_key = f"health_mismatch_retries:{profile_id}"
-                            retries = int(redis_client.hget(mismatch_retries_key, game.np_communication_id) or 0)
-                            if retries >= MAX_MISMATCH_RETRIES:
-                                skipped_mismatch_count += 1
-                                logger.info(
-                                    f"Health check: skipping unresolvable mismatch for "
-                                    f"{game.np_communication_id} (profile {profile_id}): "
-                                    f"DB={tracked_total}, trophy_titles={title_total}"
-                                )
-                            else:
-                                has_mismatch = True
-                                mismatch_count += 1
-                                redis_client.hset(mismatch_retries_key, game.np_communication_id, retries + 1)
-                                redis_client.expire(mismatch_retries_key, 86400)
-                                trophy_titles_to_be_updated.append({'title': title, 'game': game})
-                        elif pgame and tracked_total != pgame.earned_trophies_count and pgame.id not in touched_profilegame_ids:
-                            pgame_drift_count += 1
-                            touched_profilegame_ids.append(pgame.id)
-
-                        # Check if game is missing TrophyGroup records (pre-fetched)
-                        if game.id in _games_missing_groups:
-                            games_needing_groups.append(game)
-
-                        games_checked += 1
-                        if games_checked % 100 == 0:
-                            logger.info(f"Health check progress for profile {profile_id}: {games_checked} games checked, {mismatch_count} mismatches, {pgame_drift_count} PGame drifts")
-                    is_full = len(titles) == page_size
-                    limit += page_size
-                    offset += page_size
-
-                logger.info(
-                    f"Health check complete for profile {profile_id}: {games_checked} games checked, "
-                    f"{mismatch_count} mismatches, {skipped_mismatch_count} skipped (unresolvable), "
-                    f"{pgame_drift_count} ProfileGame drifts"
-                )
-                if skipped_mismatch_count:
-                    logger.warning(
-                        f"Health check for profile {profile_id}: {skipped_mismatch_count} game(s) "
-                        f"skipped after {MAX_MISMATCH_RETRIES} failed re-sync attempts"
-                    )
-
-                # Unhide games that returned in PSN response but were previously hidden
-                if games_to_unhide:
-                    with transaction.atomic():
-                        EarnedTrophy.objects.filter(
-                            profile=profile,
-                            trophy__game_id__in=games_to_unhide
-                        ).update(user_hidden=False)
-                        ProfileGame.objects.filter(
-                            profile=profile,
-                            game_id__in=games_to_unhide
-                        ).update(user_hidden=False)
-                    logger.info(
-                        f"Health check for profile {profile_id}: unhid {len(games_to_unhide)} "
-                        f"game(s) that returned in PSN response"
-                    )
-
-                if len(current_tracked_games) > 0:
-                    # Use bulk update instead of individual saves to reduce DB locks
-                    hidden_game_ids = [pgame.game_id for pgame in current_tracked_games]
-                    with transaction.atomic():
-                        EarnedTrophy.objects.filter(
-                            profile=profile,
-                            trophy__game_id__in=hidden_game_ids
-                        ).update(user_hidden=True)
-                        ProfileGame.objects.filter(
-                            profile=profile,
-                            game_id__in=hidden_game_ids
-                        ).update(user_hidden=True)
-                    logger.info(
-                        f"Health check for profile {profile_id}: hid {len(hidden_game_ids)} "
-                        f"game(s) not returned by PSN"
-                    )
-
-                has_trophy_mismatch = has_mismatch and len(trophy_titles_to_be_updated) > 0
-                has_missing_groups = len(games_needing_groups) > 0
-                has_missing_concepts = len(games_needing_concepts) > 0
-
-                if has_trophy_mismatch or has_missing_groups or has_missing_concepts:
-                    if has_trophy_mismatch:
-                        logger.info(
-                            f"Health check for profile {profile_id}: {len(trophy_titles_to_be_updated)} games need re-sync"
-                        )
-                    if has_missing_groups:
-                        logger.warning(
-                            f"Health check for profile {profile_id}: {len(games_needing_groups)} game(s) missing TrophyGroup records"
-                        )
-                    if has_missing_concepts:
-                        logger.info(
-                            f"Health check for profile {profile_id}: {len(games_needing_concepts)} PS4/PS5 game(s) missing concepts, queuing sync_title_stats"
-                        )
-
-                    # Re-enter syncing state with progress tracking
-                    profile.reset_sync_progress()
-                    profile.set_sync_status('syncing')
-
-                    # Set up pending_sync_complete so a follow-up runs after these jobs finish.
-                    # This ensures badges, milestones, challenges, etc. run AFTER the re-queued
-                    # games have actually finished syncing (not on stale data).
-                    pending_key = f"pending_sync_complete:{profile_id}"
-                    pending_data = json.dumps({
-                        'touched_profilegame_ids': touched_profilegame_ids,
-                        'queue_name': 'orchestrator'
-                    })
-                    redis_client.set(pending_key, pending_data, ex=21600)
-
-                    queued_count = 0
-                    # Re-queue sync_trophy_groups for games missing groups
-                    for game in games_needing_groups:
-                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
-                        args = [game.np_communication_id, platform]
-                        PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-                        queued_count += 1  # group sync = 1 progress tick
-
-                    # Re-queue sync_trophies for games with earned mismatches
-                    for title in trophy_titles_to_be_updated:
-                        game = title['game']
-                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
-                        if PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override='low_priority'):
-                            queued_count += 2  # sync_trophies = 2 progress ticks
-
-                    # Queue sync_title_stats to resolve proper concepts for PS4/PS5 games.
-                    # Games without title_ids won't be matched by update_profile_game_with_title_stats,
-                    # so they naturally flow into remaining_title_stats -> sync_title_id.
-                    # A single is_last=True job auto-paginates through all results.
-                    if has_missing_concepts:
-                        args = [20, 0, 20, True, False]
-                        PSNManager.assign_job('sync_title_stats', args, profile.id)
-
-                    profile.add_to_sync_target(queued_count)
-
-                    # Early return: skip badge/milestone/challenge checks.
-                    # The follow-up sync_complete (triggered by pending_sync_complete
-                    # when all re-queued jobs finish) will handle all of that.
-                    profile.last_profile_health_check = timezone.now()
-                    profile.save(update_fields=['last_profile_health_check'])
-                    return
-                else:
-                    # Calculate total_hiddens directly from PSN total minus visible
-                    # earned in DB. Using (summary_total - total_tracked) would
-                    # create a circular dependency since total_tracked already
-                    # includes the old total_hiddens value, causing oscillation.
-                    new_hiddens = max(summary_total - tracked_trophies['total'], 0)
-                    profile.total_hiddens = new_hiddens
-                    profile.save(update_fields=['total_hiddens'])
-                    logger.info(f"New total hiddens for profile {profile.id}: {new_hiddens}")
-
-                # Check badges
-                profile.last_profile_health_check = timezone.now()
-                profile.save(update_fields=['last_profile_health_check'])
-
-            elif total_tracked != profilegame_total:
-                # EarnedTrophy data matches PSN, but ProfileGame stats are stale.
-                # No PSN API calls needed: just queue all ProfileGames for recalculation.
-                logger.info(
-                    f"ProfileGame stats drift for profile {profile_id}: "
-                    f"tracked={total_tracked}, profilegame={profilegame_total}. "
-                    f"Recalculating stats (no resync needed)."
-                )
-                all_pg_ids = list(
-                    ProfileGame.objects.filter(profile=profile)
-                    .values_list('id', flat=True)
-                )
-                existing_set = set(touched_profilegame_ids)
-                for pg_id in all_pg_ids:
-                    if pg_id not in existing_set:
-                        touched_profilegame_ids.append(pg_id)
-                profile.last_profile_health_check = timezone.now()
-                profile.save(update_fields=['last_profile_health_check'])
-
-            # Clear mismatch retry counters: if we reached this point, no
-            # unresolvable mismatches triggered a re-sync early return, so
-            # any previously-tracked retries are resolved or absorbed.
+            logger.info(f"[profile {profile_id}] sync_complete hiddens recomputed")
+            PsnApiService.recompute_total_hiddens(profile)
             redis_client.delete(f"health_mismatch_retries:{profile_id}")
 
             # Trophy/TrophyGroup completeness check: detect games where sync jobs
@@ -1603,16 +1340,11 @@ class TokenKeeper:
                             queued_count += 2  # sync_trophies = 2 progress ticks
 
                     profile.add_to_sync_target(queued_count)
-                    profile.last_profile_health_check = timezone.now()
-                    profile.save(update_fields=['last_profile_health_check'])
                     return
 
             _set_phase('stats_badges')
-            logger.info(f"Updating plats for {profile_id}...")
             profile.update_plats()
-            logger.info(f"Updating profilegame stats for {profile_id}...")
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
-            logger.info(f"Checking profile badges for {profile_id}...")
             check_profile_badges(profile, touched_profilegame_ids)
 
             # Create consolidated badge notifications
@@ -1620,15 +1352,12 @@ class TokenKeeper:
                 from notifications.services.deferred_notification_service import DeferredNotificationService
                 DeferredNotificationService.create_badge_notifications(profile_id, profile=profile)
             except Exception as e:
-                logger.error(f"Failed to create badge notifications for profile {profile_id}: {e}", exc_info=True)
-
-            logger.info(f"ProfileGame Stats updated for {profile_id} successfully! | {len(touched_profilegame_ids)} profilegames updated")
+                logger.error(f"[profile {profile_id}] sync_complete badge notification failed: {e}", exc_info=True)
             _set_phase('milestones')
             from trophies.milestone_constants import ALL_CALENDAR_TYPES, ALL_GENRE_TYPES
             # Challenge-specific types are excluded here because they're checked
             # separately by their respective check_*_challenge_progress() functions below
             check_all_milestones_for_user(profile, exclude_types=ALL_CALENDAR_TYPES | {'az_progress'} | ALL_GENRE_TYPES)
-            logger.info(f"Milestones checked for {profile_id} successfully!")
 
             _set_phase('challenges')
             # Check A-Z challenge progress
@@ -1651,6 +1380,10 @@ class TokenKeeper:
                 logger.exception(f"Failed to check genre challenge progress for profile {profile_id}")
 
             _set_phase('finishing')
+            # Refresh denormalized stats from authoritative post-sync state.
+            # Both updaters honor profile.hide_hiddens, so totals stay
+            # consistent even when the user toggles that setting between syncs.
+            update_profile_games(profile)
             update_profile_trophy_counts(profile)
             profile.set_sync_status('synced')
 
@@ -1673,11 +1406,11 @@ class TokenKeeper:
                 if ProfileCardSettings.objects.filter(profile_id=profile_id, public_sig_enabled=True).exists():
                     from core.services.profile_card_renderer import render_sig_svg
                     render_sig_svg(profile)
-                    logger.info(f"Re-rendered forum sig SVG for profile {profile_id}")
+                    logger.debug(f"[profile {profile_id}] forum sig re-rendered")
             except Exception:
-                logger.exception(f"Failed to re-render forum sig for profile {profile_id}")
+                logger.exception(f"[profile {profile_id}] forum sig render failed")
 
-            logger.info(f"{profile.display_psn_username} account has finished syncing!")
+            # (job-worker bookend logs DONE; trailing narration line dropped)
         except PSNOutageError:
             logger.warning(
                 f"PSN outage during sync_complete for profile {profile_id}, deferring"
@@ -1729,7 +1462,7 @@ class TokenKeeper:
 
         if not profile.psn_history_public:
             profile.set_sync_status('error')
-        logger.info('Privacy error handled.')
+        logger.info(f"[profile {profile_id}] privacy error handled")
 
     def _job_sync_profile_data(self, profile_id: int) -> Profile:
         try:
@@ -1776,118 +1509,6 @@ class TokenKeeper:
             raise
         PsnApiService.update_profile_region(profile, region)
 
-    def _job_sync_trophy_titles(self, profile_id: int, force_title_stats:bool=False):
-        # Clear the orchestrator pending flag now that this job is executing
-        redis_client.delete(f"sync_orchestrator_pending:{profile_id}")
-        try:
-            profile = Profile.objects.get(id=profile_id)
-        except Profile.DoesNotExist:
-            logger.error(f"Profile {profile_id} does not exist.")
-            return
-        job_type = 'sync_trophy_titles'
-        job_counter = 0
-
-        trophy_titles = []
-        page_size = 400
-        limit = page_size
-        offset = 0
-        is_full = True
-
-        while is_full:
-            result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-            is_full = len(result) == page_size
-            trophy_titles.extend(result)
-            limit += page_size
-            offset += page_size
-
-        # FIRST PASS: Create/update games and calculate job count WITHOUT assigning jobs
-        touched_profilegame_ids = []
-        num_title_stats = 0
-        games_needing_groups = []
-        games_by_comm_id = {}  # Cache games to avoid re-fetching in second pass
-
-        for title in trophy_titles:
-            game, created, _ = PsnApiService.create_or_update_game(title)
-            games_by_comm_id[title.np_communication_id] = game
-            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
-            touched_profilegame_ids.append(profile_game.id)
-            has_modern_platform = False
-            for platform in game.title_platform:
-                if platform in TITLE_STATS_SUPPORTED_PLATFORMS:
-                    num_title_stats += 1
-                    has_modern_platform = True
-                    break
-
-            # Legacy-only platform games (PS3, PSVITA, PSVR, PSVR2) never enter the
-            # sync_title_stats → sync_title_id pipeline, so they need a default concept
-            # assigned here to avoid remaining concept-less indefinitely.
-            if not has_modern_platform and game.concept is None:
-                try:
-                    default_concept = Concept.create_default_concept(game)
-                    game.add_concept(default_concept)
-                    self._try_igdb_enrich(default_concept)
-                    logger.info(f"Created default concept for legacy platform game {game.title_name} ({game.np_communication_id})")
-                except Exception:
-                    logger.exception(f"Failed to create default concept for legacy platform game {game.title_name} ({game.np_communication_id})")
-            title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
-
-            # Check if this game needs trophy groups synced
-            needs_groups = created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists()
-            if needs_groups:
-                games_needing_groups.append(game)
-                job_counter += 1  # sync_trophy_groups
-            job_counter += 2  # sync_trophies (includes the +2 for include_progress)
-
-        # Set target BEFORE assigning any jobs to prevent race condition
-        profile.add_to_sync_target(job_counter)
-
-        # Determine queue for sync_trophies: bulk_priority for whale accounts
-        bulk_threshold = int(redis_client.get('sync:bulk_threshold') or 5000)
-        trophy_queue = 'bulk_priority' if job_counter > bulk_threshold else None  # None = default (low_priority)
-        if trophy_queue == 'bulk_priority':
-            logger.info(f"Profile {profile_id}: {job_counter} jobs exceeds bulk threshold ({bulk_threshold}), using bulk_priority queue")
-
-        # SECOND PASS: Now assign the jobs (using cached games from first pass)
-        skipped = 0
-        for title in trophy_titles:
-            game = games_by_comm_id[title.np_communication_id]
-            platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
-
-            if game in games_needing_groups:
-                args = [game.np_communication_id, platform]
-                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-            queued = PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override=trophy_queue)
-            if not queued:
-                skipped += 1
-
-        # Adjust target if any games were already queued from a prior pass
-        if skipped > 0:
-            logger.info(f"Profile {profile_id}: skipped {skipped} duplicate sync_trophies jobs")
-            profile.add_to_sync_target(-(skipped * 2))
-
-        update_profile_games(profile)
-
-        # Assign jobs for title_stats
-        if num_title_stats > 0:
-            page_size = 20
-            limit = page_size
-            offset = 0
-            for _ in range(num_title_stats // page_size):
-                args=[limit, offset, page_size, False, force_title_stats]
-                PSNManager.assign_job('sync_title_stats', args, profile_id)
-                limit += page_size
-                offset += page_size
-            # Always assign the final page with is_last=True
-            args=[limit, offset, page_size, True, force_title_stats]
-            PSNManager.assign_job('sync_title_stats', args, profile_id)
-        
-        pending_key = f"pending_sync_complete:{profile_id}"
-        pending_data = json.dumps({
-            'touched_profilegame_ids': touched_profilegame_ids,
-            'queue_name': 'orchestrator'
-        })
-        redis_client.set(pending_key, pending_data, ex=21600)
-
     def _job_sync_trophy_groups(self, profile_id: int, np_communication_id: str, platform: str):
         try:
             profile = Profile.objects.get(id=profile_id)
@@ -1912,10 +1533,10 @@ class TokenKeeper:
             logger.warning(f"Game {game.title_name} ({game.np_communication_id}) has no concept during trophy group sync.")
 
         profile.increment_sync_progress()
-        logger.info(f"Trophy group summaries for {game.title_name} synced successfully!")
+        logger.debug(f"[profile {profile.id}] sync_trophy_groups done game={game.np_communication_id}")
 
     def _job_sync_title_stats(self, profile_id: int, limit: int, offset: int, page_size: int, is_last: bool=False, force_all: bool=False):
-        logger.info(f"Syncing title stats | Force All: {force_all}")
+        logger.debug(f"[profile {profile_id}] sync_title_stats force_all={force_all} offset={offset}")
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
@@ -1946,7 +1567,7 @@ class TokenKeeper:
                 for title in remaining_title_stats[offset:limit]:
                     title_ids.append(title.title_id)
                 
-                logger.info(f"Calling trophy_titles_for_title... {title_ids}")
+                logger.debug(f"trophy_titles_for_title call ids={title_ids}")
                 result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids)
                 trophy_titles_for_title.extend(result)
                 limit += page_size
@@ -1984,8 +1605,7 @@ class TokenKeeper:
         acquired = redis_client.set(lock_key, f"{profile_id}", nx=True, ex=120)
         if not acquired:
             logger.info(
-                f"sync_trophies for {np_communication_id} already in progress "
-                f"(profile {profile_id}), skipping duplicate."
+                f"[profile {profile_id}] sync_trophies skip duplicate game={np_communication_id}"
             )
             redis_client.srem(f"sync_queued_games:{profile_id}", np_communication_id)
             profile.increment_sync_progress(value=2)
@@ -2001,7 +1621,7 @@ class TokenKeeper:
         """Execute the actual trophy sync work. Called under a per-game Redis lock."""
         job_type = 'sync_trophies'
 
-        logger.info(f"Fetching trophies for profile {profile.id}, game {np_communication_id} on platform {platform}")
+        logger.debug(f"[profile {profile.id}] sync_trophies fetch game={np_communication_id} platform={platform}")
         trophies = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophies', np_communication_id=np_communication_id, platform=PlatformType(platform), include_progress=True, trophy_group_id='all', page_size=500)
         # Process in batches to avoid long-running transactions that block other DB operations.
         # Suppress the EarnedTrophy pre_save signal during sync: the signal fires a SELECT per
@@ -2028,6 +1648,25 @@ class TokenKeeper:
                 f"Mismatch diagnostic for {np_communication_id} (profile {profile.id}): "
                 f"API returned {api_earned} earned, DB has {db_earned} earned, "
                 f"API total trophies: {len(trophies)}"
+            )
+
+        # Refresh Trophy.earn_rate for this game's trophies. Trophy.earned_count
+        # and Game.played_count are maintained incrementally by the EarnedTrophy
+        # and ProfileGame post_save signals, but earn_rate is a derived value
+        # (earned_count / played_count) and was historically only refreshed by
+        # the daily recalc_earn_rates cron. That left brand-new games stuck at
+        # 0% earn rate until the next cron run. Doing one targeted UPDATE here
+        # per game costs almost nothing and keeps PP-specific rarity live.
+        # The daily cron remains the source of truth for cross-game drift.
+        from trophies.models import Trophy
+        played_count = (
+            Game.objects.filter(pk=game.id)
+            .values_list('played_count', flat=True)
+            .first()
+        ) or 0
+        if played_count > 0:
+            Trophy.objects.filter(game_id=game.id).update(
+                earn_rate=F('earned_count') * 1.0 / played_count
             )
 
         profile.increment_sync_progress(value=2)
@@ -2068,7 +1707,7 @@ class TokenKeeper:
 
         job_type='sync_title_id'
 
-        logger.info(f"Beginning sync for {title_id.title_id} | {np_communication_id}")
+        logger.debug(f"[profile {profile_id}] sync_title_id begin title_id={title_id.title_id} game={np_communication_id}")
         try:
 
             # Resolve platform mismatch: trust the Game's platform over TitleID
@@ -2138,7 +1777,7 @@ class TokenKeeper:
                     self._defer_igdb_enrich(profile_id, concept)
 
                 profile.increment_sync_progress()
-                logger.info(f"Title ID {title_id.title_id} - {concept.unified_title} sync'd successfully!")
+                logger.info(f"sync_title_id resolved {title_id.title_id} -> \"{concept.unified_title}\"")
             else:
                 # PSN returned no usable metadata (empty, sparse, or errorCode). Fall
                 # back to a default concept so the Game still has something to group.
@@ -2254,8 +1893,7 @@ class TokenKeeper:
 
         concepts = list(Concept.objects.filter(id__in=concept_ids))
         logger.info(
-            f"Draining deferred IGDB enrichment for profile {profile_id}: "
-            f"{len(concepts)} concept(s)"
+            f"[profile {profile_id}] IGDB drain concepts={len(concepts)}"
         )
         for concept in concepts:
             self._try_igdb_enrich(concept)
@@ -2310,162 +1948,495 @@ class TokenKeeper:
 
         return media_data
     
+    # ─── Profile Refresh: Unified Fingerprint-Based Orchestrator ────────────
+    # See docs/architecture/sync-architecture.md for the architecture
+    # rationale. This is the single sync orchestrator entry point: both fresh
+    # accounts and follow-up syncs flow through here. Whether the DB starts
+    # empty or partially populated is no longer a code-branch decision; it
+    # just shows up as a larger fingerprint mismatch.
+
     def _job_profile_refresh(self, profile_id: int):
-        # Clear the orchestrator pending flag now that this job is executing
+        """Unified sync orchestrator.
+
+        Computes a fingerprint from PSN (`trophy_summary` totals + visible
+        game count from `trophy_titles` page 1 metadata) and compares to the
+        DB. If matched, fast-path: schedule sync_complete with no per-game
+        work. If mismatched, slow-path: walk all visible titles, reconcile
+        visibility by set diff, queue per-game work.
+        """
         redis_client.delete(f"sync_orchestrator_pending:{profile_id}")
         try:
             profile = Profile.objects.get(id=profile_id)
         except Profile.DoesNotExist:
             logger.error(f"Profile {profile_id} does not exist.")
             return
+
+        # Capture state BEFORE we queue sync_profile_data and start the walk:
+        # - last_sync: sync_profile_data will bump last_synced when it runs;
+        #   the title_stats walk below uses the previous value to early-exit
+        #   on entries older than the previous sync.
+        # - had_existing_games: distinguishes initial sync (no DB games yet)
+        #   from follow-up sync. The title_stats walk uses full-walk semantics
+        #   on initial sync so newly-created ProfileGames get their first
+        #   playtime data, and early-exit semantics on follow-ups.
+        last_sync = profile.last_synced
+        had_existing_games = ProfileGame.objects.filter(profile=profile).exists()
+
+        # Queue sync_profile_data so PSN profile fields (level, avatar, region)
+        # refresh AND last_synced gets bumped via update_profile_from_legacy.
+        # This is the canonical place for that queue: PSNManager entry points
+        # (initial_sync / profile_refresh) only queue this orchestrator.
+        PSNManager.assign_job('sync_profile_data', args=[], profile_id=profile_id)
+
         job_type = 'profile_refresh'
+
+        # 1. PSN signals: trophy_summary + first page of trophy_titles
+        summary = self._execute_api_call(
+            self._get_instance_for_job(job_type), profile, 'trophy_summary'
+        )
+        earned = summary.earned_trophies
+        page_size = 400
+        first_page, total_item_count = self._execute_api_call(
+            self._get_instance_for_job(job_type), profile, 'trophy_titles_with_count',
+            limit=page_size, offset=0, page_size=page_size,
+        )
+
+        psn_fingerprint = (
+            earned.bronze, earned.silver, earned.gold, earned.platinum,
+            total_item_count,
+        )
+        db_fingerprint = PsnApiService.get_db_fingerprint(profile)
+        fingerprints_match = (psn_fingerprint == db_fingerprint)
+
+        # Safety net: even if the fingerprint matches, force slow path when
+        # any of the profile's games is missing a concept. The fingerprint
+        # only watches trophy counts and visible-game count; it can't see
+        # concept resolution gaps caused by matching pipeline failures, IGDB
+        # outages, or manual concept cleanup. Forcing the walk lets the
+        # classifier re-route concept-less modern games into sync_title_stats
+        # and assign default concepts to legacy-only games.
+        force_slow = False
+        if fingerprints_match:
+            if ProfileGame.objects.filter(
+                profile=profile, game__concept__isnull=True,
+            ).exists():
+                force_slow = True
+
+        path_label = 'slow' if (not fingerprints_match or force_slow) else 'fast'
+        log_suffix = ' (concept-less recovery)' if (fingerprints_match and force_slow) else ''
+        logger.info(
+            f"[profile {profile_id}] fingerprint "
+            f"psn={psn_fingerprint} db={db_fingerprint} "
+            f"path={path_label}{log_suffix}"
+        )
+
+        if fingerprints_match and not force_slow:
+            self._profile_refresh_fast_path(profile_id)
+            return
+
+        self._profile_refresh_slow_path(
+            profile_id, profile, first_page, total_item_count, page_size,
+            last_sync, had_existing_games,
+        )
+
+    def _profile_refresh_fast_path(self, profile_id: int):
+        """Fingerprint matched: schedule sync_complete with no per-game work."""
+        pending_key = f"pending_sync_complete:{profile_id}"
+        pending_data = json.dumps({
+            'touched_profilegame_ids': [],
+            'queue_name': 'orchestrator',
+        })
+        redis_client.set(pending_key, pending_data, ex=7200)
+
+        # No counted jobs were queued, so sync_complete won't auto-fire via
+        # _complete_job. Trigger it immediately.
+        current_jobs = self._get_current_jobs_for_profile(profile_id)
+        if current_jobs <= 0:
+            logger.info(f"[profile {profile_id}] fast path: triggering sync_complete")
+            args = [[], 'orchestrator']
+            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='orchestrator')
+            redis_client.delete(pending_key)
+
+    def _profile_refresh_slow_path(self, profile_id, profile, first_page, total_item_count, page_size, last_sync, had_existing_games):
+        """Fingerprint mismatched: walk PSN trophy_titles fully, reconcile state."""
+        logger.info(
+            f"[profile {profile_id}] slow path: walking {total_item_count} titles"
+        )
+        job_type = 'profile_refresh'
+
+        # Fetch remaining pages (we already have page 1). For accounts with
+        # multiple remaining pages we fan them out in parallel: page-1 metadata
+        # told us total_item_count, so we know exactly how many pages and what
+        # offsets to fetch. Cap concurrency low — the token instance pool is
+        # shared with other workers, and we don't want to starve them during
+        # the brief pagination phase.
+        trophy_titles = list(first_page)
+        remaining_offsets = (
+            list(range(page_size, total_item_count, page_size))
+            if total_item_count > len(first_page)
+            else []
+        )
+        if len(remaining_offsets) == 1:
+            # Only one extra page; thread-pool overhead isn't worth it.
+            offset = remaining_offsets[0]
+            result = self._execute_api_call(
+                self._get_instance_for_job(job_type), profile, 'trophy_titles',
+                limit=offset + page_size, offset=offset, page_size=page_size,
+            )
+            trophy_titles.extend(result)
+        elif len(remaining_offsets) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            max_workers = min(3, len(remaining_offsets))
+            logger.info(
+                f"[profile {profile_id}] paginating {len(remaining_offsets)} pages "
+                f"in parallel (workers={max_workers})"
+            )
+
+            def _fetch_page(offset):
+                return offset, self._execute_api_call(
+                    self._get_instance_for_job(job_type), profile, 'trophy_titles',
+                    limit=offset + page_size, offset=offset, page_size=page_size,
+                )
+
+            results_by_offset = {}
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='trophy-titles-page') as executor:
+                # `executor.map` raises the first exception encountered; that
+                # propagates up through _job_profile_refresh and into the worker
+                # loop's existing error handling (PSNOutageError, deadlock, etc).
+                for offset, page in executor.map(_fetch_page, remaining_offsets):
+                    results_by_offset[offset] = page
+
+            # Reassemble in offset order so PSN's natural newest-first ordering
+            # is preserved across the parallel fetch.
+            for offset in remaining_offsets:
+                trophy_titles.extend(results_by_offset[offset])
+
+        # Pre-fetch DB earned-counts per game so we can detect trophy drift in
+        # one pass without per-game queries.
+        from django.db.models import Count as _Count
+        db_earned_by_game = dict(
+            EarnedTrophy.objects.filter(profile=profile, earned=True)
+            .values('trophy__game_id')
+            .annotate(total=_Count('id'))
+            .values_list('trophy__game_id', 'total')
+        )
+
+        # FIRST PASS: per-title processing, build PSN visible set, classify work
+        touched_profilegame_ids = []
+        psn_visible_np_ids = set()
+        games_needing_groups = []
+        games_needing_concepts = []
+        games_to_resync = []
+        new_game_count = 0
         job_counter = 0
 
-        last_sync = profile.last_synced
-        PSNManager.assign_job('sync_profile_data', args=[], profile_id=profile.id)
-
-        trophy_titles_to_be_updated = []
-        page_size = 400
-        limit = page_size
-        offset = 0
-        is_full = True
-        end_found = False
-        while not end_found and is_full:
-            titles = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles', limit=limit, offset=offset, page_size=page_size)
-            is_full = len(titles) == page_size
-            for title in titles:
-                if title.last_updated_datetime > last_sync:
-                    trophy_titles_to_be_updated.append(title)
-                else:
-                    end_found = True
-                    break
-            limit += page_size
-            offset += page_size
-
-        # FIRST PASS: Create/update games and calculate job count WITHOUT assigning jobs
-        touched_profilegame_ids = []
-        games_needing_groups = []
-        new_game_count = 0
-
-        for title in trophy_titles_to_be_updated:
-            game, created, _ = PsnApiService.create_or_update_game(title)
-            if created:
+        for title in trophy_titles:
+            psn_visible_np_ids.add(title.np_communication_id)
+            game, game_created, _ = PsnApiService.create_or_update_game(title)
+            if game_created:
                 new_game_count += 1
-            profile_game, _ = PsnApiService.create_or_update_profile_game(profile, game, title)
-            touched_profilegame_ids.append(profile_game.id)
-            title_defined_trophies_total = title.defined_trophies.bronze + title.defined_trophies.silver + title.defined_trophies.gold + title.defined_trophies.platinum
 
-            # Check if this game needs trophy groups synced
-            needs_groups = created or game.get_total_defined_trophies() != title_defined_trophies_total or not TrophyGroup.objects.filter(game=game).exists()
+            profile_game, pgame_created = PsnApiService.create_or_update_profile_game(profile, game, title)
+
+            # Concept-less game classification:
+            # - Modern platform games (PS4/PS5) go through sync_title_stats →
+            #   sync_title_id for proper PSN concept resolution. We do NOT
+            #   short-circuit them with default concepts even if title_ids is
+            #   empty here, because title_ids gets populated downstream by the
+            #   sync_title_stats pipeline.
+            # - Legacy-only platform games (PS3, PSVITA, PSVR, PSVR2) never
+            #   enter that pipeline, so they need a default concept assigned
+            #   inline to avoid remaining concept-less indefinitely.
+            # The health check uses an additional has_title_ids carve-out that
+            # belongs only there, NOT here: it prevents infinite retry of
+            # games PSN can't resolve. At walk time, every fresh modern game
+            # has empty title_ids and that check would mis-stub them all.
+            if game.concept is None:
+                has_modern_platform = any(
+                    p in TITLE_STATS_SUPPORTED_PLATFORMS for p in game.title_platform
+                )
+                if has_modern_platform:
+                    games_needing_concepts.append(game)
+                else:
+                    try:
+                        default_concept = Concept.create_default_concept(game)
+                        game.add_concept(default_concept)
+                        self._try_igdb_enrich(default_concept)
+                        logger.debug(
+                            f"default concept legacy game={game.np_communication_id}"
+                        )
+                    except Exception:
+                        logger.exception(
+                            f"default concept failed game={game.np_communication_id}"
+                        )
+
+            # Trophy-count drift detection: compare PSN's earned total for this
+            # title against our DB's. Mismatch = needs sync_trophies re-run.
+            title_earned_total = (
+                title.earned_trophies.bronze + title.earned_trophies.silver
+                + title.earned_trophies.gold + title.earned_trophies.platinum
+            )
+            db_earned_total = db_earned_by_game.get(game.id, 0)
+            has_drift = (title_earned_total != db_earned_total)
+
+            # TrophyGroup completeness: new games or games whose defined_trophies
+            # total disagrees with DB, or which simply have no TrophyGroup rows yet.
+            title_defined_total = (
+                title.defined_trophies.bronze + title.defined_trophies.silver
+                + title.defined_trophies.gold + title.defined_trophies.platinum
+            )
+            needs_groups = (
+                game_created
+                or game.get_total_defined_trophies() != title_defined_total
+                or not TrophyGroup.objects.filter(game=game).exists()
+            )
             if needs_groups:
                 games_needing_groups.append(game)
-                job_counter += 1  # sync_trophy_groups
-            job_counter += 2  # sync_trophies (includes the +2 for include_progress)
+                job_counter += 1
 
-        # Increment scout games_discovered counter (no-op for non-scout profiles)
+            if has_drift or pgame_created:
+                games_to_resync.append(game)
+                job_counter += 2  # sync_trophies = +2 (one without progress, one with)
+                # Only games whose EarnedTrophy aggregates need recomputation are
+                # added to touched_profilegame_ids. update_profilegame_stats and
+                # check_profile_badges scope their work to this list, so adding
+                # untouched games is wasted DB / badge-eval cycles.
+                touched_profilegame_ids.append(profile_game.id)
+
+        # Scout discovery counter (no-op for non-scouts).
         if new_game_count > 0:
             ScoutAccount.objects.filter(
                 profile_id=profile_id, status='active',
             ).update(games_discovered=F('games_discovered') + new_game_count)
 
-        # Set target BEFORE assigning any jobs to prevent race condition
+        # VISIBILITY RECONCILIATION: set diff between PSN-visible and DB-visible,
+        # then bulk-flip user_hidden on ProfileGame and EarnedTrophy.
+        db_visible_np_ids = set(
+            ProfileGame.objects.filter(profile=profile, user_hidden=False)
+            .values_list('game__np_communication_id', flat=True)
+        )
+        newly_hidden_np_ids = db_visible_np_ids - psn_visible_np_ids
+        newly_unhidden_np_ids = psn_visible_np_ids - db_visible_np_ids
+
+        if newly_hidden_np_ids:
+            game_ids = list(
+                Game.objects.filter(np_communication_id__in=newly_hidden_np_ids)
+                .values_list('id', flat=True)
+            )
+            if game_ids:
+                with transaction.atomic():
+                    ProfileGame.objects.filter(
+                        profile=profile, game_id__in=game_ids,
+                    ).update(user_hidden=True)
+                    EarnedTrophy.objects.filter(
+                        profile=profile, trophy__game_id__in=game_ids,
+                    ).update(user_hidden=True)
+
+        if newly_unhidden_np_ids:
+            game_ids = list(
+                Game.objects.filter(np_communication_id__in=newly_unhidden_np_ids)
+                .values_list('id', flat=True)
+            )
+            if game_ids:
+                with transaction.atomic():
+                    ProfileGame.objects.filter(
+                        profile=profile, game_id__in=game_ids,
+                    ).update(user_hidden=False)
+                    EarnedTrophy.objects.filter(
+                        profile=profile, trophy__game_id__in=game_ids,
+                    ).update(user_hidden=False)
+
+        if newly_hidden_np_ids or newly_unhidden_np_ids:
+            logger.info(
+                f"[profile {profile_id}] visibility "
+                f"hid={len(newly_hidden_np_ids)} unhid={len(newly_unhidden_np_ids)}"
+            )
+
+        # title_stats walk: populate playtime / play count / first / last_played
+        # on each ProfileGame and queue sync_title_id for any title_ids the
+        # endpoint returns that don't map to a known concept yet.
+        # - Initial sync (had_existing_games=False): walk every page so newly
+        #   created ProfileGames get their first playtime data.
+        # - Follow-up sync: early-exit on entries whose last_played <= last_sync
+        #   (PSN sorts title_stats by last_played DESC, so we hit stale entries
+        #   in order and can stop pagination).
+        title_id_jobs_queued = self._walk_title_stats(
+            profile, profile_id, last_sync, full_walk=not had_existing_games,
+        )
+        job_counter += title_id_jobs_queued
+
+        # Set sync_progress_target BEFORE queueing jobs to avoid the race where
+        # _complete_job sees zero pending and fires sync_complete prematurely.
         profile.add_to_sync_target(job_counter)
 
-        # Determine queue for sync_trophies: bulk_priority for whale accounts
+        # Whale routing: if total per-game work exceeds the threshold, send
+        # sync_trophies to the bulk_priority queue.
         bulk_threshold = int(redis_client.get('sync:bulk_threshold') or 5000)
-        trophy_queue = 'bulk_priority' if job_counter > bulk_threshold else 'medium_priority'
+        trophy_queue = 'bulk_priority' if job_counter > bulk_threshold else None
         if trophy_queue == 'bulk_priority':
-            logger.info(f"Profile {profile_id}: {job_counter} refresh jobs exceeds bulk threshold ({bulk_threshold}), using bulk_priority queue")
+            logger.info(
+                f"[profile {profile_id}] whale routing "
+                f"jobs={job_counter} threshold={bulk_threshold} -> bulk_priority"
+            )
 
-        # SECOND PASS: Now assign the jobs
+        # SECOND PASS: queue per-game jobs.
+        for game in games_needing_groups:
+            platform = game.title_platform[0] if game.title_platform[0] != 'PSPC' else game.title_platform[1]
+            args = [game.np_communication_id, platform]
+            PSNManager.assign_job('sync_trophy_groups', args, profile.id)
+
         skipped = 0
-        for title in trophy_titles_to_be_updated:
-            game = Game.objects.get(np_communication_id=title.np_communication_id)
-            platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
-
-            if game in games_needing_groups:
-                args = [game.np_communication_id, platform]
-                PSNManager.assign_job('sync_trophy_groups', args, profile.id)
-            queued = PSNManager.assign_sync_trophies(profile.id, game.np_communication_id, platform, priority_override=trophy_queue)
+        for game in games_to_resync:
+            platform = game.title_platform[0] if game.title_platform[0] != 'PSPC' else game.title_platform[1]
+            queued = PSNManager.assign_sync_trophies(
+                profile.id, game.np_communication_id, platform,
+                priority_override=trophy_queue,
+            )
             if not queued:
                 skipped += 1
-
-        # Adjust target if any games were already queued
         if skipped > 0:
-            logger.info(f"Profile {profile_id}: skipped {skipped} duplicate sync_trophies jobs in refresh")
+            logger.info(f"[profile {profile_id}] skipped duplicate sync_trophies count={skipped}")
             profile.add_to_sync_target(-(skipped * 2))
 
-        update_profile_games(profile)
-        job_counter = 0
-        
-        title_stats_to_be_updated = []
+        # One-line summary of the slow-path walk's per-game classification.
+        # `concepts=` reports inline-detected concept-less modern games (those
+        # got a sync_title_id job queued by _walk_title_stats above; the count
+        # here is informational and may differ slightly from title_id_jobs_queued
+        # if the title_stats walk discovered additional unmatched title_ids).
+        logger.info(
+            f"[profile {profile_id}] walk done "
+            f"titles={len(trophy_titles)} drift={len(games_to_resync)} "
+            f"groups={len(games_needing_groups)} concepts={len(games_needing_concepts)} "
+            f"title_id_jobs={title_id_jobs_queued}"
+        )
+
+        # Set pending_sync_complete so the orchestrator fires sync_complete
+        # once all per-game jobs finish.
+        pending_key = f"pending_sync_complete:{profile_id}"
+        pending_data = json.dumps({
+            'touched_profilegame_ids': touched_profilegame_ids,
+            'queue_name': 'orchestrator',
+        })
+        redis_client.set(pending_key, pending_data, ex=7200)
+
+        # If no per-game work was queued (e.g. drift-free sync that still walked
+        # to reconcile visibility), fire sync_complete immediately.
+        current_jobs = self._get_current_jobs_for_profile(profile_id)
+        if current_jobs <= 0:
+            logger.info(f"[profile {profile_id}] no pending jobs: triggering sync_complete")
+            args = [touched_profilegame_ids, 'orchestrator']
+            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='orchestrator')
+            redis_client.delete(pending_key)
+
+    def _walk_title_stats(self, profile, profile_id, last_sync, full_walk):
+        """Walk PSN title_stats inline, updating ProfileGame playtime data.
+
+        Two responsibilities, both inherited from the legacy `_job_profile_refresh`:
+
+        1. Call `update_profile_game_with_title_stats` for each entry so each
+           ProfileGame's play_count / play_duration / first_played / last_played
+           fields reflect the latest PSN data.
+        2. Detect title_ids that don't map to a known concept yet, fetch their
+           np_communication_id mappings via `trophy_titles_for_title`, and queue
+           a `sync_title_id` job for each so the concept-resolution pipeline runs.
+
+        Pagination:
+        - `full_walk=True` (initial sync): walk every page. Newly-created
+          ProfileGames have no playtime data yet, so the early-exit check
+          would only bail uselessly.
+        - `full_walk=False` (follow-up sync): early-exit when the page
+          contains an entry with `last_played_date_time <= last_sync`. PSN
+          sorts title_stats by last_played DESC, so once we hit an old entry
+          everything beyond it is also old.
+
+        Returns the number of `sync_title_id` jobs queued, so the caller can
+        add them to `sync_progress_target` before any per-game jobs queue.
+        """
+        job_type = 'profile_refresh'
         page_size = 20
-        limit = page_size
         offset = 0
-        is_full = True
+        title_stats_to_be_updated = []
         end_found = False
+        is_full = True
+
         while not end_found and is_full:
-            title_stats = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'title_stats', limit=limit, offset=offset, page_size=page_size)
-            is_full = len(title_stats) == page_size
-            for stats in title_stats:
-                if stats.last_played_date_time > last_sync:
-                    title_stats_to_be_updated.append(stats)
-                else:
+            page = self._execute_api_call(
+                self._get_instance_for_job(job_type), profile, 'title_stats',
+                limit=offset + page_size, offset=offset, page_size=page_size,
+            )
+            is_full = len(page) == page_size
+            for stats in page:
+                if not full_walk and stats.last_played_date_time <= last_sync:
                     end_found = True
                     break
-            limit += page_size
+                title_stats_to_be_updated.append(stats)
             offset += page_size
-        
+
+        # Apply the playtime data and collect title_ids that didn't match a
+        # known game/concept for the resolution pipeline.
         remaining_title_stats = []
         for stats in title_stats_to_be_updated:
             found = PsnApiService.update_profile_game_with_title_stats(profile, stats)
             if not found and stats.title_id not in TITLE_ID_BLACKLIST:
                 remaining_title_stats.append(stats)
-        
-        if len(remaining_title_stats) > 0:
-            trophy_titles_for_title = []
-            page_size = min(5, len(remaining_title_stats))
-            limit = page_size
-            offset = 0
-            while offset < len(remaining_title_stats):
-                title_ids = []
-                for title in remaining_title_stats[offset:limit]:
-                    title_ids.append(title.title_id)
-                
-                logger.info(f"Calling trophy_titles_for_title... {title_ids}")
-                result = self._execute_api_call(self._get_instance_for_job(job_type), profile, 'trophy_titles_for_title', title_ids=title_ids)
-                trophy_titles_for_title.extend(result)
-                limit += page_size
-                offset += page_size
-        
-            for title in trophy_titles_for_title:
-                try:
-                    game = Game.objects.get(np_communication_id=title.np_communication_id)
-                except Game.DoesNotExist:
-                    logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
-                    continue
-                game.add_title_id(title.np_title_id)
-                args = [title.np_title_id, title.np_communication_id]
-                PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
-                job_counter += 1
 
-            profile.add_to_sync_target(job_counter)
+        if not remaining_title_stats:
+            logger.info(
+                f"[profile {profile_id}] title_stats walk done "
+                f"entries={len(title_stats_to_be_updated)} unmatched=0 full_walk={full_walk}"
+            )
+            return 0
 
-        pending_key = f"pending_sync_complete:{profile_id}"
-        pending_data = json.dumps({
-            'touched_profilegame_ids': touched_profilegame_ids,
-            'queue_name': 'orchestrator'
-        })
-        redis_client.set(pending_key, pending_data, ex=7200)
+        # Map unmatched title_ids to np_communication_id via PSN
+        # trophy_titles_for_title (chunked at 5 ids per call), then for each
+        # resolved id: add it to the Game's `title_ids` field, retry the
+        # playtime update with the original title_stats entry (it now matches
+        # because `title_ids` is populated), and queue sync_title_id so the
+        # concept resolver runs downstream.
+        stats_by_title_id = {stats.title_id: stats for stats in remaining_title_stats}
+        chunk_size = 5
+        trophy_titles_for_title = []
+        for chunk_start in range(0, len(remaining_title_stats), chunk_size):
+            chunk = remaining_title_stats[chunk_start:chunk_start + chunk_size]
+            title_ids = [t.title_id for t in chunk]
+            logger.debug(f"trophy_titles_for_title call ids={title_ids}")
+            result = self._execute_api_call(
+                self._get_instance_for_job(job_type), profile,
+                'trophy_titles_for_title', title_ids=title_ids,
+            )
+            trophy_titles_for_title.extend(result)
 
-        # If no low/medium priority jobs were assigned, trigger sync_complete immediately
-        # Otherwise it will never fire since _complete_job only checks pending for low/medium queues
-        current_jobs = self._get_current_jobs_for_profile(profile_id)
-        if current_jobs <= 0:
-            logger.info(f"No pending jobs for profile {profile_id}, triggering sync_complete immediately")
-            args = [touched_profilegame_ids, 'orchestrator']
-            PSNManager.assign_job('sync_complete', args, profile_id, priority_override='orchestrator')
-            redis_client.delete(pending_key)
+        jobs_queued = 0
+        playtime_repopulated = 0
+        for title in trophy_titles_for_title:
+            try:
+                game = Game.objects.get(np_communication_id=title.np_communication_id)
+            except Game.DoesNotExist:
+                logger.warning(f"Game with comm id {title.np_communication_id} does not exist.")
+                continue
+            # Order matters: add_title_id MUST run before the retry update,
+            # since update_profile_game_with_title_stats matches via
+            # `Game.title_ids__contains`. Without the prior add_title_id,
+            # the retry would still find no Games — that's the bug we hit
+            # on initial sync, where Games created from trophy_titles have
+            # no title_ids until trophy_titles_for_title resolves them here.
+            game.add_title_id(title.np_title_id)
+            original_stats = stats_by_title_id.get(title.np_title_id)
+            if original_stats is not None:
+                if PsnApiService.update_profile_game_with_title_stats(profile, original_stats):
+                    playtime_repopulated += 1
+            args = [title.np_title_id, title.np_communication_id]
+            PSNManager.assign_job('sync_title_id', args=args, profile_id=profile.id)
+            jobs_queued += 1
+
+        logger.info(
+            f"[profile {profile_id}] title_stats walk done "
+            f"entries={len(title_stats_to_be_updated)} "
+            f"unmatched={len(remaining_title_stats)} "
+            f"playtime_repopulated={playtime_repopulated} "
+            f"title_id_jobs={jobs_queued} full_walk={full_walk}"
+        )
+        return jobs_queued
 
     @property
     def stats(self) -> Dict:

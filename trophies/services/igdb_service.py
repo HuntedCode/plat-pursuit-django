@@ -736,7 +736,7 @@ class IGDBService:
                 if consider(candidate):
                     return best
             else:
-                logger.info(f'IGDB exact name query for "{title}": 0 results')
+                logger.debug(f'IGDB exact name query for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB exact name query failed for "{title}"')
 
@@ -753,7 +753,7 @@ class IGDBService:
                     if consider((igdb_data, adjusted_conf, method)):
                         return best
             else:
-                logger.info(f'IGDB unfiltered search for "{title}": 0 results')
+                logger.debug(f'IGDB unfiltered search for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB unfiltered search failed for "{title}"')
 
@@ -766,7 +766,7 @@ class IGDBService:
                 if consider(candidate):
                     return best
             else:
-                logger.info(f'IGDB alt-name search for "{title}": 0 results')
+                logger.debug(f'IGDB alt-name search for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB alt-name search failed for "{title}"')
 
@@ -784,7 +784,7 @@ class IGDBService:
                 if consider(candidate):
                     return best
             else:
-                logger.info(f'IGDB localized-name search for "{title}": 0 results')
+                logger.debug(f'IGDB localized-name search for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB localized-name search failed for "{title}"')
 
@@ -809,7 +809,7 @@ class IGDBService:
                         if consider((igdb_data, capped, method)):
                             return best
                 else:
-                    logger.info(f'IGDB truncated search for "{truncated}": 0 results')
+                    logger.debug(f'IGDB truncated search for "{truncated}": 0 results')
             except Exception:
                 logger.exception(f'IGDB truncated search failed for "{truncated}"')
 
@@ -827,7 +827,7 @@ class IGDBService:
                     if consider((igdb_data, capped, method)):
                         return best
             else:
-                logger.info(f'IGDB generic-search for "{title}": 0 results')
+                logger.debug(f'IGDB generic-search for "{title}": 0 results')
         except Exception:
             logger.exception(f'IGDB generic-search failed for "{title}"')
 
@@ -910,7 +910,7 @@ class IGDBService:
                         logger.exception(f'{label} failed for romanized "{variant}"')
                         continue
                     if not r_results:
-                        logger.info(f'IGDB {label} for romanized "{variant}": 0 results')
+                        logger.debug(f'IGDB {label} for romanized "{variant}": 0 results')
                         continue
                     cls._log_search_results(variant, label, concept, r_results)
                     raw_candidate = cls._pick_best_non_dlc(
@@ -926,14 +926,19 @@ class IGDBService:
 
     @classmethod
     def _log_search_results(cls, title, search_type, concept, results):
-        """Log all IGDB search results with their confidence scores."""
+        """Log all IGDB search results with their confidence scores.
+
+        DEBUG-level: per-search detail is useful only when troubleshooting
+        matching outcomes. The "matching concept" and "Linked concept"
+        bookends remain INFO so normal sync logs still show what got matched.
+        """
         lines = [f'IGDB {search_type} search for "{title}": {len(results)} result(s)']
         for r in results:
             score = cls._calculate_confidence(concept, r, 'fuzzy_name', search_title=title)
             cat = cls._extract_game_category(r)
             cat_display = '?' if cat is None else cat
             lines.append(f'  - "{r.get("name")}" (cat={cat_display}, score={score:.0%})')
-        logger.info('\n'.join(lines))
+        logger.debug('\n'.join(lines))
 
     @classmethod
     def _pick_best_non_dlc(cls, concept, results, search_title=None):

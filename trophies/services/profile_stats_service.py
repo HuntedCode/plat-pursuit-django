@@ -15,18 +15,25 @@ def update_profile_games(profile):
     Update denormalized game counts for a profile.
 
     Updates:
-    - total_games: Count of all games played
+    - total_games: Count of games played
     - total_completes: Count of games at 100% completion
+
+    Respects profile settings:
+    - hide_hiddens: Excludes hidden games from totals (matches
+      update_profile_trophy_counts so total_games and total_trophies
+      come from the same filter logic).
 
     Args:
         profile: Profile instance to update
     """
     from trophies.models import ProfileGame
 
-    profile.total_games = ProfileGame.objects.filter(profile=profile).count()
-    profile.total_completes = ProfileGame.objects.filter(
-        profile=profile, progress=100
-    ).count()
+    qs = ProfileGame.objects.filter(profile=profile)
+    if profile.hide_hiddens:
+        qs = qs.filter(user_hidden=False)
+
+    profile.total_games = qs.count()
+    profile.total_completes = qs.filter(progress=100).count()
     profile.save(update_fields=['total_games', 'total_completes'])
 
 

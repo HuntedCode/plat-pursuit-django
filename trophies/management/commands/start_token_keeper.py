@@ -27,7 +27,15 @@ class Command(BaseCommand):
             while True:
                 time.sleep(60)
                 stats = token_keeper.stats
-                self.stdout.write(f"Current stats: {stats}")
+                # Brief heartbeat: count of healthy / busy instances. Full
+                # per-instance detail is published to Redis at the same cadence
+                # for the staff dashboard (token_keeper_stats:* channel).
+                healthy = sum(1 for s in stats.values() if s.get('healthy'))
+                busy = sum(1 for s in stats.values() if s.get('busy'))
+                self.stdout.write(
+                    f"TokenKeeper heartbeat instances={len(stats)} "
+                    f"healthy={healthy} busy={busy}"
+                )
         except Exception as e:
             self.stderr.write(f"Unexpected error: {e}")
             token_keeper._cleanup()

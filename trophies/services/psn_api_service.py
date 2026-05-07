@@ -563,29 +563,51 @@ class PsnApiService:
         return earned_trophy, created
 
     @classmethod
-    def get_profile_trophy_summary(cls, profile: Profile):
-        """Get trophy counts using a single aggregation query instead of 5 separate queries.
+    def get_db_fingerprint(cls, profile: Profile):
+        """Compute the DB-side fingerprint for sync v2.
 
-        Excludes trophies flagged user_hidden so the local count matches PSN's
-        trophy_summary (which omits trophies from games the user has hidden).
+        Returns (bronze, silver, gold, platinum, visible_game_count) describing
+        the local DB's view of the profile's library. Compared against the PSN
+        fingerprint at the start of every sync to decide fast-path vs. slow-path.
+
+        Trophy type counts come from EarnedTrophy aggregated across ALL games
+        regardless of user_hidden, because PSN's trophy_summary endpoint
+        includes hidden trophies in its totals. The visible_game_count excludes
+        user_hidden games to match PSN trophy_titles' totalItemCount, which
+        excludes hidden titles.
         """
-        try:
-            result = EarnedTrophy.objects.filter(profile=profile, earned=True, user_hidden=False).aggregate(
-                total=Count('id'),
-                bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
-                silver=Count('id', filter=Q(trophy__trophy_type='silver')),
-                gold=Count('id', filter=Q(trophy__trophy_type='gold')),
-                platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
-            )
-            return result
-        except Exception:
-            return {
-                'total': 0,
-                'bronze': 0,
-                'silver': 0,
-                'gold': 0,
-                'platinum': 0,
-            }
+        type_counts = EarnedTrophy.objects.filter(
+            profile=profile, earned=True
+        ).aggregate(
+            bronze=Count('id', filter=Q(trophy__trophy_type='bronze')),
+            silver=Count('id', filter=Q(trophy__trophy_type='silver')),
+            gold=Count('id', filter=Q(trophy__trophy_type='gold')),
+            platinum=Count('id', filter=Q(trophy__trophy_type='platinum')),
+        )
+        visible_game_count = ProfileGame.objects.filter(
+            profile=profile, user_hidden=False
+        ).count()
+        return (
+            type_counts['bronze'] or 0,
+            type_counts['silver'] or 0,
+            type_counts['gold'] or 0,
+            type_counts['platinum'] or 0,
+            visible_game_count,
+        )
+
+    @classmethod
+    def recompute_total_hiddens(cls, profile: Profile):
+        """Recompute Profile.total_hiddens from authoritative DB state.
+
+        Replaces the legacy subtraction trick (summary_total - tracked_trophies),
+        which used a snapshot taken before the visibility sweep flipped flags
+        and could go stale. This counts hidden EarnedTrophies directly.
+        """
+        profile.total_hiddens = EarnedTrophy.objects.filter(
+            profile=profile, earned=True, user_hidden=True
+        ).count()
+        profile.save(update_fields=['total_hiddens'])
+        return profile.total_hiddens
 
     
     @classmethod
@@ -619,7 +641,7 @@ class PsnApiService:
         total_pgs = pg_qs.count()
 
         if total_pgs == 0:
-            logger.info("No ProfileGames to update.")
+            logger.debug("update_profilegame_stats: nothing to update")
             return
 
         # Collect profile_id/game_id pairs for the batch annotated query
@@ -660,8 +682,7 @@ class PsnApiService:
         for i in range(0, len(pg_to_update), batch_size):
             batch = pg_to_update[i:i + batch_size]
             ProfileGame.objects.bulk_update(batch, ['earned_trophies_count', 'unearned_trophies_count', 'has_plat', 'most_recent_trophy_date'])
-            logger.info(f"Updated batch of {len(batch)} ProfileGames.")
-        logger.info(f"Updated {total_pgs} ProfileGames.")
+            logger.debug(f"profilegame stats batch update count={len(batch)}")
 
         # NOTE: Trophy.earned_count / earn_rate / Game.played_count used to be
         # recomputed inline here on every sync_complete. Under concurrent
@@ -674,7 +695,7 @@ class PsnApiService:
         # docs/guides/cron-jobs.md#recalc_earn_rates.
 
         duration = time.time() - start_time
-        logger.info(f"Completed per-profile stats update for {len(profilegame_ids)} ProfileGames in {duration:.2f}s")
+        logger.info(f"profilegame stats updated games={total_pgs} dur={duration:.2f}s")
             
     
     @classmethod

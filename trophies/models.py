@@ -94,7 +94,6 @@ class Profile(models.Model):
     flag = models.CharField(max_length=5, blank=True, null=True)
     extra_data = models.JSONField(default=dict, blank=True)
     last_synced = models.DateTimeField(default=timezone.now)
-    last_profile_health_check = models.DateTimeField(null=True)
     user_is_premium = models.BooleanField(default=False)
     sync_tier = models.CharField(
         max_length=10,

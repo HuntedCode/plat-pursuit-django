@@ -36,20 +36,20 @@ class PSNManager:
             'profile_id': profile_id
         })
         redis_client.lpush(f"{queue_name}_jobs", json_data)
-        logger.info(f"Assigned {job_type} for profile {profile_id} to queue {queue_name}")
+        logger.info(f"[profile {profile_id}] queued {job_type} -> {queue_name}")
 
     @classmethod
     def _get_queue_for_job(cls, job_type):
         """Map job type to queue.
 
         Queue priority order (highest first):
-        - orchestrator: profile-level orchestrators (sync_trophy_titles, profile_refresh, sync_profile_data, sync_complete)
+        - orchestrator: profile-level orchestrators (profile_refresh, sync_profile_data, sync_complete)
         - high_priority: check_profile_health, handle_privacy_error
         - medium_priority: sync_title_stats, sync_title_id, sync_trophy_groups
         - low_priority: sync_trophies (default)
         - bulk_priority: large account sync_trophies (assigned via threshold override)
         """
-        if job_type in ["sync_profile_data", "sync_trophy_titles", "profile_refresh", "sync_complete"]:
+        if job_type in ["sync_profile_data", "profile_refresh", "sync_complete"]:
             return "orchestrator"
         elif job_type in ["check_profile_health"]:
             return "high_priority"
@@ -76,6 +76,13 @@ class PSNManager:
 
     @classmethod
     def initial_sync(cls, profile: Profile):
+        """Queue the unified sync orchestrator for an account that's never synced.
+
+        Both initial_sync and profile_refresh now queue the same `profile_refresh`
+        job. The orchestrator handles fresh and follow-up syncs through one
+        fingerprint-driven flow; an empty DB just shows up as a large fingerprint
+        mismatch and falls naturally into the slow path.
+        """
         if cls.is_psn_outage_active():
             logger.warning(f"Skipping initial_sync for profile {profile.id}: PSN outage active")
             return
@@ -84,10 +91,9 @@ class PSNManager:
             profile.set_sync_status('syncing')
             redis_client.set(f"sync_started_at:{profile.id}", str(time.time()), ex=7200)
             # Mark orchestrator as pending so the stuck checker doesn't fire
-            # sync_complete before sync_trophy_titles has created the real jobs
+            # sync_complete before profile_refresh has created the real jobs.
             redis_client.set(f"sync_orchestrator_pending:{profile.id}", "1", ex=1800)
-            cls.assign_job('sync_profile_data', args=[], profile_id=profile.id)
-            cls.assign_job('sync_trophy_titles', args=[], profile_id=profile.id)
+            cls.assign_job('profile_refresh', args=[], profile_id=profile.id)
 
     @classmethod
     def profile_refresh(cls, profile: Profile):

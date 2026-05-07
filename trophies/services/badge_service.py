@@ -151,7 +151,7 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     )
 
     if not pg_qs.exists():
-        logger.info(f"No ProfileGames found for profile {profile.psn_username}")
+        logger.debug(f"check_profile_badges: no touched ProfileGames for {profile.psn_username}")
         return 0
 
     concept_ids = pg_qs.values_list(
@@ -186,8 +186,7 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
 
     duration = time.time() - start_time
     logger.info(
-        f"Checked {checked_count} unique badges for profile "
-        f"{profile.psn_username} in {duration:.2f}s"
+        f"[profile {profile.id}] badges checked count={checked_count} dur={duration:.2f}s"
     )
     return checked_count
 
@@ -776,7 +775,7 @@ def initial_badge_check(profile, discord_notify: bool = True):
     )
 
     if not pg_qs.exists():
-        logger.info(f"No ProfileGames found for profile {profile.psn_username}")
+        logger.debug(f"check_profile_badges: no touched ProfileGames for {profile.psn_username}")
         return 0
 
     concept_ids = pg_qs.values_list(
@@ -818,7 +817,6 @@ def initial_badge_check(profile, discord_notify: bool = True):
 
     duration = time.time() - start_time
     logger.info(
-        f"Checked {checked_count} unique badges for profile "
-        f"{profile.psn_username} in {duration:.2f}s"
+        f"[profile {profile.id}] badges checked count={checked_count} dur={duration:.2f}s"
     )
     return checked_count

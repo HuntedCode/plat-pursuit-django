@@ -42,7 +42,8 @@ User triggers sync (web UI, cron, admin)
 
 - **Thread-safe rate limiting**: Uses `pyrate_limiter.InMemoryBucket` instead of the psnawp default SQLite bucket, which caused "database is locked" errors in multi-threaded environments.
 - **Token release per API call**: Tokens are released in the `finally` block of `_execute_api_call()`, not after the entire job completes. This maximizes token availability since most jobs make only 1-2 API calls but spend significant time on DB writes.
-- **Two-phase job assignment**: Orchestrator jobs (`sync_trophy_titles`, `profile_refresh`) first count all needed jobs, set the progress target, then assign jobs. This prevents the progress bar from appearing to go backwards.
+- **Two-phase job assignment**: The `profile_refresh` orchestrator first counts all needed jobs, sets the progress target, then assigns jobs. This prevents the progress bar from appearing to go backwards.
+- **Fingerprint-based unified sync**: Initial sync and follow-up refresh share one orchestrator. The orchestrator computes a `(earned trophies by type, visible game count)` fingerprint from PSN, compares to the DB, and skips the walk entirely when they match. See [sync-architecture.md](sync-architecture.md) for the rationale.
 - **Deadlock resilience**: Deadlocked jobs are re-queued with a 2-second delay. If the DB lock error rate exceeds a configurable threshold, the entire TokenKeeper restarts itself.
 
 ## File Map
@@ -82,66 +83,60 @@ The `MACHINE_ID` environment variable enables running multiple TokenKeeper insta
 
 Sync operations use a two-tier orchestrator pattern:
 
-1. **Orchestrator jobs** (`sync_trophy_titles`, `profile_refresh`) run first. They page through the PSN API to discover all games for a profile, create Game/ProfileGame records, then fan out hundreds of child jobs.
+1. **Orchestrator job** (`profile_refresh`) runs first for both initial and follow-up syncs. It computes a fingerprint, walks PSN's `trophy_titles` if needed, creates Game/ProfileGame records, reconciles visibility, and fans out child jobs.
 2. **Child jobs** (`sync_trophies`, `sync_trophy_groups`, `sync_title_stats`, `sync_title_id`) each handle one game. As each completes, `_complete_job()` decrements a per-profile counter.
-3. **Completion job** (`sync_complete`) fires automatically when all child job counters reach zero. It runs health checks, badge evaluation, milestone checks, and challenge progress.
+3. **Completion job** (`sync_complete`) fires automatically when all child job counters reach zero. It recomputes denormalized stats, runs badge / milestone / challenge evaluation, and finalizes the sync.
 
 ### Job Types
 
 | Job Type | Queue | Description |
 |----------|-------|-------------|
-| `sync_profile_data` | orchestrator | Fetch PSN profile (username, avatar, trophy level, region) |
-| `sync_trophy_titles` | orchestrator | Page through all trophy titles, create games, fan out child jobs |
-| `profile_refresh` | orchestrator | Incremental sync: only titles updated since `last_synced` |
-| `sync_complete` | orchestrator | Post-sync: health check, stats, badges, milestones, challenges |
+| `sync_profile_data` | orchestrator | Fetch PSN profile (username, avatar, trophy level, region). Updates `last_synced`. |
+| `profile_refresh` | orchestrator | Unified sync orchestrator: fingerprint check, fast-path skip or full walk + per-game work fan-out |
+| `sync_complete` | orchestrator | Post-sync finalization: stat refresh, badges, milestones, challenges, cache invalidation |
 | `check_profile_health` | high_priority | Verify profile accessibility |
 | `handle_privacy_error` | high_priority | Handle PSN privacy settings blocking access |
 | `sync_trophy_groups` | medium_priority | Fetch DLC/group metadata for a single game |
-| `sync_title_stats` | medium_priority | Fetch play time, play count, first/last played for title IDs |
+| `sync_title_stats` | medium_priority | Fetch play time, play count, first/last played; resolve concept-less PS4/PS5 games to title IDs |
 | `sync_title_id` | medium_priority | Resolve title ID to Concept (game metadata, media, region) |
-| `sync_trophies` | low_priority | Fetch all trophies + earned status for a single game |
+| `sync_trophies` | low_priority | Fetch all trophies + earned status for a single game; refresh PP earn rates for that game |
 | `sync_trophies` (whale) | bulk_priority | Same as above but for profiles exceeding the bulk threshold |
 
 ## Key Flows
 
-### Full Profile Sync Flow
+### Profile Sync Flow
 
-1. **Trigger**: User links PSN account, or cron triggers refresh for stale profiles.
-2. **Entry point**: `PSNManager.initial_sync(profile)` sets `sync_status='syncing'`, resets progress counters, sets a `sync_orchestrator_pending` flag, and queues two orchestrator jobs: `sync_profile_data` and `sync_trophy_titles`.
-3. **sync_profile_data**: Calls `get_profile_legacy` and `get_region` PSN endpoints. Updates profile username, avatar, trophy level, region/country. Handles duplicate account_id detection and automatic profile merging.
-4. **sync_trophy_titles**: Pages through all trophy titles (400 per page). For each title:
-   - Creates or updates the `Game` record
-   - Creates or updates the `ProfileGame` record
-   - Checks if trophy groups need syncing (new game or trophy count changed)
-   - Two-phase: first pass counts jobs and sets the progress target, second pass queues the jobs
-   - Stores `pending_sync_complete` data in Redis with the list of touched ProfileGame IDs
+Both initial and follow-up syncs run through the same `profile_refresh` orchestrator. The shape of the work just falls out of how badly the DB is out of sync with PSN.
+
+1. **Trigger**: User links PSN account, cron triggers a refresh for stale profiles, or admin force-syncs.
+2. **Entry point**: `PSNManager.initial_sync(profile)` and `PSNManager.profile_refresh(profile)` both queue a single `profile_refresh` orchestrator job (plus appropriate Redis flags). They differ only in their gating preconditions.
+3. **profile_refresh orchestrator** (`_job_profile_refresh`):
+   - Queues `sync_profile_data` (handles PSN profile fields and bumps `last_synced`)
+   - Calls `trophy_summary` and the first page of `trophy_titles` to compute the **PSN fingerprint** `(bronze, silver, gold, platinum, visible_game_count)`
+   - Compares against the **DB fingerprint** computed by `PsnApiService.get_db_fingerprint`
+   - **Fast path** (fingerprints match, no concept-less games): skip the walk, schedule `sync_complete` directly. Total cost: 2 PSN API calls + the profile data fetch. Most follow-up syncs hit this path.
+   - **Slow path** (fingerprint mismatch OR concept-less safety net trips): paginate the rest of `trophy_titles` (parallelized across up to 3 workers when more than one extra page remains, since page 1's `totalItemCount` tells us the exact offsets needed), then walk every visible title:
+     - Create or update the `Game` and `ProfileGame` records
+     - Detect trophy-count drift, classify games needing trophy groups, classify games needing concept resolution (modern → `sync_title_stats` pipeline; legacy → inline default concept)
+     - After the walk, bulk-flip `user_hidden` on `ProfileGame` and `EarnedTrophy` based on the diff between PSN's visible-game set and the DB's
+   - Two-pass job assignment: count needed jobs, set the sync progress target, then assign the per-game jobs. Stores `pending_sync_complete` in Redis with the list of touched ProfileGame IDs.
+4. **sync_profile_data**: Calls `get_profile_legacy` and `get_region` PSN endpoints. Updates profile username, avatar, trophy level, region/country, and `last_synced`. Handles duplicate account_id detection and automatic profile merging.
 5. **sync_trophy_groups** (per game, if needed): Fetches DLC/group structure, creates `TrophyGroup` records, syncs concept-level trophy groups for the Review Hub.
-6. **sync_trophies** (per game): Fetches all trophies with earned status. Processes in batches of 50 within `transaction.atomic()` and `sync_signal_suppressor()`. Creates/updates `Trophy` and `EarnedTrophy` records. Triggers shovelware detection for platinums. Creates deferred platinum notifications.
-7. **sync_title_stats** (paginated): Fetches play statistics (play time, play count). Maps title IDs to games. For unresolved title IDs, calls `trophy_titles_for_title` to discover the np_communication_id mapping, then queues `sync_title_id` jobs. **Limitation**: this path can only resolve games whose `title_ids` (PPSA/CUSA SKUs) are present in PSN's `title_stats` response. Modern games whose `trophy_titles` entry never returned a `title_id` are unreachable here and must be handled by the inline default-concept fallback in the health check (see "Concept Assignment Fallback Chain" below).
+6. **sync_trophies** (per game): Fetches all trophies with earned status. Processes in batches of 50 within `transaction.atomic()` and `sync_signal_suppressor()`. Creates/updates `Trophy` and `EarnedTrophy` records. Triggers shovelware detection for platinums. Creates deferred platinum notifications. Refreshes PP-specific `Trophy.earn_rate` for the game's trophies inline (one targeted UPDATE so new games don't show 0% until the daily cron runs).
+7. **sync_title_stats** (queued only when concept-less modern games were detected during the walk): Fetches play statistics (play time, play count) and maps title IDs to games. For unresolved title IDs, calls `trophy_titles_for_title` to discover the `np_communication_id` mapping, then queues `sync_title_id` jobs. **Limitation**: this path can only resolve games whose `title_ids` (PPSA/CUSA SKUs) are present in PSN's `title_stats` response. Games whose `trophy_titles` entry never returned a `title_id` are unreachable here and must rely on the inline default-concept fallback for legacy platforms.
 8. **sync_title_id** (per title ID): Calls `game_title` to get concept details (publisher, genres, media, release date). Creates or updates `Concept` records. Assigns concepts to games via `Game.add_concept()`. Detects Asian-language regional titles. Falls back to `Concept.create_default_concept()` on any failure.
 9. **_complete_job**: After each child job, decrements `profile_jobs:{profile_id}:{queue}`. When all counters reach zero and `pending_sync_complete` exists, queues `sync_complete`.
 10. **sync_complete**: The finalization pipeline:
-    - Calls `trophy_summary` to get PSN's authoritative trophy counts
-    - Compares against local `EarnedTrophy` counts to detect drift
-    - If mismatch found: re-queues sync jobs for affected games, sets up a follow-up `pending_sync_complete`, and returns early
-    - Checks Trophy/TrophyGroup completeness (games with 0 records despite having defined trophies)
+    - Drains deferred IGDB enrichments queued by `sync_title_id`
+    - Recomputes `Profile.total_hiddens` from authoritative DB state (`EarnedTrophy.objects.filter(earned=True, user_hidden=True).count()`)
+    - Trophy/TrophyGroup completeness check (games with 0 records despite having defined trophies)
     - Calls `update_plats()`, `update_profilegame_stats()`, `check_profile_badges()`
     - Creates consolidated badge notifications via `DeferredNotificationService`
     - Checks milestones (excluding challenge-specific types)
     - Checks A-Z challenge, Calendar challenge, and Genre challenge progress
-    - Updates trophy counts, invalidates timeline cache
-    - Invalidates the dashboard module cache (`invalidate_dashboard_cache(profile)`) alongside the stats cache, so module data freshens unconditionally on every successful sync regardless of which sub-services touched it
+    - Calls `update_profile_games()` and `update_profile_trophy_counts()` so denormalized totals reflect the post-sync state regardless of fast/slow path
+    - Invalidates timeline, stats, and dashboard module caches
     - Sets `sync_status='synced'`
-
-### Profile Refresh Flow
-
-`PSNManager.profile_refresh()` is called for profiles that are already synced. Unlike `initial_sync`, it uses an incremental strategy:
-
-1. Pages through trophy titles until it finds one with `last_updated_datetime <= last_synced`
-2. Only queues sync jobs for games that changed since last sync
-3. Similarly pages through title stats only until reaching already-synced entries
-4. Uses `medium_priority` queue instead of `low_priority` for faster processing
-5. If zero changed games are found, triggers `sync_complete` immediately rather than waiting for counter-based completion
 
 ### Token Refresh Flow
 

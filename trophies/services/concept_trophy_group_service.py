@@ -63,7 +63,7 @@ class ConceptTrophyGroupService:
             )
             sort_order += 1
 
-        logger.info(f"Synced {len(seen)} ConceptTrophyGroups for concept {concept.id}")
+        logger.debug(f"Synced {len(seen)} ConceptTrophyGroups for concept {concept.id}")
 
     @staticmethod
     def detect_mismatches(concept):
