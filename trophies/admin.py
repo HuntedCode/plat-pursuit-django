@@ -1552,7 +1552,7 @@ class RoadmapAdmin(admin.ModelAdmin):
 class RoadmapStepAdmin(admin.ModelAdmin):
     list_display = ['id', 'title', 'roadmap', 'order']
     list_select_related = ('roadmap__concept',)
-    search_fields = ['title']
+    search_fields = ['title', 'description', 'roadmap__concept__unified_title']
     raw_id_fields = ['roadmap', 'created_by', 'last_edited_by']
 
 
@@ -1567,6 +1567,8 @@ class RoadmapStepTrophyAdmin(admin.ModelAdmin):
 class TrophyGuideAdmin(admin.ModelAdmin):
     list_display = ['id', 'roadmap', 'trophy_id', 'body_preview', 'created_by']
     list_select_related = ('roadmap__concept', 'created_by')
+    list_filter = ['is_missable', 'is_online', 'is_unobtainable', 'phase']
+    search_fields = ['body', 'roadmap__concept__unified_title', 'created_by__psn_username']
     raw_id_fields = ['roadmap', 'created_by', 'last_edited_by']
 
     def body_preview(self, obj):
@@ -1578,8 +1580,10 @@ class TrophyGuideAdmin(admin.ModelAdmin):
 class RoadmapEditLockAdmin(admin.ModelAdmin):
     list_display = ['id', 'roadmap', 'holder', 'acquired_at', 'last_heartbeat', 'expires_at', 'is_expired_flag']
     list_select_related = ('roadmap__concept', 'holder')
+    search_fields = ['roadmap__concept__unified_title', 'holder__psn_username', 'holder__display_psn_username']
     raw_id_fields = ['roadmap', 'holder']
     readonly_fields = ['acquired_at', 'last_heartbeat', 'expires_at', 'branch_payload']
+    date_hierarchy = 'acquired_at'
     actions = ['force_release']
 
     def is_expired_flag(self, obj):
@@ -1601,7 +1605,12 @@ class RoadmapRevisionAdmin(admin.ModelAdmin):
     list_filter = ['action_type']
     raw_id_fields = ['roadmap', 'author']
     readonly_fields = ['created_at', 'snapshot']
-    search_fields = ['roadmap__concept__unified_title', 'summary']
+    search_fields = [
+        'roadmap__concept__unified_title',
+        'author__psn_username',
+        'author__display_psn_username',
+        'summary',
+    ]
     date_hierarchy = 'created_at'
     actions = ['restore_selected_revision']
 
@@ -1637,7 +1646,12 @@ class RoadmapNoteAdmin(admin.ModelAdmin):
     list_filter = ['target_kind', 'status']
     raw_id_fields = ['roadmap', 'target_step', 'target_trophy_guide', 'author', 'resolved_by']
     readonly_fields = ['created_at', 'updated_at', 'resolved_at']
-    search_fields = ['roadmap__concept__unified_title', 'body', 'author__psn_username']
+    search_fields = [
+        'roadmap__concept__unified_title',
+        'body',
+        'author__psn_username',
+        'author__display_psn_username',
+    ]
     date_hierarchy = 'created_at'
 
     def body_preview(self, obj):
@@ -1651,7 +1665,11 @@ class RoadmapNoteReadAdmin(admin.ModelAdmin):
     list_select_related = ('profile', 'roadmap__concept')
     raw_id_fields = ['profile', 'roadmap']
     readonly_fields = ['last_read_at']
-    search_fields = ['profile__psn_username', 'roadmap__concept__unified_title']
+    search_fields = [
+        'profile__psn_username',
+        'profile__display_psn_username',
+        'roadmap__concept__unified_title',
+    ]
 
 
 # ---------- Gamification Admin ----------
@@ -1666,7 +1684,7 @@ class ProfileGamificationAdmin(admin.ModelAdmin):
         'last_updated',
     ]
     list_select_related = ('profile',)
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username']
     raw_id_fields = ('profile',)
     readonly_fields = ['last_updated']
     ordering = ['-total_badge_xp']
@@ -1741,6 +1759,7 @@ class MonthlyRecapAdmin(admin.ModelAdmin):
     ]
     search_fields = [
         'profile__psn_username',
+        'profile__display_psn_username',
     ]
     raw_id_fields = ['profile']
     readonly_fields = [
@@ -2488,7 +2507,7 @@ class DashboardConfigAdmin(admin.ModelAdmin):
     """Admin interface for dashboard configurations."""
     list_display = ['profile', 'module_count', 'hidden_count', 'updated_at']
     list_select_related = ('profile',)
-    search_fields = ['profile__psn_username']
+    search_fields = ['profile__psn_username', 'profile__display_psn_username']
     raw_id_fields = ['profile']
     readonly_fields = ['updated_at']
     ordering = ['-updated_at']
