@@ -1938,11 +1938,14 @@ html {
    makes the row the sticky scroll context — the toolbar's `top: <header>`
    then resolves relative to the row, displacing it down INTO the textarea.
    Use `relative` (not `static`) so the toolbar's `z-20` still activates and
-   the Callout dropdown-content stacks above the textarea below it; trophy
-   guide bodies are short enough that scroll-into-textarea isn't a real
-   concern. */
+   the Callout dropdown-content stacks above the textarea below it; reset
+   `top` since under `position:relative` it would offset the toolbar DOWN
+   by the chrome-height value (re-creating the original overlap bug).
+   Trophy guide bodies are short enough that scroll-into-textarea isn't a
+   real concern. */
 .collapse .formatting-toolbar {
   position: relative !important;
+  top: auto !important;
 }
 
 /* ===== Collectible reference pills =====================================
