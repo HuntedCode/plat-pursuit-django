@@ -131,3 +131,86 @@ class RoadmapImageUploadView(APIView):
         url += ('&wm=' if '?' in url else '?wm=') + ('1' if watermark else '0')
 
         return Response({'url': url, 'watermarked': watermark}, status=status.HTTP_201_CREATED)
+
+
+class RoadmapPreviewView(APIView):
+    """POST: Render a snippet of roadmap markdown to HTML for in-editor preview.
+
+    Mirrors the reader's render pipeline 1:1 (same `process_markdown` +
+    bleach allowlist + `[[slug]]` pill substitution) so the preview is
+    exactly what readers will see after publish. Used by the editor's
+    per-textarea Preview toggle.
+
+    Body fields:
+        text       Required. Markdown body to render.
+        icon_set   Optional. 'ps4' or 'ps5' for controller-icon shortcodes.
+                   Defaults to the roadmap's game's `controller_icon_set`.
+
+    The endpoint does NOT mutate state and ignores edit-lock ownership —
+    a writer with `IsRoadmapAuthor` access can preview at any time, even
+    if a different writer holds the lock.
+
+    Pill substitution uses the roadmap's *saved* collectible types only.
+    Brand-new types created in the current branch but not yet merged
+    will render as `is-broken` pills until the branch saves; this is a
+    deliberate trade-off to avoid threading branch state into the
+    render path.
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsRoadmapAuthor]
+
+    # Match the model TextField ceiling (RoadmapStep.description, etc. are
+    # all bounded well under this). A render bomb upper bound, not a tight
+    # business limit.
+    MAX_TEXT_LENGTH = 50000
+
+    def post(self, request, roadmap_id):
+        try:
+            roadmap = (
+                Roadmap.objects
+                .select_related('concept_trophy_group__concept')
+                .get(pk=roadmap_id)
+            )
+        except Roadmap.DoesNotExist:
+            return Response(
+                {'error': 'Roadmap not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        text = request.data.get('text', '') or ''
+        if not isinstance(text, str):
+            return Response(
+                {'error': 'text must be a string.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(text) > self.MAX_TEXT_LENGTH:
+            return Response(
+                {'error': f'Text exceeds {self.MAX_TEXT_LENGTH} characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # icon_set: client may override; otherwise derive from a game on
+        # the concept. Concept→Game is a reverse 1:N (a concept can span
+        # multiple platform stacks), so we just sample the first one for
+        # preview purposes — close enough for the controller-icon glyph
+        # resolution that the property cares about.
+        icon_set = (request.data.get('icon_set') or '').strip().lower()
+        if icon_set not in ('ps4', 'ps5'):
+            concept = getattr(roadmap.concept_trophy_group, 'concept', None)
+            game = concept.games.first() if concept else None
+            icon_set = getattr(game, 'controller_icon_set', 'ps4') if game else 'ps4'
+
+        from trophies.services.checklist_service import ChecklistService
+        from trophies.templatetags.markdown_filters import render_collectible_pills
+
+        # Same pipeline as the reader's `render_roadmap_markdown` filter:
+        # markdown2 + bleach + spoilers, then pill substitution. Empty
+        # input renders as empty so the editor can show "(nothing to
+        # preview)" without a special branch on this side.
+        html = ChecklistService.process_markdown(
+            text, icon_set=icon_set, enable_spoilers=True,
+        )
+        types_by_slug = {t.slug: t for t in roadmap.collectible_types.all() if t.slug}
+        html = render_collectible_pills(html, types_by_slug)
+
+        return Response({'html': html})

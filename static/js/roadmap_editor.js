@@ -2952,6 +2952,145 @@
                 helpPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         });
+
+        // Preview toggle - show/hide a server-rendered preview panel below
+        // the textarea owned by this toolbar. Per-textarea state via the
+        // _previewBindings WeakMap (one debounced refresher per pair).
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.fmt-preview-toggle');
+            if (!btn) return;
+            const toolbar = btn.closest('.formatting-toolbar');
+            const textarea = getTargetTextarea(toolbar) || lastFocusedTextarea;
+            if (!textarea) return;
+            _togglePreview(btn, textarea);
+        });
+    }
+
+    // ------------------------------------------------------------------ //
+    //  In-Editor Preview
+    //
+    //  Each textarea can have its own preview panel that mirrors the
+    //  reader's render exactly (server roundtrip — same markdown2 + bleach
+    //  + pill substitution path). State per textarea lives in
+    //  `_previewBindings`; toggling off detaches the input listener so
+    //  closed previews don't keep firing fetches in the background.
+    // ------------------------------------------------------------------ //
+    const _previewBindings = new WeakMap();
+
+    function _togglePreview(toggleBtn, textarea) {
+        const existing = _previewBindings.get(textarea);
+        if (existing) {
+            // Currently open → tear down.
+            textarea.removeEventListener('input', existing.onInput);
+            existing.panel.remove();
+            _previewBindings.delete(textarea);
+            toggleBtn.setAttribute('aria-pressed', 'false');
+            toggleBtn.classList.remove('text-primary', 'bg-primary/10');
+            toggleBtn.classList.add('text-base-content/40');
+            return;
+        }
+
+        // Not open → create the panel and wire the debounced refresher.
+        // Visual treatment is deliberately distinct from the editor chrome
+        // around it (left primary stripe, dimmer base-300 surface, badge
+        // header) so the writer reads it as "preview viewport" rather
+        // than "more editor".
+        const panel = document.createElement('div');
+        panel.className = 'fmt-preview-panel mt-2 rounded-lg border border-base-content/15 border-l-4 border-l-primary bg-base-300/40 px-3 py-2.5 text-sm shadow-inner';
+        panel.setAttribute('data-preview-state', 'empty');
+        panel.innerHTML = `
+            <div class="flex items-center justify-between mb-2 pb-2 border-b border-base-content/10">
+                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[10px] uppercase tracking-wider font-bold">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    Live Preview
+                </span>
+                <span class="flex items-center gap-2 text-[10px] text-base-content/45">
+                    <span class="hidden sm:inline italic">How readers will see it</span>
+                    <span class="fmt-preview-status italic"></span>
+                </span>
+            </div>
+            <div class="fmt-preview-content prose-roadmap italic text-base-content/40">Type to see preview...</div>
+        `;
+        // Insert directly after the textarea so the panel is anchored to
+        // it visually and survives DOM moves (e.g. trophy guide row open
+        // toggles).
+        textarea.insertAdjacentElement('afterend', panel);
+
+        const status = panel.querySelector('.fmt-preview-status');
+        const content = panel.querySelector('.fmt-preview-content');
+
+        // `pendingScrollOnFirstRender` ensures the open-time scroll waits
+        // until the *fetched* content has rendered (not just the empty
+        // placeholder). Otherwise we'd scroll to a tiny placeholder pane
+        // and the much-taller final content would land below the fold.
+        let pendingScrollOnFirstRender = true;
+        const scrollPanelIntoView = () => {
+            // Two rAFs: the first paints the new content, the second
+            // gives layout a chance to settle on the new height before
+            // we measure for scroll.
+            //
+            // `block: 'start'` (instead of 'center') so the browser respects
+            // the page-level `scroll-padding-top` (set in input.css for the
+            // sticky chrome). 'center' ignores scroll-padding and ends up
+            // tucking the panel's top edge behind the navbar on tall
+            // content.
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
+        };
+
+        // Debounced fetch. 500ms gives enough buffer for sustained typing
+        // without spamming the server. Cancel-on-unmount handled by the
+        // tear-down branch above (removing the listener before debounce
+        // fires drops the queued call).
+        const refresh = debounce(async () => {
+            const text = textarea.value || '';
+            if (!text.trim()) {
+                content.classList.add('italic', 'text-base-content/40');
+                content.classList.remove('not-italic');
+                content.textContent = 'Type to see preview...';
+                status.textContent = '';
+                if (pendingScrollOnFirstRender) {
+                    pendingScrollOnFirstRender = false;
+                    scrollPanelIntoView();
+                }
+                return;
+            }
+            status.textContent = 'Rendering...';
+            try {
+                const resp = await API.post(
+                    `/api/v1/roadmap/${roadmapId}/preview/`,
+                    { text },
+                );
+                content.classList.remove('italic', 'text-base-content/40');
+                content.classList.add('not-italic');
+                content.innerHTML = resp.html || '<em class="text-base-content/40">(empty)</em>';
+                status.textContent = '';
+            } catch (err) {
+                status.textContent = 'Render failed';
+                content.classList.add('italic', 'text-error/70');
+                content.textContent = 'Could not render preview.';
+            }
+            if (pendingScrollOnFirstRender) {
+                pendingScrollOnFirstRender = false;
+                scrollPanelIntoView();
+            }
+        }, 500);
+
+        const onInput = () => refresh();
+        textarea.addEventListener('input', onInput);
+
+        _previewBindings.set(textarea, { panel, onInput });
+        toggleBtn.setAttribute('aria-pressed', 'true');
+        toggleBtn.classList.remove('text-base-content/40');
+        toggleBtn.classList.add('text-primary', 'bg-primary/10');
+
+        // Initial render so writers see something immediately rather than
+        // waiting for the next keystroke. The `pendingScrollOnFirstRender`
+        // flag inside the debounced refresher handles the post-fetch scroll.
+        refresh();
     }
 
     // ------------------------------------------------------------------ //
