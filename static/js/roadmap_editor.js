@@ -2693,6 +2693,25 @@
         textarea.setSelectionRange(firstHeaderStart, firstHeaderEnd);
     }
 
+    function insertHorizontalRule(textarea) {
+        const start = textarea.selectionStart;
+        const text = textarea.value;
+        // `---` MUST have blank lines on both sides — without one above, it's
+        // parsed as a setext H2 underline (promoting the line above into a
+        // heading); without one below, the next block can glue on.
+        const leadingPad = leadingBlankLinePad(text, start);
+        const trailingPad = trailingBlankLinePad(text, start, true);
+        const replacement = leadingPad + '---' + trailingPad;
+
+        textarea.focus();
+        textarea.setSelectionRange(start, start);
+        insertTextPreservingUndo(textarea, replacement);
+
+        // Drop cursor on the line after the rule so the writer can keep typing.
+        const cursorPos = start + replacement.length;
+        textarea.setSelectionRange(cursorPos, cursorPos);
+    }
+
     function insertCallout(textarea, type) {
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
@@ -2755,6 +2774,12 @@
             // Table button: insert 2x2 GFM pipe-table starter at cursor.
             if (fmtKey === 'table') {
                 insertTable(textarea);
+                return;
+            }
+
+            // Horizontal rule / divider: inserts `---` with blank-line padding.
+            if (fmtKey === 'hr') {
+                insertHorizontalRule(textarea);
                 return;
             }
 

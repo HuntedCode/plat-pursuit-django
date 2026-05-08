@@ -1792,6 +1792,13 @@ html {
 .prose-roadmap h4 {
   @apply text-xs uppercase tracking-wider font-semibold text-base-content/60 mt-3 mb-1 first:mt-0;
 }
+/* Author-inserted divider (`---` in markdown). Subtle base-content tint
+   so it reads as a section break without the harshness of a default
+   browser hr. Generous vertical margin makes it a real "phase break"
+   inside long step / tip bodies. */
+.prose-roadmap hr {
+  @apply my-5 border-0 border-t border-base-content/15;
+}
 
 /* GitHub-style callouts: NOTE / TIP / WARNING / IMPORTANT. Rendered by
    checklist_service._apply_callouts as `<div class="callout callout-{type}">`

@@ -31,6 +31,8 @@ ALLOWED_HTML_TAGS = [
     # title hierarchy; h2/h3/h4 cover the realistic depth needed inside a
     # roadmap or trophy-guide body.
     'h2', 'h3', 'h4',
+    # Thematic break / divider. Authors insert via toolbar as `---`.
+    'hr',
     # Pipe-table family. thead/tbody are emitted by markdown2's tables extra
     # and would be silently stripped without explicit allowlisting.
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
