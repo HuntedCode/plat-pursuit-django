@@ -1930,11 +1930,12 @@ html {
    .collapse container (trophy guide rows), the collapse's `overflow: hidden`
    makes the row the sticky scroll context — the toolbar's `top: <header>`
    then resolves relative to the row, displacing it down INTO the textarea.
-   Disabling sticky there keeps the toolbar at its natural position; trophy
+   Use `relative` (not `static`) so the toolbar's `z-20` still activates and
+   the Callout dropdown-content stacks above the textarea below it; trophy
    guide bodies are short enough that scroll-into-textarea isn't a real
-   concern there anyway. */
+   concern. */
 .collapse .formatting-toolbar {
-  position: static !important;
+  position: relative !important;
 }
 
 /* ===== Collectible reference pills =====================================
