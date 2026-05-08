@@ -107,7 +107,17 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
             return context
 
         # Get user's platinum trophies (including shovelware - filtered client-side
-        # via the toggle in the page header)
+        # via the toggle in the page header). Note: we deliberately do NOT use
+        # `nulls_last=True` on earned_date_time here even though most date
+        # querysets in the codebase do. Postgres' default for DESC is NULLS
+        # FIRST, which puts NULL-date plats at idx 0+ and gives them the
+        # highest platinum_number. This agrees with the share-card count's
+        # NULL-branch logic (see ShareableDataService.get_platinum_share_data),
+        # so flipping to nulls_last here would silently desync the listing
+        # ordinal from the rendered card. The `-id` secondary sort breaks
+        # ties (PSN sometimes returns identical timestamps for trophies popped
+        # the same second) so the listing's ordinal exactly matches the
+        # share-card's tuple-comparison count.
         earned_platinums = EarnedTrophy.objects.filter(
             profile=profile,
             earned=True,
@@ -116,7 +126,7 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
             'trophy__game',
             'trophy__game__concept',
             'trophy__game__concept__igdb_match',
-        ).order_by('-earned_date_time')
+        ).order_by('-earned_date_time', '-id')
 
         # Calculate platinum number for each trophy (for milestone display).
         # Since the queryset is ordered newest-first, the newest plat is

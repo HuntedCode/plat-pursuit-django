@@ -14,7 +14,11 @@ The rendering pipeline has three layers: data assembly, HTML generation, and PNG
 
 **Image caching** is handled by `ShareImageCache`, which downloads external images (game covers, trophy icons, avatars) to a local `share_temp_images/` directory. Filenames are deterministic MD5 hashes of the source URL, so cached files persist across Gunicorn workers without shared state. An opportunistic cleanup runs with ~2% probability per fetch, deleting files older than 4 hours.
 
-The legacy Pillow-based renderer (`ShareImageService`) still exists for the original notification-attached share images stored in S3 as `PlatinumShareImage` records. New share card types all use the Playwright pipeline.
+There is only one rendering pipeline now (Playwright). The legacy Pillow-based `ShareImageService` and the in-notification share-card flow it served were removed in May 2026 along with the `PlatinumShareImage` S3-backed model: see "Notification deep-links" below for the replacement.
+
+### Notification deep-links
+
+When a user earns a platinum, the inbox notification at `/notifications/` no longer renders a share-card preview/download UI. Instead, the platinum-detail pane shows a "Download your share card" CTA that links to `/dashboard/shareables/platinums/?et=<earned_trophy_id>`. The platinums page (`shareable-manager.js:autoOpenSharedFromUrl`) reads `?et=<id>` on load, opens the share modal for that EarnedTrophy, and cleans the param out of the URL. This collapses the two share-card surfaces (notification + shareables) into one and removes a class of off-by-one bugs caused by the racy per-game count in the notification metadata.
 
 ## My Shareables: User-Facing Surfaces
 
@@ -58,10 +62,9 @@ The 5 landing cards each reference a static image at `static/images/shareables/l
 |------|---------|
 | `core/services/playwright_renderer.py` | Playwright PNG rendering: base64 embedding, font faces, theme CSS, dedicated thread execution |
 | `core/services/share_image_cache.py` | Fetch and cache external images locally with deterministic filenames and opportunistic cleanup |
-| `notifications/services/share_image_service.py` | Legacy Pillow-based renderer for notification platinum images |
-| `notifications/services/shareable_data_service.py` | Centralized data collection for platinum share cards: metadata, badge XP, tier 1 progress, ratings |
+| `core/services/shareable_data_service.py` | Centralized data collection for platinum share cards: metadata, badge XP, tier 1 progress, ratings, ordinal counts |
 | `api/shareable_views.py` | ShareableImageHTMLView, ShareableImagePNGView (EarnedTrophy-based, My Shareables page) |
-| `api/notification_views.py` | Notification share image views: generate, retrieve, status, HTML preview, PNG download |
+| `api/notification_views.py` | Notification list / read / rating endpoints (no share-image endpoints — those were removed) |
 | `api/recap_views.py` | RecapShareImageHTMLView, RecapShareImagePNGView |
 | `api/az_challenge_share_views.py` | AZChallengeShareHTMLView, AZChallengeSharePNGView |
 | `api/calendar_challenge_share_views.py` | CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView |
@@ -74,20 +77,11 @@ The 5 landing cards each reference a static image at `static/images/shareables/l
 | `templates/shareables/challenges.html` | Challenge cards page at `/dashboard/shareables/challenges/` |
 | `templates/shareables/profile_card.html` | Profile Card builder at `/dashboard/shareables/profile-card/` |
 | `static/images/shareables/` | Example image assets for the landing-page cards (with gradient fallback when files are missing) |
-| `notifications/models.py` (PlatinumShareImage) | S3-stored share images for notification-based generation |
+| `static/js/shareable-manager.js` | `ShareableManager` class + `openShareModal()` + `autoOpenSharedFromUrl()` for `?et=<id>` deep-links |
 
 ## Data Model
 
-### PlatinumShareImage
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `notification` | FK to Notification | CASCADE. The platinum notification this image was generated for |
-| `format` | CharField | landscape (1200x630) or portrait (1080x1350) |
-| `image` | ImageField | S3-stored PNG file |
-| `created_at` | DateTimeField | Auto |
-
-This model is used only by the legacy Pillow pipeline and the notification-based generation flow. The newer Playwright-based endpoints (My Shareables, challenges, recaps) return PNGs directly as HTTP responses without storing them.
+The Playwright-based endpoints (My Shareables, challenges, recaps) return PNGs directly as HTTP responses without storing them. The previous `PlatinumShareImage` S3 model that the Pillow pipeline used was dropped in May 2026 along with the in-notification share-card flow (migration `0016_drop_platinum_share_image`). Old S3 files under `platinum-share-images/` are orphaned by the migration and need a one-off bucket cleanup; nothing in the running app references them.
 
 ### Share Temp Directory
 
@@ -97,7 +91,7 @@ Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/
 
 ### Generating a Platinum Share Card (My Shareables / Playwright Pipeline)
 
-1. User clicks download on My Shareables page or the platinum notification share button
+1. User clicks download on the My Shareables page (or follows a `?et=<id>` deep-link from a platinum-earned notification, which auto-opens the share modal for that EarnedTrophy)
 2. Client requests `/api/v1/shareables/platinum/<earned_trophy_id>/png/?image_format=landscape&theme=default`
 3. View calls `ShareableDataService.get_platinum_share_data(earned_trophy)` to collect metadata
 4. `ShareImageCache.fetch_and_cache()` downloads external images (game cover, trophy icon, avatar) to local temp directory
@@ -106,21 +100,10 @@ Not a Django model. Local filesystem directory at `{BASE_DIR}/share_temp_images/
    - Embeds fonts as base64 `@font-face` rules (cached after first build)
    - Builds theme-specific background CSS (gradient or game art with overlay)
    - Resolves all `/api/v1/share-temp/` and `/static/` URLs to base64 data URIs
-   - Share-temp images are resized to 200px max for HTML size reduction
+   - Share-temp images are resized to `image_max_size` px max (default 200; platinum card overrides to 1000 so the cover passes through without being downscaled and re-upscaled)
 7. The full HTML is submitted to the Playwright thread pool
 8. Playwright creates a page, sets the content, screenshots `.share-image-content` element
 9. PNG bytes returned as an HTTP response with `Content-Disposition: attachment`
-
-### Generating a Notification Share Image (Legacy Pipeline)
-
-1. Client POSTs to `/api/v1/notifications/<id>/share-image/generate/`
-2. `ShareImageService.generate_image()` creates the image using Pillow:
-   - Creates gradient background pixel by pixel
-   - Loads fonts (Poppins, Inter) with system font fallbacks
-   - Fetches game cover and trophy icon via HTTP
-   - Renders card layout (landscape or portrait) with rounded rectangles, stat grids, badges
-3. Image saved as `PlatinumShareImage` record in S3
-4. Subsequent requests retrieve the stored image without re-rendering
 
 ### Image Caching Flow (ShareImageCache)
 
@@ -163,16 +146,6 @@ Themes are applied at two levels depending on context:
 | GET | `/api/v1/recap/<year>/<month>/html/` | Yes | HTML preview for monthly recap card |
 | GET | `/api/v1/recap/<year>/<month>/png/` | Yes | PNG download for monthly recap card |
 
-### Legacy / Notification-Based
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/notifications/<id>/share-image/generate/` | Yes | Generate and store share images (Pillow) |
-| GET | `/api/v1/notifications/<id>/share-image/<format_type>/` | Yes | Retrieve stored share image |
-| GET | `/api/v1/notifications/<id>/share-image/status/` | Yes | Check which formats exist |
-| GET | `/api/v1/notifications/<id>/share-image/html/` | Yes | HTML preview (Playwright) |
-| GET | `/api/v1/notifications/<id>/share-image/png/` | Yes | PNG download (Playwright) |
-
 ### Infrastructure
 
 | Method | Path | Auth | Purpose |
@@ -192,7 +165,7 @@ When a user clicks "Download Image" on a platinum share card, the system checks 
 
 ### Flow
 
-**My Shareables / Notifications** (ShareImageManager):
+**My Shareables** (ShareImageManager via ShareableManager):
 1. `ShareImageManager.generateAndDownload()` checks `this.ratingData.hasRating` (populated from the HTML API response during preview rendering)
 2. If unrated and not yet prompted: opens the `#rate-before-download-modal` dialog
 3. User can "Rate and Download" (submits rating via `/api/v1/reviews/<concept_id>/group/default/rate/`, refreshes preview, then downloads) or "Skip, just download"
@@ -228,8 +201,8 @@ In both cases, the JS knows the rating status before the user clicks download, w
 ## Gotchas and Pitfalls
 
 - **Playwright thread isolation**: Playwright starts an asyncio event loop, which conflicts with Django's `SynchronousOnlyOperation` guard. All Playwright interaction must happen in the dedicated thread. The `_executor` ThreadPoolExecutor with `max_workers=1` serializes renders and keeps the event loop isolated.
-- **30-second timeout**: `future.result(timeout=30)` means renders that take longer will raise `TimeoutError`. Cards with many images (A-Z challenge with 26 game icons) are mitigated by resizing share-temp images to 200px before embedding.
-- **base64 HTML size**: Embedding images as data URIs can produce massive HTML strings. The `resize_images=True` flag in `_resolve_urls()` compresses share-temp images (external game icons/avatars) to keep HTML under ~1MB. Static assets (fonts, logos) are not resized.
+- **30-second timeout**: `future.result(timeout=30)` means renders that take longer will raise `TimeoutError`. Cards with many images (A-Z challenge with 26 game icons) are mitigated by resizing share-temp images via the `image_max_size` cap (default 200) before embedding.
+- **base64 HTML size and per-card image cap**: Embedding images as data URIs can produce massive HTML strings. `_resolve_urls()` compresses share-temp images (external game icons/avatars) to keep HTML under ~1MB. The cap is configurable per call via `render_png(..., image_max_size=...)`: the default 200 fits the A-Z challenge (26 icons), but the platinum card has only ~3 images and a large cover slot, so it overrides to 1000. Pick a value that's at least the largest display dimension of any share-temp image on the card; a too-small cap downsamples then upscales and looks soft. Static assets (fonts, logos) are never resized.
 - **Deterministic cache filenames**: `MD5(url)` means the same external URL always maps to the same file. This is intentional for cross-worker cache sharing, but it also means a URL whose content changes (e.g., profile avatar updates) will serve the stale cached version until cleanup runs.
 - **Portrait vs. landscape game art positioning**: Portrait cards use `background-position: center top` so wide game art images show their upper portion (where logos and characters typically appear). Landscape cards use `center`.
 - **Legacy Pillow renderer limitations**: `_wrap_text()` is a naive implementation that truncates at 40 characters. The Pillow renderer also creates gradients pixel by pixel, which is slow for large images. New card types should always use the Playwright pipeline.

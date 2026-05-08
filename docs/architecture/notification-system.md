@@ -37,7 +37,7 @@ Signal fires (post_save)
 
 | File | Purpose |
 |------|---------|
-| `notifications/models.py` | Data models: Notification, NotificationTemplate, ScheduledNotification, DeviceToken, PlatinumShareImage, NotificationLog |
+| `notifications/models.py` | Data models: Notification, NotificationTemplate, ScheduledNotification, DeviceToken, NotificationLog |
 | `notifications/signals.py` | Django signal handlers for EarnedTrophy, UserBadge, UserMilestone, Profile events |
 | `notifications/apps.py` | AppConfig that imports signals on `ready()` |
 | `notifications/validators.py` | SectionValidator for structured notification sections |
@@ -46,8 +46,7 @@ Signal fires (post_save)
 | `notifications/services/scheduled_notification_service.py` | Scheduled/immediate bulk notifications with audience targeting and cron processing |
 | `notifications/services/notification_cache_service.py` | Redis cache for unread counts and recent notification lists |
 | `notifications/services/template_service.py` | `{variable}` substitution engine for NotificationTemplate rendering |
-| `notifications/services/share_image_service.py` | Pillow-based share image generator (landscape 1200x630, portrait 1080x1350) |
-| `notifications/services/shareable_data_service.py` | Data collection for share images: rarity labels, badge XP, tier progress, user ratings |
+| `core/services/shareable_data_service.py` | Data collection for share images: rarity labels, badge XP, tier progress, user ratings (consumed by `api/shareable_views.py`; the in-notification share-card flow that also used this service was removed in May 2026, and the file was moved out of `notifications/services/` shortly after) |
 | `trophies/discord_utils/discord_notifications.py` | Discord webhook queue, daemon sender thread, embed builders |
 | `trophies/apps.py` | Starts the Discord webhook daemon thread on app ready |
 | `trophies/sync_utils.py` | `sync_signal_suppressor()` context manager to skip pre_save signals during sync |
@@ -110,19 +109,6 @@ Admin-created notifications with future delivery. Processed by the hourly cron c
 | `email_cta_text` | CharField | Legacy. Defaults to `action_text` if blank |
 
 Status lifecycle: `pending` -> `processing` -> `sent` (or `failed`). Can be `cancelled` while still `pending`.
-
-### PlatinumShareImage
-
-Generated share images stored in S3.
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `notification` | FK(Notification) | CASCADE |
-| `format` | CharField | landscape (1200x630) or portrait (1080x1350) |
-| `image` | ImageField | S3 path: `platinum-share-images/%Y/%m/` |
-| `download_count` | PositiveIntegerField | Tracks downloads |
-
-Unique constraint: `(notification, format)` prevents duplicate generation.
 
 ### DeviceToken
 
@@ -221,18 +207,9 @@ The proxy is configured via `PROXY_URL` environment variable and validated at st
 
 ### Share Image Generation
 
-Platinum share images are generated server-side using Pillow (PIL).
+Platinum share images are no longer rendered inside the notification inbox. The platinum-detail pane shows a "Download your share card" CTA that links to `/dashboard/shareables/platinums/?et=<earned_trophy_id>`. The shareables page (`shareable-manager.js:autoOpenSharedFromUrl`) parses the param, opens the share modal for that EarnedTrophy, and cleans the URL. Rendering uses the Playwright pipeline via `api/shareable_views.py` and `ShareableDataService`. See [docs/features/share-images.md](../features/share-images.md) for the full pipeline.
 
-1. **Request**: User triggers share image generation from the notification detail view.
-2. **Service call**: `ShareImageService.generate_image(notification, format_type)` is called.
-3. **Background creation**: Creates a gradient background, loads fonts (Poppins Bold, Poppins SemiBold, Inter Regular from `static/fonts/`, with system font fallbacks).
-4. **Layout rendering**: Two layouts are supported:
-   - **Landscape (1200x630)**: Optimized for Facebook/Twitter/Discord. Game image with trophy overlay on left, stats on right.
-   - **Portrait (1080x1350)**: Optimized for Instagram. Game image banner at top, centered stats below.
-5. **Remote image fetch**: Game images and trophy icons are fetched from PSN CDN URLs with a 10-second timeout, resized/cropped to fit.
-6. **Output**: Returns a Django `InMemoryUploadedFile` (PNG) that gets saved to the `PlatinumShareImage` model (S3 storage).
-
-`ShareableDataService` provides the data collection layer for share images. It gathers comprehensive metadata including badge XP, tier 1 badge progress, user ratings, and historical platinum counts (counting only platinums earned on or before the share target's date for accurate "Platinum #N" display).
+`ShareableDataService` is the single source of truth for share-card data. The platinum-count query uses a tuple comparison `(earned_date_time, id)` so the displayed `#N` exactly matches the listing-page ordinal, including under tied `earned_date_time` values (PSN sometimes returns identical timestamps for trophies popped seconds apart) and NULL `earned_date_time`. Computed live, immune to the per-game sync ordering race that broke the old frozen `user_total_platinums` value in notification metadata.
 
 ## Integration Points
 
@@ -283,19 +260,15 @@ The Discord webhook queue is a Python `queue.Queue()` (in-memory). If the proces
 
 This prevents double-processing if the cron job overlaps (unlikely with hourly runs, but safe). However, it means a failed notification that stays in `processing` status will not be retried automatically. Failed notifications are marked with status `failed` and `error_message` for manual investigation.
 
-### 9. Share Image Remote Fetch Timeout
-
-`ShareImageService._fetch_and_process_image()` fetches game images from PSN CDN URLs with a 10-second timeout. If the CDN is slow or the URL is invalid, the image slot is left blank (not errored). This means share images may render without game art in degraded conditions.
-
-### 10. Template Variables Must Match Exactly
+### 9. Template Variables Must Match Exactly
 
 `TemplateService.render_template()` uses Python `str.format(**context)`. A missing variable raises `KeyError`, which is caught and logged but returns `None` (notification not created). When adding new templates, use `TemplateService.validate_context()` to verify all placeholders are satisfied before rendering.
 
-### 11. Milestone Notifications Bypass Signals
+### 10. Milestone Notifications Bypass Signals
 
 `create_milestone_notification()` is a plain function, not a signal handler. It is called directly from `milestone_service.py` to allow batch consolidation (only the highest tier per criteria type gets a notification). If you refactor milestone processing, ensure this function is still called at the right consolidation point.
 
-### 12. Milestone Title Rewards in Detail View
+### 11. Milestone Title Rewards in Detail View
 
 When a milestone has an associated `title` FK (to the `Title` model), `_build_milestone_context()` includes `title_name` and `title_text` in the context dict. These flow into `notification.metadata` and are rendered by `renderMilestoneDetail()` in `notification-inbox.js` as a styled callout card. The title info appears only in the expanded detail view, not in the preview `message` text. Milestones without a title reward have empty strings for both fields.
 

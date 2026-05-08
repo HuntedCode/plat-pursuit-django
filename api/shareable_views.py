@@ -14,7 +14,7 @@ from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
 from core.services.tracking import track_site_event
 from trophies.models import EarnedTrophy
-from notifications.services.shareable_data_service import ShareableDataService
+from core.services.shareable_data_service import ShareableDataService
 from core.services.share_image_cache import ShareImageCache
 from core.services.share_card_utils import to_int, format_share_date, process_badge_images, resolve_temp_path
 import logging
@@ -68,7 +68,6 @@ class ShareableImageHTMLView(APIView):
         # Get share data using centralized service
         metadata = ShareableDataService.get_platinum_share_data(earned_trophy)
 
-        # Build template context (matching NotificationShareImageHTMLView pattern)
         context = self._build_template_context(metadata, format_type, profile=profile)
 
         # Render the template
@@ -256,12 +255,16 @@ class ShareableImagePNGView(APIView):
 
         try:
             from core.services.playwright_renderer import render_png
+            # Platinum card has only ~3 share-temp images (cover, trophy icon,
+            # avatar) and a 432px cover slot, so override the default 200 cap
+            # to let cover_big_2x (528x748) pass through without resize.
             png_bytes = render_png(
                 html,
                 format_type=format_type,
                 theme_key=theme_key,
                 game_image_path=game_image_path,
                 concept_bg_path=concept_bg_path,
+                image_max_size=1000,
             )
         except Exception as e:
             logger.exception(f"[SHARE-PNG] Playwright render failed for shareable {earned_trophy_id}: {e}")

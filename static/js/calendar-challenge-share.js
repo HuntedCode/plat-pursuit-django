@@ -10,8 +10,8 @@
  */
 class CalendarChallengeShareManager extends ShareImageManager {
     constructor(challengeId, challengeName) {
-        // No game image metadata (game art themes come from the picker, not notification metadata)
-        super(null, {});
+        // No game image metadata (game art themes come from the picker)
+        super({});
         this.challengeId = challengeId;
         this.challengeName = challengeName;
         this.showUSHolidays = localStorage.getItem('calendarShowUSHolidays') === 'true';

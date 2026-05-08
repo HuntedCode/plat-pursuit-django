@@ -65,11 +65,6 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 | POST | `/api/v1/notifications/<pk>/read/` | Login | Mark single read |
 | DELETE | `/api/v1/notifications/<pk>/` | Login | Delete single |
 | POST | `/api/v1/notifications/<pk>/rating/` | Login | Rate platinum notification |
-| POST | `/api/v1/notifications/<pk>/share-image/generate/` | Login | Generate share image |
-| GET | `/api/v1/notifications/<pk>/share-image/status/` | Login | Check generation status |
-| GET | `/api/v1/notifications/<pk>/share-image/html/` | Login | Share card HTML |
-| GET | `/api/v1/notifications/<pk>/share-image/png/` | Login | Share card PNG |
-| GET | `/api/v1/notifications/<pk>/share-image/<format>/` | Login | Share image by format |
 
 ### Admin Notifications
 

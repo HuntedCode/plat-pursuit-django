@@ -16,7 +16,7 @@ from datetime import datetime
 from django.conf import settings
 from django.utils import timezone
 from notifications.services.notification_service import NotificationService
-from notifications.services.shareable_data_service import ShareableDataService
+from core.services.shareable_data_service import ShareableDataService
 from notifications.models import Notification, NotificationTemplate
 from trophies.models import Profile, Game, EarnedTrophy, ProfileGame
 from trophies.models import UserBadge
@@ -141,40 +141,26 @@ class DeferredNotificationService:
             fresh_total_count = earned_trophy_qs.count()
             fresh_progress = round((fresh_earned_count / fresh_total_count) * 100) if fresh_total_count > 0 else 0
 
-            # Count user's total platinums (including this one)
-            total_plats = EarnedTrophy.objects.filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum'
-            ).count()
+            # Per-platinum totals (user_total_platinums, yearly_plats) used to
+            # be stored here, but the count was racy when multiple plats from
+            # one sync were processed in non-chronological order. The inbox
+            # links to the My Shareables page where the count is computed
+            # live, so it isn't needed in the frozen metadata anymore.
 
-            # Get earned date and calculate yearly plats
-            earned_date = datetime.fromisoformat(data["earned_date_time"]) if data["earned_date_time"] else None
-            yearly_plats = 0
-            earned_year = None
-
-            if earned_date:
-                earned_year = earned_date.year
-                yearly_plats = EarnedTrophy.objects.filter(
-                    profile=profile,
-                    earned=True,
-                    trophy__trophy_type='platinum',
-                    earned_date_time__year=earned_year
-                ).count()
-
-            # Build context (replicates logic from signals.py lines 271-342)
+            # Build context (replicates logic from signals.py)
             context = {
                 'username': profile.display_psn_username or profile.psn_username,
                 'trophy_name': trophy.trophy.trophy_name,
                 'game_name': game.title_name,
                 'game_id': game.id,
+                'earned_trophy_id': trophy.id,
                 'np_communication_id': game.np_communication_id,
                 'concept_id': game.concept.id if game.concept else None,
                 'trophy_detail': trophy.trophy.trophy_detail or '',
                 'trophy_earn_rate': trophy.trophy.trophy_earn_rate or 0,
                 'trophy_rarity': trophy.trophy.trophy_rarity,
                 'trophy_icon_url': trophy.trophy.trophy_icon_url or '',
-                'game_image': game.display_image_url,
+                'game_image': game.display_image_url_large,
                 'rarity_label': ShareableDataService.get_rarity_label(trophy.trophy.trophy_rarity),
                 'title_platform': game.title_platform,
                 'region': game.region,
@@ -185,11 +171,8 @@ class DeferredNotificationService:
                 'earned_trophies_count': fresh_earned_count,
                 'total_trophies_count': fresh_total_count,
                 'progress_percentage': fresh_progress,
-                'user_total_platinums': total_plats,
                 'user_avatar_url': profile.avatar_url or '',
                 'earned_date_time': data["earned_date_time"],
-                'yearly_plats': yearly_plats,
-                'earned_year': earned_year,
             }
 
             # Create notification

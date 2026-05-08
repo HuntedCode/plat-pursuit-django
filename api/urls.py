@@ -9,9 +9,7 @@ from .views import (
 from .notification_views import (
     NotificationListView, NotificationMarkReadView, NotificationMarkAllReadView,
     AdminSendNotificationView, NotificationBulkDeleteView,
-    NotificationDeleteView, NotificationShareImageGenerateView, NotificationShareImageView,
-    NotificationShareImageStatusView, NotificationShareImageHTMLView, NotificationShareImagePNGView,
-    NotificationRatingView,
+    NotificationDeleteView, NotificationRatingView,
     AdminNotificationPreviewView, AdminTargetCountView, AdminUserSearchView
 )
 from .shareable_views import ShareableImageHTMLView, ShareableImagePNGView
@@ -166,13 +164,6 @@ urlpatterns = [
     path('admin/notifications/preview/', AdminNotificationPreviewView.as_view(), name='admin-notification-preview'),
     path('admin/notifications/target-count/', AdminTargetCountView.as_view(), name='admin-notification-target-count'),
     path('admin/notifications/user-search/', AdminUserSearchView.as_view(), name='admin-notification-user-search'),
-
-    # Platinum share image endpoints (must be before generic <int:pk>/ route)
-    path('notifications/<int:pk>/share-image/generate/', NotificationShareImageGenerateView.as_view(), name='notification-share-image-generate'),
-    path('notifications/<int:pk>/share-image/status/', NotificationShareImageStatusView.as_view(), name='notification-share-image-status'),
-    path('notifications/<int:pk>/share-image/html/', NotificationShareImageHTMLView.as_view(), name='notification-share-image-html'),
-    path('notifications/<int:pk>/share-image/png/', NotificationShareImagePNGView.as_view(), name='notification-share-image-png'),
-    path('notifications/<int:pk>/share-image/<str:format_type>/', NotificationShareImageView.as_view(), name='notification-share-image'),
 
     # Notification rating endpoint (for platinum notifications)
     path('notifications/<int:pk>/rating/', NotificationRatingView.as_view(), name='notification-rating'),

@@ -155,7 +155,7 @@ def _render_in_thread(full_html, width, height):
         page.close()
 
 
-def _resolve_urls(html, resize_images=False):
+def _resolve_urls(html, resize_images=False, image_max_size=200):
     """
     Convert relative URLs in HTML to inline base64 data URIs.
 
@@ -165,16 +165,19 @@ def _resolve_urls(html, resize_images=False):
     - data: URIs left unchanged
 
     When resize_images=True, share-temp images (external game icons/avatars)
-    are resized to 200px max dimension and compressed before embedding.
-    This dramatically reduces HTML size for cards with many images (e.g., A-Z
-    card with 26 game icons goes from ~7MB to ~0.3MB).
+    are resized to image_max_size px max dimension and compressed before
+    embedding. The default 200 keeps HTML small for cards with many images
+    (e.g., A-Z card with 26 game icons goes from ~7MB to ~0.3MB). Cards with
+    few images and a large cover slot (like the platinum card, where the
+    cover renders at 432px in the PNG) should pass a larger value so the
+    cover isn't downscaled below its display size and then upscaled back.
     """
     # Replace /api/v1/share-temp/<filename> with base64 data URIs
     def replace_share_temp(match):
         filename = match.group(1)
         file_path = SHARE_TEMP_DIR / filename
         if resize_images:
-            data_uri = _file_to_data_uri_resized(file_path)
+            data_uri = _file_to_data_uri_resized(file_path, max_size=image_max_size)
         else:
             data_uri = _file_to_data_uri(file_path)
         return data_uri if data_uri else match.group(0)
@@ -312,7 +315,7 @@ def _get_banner_css(theme_key):
 
 def _build_full_html(inner_html, width, height, theme_key='default',
                      game_image_path=None, concept_bg_path=None,
-                     format_type='landscape'):
+                     format_type='landscape', image_max_size=200):
     """
     Wrap card HTML in a full HTML document with embedded fonts, reset, and theme CSS.
     All external resources are inlined as base64 data URIs.
@@ -325,7 +328,9 @@ def _build_full_html(inner_html, width, height, theme_key='default',
 
     # Convert all relative URLs in the card HTML to base64 data URIs.
     # Resize share-temp images (external game icons) to reduce HTML size.
-    resolved_html = _resolve_urls(inner_html, resize_images=True)
+    resolved_html = _resolve_urls(
+        inner_html, resize_images=True, image_max_size=image_max_size,
+    )
 
     # Also resolve any URLs in background CSS (logoBackdrop theme uses /static/images/logo.png)
     # No resize here: background images need full resolution for cover display.
@@ -371,7 +376,7 @@ def _build_full_html(inner_html, width, height, theme_key='default',
 
 def render_png(html, format_type='landscape', theme_key='default',
                game_image_path=None, concept_bg_path=None,
-               grid_width=None, grid_height=None):
+               grid_width=None, grid_height=None, image_max_size=200):
     """
     Render share card HTML to PNG bytes using Playwright.
 
@@ -387,6 +392,12 @@ def render_png(html, format_type='landscape', theme_key='default',
         concept_bg_path: Absolute path to concept bg file (for game art themes)
         grid_width: Explicit width override (for dynamic grid images)
         grid_height: Explicit height override (for dynamic grid images)
+        image_max_size: Max dimension (px) for share-temp images embedded in
+            the HTML. Default 200 is sized for cards with many small icons
+            (e.g., A-Z challenge with 26 game icons). Cards with a large
+            cover slot (e.g., platinum card, cover at 432px) should pass a
+            larger value so the cover isn't downscaled and then upscaled
+            back during PNG render.
 
     Returns:
         bytes: PNG image data
@@ -403,6 +414,7 @@ def render_png(html, format_type='landscape', theme_key='default',
         game_image_path=game_image_path,
         concept_bg_path=concept_bg_path,
         format_type=format_type,
+        image_max_size=image_max_size,
     )
 
     # Submit the Playwright render to the dedicated thread and wait for result.

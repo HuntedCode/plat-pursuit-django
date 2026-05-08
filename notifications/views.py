@@ -44,11 +44,6 @@ class NotificationInboxView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView
             ('system_alert', 'System Alert'),
         ]
 
-        # Add available themes for color grid modal (used in platinum notifications)
-        # Include game art themes since we have game context in share cards
-        from trophies.themes import get_available_themes_for_grid
-        context['available_themes'] = get_available_themes_for_grid(include_game_art=True, grouped=True)
-
         track_page_view('notifications', 'inbox', self.request)
         return context
 

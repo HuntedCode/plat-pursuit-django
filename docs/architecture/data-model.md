@@ -390,12 +390,6 @@ Key relationships:
 - `recipient` FK to `CustomUser`
 - `template` FK to `NotificationTemplate` (nullable)
 
-### PlatinumShareImage
-Generated share images for platinum notifications. Supports landscape and portrait formats. Stored in S3.
-
-Key relationships:
-- `notification` FK to `Notification`
-
 ### ScheduledNotification
 Scheduled notifications for future delivery. Targeting supports: all users, premium tiers, discord verified, or individual users. Processed hourly by a management command.
 
@@ -579,7 +573,6 @@ Fundraiser
 Notification
   |-- N:1 --> CustomUser (recipient)
   |-- N:1 --> NotificationTemplate
-  |-- 1:N --> PlatinumShareImage
 ```
 
 ### Key Design Patterns

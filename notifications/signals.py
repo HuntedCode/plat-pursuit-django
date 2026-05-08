@@ -9,7 +9,7 @@ from django.utils import timezone
 from datetime import timedelta
 from trophies.models import EarnedTrophy, UserBadge, UserMilestone, Profile, ProfileGame
 from notifications.services.notification_service import NotificationService
-from notifications.services.shareable_data_service import ShareableDataService
+from core.services.shareable_data_service import ShareableDataService
 from notifications.models import NotificationTemplate
 import logging
 
@@ -328,34 +328,11 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                     game=instance.trophy.game
                 ).first()
 
-                # Count user's total platinums (including this one)
-                total_plats = EarnedTrophy.objects.filter(
-                    profile=profile,
-                    earned=True,
-                    trophy__trophy_type='platinum'
-                ).count()
-
-                # Get the earned date for filtering
-                earned_date = instance.earned_date_time
-
-                # Calculate yearly platinum count
-                yearly_plats = 0
-
-                if earned_date:
-                    earned_year = earned_date.year
-
-                    # Count platinums earned in the same year
-                    yearly_plats = EarnedTrophy.objects.filter(
-                        profile=profile,
-                        earned=True,
-                        trophy__trophy_type='platinum',
-                        earned_date_time__year=earned_year
-                    ).count()
-
-                # Create notification from template with enhanced context
-                # Note: badge_xp and tier1_badges are intentionally NOT stored here
-                # Badge progress is fetched live when the share card is accessed because
-                # UserBadgeProgress is calculated at the end of full sync, not per-game sync
+                # Per-platinum totals (user_total_platinums, yearly_plats) used to
+                # be stored here, but the count was racy when multiple plats from
+                # one sync were processed in non-chronological order. The inbox
+                # links to the My Shareables page where the count is computed
+                # live, so it isn't needed in the frozen metadata anymore.
                 NotificationService.create_from_template(
                     recipient=profile.user,
                     template=template,
@@ -364,13 +341,14 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                         'trophy_name': instance.trophy.trophy_name,
                         'game_name': instance.trophy.game.title_name,
                         'game_id': instance.trophy.game.id,
+                        'earned_trophy_id': instance.id,
                         'np_communication_id': instance.trophy.game.np_communication_id,
                         'concept_id': instance.trophy.game.concept.id if instance.trophy.game.concept else None,
                         'trophy_detail': instance.trophy.trophy_detail or '',
                         'trophy_earn_rate': instance.trophy.trophy_earn_rate or 0,
                         'trophy_rarity': instance.trophy.trophy_rarity,
                         'trophy_icon_url': instance.trophy.trophy_icon_url or '',
-                        'game_image': instance.trophy.game.display_image_url,
+                        'game_image': instance.trophy.game.display_image_url_large,
                         'rarity_label': ShareableDataService.get_rarity_label(instance.trophy.trophy_rarity),
                         'title_platform': instance.trophy.game.title_platform,
                         'region': instance.trophy.game.region,
@@ -381,11 +359,8 @@ def notify_platinum_earned(sender, instance, created, **kwargs):
                         'earned_trophies_count': profile_game.earned_trophies_count if profile_game else 0,
                         'total_trophies_count': profile_game.total_trophies if profile_game else 0,
                         'progress_percentage': profile_game.progress if profile_game else 0,
-                        'user_total_platinums': total_plats,
                         'user_avatar_url': profile.avatar_url or '',
                         'earned_date_time': instance.earned_date_time.isoformat() if instance.earned_date_time else None,
-                        'yearly_plats': yearly_plats,
-                        'earned_year': earned_year if earned_date else None,
                     }
                 )
 

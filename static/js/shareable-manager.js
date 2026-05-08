@@ -6,8 +6,7 @@
  */
 class ShareableManager extends ShareImageManager {
     constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId, isShovelware) {
-        // Parent constructor expects notificationId, but we override getPngEndpoint/fetchCardHTML
-        super(null, { game_name: gameName, game_image: gameImage, concept_bg_url: conceptBgUrl });
+        super({ game_name: gameName, game_image: gameImage, concept_bg_url: conceptBgUrl });
         this.earnedTrophyId = earnedTrophyId;
         this.gameName = gameName;
 
@@ -284,10 +283,37 @@ function initShovelwareFilter() {
     });
 }
 
+/**
+ * Auto-open the share modal for the EarnedTrophy referenced by `?et=<id>`,
+ * used by deep links from platinum-earned notifications. Cleans the param
+ * out of the URL afterward so a refresh or back-navigation doesn't reopen.
+ */
+function autoOpenSharedFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const earnedTrophyId = params.get('et');
+    if (!earnedTrophyId) return;
+
+    const cleanUrl = window.location.pathname + window.location.hash;
+    history.replaceState(null, '', cleanUrl);
+
+    const card = document.querySelector(
+        `.platinum-card[data-earned-trophy-id="${CSS.escape(earnedTrophyId)}"]`
+    );
+    if (card) {
+        openShareModal(card);
+    } else if (window.PlatPursuit?.ToastManager) {
+        PlatPursuit.ToastManager.show(
+            "Couldn't find that platinum on this page.",
+            'warning'
+        );
+    }
+}
+
 // Initialize filters on page load
 document.addEventListener('DOMContentLoaded', () => {
     initPlatinumSearch();
     initShovelwareFilter();
+    autoOpenSharedFromUrl();
 });
 
 // Export for global access

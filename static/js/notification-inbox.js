@@ -29,7 +29,6 @@ class NotificationInboxManager {
         this.loading = false;
         this.selectedNotification = null;
         this.debouncedSearch = PlatPursuit.debounce((value) => this.handleSearch(value), 300);
-        this.currentShareManager = null;  // Reference to active ShareImageManager for refreshing after rating changes
 
         // Check if elements exist before initializing
         if (!this.listPane) {
@@ -259,26 +258,14 @@ class NotificationInboxManager {
             }
         });
 
-        // Initialize share image manager and rating section for platinum notifications
-        if (notification.notification_type === 'platinum_earned') {
-            // Use setTimeout to ensure DOM is rendered
-            setTimeout(() => {
-                // Initialize share image manager
-                const shareContainer = document.getElementById('share-section-container');
-                if (shareContainer && window.PlatPursuit && window.PlatPursuit.ShareImageManager) {
-                    this.currentShareManager = new window.PlatPursuit.ShareImageManager(
-                        notification.id,
-                        notification.metadata
-                    );
-                    shareContainer.innerHTML = this.currentShareManager.renderShareSection();
-                    this.currentShareManager.init();
-                }
-
-                // Load rating section if game has a concept
-                if (notification.metadata?.concept_id) {
-                    this.loadRatingSection(notification.id);
-                }
-            }, 50);
+        // Load the rating section for platinum notifications. The CTA-style
+        // share-card link is rendered statically inside renderPlatinumDetail;
+        // there's no in-notification share-card UI anymore — the user follows
+        // the link to /dashboard/shareables/platinums/?et=<id> to generate a
+        // card with the live counts.
+        if (notification.notification_type === 'platinum_earned'
+            && notification.metadata?.concept_id) {
+            setTimeout(() => this.loadRatingSection(notification.id), 50);
         }
     }
 
@@ -366,11 +353,6 @@ class NotificationInboxManager {
                 // Reload the rating section, passing whether this was a first-time rating
                 const wasFirstRating = response.message && response.message.includes('submitted');
                 this.loadRatingSection(notificationId, wasFirstRating);
-
-                // Refresh the share image preview with the new rating data
-                if (this.currentShareManager) {
-                    this.currentShareManager.renderPreview();
-                }
             } else {
                 PlatPursuit.ToastManager.error('Failed to submit rating. Please check your input.');
             }
@@ -701,11 +683,40 @@ class NotificationInboxManager {
             <!-- Play Statistics Section -->
             ${this.renderPlayStatistics(metadata)}
 
-            <!-- Share Image Section Container -->
-            <div id="share-section-container"></div>
+            <!-- Share Card CTA -->
+            ${this.renderShareCardCta(metadata)}
 
             <!-- Rating Section Container (loaded via API) -->
             <div id="rating-section-container" class="mt-4"></div>
+        `;
+    }
+
+    renderShareCardCta(metadata) {
+        const earnedTrophyId = metadata?.earned_trophy_id;
+        const shareUrl = earnedTrophyId
+            ? `/dashboard/shareables/platinums/?et=${encodeURIComponent(earnedTrophyId)}`
+            : '/dashboard/shareables/platinums/';
+
+        return `
+            <a href="${shareUrl}"
+               class="block bg-base-300 rounded-lg p-4 mt-4 group hover:bg-base-200 hover:ring-2 hover:ring-primary/40 transition-all">
+                <div class="flex items-center gap-3">
+                    <div class="shrink-0 w-12 h-12 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-content shadow-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="text-base font-semibold leading-tight">Download your share card</h3>
+                        <p class="text-xs text-base-content/60 mt-0.5">
+                            Pick a theme on the My Shareables page and grab a PNG ready to post.
+                        </p>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </a>
         `;
     }
 

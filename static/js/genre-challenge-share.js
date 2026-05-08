@@ -7,7 +7,7 @@
 class GenreChallengeShareManager extends ShareImageManager {
     constructor(challengeId, challengeName) {
         // No game image metadata (no game art themes)
-        super(null, {});
+        super({});
         this.challengeId = challengeId;
         this.challengeName = challengeName;
     }

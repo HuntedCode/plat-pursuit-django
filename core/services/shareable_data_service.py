@@ -2,6 +2,7 @@
 Centralized service for collecting data needed for shareable images.
 Extracts logic from signals.py to be reusable across the application.
 """
+from django.db.models import Q
 from trophies.models import EarnedTrophy, ProfileGame, Stage, Badge, UserBadgeProgress, UserConceptRating
 import logging
 
@@ -182,37 +183,49 @@ class ShareableDataService:
             game=game
         ).first()
 
-        # Count total platinums earned up to and including this one
+        # Count total platinums earned up to and including this one. The
+        # ordering is `(-earned_date_time, -id)` (NULLs first for date) — see
+        # MyPlatinumSharesView for the matching listing order. We use a
+        # tuple-style comparison so ties on earned_date_time break by id:
+        # otherwise two plats popped the same second would both come back as
+        # the same `#N` here while the listing assigns them sequential
+        # ordinals (`#N`, `#N-1`).
         earned_date = earned_trophy.earned_date_time
+        plat_qs = EarnedTrophy.objects.filter(
+            profile=profile,
+            earned=True,
+            trophy__trophy_type='platinum',
+        )
         earned_year = None
 
         if earned_date:
+            # Listing places NULL-date plats above all valid-date plats
+            # (Postgres DESC NULLS FIRST), so a valid-date plat's ordinal
+            # only counts other VALID plats that are not-newer than it.
             earned_year = earned_date.year
-            # Count platinums earned on or before this platinum's earned date
-            total_plats = EarnedTrophy.objects.filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum',
-                earned_date_time__lte=earned_date
+            total_plats = plat_qs.filter(
+                Q(earned_date_time__lt=earned_date)
+                | Q(earned_date_time=earned_date, id__lte=earned_trophy.id)
             ).count()
 
-            # Count platinums earned in the same year, up to and including this one
+            # Yearly count uses the same tuple-comparison clamped to year start.
             from datetime import datetime
             year_start = datetime(earned_year, 1, 1, tzinfo=earned_date.tzinfo)
-            yearly_plats = EarnedTrophy.objects.filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum',
+            yearly_plats = plat_qs.filter(
                 earned_date_time__gte=year_start,
-                earned_date_time__lte=earned_date
+            ).filter(
+                Q(earned_date_time__lt=earned_date)
+                | Q(earned_date_time=earned_date, id__lte=earned_trophy.id)
             ).count()
         else:
-            # No earned date - fall back to current totals
-            total_plats = EarnedTrophy.objects.filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum'
+            # NULL-date plat: listing places these at the very top, sorted by
+            # `-id` within the NULL group, so its ordinal is (NULL plats with
+            # id <= this id) + (every valid-date plat in the library).
+            total_plats = plat_qs.filter(
+                Q(earned_date_time__isnull=False)
+                | Q(earned_date_time__isnull=True, id__lte=earned_trophy.id)
             ).count()
+            # Yearly count is meaningless without a date.
             yearly_plats = 0
 
         # Get badge XP and tier 1 badge progress
@@ -233,7 +246,7 @@ class ShareableDataService:
             'trophy_earn_rate': trophy.trophy_earn_rate or 0,
             'trophy_rarity': trophy.trophy_rarity,
             'trophy_icon_url': trophy.trophy_icon_url or '',
-            'game_image': game.display_image_url,
+            'game_image': game.display_image_url_large,
             'concept_bg_url': (game.concept.bg_url or '') if game.concept else '',
             'rarity_label': cls.get_rarity_label(trophy.trophy_rarity),
             'title_platform': game.title_platform,

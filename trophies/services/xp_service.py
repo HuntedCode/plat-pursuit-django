@@ -4,7 +4,7 @@ XP Service - Centralized logic for Badge XP calculations and updates.
 This service consolidates all XP-related logic that was previously scattered across:
 - leaderboard_service.py (compute_badge_xp_leaderboard)
 - notifications/signals.py (_calculate_badge_xp)
-- notifications/services/shareable_data_service.py (get_badge_xp_for_game)
+- core/services/shareable_data_service.py (get_badge_xp_for_game)
 
 All XP calculation should go through this service to ensure consistency.
 """

@@ -183,50 +183,6 @@ class Notification(models.Model):
             self.save(update_fields=['is_read', 'read_at'])
 
 
-class PlatinumShareImage(models.Model):
-    """
-    Stores generated share images for platinum notifications.
-    Images are stored in S3 with lifecycle management for cleanup.
-    """
-    FORMAT_CHOICES = [
-        ('landscape', 'Landscape (1200x630)'),
-        ('portrait', 'Portrait (1080x1350)'),
-    ]
-
-    notification = models.ForeignKey(
-        Notification,
-        on_delete=models.CASCADE,
-        related_name='share_images',
-        help_text="The platinum notification this image was generated for"
-    )
-    format = models.CharField(
-        max_length=20,
-        choices=FORMAT_CHOICES,
-        help_text="Image format/dimensions"
-    )
-    image = models.ImageField(
-        upload_to='platinum-share-images/%Y/%m/',
-        help_text="Generated share image stored in S3"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    download_count = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of times this image has been downloaded"
-    )
-
-    class Meta:
-        unique_together = ['notification', 'format']
-        verbose_name = 'Platinum Share Image'
-        verbose_name_plural = 'Platinum Share Images'
-        indexes = [
-            models.Index(fields=['notification', 'format']),
-            models.Index(fields=['created_at']),
-        ]
-
-    def __str__(self):
-        return f"Share image ({self.format}) for notification {self.notification_id}"
-
-
 class ScheduledNotification(models.Model):
     """
     Stores scheduled notifications for future sending.

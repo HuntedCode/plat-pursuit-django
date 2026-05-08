@@ -14,8 +14,7 @@ class ShareImageManager {
     // Resets on page navigation (class-level, not persisted).
     static _promptedIds = new Set();
 
-    constructor(notificationId, metadata) {
-        this.notificationId = notificationId;
+    constructor(metadata) {
         this.metadata = metadata || {};
         this.currentFormat = 'landscape';
         this.currentBackground = 'default';
@@ -409,30 +408,12 @@ class ShareImageManager {
     }
 
     /**
-     * Fetch the card HTML from the server (used for preview)
+     * Fetch the card HTML from the server (used for preview). Abstract:
+     * subclasses must override with the endpoint that maps to their
+     * record type (e.g. EarnedTrophy id, challenge id).
      */
     async fetchCardHTML(format) {
-        const response = await PlatPursuit.API.get(
-            `/api/v1/notifications/${this.notificationId}/share-image/html/?image_format=${format}`
-        );
-
-        if (response && response.html) {
-            // Capture rating metadata from API response
-            if (response.has_rating !== undefined) {
-                this.ratingData.hasRating = response.has_rating;
-            }
-            if (response.concept_id) {
-                this.ratingData.conceptId = response.concept_id;
-            }
-            if (response.playtime) {
-                this.ratingData.playtime = response.playtime;
-            }
-            if (response.is_shovelware !== undefined) {
-                this.ratingData.isShovelware = response.is_shovelware;
-            }
-            return response.html;
-        }
-        throw new Error('Failed to fetch card HTML');
+        throw new Error('ShareImageManager subclasses must override fetchCardHTML(format)');
     }
 
     /**
@@ -508,7 +489,7 @@ class ShareImageManager {
      * Returns the ID used for download tracking. Overridden by subclasses.
      */
     getTrackingId() {
-        return this.notificationId || 'unknown';
+        return 'unknown';
     }
 
     /**
@@ -730,10 +711,11 @@ class ShareImageManager {
     }
 
     /**
-     * Build the PNG endpoint URL for server-side rendering
+     * Build the PNG endpoint URL for server-side rendering. Abstract:
+     * subclasses must return the URL appropriate to their record type.
      */
     getPngEndpoint(format) {
-        return `/api/v1/notifications/${this.notificationId}/share-image/png/?image_format=${format}&theme=${this.currentBackground}`;
+        throw new Error('ShareImageManager subclasses must override getPngEndpoint(format)');
     }
 
     /**

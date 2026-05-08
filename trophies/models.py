@@ -638,22 +638,14 @@ class Game(models.Model):
         """Alias for get_icon_url() for template convenience."""
         return self.get_icon_url()
 
-    @property
-    def display_image_url(self):
-        """Best cover-art URL for this game with the full fallback chain.
-
-        Normal path (IGDB-first):
-        1. Trusted IGDB cover (Concept.get_igdb_cover_url)
-        2. PSN MASTER icon (Concept.concept_icon_url, skipped for PP_* stubs)
-        3. PSN store art (Game.title_image)
-        4. Generic PSN title icon (Game.title_icon_url)
-
-        When force_title_icon is set (admin flag for games with bad PSN
-        store art), PSN intermediate sources are skipped entirely: we try
-        a trusted IGDB cover, otherwise fall straight to title_icon_url.
+    def _display_image_url(self, igdb_size='cover_big'):
+        """Internal helper for display_image_url* properties. The IGDB
+        size is parameterized so share-card surfaces can request a
+        higher-resolution variant; PSN fallback URLs are fixed strings
+        and don't have a size knob.
         """
         if self.concept_id:
-            igdb = self.concept.get_igdb_cover_url()
+            igdb = self.concept.get_igdb_cover_url(size=igdb_size)
             if igdb:
                 return igdb
 
@@ -669,6 +661,35 @@ class Game(models.Model):
             return self.title_image
 
         return self.title_icon_url or ''
+
+    @property
+    def display_image_url(self):
+        """Best cover-art URL for this game with the full fallback chain.
+
+        Normal path (IGDB-first):
+        1. Trusted IGDB cover (Concept.get_igdb_cover_url)
+        2. PSN MASTER icon (Concept.concept_icon_url, skipped for PP_* stubs)
+        3. PSN store art (Game.title_image)
+        4. Generic PSN title icon (Game.title_icon_url)
+
+        When force_title_icon is set (admin flag for games with bad PSN
+        store art), PSN intermediate sources are skipped entirely: we try
+        a trusted IGDB cover, otherwise fall straight to title_icon_url.
+        """
+        return self._display_image_url(igdb_size='cover_big')
+
+    @property
+    def display_image_url_large(self):
+        """display_image_url variant that requests IGDB's `t_cover_big_2x`
+        size (528x748) instead of `t_cover_big` (264x374). Same 3:4
+        portrait aspect ratio — just at retina density. For surfaces that
+        render the cover art larger than the default thumbnail, like the
+        platinum share card. `t_720p` and `t_1080p` are 16:9 landscape
+        and would distort/letterbox a portrait cover, so don't reach for
+        them here. PSN fallback URLs are unchanged (PSN already serves
+        large GAMEHUB art).
+        """
+        return self._display_image_url(igdb_size='cover_big_2x')
 
     @property
     def has_cover_art(self):

@@ -15,7 +15,7 @@ if (typeof ShareImageManager !== 'undefined') {
 
 class ProfileCardShareManager extends ShareImageManager {
     constructor() {
-        super(null, {});
+        super({});
         // No rating prompt for profile cards
         this.ratingData = { hasRating: true, conceptId: null, isShovelware: false };
 
