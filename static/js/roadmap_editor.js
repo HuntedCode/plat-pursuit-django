@@ -4179,15 +4179,29 @@
                 }
             });
 
-            // Add item button
+            // Add item buttons: top (header) + bottom (below the list, only
+            // visible when items exist so writers working at the tail of a
+            // long list don't have to scroll back up).
             const addBtn = el.querySelector('.collectible-add-item-btn');
+            const addBtnBottom = el.querySelector('.collectible-add-item-btn-bottom');
+            const addBtnLabel = noTypes ? 'Add a Collectible Type above first' : 'Add an item to this area';
             addBtn.disabled = noTypes;
-            addBtn.title = noTypes ? 'Add a Collectible Type above first' : 'Add an item to this area';
-            addBtn.addEventListener('click', (e) => {
+            addBtn.title = addBtnLabel;
+            const onAddClick = (e) => {
                 e.stopPropagation();
                 if (noTypes) return;
                 this._addItemToArea(tabId, areaId);
-            });
+            };
+            addBtn.addEventListener('click', onAddClick);
+            if (addBtnBottom) {
+                addBtnBottom.disabled = noTypes;
+                addBtnBottom.title = addBtnLabel;
+                // Only show the bottom affordance once there's a list to be
+                // at the bottom OF; for empty / no-type states the header
+                // button + hint already cover the empty case.
+                addBtnBottom.style.display = (items.length > 0 && !noTypes) ? 'flex' : 'none';
+                addBtnBottom.addEventListener('click', onAddClick);
+            }
 
             // Per-area item drag reorder, attached after the items list is
             // populated.

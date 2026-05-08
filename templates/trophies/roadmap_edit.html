@@ -649,6 +649,17 @@
             </div>
 
             <div class="collectible-items-container space-y-1.5"></div>
+            {# Bottom "Add another" affordance — only shown when items exist so #}
+            {# writers working at the tail of a long list don't have to scroll  #}
+            {# back to the header button to add the next item. The header      #}
+            {# button stays the primary CTA for empty state.                   #}
+            <button type="button"
+                    class="collectible-add-item-btn-bottom mt-1.5 w-full rounded-md border border-dashed border-base-content/15 hover:border-primary/40 hover:bg-primary/5 text-base-content/55 hover:text-primary text-xs py-1.5 transition-colors flex items-center justify-center gap-1.5"
+                    style="display: none;"
+                    title="Add another item to this area">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Add another item
+            </button>
             <div class="collectible-items-empty text-[11px] italic text-base-content/35 py-2">No items yet — add the first one in playthrough order.</div>
             <div class="collectible-no-types-hint hidden text-[11px] italic text-warning/80 py-2">Define a Collectible Type above before adding items here.</div>
         </div>
