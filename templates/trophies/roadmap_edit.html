@@ -645,17 +645,27 @@
                 </div>
             </div>
 
-            {# Bulk-paste textarea (hidden by default; per-area, with type picker). #}
+            {# Bulk-paste panel (hidden by default; per-area). Two paste modes: #}
+            {#   - Plain: one item name per line, all using the dropdown type. #}
+            {#   - TSV: first line is headers (name / type / body / missable / #}
+            {#     dlc), each subsequent line is a row. Detected automatically. #}
+            {#   Excel & Sheets put TSV on the clipboard when you copy a cell  #}
+            {#   range, so paste-from-spreadsheet works without xlsx parsing.  #}
             <div class="collectible-bulk-paste-wrap hidden mb-2 rounded-md border border-dashed border-base-content/15 bg-white/[0.03] p-2">
                 <div class="flex items-center gap-2 mb-1 flex-wrap">
-                    <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50">Type for these items</label>
+                    <label class="collectible-bulk-type-label text-[10px] uppercase tracking-wider font-semibold text-base-content/50">Type for these items</label>
                     <select class="collectible-bulk-type-select select select-bordered select-xs h-6 min-h-0 py-0 text-xs"></select>
                 </div>
-                <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">One name per line</label>
-                <textarea class="collectible-bulk-paste-input textarea textarea-bordered textarea-xs w-full text-xs auto-resize"
+                <label class="collectible-bulk-input-label text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">One name per line — or paste a spreadsheet column with headers (name, type, body, missable, dlc)</label>
+                <textarea class="collectible-bulk-paste-input textarea textarea-bordered textarea-xs w-full text-xs auto-resize font-mono"
                           rows="3"
-                          placeholder="Riddler Trophy 1&#10;Riddler Trophy 2&#10;Riddler Trophy 3"
-                          maxlength="10000"></textarea>
+                          placeholder="Riddler Trophy 1&#10;Riddler Trophy 2&#10;Riddler Trophy 3&#10;&#10;— or paste a sheet with headers —&#10;name&#9;type&#9;body&#9;missable&#9;dlc&#10;Riddler Trophy 1&#9;Riddler Trophy&#9;Behind the GCPD&#9;yes&#9;"
+                          maxlength="100000"></textarea>
+                {# Live parse summary + per-row errors. Both populated by JS  #}
+                {# from _parseBulkPaste output; hidden when there's nothing  #}
+                {# to say so the panel stays compact for plain-mode pastes.  #}
+                <div class="collectible-bulk-summary hidden text-[11px] mt-1 text-base-content/55"></div>
+                <ul class="collectible-bulk-errors hidden text-[11px] mt-1 text-error/80 list-disc list-inside space-y-0.5"></ul>
                 <div class="flex items-center justify-end gap-2 mt-1">
                     <button type="button" class="collectible-bulk-cancel-btn btn btn-ghost btn-xs">Cancel</button>
                     <button type="button" class="collectible-bulk-apply-btn btn btn-primary btn-xs">Add all</button>

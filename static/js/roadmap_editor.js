@@ -10,6 +10,7 @@
     const API = window.PlatPursuit.API;
     const Toast = window.PlatPursuit.ToastManager;
     const debounce = window.PlatPursuit.debounce;
+    const HTMLUtils = window.PlatPursuit.HTMLUtils;
 
     const TROPHY_TYPE_COLORS = {
         platinum: 'badge-info',
@@ -200,6 +201,130 @@
         }
         return 'primary';
     }
+    // ---- Bulk paste (TSV) -------------------------------------------------
+    // Recognized header column keys. Header detection uses *intersection* with
+    // this set so a stray non-TSV first line ("Riddler Trophy 1") never gets
+    // misread as a header just because it has tabs (it never will, but the
+    // explicit allowlist is the load-bearing safeguard).
+    const BULK_PASTE_HEADER_KEYS = new Set(['name', 'type', 'body', 'missable', 'dlc']);
+    const BULK_PASTE_TRUTHY = new Set(['y', 'yes', 'true', '1', 'x']);
+
+    /**
+     * Parse the bulk-paste textarea into a list of item-create payloads.
+     *
+     * Two modes, auto-detected from the first line:
+     *
+     *   - Plain mode (no recognized header): one item name per line, all
+     *     using ``fallbackTypeId``. This is the original v1 behavior.
+     *   - Structured mode (TSV with `name` column): each subsequent line is
+     *     parsed as TSV. Recognized columns: name (required), type, body,
+     *     missable, dlc. Blank ``type`` cells fall back to ``fallbackTypeId``.
+     *
+     * @param {string} text - raw textarea content
+     * @param {Array}  types - the area's parent tab.collectible_types list
+     * @param {number} fallbackTypeId - dropdown's selected type id
+     * @returns {{rows: Array, errors: Array<string>, mode: string}}
+     */
+    function _parseBulkPaste(text, types, fallbackTypeId) {
+        const errors = [];
+        const allLines = (text || '').split('\n');
+        // Trim trailing blank lines but preserve internal ones; structured
+        // parsing will skip blanks too. Empty input returns no rows.
+        const lines = allLines.filter(l => l.trim().length > 0);
+        if (lines.length === 0) return { rows: [], errors, mode: 'plain' };
+
+        // ---- Header detection --------------------------------------------
+        // Structured mode requires (1) a tab in the first line and (2) at
+        // least one cell that names a recognized column. This avoids
+        // misreading a name like "Foo\tBar" as a header.
+        const first = lines[0];
+        let mode = 'plain';
+        let columns = null;
+        if (first.includes('\t')) {
+            const cells = first.split('\t').map(c => c.trim().toLowerCase());
+            const hasName = cells.includes('name');
+            const recognized = cells.filter(c => BULK_PASTE_HEADER_KEYS.has(c));
+            if (hasName && recognized.length >= 1) {
+                mode = 'tsv';
+                columns = cells;
+            }
+        }
+
+        // ---- Type resolver helper ----------------------------------------
+        // Match by name, name_plural, or slug, all case-insensitive. Returns
+        // the type id or null when not found. Empty cell -> use fallback.
+        const typeByKey = new Map();
+        (types || []).forEach(t => {
+            const keys = [t.name, t.name_plural, t.slug].filter(Boolean);
+            keys.forEach(k => typeByKey.set(String(k).toLowerCase().trim(), t.id));
+        });
+        const resolveType = (cell) => {
+            const trimmed = (cell || '').trim();
+            if (!trimmed) return fallbackTypeId || null;
+            const id = typeByKey.get(trimmed.toLowerCase());
+            return id != null ? id : null;
+        };
+
+        const truthy = (cell) => BULK_PASTE_TRUTHY.has((cell || '').trim().toLowerCase());
+
+        // ---- Plain mode --------------------------------------------------
+        if (mode === 'plain') {
+            if (!fallbackTypeId) {
+                errors.push('No type selected. Pick one from the dropdown above.');
+                return { rows: [], errors, mode };
+            }
+            const rows = lines.map(line => ({
+                name: line.trim().slice(0, 200),
+                type_id: fallbackTypeId,
+                body: '',
+                is_missable: false,
+                is_dlc: false,
+            }));
+            return { rows, errors, mode };
+        }
+
+        // ---- Structured mode ---------------------------------------------
+        const idx = (col) => columns.indexOf(col);
+        const nameCol = idx('name');
+        const typeCol = idx('type');
+        const bodyCol = idx('body');
+        const missCol = idx('missable');
+        const dlcCol = idx('dlc');
+
+        const rows = [];
+        // Skip the header line (lines[0]); subsequent lines are data rows.
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            const cells = line.split('\t');
+            const get = (n) => (n >= 0 ? (cells[n] || '') : '');
+            const rowNum = i + 1;  // 1-indexed for human-friendly errors
+            const name = get(nameCol).trim().slice(0, 200);
+            if (!name) {
+                errors.push(`Row ${rowNum}: name is required.`);
+                continue;
+            }
+            const typeId = resolveType(get(typeCol));
+            if (!typeId) {
+                const available = (types || []).map(t => t.name).filter(Boolean).join(', ') || '(none)';
+                const cell = get(typeCol).trim();
+                errors.push(
+                    cell
+                        ? `Row ${rowNum}: type ${JSON.stringify(cell)} not found. Available: ${available}`
+                        : `Row ${rowNum}: type column blank and no default type selected.`,
+                );
+                continue;
+            }
+            rows.push({
+                name,
+                type_id: typeId,
+                body: get(bodyCol).trim(),
+                is_missable: truthy(get(missCol)),
+                is_dlc: truthy(get(dlcCol)),
+            });
+        }
+        return { rows, errors, mode };
+    }
+
     // Slugify mirrors Django's slugify enough for client-side preview.
     // Server still re-runs slugify on merge, so this is just for the
     // slug pill display while the type is being edited.
@@ -864,13 +989,16 @@
                     id: this.nextId(),
                     name: (body.name || '').trim() || 'New Item',
                     area_id: areaId,
-                    body: '',
+                    // Bulk-paste callers may seed body / flags directly so we
+                    // skip the per-item PATCH round-trip; single-add callers
+                    // omit them and get the existing empty defaults.
+                    body: typeof body.body === 'string' ? body.body : '',
                     youtube_url: '',
                     youtube_channel_name: '',
                     youtube_channel_url: '',
                     gallery_images: [],
-                    is_missable: false,
-                    is_dlc: false,
+                    is_missable: !!body.is_missable,
+                    is_dlc: !!body.is_dlc,
                     order: existingInArea.length,
                     created_by_id: viewerProfileId,
                     last_edited_by_id: viewerProfileId,
@@ -4147,6 +4275,9 @@
             const bulkApply = el.querySelector('.collectible-bulk-apply-btn');
             const bulkCancel = el.querySelector('.collectible-bulk-cancel-btn');
             const bulkTypeSelect = el.querySelector('.collectible-bulk-type-select');
+            const bulkTypeLabel = el.querySelector('.collectible-bulk-type-label');
+            const bulkSummary = el.querySelector('.collectible-bulk-summary');
+            const bulkErrors = el.querySelector('.collectible-bulk-errors');
             this._populateTypeSelect(bulkTypeSelect, types, types[0]?.id);
             // Disable the bulk-paste path entirely when there are no types.
             bulkBtn.disabled = noTypes;
@@ -4162,30 +4293,78 @@
             bulkCancel.addEventListener('click', (e) => {
                 e.stopPropagation();
                 bulkInput.value = '';
+                bulkSummary.classList.add('hidden');
+                bulkErrors.classList.add('hidden');
                 bulkWrap.classList.add('hidden');
             });
+
+            // Live parse-preview: re-run on every input change so writers see
+            // type-resolution / row-count feedback before they hit Add all.
+            const refreshBulkPreview = () => {
+                const fallback = parseInt(bulkTypeSelect.value, 10);
+                const parsed = _parseBulkPaste(bulkInput.value, types, fallback);
+                // Type-dropdown label flips to "default" copy in TSV mode so
+                // it's clear the dropdown is just a fallback for blank `type`
+                // cells — not the type for every row.
+                if (bulkTypeLabel) {
+                    bulkTypeLabel.textContent = parsed.mode === 'tsv'
+                        ? "Default type (used when 'type' column is blank)"
+                        : 'Type for these items';
+                }
+                // Errors first — Add all is gated on zero errors.
+                if (parsed.errors.length > 0) {
+                    bulkErrors.innerHTML = parsed.errors
+                        .map(e => `<li>${HTMLUtils.escape(e)}</li>`)
+                        .join('');
+                    bulkErrors.classList.remove('hidden');
+                } else {
+                    bulkErrors.classList.add('hidden');
+                }
+                // Summary: row count + per-type breakdown so the writer can
+                // sanity-check at a glance ("12 items: 8 Riddler Trophy, 4
+                // Health Upgrade") before committing.
+                if (parsed.rows.length > 0) {
+                    const byType = new Map();
+                    parsed.rows.forEach(r => byType.set(r.type_id, (byType.get(r.type_id) || 0) + 1));
+                    const breakdown = Array.from(byType.entries())
+                        .map(([tid, n]) => {
+                            const t = types.find(x => x.id === tid);
+                            return `${n} ${t ? t.name : 'unknown'}`;
+                        })
+                        .join(', ');
+                    bulkSummary.textContent =
+                        `Will add ${parsed.rows.length} item${parsed.rows.length === 1 ? '' : 's'}: ${breakdown}`;
+                    bulkSummary.classList.remove('hidden');
+                } else {
+                    bulkSummary.classList.add('hidden');
+                }
+                bulkApply.disabled = parsed.rows.length === 0 || parsed.errors.length > 0;
+            };
+            bulkInput.addEventListener('input', refreshBulkPreview);
+            bulkTypeSelect.addEventListener('change', refreshBulkPreview);
+            // Initial state so Add all is correctly disabled on empty input.
+            refreshBulkPreview();
+
             bulkApply.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                const lines = bulkInput.value
-                    .split('\n')
-                    .map(l => l.trim())
-                    .filter(l => l.length > 0);
-                if (lines.length === 0) return;
-                const typeId = parseInt(bulkTypeSelect.value, 10);
-                if (!typeId) return;
+                const fallback = parseInt(bulkTypeSelect.value, 10);
+                const parsed = _parseBulkPaste(bulkInput.value, types, fallback);
+                if (parsed.rows.length === 0 || parsed.errors.length > 0) return;
                 bulkApply.disabled = true;
                 try {
                     const seg = isUnsorted ? 'null' : String(areaId);
-                    for (const line of lines) {
+                    for (const row of parsed.rows) {
                         await apiCall(
                             'post',
                             `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/items/`,
-                            { type_id: typeId, name: line.slice(0, 200) }
+                            row,
                         );
                     }
                     bulkInput.value = '';
+                    bulkSummary.classList.add('hidden');
+                    bulkErrors.classList.add('hidden');
                     bulkWrap.classList.add('hidden');
-                    Toast.show(`Added ${lines.length} item${lines.length === 1 ? '' : 's'}.`, 'success');
+                    Toast.show(`Added ${parsed.rows.length} item${parsed.rows.length === 1 ? '' : 's'}.`, 'success');
                     this.renderAll(tabId);
                 } catch (err) {
                     Toast.show('Failed to add items.', 'error');
