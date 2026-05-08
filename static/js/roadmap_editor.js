@@ -2885,7 +2885,16 @@
             const trophyId = opt.dataset.trophyId;
             const trophyName = opt.dataset.trophyName;
 
-            applyFormat(textarea, '[', `](#trophy-guide-${trophyId})`, trophyName);
+            // Trophy name is already authoritative (writer picked it from
+            // the list), so there's no placeholder to overtype — drop the
+            // cursor after the closing `)` so they can keep typing the
+            // next word, matching how :ps-icon: / [[collectible]] inserts
+            // behave. (`applyFormat` would select the inner name, which
+            // breaks flow when the writer has nothing to replace it with.)
+            insertTextPreservingUndo(
+                textarea,
+                `[${trophyName}](#trophy-guide-${trophyId})`,
+            );
             picker.remove();
         });
 
