@@ -4190,13 +4190,17 @@
                     { name: 'New Area' }
                 );
                 this.renderAll(tabId);
-                // Focus the new chip's input so the writer can immediately type.
+                // Scroll the new card into view + focus its name input so the
+                // writer can immediately type without hunting for it.
                 requestAnimationFrame(() => {
-                    const newChip = document.querySelector(
-                        `.collectible-area-chip[data-area-id="${created.id}"] .collectible-area-name-input`
+                    const newCard = document.querySelector(
+                        `.collectible-area-card[data-area-id="${created.id}"]`
                     );
-                    newChip?.focus();
-                    newChip?.select();
+                    if (!newCard) return;
+                    newCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const nameInput = newCard.querySelector('.collectible-area-name-input');
+                    nameInput?.focus({ preventScroll: true });
+                    nameInput?.select();
                 });
             } catch (err) {
                 Toast.show('Failed to add area.', 'error');
