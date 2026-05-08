@@ -1401,6 +1401,34 @@ html {
   scroll-padding-top: calc(var(--chrome-height, 5rem) + 1.5rem);
 }
 
+/* ===== <details> open/close animation =================================
+   `<details>` doesn't animate natively — content snaps when the open
+   attribute toggles. Modern CSS solves this with `interpolate-size:
+   allow-keywords` (lets `auto` animate to a numeric value) plus the
+   `::details-content` pseudo (the part that hides when closed). We
+   transition `block-size` and use `allow-discrete` on
+   `content-visibility` so the close direction works too.
+
+   Older browsers (Safari < 18.2, Firefox < 137) ignore both features
+   and fall back to today's snap behavior — no breakage, just no
+   animation. Covers every <details> on the page (trophy guide rows,
+   collectible area + type cards, formatting cheatsheet) with one
+   rule, which is the consistency we want.
+   ============================================================================ */
+:root {
+  interpolate-size: allow-keywords;
+}
+details::details-content {
+  block-size: 0;
+  overflow: clip;
+  transition:
+    block-size 200ms ease,
+    content-visibility 200ms allow-discrete;
+}
+details[open]::details-content {
+  block-size: auto;
+}
+
 /* Unified Item Creator */
 [id^="item-creator-"] {
   @apply transition-all duration-200;
