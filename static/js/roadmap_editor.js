@@ -3319,8 +3319,8 @@
 
         _onFilePicked(file) {
             if (!file) return;
-            if (file.size > 5 * 1024 * 1024) {
-                Toast.show('Image must be under 5MB.', 'error');
+            if (file.size > 10 * 1024 * 1024) {
+                Toast.show('Image must be under 10MB.', 'error');
                 return;
             }
             if (!file.type.startsWith('image/')) {

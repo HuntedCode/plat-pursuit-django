@@ -108,7 +108,7 @@ class RoadmapImageUploadView(APIView):
         from trophies.image_utils import process_roadmap_image, validate_image
 
         try:
-            validate_image(image)
+            validate_image(image, max_size_mb=10)
         except Exception as e:
             return Response(
                 {'error': str(e)},
