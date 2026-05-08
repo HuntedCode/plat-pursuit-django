@@ -4030,13 +4030,19 @@
 
             const empty = container.parentElement.querySelector('.collectible-areas-empty');
             const countBadge = container.parentElement.querySelector('.collectible-areas-count');
+            const addBottom = container.parentElement.querySelector('.add-collectible-area-btn-bottom');
             const areas = tab.collectible_areas || [];
             if (countBadge) countBadge.textContent = String(areas.length);
 
             const hasUnsorted = this._hasUnsortedItems(tab);
             // Empty-state visible only when there are no real areas AND no
             // orphaned items needing the Unsorted bucket.
-            if (empty) empty.classList.toggle('hidden', areas.length > 0 || hasUnsorted);
+            const hasAnyAreas = areas.length > 0 || hasUnsorted;
+            if (empty) empty.classList.toggle('hidden', hasAnyAreas);
+            // Bottom "Add another area" mirrors the per-area "Add another
+            // item" affordance: only useful once a list exists; the empty
+            // state covers the zero-areas case.
+            if (addBottom) addBottom.style.display = hasAnyAreas ? 'flex' : 'none';
 
             areas.forEach(area => {
                 const el = this._buildAreaCard(tabId, tab, area);
