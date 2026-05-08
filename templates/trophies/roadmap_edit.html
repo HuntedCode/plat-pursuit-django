@@ -380,6 +380,21 @@
                     {# Steps rendered by JS from the data block at the top of the page. #}
                 </div>
 
+                {# Bottom "Add another step" affordance — mirrors the per-area  #}
+                {# Add Item / Add Area pattern so writers working at the tail of #}
+                {# a long step list don't have to scroll back up. Reuses the    #}
+                {# `.add-step-btn` class so the existing init-time handler      #}
+                {# picks it up automatically. JS toggles `style.display` based  #}
+                {# on whether any steps exist (empty state covers zero case).   #}
+                <button type="button"
+                        class="add-step-btn add-step-btn-bottom mt-2 w-full rounded-md border border-dashed border-base-content/15 hover:border-primary/40 hover:bg-primary/5 text-base-content/55 hover:text-primary text-sm py-2 transition-colors flex items-center justify-center gap-1.5"
+                        style="display: none;"
+                        data-tab-id="{{ roadmap.id }}"
+                        title="Add another step">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    Add another step
+                </button>
+
                 <div class="steps-empty-state hidden text-center py-8">
                     <p class="text-base-content/40 text-sm">No steps yet. Add your first step to start building the roadmap.</p>
                 </div>

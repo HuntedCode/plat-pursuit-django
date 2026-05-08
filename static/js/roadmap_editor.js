@@ -1863,13 +1863,19 @@
 
         container.innerHTML = '';
         const emptyState = container.parentElement.querySelector('.steps-empty-state');
+        const addBottom = container.parentElement.querySelector('.add-step-btn-bottom');
 
         if (tabData.steps.length === 0) {
             emptyState?.classList.remove('hidden');
+            if (addBottom) addBottom.style.display = 'none';
             return;
         }
 
         emptyState?.classList.add('hidden');
+        // Bottom "Add another step" mirrors the per-area Add Item / Add
+        // Area affordance — only useful once a list exists. Empty state
+        // covers the zero case via the header CTA.
+        if (addBottom) addBottom.style.display = 'flex';
 
         tabData.steps.forEach((step, index) => {
             const el = createStepElement(step, index + 1, tabData.trophy_group_id);
