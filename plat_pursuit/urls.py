@@ -19,7 +19,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.views import LogoutView
-from django.contrib.sitemaps.views import sitemap
+from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView
@@ -313,7 +313,19 @@ urlpatterns = [
     path("paypal/webhook/", paypal_webhook, name="paypal_webhook"),
     path('ads.txt', AdsTxtView.as_view(), name='ads_txt'),
     path('robots.txt', RobotsTxtView.as_view(), name='robots_txt'),
-    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
+    # Sitemap index: /sitemap.xml returns the index of section sitemaps,
+    # crawlers fetch each /sitemap-<section>.xml on demand. This bounds the
+    # per-request memory cost and matches sitemap-protocol best practices
+    # for sites with tens of thousands of URLs. (Bots that hit /sitemap.xml
+    # directly used to materialize every Game/Profile row at once for an
+    # ~160 MB allocation per fetch — the May 2026 OOM contributor.)
+    path('sitemap.xml', sitemap_index, {'sitemaps': sitemaps}, name='sitemap'),
+    path(
+        'sitemap-<section>.xml',
+        sitemap,
+        {'sitemaps': sitemaps},
+        name='sitemap_section',
+    ),
 
     path('privacy/', PrivacyPolicyView.as_view(), name='privacy'),
     path('terms/', TermsOfServiceView.as_view(), name='terms'),
