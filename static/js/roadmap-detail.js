@@ -557,7 +557,15 @@
 
             function makeHeader(phaseKey, emoji, label, count, badgeClass) {
                 const header = document.createElement('div');
-                header.className = 'phase-section-header flex items-center gap-2 mt-4 first:mt-0 mb-1 pl-1';
+                // Wider strip with the phase's color tinted into the background
+                // and a 4px left stripe — reads as a real section divider rather
+                // than a small badge in flow with the trophy cards. Color is
+                // pulled from the badge class (`badge-info` → `info`) so daisyUI
+                // theme tokens drive both the strip and the existing badge.
+                const phaseColor = (badgeClass || '').replace(/^badge-/, '') || 'neutral';
+                header.className = 'phase-section-header mt-6 first:mt-2 mb-2 flex items-center gap-2.5 px-3 py-2 rounded-lg border border-base-content/10 border-l-4';
+                header.style.borderLeftColor = `var(--color-${phaseColor})`;
+                header.style.backgroundColor = `oklch(from var(--color-${phaseColor}) l c h / 0.08)`;
                 // Data attributes let the TOC sync extract metadata without parsing
                 // the visible text — and let collapse state key off a stable id.
                 header.dataset.phaseKey = phaseKey;
@@ -566,9 +574,9 @@
                 header.dataset.phaseCount = count;
                 header.dataset.phaseBadgeClass = badgeClass;
                 header.innerHTML = `
-                    <span class="badge badge-sm ${badgeClass} font-semibold gap-1">${emoji} ${label}</span>
-                    <span class="text-xs text-base-content/40">${count}</span>
-                    <div class="flex-1 h-px bg-base-content/10 ml-1"></div>
+                    <span class="text-base leading-none shrink-0" aria-hidden="true">${emoji}</span>
+                    <span class="text-sm font-bold uppercase tracking-wider text-base-content">${label}</span>
+                    <span class="badge badge-xs ${badgeClass} ml-auto">${count}</span>
                 `;
                 return header;
             }
