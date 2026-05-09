@@ -147,6 +147,64 @@ Note: `RoadmapEditLock`, `RoadmapRevision`, `RoadmapNote`, `RoadmapNoteRead`, an
 
 ---
 
+## Performance: Per-User Querysets Must DB-Aggregate
+
+PlatPursuit users range from 0 to 250,000+ earned trophies. Code that handles 100 rows fine in code review will OOM the gunicorn worker (or hit the 30-second timeout and 502) for power users. We hit this exact pattern at least eight times across `dashboard_service.py` and `stats_service.py` during the May 2026 whale OOM saga; each instance felt small in isolation but together cost a multi-day firefight.
+
+**Rule:** When a queryset filters by `profile=...` and produces aggregate output (counts, sums, averages, distributions, min/max, group-by tallies), the aggregation must happen in the database. Never iterate the queryset in Python and build Counters/dicts/lists from it.
+
+**Bad:**
+```python
+counts = defaultdict(int)
+for et in EarnedTrophy.objects.filter(profile=profile, earned=True):
+    for cg in et.trophy.game.concept.concept_genres.all():
+        counts[cg.genre.name] += 1
+```
+
+**Good:**
+```python
+counts = dict(
+    EarnedTrophy.objects.filter(profile=profile, earned=True)
+    .values('trophy__game__concept__concept_genres__genre__name')
+    .annotate(c=Count('id'))
+    .values_list('trophy__game__concept__concept_genres__genre__name', 'c')
+)
+```
+
+Postgres handles the aggregation in bounded memory (`work_mem`) and returns ~10-100 summary rows. Python iteration over 250K+ rows materializes hundreds of MB of ORM objects + JSONFields and takes 30+ seconds.
+
+**Common anti-patterns to flag in review:**
+- `for X in queryset:` building counts, sums, or sets — replace with `.values().annotate(Count('id'))` / `.aggregate()`
+- `Counter(x.field for x in qs)` — replace with `.values('field').annotate(c=Count('id'))`
+- `list(qs.values_list('field', flat=True))` followed by Python aggregation — replace with the above
+- `defaultdict(int)` followed by per-row iteration
+
+**Acceptable:** iteration over a profile-scoped queryset bounded by an explicit `[:N]` slice (e.g. `[:8]` for a preview grid). ProfileGame iteration (~hundreds-thousands for whales) is borderline OK for cheap per-row work, but prefer aggregation when possible.
+
+**Diagnostic tool:** `python manage.py profile_render <url> --user <whale_username> --no-warmup` (run via Render Shell against prod) surfaces these issues in 30 seconds, listing the top allocation sites by file:line. If the top entry is a `for X in qs:` loop in our code, it needs fixing.
+
+---
+
+## Premium Preview Pattern: Never Run Heavy Code Against Real User Data
+
+When a feature shows a "locked" or "preview" UI for users who don't have access (premium previews, gated content), the data-fetching code path must NOT execute against the actual user's data. We tripped this twice:
+
+1. The original premium preview rendering ran each premium module's provider against a "showcase profile" inline during the dashboard render, allocating 200-2400 MB per cold-cache hit (the May 2026 homepage OOM class).
+2. Phase 0 emptied the `preview_html` template variable but left `is_preview` modules with `load_strategy='server'`, so `get_server_module_data` still executed every premium provider against the real user's data — for free-tier whale users this fanned out to 10+ providers running sequentially against their 250K-trophy dataset, taking 91 seconds and 153 MB per render → 502s on `/`.
+
+**Rule:** Any preview/locked UI's data layer must explicitly check the gate flag and skip work BEFORE invoking the underlying provider. The visual placeholder must come from one of:
+1. A static gradient/skeleton (cheapest, currently in use for dashboard premium previews)
+2. A hand-crafted sample fixture stored as constants
+3. Cached output from a single canonical demo profile, refreshed via cron (NOT on the request path)
+
+**Never** derive the placeholder from the actual viewing user's data on the request path, no matter how visually you hide it (blur, gradient overlay, etc.). The visual lock is harmless; the data fetching isn't.
+
+**Concrete enforcement points:**
+- `trophies/services/dashboard_service.py` `get_server_module_data` skips `mod.get('is_preview')` items. If a similar orchestrator gets added elsewhere (a stats-page preview loop, a community-page preview loop, etc.), the same skip must be there.
+- When adding a new preview/locked feature, the code review checklist is: "what does this look like for a free-tier user with a maxed-out library?" If the data layer runs at all in that scenario, the design is wrong.
+
+---
+
 ## Quality Workflow: Project-Specific Extensions
 
 The global CLAUDE.md defines the three-phase workflow (Plan, Build, Polish). Below are PlatPursuit-specific additions to each phase.
