@@ -7,6 +7,7 @@
 {# need. Deep links (TOC clicks, trophy-mention pills, ?#trophy-guide-X     #}
 {# in URL) auto-open via roadmap-detail.js's navigateToGuide/handleDeepLink. #}
 <details id="trophy-guide-{{ guide.trophy_id }}"
+        data-toc-section
         data-order="{{ guide.trophy_id }}"
         data-type="{% if trophy %}{{ trophy.trophy_type }}{% endif %}"
         data-rarity="{% if trophy %}{{ trophy.trophy_earn_rate }}{% else %}100{% endif %}"
