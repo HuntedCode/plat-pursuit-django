@@ -123,6 +123,19 @@
     const LEGACY_C_AREA_ITEMS_REORDER_PATTERN = new RegExp(
         `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+|null)/items/reorder/?$`
     );
+    // Trophy-marker (nav anchor) operations per area. Markers share the
+    // area's per-item `order` space so reorder is unified — the
+    // `entries/reorder` endpoint accepts mixed [{kind, id}] payloads and
+    // rewrites both items.order and markers.order in lockstep.
+    const LEGACY_C_AREA_MARKERS_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/markers/?$`
+    );
+    const LEGACY_C_AREA_MARKERS_DETAIL_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/markers/(-?\\d+)/?$`
+    );
+    const LEGACY_C_AREA_ENTRIES_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+|null)/entries/reorder/?$`
+    );
 
     const COLLECTIBLE_COLORS = ['primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error'];
     const COLLECTIBLE_DEFAULT_ICON = '🎯';
@@ -510,6 +523,25 @@
                 });
                 (tab.trophy_guides || []).forEach(g => {
                     if (typeof g.id === 'number' && g.id < minId) minId = g.id;
+                });
+                // Resumed sessions may have unsaved areas / markers / items
+                // with negative ids — include them so new entities don't
+                // reuse a still-pending negative id.
+                (tab.collectible_areas || []).forEach(a => {
+                    if (typeof a.id === 'number' && a.id < minId) minId = a.id;
+                    // Defensive: pre-seed `markers` so old branch payloads
+                    // (saved before markers shipped) still have the array
+                    // when handlers append to it.
+                    if (!Array.isArray(a.markers)) a.markers = [];
+                    a.markers.forEach(m => {
+                        if (typeof m.id === 'number' && m.id < minId) minId = m.id;
+                    });
+                });
+                (tab.collectible_types || []).forEach(ct => {
+                    if (typeof ct.id === 'number' && ct.id < minId) minId = ct.id;
+                    (ct.items || []).forEach(it => {
+                        if (typeof it.id === 'number' && it.id < minId) minId = it.id;
+                    });
                 });
             });
             this.nextLocalId = minId - 1;
@@ -1105,6 +1137,98 @@
 
                 this.schedulePush();
                 return { ...item };
+            }
+
+            // ── Trophy nav markers (per area) ─────────────────────────
+
+            // Create marker: POST /tab/Y/collectible-areas/A/markers/
+            // Body: { trophy_id }. Marker appended at end of the area's
+            // unified order space (items + markers share `order`).
+            if ((match = url.match(LEGACY_C_AREA_MARKERS_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const areaId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const area = (tab.collectible_areas || []).find(a => a.id === areaId);
+                if (!area) throw new Error(`Area ${areaId} not in branch.`);
+                if (!area.markers) area.markers = [];
+                // New marker's order = end of the area's unified sequence.
+                // Author drag-reorders from there if they want it earlier.
+                const itemCount = (tab.collectible_types || [])
+                    .reduce((n, ct) => n + (ct.items || []).filter(i => (i.area_id ?? null) === areaId).length, 0);
+                const newMarker = {
+                    id: this.nextId(),
+                    trophy_id: parseInt(body.trophy_id, 10),
+                    order: itemCount + area.markers.length,
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                area.markers.push(newMarker);
+                this.schedulePush();
+                return { ...newMarker };
+            }
+
+            // Delete / patch marker: DELETE or PATCH /tab/Y/collectible-areas/A/markers/M/
+            if ((match = url.match(LEGACY_C_AREA_MARKERS_DETAIL_PATTERN)) && (m === 'delete' || m === 'patch')) {
+                const tabId = parseInt(match[1], 10);
+                const areaId = parseInt(match[2], 10);
+                const markerId = parseInt(match[3], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const area = (tab.collectible_areas || []).find(a => a.id === areaId);
+                if (!area) throw new Error(`Area ${areaId} not in branch.`);
+                if (!area.markers) area.markers = [];
+                if (m === 'delete') {
+                    area.markers = area.markers.filter(mk => mk.id !== markerId);
+                    this.schedulePush();
+                    return null;
+                }
+                const marker = area.markers.find(mk => mk.id === markerId);
+                if (!marker) throw new Error(`Marker ${markerId} not in branch.`);
+                if ('trophy_id' in body) marker.trophy_id = parseInt(body.trophy_id, 10);
+                if ('order' in body) marker.order = body.order;
+                marker.last_edited_by_id = viewerProfileId;
+                this.schedulePush();
+                return { ...marker };
+            }
+
+            // Reorder a mixed sequence: POST /tab/Y/collectible-areas/A/entries/reorder/
+            // Body: { entries: [{kind: 'item'|'marker', id: N}, ...] }
+            // Rewrites both items.order and markers.order in lockstep so
+            // the unified per-area sequence reflects the new visual order.
+            if ((match = url.match(LEGACY_C_AREA_ENTRIES_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const areaSeg = match[2];
+                const areaId = areaSeg === 'null' ? null : parseInt(areaSeg, 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const entries = body.entries || [];
+                const itemsByArea = {};
+                (tab.collectible_types || []).forEach(ct => {
+                    (ct.items || []).forEach(it => {
+                        if ((it.area_id ?? null) === areaId) {
+                            itemsByArea[it.id] = it;
+                        }
+                    });
+                });
+                const area = areaId == null ? null
+                    : (tab.collectible_areas || []).find(a => a.id === areaId);
+                const markersById = {};
+                if (area && area.markers) {
+                    area.markers.forEach(mk => { markersById[mk.id] = mk; });
+                }
+                entries.forEach((entry, i) => {
+                    const id = parseInt(entry.id, 10);
+                    if (entry.kind === 'marker') {
+                        const mk = markersById[id];
+                        if (mk) mk.order = i;
+                    } else {
+                        const it = itemsByArea[id];
+                        if (it) it.order = i;
+                    }
+                });
+                this.schedulePush();
+                return { status: 'ok' };
             }
 
             throw new Error(`BranchProxy: unhandled ${method.toUpperCase()} ${url}`);
@@ -3097,8 +3221,16 @@
     //  Trophy Link Picker
     // ------------------------------------------------------------------ //
 
-    function showTrophyLinkPicker(textarea) {
-        // Find the active tab's trophy group
+    /**
+     * Generic trophy picker modal. Resolves the active tab's trophy list
+     * from `trophiesByGroup`, renders a searchable list, and invokes
+     * `onPick(trophyId, trophyName)` when the writer selects one.
+     *
+     * @param {object} opts
+     *   - title:     string title displayed in the modal header
+     *   - onPick:    (trophyId, trophyName) => void
+     */
+    function showTrophyPicker({ title = 'Pick a Trophy', onPick }) {
         const activePanel = document.querySelector(`.roadmap-tab-panel:not(.hidden)`);
         const groupId = activePanel?.dataset.groupId;
         const trophies = trophiesByGroup[groupId] || [];
@@ -3108,7 +3240,6 @@
             return;
         }
 
-        // Remove any existing picker
         document.getElementById('trophy-link-picker')?.remove();
 
         const picker = document.createElement('div');
@@ -3117,7 +3248,7 @@
         picker.innerHTML = `
             <div class="bg-base-200 border-2 border-base-300 rounded-xl shadow-2xl w-[90vw] max-w-md max-h-[70vh] flex flex-col">
                 <div class="flex items-center justify-between p-3 border-b border-base-300">
-                    <h3 class="text-sm font-bold">Link to Trophy Guide</h3>
+                    <h3 class="text-sm font-bold">${HTMLUtils.escape(title)}</h3>
                     <button class="btn btn-ghost btn-xs btn-circle" id="trophy-link-close">&times;</button>
                 </div>
                 <div class="p-2 border-b border-base-300">
@@ -3150,28 +3281,15 @@
         search.focus();
         search.addEventListener('input', () => renderList(search.value));
 
-        // Select trophy
         list.addEventListener('click', (e) => {
             const opt = e.target.closest('.trophy-link-option');
             if (!opt) return;
-
             const trophyId = opt.dataset.trophyId;
             const trophyName = opt.dataset.trophyName;
-
-            // Trophy name is already authoritative (writer picked it from
-            // the list), so there's no placeholder to overtype — drop the
-            // cursor after the closing `)` so they can keep typing the
-            // next word, matching how :ps-icon: / [[collectible]] inserts
-            // behave. (`applyFormat` would select the inner name, which
-            // breaks flow when the writer has nothing to replace it with.)
-            insertTextPreservingUndo(
-                textarea,
-                `[${trophyName}](#trophy-guide-${trophyId})`,
-            );
             picker.remove();
+            if (typeof onPick === 'function') onPick(trophyId, trophyName);
         });
 
-        // Close
         picker.querySelector('#trophy-link-close').addEventListener('click', () => picker.remove());
         picker.addEventListener('click', (e) => {
             if (e.target === picker) picker.remove();
@@ -3181,6 +3299,23 @@
                 picker.remove();
                 document.removeEventListener('keydown', escHandler);
             }
+        });
+    }
+
+    function showTrophyLinkPicker(textarea) {
+        // Trophy name is authoritative (writer picked it from the list), so
+        // there's no placeholder to overtype — drop the cursor after the
+        // closing `)` so they can keep typing the next word, matching how
+        // :ps-icon: / [[collectible]] inserts behave. (`applyFormat` would
+        // select the inner name, which breaks flow.)
+        showTrophyPicker({
+            title: 'Link to Trophy Guide',
+            onPick: (trophyId, trophyName) => {
+                insertTextPreservingUndo(
+                    textarea,
+                    `[${trophyName}](#trophy-guide-${trophyId})`,
+                );
+            },
         });
     }
 
@@ -4263,7 +4398,13 @@
             const tab = tabsData.find(t => t.id === tabId);
             const branchTab = (BranchProxy.state?.tabs || []).find(t => t.id === tabId);
             if (!tab || !branchTab) return;
-            tab.collectible_areas = (branchTab.collectible_areas || []).map(a => ({ ...a }));
+            // Areas carry their `markers` arrays — clone so the local
+            // tabsData mirror doesn't share references with the canonical
+            // BranchProxy state.
+            tab.collectible_areas = (branchTab.collectible_areas || []).map(a => ({
+                ...a,
+                markers: (a.markers || []).map(m => ({ ...m })),
+            }));
             tab.collectible_types = (branchTab.collectible_types || []).map(ct => ({
                 ...ct,
                 items: (ct.items || []).map(it => ({ ...it })),
@@ -4290,6 +4431,31 @@
             });
             out.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             return out;
+        },
+
+        // Trophy markers for an area. Markers anchor to *real* areas only —
+        // the Unsorted bucket (areaId === null) returns []. Returns a
+        // shallow-cloned list with `_kind = 'marker'` for the unified render
+        // path; items use `_kind = 'item'`.
+        _markersForArea(tab, areaId) {
+            if (areaId == null) return [];
+            const area = (tab.collectible_areas || []).find(a => a.id === areaId);
+            if (!area || !Array.isArray(area.markers)) return [];
+            return area.markers.map(m => ({ ...m, _kind: 'marker' }));
+        },
+
+        // Unified entries for an area: items + markers, sorted by their
+        // shared `order` field. Items get `_kind = 'item'`. The render
+        // path branches on `_kind` to pick the right row builder.
+        _entriesForArea(tab, areaId) {
+            const items = this._itemsForArea(tab, areaId).map(it => ({ ...it, _kind: 'item' }));
+            const markers = this._markersForArea(tab, areaId);
+            return [...items, ...markers].sort((a, b) => {
+                const oa = a.order ?? 0, ob = b.order ?? 0;
+                if (oa !== ob) return oa - ob;
+                // Stable tiebreaker: items before markers when they collide.
+                return a._kind === b._kind ? 0 : (a._kind === 'item' ? -1 : 1);
+            });
         },
 
         // True iff any item across all types has area_id === null. Used to
@@ -4382,18 +4548,24 @@
                 });
             }
 
-            // Items list inside the area
-            const items = this._itemsForArea(tab, areaId);
+            // Entries (items + trophy markers) inside the area, ordered by
+            // their shared per-area `order` so the playthrough sequence is
+            // preserved across kinds.
+            const entries = this._entriesForArea(tab, areaId);
+            const items = entries.filter(e => e._kind === 'item');
             const itemsContainer = el.querySelector('.collectible-items-container');
             const itemsEmpty = el.querySelector('.collectible-items-empty');
             const noTypesHint = el.querySelector('.collectible-no-types-hint');
             const countBadge = el.querySelector('.collectible-area-item-count');
+            // Counter still shows item count (excluding markers — markers
+            // are nav anchors, not collectibles, so they shouldn't inflate
+            // the "N items" badge).
             countBadge.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
 
             const types = tab.collectible_types || [];
             const noTypes = types.length === 0;
 
-            if (items.length === 0) {
+            if (entries.length === 0) {
                 itemsContainer.classList.add('hidden');
                 if (noTypes) {
                     itemsEmpty.classList.add('hidden');
@@ -4408,8 +4580,10 @@
                 noTypesHint.classList.add('hidden');
             }
 
-            items.forEach(item => {
-                const row = this._buildItemElement(tabId, tab, item, areaId);
+            entries.forEach(entry => {
+                const row = entry._kind === 'marker'
+                    ? this._buildMarkerElement(tabId, tab, entry, areaId)
+                    : this._buildItemElement(tabId, tab, entry, areaId);
                 itemsContainer.appendChild(row);
             });
 
@@ -4542,8 +4716,25 @@
                 addBtnBottom.addEventListener('click', onAddClick);
             }
 
-            // Per-area item drag reorder, attached after the items list is
-            // populated.
+            // Add trophy marker button — markers don't need a type defined
+            // (they're nav anchors, not collectibles), but they DO need a
+            // real area, so the button stays disabled in the Unsorted bucket.
+            const addMarkerBtn = el.querySelector('.collectible-add-marker-btn');
+            if (addMarkerBtn) {
+                if (isUnsorted) {
+                    addMarkerBtn.disabled = true;
+                    addMarkerBtn.title = "Markers can't anchor to the Unsorted bucket — add an area first";
+                }
+                addMarkerBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (isUnsorted) return;
+                    this._addMarker(tabId, areaId);
+                });
+            }
+
+            // Per-area drag reorder over the unified entries list (items +
+            // markers share the area's `order` space). Attached after the
+            // entries are populated so the manager can index initial state.
             this._initItemDragReorderForArea(tabId, areaId, itemsContainer);
 
             return el;
@@ -5219,6 +5410,135 @@
             }
         },
 
+        // ── Trophy markers (nav anchors inside areas) ──────────────────
+
+        // Open the trophy picker; on selection, POST a marker into the area.
+        // Marker appended at end of the area's unified order space — author
+        // can drag it to its real spot. Scroll the new row into view + flash
+        // a brief ring so the writer sees where it landed (parallel to the
+        // _addItemToArea / _addArea focus pattern).
+        _addMarker(tabId, areaId) {
+            if (areaId == null) return;
+            showTrophyPicker({
+                title: 'Pick a Trophy to Mark',
+                onPick: async (trophyId) => {
+                    try {
+                        const created = await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/markers/`,
+                            { trophy_id: parseInt(trophyId, 10) },
+                        );
+                        this.renderAll(tabId);
+                        requestAnimationFrame(() => {
+                            const areaCard = document.querySelector(
+                                `.collectible-area-card[data-area-id="${areaId}"]`
+                            );
+                            const newRow = areaCard?.querySelector(
+                                `.collectible-marker-row-editor[data-marker-id="${created.id}"]`
+                            );
+                            if (!newRow) return;
+                            newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            // Brief ring flash so the eye lands on the new row
+                            // even when the area was already in the viewport.
+                            newRow.classList.add('ring-2', 'ring-primary/40');
+                            setTimeout(() => {
+                                newRow.classList.remove('ring-2', 'ring-primary/40');
+                            }, 1500);
+                        });
+                    } catch (err) {
+                        Toast.show('Failed to add marker.', 'error');
+                    }
+                },
+            });
+        },
+
+        async _deleteMarker(tabId, areaId, markerId) {
+            try {
+                await apiCall(
+                    'delete',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/markers/${markerId}/`,
+                );
+                this.renderAll(tabId);
+            } catch (err) {
+                Toast.show('Failed to delete marker.', 'error');
+            }
+        },
+
+        // Build a marker row. Shares the `.collectible-item-row` class +
+        // drag handle with item rows so DragReorderManager picks it up
+        // alongside items. `data-entry-kind="marker"` differentiates it
+        // for the reorder callback.
+        //
+        // Visual identity is keyed on the trophy's actual *type* color
+        // (bronze / silver / gold / platinum) — left stripe + soft bg
+        // tint in the trophy color so the row scans as "this is a TROPHY"
+        // instead of "ad-shaped placeholder". Three reinforcing cues:
+        //   1. Trophy color stripe + bg tint
+        //   2. The actual trophy icon image (not a generic glyph)
+        //   3. "🏆 Trophy" small caps header above the name
+        // Together those make the row feel like a first-class trophy
+        // reference, distinct from the collectible item rows around it.
+        _buildMarkerElement(tabId, tab, marker, areaId) {
+            // Resolve the trophy display data from the tab's group.
+            const groupId = tab.trophy_group_id;
+            const trophy = (trophiesByGroup[groupId] || []).find(
+                t => parseInt(t.trophy_id, 10) === parseInt(marker.trophy_id, 10),
+            );
+            // Trophy color tokens defined in input.css as
+            // --color-trophy-{bronze,silver,gold,platinum}. Fallback to
+            // bronze for unknown trophies so the row still has a stripe
+            // rather than an ugly empty edge.
+            const trophyType = trophy?.type || 'bronze';
+
+            const row = document.createElement('div');
+            row.className = 'collectible-item-row collectible-marker-row-editor rounded border border-base-content/10 border-l-4 hover:border-base-content/20 transition-colors';
+            row.style.borderLeftColor = `var(--color-trophy-${trophyType})`;
+            row.style.backgroundColor = `oklch(from var(--color-trophy-${trophyType}) l c h / 0.07)`;
+            row.dataset.itemId = String(marker.id);
+            row.dataset.entryKind = 'marker';
+            row.dataset.markerId = String(marker.id);
+
+            const iconHtml = trophy
+                ? `<img src="${trophy.icon_url}" alt="" class="w-8 h-8 rounded object-cover shrink-0 border border-base-content/10" loading="lazy">`
+                : `<div class="w-8 h-8 rounded shrink-0 bg-base-300/40 border border-base-content/10 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172"/></svg></div>`;
+            const trophyName = trophy
+                ? HTMLUtils.escape(trophy.name)
+                : `<span class="text-error/70">Unknown trophy (${marker.trophy_id})</span>`;
+            const trophyTypeBadge = trophy
+                ? `<span class="badge badge-xs ${TROPHY_TYPE_COLORS[trophy.type] || 'badge-ghost'} shrink-0 capitalize">${trophy.type}</span>`
+                : '';
+            // Header label uses the trophy's color too (text-trophy-X) for
+            // a tight visual loop between stripe, badge, and label.
+            const labelStyle = `color: var(--color-trophy-${trophyType});`;
+
+            row.innerHTML = `
+                <div class="flex items-center gap-2.5 p-2">
+                    <button type="button" class="collectible-item-handle cursor-grab text-base-content/25 hover:text-base-content/60" title="Drag to reorder within area" aria-label="Drag to reorder marker">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/></svg>
+                    </button>
+                    ${iconHtml}
+                    <div class="flex-1 min-w-0 flex flex-col leading-tight gap-0.5">
+                        <span class="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1" style="${labelStyle}">
+                            <span aria-hidden="true">🏆</span>
+                            <span>Trophy</span>
+                        </span>
+                        <span class="text-sm font-medium truncate">${trophyName}</span>
+                    </div>
+                    ${trophyTypeBadge}
+                    <button type="button" class="collectible-marker-delete-btn btn btn-ghost btn-xs text-error/60 hover:text-error" title="Remove marker" aria-label="Remove marker">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+            `;
+
+            row.querySelector('.collectible-marker-delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._deleteMarker(tabId, areaId, marker.id);
+            });
+
+            return row;
+        },
+
         _initItemDragReorderForArea(tabId, areaId, container) {
             if (!container) return;
             const seg = areaId == null ? 'null' : String(areaId);
@@ -5226,13 +5546,22 @@
                 container,
                 handleSelector: '.collectible-item-handle',
                 itemSelector: '.collectible-item-row',
-                onReorder: async (_itemId, _pos, allItemIds) => {
-                    const itemIds = allItemIds.map(x => parseInt(x, 10));
+                onReorder: async () => {
+                    // Both items and marker rows live in `container.children`
+                    // and carry `data-entry-kind` + `data-item-id`. After the
+                    // drop, the DOM order IS the new sequence — read it
+                    // directly so markers' kind survives the round-trip.
+                    const entries = Array.from(container.children)
+                        .filter(row => row.dataset && row.dataset.itemId)
+                        .map(row => ({
+                            kind: row.dataset.entryKind || 'item',
+                            id: parseInt(row.dataset.itemId, 10),
+                        }));
                     try {
                         await apiCall(
                             'post',
-                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/items/reorder/`,
-                            { item_ids: itemIds }
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/entries/reorder/`,
+                            { entries }
                         );
                         // Refresh order on local mirror (handler did it on
                         // the BranchProxy state, but tabsData is a copy).

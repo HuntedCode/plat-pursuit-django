@@ -228,10 +228,32 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             for bucket in list(area_buckets.values()) + [unsorted_bucket]:
                 bucket['items'].sort(key=lambda it: it.order)
 
+            # Trophy nav markers per area — share the area's `order` space
+            # with items so they interleave in the playthrough sequence.
+            # Unsorted bucket has no markers (markers anchor to a real area).
+            for area_obj in collectible_areas:
+                area_buckets[area_obj.id]['markers'] = list(area_obj.markers.all())
+
             # Materialize ordered area list, dropping empty ones. Each
             # bucket gets `is_complete` so the template can render an
             # already-finished chapter pre-collapsed (no payoff in showing
             # a 5/5 list expanded by default on a return visit).
+            #
+            # `entries` is the unified items+markers sequence the template
+            # iterates; each entry is tagged with `entry_kind` so the
+            # template can pick the right partial. Completion is computed
+            # from items only — markers are pure navigation.
+            def _build_entries(items, markers):
+                tagged = []
+                for it in items:
+                    it.entry_kind = 'item'
+                    tagged.append((it.order, 0, it))  # 0 = items sort first on tie
+                for m in markers:
+                    m.entry_kind = 'marker'
+                    tagged.append((m.order, 1, m))    # 1 = markers sort after
+                tagged.sort(key=lambda x: (x[0], x[1]))
+                return [t[2] for t in tagged]
+
             tracker_areas = []
             for a in collectible_areas:
                 bucket = area_buckets[a.id]
@@ -239,14 +261,16 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
                     tracker_areas.append({
                         'key': a.slug,
                         'area': a,
-                        'items': bucket['items'],
+                        'entries': _build_entries(bucket['items'], bucket.get('markers') or []),
                         'is_complete': all(it.is_found for it in bucket['items']),
                     })
             if unsorted_bucket['items']:
                 tracker_areas.append({
                     'key': UNSORTED_KEY,
                     'area': None,
-                    'items': unsorted_bucket['items'],
+                    # Unsorted has no markers (no real area to anchor to);
+                    # emit items-only entries to keep the template uniform.
+                    'entries': _build_entries(unsorted_bucket['items'], []),
                     'is_complete': all(it.is_found for it in unsorted_bucket['items']),
                 })
 
@@ -274,13 +298,16 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         )
 
         # Resolve trophy display data for trophies referenced in the
-        # roadmap's steps + trophy guides.
+        # roadmap's steps + trophy guides + collectible-area trophy markers.
         roadmap_trophy_ids = set()
         for step in roadmap.steps.all():
             for st in step.step_trophies.all():
                 roadmap_trophy_ids.add(st.trophy_id)
         for tg in roadmap.trophy_guides.all():
             roadmap_trophy_ids.add(tg.trophy_id)
+        for area_obj in roadmap.collectible_areas.all():
+            for marker in area_obj.markers.all():
+                roadmap_trophy_ids.add(marker.trophy_id)
 
         if roadmap_trophy_ids:
             context['roadmap_trophies'] = {

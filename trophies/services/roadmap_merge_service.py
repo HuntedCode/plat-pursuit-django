@@ -59,6 +59,7 @@ from django.utils.text import slugify
 
 from trophies.models import (
     Roadmap,
+    RoadmapAreaMarker,
     RoadmapCollectibleArea,
     RoadmapCollectibleItem,
     RoadmapCollectibleType,
@@ -158,6 +159,9 @@ class _ChangeCounts:
     collectible_item_creates: int = 0
     collectible_item_updates: int = 0
     collectible_item_deletes: int = 0
+    area_marker_creates: int = 0
+    area_marker_updates: int = 0
+    area_marker_deletes: int = 0
 
     def any(self) -> bool:
         return any((
@@ -178,6 +182,9 @@ class _ChangeCounts:
             self.collectible_item_creates,
             self.collectible_item_updates,
             self.collectible_item_deletes,
+            self.area_marker_creates,
+            self.area_marker_updates,
+            self.area_marker_deletes,
         ))
 
     def summary(self, ctg_label: str = '') -> str:
@@ -235,6 +242,18 @@ class _ChangeCounts:
         if self.collectible_item_deletes:
             parts.append(
                 f"deleted {self.collectible_item_deletes} collectible item{'s' if self.collectible_item_deletes != 1 else ''}"
+            )
+        if self.area_marker_creates:
+            parts.append(
+                f"added {self.area_marker_creates} trophy marker{'s' if self.area_marker_creates != 1 else ''}"
+            )
+        if self.area_marker_updates:
+            parts.append(
+                f"edited {self.area_marker_updates} trophy marker{'s' if self.area_marker_updates != 1 else ''}"
+            )
+        if self.area_marker_deletes:
+            parts.append(
+                f"deleted {self.area_marker_deletes} trophy marker{'s' if self.area_marker_deletes != 1 else ''}"
             )
         if self.content_updates:
             parts.append("updated tips/content")
@@ -712,8 +731,113 @@ def _apply_collectible_areas(
         changes.collectible_area_deletes += len(actually_deleted)
         # Items pointing at deleted areas get SET_NULL via FK on_delete,
         # so they fall back to the trailing "Misc" group on the reader.
+        # Markers cascade-delete with their parent area (the markers are
+        # area-anchored navigation; orphaning them into Unsorted would
+        # lose their meaning).
 
     return area_id_map
+
+
+def _apply_area_markers(
+    live_roadmap: Roadmap, areas_payload: list, area_id_map: dict,
+    profile, is_editor: bool, changes: _ChangeCounts,
+) -> None:
+    """Diff and apply trophy markers per area.
+
+    Each entry in ``areas_payload`` may carry a ``markers`` list. We process
+    those after areas are reconciled so payload area_ids (possibly negative
+    for brand-new areas) can be translated to live ids via ``area_id_map``.
+
+    Set-level ownership matches the rest of the collectibles surface — the
+    set owner gates create / update / delete; editors+ bypass.
+    """
+    set_owner_id = _collectibles_set_owner_id(live_roadmap)
+
+    def _enforce_set_ownership():
+        if is_editor:
+            return
+        if set_owner_id is not None and set_owner_id != profile.id:
+            raise MergeError(
+                "This roadmap's collectibles are owned by another writer. "
+                "Editors+ can override."
+            )
+
+    # Pre-fetch all live markers once (one query) instead of per-area to
+    # save N round-trips when the roadmap has many areas.
+    live_markers_by_area: dict[int, dict[int, RoadmapAreaMarker]] = {}
+    for marker in RoadmapAreaMarker.objects.filter(area__roadmap=live_roadmap):
+        live_markers_by_area.setdefault(marker.area_id, {})[marker.id] = marker
+
+    for area_payload in areas_payload:
+        markers_payload = area_payload.get('markers')
+        if markers_payload is None:
+            # Area payload doesn't mention markers at all — leave any live
+            # markers alone (treat as "not in this diff" rather than "delete").
+            continue
+
+        # Resolve which live area these markers belong to. Brand-new areas
+        # get their live id via area_id_map; pre-existing areas map identity.
+        payload_area_id = area_payload.get('id')
+        live_area_id = area_id_map.get(payload_area_id) if payload_area_id is not None else None
+        if live_area_id is None:
+            # Couldn't resolve (area was rejected by the area diff). Skip
+            # silently — orphaned markers don't make sense.
+            continue
+
+        live_markers = live_markers_by_area.get(live_area_id, {})
+        explicit_payload_ids = set()
+
+        for marker_payload in markers_payload:
+            marker_id = marker_payload.get('id')
+            trophy_id = marker_payload.get('trophy_id')
+            if trophy_id is None:
+                continue  # malformed; markers must reference a trophy
+
+            # NEW marker.
+            if marker_id is None or (isinstance(marker_id, int) and marker_id < 0):
+                _enforce_set_ownership()
+                RoadmapAreaMarker.objects.create(
+                    area_id=live_area_id,
+                    trophy_id=int(trophy_id),
+                    order=marker_payload.get('order', len(live_markers)),
+                    created_by_id=profile.id,
+                    last_edited_by_id=profile.id,
+                )
+                changes.area_marker_creates += 1
+                continue
+
+            explicit_payload_ids.add(marker_id)
+            live_marker = live_markers.get(marker_id)
+            if live_marker is None:
+                logger.warning(
+                    "Roadmap merge: payload referenced marker id %s not in area %s; skipping.",
+                    marker_id, live_area_id,
+                )
+                continue
+
+            # Diff: trophy_id and order are the only mutable fields. (We
+            # don't support migrating a marker to a different area; deleting
+            # + re-creating is the natural path for that.)
+            dirty = []
+            if int(trophy_id) != live_marker.trophy_id:
+                dirty.append(('trophy_id', int(trophy_id)))
+            if 'order' in marker_payload and marker_payload['order'] != live_marker.order:
+                dirty.append(('order', marker_payload['order']))
+            if not dirty:
+                continue
+            _enforce_set_ownership()
+            for fld, val in dirty:
+                setattr(live_marker, fld, val)
+            live_marker.last_edited_by_id = profile.id
+            live_marker.save()
+            changes.area_marker_updates += 1
+
+        # Deletes: any live marker for THIS area not referenced in the payload.
+        actually_deleted = set(live_markers.keys()) - explicit_payload_ids
+        if actually_deleted:
+            _enforce_set_ownership()
+            RoadmapAreaMarker.objects.filter(id__in=actually_deleted).delete()
+            changes.area_marker_deletes += len(actually_deleted)
 
 
 def _apply_items_for_type(
@@ -1101,6 +1225,12 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
         )
         _apply_collectible_types(
             roadmap, payload.get('collectible_types') or [],
+            area_id_map, profile, is_editor, changes,
+        )
+        # Markers anchor to areas (independent of types/items), so they
+        # can apply alongside types — no ordering dependency between them.
+        _apply_area_markers(
+            roadmap, payload.get('collectible_areas') or [],
             area_id_map, profile, is_editor, changes,
         )
 

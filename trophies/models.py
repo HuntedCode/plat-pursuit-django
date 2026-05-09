@@ -4382,6 +4382,53 @@ class RoadmapCollectibleItem(models.Model):
         return f"CollectibleItem: type={self.collectible_type_id}, name={self.name[:40]!r}"
 
 
+class RoadmapAreaMarker(models.Model):
+    """A trophy-reference nav anchor inside a collectible area's playthrough sequence.
+
+    Authors use these to flag "you'll earn trophy X around this point in the
+    playthrough" without making it a checkable collectible. Renders inline
+    in the area's items list, ordered by `order` interleaved with items
+    (which share the same per-area numeric order space). Click in the
+    reader jumps to the trophy guide row via the existing
+    `#trophy-guide-<id>` deep link.
+
+    Markers do NOT contribute to type counts, area completion, missable
+    aggregates, or any user-progress signal — they are pure navigation.
+    """
+    area = models.ForeignKey(
+        RoadmapCollectibleArea,
+        on_delete=models.CASCADE,
+        related_name='markers',
+    )
+    # PSN trophy_id (matches Trophy.trophy_id, an integer scoped to the
+    # game's trophy set). Stored as IntegerField to mirror the existing
+    # trophy_id columns elsewhere in the schema.
+    trophy_id = models.IntegerField()
+    # Shares the area's item order space — render-time interleave is by
+    # `order` regardless of kind so the playthrough sequence is preserved.
+    order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_area_markers',
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_area_markers',
+    )
+
+    class Meta:
+        ordering = ['order', 'id']
+        indexes = [
+            models.Index(
+                fields=['area', 'order'],
+                name='area_marker_order_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f"AreaMarker: area={self.area_id}, trophy_id={self.trophy_id}"
+
+
 class UserCollectibleProgress(models.Model):
     """Per-user found state for a collectible item.
 

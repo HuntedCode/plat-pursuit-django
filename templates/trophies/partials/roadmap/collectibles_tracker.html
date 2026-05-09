@@ -236,8 +236,12 @@
                             </button>
                         </div>
                         <div class="collectible-items-list space-y-2">
-                            {% for item in area_bucket.items %}
-                            {% include 'trophies/partials/roadmap/collectible_item_row.html' with item=item area=area %}
+                            {% for entry in area_bucket.entries %}
+                                {% if entry.entry_kind == 'marker' %}
+                                    {% include 'trophies/partials/roadmap/collectible_marker_row.html' with marker=entry %}
+                                {% else %}
+                                    {% include 'trophies/partials/roadmap/collectible_item_row.html' with item=entry area=area %}
+                                {% endif %}
                             {% endfor %}
                         </div>
                     </div>

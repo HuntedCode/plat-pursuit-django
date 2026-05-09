@@ -28,6 +28,7 @@
      data-color="{{ item.type_color_ref|default:'primary' }}"
      data-name="{{ item.name }}"
      data-found="{% if item.is_found %}1{% else %}0{% endif %}"
+     data-next-up="0"
      data-missable="{% if item.is_missable %}1{% else %}0{% endif %}"
      data-dlc="{% if item.is_dlc %}1{% else %}0{% endif %}"
      data-has-content="{% if item.body or item.youtube_url or item.gallery_images %}1{% else %}0{% endif %}">
@@ -62,6 +63,14 @@
         </span>
         <span class="collectible-item-name flex-1 min-w-0 text-xs md:text-sm font-semibold truncate">
             {{ item.name|default:"(unnamed)" }}
+        </span>
+        {# "Next up" pill — hidden by default; CSS shows it when the parent #}
+        {# row has data-next-up="1" (toggled by _recomputeNextUp in JS).    #}
+        {# Color comes from the row's --row-color (set via data-color CSS). #}
+        <span class="collectible-item-next-pill items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase text-base-100 shrink-0"
+              style="background-color: var(--row-color);">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+            Next up
         </span>
         {% if item.is_missable %}
         <span class="badge badge-xs badge-warning shrink-0" title="Missable">

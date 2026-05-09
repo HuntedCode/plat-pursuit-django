@@ -814,7 +814,10 @@
 
     function initTrophyLinkNavigation() {
         // Step card trophy links + inline trophy mentions in markdown prose
-        document.querySelectorAll('.roadmap-trophy-link, .trophy-mention').forEach((link) => {
+        // + trophy nav markers inside collectible areas. All three flavors
+        // jump to a `#trophy-guide-X` anchor and want the same auto-open
+        // + scroll-and-highlight behavior.
+        document.querySelectorAll('.roadmap-trophy-link, .trophy-mention, .collectible-marker-row').forEach((link) => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 navigateToGuide(link.getAttribute('href'));
@@ -1432,6 +1435,84 @@
             // Keep each area's Mark all / Unmark all button label in
             // sync as the user ticks individual items.
             this._refreshMarkAllButtons();
+            // Re-evaluate "next up" highlights on items + markers — both
+            // depend on per-area found state we just recomputed above.
+            this._recomputeNextUp();
+        },
+
+        // Two-flavor "next up" highlight, one walk:
+        //
+        //   - ITEMS get a SINGLE GLOBAL highlight: the first unfound
+        //     item across the whole roadmap, walking areas in order.
+        //     "Don't highlight ch2 item 1 while ch1 has things left."
+        //   - MARKERS get a PER-AREA highlight: in each area, the first
+        //     marker with all items above it found gets the highlight.
+        //     Markers are awareness signals (a trophy unlocking soon
+        //     across multiple areas in progress is independently useful);
+        //     items are action targets (one at a time).
+        //
+        // Both flavors share the `data-next-up="1"` CSS hook (pulse ring
+        // + "Next up" pill) — only the population logic differs.
+        //
+        // Re-runs on every found-state change via `_recomputeTotals`.
+        _recomputeNextUp() {
+            // Clear all prior flags first so the highlight strictly
+            // follows the latest state — no stale residue from a
+            // previous pass when an item was unticked.
+            this.rootEl.querySelectorAll('.collectible-item-row[data-next-up="1"]').forEach(row => {
+                row.dataset.nextUp = '0';
+            });
+            this.rootEl.querySelectorAll('.collectible-marker-row[data-next-up="1"]').forEach(row => {
+                row.dataset.nextUp = '0';
+            });
+
+            let nextUpItemFlagged = false;  // global single-target gate
+
+            this.rootEl.querySelectorAll('.collectible-area-group').forEach(area => {
+                const list = area.querySelector('.collectible-items-list');
+                if (!list) return;
+                let unfoundItemSeenInArea = false;
+                let markerFlaggedThisArea = false;
+                let hasAnyItemInArea = false;
+
+                Array.from(list.children).forEach(row => {
+                    if (row.classList.contains('collectible-item-row')) {
+                        hasAnyItemInArea = true;
+                        const isUnfound = row.dataset.found !== '1';
+                        // Global "next up" item: first unfound across the
+                        // whole roadmap. The `nextUpItemFlagged` gate
+                        // ensures only ONE item is flagged total.
+                        if (isUnfound && !nextUpItemFlagged) {
+                            row.dataset.nextUp = '1';
+                            nextUpItemFlagged = true;
+                        }
+                        if (isUnfound) unfoundItemSeenInArea = true;
+                    } else if (row.classList.contains('collectible-marker-row')) {
+                        // Per-area marker rule: first marker with no
+                        // unfound item before it in THIS area. Already-
+                        // earned markers are skipped — once you've got
+                        // the trophy, the highlight should advance to
+                        // whatever's actually still ahead.
+                        if (
+                            !unfoundItemSeenInArea
+                            && !markerFlaggedThisArea
+                            && row.dataset.earned !== '1'
+                        ) {
+                            row.dataset.nextUp = '1';
+                            markerFlaggedThisArea = true;
+                        }
+                    }
+                });
+
+                // Items-less area's marker isn't a meaningful "next up"
+                // (no playthrough sequence to be at the next step OF) —
+                // unflag if we tentatively flagged one above.
+                if (!hasAnyItemInArea) {
+                    list.querySelectorAll('.collectible-marker-row[data-next-up="1"]').forEach(row => {
+                        row.dataset.nextUp = '0';
+                    });
+                }
+            });
         },
 
         // ── Filter chips ───────────────────────────────────────────

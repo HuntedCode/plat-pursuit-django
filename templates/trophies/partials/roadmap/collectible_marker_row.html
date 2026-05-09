@@ -1,0 +1,84 @@
+{% load custom_filters %}
+{# Trophy nav marker — a non-checkable anchor that says "you'll earn this    #}
+{# trophy around this point in the playthrough". Visual identity is keyed   #}
+{# on the trophy's actual *type* color (bronze / silver / gold / platinum)  #}
+{# so the row scans as a TROPHY reference, not generic chrome:              #}
+{#   1. Trophy color stripe (4px left border) + soft bg tint                #}
+{#   2. The actual trophy icon image                                        #}
+{#   3. "🏆 Trophy" small caps header above the name                         #}
+{# Click jumps to the trophy guide row via #trophy-guide-X; navigateToGuide  #}
+{# auto-opens the closed-by-default guide details after the jump.            #}
+{#                                                                          #}
+{# Trophy lookup uses the page-level `roadmap_trophies` dict already in     #}
+{# context (collected per-view from steps + guides + markers).               #}
+{% with trophy=roadmap_trophies|get_item:marker.trophy_id earned_data=profile_earned|get_item:marker.trophy_id %}
+{% with trophy_type=trophy.trophy_type|default:'bronze' %}
+{# Earned markers: success-tinted treatment + check disc on the icon +     #}
+{# "Earned" label, mirroring the trophy guide card's earned styling. JS    #}
+{# also skips earned markers when computing the next-up highlight, so the  #}
+{# pulse advances past trophies the user already has.                      #}
+<a class="collectible-marker-row group flex items-center gap-2.5 px-3 py-2 rounded border border-base-content/10 border-l-4 hover:border-base-content/20 transition-colors text-base-content/85 hover:text-base-content"
+   href="#trophy-guide-{{ marker.trophy_id }}"
+   data-marker-id="{{ marker.id }}"
+   data-trophy-id="{{ marker.trophy_id }}"
+   data-next-up="0"
+   data-earned="{% if earned_data.earned %}1{% else %}0{% endif %}"
+   {% if earned_data.earned %}
+   style="--marker-color: var(--color-success); border-left-color: var(--color-success); background-color: oklch(from var(--color-success) l c h / 0.07);"
+   {% else %}
+   style="--marker-color: var(--color-trophy-{{ trophy_type }}); border-left-color: var(--color-trophy-{{ trophy_type }}); background-color: oklch(from var(--color-trophy-{{ trophy_type }}) l c h / 0.07);"
+   {% endif %}
+   title="Jump to trophy guide">
+    {# Trophy glyph — actual trophy icon if available, fallback cup glyph    #}
+    {# in a tinted disc otherwise so the row still has a clear "this is a   #}
+    {# trophy reference" cue. When earned, we wrap in a `relative` container #}
+    {# and overlay a small green check disc (mirrors the trophy guide card). #}
+    {% if trophy %}
+    <div class="relative shrink-0">
+        <img src="{{ trophy.trophy_icon_url }}"
+             alt=""
+             class="w-8 h-8 rounded object-cover border border-base-content/10 {% if not earned_data.earned %}opacity-90{% endif %}"
+             loading="lazy">
+        {% if earned_data.earned %}
+        <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-success rounded-full flex items-center justify-center ring-2 ring-base-200 shadow-sm shadow-success/40">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-success-content" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="w-8 h-8 rounded shrink-0 bg-base-300/40 border border-base-content/10 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 002.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 012.916.52 6.003 6.003 0 01-5.395 4.972m0 0a6.726 6.726 0 01-2.749 1.35m0 0a6.772 6.772 0 01-3.044 0"/></svg>
+    </div>
+    {% endif %}
+    {# Header in the trophy color + cup glyph; name below in normal weight.  #}
+    {# Color loop (stripe → label → bg) keeps the "this is a trophy" signal  #}
+    {# tight in both color and meaning.                                      #}
+    <span class="flex-1 min-w-0 flex flex-col leading-tight gap-0.5">
+        {# Label color matches the stripe; flips to success on earned. #}
+        <span class="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5"
+              {% if earned_data.earned %}
+              style="color: var(--color-success);"
+              {% else %}
+              style="color: var(--color-trophy-{{ trophy_type }});"
+              {% endif %}>
+            <span aria-hidden="true">{% if earned_data.earned %}✓{% else %}🏆{% endif %}</span>
+            <span>{% if earned_data.earned %}Trophy earned{% else %}Trophy unlocks here{% endif %}</span>
+            {# "Next up" pill — visibility driven by the parent row's       #}
+            {# [data-next-up="1"] attribute via CSS, so JS just flips the   #}
+            {# attribute (no class swap, no hidden+flex conflict).          #}
+            <span class="collectible-marker-next-pill items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase text-base-100"
+                  style="background-color: var(--color-trophy-{{ trophy_type }});">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                Next up
+            </span>
+        </span>
+        <span class="text-sm font-medium truncate">
+            {% if trophy %}{{ trophy.trophy_name }}{% else %}<span class="text-error/70">Unknown trophy ({{ marker.trophy_id }})</span>{% endif %}
+        </span>
+    </span>
+    {# Jump arrow chevron — affirms this is a navigational link. Slides on   #}
+    {# hover for tactile feedback.                                            #}
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-base-content/35 group-hover:text-base-content group-hover:translate-x-0.5 transition-[color,transform] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+</a>
+{% endwith %}
+{% endwith %}

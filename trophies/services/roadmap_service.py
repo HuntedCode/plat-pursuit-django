@@ -43,7 +43,7 @@ class RoadmapService:
     def _build_roadmap_prefetch():
         """Shared prefetch chain for a single Roadmap's children."""
         from trophies.models import (
-            RoadmapCollectibleArea, RoadmapCollectibleItem,
+            RoadmapAreaMarker, RoadmapCollectibleArea, RoadmapCollectibleItem,
             RoadmapCollectibleType, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
         )
 
@@ -61,13 +61,18 @@ class RoadmapService:
                 'trophy_guides',
                 queryset=TrophyGuide.objects.order_by('order', 'trophy_id'),
             ),
-            # Collectible vocabulary + items. The reader's Collectibles
-            # Tracker section iterates types -> items -> resolves area FK,
-            # so we need both relations preloaded to avoid N+1 on the
-            # roadmap detail page.
+            # Collectible vocabulary + items + area markers. The reader's
+            # Collectibles Tracker section iterates types -> items -> resolves
+            # area FK; markers attach directly to areas. Preload all three
+            # to avoid N+1 on the detail page.
             Prefetch(
                 'collectible_areas',
-                queryset=RoadmapCollectibleArea.objects.order_by('order', 'id'),
+                queryset=RoadmapCollectibleArea.objects.prefetch_related(
+                    Prefetch(
+                        'markers',
+                        queryset=RoadmapAreaMarker.objects.order_by('order', 'id'),
+                    ),
+                ).order_by('order', 'id'),
             ),
             Prefetch(
                 'collectible_types',
@@ -369,6 +374,7 @@ class RoadmapService:
         live_areas_by_id = {a.id: a for a in roadmap.collectible_areas.all()}
         overlay_areas = []
         synthetic_area_id = -3_000_000
+        synthetic_marker_id = -5_000_000
         for area_payload in branch_payload.get('collectible_areas') or []:
             aid = area_payload.get('id')
             if isinstance(aid, int) and aid in live_areas_by_id:
@@ -383,6 +389,36 @@ class RoadmapService:
                 area.order = area_payload['order']
             if 'created_by_id' in area_payload:
                 area.created_by_id = area_payload['created_by_id']
+
+            # Markers — stash as a prefetched cache on the area instance so
+            # `area.markers.all()` returns the overlay during preview without
+            # hitting the database (which won't reflect unsaved branch edits).
+            from trophies.models import RoadmapAreaMarker
+            live_markers_by_id = (
+                {m.id: m for m in area.markers.all()}
+                if isinstance(area.id, int) and area.id > 0
+                else {}
+            )
+            overlay_markers = []
+            for marker_payload in area_payload.get('markers') or []:
+                mid = marker_payload.get('id')
+                if isinstance(mid, int) and mid in live_markers_by_id:
+                    m = live_markers_by_id[mid]
+                else:
+                    synthetic_marker_id -= 1
+                    m = RoadmapAreaMarker(area=area, id=synthetic_marker_id)
+                if 'trophy_id' in marker_payload:
+                    m.trophy_id = marker_payload['trophy_id']
+                if 'order' in marker_payload:
+                    m.order = marker_payload['order']
+                if 'created_by_id' in marker_payload:
+                    m.created_by_id = marker_payload['created_by_id']
+                overlay_markers.append(m)
+            overlay_markers.sort(key=lambda x: (x.order, x.id))
+            if not hasattr(area, '_prefetched_objects_cache'):
+                area._prefetched_objects_cache = {}
+            area._prefetched_objects_cache['markers'] = overlay_markers
+
             overlay_areas.append(area)
         overlay_areas.sort(key=lambda a: (a.order, a.id))
 
@@ -664,6 +700,19 @@ class RoadmapService:
                     'order': area.order,
                     'created_by_id': area.created_by_id,
                     'last_edited_by_id': area.last_edited_by_id,
+                    # Trophy nav anchors. Share the area's `order` space with
+                    # items — render-time interleave by `order` regardless of
+                    # kind preserves the playthrough sequence.
+                    'markers': [
+                        {
+                            'id': m.id,
+                            'trophy_id': m.trophy_id,
+                            'order': m.order,
+                            'created_by_id': m.created_by_id,
+                            'last_edited_by_id': m.last_edited_by_id,
+                        }
+                        for m in area.markers.all()
+                    ],
                 }
                 for area in rm.collectible_areas.all()
             ],

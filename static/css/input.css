@@ -2038,6 +2038,70 @@ details[open]::details-content {
 .collectible-color-btn.is-selected[data-color="warning"]   { @apply ring-warning; }
 .collectible-color-btn.is-selected[data-color="error"]     { @apply ring-error; }
 
+/* ===== "Next up" highlight (reader) ====================================
+   Two flavors share one visual treatment, keyed off `data-next-up="1"`:
+
+     1. Trophy markers: per-area. The first marker in each area whose
+        items above it are all found gets the highlight.
+     2. Collectible items: global. The single first unfound item across
+        the entire roadmap gets the highlight (chapter-respecting — items
+        in chapter 2 don't light up while chapter 1 has unfound items).
+
+   Color source: `--marker-color` for markers (trophy color, set inline
+   by the template) and `--row-color` for items (mapped from `data-color`
+   below). Pulse uses whichever applies via the more-specific rule.
+   ============================================================================ */
+.collectible-marker-next-pill,
+.collectible-item-next-pill {
+  display: none;  /* default; attribute selectors below show when next-up */
+}
+.collectible-marker-row[data-next-up="1"] .collectible-marker-next-pill,
+.collectible-item-row[data-next-up="1"] .collectible-item-next-pill {
+  display: inline-flex;
+}
+
+/* Map item data-color → --row-color so the pulse + pill share a single
+   color source per row. (Markers set --marker-color inline; items
+   default off the daisyUI semantic-color tokens.) */
+.collectible-item-row[data-color="primary"]   { --row-color: var(--color-primary); }
+.collectible-item-row[data-color="secondary"] { --row-color: var(--color-secondary); }
+.collectible-item-row[data-color="accent"]    { --row-color: var(--color-accent); }
+.collectible-item-row[data-color="info"]      { --row-color: var(--color-info); }
+.collectible-item-row[data-color="success"]   { --row-color: var(--color-success); }
+.collectible-item-row[data-color="warning"]   { --row-color: var(--color-warning); }
+.collectible-item-row[data-color="error"]     { --row-color: var(--color-error); }
+
+.collectible-marker-row[data-next-up="1"] {
+  animation: marker-next-pulse 2.4s ease-in-out infinite;
+}
+.collectible-item-row[data-next-up="1"] {
+  animation: item-next-pulse 2.4s ease-in-out infinite;
+}
+@keyframes marker-next-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px var(--marker-color),
+      0 0 12px -2px var(--marker-color);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px var(--marker-color),
+      0 0 22px 0 var(--marker-color);
+  }
+}
+@keyframes item-next-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px var(--row-color),
+      0 0 12px -2px var(--row-color);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px var(--row-color),
+      0 0 22px 0 var(--row-color);
+  }
+}
+
 /* Collectible item rich-content panel: opt the formatting toolbar OUT of
    sticky positioning here. The shared toolbar's `top: chrome + 5rem` is
    calibrated for the page-level layout (steps, trophy guides — tall
