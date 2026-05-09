@@ -1304,32 +1304,47 @@ def provide_theme_mastery(profile):
     """
     from trophies.models import EarnedTrophy, Theme, Genre
 
-    earned_qs = (
-        EarnedTrophy.objects
-        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
-        .select_related('trophy__game__concept')
-        .prefetch_related(
-            'trophy__game__concept__concept_themes__theme',
-            'trophy__game__concept__concept_genres__genre',
-        )
+    earned_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
     )
 
+    # DB-side aggregation. The prior version iterated every EarnedTrophy in
+    # Python with prefetches on both concept_themes AND concept_genres,
+    # which OOMed the worker for whales (10K+ platinums = 250K+ trophies).
+    # Two GROUP BYs in Postgres replace one big iteration.
+    theme_rows = (
+        earned_qs
+        .values(
+            'trophy__game__concept__concept_themes__theme_id',
+            'trophy__game__concept__concept_themes__theme__name',
+        )
+        .annotate(count=Count('id'))
+    )
     theme_counts = defaultdict(int)
-    genre_counts = defaultdict(int)
     seen_themes = set()
-    seen_genres = set()
+    for r in theme_rows:
+        name = r['trophy__game__concept__concept_themes__theme__name']
+        theme_id = r['trophy__game__concept__concept_themes__theme_id']
+        if name and theme_id is not None:
+            theme_counts[name] += r['count']
+            seen_themes.add(theme_id)
 
-    for et in earned_qs:
-        game = et.trophy.game if et.trophy else None
-        concept = getattr(game, 'concept', None) if game else None
-        if not concept:
-            continue
-        for ct in concept.concept_themes.all():
-            theme_counts[ct.theme.name] += 1
-            seen_themes.add(ct.theme_id)
-        for cg in concept.concept_genres.all():
-            genre_counts[cg.genre.name] += 1
-            seen_genres.add(cg.genre_id)
+    genre_rows = (
+        earned_qs
+        .values(
+            'trophy__game__concept__concept_genres__genre_id',
+            'trophy__game__concept__concept_genres__genre__name',
+        )
+        .annotate(count=Count('id'))
+    )
+    genre_counts = defaultdict(int)
+    seen_genres = set()
+    for r in genre_rows:
+        name = r['trophy__game__concept__concept_genres__genre__name']
+        genre_id = r['trophy__game__concept__concept_genres__genre_id']
+        if name and genre_id is not None:
+            genre_counts[name] += r['count']
+            seen_genres.add(genre_id)
 
     if not theme_counts and not genre_counts:
         return {'has_data': False}
@@ -1480,11 +1495,18 @@ def provide_top_developers(profile, settings=None):
         if row['progress'] == 100:
             concept_completed[cid] += 1
 
-    # Per-concept earned trophy counts
-    earned_qs = EarnedTrophy.objects.filter(
-        profile=profile, earned=True, earned_date_time__isnull=False,
-    ).values_list('trophy__game__concept_id', flat=True)
-    concept_trophies = Counter(cid for cid in earned_qs if cid)
+    # Per-concept earned trophy counts. DB-side aggregation: the prior
+    # `Counter(cid for cid in values_list(...))` pattern fetched 250K+
+    # concept_ids into Python for whales. GROUP BY returns one row per
+    # concept (~hundreds, not hundreds of thousands).
+    concept_trophies = Counter(dict(
+        EarnedTrophy.objects
+        .filter(profile=profile, earned=True, earned_date_time__isnull=False)
+        .values('trophy__game__concept_id')
+        .annotate(c=Count('id'))
+        .values_list('trophy__game__concept_id', 'c')
+    ))
+    concept_trophies.pop(None, None)  # drop trophies with no concept link
 
     if not concept_games:
         return {'developers': [], 'publishers': [], 'has_data': False}
