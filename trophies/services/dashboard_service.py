@@ -5879,10 +5879,21 @@ def get_server_module_data(profile, modules):
     Batch-fetch context dicts for all server-rendered modules.
 
     Returns {slug: context_dict} for modules with load_strategy == 'server'.
+    Skips premium-preview modules: free users see a gradient placeholder
+    + upgrade CTA (rendered from the template's else branch when no
+    preview HTML is available), so executing the underlying premium
+    providers against their real data was wasted work and was the cause
+    of the 91-second / 153 MB dashboard render for whales — every
+    premium provider (advanced_stats, trophy_visualizations, theme_mastery,
+    advanced_badge_stats, etc.) ran in sequence against their 250K-trophy
+    dataset. Phase 0 emptied preview_html in build_dashboard_context but
+    left the provider execution in place; this skip closes that gap.
     """
     data = {}
     for mod in modules:
         if mod['load_strategy'] != 'server':
+            continue
+        if mod.get('is_preview'):
             continue
         provider_fn = mod['provider']
         try:
