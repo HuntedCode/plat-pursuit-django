@@ -192,6 +192,128 @@ def invalidate_stats_cache(profile_id):
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+def _build_timestamp_aggregates(profile, user_tz):
+    """Pre-aggregate every timestamp-derived stat via DB GROUP BYs.
+
+    Replaces the prior `earned_timestamps = list(values_list(...))` shared
+    fetch which materialized every EarnedTrophy row into Python and was
+    iterated three times by the records/streaks/time-patterns functions.
+    For users with very large libraries (10K+ platinums = 250K+ trophies)
+    that allocated 50 MB+ per stats render and timed out the worker.
+
+    Each GROUP BY here returns a small, bounded result set
+    (24 hours / 7 weekdays / 12 months / N years / N active days / N plats).
+    Total memory is dominated by daily_counts (one entry per active day,
+    a few thousand max) and plat_datetimes (one per platinum, ~10K max),
+    not by total trophy count.
+
+    Returns a dict consumed by the records/streaks/time-patterns functions.
+    """
+    from trophies.models import EarnedTrophy
+    from django.db.models import Count, Min, Max
+    from django.db.models.functions import (
+        TruncDate, ExtractYear, ExtractMonth, ExtractHour, ExtractMinute,
+        ExtractWeekDay,
+    )
+
+    base_qs = EarnedTrophy.objects.filter(
+        profile=profile, earned=True, earned_date_time__isnull=False,
+    )
+    plat_qs = base_qs.filter(trophy__trophy_type='platinum')
+
+    # Daily counts (local date → count). Bounded by active days.
+    daily_counts = Counter()
+    for d, c in (
+        base_qs.annotate(day=TruncDate('earned_date_time', tzinfo=user_tz))
+        .values('day').annotate(c=Count('id'))
+        .values_list('day', 'c')
+    ):
+        if d is not None:
+            daily_counts[d] = c
+
+    # Sorted plat datetimes (full precision for gap calc); sorted plat dates
+    # in user-local time for day-level stats.
+    plat_datetimes = sorted(plat_qs.values_list('earned_date_time', flat=True))
+    plat_dates = sorted({dt.astimezone(user_tz).date() for dt in plat_datetimes})
+
+    # Yearly counts
+    yearly_counts = Counter()
+    for y, c in (
+        base_qs.annotate(yr=ExtractYear('earned_date_time', tzinfo=user_tz))
+        .values('yr').annotate(c=Count('id'))
+        .values_list('yr', 'c')
+    ):
+        if y is not None:
+            yearly_counts[y] = c
+
+    # Monthly counts (year, month) → count
+    monthly_counts = Counter()
+    for y, m, c in (
+        base_qs
+        .annotate(yr=ExtractYear('earned_date_time', tzinfo=user_tz),
+                  mo=ExtractMonth('earned_date_time', tzinfo=user_tz))
+        .values('yr', 'mo').annotate(c=Count('id'))
+        .values_list('yr', 'mo', 'c')
+    ):
+        if y and m:
+            monthly_counts[(y, m)] = c
+
+    # Hour distribution (0-23)
+    hour_counts = Counter()
+    for h, c in (
+        base_qs.annotate(hr=ExtractHour('earned_date_time', tzinfo=user_tz))
+        .values('hr').annotate(c=Count('id'))
+        .values_list('hr', 'c')
+    ):
+        if h is not None:
+            hour_counts[h] = c
+
+    # Weekday distribution. Django/Postgres ExtractWeekDay returns
+    # 1=Sunday..7=Saturday; remap to Python's Mon=0..Sun=6 to match the
+    # existing weekday_counts contract used by _compute_time_patterns.
+    _DOW_DJANGO_TO_PY = {1: 6, 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5}
+    weekday_counts = Counter()
+    for wd, c in (
+        base_qs.annotate(wd=ExtractWeekDay('earned_date_time', tzinfo=user_tz))
+        .values('wd').annotate(c=Count('id'))
+        .values_list('wd', 'c')
+    ):
+        if wd is not None:
+            py = _DOW_DJANGO_TO_PY.get(wd)
+            if py is not None:
+                weekday_counts[py] = c
+
+    # Calendar month distribution (1-12, ignoring year)
+    month_dist_counts = Counter()
+    for m, c in (
+        base_qs.annotate(mo=ExtractMonth('earned_date_time', tzinfo=user_tz))
+        .values('mo').annotate(c=Count('id'))
+        .values_list('mo', 'c')
+    ):
+        if m is not None:
+            month_dist_counts[m] = c
+
+    # Earliest / latest clock minute (hour*60 + minute) in user-local time.
+    clock_agg = base_qs.annotate(
+        clock_min=(ExtractHour('earned_date_time', tzinfo=user_tz) * 60
+                   + ExtractMinute('earned_date_time', tzinfo=user_tz)),
+    ).aggregate(min_clk=Min('clock_min'), max_clk=Max('clock_min'))
+
+    return {
+        'total': sum(yearly_counts.values()),
+        'daily_counts': daily_counts,
+        'plat_dates': plat_dates,
+        'plat_datetimes': plat_datetimes,
+        'yearly_counts': yearly_counts,
+        'monthly_counts': monthly_counts,
+        'hour_counts': hour_counts,
+        'weekday_counts': weekday_counts,
+        'month_dist_counts': month_dist_counts,
+        'earliest_clock_min': clock_agg.get('min_clk'),
+        'latest_clock_min': clock_agg.get('max_clk'),
+    }
+
+
 def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden=False):
     """Compute every premium section together for efficient query batching.
 
@@ -208,13 +330,13 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
     # Build game filter Q for queries that join through game
     game_filter_q = _build_game_filter_q(exclude_shovelware, exclude_hidden)
 
-    # Shared fetch 1: all earned timestamps + trophy type (for streaks, time, records)
-    # Not filtered by shovelware/hidden: a trophy is a trophy regardless of game status
-    earned_timestamps = list(
-        EarnedTrophy.objects.filter(
-            profile=profile, earned=True, earned_date_time__isnull=False,
-        ).values_list('earned_date_time', 'trophy__trophy_type')
-    )
+    user_tz = _get_user_timezone(profile)
+
+    # Shared fetch 1: timestamp aggregates (daily/yearly/monthly/hour/weekday
+    # buckets) computed via DB GROUP BYs. Replaces a 250K-row materialization
+    # that OOM'd whales. Not filtered by shovelware/hidden: a trophy is a
+    # trophy regardless of game status.
+    ts_agg = _build_timestamp_aggregates(profile, user_tz)
 
     # Shared fetch 2: profile games with game+concept (filtered by toggles)
     pg_qs = ProfileGame.objects.filter(profile=profile).select_related('game__concept')
@@ -222,14 +344,20 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
         pg_qs = pg_qs.filter(game_filter_q)
     profile_games = list(pg_qs)
 
-    # Shared fetch 3: IGDB data for concepts in the user's library
+    # Shared fetch 3: IGDB data for concepts in the user's library.
+    # raw_response is the ~30-50KB IGDB JSON blob; we only need 5 small
+    # arrays/scalars from it (game_modes, perspectives, keywords, ratings).
+    # For whales with hundreds of games the bulk load alone was hundreds
+    # of MB. Pre-parse what _compute_game_library needs into igdb_meta
+    # and immediately nullify raw_response on each instance so the JSON
+    # dicts can be GC'd before we iterate the library.
     concept_ids = {pg.game.concept_id for pg in profile_games if pg.game and pg.game.concept_id}
     igdb_lookup = {}
+    igdb_meta = {}  # concept_id -> {'game_modes', 'perspectives', 'keywords', 'user_rating', 'critic_rating'}
     if concept_ids:
         # Only trusted matches feed the stats page. Pending/rejected matches
         # carry populated TTB/category fields but haven't been reviewed.
-        igdb_lookup = {
-            m.concept_id: m for m in
+        for m in (
             IGDBMatch.objects.filter(
                 concept_id__in=concept_ids,
                 status__in=('accepted', 'auto_accepted'),
@@ -237,7 +365,17 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
             .only('concept_id', 'game_category', 'franchise_names',
                   'time_to_beat_completely', 'igdb_first_release_date',
                   'raw_response')
-        }
+        ):
+            raw = m.raw_response or {}
+            igdb_meta[m.concept_id] = {
+                'game_modes': [gm.get('name') for gm in raw.get('game_modes', []) if gm.get('name')],
+                'perspectives': [pp.get('name') for pp in raw.get('player_perspectives', []) if pp.get('name')],
+                'keywords': [kw.get('name') for kw in raw.get('keywords', []) if kw.get('name')],
+                'user_rating': raw.get('rating'),
+                'critic_rating': raw.get('aggregated_rating'),
+            }
+            m.raw_response = None  # release the JSON blob; GC reclaims it
+            igdb_lookup[m.concept_id] = m
 
     # Shared fetch 4: engine lookup for _compute_game_library
     engine_lookup = defaultdict(list)  # concept_id -> [engine_name, ...]
@@ -246,16 +384,15 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
             engine_lookup[ce.concept_id].append(ce.engine.name)
 
     gamification = ProfileGamification.objects.filter(profile=profile).first()
-    user_tz = _get_user_timezone(profile)
 
     return {
-        'records': _compute_personal_records(profile, earned_timestamps, user_tz, exclude_shovelware, exclude_hidden, igdb_lookup),
+        'records': _compute_personal_records(profile, ts_agg, user_tz, exclude_shovelware, exclude_hidden, igdb_lookup),
         'rarity': _compute_rarity_profile(profile),
-        'streaks': _compute_streaks(earned_timestamps, user_tz),
-        'time_patterns': _compute_time_patterns(earned_timestamps, user_tz),
+        'streaks': _compute_streaks(ts_agg, user_tz),
+        'time_patterns': _compute_time_patterns(ts_agg, user_tz),
         'platforms': _compute_platform_breakdown(profile_games),
         'genres': _compute_genre_breakdown(profile, exclude_shovelware, exclude_hidden),
-        'library': _compute_game_library(profile_games, igdb_lookup, engine_lookup),
+        'library': _compute_game_library(profile_games, igdb_lookup, engine_lookup, igdb_meta),
         'badges': _compute_badge_stats(profile, gamification),
         'challenges': _compute_challenge_progress(profile),
         'community': _compute_community_stats(profile),
@@ -272,7 +409,7 @@ def _compute_all_premium_stats(profile, exclude_shovelware=False, exclude_hidden
 # Section: Personal Records
 # ---------------------------------------------------------------------------
 
-def _compute_personal_records(profile, earned_timestamps, user_tz,
+def _compute_personal_records(profile, ts_agg, user_tz,
                               exclude_shovelware=False, exclude_hidden=False,
                               igdb_lookup=None):
     from trophies.models import EarnedTrophy, ProfileGame, MonthlyRecap, Game
@@ -459,19 +596,12 @@ def _compute_personal_records(profile, earned_timestamps, user_tz,
         if oldest_plat_release:
             items.append(oldest_plat_release)
 
-    # --- Stats derived from shared timestamps (no extra queries) ---
-
-    daily_counts = Counter()
-    plat_dates = []       # date objects for day-level stats
-    plat_datetimes = []   # full datetimes for precise gap calculation
-    for dt, trophy_type in earned_timestamps:
-        local_dt = dt.astimezone(user_tz)
-        daily_counts[local_dt.date()] += 1
-        if trophy_type == 'platinum':
-            plat_dates.append(local_dt.date())
-            plat_datetimes.append(local_dt)
-    plat_dates.sort()
-    plat_datetimes.sort()
+    # --- Stats derived from shared timestamp aggregates (no extra queries) ---
+    # Pre-aggregated by _build_timestamp_aggregates so we don't iterate
+    # 250K rows for whales.
+    daily_counts = ts_agg['daily_counts']
+    plat_dates = ts_agg['plat_dates']
+    plat_datetimes = ts_agg['plat_datetimes']
 
     # Best day
     if daily_counts:
@@ -823,27 +953,20 @@ def _compute_rarity_profile(profile):
 # Section: Streaks & Consistency
 # ---------------------------------------------------------------------------
 
-def _compute_streaks(earned_timestamps, user_tz):
-    if not earned_timestamps:
+def _compute_streaks(ts_agg, user_tz):
+    if not ts_agg.get('total'):
         return _empty_section()
 
-    # Build sorted unique date sets
-    all_dates = set()
-    plat_dates_set = set()
-    yearly_counts = Counter()
-    monthly_counts = Counter()  # (year, month) -> count
+    # Use pre-aggregated buckets from _build_timestamp_aggregates instead
+    # of iterating 250K raw timestamps.
+    daily_counts = ts_agg['daily_counts']
+    plat_dates = ts_agg['plat_dates']
+    yearly_counts = ts_agg['yearly_counts']
+    monthly_counts = ts_agg['monthly_counts']
+    total_trophies = ts_agg['total']
 
-    for dt, trophy_type in earned_timestamps:
-        local = dt.astimezone(user_tz)
-        d = local.date()
-        all_dates.add(d)
-        yearly_counts[local.year] += 1
-        monthly_counts[(local.year, local.month)] += 1
-        if trophy_type == 'platinum':
-            plat_dates_set.add(d)
-
-    sorted_dates = sorted(all_dates)
-    sorted_plat_dates = sorted(plat_dates_set)
+    sorted_dates = sorted(daily_counts.keys())
+    sorted_plat_dates = sorted(plat_dates)
     today = timezone.now().astimezone(user_tz).date()
 
     # Streaks
@@ -855,13 +978,13 @@ def _compute_streaks(earned_timestamps, user_tz):
     plat_drought_len, plat_drought_after, plat_drought_before = _longest_drought(sorted_plat_dates)
 
     # Activity stats
-    total_active = len(all_dates)
+    total_active = len(sorted_dates)
     first_date = sorted_dates[0] if sorted_dates else today
     total_span = (today - first_date).days or 1
     active_ratio = round(total_active / total_span * 100, 1)
     days_since_last = (today - sorted_dates[-1]).days if sorted_dates else 0
     days_since_last_plat = (today - sorted_plat_dates[-1]).days if sorted_plat_dates else None
-    avg_per_active = round(len(earned_timestamps) / total_active, 1) if total_active else 0
+    avg_per_active = round(total_trophies / total_active, 1) if total_active else 0
 
     # Monthly activity stats
     months_with_activity = len([v for v in monthly_counts.values() if v > 0])
@@ -896,7 +1019,7 @@ def _compute_streaks(earned_timestamps, user_tz):
     # Derived: inactive days, avg per month
     inactive_days = total_span - total_active
     career_months = total_span / 30.44
-    avg_per_month = round(len(earned_timestamps) / career_months, 1) if career_months > 0 else 0
+    avg_per_month = round(total_trophies / career_months, 1) if career_months > 0 else 0
 
     # Best month-over-month improvement
     best_mom = None
@@ -961,23 +1084,17 @@ def _compute_streaks(earned_timestamps, user_tz):
 # Section: Time Patterns
 # ---------------------------------------------------------------------------
 
-def _compute_time_patterns(earned_timestamps, user_tz):
-    if not earned_timestamps:
+def _compute_time_patterns(ts_agg, user_tz):
+    if not ts_agg.get('total'):
         return _empty_section()
 
-    hours = []
-    weekdays = []
-    months = []
-    clock_minutes = []
-
-    for dt, _ in earned_timestamps:
-        local = dt.astimezone(user_tz)
-        hours.append(local.hour)
-        weekdays.append(local.weekday())  # 0=Mon, 6=Sun
-        months.append(local.month)
-        clock_minutes.append(local.hour * 60 + local.minute)
-
-    total = len(hours)
+    # Use pre-aggregated buckets from _build_timestamp_aggregates instead
+    # of building 4 parallel lists of 250K ints (which OOMed whales).
+    hour_counts = ts_agg['hour_counts']        # Counter: hour (0-23) -> count
+    day_counts = ts_agg['weekday_counts']      # Counter: Mon=0..Sun=6 -> count
+    month_dist = ts_agg['month_dist_counts']   # Counter: month (1-12) -> count
+    yearly = ts_agg['yearly_counts']
+    total = ts_agg['total']
 
     # Time of day
     time_buckets = [
@@ -989,48 +1106,46 @@ def _compute_time_patterns(earned_timestamps, user_tz):
     time_distribution = []
     for name, start, end in time_buckets:
         if start < end:
-            count = sum(1 for h in hours if start <= h < end)
+            count = sum(c for h, c in hour_counts.items() if start <= h < end)
         else:
-            count = sum(1 for h in hours if h >= start or h < end)
+            count = sum(c for h, c in hour_counts.items() if h >= start or h < end)
         time_distribution.append({
             'name': name, 'count': count, 'pct': round(count / total * 100, 1),
         })
 
-    hour_counts = Counter(hours)
-    peak_hour = hour_counts.most_common(1)[0][0]
+    peak_hour = hour_counts.most_common(1)[0][0] if hour_counts else 0
 
     # Day of week
     day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    day_counts = Counter(weekdays)
     day_distribution = [
         {'name': day_names[i], 'count': day_counts.get(i, 0), 'pct': round(day_counts.get(i, 0) / total * 100, 1)}
         for i in range(7)
     ]
-    peak_day = day_names[day_counts.most_common(1)[0][0]]
+    peak_day_idx = day_counts.most_common(1)[0][0] if day_counts else 0
+    peak_day = day_names[peak_day_idx]
 
-    # Weekend vs weekday
-    weekend = sum(1 for w in weekdays if w >= 5)
+    # Weekend vs weekday (Sat=5, Sun=6 in Mon-indexed)
+    weekend = day_counts.get(5, 0) + day_counts.get(6, 0)
     weekend_pct = round(weekend / total * 100, 1)
 
-    # Earliest / latest clock time
-    earliest = min(clock_minutes)
-    latest = max(clock_minutes)
+    # Earliest / latest clock time (DB-aggregated min/max of hour*60+minute)
+    earliest = ts_agg.get('earliest_clock_min') or 0
+    latest = ts_agg.get('latest_clock_min') or 0
 
     # Seasonal
     season_map = {12: 'Winter', 1: 'Winter', 2: 'Winter',
                   3: 'Spring', 4: 'Spring', 5: 'Spring',
                   6: 'Summer', 7: 'Summer', 8: 'Summer',
                   9: 'Fall', 10: 'Fall', 11: 'Fall'}
-    season_counts = Counter(season_map[m] for m in months)
+    season_counts = Counter()
+    for m, c in month_dist.items():
+        season_counts[season_map[m]] += c
     season_distribution = [
         {'name': s, 'count': season_counts.get(s, 0), 'pct': round(season_counts.get(s, 0) / total * 100, 1)}
         for s in ['Spring', 'Summer', 'Fall', 'Winter']
     ]
 
-    # Year over year
-    yearly = Counter()
-    for dt, _ in earned_timestamps:
-        yearly[dt.astimezone(user_tz).year] += 1
+    # Year over year (already aggregated in ts_agg)
     yoy = [{'year': y, 'count': yearly[y]} for y in sorted(yearly)]
 
     # Observation
@@ -1360,11 +1475,12 @@ def _compute_genre_breakdown(profile, exclude_shovelware=False, exclude_hidden=F
 # Section: Game Library Analysis
 # ---------------------------------------------------------------------------
 
-def _compute_game_library(profile_games, igdb_lookup=None, engine_lookup=None):
+def _compute_game_library(profile_games, igdb_lookup=None, engine_lookup=None, igdb_meta=None):
     from trophies.models import UserConceptRating
 
     igdb_lookup = igdb_lookup or {}
     engine_lookup = engine_lookup or {}
+    igdb_meta = igdb_meta or {}
 
     almost_there = 0
     one_trophy = 0
@@ -1476,19 +1592,18 @@ def _compute_game_library(profile_games, igdb_lookup=None, engine_lookup=None):
                     gap = pg.first_played_date_time - igdb.igdb_first_release_date
                     if gap.total_seconds() > 0:
                         release_to_play_gaps.append(gap)
-                # Tier 2: parse from raw_response
-                raw = igdb.raw_response or {}
-                for gm in raw.get('game_modes', []):
-                    if gm.get('name'):
-                        game_mode_counts[gm['name']] += 1
-                for pp in raw.get('player_perspectives', []):
-                    if pp.get('name'):
-                        perspective_counts[pp['name']] += 1
-                for kw in raw.get('keywords', []):
-                    if kw.get('name'):
-                        keyword_counts[kw['name']] += 1
-                user_rating = raw.get('rating')
-                critic_rating = raw.get('aggregated_rating')
+                # Tier 2: pre-parsed in the orchestrator from raw_response
+                # so we don't hold every concept's full IGDB JSON blob in
+                # memory at once (hundreds of MB for whales).
+                meta = igdb_meta.get(concept.id, {})
+                for name in meta.get('game_modes', ()):
+                    game_mode_counts[name] += 1
+                for name in meta.get('perspectives', ()):
+                    perspective_counts[name] += 1
+                for name in meta.get('keywords', ()):
+                    keyword_counts[name] += 1
+                user_rating = meta.get('user_rating')
+                critic_rating = meta.get('critic_rating')
                 if user_rating or critic_rating:
                     igdb_ratings.append((user_rating, critic_rating, concept.id))
 

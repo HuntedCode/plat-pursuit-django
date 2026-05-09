@@ -2171,9 +2171,32 @@ def provide_advanced_stats(profile, settings=None):
     except pytz.UnknownTimeZoneError:
         user_tz = pytz.UTC
 
-    timestamps = list(
-        earned_qs.values_list('earned_date_time', flat=True)
+    # DB-side aggregation. The prior version pulled ~250K datetime objects
+    # into memory for whales and looped to bucket them, costing ~12 MB +
+    # seconds of Python work. Postgres bins them in two GROUP BYs returning
+    # 24 + 7 rows total. ExtractHour/ExtractWeekDay accept tzinfo so the
+    # bucketing matches the user's local time, same as before.
+    from django.db.models.functions import ExtractHour, ExtractWeekDay
+
+    hour_rows = (
+        earned_qs
+        .annotate(hr=ExtractHour('earned_date_time', tzinfo=user_tz))
+        .values('hr')
+        .annotate(c=Count('id'))
+        .values_list('hr', 'c')
     )
+    hour_counts = {hr: c for hr, c in hour_rows if hr is not None}
+
+    weekday_rows = (
+        earned_qs
+        .annotate(wd=ExtractWeekDay('earned_date_time', tzinfo=user_tz))
+        .values('wd')
+        .annotate(c=Count('id'))
+        .values_list('wd', 'c')
+    )
+    # ExtractWeekDay returns 1=Sunday..7=Saturday (Django/Postgres convention).
+    # We want Mon=0..Sun=6 for the day_counts array.
+    _DOW_DJANGO_TO_PY = {1: 6, 2: 0, 3: 1, 4: 2, 5: 3, 6: 4, 7: 5}
 
     # Time of day buckets
     time_buckets = [
@@ -2182,22 +2205,25 @@ def provide_advanced_stats(profile, settings=None):
         {'label': 'Evening', 'range': '6pm-12am', 'count': 0, 'hex': '#8b5cf6'},
         {'label': 'Night', 'range': '12am-6am', 'count': 0, 'hex': '#1e40af'},
     ]
+    for hr, c in hour_counts.items():
+        if 6 <= hr < 12:
+            time_buckets[0]['count'] += c
+        elif 12 <= hr < 18:
+            time_buckets[1]['count'] += c
+        elif 18 <= hr < 24:
+            time_buckets[2]['count'] += c
+        else:
+            time_buckets[3]['count'] += c
+
     # Day of week counts (Mon=0 through Sun=6)
     day_names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     day_counts = [0] * 7
-
-    for ts in timestamps:
-        local_dt = ts.astimezone(user_tz)
-        hour = local_dt.hour
-        if 6 <= hour < 12:
-            time_buckets[0]['count'] += 1
-        elif 12 <= hour < 18:
-            time_buckets[1]['count'] += 1
-        elif 18 <= hour < 24:
-            time_buckets[2]['count'] += 1
-        else:
-            time_buckets[3]['count'] += 1
-        day_counts[local_dt.weekday()] += 1
+    for wd, c in weekday_rows:
+        if wd is None:
+            continue
+        py_idx = _DOW_DJANGO_TO_PY.get(wd)
+        if py_idx is not None:
+            day_counts[py_idx] += c
 
     time_max = max((b['count'] for b in time_buckets), default=1) or 1
     for b in time_buckets:
