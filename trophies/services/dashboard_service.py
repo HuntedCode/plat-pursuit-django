@@ -2421,20 +2421,25 @@ def _build_engine_radar_data(profile, year):
 
     earned_qs = EarnedTrophy.objects.filter(
         profile=profile, earned=True, earned_date_time__isnull=False,
-    ).select_related('trophy__game__concept').prefetch_related(
-        'trophy__game__concept__concept_engines__engine'
     )
     if year is not None:
         earned_qs = earned_qs.filter(earned_date_time__year=year)
 
-    engine_counts = defaultdict(int)
-    for et in earned_qs:
-        game = et.trophy.game if et.trophy else None
-        concept = getattr(game, 'concept', None) if game else None
-        if not concept:
-            continue
-        for ce in concept.concept_engines.all():
-            engine_counts[ce.engine.name] += 1
+    # DB-side aggregation. Iterating earned_qs in Python (the prior version)
+    # materialized every EarnedTrophy + joined Trophy/Game/Concept row for
+    # whales with 100K+ earned trophies, OOMing the worker. Postgres can
+    # group by engine name with bounded memory and return ~10 rows.
+    rows = (
+        earned_qs
+        .values('trophy__game__concept__concept_engines__engine__name')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    engine_counts = {
+        r['trophy__game__concept__concept_engines__engine__name']: r['count']
+        for r in rows
+        if r['trophy__game__concept__concept_engines__engine__name']
+    }
 
     if not engine_counts:
         return {'has_data': False}
@@ -2462,20 +2467,23 @@ def _build_genre_radar_data(profile, year):
 
     earned_qs = EarnedTrophy.objects.filter(
         profile=profile, earned=True, earned_date_time__isnull=False,
-    ).select_related('trophy__game__concept').prefetch_related(
-        'trophy__game__concept__concept_genres__genre'
     )
     if year is not None:
         earned_qs = earned_qs.filter(earned_date_time__year=year)
 
-    genre_counts = defaultdict(int)
-    for et in earned_qs:
-        game = et.trophy.game if et.trophy else None
-        concept = getattr(game, 'concept', None) if game else None
-        if not concept:
-            continue
-        for cg in concept.concept_genres.all():
-            genre_counts[cg.genre.name] += 1
+    # DB-side aggregation. See _build_engine_radar_data for context: iterating
+    # in Python OOMs whales. Group by genre name in Postgres, return ~10 rows.
+    rows = (
+        earned_qs
+        .values('trophy__game__concept__concept_genres__genre__name')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    genre_counts = {
+        r['trophy__game__concept__concept_genres__genre__name']: r['count']
+        for r in rows
+        if r['trophy__game__concept__concept_genres__genre__name']
+    }
 
     if not genre_counts:
         return {'has_data': False}
@@ -2566,12 +2574,22 @@ def _build_platform_radar_data(profile, year):
     if year is not None:
         earned_qs = earned_qs.filter(earned_date_time__year=year)
 
-    platform_lists = earned_qs.values_list('trophy__game__title_platform', flat=True)
+    # Group by game first (bounded by unique-games-played, ~hundreds), then
+    # fan out by platform in Python. The prior version pulled one row per
+    # earned trophy (250K+ for whales), each row carrying the title_platform
+    # array, which OOMed the worker. Counting per game and multiplying gives
+    # the same per-trophy distribution with constant memory.
+    per_game = (
+        earned_qs
+        .values('trophy__game_id', 'trophy__game__title_platform')
+        .annotate(count=Count('id'))
+    )
     platform_counts = defaultdict(int)
-    for plist in platform_lists:
-        if plist:
-            for p in plist:
-                platform_counts[p] += 1
+    for entry in per_game:
+        platforms = entry['trophy__game__title_platform'] or []
+        cnt = entry['count']
+        for p in platforms:
+            platform_counts[p] += cnt
 
     # Always show all platforms, even with 0 count
     labels = [PLATFORM_LABELS.get(p, p) for p in ALL_PLATFORMS]
