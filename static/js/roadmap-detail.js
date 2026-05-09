@@ -466,6 +466,9 @@
                         emoji: el.dataset.phaseEmoji || '·',
                         label: el.dataset.phaseLabel || 'Other',
                         count: el.dataset.phaseCount || '0',
+                        // Carried through so the TOC header can derive the same
+                        // phase-color stripe / tint as the main-page header.
+                        badgeClass: el.dataset.phaseBadgeClass || '',
                     });
                 } else if (el.classList.contains('trophy-guide-item')) {
                     sequence.push({
@@ -487,13 +490,21 @@
                 sequence.forEach(s => {
                     if (s.kind === 'header') {
                         const li = document.createElement('li');
-                        li.className = 'toc-phase-header mt-2 first:mt-1 border-t border-base-content/5 pt-1.5';
+                        // Mirrors the main-page phase strip but compressed for
+                        // the narrower TOC: 3px left stripe (vs 4px), tighter
+                        // padding, smaller text. Inline styles drive color so
+                        // dynamic class names don't need to live in source for
+                        // the JIT.
+                        const phaseColor = (s.badgeClass || '').replace(/^badge-/, '') || 'neutral';
+                        li.className = 'toc-phase-header mt-2 first:mt-1 rounded-md overflow-hidden border-l-[3px]';
+                        li.style.borderLeftColor = `var(--color-${phaseColor})`;
+                        li.style.backgroundColor = `oklch(from var(--color-${phaseColor}) l c h / 0.06)`;
                         li.dataset.phaseKey = s.phaseKey;
                         li.innerHTML = `
-                            <button type="button" class="toc-phase-toggle w-full flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-base-content/45 hover:text-base-content/80 px-1.5 py-0.5 rounded hover:bg-white/[0.04] transition-colors">
+                            <button type="button" class="toc-phase-toggle w-full flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-base-content/65 hover:text-base-content px-2 py-1 hover:bg-white/[0.04] transition-colors">
                                 <span class="shrink-0">${s.emoji}</span>
                                 <span class="truncate">${escapeHtml(s.label)}</span>
-                                <span class="text-base-content/30 font-normal normal-case tracking-normal">(${s.count})</span>
+                                <span class="text-base-content/40 font-normal normal-case tracking-normal">(${s.count})</span>
                                 <svg class="toc-phase-chevron w-3 h-3 ml-auto shrink-0 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                             </button>
                         `;
