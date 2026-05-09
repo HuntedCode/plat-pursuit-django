@@ -123,10 +123,12 @@
                      id="module-{{ module.slug }}"
                      class="dashboard-module relative">
                     {% if module.is_preview %}
-                        {# Premium preview: upgrade CTA always renders. The blurred
-                           sample data is decorative — when missing (Phase 0 with
-                           previews disabled, or future cache miss), we fall back
-                           to a placeholder gradient so the CTA still has body. #}
+                        {% comment %}
+                        Premium preview: upgrade CTA always renders. The blurred
+                        sample data is decorative — when missing (Phase 0 with
+                        previews disabled, or future cache miss), we fall back
+                        to a placeholder gradient so the CTA still has body.
+                        {% endcomment %}
                         <div class="relative overflow-hidden rounded-2xl">
                             {% with preview=preview_html|get_item:module.slug %}
                                 {% if preview %}
