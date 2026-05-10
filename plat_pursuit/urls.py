@@ -339,6 +339,11 @@ urlpatterns = [
     # Arcade (mini-games)
     path('arcade/stellar-circuit/', TemplateView.as_view(template_name='minigames/stellar-circuit.html'), name='stellar_circuit'),
 
+    # Design previews (team-facing, publicly accessible by direct link).
+    # Used to gather feedback on proposed visual primitives before they're
+    # committed to the canonical design system. Not linked from nav.
+    path('design/frame/', TemplateView.as_view(template_name='design/frame_preview.html'), name='design_frame_preview'),
+
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
     path('api/v1/', include('api.urls')),
