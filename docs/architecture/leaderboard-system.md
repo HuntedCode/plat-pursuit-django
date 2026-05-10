@@ -62,6 +62,12 @@ Country leaderboards use the same composite score as the global XP leaderboard b
 
 **Progress Leaderboard**: After `bulk_gamification_update()` exits -> `update_progress_leaderboards_for_profile()` computes per-profile trophy counts for affected series -> ZADD/ZREM per series + global.
 
+### Profile Linking Backfill
+
+When a `Profile` is linked to a `User` (either a brand-new account's first verification or a claim of a previously-unowned synced profile), `VerificationService.link_profile_to_user()` calls `_backfill_leaderboards_for_newly_linked_profile()` to write XP, country XP, earner, and progress entries from the existing `ProfileGamification` row. This is required because all incremental writers gate on `profile.is_linked` and any updates that ran before linking were silently skipped. Without the backfill, the first sync's leaderboard updates are lost and the profile is invisible until the next sync_complete or the reconciliation cron.
+
+The backfill reads pre-aggregated data (the same source the cron rebuild uses), so it cannot place stale or inconsistent entries on the leaderboard. If `ProfileGamification` does not exist yet (e.g., a claimed unowned profile with zero badges), the backfill is a safe no-op and the next sync_complete picks the profile up via the now-unblocked incremental path.
+
 ### Reconciliation Cron
 
 1. `update_leaderboards` runs periodically (recommended: every 12-24 hours)
@@ -124,6 +130,8 @@ Redis sorted set scores are 64-bit IEEE 754 doubles, representing integers exact
 - **Community XP uses INCRBY deltas**: Updated incrementally by computing the difference between old and new `series_badge_xp` values in `update_profile_gamification()`. If the delta calculation drifts (e.g., missed signal, Redis flush), the cron reconciliation does a full recompute via `rebuild_community_xp(slug)`.
 
 - **Country leaderboard stale entries on region change**: If a user's PSN region changes (extremely rare), the old country's sorted set retains a stale entry until the next cron reconciliation. The new country gets the correct entry immediately. This is by design: adding eager cleanup would add complexity for a near-zero-frequency event.
+
+- **All incremental writers gate on `is_linked`**: `update_xp_entry`, `update_country_xp_entry`, `update_earner_leaderboards_for_profile`, and `update_progress_leaderboards_for_profile` all skip profiles where `is_linked=False`. This is correct (unowned profiles should not appear on user-facing leaderboards), but it means linking a profile must explicitly backfill leaderboards from `ProfileGamification`, otherwise the new user is invisible until the next sync_complete or the cron reconciliation. `VerificationService.link_profile_to_user()` handles this; any other code that flips `is_linked` to `True` (none today) must do the same.
 
 ## Management Commands
 

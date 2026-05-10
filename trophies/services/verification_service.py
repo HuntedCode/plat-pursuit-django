@@ -134,6 +134,59 @@ class VerificationService:
                     f"Failed to send welcome email for {profile.psn_username}"
                 )
 
+            # Backfill Redis leaderboard entries. All incremental leaderboard
+            # writers (xp_service.update_profile_gamification, the per-series
+            # helpers in redis_leaderboard_service) gate on profile.is_linked,
+            # so any updates that ran before this point were skipped. Without
+            # this backfill the profile is invisible on every leaderboard
+            # until the next sync_complete or the 6-hour reconciliation cron.
+            try:
+                VerificationService._backfill_leaderboards_for_newly_linked_profile(profile)
+            except Exception:
+                logger.exception(
+                    f"Failed to backfill leaderboards for newly linked profile {profile.psn_username}"
+                )
+
+    @staticmethod
+    def _backfill_leaderboards_for_newly_linked_profile(profile):
+        """
+        Write Redis leaderboard entries for a profile that was just linked.
+
+        Reads from the existing ProfileGamification row (the same source the
+        reconciliation cron reads), so the data written matches what the next
+        full rebuild would produce. Safe no-op if gamification doesn't exist
+        yet (e.g., a freshly-claimed unowned profile with zero badges).
+        """
+        from trophies.models import ProfileGamification
+        from trophies.services.redis_leaderboard_service import (
+            update_xp_entry,
+            update_country_xp_entry,
+            update_earner_leaderboards_for_profile,
+            update_progress_leaderboards_for_profile,
+        )
+
+        try:
+            gamification = ProfileGamification.objects.get(profile=profile)
+        except ProfileGamification.DoesNotExist:
+            gamification = None
+
+        if gamification and gamification.total_badge_xp > 0:
+            update_xp_entry(
+                profile,
+                gamification.total_badge_xp,
+                gamification.total_badges_earned,
+            )
+            if profile.country_code:
+                update_country_xp_entry(
+                    profile.country_code,
+                    profile,
+                    gamification.total_badge_xp,
+                    gamification.total_badges_earned,
+                )
+
+        update_earner_leaderboards_for_profile(profile)
+        update_progress_leaderboards_for_profile(profile)
+
     @staticmethod
     def unlink_profile_from_user(profile):
         """
