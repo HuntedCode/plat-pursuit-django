@@ -1,0 +1,2439 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Frame · PlatPursuit Badge Design Preview</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.7.2/dist/full.min.css" rel="stylesheet" type="text/css" />
+
+    <style>
+        /* ============================================================
+         * THE FRAME - PlatPursuit Badge Chrome
+         *
+         * Visual primitive that wraps every badge wherever it renders.
+         * Trading-card layout: series name (top), badge art (middle),
+         * badge name + earn metadata (bottom). Tier identity carries
+         * through the whole card via tier-tinted gradients on title,
+         * art, and plinth.
+         * ============================================================ */
+
+        :root {
+            --tier-bronze: #c87a3b;
+            --tier-silver: #cdd0d4;
+            --tier-gold: #f0c64a;
+            --tier-platinum: #cfe8f0;
+            --tier-bronze-dim: #6e3f1e;
+            --tier-silver-dim: #6c7077;
+            --tier-gold-dim: #7a5f1a;
+            --tier-platinum-dim: #5b7a86;
+
+            --frame-bg: rgba(20, 22, 28, 0.88);
+            --frame-border: rgba(255, 255, 255, 0.08);
+            /* Defaults; tier classes override these */
+            --frame-chrome-bg: rgba(20, 22, 28, 0.92);
+            --frame-art-bg: rgba(20, 22, 28, 0.85);
+
+            --frame-aspect: 1 / 1;
+            --frame-art-pad: 10px;
+        }
+
+        /* ----------------------------------------------------------
+         * .pp-frame
+         * ---------------------------------------------------------- */
+        .pp-frame {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: var(--frame-bg);
+            border: 1px solid var(--frame-border);
+            border-radius: 6px;
+            overflow: visible;
+            transition: transform 280ms ease, box-shadow 280ms ease, border-color 280ms ease;
+            cursor: pointer;
+        }
+
+        /* ----------------------------------------------------------
+         * Corner notches - tier-aware brand mark
+         * ---------------------------------------------------------- */
+        .pp-frame::before,
+        .pp-frame::after,
+        .pp-frame > .pp-frame__corner-bl,
+        .pp-frame > .pp-frame__corner-br {
+            content: "";
+            position: absolute;
+            width: var(--notch-size, 7px);
+            height: var(--notch-size, 7px);
+            background: var(--frame-bg);
+            border: 1px solid var(--frame-border);
+            transform: rotate(45deg);
+            z-index: 5;
+            pointer-events: none;
+            transition: opacity 600ms ease, box-shadow 600ms ease;
+        }
+        .pp-frame::before { top: calc(var(--notch-size, 7px) / -2); left: calc(var(--notch-size, 7px) / -2); }
+        .pp-frame::after { top: calc(var(--notch-size, 7px) / -2); right: calc(var(--notch-size, 7px) / -2); }
+        .pp-frame > .pp-frame__corner-bl { bottom: calc(var(--notch-size, 7px) / -2); left: calc(var(--notch-size, 7px) / -2); }
+        .pp-frame > .pp-frame__corner-br { bottom: calc(var(--notch-size, 7px) / -2); right: calc(var(--notch-size, 7px) / -2); }
+
+        /* ----------------------------------------------------------
+         * Title bar (series only) - tier-tinted
+         * ---------------------------------------------------------- */
+        .pp-frame__title {
+            background: var(--frame-chrome-bg);
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--frame-border);
+            z-index: 2;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+        }
+        .pp-frame__series {
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.7);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 700;
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ----------------------------------------------------------
+         * Art container (tier-tinted by default; can be overridden)
+         * ---------------------------------------------------------- */
+        .pp-frame__art {
+            position: relative;
+            aspect-ratio: var(--frame-aspect);
+            background: var(--frame-art-bg);
+            overflow: hidden;
+        }
+        .pp-frame__layer {
+            position: absolute;
+            top: var(--frame-art-pad);
+            left: var(--frame-art-pad);
+            width: calc(100% - (var(--frame-art-pad) * 2));
+            height: calc(100% - (var(--frame-art-pad) * 2));
+            object-fit: contain;
+            display: block;
+            pointer-events: none;
+        }
+
+        /* Tier ribbon */
+        .pp-frame__ribbon {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            padding: 2px 8px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            border-radius: 2px;
+            backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.55);
+            color: white;
+            z-index: 3;
+        }
+
+        /* ----------------------------------------------------------
+         * Plinth (badge name + meta line) - tier-tinted
+         * ---------------------------------------------------------- */
+        .pp-frame__plinth {
+            background: var(--frame-chrome-bg);
+            padding: 7px 10px;
+            border-top: 1px solid var(--frame-border);
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            z-index: 2;
+            border-bottom-left-radius: 5px;
+            border-bottom-right-radius: 5px;
+        }
+        .pp-frame__name {
+            font-size: 13px;
+            font-weight: 700;
+            color: white;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .pp-frame__plinth-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 0.04em;
+        }
+
+        /* ----------------------------------------------------------
+         * Rarity (unchanged)
+         * ---------------------------------------------------------- */
+        .pp-frame__rarity {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .pp-frame__rarity svg { width: 10px; height: 10px; flex-shrink: 0; }
+        .pp-frame__rarity--common { color: rgba(255, 255, 255, 0.5); font-weight: 600; }
+        .pp-frame__rarity--uncommon { color: rgba(170, 220, 195, 0.9); }
+        .pp-frame__rarity--rare {
+            color: rgba(245, 205, 105, 1);
+            text-shadow: 0 0 5px rgba(240, 200, 100, 0.35);
+        }
+        .pp-frame__rarity--mythic {
+            color: rgba(225, 245, 255, 1);
+            text-shadow: 0 0 6px rgba(180, 220, 255, 0.55);
+            animation: pp-mythic-pulse 2.6s ease-in-out infinite;
+        }
+        @keyframes pp-mythic-pulse {
+            0%, 100% { opacity: 0.88; text-shadow: 0 0 4px rgba(180, 220, 255, 0.4); }
+            50% { opacity: 1; text-shadow: 0 0 10px rgba(180, 220, 255, 0.75); }
+        }
+
+        /* Gleam covers full art container */
+        .pp-frame__gleam {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 400ms ease;
+            z-index: 2;
+        }
+
+        /* ----------------------------------------------------------
+         * Tier variants - set tier tokens (sizes, chrome bg, art bg, border, notch)
+         * ---------------------------------------------------------- */
+
+        .pp-frame--bronze {
+            --notch-size: 7px;
+            --frame-chrome-bg: linear-gradient(180deg, rgba(50, 28, 12, 0.95), rgba(32, 18, 6, 0.96));
+            --frame-art-bg: linear-gradient(180deg, rgba(70, 40, 15, 0.7), rgba(30, 20, 8, 0.85));
+            border-color: rgba(200, 122, 59, 0.4);
+        }
+        .pp-frame--bronze .pp-frame__ribbon {
+            background: linear-gradient(180deg, var(--tier-bronze) 0%, var(--tier-bronze-dim) 100%);
+            color: white;
+        }
+        .pp-frame--bronze::before,
+        .pp-frame--bronze::after,
+        .pp-frame--bronze > .pp-frame__corner-bl,
+        .pp-frame--bronze > .pp-frame__corner-br {
+            background: linear-gradient(135deg, var(--tier-bronze) 0%, var(--tier-bronze-dim) 100%);
+            border-color: rgba(200, 122, 59, 0.8);
+        }
+
+        .pp-frame--silver {
+            --notch-size: 8px;
+            --frame-chrome-bg: linear-gradient(180deg, rgba(38, 42, 50, 0.95), rgba(24, 27, 33, 0.96));
+            --frame-art-bg: linear-gradient(180deg, rgba(50, 55, 65, 0.7), rgba(20, 24, 30, 0.85));
+            border-color: rgba(205, 208, 212, 0.4);
+        }
+        .pp-frame--silver .pp-frame__ribbon {
+            background: linear-gradient(180deg, var(--tier-silver) 0%, var(--tier-silver-dim) 100%);
+            color: #1a1a1a;
+        }
+        .pp-frame--silver::before,
+        .pp-frame--silver::after,
+        .pp-frame--silver > .pp-frame__corner-bl,
+        .pp-frame--silver > .pp-frame__corner-br {
+            background: linear-gradient(135deg, var(--tier-silver) 0%, var(--tier-silver-dim) 100%);
+            border-color: rgba(205, 208, 212, 0.8);
+            box-shadow: 0 0 2px rgba(205, 208, 212, 0.25);
+        }
+
+        .pp-frame--gold {
+            --notch-size: 9px;
+            --frame-chrome-bg: linear-gradient(180deg, rgba(50, 38, 12, 0.95), rgba(28, 22, 8, 0.96));
+            --frame-art-bg: linear-gradient(180deg, rgba(70, 55, 20, 0.7), rgba(35, 26, 10, 0.85));
+            border-color: rgba(240, 198, 74, 0.55);
+            box-shadow: 0 0 0 1px rgba(240, 198, 74, 0.12) inset;
+        }
+        .pp-frame--gold .pp-frame__ribbon {
+            background: linear-gradient(180deg, var(--tier-gold) 0%, var(--tier-gold-dim) 100%);
+            color: #1a1a1a;
+        }
+        .pp-frame--gold::before,
+        .pp-frame--gold::after,
+        .pp-frame--gold > .pp-frame__corner-bl,
+        .pp-frame--gold > .pp-frame__corner-br {
+            background: linear-gradient(135deg, var(--tier-gold) 0%, var(--tier-gold-dim) 100%);
+            border-color: rgba(240, 198, 74, 0.9);
+            box-shadow: 0 0 4px rgba(240, 198, 74, 0.4);
+        }
+
+        .pp-frame--platinum {
+            --notch-size: 10px;
+            --frame-chrome-bg: linear-gradient(180deg, rgba(30, 44, 56, 0.95), rgba(16, 25, 34, 0.96));
+            --frame-art-bg: linear-gradient(180deg, rgba(40, 60, 80, 0.6), rgba(18, 30, 40, 0.85));
+            border-color: rgba(207, 232, 240, 0.6);
+            box-shadow: 0 0 0 1px rgba(207, 232, 240, 0.18) inset;
+        }
+        .pp-frame--platinum .pp-frame__ribbon {
+            background:
+                linear-gradient(110deg,
+                    var(--tier-platinum) 0%,
+                    #ffffff 25%,
+                    var(--tier-platinum) 50%,
+                    var(--tier-platinum-dim) 75%,
+                    var(--tier-platinum) 100%);
+            color: #1a1a1a;
+        }
+        .pp-frame--platinum::before,
+        .pp-frame--platinum::after,
+        .pp-frame--platinum > .pp-frame__corner-bl,
+        .pp-frame--platinum > .pp-frame__corner-br {
+            background: linear-gradient(135deg,
+                var(--tier-platinum) 0%,
+                #ffffff 30%,
+                var(--tier-platinum) 55%,
+                var(--tier-platinum-dim) 90%);
+            border-color: rgba(207, 232, 240, 0.95);
+            box-shadow: 0 0 5px rgba(207, 232, 240, 0.5);
+            animation: pp-notch-shimmer 3.2s ease-in-out infinite;
+        }
+        @keyframes pp-notch-shimmer {
+            0%, 100% { opacity: 0.85; box-shadow: 0 0 4px rgba(207, 232, 240, 0.4); }
+            50% { opacity: 1; box-shadow: 0 0 9px rgba(207, 232, 240, 0.75); }
+        }
+
+        /* ----------------------------------------------------------
+         * Hover: shared lift + tier-colored outer shadow
+         * ---------------------------------------------------------- */
+        .pp-frame:hover { transform: translateY(-4px); }
+        .pp-frame--bronze:hover {
+            box-shadow: 0 8px 28px rgba(200, 122, 59, 0.22), 0 0 0 1px rgba(200, 122, 59, 0.55);
+        }
+        .pp-frame--silver:hover {
+            box-shadow: 0 8px 28px rgba(205, 208, 212, 0.22), 0 0 0 1px rgba(205, 208, 212, 0.55);
+        }
+        .pp-frame--gold:hover {
+            box-shadow: 0 10px 32px rgba(240, 198, 74, 0.28), 0 0 0 1px rgba(240, 198, 74, 0.65);
+        }
+        .pp-frame--platinum:hover {
+            box-shadow: 0 12px 36px rgba(207, 232, 240, 0.32), 0 0 0 1px rgba(207, 232, 240, 0.75);
+        }
+
+        /* ----------------------------------------------------------
+         * Hover Option A: gleam sweep (the pick)
+         * ---------------------------------------------------------- */
+        .pp-hover-a .pp-frame__gleam {
+            background: linear-gradient(105deg, transparent 30%, var(--gleam-color, rgba(255,255,255,0.2)) 50%, transparent 70%);
+            transform: translateX(-100%);
+            opacity: 0;
+            transition: transform 900ms ease, opacity 200ms ease;
+        }
+        .pp-hover-a:hover .pp-frame__gleam {
+            transform: translateX(100%);
+            opacity: 1;
+        }
+        .pp-hover-a.pp-frame--bronze   { --gleam-color: rgba(255, 200, 150, 0.20); }
+        .pp-hover-a.pp-frame--silver   { --gleam-color: rgba(220, 230, 245, 0.30); }
+        .pp-hover-a.pp-frame--gold     { --gleam-color: rgba(255, 220, 130, 0.42); }
+        .pp-hover-a.pp-frame--platinum .pp-frame__gleam {
+            background: linear-gradient(105deg, transparent 25%,
+                rgba(180, 220, 255, 0.42) 40%,
+                rgba(255, 200, 220, 0.42) 50%,
+                rgba(180, 255, 220, 0.42) 60%,
+                transparent 75%);
+        }
+        /* When a flippable card is flipped (back showing), suppress the
+         * hover gleam entirely. Prevents the sweep from co-firing with
+         * the flip animation. */
+        .pp-hover-a.is-flipped .pp-frame__gleam,
+        .pp-hover-a.is-flipped:hover .pp-frame__gleam {
+            opacity: 0 !important;
+            transform: translateX(-100%) !important;
+            transition: none !important;
+        }
+
+        /* ----------------------------------------------------------
+         * Background overrides for Section 4 (variant classes)
+         * and Section 8 (gallery toggle via data attribute).
+         * Override --frame-art-bg variable; chrome (title/plinth)
+         * stays tier-tinted always.
+         * ---------------------------------------------------------- */
+        .pp-frame--bg-black { --frame-art-bg: #000; }
+        .pp-frame--bg-body { --frame-art-bg: rgba(20, 22, 28, 0.85); }
+        .pp-frame--bg-warm { --frame-art-bg: #1a1612; }
+        /* tier (default) - no class needed */
+
+        [data-gallery-bg="black"] .pp-frame { --frame-art-bg: #000; }
+        [data-gallery-bg="body"] .pp-frame { --frame-art-bg: rgba(20, 22, 28, 0.85); }
+        [data-gallery-bg="warm"] .pp-frame { --frame-art-bg: #1a1612; }
+        /* tier default - no override needed */
+
+        .bg-toggle-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+        .bg-toggle-btn {
+            padding: 5px 12px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.65);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 200ms ease, border-color 200ms ease, color 200ms ease;
+        }
+        .bg-toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.85);
+        }
+        .bg-toggle-btn.is-active {
+            background: rgba(207, 232, 240, 0.15);
+            border-color: rgba(207, 232, 240, 0.45);
+            color: white;
+        }
+
+        /* ----------------------------------------------------------
+         * Unearned
+         * ---------------------------------------------------------- */
+        .pp-frame--unearned {
+            background: rgba(20, 22, 28, 0.92);
+            border-style: dashed;
+            cursor: default;
+        }
+        .pp-frame--unearned .pp-frame__art::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(180deg, rgba(20, 22, 28, 0.55), rgba(20, 22, 28, 0.78)),
+                repeating-linear-gradient(45deg,
+                    transparent 0px, transparent 6px,
+                    rgba(255, 255, 255, 0.03) 6px, rgba(255, 255, 255, 0.03) 7px);
+            pointer-events: none;
+            z-index: 4;
+        }
+        .pp-frame--unearned .pp-frame__locked {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            color: rgba(255, 255, 255, 0.55);
+        }
+        .pp-frame--unearned .pp-frame__ribbon {
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.5);
+            border: 1px dashed rgba(255, 255, 255, 0.25);
+        }
+        .pp-frame--unearned .pp-frame__name { color: rgba(255, 255, 255, 0.6); }
+        .pp-frame--unearned:hover { transform: translateY(-2px); }
+
+        /* ----------------------------------------------------------
+         * Size variants
+         * ---------------------------------------------------------- */
+        .pp-frame--compact .pp-frame__title { display: none; }
+        .pp-frame--compact .pp-frame__plinth { display: none; }
+        .pp-frame--compact .pp-frame__art { border-radius: 5px; }
+
+        /* Mini: bumped from 80→110px, padding reduced 10→5 */
+        .pp-frame--mini {
+            max-width: 110px;
+            --frame-art-pad: 5px;
+        }
+        .pp-frame--mini .pp-frame__title { display: none; }
+        .pp-frame--mini .pp-frame__plinth { display: none; }
+        .pp-frame--mini .pp-frame__art { border-radius: 5px; }
+        .pp-frame--mini .pp-frame__ribbon {
+            font-size: 7px;
+            padding: 1px 4px;
+            top: 4px;
+            right: 4px;
+        }
+        .pp-frame--mini.pp-frame--bronze   { --notch-size: 5px; }
+        .pp-frame--mini.pp-frame--silver   { --notch-size: 5px; }
+        .pp-frame--mini.pp-frame--gold     { --notch-size: 6px; }
+        .pp-frame--mini.pp-frame--platinum { --notch-size: 7px; }
+
+        .pp-frame--no-ribbon .pp-frame__ribbon { display: none; }
+
+        /* ----------------------------------------------------------
+         * Card flip
+         * ---------------------------------------------------------- */
+        .pp-frame--flippable {
+            perspective: 1400px;
+            cursor: pointer;
+        }
+        .pp-frame--flippable .pp-frame__inner {
+            position: relative;
+            width: 100%;
+            transform-style: preserve-3d;
+            transition: transform 0.75s cubic-bezier(0.4, 0.0, 0.2, 1);
+            will-change: transform;
+        }
+        /* Each face draws its own inset border so the edge stays crisp during
+         * the flip (the .pp-frame's actual border can flicker during the 3D
+         * transform; the face-level inset shadow doesn't). */
+        .pp-frame--flippable .pp-frame__face {
+            box-shadow: inset 0 0 0 1px var(--frame-border);
+        }
+        .pp-frame--bronze.pp-frame--flippable .pp-frame__face {
+            box-shadow: inset 0 0 0 1px rgba(200, 122, 59, 0.4);
+        }
+        .pp-frame--silver.pp-frame--flippable .pp-frame__face {
+            box-shadow: inset 0 0 0 1px rgba(205, 208, 212, 0.4);
+        }
+        .pp-frame--gold.pp-frame--flippable .pp-frame__face {
+            box-shadow: inset 0 0 0 1px rgba(240, 198, 74, 0.55);
+        }
+        .pp-frame--platinum.pp-frame--flippable .pp-frame__face {
+            box-shadow: inset 0 0 0 1px rgba(207, 232, 240, 0.6);
+        }
+        .pp-frame--flippable.is-flipped .pp-frame__inner {
+            transform: rotateY(180deg);
+        }
+        .pp-frame__face {
+            position: relative;
+            width: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .pp-frame__face--back {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            transform: rotateY(180deg);
+            background: var(--frame-chrome-bg);
+            padding: 14px 14px 12px;
+            color: white;
+            justify-content: space-between;
+        }
+        .pp-frame--bronze .pp-frame__face--back   { border-top: 2px solid var(--tier-bronze); }
+        .pp-frame--silver .pp-frame__face--back   { border-top: 2px solid var(--tier-silver); }
+        .pp-frame--gold .pp-frame__face--back     { border-top: 2px solid var(--tier-gold); }
+        .pp-frame--platinum .pp-frame__face--back { border-top: 2px solid var(--tier-platinum); }
+
+        .pp-frame__back-header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 8px;
+        }
+        .pp-frame__back-header .pp-frame__series { margin-bottom: 1px; }
+        .pp-frame__back-header .pp-frame__name { font-size: 13px; }
+        .pp-frame__back-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-top: 10px;
+            overflow: hidden;
+        }
+        .pp-frame__back-desc {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.4;
+            font-style: italic;
+        }
+        .pp-frame__back-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .pp-frame__back-stat {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 4px;
+            padding: 5px 7px;
+        }
+        .pp-frame__back-stat-label {
+            font-size: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(255, 255, 255, 0.45);
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .pp-frame__back-stat-value {
+            font-size: 11px;
+            color: white;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .pp-frame__back-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.45);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 700;
+        }
+        .pp-frame__back-flip-hint {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 8px;
+            letter-spacing: 0.04em;
+            text-transform: none;
+            font-weight: 500;
+        }
+
+        /* ----------------------------------------------------------
+         * User customization / Flair (Phase 3 prototype)
+         *
+         * Two modes:
+         *   1. BACKGROUND flairs (Ember/Cosmic/Holographic/Aurora):
+         *      The flair gradient is applied DIRECTLY to .pp-frame's
+         *      background property - it IS the card's surface. Tier
+         *      backdrop image is hidden; title/plinth go semi-transparent
+         *      so the bg flair bleeds through while text stays readable.
+         *      No overlay element, no mix-blend-mode.
+         *   2. BORDER flairs (Lightning/Ants):
+         *      Use the .pp-frame__flair element with an inline SVG path
+         *      tracing the card's perimeter. Tier tint underneath stays.
+         * ---------------------------------------------------------- */
+        .pp-frame__flair {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 4;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        /* ---- BACKGROUND flairs: shared overrides ---- */
+        .pp-flair--ember,
+        .pp-flair--cosmic,
+        .pp-flair--holo,
+        .pp-flair--aurora {
+            /* Art container fully transparent so the flair shows there. */
+            --frame-art-bg: transparent;
+        }
+        /* TRANSPARENT chrome mode (default): title and plinth go semi-transparent
+         * so the bg flair bleeds through them. */
+        [data-chrome-mode="transparent"] .pp-flair--ember,
+        [data-chrome-mode="transparent"] .pp-flair--cosmic,
+        [data-chrome-mode="transparent"] .pp-flair--holo,
+        [data-chrome-mode="transparent"] .pp-flair--aurora {
+            --frame-chrome-bg: rgba(8, 4, 18, 0.45);
+        }
+        /* SOLID chrome mode: no override - the tier's own tier-tinted chrome
+         * applies (same as a non-flair card). Flair only shows in the art area. */
+        .pp-flair--ember .pp-frame__art > .pp-frame__layer:not(:nth-of-type(2)),
+        .pp-flair--cosmic .pp-frame__art > .pp-frame__layer:not(:nth-of-type(2)),
+        .pp-flair--holo .pp-frame__art > .pp-frame__layer:not(:nth-of-type(2)),
+        .pp-flair--aurora .pp-frame__art > .pp-frame__layer:not(:nth-of-type(2)) {
+            /* Hide backdrop (1st) AND foreground (3rd) - keep only the main
+             * badge image (2nd). The foreground is a decorative overlay
+             * designed for the backdrop; without it, the foreground floats
+             * orphaned. The card's flair bg replaces both. */
+            display: none;
+        }
+        .pp-flair--ember .pp-frame__flair,
+        .pp-flair--cosmic .pp-frame__flair,
+        .pp-flair--holo .pp-frame__flair,
+        .pp-flair--aurora .pp-frame__flair {
+            /* No overlay needed - flair lives on .pp-frame's bg. */
+            display: none;
+        }
+
+        /* FLAIR 1: Ember Glow -warm card surface */
+        .pp-flair--ember {
+            background:
+                radial-gradient(ellipse 110% 85% at 50% 110%, rgba(255, 140, 60, 0.75) 0%, transparent 62%),
+                radial-gradient(ellipse 80% 55% at 50% -10%, rgba(255, 80, 40, 0.45) 0%, transparent 60%),
+                #1c0e06;
+            animation: pp-ember-bg-pulse 3.5s ease-in-out infinite;
+        }
+        @keyframes pp-ember-bg-pulse {
+            0%, 100% { background-color: #1c0e06; }
+            50%      { background-color: #2a1408; }
+        }
+
+        /* FLAIR 2: Cosmic Drift - starfield, vertical drift (badge rising up
+         * through stars). Uses fixed-pixel bg-size + matching pixel shift so
+         * the loop is exactly one tile = seamless regardless of card size. */
+        .pp-flair--cosmic {
+            background:
+                radial-gradient(2px 2px at 15% 10%, white 50%, transparent 100%),
+                radial-gradient(1px 1px at 48% 7%, rgba(180, 220, 255, 0.95) 50%, transparent 100%),
+                radial-gradient(2px 2px at 80% 14%, rgba(255, 230, 200, 0.9) 50%, transparent 100%),
+                radial-gradient(1px 1px at 10% 25%, white 50%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 88% 30%, rgba(255, 200, 240, 0.85) 50%, transparent 100%),
+                radial-gradient(1px 1px at 30% 42%, white 50%, transparent 100%),
+                radial-gradient(2px 2px at 62% 48%, rgba(220, 240, 255, 0.9) 50%, transparent 100%),
+                radial-gradient(1px 1px at 18% 58%, rgba(255, 230, 200, 0.75) 50%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 50% 65%, white 50%, transparent 100%),
+                radial-gradient(1px 1px at 78% 70%, rgba(180, 220, 255, 0.85) 50%, transparent 100%),
+                radial-gradient(2px 2px at 25% 82%, rgba(255, 220, 240, 0.85) 50%, transparent 100%),
+                radial-gradient(1px 1px at 88% 88%, white 50%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 58% 92%, rgba(220, 240, 255, 0.8) 50%, transparent 100%),
+                #06030f;
+            background-size: 100% 350px;
+            background-repeat: repeat;
+            animation: pp-cosmic-drift 14s linear infinite;
+        }
+        @keyframes pp-cosmic-drift {
+            from { background-position: 0 0; }
+            to   { background-position: 0 350px; }
+        }
+
+        /* FLAIR 3: Holographic - chromatic surface, seamless hue cycle.
+         * Pure 90deg (horizontal) gradient + matching 0%/100% colors (both
+         * blue) + animating by exactly one tile width = no seam.
+         * Cycles blue→cyan→green→yellow→orange→pink→magenta→blue. */
+        .pp-flair--holo {
+            background: linear-gradient(90deg,
+                rgba(120, 180, 255, 0.5) 0%,
+                rgba(120, 240, 230, 0.5) 14%,
+                rgba(150, 240, 180, 0.5) 28%,
+                rgba(255, 240, 130, 0.5) 42%,
+                rgba(255, 180, 100, 0.5) 56%,
+                rgba(255, 130, 180, 0.5) 70%,
+                rgba(200, 130, 255, 0.5) 84%,
+                rgba(120, 180, 255, 0.5) 100%);
+            background-color: #1a1822;
+            background-size: 300px 100%;
+            background-repeat: repeat;
+            animation: pp-holo-bg-shift 6s linear infinite;
+        }
+        @keyframes pp-holo-bg-shift {
+            from { background-position: 0 0; }
+            to   { background-position: -300px 0; }
+        }
+
+        /* FLAIR 4: Aurora - flowing colored card surface */
+        .pp-flair--aurora {
+            background:
+                radial-gradient(ellipse 90% 110% at 30% 40%, rgba(120, 220, 200, 0.7), transparent 60%),
+                radial-gradient(ellipse 90% 110% at 70% 25%, rgba(180, 150, 255, 0.7), transparent 60%),
+                radial-gradient(ellipse 90% 110% at 50% 85%, rgba(255, 170, 220, 0.65), transparent 60%),
+                #14102a;
+            background-size: 200% 200%;
+            animation: pp-aurora-bg-flow 11s ease-in-out infinite alternate;
+        }
+        @keyframes pp-aurora-bg-flow {
+            0%   { background-position: 0% 0%,   100% 30%, 50% 70%; }
+            100% { background-position: 100% 30%, 0% 70%,  80% 30%; }
+        }
+
+        /* ---- BORDER flairs: keep .pp-frame__flair with SVG ---- */
+
+        /* FLAIR 5: Lightning - SVG spark traveling around the card's perimeter */
+        .pp-flair--lightning .pp-frame__flair svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+            overflow: visible;
+        }
+        .pp-flair--lightning .pp-frame__flair rect {
+            fill: none;
+            stroke: rgb(140, 210, 255);
+            stroke-width: 3;
+            stroke-linecap: round;
+            vector-effect: non-scaling-stroke;
+            filter:
+                drop-shadow(0 0 3px rgba(140, 210, 255, 1))
+                drop-shadow(0 0 8px rgba(120, 200, 255, 0.7));
+        }
+
+        /* FLAIR 6: Marching Ants - SVG dashed perimeter around the whole card */
+        .pp-flair--ants .pp-frame__flair svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .pp-flair--ants .pp-frame__flair rect {
+            fill: none;
+            stroke: rgba(255, 220, 100, 1);
+            stroke-width: 2;
+            vector-effect: non-scaling-stroke;
+        }
+
+        /* ----------------------------------------------------------
+         * Custom hover effects (Section 10 prototype)
+         *
+         * Each .pp-hover-* class adds a unique hover behavior. Independent
+         * of the background/border flair system in Section 9 - these target
+         * the card's hover state directly.
+         * ---------------------------------------------------------- */
+
+        /* 1. 3D TILT - card tilts toward cursor (JS-driven via mousemove) */
+        .pp-hover-tilt {
+            transition: transform 250ms cubic-bezier(0.2, 0.8, 0.2, 1);
+            transform-style: preserve-3d;
+        }
+        .pp-hover-tilt:hover {
+            transform: translateY(-4px);
+            /* JS overrides this during mousemove with calculated 3D tilt */
+        }
+
+        /* 2. CURSOR SPOTLIGHT - bright warm spot follows the cursor over the card */
+        .pp-hover-spotlight .pp-frame__gleam {
+            background: radial-gradient(circle 150px at var(--mx, 50%) var(--my, 50%),
+                rgba(255, 240, 170, 0.85),
+                rgba(255, 210, 110, 0.55) 25%,
+                rgba(255, 180, 80, 0.2) 50%,
+                transparent 72%);
+            opacity: 0;
+            transition: opacity 220ms ease;
+        }
+        .pp-hover-spotlight:hover .pp-frame__gleam {
+            opacity: 1;
+        }
+
+        /* 3. HOLOGRAPHIC SHEEN - chromatic reflection shifts with cursor like a
+         * tilted holo card under light */
+        .pp-hover-sheen .pp-frame__gleam {
+            background: linear-gradient(115deg,
+                transparent 30%,
+                rgba(180, 220, 255, 0.42) 42%,
+                rgba(255, 200, 220, 0.5) 50%,
+                rgba(180, 255, 220, 0.42) 58%,
+                transparent 70%);
+            background-size: 300% 300%;
+            background-position: var(--mx, 50%) var(--my, 50%);
+            opacity: 0;
+            transition: opacity 220ms ease, background-position 90ms ease-out;
+            mix-blend-mode: screen;
+        }
+        .pp-hover-sheen:hover .pp-frame__gleam {
+            opacity: 1;
+        }
+
+        /* 4. CURSOR TRAIL - sparkle particles spawn at cursor position and fade
+         * (JS spawns the .pp-sparkle elements) */
+        .pp-sparkle {
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: radial-gradient(circle,
+                rgba(255, 255, 255, 1),
+                rgba(230, 245, 255, 0.95) 22%,
+                rgba(180, 220, 255, 0.55) 50%,
+                transparent 75%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 6;
+            transform: translate(-50%, -50%);
+            animation: pp-sparkle-fade 950ms ease-out forwards;
+            filter: drop-shadow(0 0 4px rgba(180, 220, 255, 0.7));
+        }
+        @keyframes pp-sparkle-fade {
+            0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+            12%  { opacity: 1; }
+            100% { transform: translate(-50%, calc(-50% - 28px)) scale(1.7); opacity: 0; }
+        }
+
+        /* 5. FLOATING EMBERS - particles spawned by JS at random horizontal
+         * positions, each with randomized drift, size, and duration so embers
+         * rise at varied natural angles instead of a uniform vertical column. */
+        .pp-hover-embers .pp-frame__gleam {
+            opacity: 1; /* container always visible; embers are individual elements */
+        }
+        .pp-ember {
+            position: absolute;
+            bottom: 0;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                rgba(255, 210, 110, 1) 25%,
+                rgba(255, 150, 60, 0.7) 60%,
+                transparent 85%);
+            pointer-events: none;
+            z-index: 2;
+            transform: translate(-50%, 0);
+            filter: drop-shadow(0 0 4px rgba(255, 140, 50, 0.65));
+            animation: pp-ember-rise linear forwards;
+            will-change: transform, bottom, opacity;
+        }
+        @keyframes pp-ember-rise {
+            0% {
+                bottom: -4px;
+                opacity: 0;
+                transform: translate(-50%, 0) scale(1);
+            }
+            12% { opacity: 1; }
+            50% {
+                transform: translate(calc(-50% + var(--drift-mid, 0px)), 0) scale(1);
+            }
+            100% {
+                bottom: 108%;
+                opacity: 0;
+                transform: translate(calc(-50% + var(--drift-end, 0px)), 0) scale(0.35);
+            }
+        }
+
+        /* 6. LEVITATE - card floats organically. Three independent animations
+         * on individual transform properties (translate/rotate/scale), each
+         * with a different duration so they're never in sync. At any given
+         * moment some axis is in motion - no keyframe-stop feel. */
+        .pp-hover-levitate {
+            /* Initialize individual transform properties so they're animatable
+             * from a defined state (not 'none'). */
+            translate: 0 0;
+            rotate: 0deg;
+            scale: 1;
+        }
+        .pp-hover-levitate:hover {
+            animation:
+                pp-lev-translate 4.7s ease-in-out infinite,
+                pp-lev-rotate    5.9s ease-in-out infinite,
+                pp-lev-scale     6.7s ease-in-out infinite;
+        }
+        @keyframes pp-lev-translate {
+            0%, 100% { translate: -3px 0; }
+            50%      { translate: 3px -13px; }
+        }
+        @keyframes pp-lev-rotate {
+            0%, 100% { rotate: -2.5deg; }
+            50%      { rotate: 2.5deg; }
+        }
+        @keyframes pp-lev-scale {
+            0%, 100% { scale: 1; }
+            50%      { scale: 1.02; }
+        }
+
+        /* ----------------------------------------------------------
+         * Page chrome
+         * ---------------------------------------------------------- */
+        body {
+            background:
+                radial-gradient(ellipse at top, rgba(40, 60, 100, 0.18), transparent 60%),
+                #0e1014;
+            color: #e8e9ec;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .demo-section {
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 28px;
+            margin-bottom: 24px;
+        }
+        .demo-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 6px;
+        }
+        .demo-caption {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 12px;
+            text-align: center;
+        }
+        h1 { font-size: 32px; font-weight: 800; }
+        h2 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+        h3 { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.85); margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+            <symbol id="rarity-dot" viewBox="0 0 12 12">
+                <circle cx="6" cy="6" r="3" fill="currentColor"/>
+            </symbol>
+            <symbol id="rarity-diamond" viewBox="0 0 12 12">
+                <path d="M6 1 L10.5 6 L6 11 L1.5 6 Z" fill="currentColor"/>
+            </symbol>
+            <symbol id="rarity-sparkle" viewBox="0 0 12 12">
+                <path d="M6 0.5 L7 5 L11.5 6 L7 7 L6 11.5 L5 7 L0.5 6 L5 5 Z" fill="currentColor"/>
+            </symbol>
+        </defs>
+    </svg>
+
+    <div class="max-w-6xl mx-auto px-6 py-10">
+
+        <div class="mb-10">
+            <div class="text-xs uppercase tracking-[0.2em] text-white/40 mb-2">Design Preview</div>
+            <h1>The Frame</h1>
+            <p class="text-white/70 mt-3 max-w-2xl leading-relaxed">
+                The proposed visual primitive for PlatPursuit badges. It's the chrome that surrounds every badge wherever it renders (gallery, share images, comments, profiles, everywhere). This preview shows how it looks across tiers, sizes, and states, plus an exploration of optional cosmetic effects (&ldquo;flair&rdquo;) we&rsquo;re considering for a future customization layer.
+            </p>
+            <p class="text-white/55 mt-3 max-w-2xl text-sm leading-relaxed">
+                Hover, click, and toggle the interactive controls in each section. Feedback prompts at the very bottom.
+            </p>
+        </div>
+
+        <!-- 1. TIER VARIANTS -->
+        <div class="demo-section">
+            <h2>1. The four tiers</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Bronze, Silver, Gold, and Platinum. Each tier carries through the whole card: title bar, art container, and metadata strip all share a tier palette so a Bronze card feels Bronze top to bottom, not Bronze art wrapped in neutral chrome.
+            </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+
+                <div class="pp-frame pp-frame--bronze">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title">
+                        <div class="pp-frame__series">Resident Evil</div>
+                    </div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Bronze</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/1_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/1_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2024-08-15</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--common">47%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title">
+                        <div class="pp-frame__series">FromSoftware</div>
+                    </div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Silver</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2024-11-02</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>12%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title">
+                        <div class="pp-frame__series">Marvel Universe</div>
+                    </div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Gold</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2025-01-21</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--platinum">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title">
+                        <div class="pp-frame__series">PSVR Catalogue</div>
+                    </div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Platinum</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2025-04-08</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 2. RIBBON A/B -->
+        <div class="demo-section">
+            <h2>2. Ribbon vs no-ribbon</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Tier identity already shows in three places: backdrop art, corner notch color, and chrome tint. The tier ribbon (top-right of the art) makes it four. Open question: is the ribbon pulling its weight, or is it visual noise?
+            </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+
+                <div>
+                    <div class="demo-label">With ribbon · Gold</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Without ribbon · Gold</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--no-ribbon">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">With ribbon · Platinum</div>
+                    <div class="pp-frame pp-frame--platinum">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Platinum</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Without ribbon · Platinum</div>
+                    <div class="pp-frame pp-frame--platinum pp-frame--no-ribbon">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Platinum</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3. HOVER -->
+        <div class="demo-section">
+            <h2>3. Hover behavior (universal)</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Hover any card. A subtle tier-colored gleam sweeps across the surface alongside a gentle lift. This is the default hover for every Frame, regardless of tier or flair.
+            </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+
+                <div class="pp-frame pp-frame--bronze pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Resident Evil</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Bronze</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/1_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/1_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--common">47%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">FromSoftware</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Silver</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>12%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Gold</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--platinum pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Platinum</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 4. BG OPTIONS -->
+        <div class="demo-section">
+            <h2>4. Background options compared</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Four candidates for what fills the area immediately behind the badge image. Same Gold badge in each, only the art container fill changes. C (tier-tinted) is the proposed default; Section 8 lets you preview each option at gallery scale.
+            </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+
+                <div>
+                    <div class="demo-label">A: Pure black</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--bg-black">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">B: Card body</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--bg-body">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">C: Tier-tinted (default)</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">D: PlatPursuit warm</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--bg-warm">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 5. FLIP -->
+        <div class="demo-section">
+            <h2>5. Card flip</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Click any card to flip it and see the back. Personal stats live there: earn date, stage completion, rarity rank, and next-tier progress. Click again to flip back.
+            </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+
+                <div class="pp-frame pp-frame--bronze pp-frame--flippable pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__inner">
+                        <div class="pp-frame__face pp-frame__face--front">
+                            <div class="pp-frame__title"><div class="pp-frame__series">Resident Evil</div></div>
+                            <div class="pp-frame__art">
+                                <span class="pp-frame__ribbon">Bronze</span>
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/1_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/1_foreground.png" alt="" />
+                                <div class="pp-frame__gleam"></div>
+                            </div>
+                            <div class="pp-frame__plinth">
+                                <div class="pp-frame__name">Default Badge</div>
+                                <div class="pp-frame__plinth-meta">
+                                    <span>Earned 2024-08-15</span>
+                                    <span class="pp-frame__rarity pp-frame__rarity--common">47%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pp-frame__face pp-frame__face--back">
+                            <div class="pp-frame__back-header">
+                                <div class="pp-frame__series">Resident Evil</div>
+                                <div class="pp-frame__name">Default Badge</div>
+                            </div>
+                            <div class="pp-frame__back-body">
+                                <p class="pp-frame__back-desc">Awarded for completing the platinum on a Resident Evil entry.</p>
+                                <div class="pp-frame__back-stats">
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">Aug 15, 2024</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">5 / 5</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">47% · #2,341</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Silver</div></div>
+                                </div>
+                            </div>
+                            <div class="pp-frame__back-footer">
+                                <span>PlatPursuit</span>
+                                <span class="pp-frame__back-flip-hint">click to flip</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver pp-frame--flippable pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__inner">
+                        <div class="pp-frame__face pp-frame__face--front">
+                            <div class="pp-frame__title"><div class="pp-frame__series">FromSoftware</div></div>
+                            <div class="pp-frame__art">
+                                <span class="pp-frame__ribbon">Silver</span>
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                                <div class="pp-frame__gleam"></div>
+                            </div>
+                            <div class="pp-frame__plinth">
+                                <div class="pp-frame__name">Default Badge</div>
+                                <div class="pp-frame__plinth-meta">
+                                    <span>Earned 2024-11-02</span>
+                                    <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>12%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pp-frame__face pp-frame__face--back">
+                            <div class="pp-frame__back-header">
+                                <div class="pp-frame__series">FromSoftware</div>
+                                <div class="pp-frame__name">Default Badge</div>
+                            </div>
+                            <div class="pp-frame__back-body">
+                                <p class="pp-frame__back-desc">Awarded for completing the platinum on multiple FromSoftware soulsbornes.</p>
+                                <div class="pp-frame__back-stats">
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">Nov 2, 2024</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">8 / 8</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">12% · #427</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Gold</div></div>
+                                </div>
+                            </div>
+                            <div class="pp-frame__back-footer">
+                                <span>PlatPursuit</span>
+                                <span class="pp-frame__back-flip-hint">click to flip</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold pp-frame--flippable pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__inner">
+                        <div class="pp-frame__face pp-frame__face--front">
+                            <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                            <div class="pp-frame__art">
+                                <span class="pp-frame__ribbon">Gold</span>
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                                <div class="pp-frame__gleam"></div>
+                            </div>
+                            <div class="pp-frame__plinth">
+                                <div class="pp-frame__name">Default Badge</div>
+                                <div class="pp-frame__plinth-meta">
+                                    <span>Earned 2025-01-21</span>
+                                    <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pp-frame__face pp-frame__face--back">
+                            <div class="pp-frame__back-header">
+                                <div class="pp-frame__series">Marvel Universe</div>
+                                <div class="pp-frame__name">Default Badge</div>
+                            </div>
+                            <div class="pp-frame__back-body">
+                                <p class="pp-frame__back-desc">Awarded for platinuming every Marvel-licensed game in the catalogue.</p>
+                                <div class="pp-frame__back-stats">
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">Jan 21, 2025</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">10 / 10</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">3% · #84</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Platinum</div></div>
+                                </div>
+                            </div>
+                            <div class="pp-frame__back-footer">
+                                <span>PlatPursuit</span>
+                                <span class="pp-frame__back-flip-hint">click to flip</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--platinum pp-frame--flippable pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__inner">
+                        <div class="pp-frame__face pp-frame__face--front">
+                            <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                            <div class="pp-frame__art">
+                                <span class="pp-frame__ribbon">Platinum</span>
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                                <div class="pp-frame__gleam"></div>
+                            </div>
+                            <div class="pp-frame__plinth">
+                                <div class="pp-frame__name">Default Badge</div>
+                                <div class="pp-frame__plinth-meta">
+                                    <span>Earned 2025-04-08</span>
+                                    <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pp-frame__face pp-frame__face--back">
+                            <div class="pp-frame__back-header">
+                                <div class="pp-frame__series">PSVR Catalogue</div>
+                                <div class="pp-frame__name">Default Badge</div>
+                            </div>
+                            <div class="pp-frame__back-body">
+                                <p class="pp-frame__back-desc">The final tier. Awarded for 100% completion across all PSVR-tagged platinums.</p>
+                                <div class="pp-frame__back-stats">
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">Apr 8, 2025</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">18 / 18</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">0.3% · #11</div></div>
+                                    <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Status</div><div class="pp-frame__back-stat-value">Maxed</div></div>
+                                </div>
+                            </div>
+                            <div class="pp-frame__back-footer">
+                                <span>PlatPursuit</span>
+                                <span class="pp-frame__back-flip-hint">click to flip</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 6. UNEARNED -->
+        <div class="demo-section">
+            <h2>6. Earned vs unearned</h2>
+            <p class="text-sm text-white/55 mb-6">
+                How a Frame looks before you&rsquo;ve earned the badge. Veiled rather than greyscaled (the badge art stays visible underneath as a glimpse of what&rsquo;s waiting), with a dashed border and progress shown in the plinth.
+            </p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl">
+                <div>
+                    <div class="demo-label">Earned</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-01-21</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Unearned</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">?</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__locked">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. SIZE VARIANTS -->
+        <div class="demo-section">
+            <h2>7. Size variants</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Three sizes for different surfaces: <strong>default</strong> for galleries and detail pages, <strong>compact</strong> for in-progress badges on the home screen, and <strong>mini</strong> for inline use in comments, leaderboards, or chips.
+            </p>
+
+            <div class="flex flex-wrap items-end gap-8">
+
+                <div class="w-48">
+                    <div class="demo-label">Default</div>
+                    <div class="pp-frame pp-frame--platinum">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Platinum</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-36">
+                    <div class="demo-label">Compact</div>
+                    <div class="pp-frame pp-frame--platinum pp-frame--compact">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Platinum</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Mini (inline)</div>
+                    <div class="pp-frame pp-frame--platinum pp-frame--mini">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">P</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Mini · all tiers</div>
+                    <div class="flex gap-3 items-end">
+                        <div class="pp-frame pp-frame--bronze pp-frame--mini">
+                            <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                            <div class="pp-frame__art">
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/1_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/1_foreground.png" alt="" />
+                            </div>
+                        </div>
+                        <div class="pp-frame pp-frame--silver pp-frame--mini">
+                            <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                            <div class="pp-frame__art">
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                            </div>
+                        </div>
+                        <div class="pp-frame pp-frame--gold pp-frame--mini">
+                            <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                            <div class="pp-frame__art">
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            </div>
+                        </div>
+                        <div class="pp-frame pp-frame--platinum pp-frame--mini">
+                            <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                            <div class="pp-frame__art">
+                                <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                                <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 8. GALLERY -->
+        <div class="demo-section" data-gallery-bg="tier">
+            <h2>8. Gallery view</h2>
+            <p class="text-sm text-white/55 mb-6">
+                A simulated Badge Gallery slice showing earned and unearned Frames mixed together. Toggle the background options below to preview how each looks at scale.
+            </p>
+
+            <div class="bg-toggle-row">
+                <button class="bg-toggle-btn" data-bg="black">A: Pure black</button>
+                <button class="bg-toggle-btn" data-bg="body">B: Card body</button>
+                <button class="bg-toggle-btn is-active" data-bg="tier">C: Tier-tinted (default)</button>
+                <button class="bg-toggle-btn" data-bg="warm">D: PlatPursuit warm</button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+
+                <div class="pp-frame pp-frame--platinum pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Platinum</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Gold</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">FromSoftware</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Silver</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>12%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--bronze pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Resident Evil</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Bronze</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/1_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/1_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--common">47%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold pp-frame--unearned">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">From Soulsborne</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">?</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                        <div class="pp-frame__locked"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>6 of 8 stages</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>4%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver pp-frame--unearned">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">CRPG Vault</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">?</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                        <div class="pp-frame__locked"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>3 of 6 stages</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>15%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--bronze pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">JRPG Quest</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Bronze</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/1_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/1_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--common">52%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--platinum pp-frame--unearned">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">FPS Specialist</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">?</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/4_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/4_foreground.png" alt="" />
+                        <div class="pp-frame__locked"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>2 of 12 stages</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.8%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Racing Driver</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Gold</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>2%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver pp-hover-a">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Phoenix Wright</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Silver</span>
+                        <img class="pp-frame__layer" src="static/images/badges/backdrops/2_backdrop.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                        <img class="pp-frame__layer" src="static/images/badges/foregrounds/2_foreground.png" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>18%</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 9. FLAIR / USER CUSTOMIZATION -->
+        <div class="demo-section" data-chrome-mode="transparent">
+            <h2>9. Flair: background &amp; border effects</h2>
+            <p class="text-sm text-white/55 mb-2">
+                Cosmetic effects users could unlock and apply to their badges as part of a future customization layer. All examples shown on Gold tier.
+            </p>
+            <p class="text-xs text-white/45 mb-4">
+                <strong>Background flairs</strong> replace the tier-tinted card surface; the flair becomes the visible backdrop the badge sits on. <strong>Border flairs</strong> trace the card&rsquo;s outer perimeter (lightning travels around, marching ants chase around). Tier identity is preserved via the corner notches and outer border in both cases.
+            </p>
+
+            <div class="bg-toggle-row">
+                <button class="bg-toggle-btn is-active" data-chrome="transparent">Chrome: transparent (flair bleeds through)</button>
+                <button class="bg-toggle-btn" data-chrome="solid">Chrome: solid (text isolated)</button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                <!-- 1. EMBER -->
+                <div>
+                    <div class="demo-label">Ember Glow · background</div>
+                    <div class="pp-frame pp-frame--gold pp-flair--ember">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                        <div class="pp-frame__flair"></div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Warm radial bloom from bottom + faint top glow, slow pulse.</p>
+                </div>
+
+                <!-- 2. COSMIC -->
+                <div>
+                    <div class="demo-label">Cosmic Drift · background</div>
+                    <div class="pp-frame pp-frame--gold pp-flair--cosmic">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                        <div class="pp-frame__flair"></div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Starfield scattered across the whole card, twinkling in/out.</p>
+                </div>
+
+                <!-- 3. HOLOGRAPHIC -->
+                <div>
+                    <div class="demo-label">Holographic · background</div>
+                    <div class="pp-frame pp-frame--gold pp-flair--holo">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                        <div class="pp-frame__flair"></div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Chromatic sweep across the entire card, like a foil card tilting under light.</p>
+                </div>
+
+                <!-- 4. AURORA -->
+                <div>
+                    <div class="demo-label">Aurora · background</div>
+                    <div class="pp-frame pp-frame--gold pp-flair--aurora">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                        <div class="pp-frame__flair"></div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Teal / violet / pink blooms drifting slowly across the card.</p>
+                </div>
+
+                <!-- 5. LIGHTNING -->
+                <div>
+                    <div class="demo-label">Lightning · border</div>
+                    <div class="pp-frame pp-frame--gold pp-flair--lightning">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                        <div class="pp-frame__flair">
+                            <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                                <rect x="0.5" y="0.5" width="99" height="99" rx="3" pathLength="200" stroke-dasharray="25 175">
+                                    <animate attributeName="stroke-dashoffset" from="0" to="-200" dur="2s" repeatCount="indefinite" />
+                                </rect>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Bright spark travels around the whole card's perimeter, ~2s per lap.</p>
+                </div>
+
+                <!-- 6. MARCHING ANTS -->
+                <div>
+                    <div class="demo-label">Marching Ants · border</div>
+                    <div class="pp-frame pp-frame--gold pp-flair--ants">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                        <div class="pp-frame__flair">
+                            <svg preserveAspectRatio="none" viewBox="0 0 100 100">
+                                <rect x="0.5" y="0.5" width="99" height="99" rx="3" pathLength="200" stroke-dasharray="4 4">
+                                    <animate attributeName="stroke-dashoffset" from="0" to="-8" dur="0.8s" repeatCount="indefinite" />
+                                </rect>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Dashed border marching around the full card perimeter, ~0.8s per cycle.</p>
+                </div>
+
+            </div>
+
+            <p class="demo-caption mt-6">
+                Background flairs replace the tier tint. The flair becomes the surface. Border flairs trace the perimeter and keep the tier tint underneath. Both modes preserve tier identity through the corner notches and outer border.
+            </p>
+        </div>
+
+        <!-- 10. HOVER FLAIR -->
+        <div class="demo-section">
+            <h2>10. Flair: hover effects</h2>
+            <p class="text-sm text-white/55 mb-6">
+                Cosmetic effects that activate on hover. Independent of the background/border flair above. These can be combined with any of those, or applied to plain Frames. All Gold tier for direct comparison.
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                <!-- 1. 3D TILT (JS) -->
+                <div>
+                    <div class="demo-label">3D Tilt · motion</div>
+                    <div class="pp-frame pp-frame--gold pp-hover-tilt">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Card tilts toward the cursor. Move your mouse over the art.</p>
+                </div>
+
+                <!-- 2. LEVITATE -->
+                <div>
+                    <div class="demo-label">Levitate · motion</div>
+                    <div class="pp-frame pp-frame--gold pp-hover-levitate">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Card gently floats and rotates while hovered.</p>
+                </div>
+
+                <!-- 3. CURSOR SPOTLIGHT (JS) -->
+                <div>
+                    <div class="demo-label">Cursor Spotlight · mouse-follow</div>
+                    <div class="pp-frame pp-frame--gold pp-hover-spotlight">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Warm glow follows the cursor over the card.</p>
+                </div>
+
+                <!-- 4. HOLOGRAPHIC SHEEN (JS) -->
+                <div>
+                    <div class="demo-label">Holo Sheen · mouse-follow</div>
+                    <div class="pp-frame pp-frame--gold pp-hover-sheen">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Chromatic reflection shifts with cursor, like tilting a real foil card.</p>
+                </div>
+
+                <!-- 5. CURSOR TRAIL (JS, particles) -->
+                <div>
+                    <div class="demo-label">Cursor Trail · particles + mouse-follow</div>
+                    <div class="pp-frame pp-frame--gold pp-hover-trail">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Sparkle particles trail the cursor as it moves over the card.</p>
+                </div>
+
+                <!-- 6. FLOATING EMBERS (CSS, particles) -->
+                <div>
+                    <div class="demo-label">Floating Embers · particles</div>
+                    <div class="pp-frame pp-frame--gold pp-hover-embers">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="static/images/badges/backdrops/3_backdrop.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/default.png" alt="" />
+                            <img class="pp-frame__layer" src="static/images/badges/foregrounds/3_foreground.png" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-2 leading-snug">Warm embers continuously rise from the bottom of the card.</p>
+                </div>
+
+            </div>
+
+            <p class="demo-caption mt-6">
+                Each hover effect is independent and can be combined with any background or border flair (e.g., Aurora background + 3D Tilt hover). All effects pictured here are exploratory. Not all of them would necessarily ship.
+            </p>
+        </div>
+
+        <!-- 11. KEY DESIGN CHOICES -->
+        <div class="demo-section">
+            <h2>11. Key design choices</h2>
+            <ul class="space-y-3 text-sm text-white/70 max-w-3xl">
+                <li>
+                    <strong class="text-white">Trading-card layout.</strong>
+                    Series name at the top (small caps, like a card set subtitle), badge art in the middle, badge name + earn metadata at the bottom. Closer to a Topps baseball card than a Pokemon card. The badge name is the headline; everything else supports it.
+                </li>
+                <li>
+                    <strong class="text-white">Corner notches as brand mark.</strong>
+                    Inspired by graded trading-card sleeves. Small (7-10px depending on tier), tier-colored, and the same diamond shape across every Frame. The goal: a screenshot of any Frame should read as PlatPursuit before any text loads.
+                </li>
+                <li>
+                    <strong class="text-white">Tier-tinted everywhere.</strong>
+                    Title, art, and plinth all share a tier palette (Bronze warm, Silver cool, Gold warm, Platinum cool iridescent). The whole card reads as one cohesive tier color top to bottom, not chrome wrapped around a tier-colored art.
+                </li>
+                <li>
+                    <strong class="text-white">Rarity as a feature.</strong>
+                    The earn-percentage in the plinth is treated as a status indicator, not just a number. Common badges read muted; rare badges glow gold; mythic badges (sub-1%) have an animated pulse and sparkle icon. A mythic badge should stand out in a gallery at a glance, regardless of its tier.
+                </li>
+                <li>
+                    <strong class="text-white">Click to flip.</strong>
+                    Each Frame can show personal stats on the back (earn date, stages complete, rarity rank, next-tier progress). The trading-card metaphor goes from &ldquo;looks like a card&rdquo; to &ldquo;behaves like a card.&rdquo;
+                </li>
+                <li>
+                    <strong class="text-white">Flair = optional, not default.</strong>
+                    The base Frame is what every user sees by default. The flair effects in Sections 9 and 10 are explorations of a future customization layer where users could unlock and equip cosmetic effects. The base design needs to be strong on its own first.
+                </li>
+            </ul>
+        </div>
+
+        <!-- 12. FEEDBACK PROMPTS -->
+        <div class="demo-section">
+            <h2>12. Feedback prompts</h2>
+            <p class="text-sm text-white/55 mb-5 max-w-3xl">
+                The honest gut-checks we&rsquo;re looking for. Don&rsquo;t worry about being polite. Conflicting opinions are useful.
+            </p>
+            <ul class="space-y-4 text-sm text-white/75 max-w-3xl">
+                <li>
+                    <strong class="text-white">1. First impression.</strong>
+                    Does this read as PlatPursuit? Would you recognize a Frame in the wild as ours, or could it belong to any tracker?
+                </li>
+                <li>
+                    <strong class="text-white">2. Tier identity.</strong>
+                    Do the four tiers feel distinct enough? Does the tier signaling (notches + chrome tint + ribbon + backdrop) feel right, or is it too loud / too quiet?
+                </li>
+                <li>
+                    <strong class="text-white">3. The badge gallery experience.</strong>
+                    Section 8 simulates a gallery view. Try the background toggle. Does it hold up at scale? Would you enjoy scrolling through your own badge collection rendered like this?
+                </li>
+                <li>
+                    <strong class="text-white">4. Card flip (Section 5).</strong>
+                    Is the click-to-flip useful, or unnecessary chrome? What would you most want to see on the back?
+                </li>
+                <li>
+                    <strong class="text-white">5. Flair effects (Sections 9 &amp; 10).</strong>
+                    Which ones land? Which feel like &ldquo;too much&rdquo;? Which would you want for your own badge? Are there missing categories (e.g. nature, weather, magic, sci-fi) you&rsquo;d expect to see?
+                </li>
+                <li>
+                    <strong class="text-white">6. Deal-breakers.</strong>
+                    Is there anything in this design you&rsquo;d push back on hard? Anything that feels off-brand for PlatPursuit?
+                </li>
+                <li>
+                    <strong class="text-white">7. The unknown unknowns.</strong>
+                    Something you&rsquo;d expect this design to address that it doesn&rsquo;t? Edge cases we missed?
+                </li>
+            </ul>
+            <p class="text-xs text-white/45 mt-6 max-w-3xl leading-relaxed">
+                This is an interactive HTML preview, not a final implementation. Real badge artwork, real user data, real performance characteristics will all behave somewhat differently when integrated into PlatPursuit proper. Treat the visuals as directional.
+            </p>
+        </div>
+
+    </div>
+
+    <script>
+        document.querySelectorAll('.pp-frame--flippable').forEach(frame => {
+            frame.addEventListener('click', (e) => {
+                if (e.target.closest('a, button')) return;
+                frame.classList.toggle('is-flipped');
+            });
+        });
+        // Gallery background toggle (Section 8) - scoped to buttons with data-bg
+        document.querySelectorAll('[data-gallery-bg]').forEach(section => {
+            section.querySelectorAll('button[data-bg]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    section.setAttribute('data-gallery-bg', btn.dataset.bg);
+                    section.querySelectorAll('button[data-bg]').forEach(b => {
+                        b.classList.toggle('is-active', b === btn);
+                    });
+                });
+            });
+        });
+
+        // Chrome mode toggle (Section 9) - scoped to buttons with data-chrome
+        document.querySelectorAll('[data-chrome-mode]').forEach(section => {
+            section.querySelectorAll('button[data-chrome]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    section.setAttribute('data-chrome-mode', btn.dataset.chrome);
+                    section.querySelectorAll('button[data-chrome]').forEach(b => {
+                        b.classList.toggle('is-active', b === btn);
+                    });
+                });
+            });
+        });
+
+        // 3D Tilt hover effect - tracks mouse over the card, applies a
+        // perspective rotation that follows the cursor.
+        document.querySelectorAll('.pp-hover-tilt').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const rotX = ((y - rect.height / 2) / (rect.height / 2)) * -7;
+                const rotY = ((x - rect.width / 2) / (rect.width / 2)) * 7;
+                card.style.transform =
+                    `perspective(900px) rotateX(${rotX}deg) rotateY(${rotY}deg) translateY(-6px)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+            });
+        });
+
+        // Cursor Spotlight + Holographic Sheen - both use --mx/--my custom
+        // properties driven by mouse position. Pure CSS handles the rendering.
+        document.querySelectorAll('.pp-hover-spotlight, .pp-hover-sheen').forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const mx = ((e.clientX - rect.left) / rect.width) * 100;
+                const my = ((e.clientY - rect.top) / rect.height) * 100;
+                card.style.setProperty('--mx', `${mx}%`);
+                card.style.setProperty('--my', `${my}%`);
+            });
+        });
+
+        // Cursor Trail - spawns sparkle particles at cursor position on
+        // mousemove (throttled). Each sparkle fades out and self-removes.
+        document.querySelectorAll('.pp-hover-trail').forEach(card => {
+            let lastSparkle = 0;
+            card.addEventListener('mousemove', (e) => {
+                const now = Date.now();
+                if (now - lastSparkle < 30) return; // throttle to ~33/s
+                lastSparkle = now;
+                const sparkle = document.createElement('div');
+                sparkle.className = 'pp-sparkle';
+                const rect = card.getBoundingClientRect();
+                sparkle.style.left = (e.clientX - rect.left) + 'px';
+                sparkle.style.top = (e.clientY - rect.top) + 'px';
+                card.appendChild(sparkle);
+                setTimeout(() => sparkle.remove(), 950);
+            });
+        });
+
+        // Floating Embers - spawn ember particles continuously on hover.
+        // Each ember has randomized drift (horizontal direction varies),
+        // size, and duration so they rise at varied natural angles.
+        document.querySelectorAll('.pp-hover-embers').forEach(card => {
+            const gleam = card.querySelector('.pp-frame__gleam');
+            if (!gleam) return;
+            let timer = null;
+            const spawn = () => {
+                const ember = document.createElement('div');
+                ember.className = 'pp-ember';
+                const x = 5 + Math.random() * 90;             // 5%-95%
+                const size = 4 + Math.random() * 4;            // 4-8px
+                const duration = 2200 + Math.random() * 1800;  // 2.2-4s
+                const driftMid = (Math.random() - 0.5) * 20;   // ±10px
+                const driftEnd = (Math.random() - 0.5) * 44;   // ±22px
+                ember.style.left = x + '%';
+                ember.style.width = size + 'px';
+                ember.style.height = size + 'px';
+                ember.style.setProperty('--drift-mid', driftMid + 'px');
+                ember.style.setProperty('--drift-end', driftEnd + 'px');
+                ember.style.animationDuration = duration + 'ms';
+                gleam.appendChild(ember);
+                setTimeout(() => ember.remove(), duration + 50);
+            };
+            card.addEventListener('mouseenter', () => {
+                if (timer) return;
+                // Seed a few immediately so embers are visible right away
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(spawn, i * 90);
+                }
+                timer = setInterval(spawn, 200);
+            });
+            card.addEventListener('mouseleave', () => {
+                clearInterval(timer);
+                timer = null;
+            });
+        });
+    </script>
+
+</body>
+</html>
