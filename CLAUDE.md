@@ -6,6 +6,8 @@
 
 All pages should be designed with the "Platinum Pursuit Standard" in mind: Professional, Sleek, Modern but never losing the charm that comes with our indie development team and our passion for trophy hunting. Flavor text, easter eggs, and nods to the community are welcomed within reason! Fun should always be a priority.
 
+The full visual constitution lives in **[docs/design/visual-identity.md](docs/design/visual-identity.md)**: brief, six adjectives (prestigious, exploratory, rewarding, modern, charming, earnest), four signature primitives (Frame, Pursuer Card, Horizon, Tally), and explicit anti-references. Consult it before any non-trivial visual work. The companion **[docs/design/product-identity.md](docs/design/product-identity.md)** is the strategic frame that visual-identity.md serves.
+
 ---
 
 ## Site-Wide Redesign

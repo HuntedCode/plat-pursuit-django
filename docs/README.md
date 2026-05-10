@@ -27,12 +27,15 @@ Cross-cutting engine systems. Read these to understand how the core platform wor
 
 ## Design
 
-Long-form vision documents for systems not yet fully implemented.
+Strategic-identity docs and long-form vision documents for systems not yet fully implemented. The product-identity and visual-identity docs are the test that every product/visual decision should pass.
 
 | Doc | Description |
 |-----|-------------|
+| [Product Identity](design/product-identity.md) | Strategic identity, 2-minute pitch, IA, hub model, naming, supporting pillars. The strategic frame every other doc serves. |
+| [Visual Identity](design/visual-identity.md) | Visual constitution: brief, six adjectives, four signature primitives (Frame, Pursuer Card, Horizon, Tally), anti-references. The test every visual decision must pass. |
+| [Visual Identity References](design/visual-identity-references.md) | Curated real-world references for each primitive (trading-card chrome, identity-card design, progress UIs, number-as-reward) plus PSN-era and explorer's-office moods. Working doc for sketching/mood-boarding. |
+| [Gamification Plan](design/gamification-plan.md) | Layered Phase 1 to 4+ rollout for the Pursuer + Job system. Phase 1 ships the core loop; later phases earn their place through engagement data. |
 | [Dashboard Module Catalog](design/dashboard-module-catalog.md) | 28-module roadmap with priority tiers, data sources, and implementation status |
-| [Gamification Vision](design/gamification-vision.md) | Full RPG system design: stats, jobs, quests, currency, star chart, avatar frames |
 | [Platinum Journey](design/platinum-journey.md) | Premium "patient companion" feature: synthesis layer that knows the user and helps plan their next pursuits |
 | [Stats Page](design/stats-page.md) | Premium `/my-stats/` page: video game stats screen with 100+ trophy hunting stats |
 | [Tutorial System](design/tutorial-system.md) | 3-tour onboarding: Welcome Tour (hub navigation), Game Detail Tour (community features), Badge Detail Tour (progression system) |
