@@ -87,6 +87,10 @@
             z-index: 2;
             border-top-left-radius: 5px;
             border-top-right-radius: 5px;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 10px;
         }
         .pp-frame__series {
             font-size: 9px;
@@ -98,6 +102,43 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            flex: 1;
+            min-width: 0;
+        }
+        /* Tier label in the title bar (right-aligned via flex). Rendered as
+         * a ::after pseudo-element so no per-card HTML changes are needed;
+         * tier name and color come from the .pp-frame--{tier} class. */
+        .pp-frame__title::after {
+            content: "";
+            flex-shrink: 0;
+            font-size: 9px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+        .pp-frame--bronze .pp-frame__title::after {
+            content: "Bronze";
+            color: rgba(220, 150, 80, 0.95);
+        }
+        .pp-frame--silver .pp-frame__title::after {
+            content: "Silver";
+            color: rgba(215, 220, 225, 0.95);
+        }
+        .pp-frame--gold .pp-frame__title::after {
+            content: "Gold";
+            color: rgba(245, 215, 120, 1);
+            text-shadow: 0 0 4px rgba(240, 198, 74, 0.3);
+        }
+        .pp-frame--platinum .pp-frame__title::after {
+            content: "Platinum";
+            color: rgba(220, 240, 250, 1);
+            text-shadow: 0 0 5px rgba(207, 232, 240, 0.45);
+        }
+        /* Unearned cards: tier name still shown but dimmed to match the veil. */
+        .pp-frame--unearned .pp-frame__title::after {
+            color: rgba(255, 255, 255, 0.4);
+            text-shadow: none;
         }
 
         /* ----------------------------------------------------------
@@ -120,8 +161,14 @@
             pointer-events: none;
         }
 
-        /* Tier ribbon */
+        /* Tier ribbon.
+         * Default: hidden. Tier identity for full cards is shown by the
+         * tier label in the title bar (see .pp-frame__title::after above).
+         * Size variants without a title bar (compact, mini) re-enable the
+         * ribbon so tier identity stays visible. .pp-frame--legacy-ribbon
+         * also re-enables it for direct A/B comparison in Section 2. */
         .pp-frame__ribbon {
+            display: none;
             position: absolute;
             top: 8px;
             right: 8px;
@@ -136,11 +183,22 @@
             color: white;
             z-index: 3;
         }
+        .pp-frame--compact .pp-frame__ribbon,
+        .pp-frame--mini .pp-frame__ribbon,
+        .pp-frame--legacy-ribbon .pp-frame__ribbon {
+            display: inline-block;
+        }
+        /* Legacy-ribbon swap: hide the title-bar tier label when the old
+         * ribbon is shown so the two systems don't double up. */
+        .pp-frame--legacy-ribbon .pp-frame__title::after {
+            content: none;
+        }
 
         /* ----------------------------------------------------------
          * Plinth (badge name + meta line) - tier-tinted
          * ---------------------------------------------------------- */
         .pp-frame__plinth {
+            position: relative;
             background: var(--frame-chrome-bg);
             padding: 7px 10px;
             border-top: 1px solid var(--frame-border);
@@ -168,6 +226,116 @@
             font-size: 9px;
             color: rgba(255, 255, 255, 0.6);
             letter-spacing: 0.04em;
+        }
+        /* Earn engraving - the "limited-run authentication" treatment.
+         * Each Pursuer's frame carries their permanent earn-rank etched
+         * into the bottom of the plinth, like the serial on a limited-
+         * edition watch case-back. The badge exists at many earn-ranks
+         * across the community; YOUR frame's engraving is yours forever.
+         *
+         * Visual: small caps label + tabular-figure number with a faux
+         * "engraved into chrome" shadow (dark bottom + faint top hairline). */
+        .pp-frame__engraving {
+            margin-top: 2px;
+            padding-top: 4px;
+            border-top: 1px dashed rgba(255, 255, 255, 0.07);
+            display: flex;
+            justify-content: center;
+            align-items: baseline;
+            gap: 5px;
+            font-size: 7.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            color: rgba(255, 255, 255, 0.35);
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+        }
+        .pp-frame__engraving-num {
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: rgba(255, 255, 255, 0.78);
+            text-shadow:
+                0 1px 0 rgba(0, 0, 0, 0.55),
+                0 -0.5px 0 rgba(255, 255, 255, 0.08);
+        }
+        .pp-frame--bronze .pp-frame__engraving-num   { color: rgba(220, 150, 80, 0.9); }
+        .pp-frame--silver .pp-frame__engraving-num   { color: rgba(215, 220, 225, 0.9); }
+        .pp-frame--gold .pp-frame__engraving-num {
+            color: rgba(245, 215, 120, 0.95);
+            text-shadow:
+                0 1px 0 rgba(0, 0, 0, 0.55),
+                0 0 4px rgba(240, 198, 74, 0.22);
+        }
+        .pp-frame--platinum .pp-frame__engraving-num {
+            color: rgba(220, 240, 250, 0.95);
+            text-shadow:
+                0 1px 0 rgba(0, 0, 0, 0.55),
+                0 0 5px rgba(207, 232, 240, 0.28);
+        }
+        .pp-frame--unearned .pp-frame__engraving,
+        .pp-frame--unearned .pp-frame__engraving-num { color: rgba(255, 255, 255, 0.35); }
+
+        /* Placeholder engraving slot - reserves the engraving's vertical
+         * space on unearned/blueprint/pinned cards so plinth height stays
+         * constant across states. The hairline rule and padding render
+         * normally; the text content is hidden via visibility (which keeps
+         * the box height intact). Lets the Earn Moment animation slide
+         * the engraving in without the card jumping size. */
+        .pp-frame__engraving--placeholder > * {
+            visibility: hidden;
+        }
+
+        /* First-earn celebration - the bragging-rights case where a
+         * Pursuer was the earliest to earn this badge. Subtle steady
+         * pulse on the engraving number so the rare flex reads at a
+         * glance without becoming gaudy. */
+        .pp-frame__engraving--first .pp-frame__engraving-num {
+            animation: pp-engraving-first 3.2s ease-in-out infinite;
+        }
+        @keyframes pp-engraving-first {
+            0%, 100% { opacity: 0.85; }
+            50%      { opacity: 1; }
+        }
+
+        /* Earned stamp - a small "applied" seal that lives in the art's
+         * top-left corner on earned cards. Slightly off-register (rotation)
+         * so it reads as tactile / human-applied, not machine-printed.
+         * Carries the PP monogram so the stamp does brand-mark work in
+         * addition to charm work. */
+        .pp-frame__stamp {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1.5px solid currentColor;
+            background: rgba(15, 10, 4, 0.5);
+            backdrop-filter: blur(3px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            line-height: 1;
+            opacity: 0.82;
+            pointer-events: none;
+            transform: rotate(-7deg);
+            z-index: 2;
+        }
+        .pp-frame--bronze .pp-frame__stamp   { color: rgba(220, 150, 80, 0.95); border-color: rgba(220, 150, 80, 0.55); }
+        .pp-frame--silver .pp-frame__stamp   { color: rgba(215, 220, 225, 0.95); border-color: rgba(215, 220, 225, 0.55); }
+        .pp-frame--gold .pp-frame__stamp     {
+            color: rgba(245, 215, 120, 1);
+            border-color: rgba(240, 198, 74, 0.6);
+            box-shadow: 0 0 6px rgba(240, 198, 74, 0.15);
+        }
+        .pp-frame--platinum .pp-frame__stamp {
+            color: rgba(220, 240, 250, 1);
+            border-color: rgba(207, 232, 240, 0.65);
+            box-shadow: 0 0 7px rgba(207, 232, 240, 0.2);
         }
 
         /* ----------------------------------------------------------
@@ -434,8 +602,1037 @@
         .pp-frame--unearned:hover { transform: translateY(-2px); }
 
         /* ----------------------------------------------------------
+         * Unearned: incremental blueprint mode
+         *
+         * Render the badge as the architectural blueprint of what the
+         * Pursuer is working toward. As stages are earned, the badge
+         * builds upward out of the blueprint into full-color rendered
+         * art (8 stages of 10 done = bottom 80% rendered, top 20% still
+         * blueprint). A "Fabricating..." banner across the top + a
+         * cyan-tinted lock + a desaturated tint on the built portion
+         * keep the state unambiguous even at high build percentages.
+         *
+         * Pass progress as an inline style on the card:
+         *   <div class="pp-frame ... pp-frame--blueprint" style="--pp-build: 80%">
+         *
+         * Tier identity stays intact in the chrome.
+         * ---------------------------------------------------------- */
+        @property --pp-build {
+            syntax: "<percentage>";
+            inherits: true;
+            initial-value: 0%;
+        }
+        @property --scan-fwd {
+            syntax: "<percentage>";
+            inherits: true;
+            initial-value: 0%;
+        }
+        @property --scan-back {
+            syntax: "<percentage>";
+            inherits: true;
+            initial-value: 0%;
+        }
+        /* Art's vertical position inside the face, as unitless fractions
+         * of face height. Used to remap --scan-fwd (which spans the WHOLE
+         * face) into the mask's coord space (which only spans the art).
+         * Defaults: --art-bottom 0, --art-range 1 → no remapping
+         * (back-compat with cards where JS hasn't measured the layout). */
+        @property --art-bottom {
+            syntax: "<number>";
+            inherits: true;
+            initial-value: 0;
+        }
+        @property --art-range {
+            syntax: "<number>";
+            inherits: true;
+            initial-value: 1;
+        }
+        .pp-frame--blueprint {
+            --pp-build: 0%;
+        }
+        /* Blueprint grid moved off the art container's background and onto
+         * a dedicated child element. Lets us crossfade between blueprint
+         * mode and the tier-tinted earned background smoothly via opacity
+         * during the Earn Moment, rather than snapping when the blueprint
+         * class is removed. */
+        .pp-frame__blueprint-grid {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0;
+            background:
+                repeating-linear-gradient(0deg,
+                    rgba(120, 200, 230, 0.18) 0,
+                    rgba(120, 200, 230, 0.18) 1px,
+                    transparent 1px,
+                    transparent 14px),
+                repeating-linear-gradient(90deg,
+                    rgba(120, 200, 230, 0.18) 0,
+                    rgba(120, 200, 230, 0.18) 1px,
+                    transparent 1px,
+                    transparent 14px),
+                linear-gradient(135deg, rgba(18, 32, 52, 0.96), rgba(10, 18, 32, 0.98));
+        }
+        .pp-frame--blueprint .pp-frame__blueprint-grid {
+            opacity: 1;
+        }
+        /* Cyan veil over the whole art area so even the built portion
+         * reads as "draft / in production," not "earned." Subtle enough
+         * that the badge stays recognizable. */
+        .pp-frame--blueprint.pp-frame--unearned .pp-frame__art::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(40, 90, 130, 0.18), rgba(20, 50, 80, 0.28));
+            z-index: 3;
+            pointer-events: none;
+            display: block;
+        }
+        /* Mask the badge layers so only the built portion (bottom
+         * --pp-build) renders. Slight desaturation + brightness drop +
+         * opacity reduction in the built portion so it looks like a
+         * blueprint print, not the final earned card. Above the build
+         * line, the blueprint backdrop shows through unmasked. */
+        .pp-frame--blueprint .pp-frame__layer {
+            -webkit-mask-image: linear-gradient(
+                to top,
+                black 0%,
+                black calc(var(--pp-build) - 4%),
+                transparent calc(var(--pp-build) + 4%),
+                transparent 100%
+            );
+            mask-image: linear-gradient(
+                to top,
+                black 0%,
+                black calc(var(--pp-build) - 4%),
+                transparent calc(var(--pp-build) + 4%),
+                transparent 100%
+            );
+            opacity: 0.82;
+            filter: saturate(0.6) brightness(0.85);
+        }
+        /* Construction line - subtle horizontal glow at the build edge.
+         * Inset 8px from the art edges so it reads as floating across
+         * the work, not running into the chrome. */
+        .pp-frame--blueprint .pp-frame__art::before {
+            content: "";
+            position: absolute;
+            left: 8px;
+            right: 8px;
+            bottom: var(--pp-build);
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(160, 220, 240, 0.85) 25%,
+                rgba(220, 240, 250, 1) 50%,
+                rgba(160, 220, 240, 0.85) 75%,
+                transparent 100%);
+            box-shadow:
+                0 0 5px rgba(160, 220, 240, 0.65),
+                0 0 12px rgba(160, 220, 240, 0.3);
+            z-index: 5;
+            pointer-events: none;
+        }
+        /* Fabricating banner across the top of the art container.
+         * Monospace caps for the technical mood; subtle pulse on the
+         * whole banner; animated dots for the in-progress feel. */
+        .pp-frame__fab-banner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 6;
+            background: linear-gradient(90deg,
+                rgba(12, 32, 52, 0.94),
+                rgba(28, 58, 90, 0.94),
+                rgba(12, 32, 52, 0.94));
+            color: rgba(190, 230, 245, 0.95);
+            font-family: 'Courier New', 'Consolas', monospace;
+            font-size: 8.5px;
+            font-weight: 700;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            padding: 4px 0 3px;
+            text-align: center;
+            border-bottom: 1px solid rgba(120, 200, 230, 0.5);
+            animation: pp-fab-pulse 2.4s ease-in-out infinite;
+            pointer-events: none;
+        }
+        .pp-frame__fab-banner::after {
+            content: "...";
+            display: inline-block;
+            width: 1.6em;
+            text-align: left;
+            animation: pp-fab-dots 1.6s steps(1, end) infinite;
+        }
+        @keyframes pp-fab-dots {
+            0%   { content: ""; }
+            25%  { content: "."; }
+            50%  { content: ".."; }
+            75%  { content: "..."; }
+        }
+        @keyframes pp-fab-pulse {
+            0%, 100% { opacity: 0.88; }
+            50%      { opacity: 1; }
+        }
+        /* Lock icon in blueprint mode - centered, smaller, cyan-tinted,
+         * lower opacity so it coexists with the badge art at high build
+         * percentages without dominating. */
+        .pp-frame--blueprint.pp-frame--unearned .pp-frame__locked {
+            color: rgba(160, 220, 240, 0.55);
+            z-index: 5;
+        }
+        .pp-frame--blueprint .pp-frame__ribbon {
+            background: rgba(10, 30, 50, 0.7);
+            color: rgba(160, 220, 240, 0.85);
+            border: 1px dashed rgba(160, 220, 240, 0.5);
+            font-family: 'Courier New', 'Consolas', monospace;
+        }
+        /* Small technical label - the "TO EARN" engineering stamp,
+         * used on the 0%-build card to communicate "blueprint awaiting
+         * construction." Built-progress cards drop this in favor of the
+         * construction line. */
+        .pp-frame__blueprint-mark {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            font-family: 'Courier New', 'Consolas', monospace;
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.25em;
+            color: rgba(160, 220, 240, 0.7);
+            text-transform: uppercase;
+            pointer-events: none;
+        }
+
+        /* ----------------------------------------------------------
+         * Blueprint stage-transition animations (tester)
+         *
+         * Different ways the construction line could behave when a new
+         * stage is cleared. Triggered by adding one of these classes
+         * alongside .is-animating; the JS controller swaps them and
+         * sets --pp-build to the new target.
+         * ---------------------------------------------------------- */
+
+        /* A: Smooth slide. Standard material easing. */
+        .pp-anim-smooth { transition: --pp-build 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        /* B: Snap + flash. Quick build-up with a celebratory line flash. */
+        .pp-anim-snap { transition: --pp-build 0.55s cubic-bezier(0.2, 0.7, 0.3, 1); }
+        .pp-anim-snap.is-animating .pp-frame__art::before {
+            animation: pp-anim-snap-flash 0.7s ease-out;
+        }
+        @keyframes pp-anim-snap-flash {
+            0%   { box-shadow: 0 0 5px rgba(160, 220, 240, 0.65), 0 0 12px rgba(160, 220, 240, 0.3); height: 1px; }
+            30%  { box-shadow: 0 0 14px rgba(220, 240, 250, 1),   0 0 30px rgba(160, 220, 240, 0.7), 0 0 50px rgba(160, 220, 240, 0.3); height: 2px; }
+            100% { box-shadow: 0 0 5px rgba(160, 220, 240, 0.65), 0 0 12px rgba(160, 220, 240, 0.3); height: 1px; }
+        }
+
+        /* C: Scan wipe. A bright scanline sweeps across the new build
+         * area while the build extends; the moving brightness feels
+         * like the badge is materializing under a laser scanner. */
+        .pp-anim-scan { transition: --pp-build 1.4s cubic-bezier(0.45, 0, 0.55, 1); }
+        .pp-anim-scan.is-animating .pp-frame__art {
+            background:
+                linear-gradient(0deg,
+                    transparent 0%,
+                    rgba(180, 235, 250, 0.18) calc(var(--pp-build) - 6%),
+                    rgba(220, 245, 255, 0.32) var(--pp-build),
+                    rgba(180, 235, 250, 0.18) calc(var(--pp-build) + 6%),
+                    transparent calc(var(--pp-build) + 14%)),
+                repeating-linear-gradient(0deg,
+                    rgba(120, 200, 230, 0.18) 0,
+                    rgba(120, 200, 230, 0.18) 1px,
+                    transparent 1px,
+                    transparent 14px),
+                repeating-linear-gradient(90deg,
+                    rgba(120, 200, 230, 0.18) 0,
+                    rgba(120, 200, 230, 0.18) 1px,
+                    transparent 1px,
+                    transparent 14px),
+                linear-gradient(135deg, rgba(18, 32, 52, 0.96), rgba(10, 18, 32, 0.98));
+        }
+
+        /* D: Bouncy / overshoot. Build-up briefly overshoots target,
+         * then settles back. Reads as a celebratory "snap into place." */
+        .pp-anim-bouncy { transition: --pp-build 1.1s cubic-bezier(0.34, 1.56, 0.5, 1); }
+        .pp-anim-bouncy.is-animating .pp-frame__art::before {
+            animation: pp-anim-bouncy-flash 1s ease-out;
+        }
+        @keyframes pp-anim-bouncy-flash {
+            0%   { box-shadow: 0 0 5px rgba(160, 220, 240, 0.65), 0 0 12px rgba(160, 220, 240, 0.3); }
+            40%  { box-shadow: 0 0 10px rgba(220, 240, 250, 0.9), 0 0 22px rgba(160, 220, 240, 0.55); }
+            100% { box-shadow: 0 0 5px rgba(160, 220, 240, 0.65), 0 0 12px rgba(160, 220, 240, 0.3); }
+        }
+
+        /* E: Weld. Same smooth build curve as A, but the construction
+         * line briefly glows hot (orange-white) and JS-spawned sparks
+         * arc off the line and fall under gravity. Reads as the badge
+         * being welded together as the build progresses. */
+        .pp-anim-weld { transition: --pp-build 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .pp-anim-weld.is-animating .pp-frame__art::before {
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255, 215, 130, 0.95) 25%,
+                rgba(255, 250, 230, 1) 50%,
+                rgba(255, 215, 130, 0.95) 75%,
+                transparent 100%);
+            box-shadow:
+                0 0 6px rgba(255, 200, 100, 0.95),
+                0 0 14px rgba(255, 160, 50, 0.55),
+                0 0 28px rgba(255, 120, 30, 0.25);
+            height: 1.5px;
+            transition:
+                background 350ms ease-in,
+                box-shadow 350ms ease-in,
+                height 350ms ease-in;
+        }
+
+        /* Individual welding spark - hot radial dot, white core fading
+         * through yellow into orange. Spawned by JS along the moving
+         * construction line; each spark gets a random arc trajectory via
+         * inline --spark-x-mid/-end and --spark-y-mid/-end CSS vars. */
+        .pp-spark {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                rgba(255, 255, 255, 1) 0%,
+                rgba(255, 240, 180, 0.95) 30%,
+                rgba(255, 170, 60, 0.7) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 4px rgba(255, 220, 130, 0.9),
+                0 0 9px rgba(255, 150, 50, 0.45);
+            pointer-events: none;
+            z-index: 7;
+            animation: pp-spark-fly var(--spark-dur, 750ms) cubic-bezier(0.2, 0.7, 0.4, 1) forwards;
+        }
+        @keyframes pp-spark-fly {
+            0% {
+                transform: translate(0, 0) scale(1);
+                opacity: 1;
+            }
+            20% {
+                transform: translate(var(--spark-x-mid), var(--spark-y-mid)) scale(0.95);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(var(--spark-x-end), var(--spark-y-end)) scale(0.25);
+                opacity: 0;
+            }
+        }
+
+        /* ----------------------------------------------------------
+         * Earn Moment choreography
+         *
+         * Phases (added by JS at staggered intervals):
+         *  1. Final weld pulse to 100% built (uses .pp-anim-weld + sparks)
+         *  2. .pp-earn-cooling - blueprint atmosphere dissolves (banner
+         *     slides off, lock fades, cyan veil fades, layer filters lift
+         *     back to full-color earned appearance, construction line
+         *     fades out)
+         *  3. Blueprint + unearned classes removed - card visually
+         *     resolves to its earned base state (tier chrome reasserts)
+         *  4. .pp-earn-engraving - engraving etches in via clip-path with
+         *     a traveling welding head + sparks. Text briefly glows hot,
+         *     cools to final tier color.
+         * ---------------------------------------------------------- */
+
+        /* PHASE 2: Cooling - card lifts, banner/lock/construction-line
+         * fade out. Blueprint atmosphere (grid + veil + dimmed layers)
+         * stays in place so the border weld plays over still-blueprint
+         * chrome. */
+        .pp-earn-cooling {
+            transform: translateY(-14px);
+            box-shadow:
+                0 24px 38px rgba(0, 0, 0, 0.55),
+                0 0 0 1px var(--frame-border);
+            transition:
+                transform 950ms cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 950ms ease-out;
+        }
+        .pp-earn-cooling .pp-frame__fab-banner {
+            animation: pp-earn-banner-exit 650ms ease-in forwards;
+        }
+        @keyframes pp-earn-banner-exit {
+            0%   { transform: translateY(0);     opacity: 1; }
+            100% { transform: translateY(-110%); opacity: 0; }
+        }
+        /* Lock fades + shrinks - decoupled from .pp-frame--unearned so
+         * the transition can complete even after the unearned class is
+         * stripped. */
+        .pp-earn-cooling .pp-frame__locked {
+            opacity: 0;
+            transform: scale(0.85);
+            transition: opacity 600ms ease-in, transform 600ms ease-in;
+        }
+        /* Once uncloak begins, fully remove the lock from layout. Without
+         * .pp-frame--unearned the lock loses its absolute positioning and
+         * would otherwise reflow into the top-left corner of the art
+         * container as a stray static block. */
+        .pp-earn-uncloak .pp-frame__locked,
+        .pp-earn-engraving .pp-frame__locked,
+        .pp-earn-settling .pp-frame__locked,
+        .pp-earn-back-engraving .pp-frame__locked {
+            display: none;
+        }
+        /* Construction line fades out */
+        .pp-earn-cooling.pp-frame--blueprint .pp-frame__art::before {
+            opacity: 0;
+            transition: opacity 500ms ease-out;
+        }
+
+        /* PHASE 4: Uncloak - blueprint atmosphere is "scanned away" by
+         * a bright horizontal beam sweeping from bottom to top of the
+         * art container. The blueprint grid + cyan veil are masked from
+         * bottom up as the beam passes; the badge layer filter restores
+         * uniformly during the same 1.2s window. The scan reads as the
+         * tier-tinted background being generated under the beam. */
+        .pp-earn-uncloak {
+            transition: --scan-fwd 2200ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Mask formula: remaps the face-relative --scan-fwd into the
+         * grid's coord space so the mask boundary tracks the beam's
+         * actual position over the art (not its position as a percent
+         * of the grid's own height).
+         *   remapped = (scan-fwd - art-bottom * 100%) / art-range
+         * When the beam is below the art, remapped is negative → all
+         * stops clamp at 0%, grid fully visible. When above the art,
+         * remapped is > 100% → all stops clamp at 100%, grid hidden. */
+        .pp-earn-uncloak.pp-frame--blueprint .pp-frame__blueprint-grid {
+            -webkit-mask-image: linear-gradient(
+                to top,
+                transparent 0%,
+                transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+                black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+                black 100%
+            );
+            mask-image: linear-gradient(
+                to top,
+                transparent 0%,
+                transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+                black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+                black 100%
+            );
+        }
+        .pp-earn-uncloak.pp-frame--unearned .pp-frame__art::after {
+            -webkit-mask-image: linear-gradient(
+                to top,
+                transparent 0%,
+                transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+                black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+                black 100%
+            );
+            mask-image: linear-gradient(
+                to top,
+                transparent 0%,
+                transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+                black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+                black 100%
+            );
+        }
+        .pp-earn-uncloak.pp-frame--blueprint .pp-frame__layer {
+            opacity: 1;
+            filter: saturate(1) brightness(1);
+            transition: opacity 2200ms ease-out, filter 2200ms ease-out;
+        }
+        /* Completion sheen sweep - after the border weld + uncloak finish,
+         * the existing hover-A gleam plays once across the card as the
+         * "stamp of completion." Triggered by .pp-earn-gleaming. Uses a
+         * one-shot animation so it can play without depending on hover. */
+        @keyframes pp-earn-gleam-sweep {
+            0%   { transform: translateX(-110%); opacity: 0; }
+            8%   { opacity: 1; }
+            92%  { opacity: 1; }
+            100% { transform: translateX(110%); opacity: 0; }
+        }
+        .pp-earn-gleaming .pp-frame__gleam {
+            background: linear-gradient(105deg,
+                transparent 25%,
+                rgba(255, 255, 255, 0.4) 50%,
+                transparent 75%);
+            animation: pp-earn-gleam-sweep 1400ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        /* Gold/Platinum tier-tinted gleam */
+        .pp-earn-gleaming.pp-frame--gold .pp-frame__gleam {
+            background: linear-gradient(105deg,
+                transparent 25%,
+                rgba(255, 220, 130, 0.5) 50%,
+                transparent 75%);
+        }
+        .pp-earn-gleaming.pp-frame--platinum .pp-frame__gleam {
+            background: linear-gradient(105deg,
+                transparent 25%,
+                rgba(180, 220, 255, 0.45) 40%,
+                rgba(255, 200, 220, 0.45) 50%,
+                rgba(180, 255, 220, 0.45) 60%,
+                transparent 75%);
+        }
+
+        /* As the uncloak scan passes each text row, that row briefly
+         * brightens with a warm welding glow. Delays align with where
+         * the beam is over the card (beam goes bottom→top, 0%→100% over
+         * 2200ms). Keyframes that transition between distinct unearned
+         * and earned colors (name, tier label) use `forwards` so the
+         * elevated end-state persists - prevents a later snap when the
+         * unearned class is stripped at phase 6. */
+
+        /* Meta + series: same color in both unearned and earned, so the
+         * pulse just adds and removes a warm text-shadow. No forwards. */
+        @keyframes pp-earn-scan-brighten {
+            0%, 100% {
+                text-shadow: 0 0 0 transparent;
+            }
+            50% {
+                text-shadow:
+                    0 0 7px rgba(255, 230, 150, 1),
+                    0 0 16px rgba(255, 200, 100, 0.6);
+                color: rgba(255, 255, 255, 1);
+            }
+        }
+
+        /* Name: unearned is rgba(0.6) white, earned is full white.
+         * Transition to earned color at the peak and lock it in. */
+        @keyframes pp-earn-scan-brighten-name {
+            0% {
+                color: rgba(255, 255, 255, 0.6);
+                text-shadow: 0 0 0 transparent;
+            }
+            50% {
+                color: rgba(255, 255, 255, 1);
+                text-shadow:
+                    0 0 7px rgba(255, 230, 150, 1),
+                    0 0 16px rgba(255, 200, 100, 0.6);
+            }
+            100% {
+                color: rgba(255, 255, 255, 1);
+                text-shadow: 0 0 0 transparent;
+            }
+        }
+
+        /* Tier label (Gold): unearned is rgba(0.4) white no shadow,
+         * earned is the gold color + a soft gold shadow. */
+        @keyframes pp-earn-scan-brighten-tier-gold {
+            0% {
+                color: rgba(255, 255, 255, 0.4);
+                text-shadow: none;
+            }
+            50% {
+                color: rgba(255, 230, 150, 1);
+                text-shadow:
+                    0 0 7px rgba(255, 230, 150, 1),
+                    0 0 16px rgba(255, 200, 100, 0.6);
+            }
+            100% {
+                color: rgba(245, 215, 120, 1);
+                text-shadow: 0 0 4px rgba(240, 198, 74, 0.3);
+            }
+        }
+
+        .pp-earn-uncloak .pp-frame__plinth-meta {
+            animation: pp-earn-scan-brighten 500ms ease-out 100ms;
+        }
+        .pp-earn-uncloak .pp-frame__name {
+            animation: pp-earn-scan-brighten-name 500ms ease-out 280ms forwards;
+        }
+        .pp-earn-uncloak .pp-frame__series {
+            animation: pp-earn-scan-brighten 500ms ease-out 1900ms;
+        }
+        .pp-earn-uncloak.pp-frame--gold .pp-frame__title::after {
+            animation: pp-earn-scan-brighten-tier-gold 500ms ease-out 1900ms forwards;
+        }
+
+        /* Horizontal scan beam riding the --scan-fwd boundary. JS injects
+         * a .pp-frame__scan-beam-h element into the front face so the
+         * beam traverses the WHOLE card height (plinth → art → title).
+         * Bottom position follows the variable so the beam transitions
+         * with the same curve as the art-content masks. */
+        .pp-frame__scan-beam-h {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            bottom: var(--scan-fwd, 0%);
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255, 215, 130, 0.95) 20%,
+                rgba(255, 255, 255, 1) 50%,
+                rgba(255, 215, 130, 0.95) 80%,
+                transparent 100%);
+            box-shadow:
+                0 0 8px rgba(255, 200, 100, 1),
+                0 0 22px rgba(255, 150, 50, 0.7),
+                0 0 42px rgba(255, 120, 30, 0.3);
+            z-index: 6;
+            pointer-events: none;
+        }
+
+        /* PHASE 3.5: Border weld lap. A welding head rides the perimeter
+         * of the card (top → right → bottom → left → top) over ~1.5s,
+         * spraying sparks outward from each edge. Conceptually "sealing
+         * the frame around the badge" before the engraving moment. */
+        .pp-frame__border-weld-head {
+            position: absolute;
+            top: 0%;
+            left: 0%;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                rgba(255, 255, 255, 1) 0%,
+                rgba(255, 240, 180, 0.95) 30%,
+                rgba(255, 170, 60, 0.85) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 8px rgba(255, 220, 130, 1),
+                0 0 18px rgba(255, 150, 50, 0.7),
+                0 0 32px rgba(255, 120, 30, 0.35);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 11;
+            animation: pp-border-weld-trace 1.5s linear forwards;
+        }
+        @keyframes pp-border-weld-trace {
+            0%   { top: 0%;   left: 0%;   }
+            25%  { top: 0%;   left: 100%; }
+            50%  { top: 100%; left: 100%; }
+            75%  { top: 100%; left: 0%;   }
+            100% { top: 0%;   left: 0%;   }
+        }
+
+        /* Progressive border seal: as the welding torch finishes each
+         * side of the perimeter, that side flips from dashed (unearned
+         * default) to solid (welded). JS adds these classes at the
+         * corner-crossing moments during the weld lap. */
+        .pp-earn-weld-top.pp-frame--unearned    { border-top-style: solid; }
+        .pp-earn-weld-right.pp-frame--unearned  { border-right-style: solid; }
+        .pp-earn-weld-bottom.pp-frame--unearned { border-bottom-style: solid; }
+        .pp-earn-weld-left.pp-frame--unearned   { border-left-style: solid; }
+        /* Border glow after the lap completes - now a self-contained
+         * animation (fade in → hold → fade out → settle back to cooling
+         * shadow) so the removal doesn't snap. */
+        .pp-earn-sealed {
+            animation: pp-earn-sealed-pulse 1400ms ease-in-out forwards;
+        }
+        @keyframes pp-earn-sealed-pulse {
+            0% {
+                box-shadow:
+                    0 24px 38px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px var(--frame-border);
+            }
+            28% {
+                box-shadow:
+                    0 24px 38px rgba(0, 0, 0, 0.55),
+                    0 0 0 1.5px rgba(255, 215, 130, 0.95),
+                    0 0 18px rgba(255, 180, 80, 0.6),
+                    0 0 36px rgba(255, 140, 50, 0.32);
+            }
+            66% {
+                box-shadow:
+                    0 24px 38px rgba(0, 0, 0, 0.55),
+                    0 0 0 1.5px rgba(255, 215, 130, 0.95),
+                    0 0 18px rgba(255, 180, 80, 0.6),
+                    0 0 36px rgba(255, 140, 50, 0.32);
+            }
+            100% {
+                box-shadow:
+                    0 24px 38px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px var(--frame-border);
+            }
+        }
+
+        /* PHASE 4: Engraving etches in via clip-path. The JS measures
+         * the actual text bounds (since the text is centered inside the
+         * engraving box, the head should only travel across the text
+         * itself, not the empty space on either side) and sets inline
+         * clip-path + head position. Same 3s total but the welding head
+         * only moves where text actually is. */
+        .pp-earn-engraving .pp-frame__engraving {
+            position: relative;
+            clip-path: inset(0 100% 0 0);
+            transition: clip-path 3s linear;
+        }
+        .pp-earn-engraving .pp-frame__engraving--placeholder > * {
+            visibility: visible;
+        }
+        /* Hot-glow on the freshly etched number - lingers longer for the
+         * slow-burn feel. Delayed 0.4s so the etching starts dim and
+         * brightens as the head finishes. */
+        .pp-earn-engraving .pp-frame__engraving-num {
+            animation: pp-earn-engrave-glow 3s ease-out 0.4s forwards;
+        }
+        @keyframes pp-earn-engrave-glow {
+            0% {
+                color: rgba(255, 255, 255, 1);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 8px rgba(255, 200, 100, 1),
+                    0 0 18px rgba(255, 150, 50, 0.7);
+            }
+            55% {
+                color: rgba(255, 230, 150, 1);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 6px rgba(255, 200, 100, 0.5);
+            }
+            100% {
+                color: rgba(245, 215, 120, 0.95);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 4px rgba(240, 198, 74, 0.22);
+            }
+        }
+        /* Welding head riding the etch edge. JS sets initial left/transition
+         * inline based on measured text bounds, then triggers movement to
+         * the text's right edge over 3s. */
+        .pp-frame__etch-head {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                rgba(255, 255, 255, 1) 0%,
+                rgba(255, 240, 180, 0.95) 30%,
+                rgba(255, 170, 60, 0.85) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 6px rgba(255, 220, 130, 1),
+                0 0 16px rgba(255, 150, 50, 0.6);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 3;
+        }
+        /* Smaller spark variant for the etch */
+        .pp-spark--etch {
+            width: 2.5px;
+            height: 2.5px;
+        }
+
+        /* Tier-colored spark variants - mixed into the spark spawns
+         * alongside the default hot welding sparks so the "molten metal"
+         * being deposited carries the tier's own color. The frame is
+         * literally being made out of its tier material. */
+        .pp-spark--tier-bronze {
+            background: radial-gradient(circle,
+                rgba(255, 230, 180, 1) 0%,
+                rgba(245, 175, 100, 0.95) 30%,
+                rgba(200, 110, 50, 0.7) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 4px rgba(245, 175, 100, 0.95),
+                0 0 10px rgba(200, 110, 50, 0.45);
+        }
+        .pp-spark--tier-silver {
+            background: radial-gradient(circle,
+                rgba(255, 255, 255, 1) 0%,
+                rgba(225, 230, 240, 0.95) 30%,
+                rgba(170, 180, 195, 0.7) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 4px rgba(220, 230, 245, 0.95),
+                0 0 10px rgba(180, 195, 215, 0.5);
+        }
+        .pp-spark--tier-gold {
+            background: radial-gradient(circle,
+                rgba(255, 250, 220, 1) 0%,
+                rgba(255, 220, 130, 0.95) 30%,
+                rgba(220, 170, 60, 0.7) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 4px rgba(255, 220, 130, 0.95),
+                0 0 10px rgba(220, 170, 60, 0.5);
+        }
+        .pp-spark--tier-platinum {
+            background: radial-gradient(circle,
+                rgba(255, 255, 255, 1) 0%,
+                rgba(225, 240, 250, 0.95) 30%,
+                rgba(170, 200, 225, 0.75) 65%,
+                transparent 100%);
+            box-shadow:
+                0 0 4px rgba(220, 240, 250, 1),
+                0 0 11px rgba(180, 215, 240, 0.55);
+        }
+
+        /* PHASE 5: Settle - card descends from its lifted state to
+         * resting elevation, with a final tier-tinted glow flourish at
+         * the moment of landing. The card briefly overshoots its resting
+         * position, then settles as the glow blooms and fades. */
+        .pp-earn-cooling.pp-earn-settling {
+            animation: pp-earn-settle-flourish 2000ms cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+        }
+        @keyframes pp-earn-settle-flourish {
+            0% {
+                transform: translateY(-14px);
+                box-shadow:
+                    0 24px 38px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px var(--frame-border);
+            }
+            45% {
+                transform: translateY(2px);
+                box-shadow:
+                    0 14px 26px rgba(0, 0, 0, 0.5),
+                    0 0 0 1.5px rgba(255, 220, 130, 0.95),
+                    0 0 30px rgba(255, 200, 100, 0.6),
+                    0 0 64px rgba(245, 175, 80, 0.35);
+            }
+            70% {
+                transform: translateY(-1px);
+                box-shadow:
+                    0 10px 22px rgba(0, 0, 0, 0.4),
+                    0 0 0 1.3px rgba(255, 220, 130, 0.6),
+                    0 0 24px rgba(255, 200, 100, 0.32),
+                    0 0 50px rgba(245, 175, 80, 0.15);
+            }
+            100% {
+                transform: translateY(0);
+                box-shadow:
+                    0 8px 18px rgba(0, 0, 0, 0.3),
+                    0 0 0 1px var(--frame-border);
+            }
+        }
+
+        /* PHASE 6: Back face scan reveal. The back lands blank (chrome
+         * only) when the card flips; a bright vertical beam then sweeps
+         * from right to left, revealing the header, description, stats,
+         * and footer in a single coherent pass. The face's background
+         * stays visible (so the flipped card isn't transparent); only
+         * the content children are masked. */
+        .pp-earn-back-staged .pp-frame__face--back > * {
+            visibility: hidden;
+        }
+        .pp-earn-back-scan {
+            transition: --scan-back 2000ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .pp-earn-back-scan .pp-frame__face--back > * {
+            visibility: visible;
+            -webkit-mask-image: linear-gradient(
+                to left,
+                black 0%,
+                black calc(var(--scan-back, 0%) - 1%),
+                transparent calc(var(--scan-back, 0%) + 1%),
+                transparent 100%
+            );
+            mask-image: linear-gradient(
+                to left,
+                black 0%,
+                black calc(var(--scan-back, 0%) - 1%),
+                transparent calc(var(--scan-back, 0%) + 1%),
+                transparent 100%
+            );
+        }
+        /* Vertical scan beam on the back face. ::after on the back face
+         * rides the right→left scan boundary. */
+        .pp-earn-back-scan .pp-frame__face--back::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            right: var(--scan-back, 0%);
+            background: linear-gradient(180deg,
+                transparent 0%,
+                rgba(255, 215, 130, 0.95) 20%,
+                rgba(255, 255, 255, 1) 50%,
+                rgba(255, 215, 130, 0.95) 80%,
+                transparent 100%);
+            box-shadow:
+                0 0 8px rgba(255, 200, 100, 1),
+                0 0 22px rgba(255, 150, 50, 0.7);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Tester controls */
+        .pp-anim-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+        .pp-anim-controls__label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: rgba(255, 255, 255, 0.45);
+            margin-right: 8px;
+        }
+        .pp-anim-btn {
+            padding: 6px 14px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+        }
+        .pp-anim-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(120, 200, 230, 0.55);
+            color: rgba(220, 240, 250, 1);
+        }
+        .pp-anim-btn.is-active {
+            background: rgba(63, 205, 220, 0.18);
+            border-color: rgba(63, 205, 220, 0.85);
+            color: rgba(220, 245, 250, 1);
+        }
+        .pp-anim-btn--replay {
+            margin-left: 12px;
+            background: rgba(63, 205, 220, 0.12);
+            border-color: rgba(63, 205, 220, 0.5);
+            color: rgba(180, 230, 245, 1);
+        }
+        .pp-anim-btn--replay:hover {
+            background: rgba(63, 205, 220, 0.22);
+            border-color: rgba(63, 205, 220, 0.85);
+        }
+
+        /* ----------------------------------------------------------
+         * Pinned state
+         *
+         * The badge the Pursuer is actively pursuing (user-toggled).
+         * Wayfinding signal: among many badges in a gallery, the pinned
+         * one carries a soft tier-tinted edge glow so the eye locates it
+         * immediately. Plinth meta carries a "Pursuing" status copy that
+         * replaces the earn date. Pairs naturally with progress data and,
+         * later, with Horizon-style progress bars.
+         * ---------------------------------------------------------- */
+        .pp-frame--pinned {
+            box-shadow:
+                0 0 0 1px var(--frame-border),
+                0 0 14px rgba(255, 255, 255, 0.08);
+        }
+        .pp-frame--pinned.pp-frame--bronze {
+            box-shadow:
+                0 0 0 1px rgba(220, 150, 80, 0.55),
+                0 0 14px rgba(220, 150, 80, 0.22),
+                0 0 26px rgba(220, 150, 80, 0.1);
+        }
+        .pp-frame--pinned.pp-frame--silver {
+            box-shadow:
+                0 0 0 1px rgba(215, 220, 225, 0.55),
+                0 0 14px rgba(215, 220, 225, 0.22),
+                0 0 26px rgba(215, 220, 225, 0.1);
+        }
+        .pp-frame--pinned.pp-frame--gold {
+            box-shadow:
+                0 0 0 1px rgba(240, 198, 74, 0.65),
+                0 0 18px rgba(240, 198, 74, 0.28),
+                0 0 34px rgba(240, 198, 74, 0.12);
+            animation: pp-pinned-pulse-gold 4s ease-in-out infinite;
+        }
+        .pp-frame--pinned.pp-frame--platinum {
+            box-shadow:
+                0 0 0 1px rgba(207, 232, 240, 0.7),
+                0 0 20px rgba(207, 232, 240, 0.32),
+                0 0 38px rgba(207, 232, 240, 0.15);
+            animation: pp-pinned-pulse-platinum 4s ease-in-out infinite;
+        }
+        @keyframes pp-pinned-pulse-gold {
+            0%, 100% { box-shadow: 0 0 0 1px rgba(240, 198, 74, 0.65), 0 0 16px rgba(240, 198, 74, 0.22), 0 0 30px rgba(240, 198, 74, 0.1); }
+            50%      { box-shadow: 0 0 0 1px rgba(240, 198, 74, 0.75), 0 0 22px rgba(240, 198, 74, 0.34), 0 0 38px rgba(240, 198, 74, 0.16); }
+        }
+        @keyframes pp-pinned-pulse-platinum {
+            0%, 100% { box-shadow: 0 0 0 1px rgba(207, 232, 240, 0.7), 0 0 18px rgba(207, 232, 240, 0.28), 0 0 32px rgba(207, 232, 240, 0.12); }
+            50%      { box-shadow: 0 0 0 1px rgba(207, 232, 240, 0.8), 0 0 26px rgba(207, 232, 240, 0.4), 0 0 44px rgba(207, 232, 240, 0.2); }
+        }
+        /* Pinned ribbon override - turn the placeholder "?" or progress
+         * indicator into a clean pursuing-state label. */
+        .pp-frame--pinned .pp-frame__ribbon {
+            background: rgba(0, 0, 0, 0.7);
+            color: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(6px);
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+        }
+
+        /* Pinned · accent (primary color) variant. Drops the tier-colored
+         * glow in favor of a brand primary edge glow so the pinned badge
+         * reads as "currently active in the system" (a wayfinding role)
+         * rather than as another tier echo. Primary color matches our
+         * luminous-cyan brand accent. */
+        .pp-frame--pinned-accent {
+            box-shadow:
+                0 0 0 1px rgba(63, 205, 220, 0.7),
+                0 0 18px rgba(63, 205, 220, 0.32),
+                0 0 34px rgba(63, 205, 220, 0.14);
+            animation: pp-pinned-pulse-accent 4s ease-in-out infinite;
+        }
+        @keyframes pp-pinned-pulse-accent {
+            0%, 100% { box-shadow: 0 0 0 1px rgba(63, 205, 220, 0.7),  0 0 16px rgba(63, 205, 220, 0.28), 0 0 30px rgba(63, 205, 220, 0.12); }
+            50%      { box-shadow: 0 0 0 1px rgba(63, 205, 220, 0.85), 0 0 26px rgba(63, 205, 220, 0.42), 0 0 42px rgba(63, 205, 220, 0.2); }
+        }
+        /* Border accent variant - same primary glow but also shifts the
+         * Frame's outer border to the primary color. Strongest "this is
+         * pinned" signal, at the cost of overriding tier border color. */
+        .pp-frame--pinned-accent-border {
+            border-color: rgba(63, 205, 220, 0.85);
+        }
+
+        /* Pin chip - a small circular badge with a map-pin icon, "stuck"
+         * onto the top-left corner of the Frame with a slight rotation
+         * so it reads as a physical pin pressed into the chrome. */
+        .pp-frame__pin {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            box-shadow:
+                0 2px 6px rgba(0, 0, 0, 0.5),
+                0 0 0 2px rgba(20, 24, 30, 0.95);
+            transform: rotate(-14deg);
+            pointer-events: none;
+        }
+        .pp-frame__pin svg {
+            width: 13px;
+            height: 13px;
+            color: #fff;
+        }
+        /* Pin chip color modes: tier (matches Frame tier) or accent
+         * (primary brand cyan, decoupled from tier). */
+        .pp-frame__pin--tier {
+            background: linear-gradient(135deg, var(--frame-border), rgba(0, 0, 0, 0.55));
+        }
+        .pp-frame--bronze .pp-frame__pin--tier   { background: linear-gradient(135deg, rgba(220, 150, 80, 1), rgba(140, 88, 38, 1)); }
+        .pp-frame--silver .pp-frame__pin--tier   { background: linear-gradient(135deg, rgba(215, 220, 225, 1), rgba(140, 144, 150, 1)); color: #1a1a1a; }
+        .pp-frame--gold .pp-frame__pin--tier     { background: linear-gradient(135deg, rgba(245, 215, 120, 1), rgba(180, 140, 50, 1)); }
+        .pp-frame--platinum .pp-frame__pin--tier { background: linear-gradient(135deg, rgba(225, 245, 255, 1), rgba(140, 180, 200, 1)); color: #1a1a1a; }
+        .pp-frame__pin--accent {
+            background: linear-gradient(135deg, #5FE0EE, #1FA5BD);
+        }
+
+        /* ----------------------------------------------------------
          * Size variants
          * ---------------------------------------------------------- */
+
+        /* Large: detail-page hero size. Width matches the natural width
+         * a card reaches inside a 3-col grid at the lg breakpoint, where
+         * the frame's chrome and art breathe most comfortably. */
+        .pp-frame--large {
+            width: 320px;
+            max-width: 100%;
+            --frame-art-pad: 14px;
+        }
+        .pp-frame--large .pp-frame__series { font-size: 10px; }
+        .pp-frame--large .pp-frame__title::after { font-size: 10px; }
+        .pp-frame--large .pp-frame__name { font-size: 15px; }
+        .pp-frame--large .pp-frame__plinth-meta { font-size: 10px; }
+
         .pp-frame--compact .pp-frame__title { display: none; }
         .pp-frame--compact .pp-frame__plinth { display: none; }
         .pp-frame--compact .pp-frame__art { border-radius: 5px; }
@@ -458,8 +1655,6 @@
         .pp-frame--mini.pp-frame--silver   { --notch-size: 5px; }
         .pp-frame--mini.pp-frame--gold     { --notch-size: 6px; }
         .pp-frame--mini.pp-frame--platinum { --notch-size: 7px; }
-
-        .pp-frame--no-ribbon .pp-frame__ribbon { display: none; }
 
         /* ----------------------------------------------------------
          * Card flip
@@ -1065,15 +2260,62 @@
 
         <!-- 2. RIBBON A/B -->
         <div class="demo-section">
-            <h2>2. Ribbon vs no-ribbon</h2>
+            <h2>2. Tier label placement: ribbon vs title bar</h2>
+            <p class="text-sm text-white/55 mb-2">
+                Early team feedback: the ribbon (top-right of the art) covers part of the badge. Tier identity already shows in three other places (backdrop art, corner notch color, chrome tint), so the ribbon's job is just the explicit "Gold / Platinum" label.
+            </p>
             <p class="text-sm text-white/55 mb-6">
-                Tier identity already shows in three places: backdrop art, corner notch color, and chrome tint. The tier ribbon (top-right of the art) makes it four. Open question: is the ribbon pulling its weight, or is it visual noise?
+                Proposed change: move the tier label out of the art and into the title bar, right-aligned next to the series name. Long series titles (e.g. "Yakuza / Like a Dragon Anthology") truncate with an ellipsis so the tier label stays anchored on the right.
             </p>
 
             <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
 
                 <div>
-                    <div class="demo-label">With ribbon · Gold</div>
+                    <div class="demo-label">Old · ribbon · short title</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--legacy-ribbon">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Old · ribbon · long title</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--legacy-ribbon">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Yakuza / Like a Dragon Anthology</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">New · title-bar label · short title</div>
                     <div class="pp-frame pp-frame--gold">
                         <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
                         <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
@@ -1095,10 +2337,10 @@
                 </div>
 
                 <div>
-                    <div class="demo-label">Without ribbon · Gold</div>
-                    <div class="pp-frame pp-frame--gold pp-frame--no-ribbon">
+                    <div class="demo-label">New · title-bar label · long title</div>
+                    <div class="pp-frame pp-frame--gold">
                         <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
-                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Yakuza / Like a Dragon Anthology</div></div>
                         <div class="pp-frame__art">
                             <span class="pp-frame__ribbon">Gold</span>
                             <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
@@ -1111,50 +2353,6 @@
                             <div class="pp-frame__plinth-meta">
                                 <span>Earned</span>
                                 <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="demo-label">With ribbon · Platinum</div>
-                    <div class="pp-frame pp-frame--platinum">
-                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
-                        <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
-                        <div class="pp-frame__art">
-                            <span class="pp-frame__ribbon">Platinum</span>
-                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="" />
-                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
-                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/4_foreground.png' %}" alt="" />
-                            <div class="pp-frame__gleam"></div>
-                        </div>
-                        <div class="pp-frame__plinth">
-                            <div class="pp-frame__name">Default Badge</div>
-                            <div class="pp-frame__plinth-meta">
-                                <span>Earned</span>
-                                <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="demo-label">Without ribbon · Platinum</div>
-                    <div class="pp-frame pp-frame--platinum pp-frame--no-ribbon">
-                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
-                        <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
-                        <div class="pp-frame__art">
-                            <span class="pp-frame__ribbon">Platinum</span>
-                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="" />
-                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
-                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/4_foreground.png' %}" alt="" />
-                            <div class="pp-frame__gleam"></div>
-                        </div>
-                        <div class="pp-frame__plinth">
-                            <div class="pp-frame__name">Default Badge</div>
-                            <div class="pp-frame__plinth-meta">
-                                <span>Earned</span>
-                                <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
                             </div>
                         </div>
                     </div>
@@ -1255,7 +2453,7 @@
         <div class="demo-section">
             <h2>4. Background options compared</h2>
             <p class="text-sm text-white/55 mb-6">
-                Four candidates for what fills the area immediately behind the badge image. Same Gold badge in each, only the art container fill changes. C (tier-tinted) is the proposed default; Section 8 lets you preview each option at gallery scale.
+                Four candidates for what fills the area immediately behind the badge image. Same Gold badge in each, only the art container fill changes. C (tier-tinted) is the proposed default; Section 9 lets you preview each option at gallery scale.
             </p>
 
             <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -1531,13 +2729,16 @@
             </div>
         </div>
 
-        <!-- 6. UNEARNED -->
+        <!-- 6. FRAME STATES -->
         <div class="demo-section">
-            <h2>6. Earned vs unearned</h2>
-            <p class="text-sm text-white/55 mb-6">
-                How a Frame looks before you&rsquo;ve earned the badge. Veiled rather than greyscaled (the badge art stays visible underneath as a glimpse of what&rsquo;s waiting), with a dashed border and progress shown in the plinth.
+            <h2>6. Frame states</h2>
+            <p class="text-sm text-white/55 mb-2">
+                Three states a Frame can carry pre-Earned. The art layer never greyscales (greyscale reads &ldquo;disabled&rdquo;), tier identity is preserved across every state so the gallery never loses its color rhythm.
             </p>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl">
+            <p class="text-xs text-white/45 mb-6">
+                <strong>Unearned · dim</strong> is the current default lock state. <strong>Unearned · blueprint</strong> is an alternative treatment the visual-identity doc speculated about: render the badge as the architectural blueprint of what the Pursuer is working toward, not a greyed-out icon. The fourth state, <em>Pinned</em>, lives in its own dedicated exploration in Section 7.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                     <div class="demo-label">Earned</div>
                     <div class="pp-frame pp-frame--gold">
@@ -1556,12 +2757,16 @@
                                 <span>Earned 2025-01-21</span>
                                 <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
                             </div>
+                            <div class="pp-frame__engraving">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#247</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div>
-                    <div class="demo-label">Unearned</div>
+                    <div class="demo-label">Unearned · dim (current)</div>
                     <div class="pp-frame pp-frame--gold pp-frame--unearned">
                         <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
                         <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
@@ -1583,20 +2788,466 @@
                                 <span>8 of 10 stages</span>
                                 <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
                             </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">Unearned · blueprint (80% built)</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint" style="--pp-build: 80%">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <div class="pp-frame__blueprint-grid"></div>
+                            <div class="pp-frame__fab-banner">Fabricating</div>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__locked">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="text-xs text-white/45 mt-8 mb-2">
+                <strong>Incremental blueprint build:</strong> as stages are earned, the badge materializes upward out of the blueprint into full-color rendered art. A subtle construction line marks where the build currently stands. The blueprint atmosphere stays until the final stage clears, at which point the Frame flips to the Earned state with engraving.
+            </p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+
+                <div>
+                    <div class="demo-label">2 of 10 stages (20%)</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint" style="--pp-build: 20%">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <div class="pp-frame__blueprint-grid"></div>
+                            <div class="pp-frame__fab-banner">Fabricating</div>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__locked">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>2 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">5 of 10 stages (50%)</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint" style="--pp-build: 50%">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <div class="pp-frame__blueprint-grid"></div>
+                            <div class="pp-frame__fab-banner">Fabricating</div>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__locked">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>5 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">8 of 10 stages (80%)</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint" style="--pp-build: 80%">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <div class="pp-frame__blueprint-grid"></div>
+                            <div class="pp-frame__fab-banner">Fabricating</div>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__locked">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">10 of 10 stages → Earned</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#247</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="demo-caption mt-6">
+                Visual goal: the badge feels like it&rsquo;s being <em>built</em> on the planning desk, not waiting in a locked vault. CSS implementation masks the badge image layers from the bottom up by a percentage; the construction line is a 1px gradient inset 8px from the chrome.
+            </p>
+
+            <p class="text-xs text-white/45 mt-10 mb-2">
+                <strong>Stage-transition animations (tester):</strong> when a Pursuer clears a new stage, the build line moves up. Below: four animation styles to pick between. Each button resets the card to 30% built, then animates to 80%. Click again to replay.
+            </p>
+
+            <div class="pp-anim-controls" id="pp-anim-controls">
+                <span class="pp-anim-controls__label">Style:</span>
+                <button type="button" class="pp-anim-btn" data-anim="smooth">A · Smooth</button>
+                <button type="button" class="pp-anim-btn" data-anim="snap">B · Snap + flash</button>
+                <button type="button" class="pp-anim-btn" data-anim="scan">C · Scan wipe</button>
+                <button type="button" class="pp-anim-btn" data-anim="bouncy">D · Bouncy overshoot</button>
+                <button type="button" class="pp-anim-btn is-active" data-anim="weld">E · Weld + sparks</button>
+                <button type="button" class="pp-anim-btn pp-anim-btn--replay" id="pp-anim-replay">Replay</button>
+            </div>
+
+            <div class="flex justify-start">
+                <div class="w-56">
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint pp-anim-weld" id="pp-anim-target" style="--pp-build: 30%">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <div class="pp-frame__blueprint-grid"></div>
+                            <div class="pp-frame__fab-banner">Fabricating</div>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__locked">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span id="pp-anim-stages">3 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <p class="demo-caption mt-4">
+                A is the simplest read: progress just slides up. B adds a celebratory flash at the construction line. C reads as the badge being scanned into existence under a laser line. D overshoots its target and snaps back, the most game-y read. E adds welding sparks that arc off the build line and fall under gravity, with the line itself glowing hot during the build.
+            </p>
+
+            <p class="text-xs text-white/45 mt-10 mb-2">
+                <strong>The Earn Moment:</strong> the choreographed sequence that plays when the final stage clears. Heavy and deliberate, because these badges don&rsquo;t come along often. Build line completes with welding sparks &rarr; card lifts off the page (and stays lifted) &rarr; a welding torch laps the perimeter, sealing the frame &rarr; sealed-border glow &rarr; horizontal scan beam sweeps bottom-to-top, generating the tier-tinted background &rarr; a sheen sweeps across the card as the &ldquo;stamp of completion&rdquo; &rarr; the front engraving slow-burns in &rarr; card flips to its back face &rarr; a vertical scan beam sweeps right-to-left, revealing the back content &rarr; card finally settles back down. The flip doubles as a teaching moment for the click-to-flip interaction.
+            </p>
+
+            <div class="pp-anim-controls">
+                <button type="button" class="pp-anim-btn pp-anim-btn--replay" id="pp-earn-play">Play earn moment</button>
+                <button type="button" class="pp-anim-btn" id="pp-earn-reset">Reset</button>
+            </div>
+
+            <div class="flex justify-start">
+                <div class="w-56">
+                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint pp-frame--flippable pp-anim-weld pp-hover-a pp-earn-back-staged" id="pp-earn-target" style="--pp-build: 90%">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__inner">
+                            <div class="pp-frame__face pp-frame__face--front">
+                                <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                                <div class="pp-frame__art">
+                                    <div class="pp-frame__blueprint-grid"></div>
+                                    <div class="pp-frame__fab-banner">Fabricating</div>
+                                    <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                                    <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                                    <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                                    <div class="pp-frame__locked">
+                                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                        </svg>
+                                    </div>
+                                    <div class="pp-frame__gleam"></div>
+                                </div>
+                                <div class="pp-frame__plinth">
+                                    <div class="pp-frame__name">Default Badge</div>
+                                    <div class="pp-frame__plinth-meta">
+                                        <span id="pp-earn-meta">9 of 10 stages</span>
+                                        <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                                    </div>
+                                    <div class="pp-frame__engraving pp-frame__engraving--placeholder" id="pp-earn-engraving">
+                                        <span>Earn</span>
+                                        <span class="pp-frame__engraving-num">#247</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="pp-frame__face pp-frame__face--back">
+                                <div class="pp-frame__back-header">
+                                    <div class="pp-frame__series">Marvel Universe</div>
+                                    <div class="pp-frame__name">Default Badge</div>
+                                </div>
+                                <div class="pp-frame__back-body">
+                                    <p class="pp-frame__back-desc">Awarded for platinuming every Marvel-licensed game in the catalogue.</p>
+                                    <div class="pp-frame__back-stats">
+                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">May 11, 2026</div></div>
+                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">10 / 10</div></div>
+                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">3% · #247</div></div>
+                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Platinum</div></div>
+                                    </div>
+                                </div>
+                                <div class="pp-frame__back-footer">
+                                    <span>PlatPursuit</span>
+                                    <span class="pp-frame__back-flip-hint">click to flip</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="demo-caption mt-4">
+                Click <em>Play earn moment</em> to watch the full sequence. About 20 seconds end-to-end. The card runs through twelve phases: build &rarr; lift &rarr; border weld lap &rarr; sealed pulse &rarr; uncloak scan &rarr; resolve &rarr; completion sheen &rarr; front engraving &rarr; flip to back &rarr; back scan &rarr; flip to front &rarr; settle (with a final glow flourish). Sparks pick up tier-tinted variants. The plinth height is identical pre- and post-earn (placeholder engraving slot reserves the space), so the card doesn&rsquo;t jump size at the transition.
+            </p>
         </div>
 
-        <!-- 7. SIZE VARIANTS -->
+        <!-- 7. PINNED EXPLORATION -->
         <div class="demo-section">
-            <h2>7. Size variants</h2>
+            <h2>7. Pinned exploration</h2>
+            <p class="text-sm text-white/55 mb-2">
+                The pinned state needs to read as &ldquo;currently active&rdquo; from across a gallery without competing with the tier color hierarchy. Four directions, ordered from lightest touch to fullest commitment. All examples on Gold Marvel Universe, 8 of 10 stages, so the only variable is the pinned treatment itself.
+            </p>
+            <p class="text-xs text-white/45 mb-6">
+                The <strong>map-pin chip</strong> is a small circular badge anchored at the top-left corner with a slight rotation so it reads as a physical pin pressed into the chrome. <strong>Accent color</strong> uses our brand primary cyan (luminous teal, hue ~206), decoupled from the tier color, so &ldquo;pinned&rdquo; becomes a wayfinding signal rather than another tier echo.
+            </p>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-8">
+
+                <div>
+                    <div class="demo-label">A · Edge glow only (tier)</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--pinned">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Pursuing</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">B · Pin chip + tier glow</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--pinned">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <span class="pp-frame__pin pp-frame__pin--tier">
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>
+                        </span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Pursuing</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">C · Pin chip + accent glow</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--pinned-accent">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <span class="pp-frame__pin pp-frame__pin--accent">
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>
+                        </span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Pursuing</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">D · Pin chip + accent border</div>
+                    <div class="pp-frame pp-frame--gold pp-frame--pinned-accent pp-frame--pinned-accent-border">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <span class="pp-frame__pin pp-frame__pin--accent">
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>
+                        </span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Pursuing</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>8 of 10 stages</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#---</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="demo-caption mt-6">
+                Open question for the team: should the pinned signal lean tier-coupled (A/B) so a pinned Gold badge still reads as Gold first, or accent-decoupled (C/D) so a glance across the gallery instantly locates the pursued badge by the cyan signature? Tradeoff: tier-coupled is quieter but adds another tier-tinted thing to the visual rhythm; accent-decoupled is bolder but introduces a non-tier color the rest of the kit doesn&rsquo;t use yet.
+            </p>
+        </div>
+
+        <!-- 8. SIZE VARIANTS -->
+        <div class="demo-section">
+            <h2>8. Size variants</h2>
             <p class="text-sm text-white/55 mb-6">
-                Three sizes for different surfaces: <strong>default</strong> for galleries and detail pages, <strong>compact</strong> for in-progress badges on the home screen, and <strong>mini</strong> for inline use in comments, leaderboards, or chips.
+                Four sizes for different surfaces: <strong>large</strong> for hero placement on badge / game detail pages, <strong>default</strong> for galleries and grid views, <strong>compact</strong> for in-progress badges on the home screen, and <strong>mini</strong> for inline use in comments, leaderboards, or chips.
             </p>
 
             <div class="flex flex-wrap items-end gap-8">
+
+                <div>
+                    <div class="demo-label">Large (detail hero)</div>
+                    <div class="pp-frame pp-frame--platinum pp-frame--large">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Platinum</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/4_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="w-48">
                     <div class="demo-label">Default</div>
@@ -1689,9 +3340,9 @@
             </div>
         </div>
 
-        <!-- 8. GALLERY -->
+        <!-- 9. GALLERY -->
         <div class="demo-section" data-gallery-bg="tier">
-            <h2>8. Gallery view</h2>
+            <h2>9. Gallery view</h2>
             <p class="text-sm text-white/55 mb-6">
                 A simulated Badge Gallery slice showing earned and unearned Frames mixed together. Toggle the background options below to preview how each looks at scale.
             </p>
@@ -1898,9 +3549,9 @@
             </div>
         </div>
 
-        <!-- 9. FLAIR / USER CUSTOMIZATION -->
+        <!-- 10. FLAIR / USER CUSTOMIZATION -->
         <div class="demo-section" data-chrome-mode="transparent">
-            <h2>9. Flair: background &amp; border effects</h2>
+            <h2>10. Flair: background &amp; border effects</h2>
             <p class="text-sm text-white/55 mb-2">
                 Cosmetic effects users could unlock and apply to their badges as part of a future customization layer. All examples shown on Gold tier.
             </p>
@@ -2084,9 +3735,9 @@
             </p>
         </div>
 
-        <!-- 10. HOVER FLAIR -->
+        <!-- 11. HOVER FLAIR -->
         <div class="demo-section">
-            <h2>10. Flair: hover effects</h2>
+            <h2>11. Flair: hover effects</h2>
             <p class="text-sm text-white/55 mb-6">
                 Cosmetic effects that activate on hover. Independent of the background/border flair above. These can be combined with any of those, or applied to plain Frames. All Gold tier for direct comparison.
             </p>
@@ -2244,9 +3895,9 @@
             </p>
         </div>
 
-        <!-- 11. KEY DESIGN CHOICES -->
+        <!-- 12. KEY DESIGN CHOICES -->
         <div class="demo-section">
-            <h2>11. Key design choices</h2>
+            <h2>12. Key design choices</h2>
             <ul class="space-y-3 text-sm text-white/70 max-w-3xl">
                 <li>
                     <strong class="text-white">Trading-card layout.</strong>
@@ -2270,14 +3921,234 @@
                 </li>
                 <li>
                     <strong class="text-white">Flair = optional, not default.</strong>
-                    The base Frame is what every user sees by default. The flair effects in Sections 9 and 10 are explorations of a future customization layer where users could unlock and equip cosmetic effects. The base design needs to be strong on its own first.
+                    The base Frame is what every user sees by default. The flair effects in Sections 10 and 11 are explorations of a future customization layer where users could unlock and equip cosmetic effects. The base design needs to be strong on its own first.
                 </li>
             </ul>
         </div>
 
-        <!-- 12. FEEDBACK PROMPTS -->
+        <!-- 13. EARN ENGRAVING -->
         <div class="demo-section">
-            <h2>12. Feedback prompts</h2>
+            <h2>13. Earn engraving (limited-run authentication)</h2>
+            <p class="text-sm text-white/55 mb-2">
+                The collector instinct, made literal. Every Pursuer&rsquo;s frame carries their permanent earn-rank etched into the plinth, the way a limited-edition watch carries a serial on its case-back. The badge exists at many earn-ranks across the community; <em>your</em> frame&rsquo;s engraving is yours forever.
+            </p>
+            <p class="text-xs text-white/45 mb-6">
+                No closing denominator (the community keeps earning, so &ldquo;247 / 1,420&rdquo; would shift every day). Just the rank, locked. A #5 owner can flex being the fifth ever; a #14,802 owner sees their place in the queue. The number is the charm hook and the brand authenticity mark in one stroke.
+            </p>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+
+                <div>
+                    <div class="demo-label">A · Baseline (no engraving)</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">B · Minimal engraving</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#247</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">C · Decorated engraving</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving">
+                                <span class="pp-frame__engraving-num">#247</span>
+                                <span>of all-time</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="demo-label">D · Engraving + stamp</div>
+                    <div class="pp-frame pp-frame--gold">
+                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                        <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                        <div class="pp-frame__art">
+                            <span class="pp-frame__ribbon">Gold</span>
+                            <span class="pp-frame__stamp">PP</span>
+                            <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                            <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                            <div class="pp-frame__gleam"></div>
+                        </div>
+                        <div class="pp-frame__plinth">
+                            <div class="pp-frame__name">Default Badge</div>
+                            <div class="pp-frame__plinth-meta">
+                                <span>Earned 2025-04-08</span>
+                                <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                            </div>
+                            <div class="pp-frame__engraving">
+                                <span>Earn</span>
+                                <span class="pp-frame__engraving-num">#247</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="text-xs text-white/45 mt-8 mb-2">
+                Number-magnitude test: how the engraving reads from #1 (the rare flex) through #14,802 (a common badge, late earner). All four tiers represented. The #1 card carries a subtle pulse on the number so the bragging right doesn&rsquo;t need extra chrome.
+            </p>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+
+                <div class="pp-frame pp-frame--platinum">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">PSVR Catalogue</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Platinum</span>
+                        <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/4_backdrop.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/4_foreground.png' %}" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2025-04-08</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
+                        </div>
+                        <div class="pp-frame__engraving pp-frame__engraving--first">
+                            <span>Earn</span>
+                            <span class="pp-frame__engraving-num">#1</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--gold">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Gold</span>
+                        <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2025-04-08</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                        </div>
+                        <div class="pp-frame__engraving">
+                            <span>Earn</span>
+                            <span class="pp-frame__engraving-num">#247</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--silver">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">FromSoftware</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Silver</span>
+                        <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/2_backdrop.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/2_foreground.png' %}" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2025-04-08</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>8%</span>
+                        </div>
+                        <div class="pp-frame__engraving">
+                            <span>Earn</span>
+                            <span class="pp-frame__engraving-num">#1,902</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pp-frame pp-frame--bronze">
+                    <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                    <div class="pp-frame__title"><div class="pp-frame__series">Resident Evil</div></div>
+                    <div class="pp-frame__art">
+                        <span class="pp-frame__ribbon">Bronze</span>
+                        <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/1_backdrop.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                        <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/1_foreground.png' %}" alt="" />
+                        <div class="pp-frame__gleam"></div>
+                    </div>
+                    <div class="pp-frame__plinth">
+                        <div class="pp-frame__name">Default Badge</div>
+                        <div class="pp-frame__plinth-meta">
+                            <span>Earned 2025-04-08</span>
+                            <span class="pp-frame__rarity pp-frame__rarity--common"><svg><use href="#rarity-dot"/></svg>22%</span>
+                        </div>
+                        <div class="pp-frame__engraving">
+                            <span>Earn</span>
+                            <span class="pp-frame__engraving-num">#14,802</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <p class="demo-caption mt-6">
+                Engraving lives at the bottom of the plinth, separated by a hairline dashed rule and rendered with tabular figures + a faux deboss text-shadow (dark bottom + faint top hairline) so it reads as etched into chrome rather than printed on top. Tier-colored on Gold and Platinum to feel of-a-piece with the rest of the frame. Unearned cards omit the engraving entirely (you haven&rsquo;t earned your number yet).
+            </p>
+        </div>
+
+        <!-- 14. FEEDBACK PROMPTS -->
+        <div class="demo-section">
+            <h2>14. Feedback prompts</h2>
             <p class="text-sm text-white/55 mb-5 max-w-3xl">
                 The honest gut-checks we&rsquo;re looking for. Don&rsquo;t worry about being polite. Conflicting opinions are useful.
             </p>
@@ -2292,22 +4163,30 @@
                 </li>
                 <li>
                     <strong class="text-white">3. The badge gallery experience.</strong>
-                    Section 8 simulates a gallery view. Try the background toggle. Does it hold up at scale? Would you enjoy scrolling through your own badge collection rendered like this?
+                    Section 9 simulates a gallery view. Try the background toggle. Does it hold up at scale? Would you enjoy scrolling through your own badge collection rendered like this?
                 </li>
                 <li>
                     <strong class="text-white">4. Card flip (Section 5).</strong>
                     Is the click-to-flip useful, or unnecessary chrome? What would you most want to see on the back?
                 </li>
                 <li>
-                    <strong class="text-white">5. Flair effects (Sections 9 &amp; 10).</strong>
+                    <strong class="text-white">5. Frame states (Sections 6 &amp; 7).</strong>
+                    Two questions stacked: <em>(a)</em> Unearned dim vs. incremental blueprint build &mdash; which sells &ldquo;working toward this&rdquo; better? <em>(b)</em> For Pinned, which of A/B/C/D feels right? Tier-coupled (A/B) is quieter; accent-decoupled (C/D) creates a system-wide &ldquo;currently active&rdquo; signature in our brand cyan.
+                </li>
+                <li>
+                    <strong class="text-white">6. Earn engraving (Section 13).</strong>
+                    The limited-run authentication idea: every Pursuer&rsquo;s frame carries their permanent earn-rank engraved into the plinth. Does it land? Which engraving format (minimal &ldquo;Earn #247&rdquo;, decorated &ldquo;#247 of all-time&rdquo;, or with-stamp) feels right? Would you brag about your number?
+                </li>
+                <li>
+                    <strong class="text-white">7. Flair effects (Sections 10 &amp; 11).</strong>
                     Which ones land? Which feel like &ldquo;too much&rdquo;? Which would you want for your own badge? Are there missing categories (e.g. nature, weather, magic, sci-fi) you&rsquo;d expect to see?
                 </li>
                 <li>
-                    <strong class="text-white">6. Deal-breakers.</strong>
+                    <strong class="text-white">8. Deal-breakers.</strong>
                     Is there anything in this design you&rsquo;d push back on hard? Anything that feels off-brand for PlatPursuit?
                 </li>
                 <li>
-                    <strong class="text-white">7. The unknown unknowns.</strong>
+                    <strong class="text-white">9. The unknown unknowns.</strong>
                     Something you&rsquo;d expect this design to address that it doesn&rsquo;t? Edge cases we missed?
                 </li>
             </ul>
@@ -2322,10 +4201,12 @@
         document.querySelectorAll('.pp-frame--flippable').forEach(frame => {
             frame.addEventListener('click', (e) => {
                 if (e.target.closest('a, button')) return;
+                // Blueprint cards aren't flippable (the badge isn't earned yet)
+                if (frame.classList.contains('pp-frame--blueprint')) return;
                 frame.classList.toggle('is-flipped');
             });
         });
-        // Gallery background toggle (Section 8) - scoped to buttons with data-bg
+        // Gallery background toggle (Section 9) - scoped to buttons with data-bg
         document.querySelectorAll('[data-gallery-bg]').forEach(section => {
             section.querySelectorAll('button[data-bg]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -2337,7 +4218,578 @@
             });
         });
 
-        // Chrome mode toggle (Section 9) - scoped to buttons with data-chrome
+        // Blueprint stage-transition animation tester (Section 6).
+        // Each style button selects the animation flavor; replay triggers it.
+        // We swap the .pp-anim-* class to swap easing/effects, then reset
+        // build to 30% and animate to 80%. The class change forces the
+        // transition to be from the snapped baseline, not from current.
+        (() => {
+            const target = document.getElementById('pp-anim-target');
+            const stages = document.getElementById('pp-anim-stages');
+            const controls = document.getElementById('pp-anim-controls');
+            if (!target || !controls) return;
+            const STYLES = ['smooth', 'snap', 'scan', 'bouncy', 'weld'];
+            let current = 'weld';
+            let sparkTimer = null;
+
+            const setStyle = (name) => {
+                STYLES.forEach(s => target.classList.remove('pp-anim-' + s));
+                target.classList.add('pp-anim-' + name);
+                current = name;
+                controls.querySelectorAll('.pp-anim-btn[data-anim]').forEach(b => {
+                    b.classList.toggle('is-active', b.dataset.anim === name);
+                });
+            };
+
+            // Spawn a single welding spark on the moving construction line.
+            // Random lateral position along the line, random arc trajectory.
+            const spawnSpark = () => {
+                const art = target.querySelector('.pp-frame__art');
+                if (!art) return;
+                const buildPct = parseFloat(getComputedStyle(target).getPropertyValue('--pp-build')) || 0;
+                const spark = document.createElement('div');
+                spark.className = 'pp-spark';
+                spark.style.left = (15 + Math.random() * 70) + '%';
+                spark.style.bottom = buildPct + '%';
+                // Arc trajectory: small upward kick early, then lateral drift + gravity-pulled fall.
+                const xMid = (Math.random() - 0.5) * 18;            // ±9px early
+                const xEnd = (Math.random() - 0.5) * 90;            // ±45px end
+                const yMid = -(8 + Math.random() * 14);             // -8 to -22px (up)
+                const yEnd = 22 + Math.random() * 34;               // +22 to +56px (down)
+                const dur = 550 + Math.random() * 350;              // 550-900ms
+                spark.style.setProperty('--spark-x-mid', xMid + 'px');
+                spark.style.setProperty('--spark-y-mid', yMid + 'px');
+                spark.style.setProperty('--spark-x-end', xEnd + 'px');
+                spark.style.setProperty('--spark-y-end', yEnd + 'px');
+                spark.style.setProperty('--spark-dur', dur + 'ms');
+                art.appendChild(spark);
+                setTimeout(() => spark.remove(), dur + 50);
+            };
+
+            // Run the spark spawner for the duration of the weld animation.
+            // A small burst at the start for the welding-touchdown feel, then
+            // a steady stream until ~1.4s in (matches the 1.5s build curve).
+            const startSparks = () => {
+                if (sparkTimer) clearInterval(sparkTimer);
+                for (let i = 0; i < 6; i++) setTimeout(spawnSpark, i * 25);
+                let count = 0;
+                sparkTimer = setInterval(() => {
+                    spawnSpark();
+                    count++;
+                    if (count > 50) {
+                        clearInterval(sparkTimer);
+                        sparkTimer = null;
+                    }
+                }, 28);
+            };
+
+            const play = () => {
+                // Reset to baseline without transition (briefly suppress).
+                target.classList.add('pp-anim-resetting');
+                target.style.setProperty('--pp-build', '30%');
+                if (stages) stages.textContent = '3 of 10 stages';
+                target.classList.remove('is-animating');
+                if (sparkTimer) { clearInterval(sparkTimer); sparkTimer = null; }
+                // Clear any lingering sparks from a prior run so reset is clean.
+                target.querySelectorAll('.pp-spark').forEach(s => s.remove());
+                // Force reflow so the next changes actually animate.
+                void target.offsetWidth;
+                target.classList.remove('pp-anim-resetting');
+                // Now trigger.
+                requestAnimationFrame(() => {
+                    target.classList.add('is-animating');
+                    target.style.setProperty('--pp-build', '80%');
+                    if (stages) stages.textContent = '8 of 10 stages';
+                    if (current === 'weld') startSparks();
+                    // Clear the is-animating class after the longest expected
+                    // animation duration so one-shot keyframe effects can replay.
+                    setTimeout(() => target.classList.remove('is-animating'), 1700);
+                });
+            };
+            controls.querySelectorAll('.pp-anim-btn[data-anim]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    setStyle(btn.dataset.anim);
+                    play();
+                });
+            });
+            const replay = document.getElementById('pp-anim-replay');
+            if (replay) replay.addEventListener('click', play);
+        })();
+        // Suppress the --pp-build transition while a reset is in progress.
+        const _animStyle = document.createElement('style');
+        _animStyle.textContent = '.pp-frame--blueprint.pp-anim-resetting { transition: none !important; }';
+        document.head.appendChild(_animStyle);
+
+        // Earn Moment - choreographed completion sequence (Section 6).
+        // Heavy / cinematic pacing. Card stays lifted throughout, flips
+        // back to face the front before settling with a tier-tinted glow
+        // flourish. Sparks pick up tier-tinted variants alongside the
+        // hot welding sparks.
+        //   1. T=0-1800ms:     Build pulse 90% → 100% with weld sparks
+        //   2. T=1800ms:       .pp-earn-cooling - lift + atmosphere stays
+        //   3. T=2900-5000ms:  Border weld lap over blueprint chrome
+        //   4. T=5000-6400ms:  Sealed border pulse (fade in, hold, fade out)
+        //   5. T=6500ms:       .pp-earn-uncloak - SCAN bottom→top, 2200ms
+        //   6. T=8750ms:       Strip blueprint/unearned
+        //   7. T=8900ms:       .pp-earn-gleaming - sheen sweep (1400ms)
+        //   8. T=10500ms:      Front engraving etch (3000ms over text only)
+        //   9. T=13700ms:      .is-flipped - card flips to back face
+        //  10. T=14550ms:      .pp-earn-back-scan - SCAN right→left, 2000ms
+        //  11. T=17400ms:      Flip BACK to front (.is-flipped removed)
+        //  12. T=18300ms:      .pp-earn-settling - descend + glow flourish
+        (() => {
+            const target = document.getElementById('pp-earn-target');
+            const playBtn = document.getElementById('pp-earn-play');
+            const resetBtn = document.getElementById('pp-earn-reset');
+            const meta = document.getElementById('pp-earn-meta');
+            const engraving = document.getElementById('pp-earn-engraving');
+            if (!target || !playBtn || !resetBtn) return;
+
+            let timers = [];
+            let buildTimer = null;
+            let etchTimer = null;
+            let borderTimer = null;
+
+            const clearAllTimers = () => {
+                timers.forEach(t => clearTimeout(t));
+                timers = [];
+                if (buildTimer)  { clearInterval(buildTimer);  buildTimer  = null; }
+                if (etchTimer)   { clearInterval(etchTimer);   etchTimer   = null; }
+                if (borderTimer) { clearInterval(borderTimer); borderTimer = null; }
+            };
+
+            // Determine current tier for tier-colored spark mixing.
+            const getTier = () => {
+                if (target.classList.contains('pp-frame--bronze'))   return 'bronze';
+                if (target.classList.contains('pp-frame--silver'))   return 'silver';
+                if (target.classList.contains('pp-frame--gold'))     return 'gold';
+                if (target.classList.contains('pp-frame--platinum')) return 'platinum';
+                return 'gold';
+            };
+            // ~45% of build/border/uncloak sparks get a tier-color variant
+            // so the "molten metal being welded" carries the tier itself.
+            const maybeTintSpark = (spark) => {
+                if (Math.random() < 0.45) {
+                    spark.classList.add('pp-spark--tier-' + getTier());
+                }
+            };
+
+            // Build-line spark (same envelope as the Section 6 tester's weld style)
+            const spawnBuildSpark = () => {
+                const art = target.querySelector('.pp-frame__art');
+                if (!art) return;
+                const buildPct = parseFloat(getComputedStyle(target).getPropertyValue('--pp-build')) || 0;
+                const spark = document.createElement('div');
+                spark.className = 'pp-spark';
+                maybeTintSpark(spark);
+                spark.style.left = (15 + Math.random() * 70) + '%';
+                spark.style.bottom = buildPct + '%';
+                const xMid = (Math.random() - 0.5) * 18;
+                const xEnd = (Math.random() - 0.5) * 90;
+                const yMid = -(8 + Math.random() * 14);
+                const yEnd = 22 + Math.random() * 34;
+                const dur = 550 + Math.random() * 350;
+                spark.style.setProperty('--spark-x-mid', xMid + 'px');
+                spark.style.setProperty('--spark-y-mid', yMid + 'px');
+                spark.style.setProperty('--spark-x-end', xEnd + 'px');
+                spark.style.setProperty('--spark-y-end', yEnd + 'px');
+                spark.style.setProperty('--spark-dur', dur + 'ms');
+                art.appendChild(spark);
+                setTimeout(() => spark.remove(), dur + 50);
+            };
+
+            // Border-weld spark - spawned at the head's current perimeter
+            // position. Trajectory direction depends on which edge the
+            // head is on so sparks fly OUTWARD from the card.
+            const spawnBorderSpark = (leftPct, topPct, edge) => {
+                const spark = document.createElement('div');
+                spark.className = 'pp-spark';
+                maybeTintSpark(spark);
+                spark.style.left = leftPct + '%';
+                spark.style.top = topPct + '%';
+                spark.style.bottom = 'auto';
+                let xMid, xEnd, yMid, yEnd;
+                if (edge === 'top') {
+                    xMid = (Math.random() - 0.5) * 14;
+                    xEnd = (Math.random() - 0.5) * 36;
+                    yMid = -(6 + Math.random() * 8);
+                    yEnd = -(18 + Math.random() * 22);
+                } else if (edge === 'right') {
+                    xMid = (5 + Math.random() * 8);
+                    xEnd = (18 + Math.random() * 22);
+                    yMid = (Math.random() - 0.5) * 14;
+                    yEnd = (Math.random() - 0.5) * 36;
+                } else if (edge === 'bottom') {
+                    xMid = (Math.random() - 0.5) * 14;
+                    xEnd = (Math.random() - 0.5) * 36;
+                    yMid = (6 + Math.random() * 8);
+                    yEnd = (18 + Math.random() * 22);
+                } else { // left
+                    xMid = -(5 + Math.random() * 8);
+                    xEnd = -(18 + Math.random() * 22);
+                    yMid = (Math.random() - 0.5) * 14;
+                    yEnd = (Math.random() - 0.5) * 36;
+                }
+                const dur = 450 + Math.random() * 300;
+                spark.style.setProperty('--spark-x-mid', xMid + 'px');
+                spark.style.setProperty('--spark-y-mid', yMid + 'px');
+                spark.style.setProperty('--spark-x-end', xEnd + 'px');
+                spark.style.setProperty('--spark-y-end', yEnd + 'px');
+                spark.style.setProperty('--spark-dur', dur + 'ms');
+                target.appendChild(spark);
+                setTimeout(() => spark.remove(), dur + 50);
+            };
+
+            // Etch spark - smaller, tighter trajectory, tracks the head's
+            // current position by left percentage (passed in).
+            const spawnEtchSpark = (leftPct) => {
+                if (!engraving) return;
+                const spark = document.createElement('div');
+                spark.className = 'pp-spark pp-spark--etch';
+                spark.style.left = leftPct + '%';
+                spark.style.top = '50%';
+                const xMid = (Math.random() - 0.5) * 10;
+                const xEnd = (Math.random() - 0.5) * 32;
+                const yMid = -(2 + Math.random() * 5);
+                const yEnd = 8 + Math.random() * 14;
+                const dur = 400 + Math.random() * 280;
+                spark.style.setProperty('--spark-x-mid', xMid + 'px');
+                spark.style.setProperty('--spark-y-mid', yMid + 'px');
+                spark.style.setProperty('--spark-x-end', xEnd + 'px');
+                spark.style.setProperty('--spark-y-end', yEnd + 'px');
+                spark.style.setProperty('--spark-dur', dur + 'ms');
+                engraving.appendChild(spark);
+                setTimeout(() => spark.remove(), dur + 50);
+            };
+
+            const reset = () => {
+                clearAllTimers();
+                target.querySelectorAll('.pp-spark, .pp-frame__etch-head, .pp-frame__border-weld-head, .pp-frame__scan-beam-h').forEach(el => el.remove());
+                target.classList.remove(
+                    'pp-earn-cooling',
+                    'pp-earn-uncloak',
+                    'pp-earn-gleaming',
+                    'pp-earn-engraving',
+                    'pp-earn-settling',
+                    'pp-earn-sealed',
+                    'pp-earn-back-scan',
+                    'pp-earn-weld-top',
+                    'pp-earn-weld-right',
+                    'pp-earn-weld-bottom',
+                    'pp-earn-weld-left',
+                    'is-flipped',
+                    'is-animating'
+                );
+                target.classList.add('pp-frame--blueprint', 'pp-frame--unearned', 'pp-earn-back-staged');
+                target.style.setProperty('--pp-build', '90%');
+                // Clear scan variables so the next play() can re-trigger
+                // their transitions from initial 0%. Also clear the
+                // art-position vars so they get re-measured fresh.
+                target.style.removeProperty('--scan-fwd');
+                target.style.removeProperty('--scan-back');
+                target.style.removeProperty('--art-bottom');
+                target.style.removeProperty('--art-range');
+                // Clear inline clip-path on the engraving (set by the etch
+                // phase) so the next play starts from CSS defaults.
+                if (engraving) {
+                    engraving.style.removeProperty('clip-path');
+                    engraving.style.removeProperty('-webkit-clip-path');
+                }
+                if (meta) meta.textContent = '9 of 10 stages';
+            };
+
+            const play = () => {
+                reset();
+                // Force reflow so the build transition fires from 90%, not snaps.
+                void target.offsetWidth;
+
+                // PHASE 1: Weld pulse 90% → 100% (slightly slower, 1800ms feel)
+                requestAnimationFrame(() => {
+                    target.classList.add('is-animating');
+                    target.style.setProperty('--pp-build', '100%');
+                    if (meta) meta.textContent = '10 of 10 stages';
+                    for (let i = 0; i < 6; i++) timers.push(setTimeout(spawnBuildSpark, i * 25));
+                    let count = 0;
+                    buildTimer = setInterval(() => {
+                        spawnBuildSpark();
+                        count++;
+                        if (count > 65) { clearInterval(buildTimer); buildTimer = null; }
+                    }, 28);
+                });
+
+                // PHASE 2: Cooling - card lifts, banner/lock/line fade.
+                timers.push(setTimeout(() => {
+                    target.classList.add('pp-earn-cooling');
+                }, 1800));
+
+                // PHASE 3: Border weld lap (2100ms over still-blueprint chrome).
+                // As the welder finishes each side, that side flips from
+                // dashed to solid - the seal "follows" the torch around.
+                timers.push(setTimeout(() => {
+                    target.classList.remove('is-animating');
+                    target.querySelectorAll('.pp-spark:not(.pp-spark--etch)').forEach(s => s.remove());
+
+                    const head = document.createElement('span');
+                    head.className = 'pp-frame__border-weld-head';
+                    head.style.animationDuration = '2100ms';
+                    target.appendChild(head);
+                    timers.push(setTimeout(() => head.remove(), 2150));
+
+                    // Stage the per-side seal switches at corner-crossings:
+                    // welder reaches each next corner at 525ms intervals.
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-top'),    525));
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-right'),  1050));
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-bottom'), 1575));
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-left'),   2100));
+
+                    const startTime = Date.now();
+                    const dur = 2100;
+                    borderTimer = setInterval(() => {
+                        const elapsed = Date.now() - startTime;
+                        const progress = Math.min(elapsed / dur, 1);
+                        if (progress >= 1) { clearInterval(borderTimer); borderTimer = null; return; }
+                        let leftPct, topPct, edge;
+                        if (progress < 0.25) {
+                            leftPct = (progress / 0.25) * 100;
+                            topPct = 0;
+                            edge = 'top';
+                        } else if (progress < 0.5) {
+                            leftPct = 100;
+                            topPct = ((progress - 0.25) / 0.25) * 100;
+                            edge = 'right';
+                        } else if (progress < 0.75) {
+                            leftPct = 100 - ((progress - 0.5) / 0.25) * 100;
+                            topPct = 100;
+                            edge = 'bottom';
+                        } else {
+                            leftPct = 0;
+                            topPct = 100 - ((progress - 0.75) / 0.25) * 100;
+                            edge = 'left';
+                        }
+                        spawnBorderSpark(leftPct, topPct, edge);
+                    }, 36);
+                }, 2900));
+
+                // PHASE 4: Sealed glow pulse (1400ms self-contained
+                // animation: fade in → hold → fade out → settle back).
+                timers.push(setTimeout(() => {
+                    target.classList.add('pp-earn-sealed');
+                }, 5000));
+
+                // PHASE 5: Uncloak SCAN - bottom-to-top beam over the
+                // WHOLE front face (plinth → art → title), 2200ms.
+                // Beam + sparks live in the face so they traverse the
+                // full card height, not just the art. Title and plinth
+                // text brighten as the beam passes (CSS animations with
+                // delays calibrated to the beam's vertical position).
+                //
+                // Before triggering, measure the art's vertical position
+                // within the face so the mask boundary tracks the beam's
+                // actual position over the art - not 50% of the grid
+                // when the beam is at 50% of the face.
+                timers.push(setTimeout(() => {
+                    target.classList.remove('pp-earn-sealed');
+                    target.querySelectorAll('.pp-spark').forEach(s => s.remove());
+
+                    const face = target.querySelector('.pp-frame__face--front');
+                    const artEl = target.querySelector('.pp-frame__art');
+                    if (face && artEl) {
+                        const faceRect = face.getBoundingClientRect();
+                        const artRect  = artEl.getBoundingClientRect();
+                        // From face bottom (--scan-fwd = 0%) upward,
+                        // art-bottom is the fraction where the art starts
+                        // and art-range is its height as a fraction of face.
+                        const artBottom = (faceRect.bottom - artRect.bottom) / faceRect.height;
+                        const artTop    = (faceRect.bottom - artRect.top)    / faceRect.height;
+                        target.style.setProperty('--art-bottom', artBottom);
+                        target.style.setProperty('--art-range',  artTop - artBottom);
+                    }
+
+                    if (face) {
+                        const beam = document.createElement('div');
+                        beam.className = 'pp-frame__scan-beam-h';
+                        face.appendChild(beam);
+                        timers.push(setTimeout(() => beam.remove(), 2300));
+                    }
+
+                    target.classList.add('pp-earn-uncloak');
+                    requestAnimationFrame(() => {
+                        target.style.setProperty('--scan-fwd', '100%');
+                    });
+
+                    const startTime = Date.now();
+                    const dur = 2200;
+                    const scanSparkTimer = setInterval(() => {
+                        const elapsed = Date.now() - startTime;
+                        const progress = Math.min(elapsed / dur, 1);
+                        if (progress >= 1) { clearInterval(scanSparkTimer); return; }
+                        const eased = progress < 0.5
+                            ? 2 * progress * progress
+                            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+                        const beamPct = eased * 100;
+                        const faceEl = target.querySelector('.pp-frame__face--front');
+                        if (!faceEl) return;
+                        const spark = document.createElement('div');
+                        spark.className = 'pp-spark';
+                        maybeTintSpark(spark);
+                        spark.style.left = (10 + Math.random() * 80) + '%';
+                        spark.style.bottom = beamPct + '%';
+                        const xMid = (Math.random() - 0.5) * 14;
+                        const xEnd = (Math.random() - 0.5) * 60;
+                        const yMid = -(4 + Math.random() * 8);
+                        const yEnd = -(10 + Math.random() * 18);
+                        const sDur = 480 + Math.random() * 280;
+                        spark.style.setProperty('--spark-x-mid', xMid + 'px');
+                        spark.style.setProperty('--spark-y-mid', yMid + 'px');
+                        spark.style.setProperty('--spark-x-end', xEnd + 'px');
+                        spark.style.setProperty('--spark-y-end', yEnd + 'px');
+                        spark.style.setProperty('--spark-dur', sDur + 'ms');
+                        faceEl.appendChild(spark);
+                        setTimeout(() => spark.remove(), sDur + 50);
+                    }, 42);
+                    timers.push(setTimeout(() => clearInterval(scanSparkTimer), dur + 50));
+                }, 6500));
+
+                // PHASE 6: Strip blueprint/unearned - card is now in earned base
+                timers.push(setTimeout(() => {
+                    target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
+                }, 8750));
+
+                // PHASE 7: Completion sheen sweep across the card
+                timers.push(setTimeout(() => {
+                    target.classList.add('pp-earn-gleaming');
+                }, 8900));
+                timers.push(setTimeout(() => {
+                    target.classList.remove('pp-earn-gleaming');
+                }, 10300));
+
+                // PHASE 8: Front engraving etch - 3000ms slow burn.
+                // The head lives in the plinth (NOT inside the engraving)
+                // so it isn't clipped by the engraving's reveal mask. JS
+                // measures text bounds in the plinth coordinate space and
+                // positions the head accordingly.
+                //
+                // ORDER MATTERS: the initial clip-path must be set inline
+                // BEFORE adding .pp-earn-engraving. Otherwise the CSS rule
+                // briefly applies its inset(0 100% 0 0) and arms the
+                // transition from that snapshot, so the subsequent RAF
+                // change interpolates from 100% (full hide) instead of
+                // from the text's left edge. Result: wipe is ~2x too fast
+                // and starts late relative to the head's movement.
+                timers.push(setTimeout(() => {
+                    if (!engraving) return;
+                    const plinth = engraving.parentElement;
+                    if (!plinth) return;
+
+                    // Measure text bounds. Children currently have layout
+                    // (visibility: hidden from the placeholder rule), so
+                    // bounding rects are valid.
+                    const plinthRect = plinth.getBoundingClientRect();
+                    const engRect = engraving.getBoundingClientRect();
+                    const spans = engraving.querySelectorAll(':scope > span');
+                    let textLeftPx = engRect.left;
+                    let textRightPx = engRect.right;
+                    if (spans.length >= 1) {
+                        textLeftPx  = spans[0].getBoundingClientRect().left;
+                        textRightPx = spans[spans.length - 1].getBoundingClientRect().right;
+                    }
+
+                    // Head coords as percentages of the plinth box.
+                    const headStartPct = ((textLeftPx  - plinthRect.left) / plinthRect.width)  * 100;
+                    const headEndPct   = ((textRightPx - plinthRect.left) / plinthRect.width)  * 100;
+                    const headTopPct   = ((engRect.top + engRect.height / 2 - plinthRect.top) / plinthRect.height) * 100;
+
+                    // Clip percentages relative to engraving width.
+                    const engLeftPct  = Math.max(0,   ((textLeftPx  - engRect.left) / engRect.width) * 100);
+                    const engRightPct = Math.min(100, ((textRightPx - engRect.left) / engRect.width) * 100);
+
+                    // Set inline clip-path BEFORE adding the class so the
+                    // CSS default (inset 100%) never takes effect.
+                    engraving.style.clipPath = `inset(0 ${100 - engLeftPct}% 0 0)`;
+                    target.classList.add('pp-earn-engraving');
+
+                    // Inject the welding head into the plinth (outside the
+                    // engraving's clip-path so its glow is fully visible).
+                    const head = document.createElement('span');
+                    head.className = 'pp-frame__etch-head';
+                    head.style.left = headStartPct + '%';
+                    head.style.top = headTopPct + '%';
+                    head.style.opacity = '1';
+                    head.style.transition = 'left 3s linear, opacity 300ms ease-out 2.7s';
+                    plinth.appendChild(head);
+                    timers.push(setTimeout(() => head.remove(), 3200));
+
+                    // Trigger both transitions on the next frame so they
+                    // start in lock-step at the actual text's left edge.
+                    requestAnimationFrame(() => {
+                        engraving.style.clipPath = `inset(0 ${100 - engRightPct}% 0 0)`;
+                        head.style.left = headEndPct + '%';
+                        head.style.opacity = '0';
+                    });
+
+                    // Sparks spawn at the head's current position, also
+                    // in plinth coordinates so they aren't clipped by the
+                    // engraving's reveal mask.
+                    const startTime = Date.now();
+                    const dur = 3000;
+                    etchTimer = setInterval(() => {
+                        const elapsed = Date.now() - startTime;
+                        const progress = Math.min(elapsed / dur, 1);
+                        if (progress >= 1) { clearInterval(etchTimer); etchTimer = null; return; }
+                        const sparkLeftPct = headStartPct + progress * (headEndPct - headStartPct);
+                        const spark = document.createElement('div');
+                        spark.className = 'pp-spark pp-spark--etch';
+                        spark.style.left = sparkLeftPct + '%';
+                        spark.style.top = headTopPct + '%';
+                        spark.style.bottom = 'auto';
+                        const xMid = (Math.random() - 0.5) * 10;
+                        const xEnd = (Math.random() - 0.5) * 32;
+                        const yMid = -(2 + Math.random() * 5);
+                        const yEnd = 8 + Math.random() * 14;
+                        const sDur = 400 + Math.random() * 280;
+                        spark.style.setProperty('--spark-x-mid', xMid + 'px');
+                        spark.style.setProperty('--spark-y-mid', yMid + 'px');
+                        spark.style.setProperty('--spark-x-end', xEnd + 'px');
+                        spark.style.setProperty('--spark-y-end', yEnd + 'px');
+                        spark.style.setProperty('--spark-dur', sDur + 'ms');
+                        plinth.appendChild(spark);
+                        setTimeout(() => spark.remove(), sDur + 50);
+                    }, 65);
+                }, 10500));
+
+                // PHASE 9: Flip to back face. Card is still lifted.
+                timers.push(setTimeout(() => {
+                    target.classList.add('is-flipped');
+                }, 13700));
+
+                // PHASE 10: Back face SCAN - 2000ms right-to-left.
+                timers.push(setTimeout(() => {
+                    target.classList.remove('pp-earn-back-staged');
+                    target.classList.add('pp-earn-back-scan');
+                    requestAnimationFrame(() => {
+                        target.style.setProperty('--scan-back', '100%');
+                    });
+                }, 14550));
+
+                // PHASE 11: Flip BACK to front. Brief dwell on the back
+                // so the stats can be read, then flip back so the card
+                // settles facing forward.
+                timers.push(setTimeout(() => {
+                    target.classList.remove('is-flipped');
+                }, 17400));
+
+                // PHASE 12: Settle - card descends from its lift with a
+                // tier-tinted glow flourish at the moment of landing.
+                timers.push(setTimeout(() => {
+                    target.classList.add('pp-earn-settling');
+                }, 18300));
+            };
+
+            playBtn.addEventListener('click', play);
+            resetBtn.addEventListener('click', reset);
+        })();
+
+        // Chrome mode toggle (Section 10) - scoped to buttons with data-chrome
         document.querySelectorAll('[data-chrome-mode]').forEach(section => {
             section.querySelectorAll('button[data-chrome]').forEach(btn => {
                 btn.addEventListener('click', () => {
