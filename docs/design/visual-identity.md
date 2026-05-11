@@ -16,6 +16,12 @@ This is a living document. Sections 1, 2, 3, and 5 are committed. Section 4 (Tok
 
 The Brief is the test of last resort. When a visual decision is unclear, read it again.
 
+### The fabrication layer (added during the Frame prototype)
+
+The explorer's-office framing still holds, but the Frame prototype made a second truth visible: badges aren't just *displayed*, they're *made*. Earning a badge is a forge moment, not just a wall-mount moment. The welding-and-scanning language that emerged from the prototype (build sparks, border weld, scan beams, engraving etch) is canon: the Frame is the artifact, but *the fabrication of the artifact* is part of the identity.
+
+The card is a 2026 collector's piece being made on a 2026 workbench, then displayed in a 2026 archive. The three Brief reads (collector / adventurer / number-watcher) all sit on top of a fourth quiet read: *maker*. The Frame's Earn Moment is the canonical demonstration of this layer; future earn moments for other primitives should draw from the same vocabulary.
+
 ---
 
 ## 2. Adjectives
@@ -57,6 +63,27 @@ Every badge is conceptually a high-quality collectible card. The four primitives
 
 The test for any badge-rendering decision: *does this respect the card metaphor?* If a treatment makes a badge feel like a generic icon instead of a collectible artifact, it's wrong.
 
+### Kit-level vocabulary: Motion + Particles
+
+The four primitives share a motion and particle language that the Frame prototype made visible. Future primitives (Pursuer Card, Horizon, Tally) inherit this language rather than reinventing it. The vocabulary is just as load-bearing as the trading-card idiom; both serve brand recognition.
+
+**Motion vocabulary (baseline, applied across all primitives).**
+
+- Slow, multi-property, desynced. The Frame's hover uses translate, rotate, and scale on separate timing curves; never a single monolithic animation.
+- Organic, never frantic. Durations measured in hundreds-of-ms to seconds, easing favors cubic-bezier with subtle overshoot, never `linear` outside of mechanical effects like scan beams.
+- Functional, not decorative. Every motion has a job: a lift presents, a wobble adds weight, a scan transforms.
+
+**Particle vocabulary (welding-tier signature, reserved for fabrication and earn moments).**
+
+- **Hot welding sparks** — white-yellow-orange radial gradients with warm box-shadows. Carry the metaphor that the badge is being made from molten metal.
+- **Tier-tinted molten sparks** — Bronze / Silver / Gold / Platinum-colored particles mixed alongside hot sparks. The frame is literally being made out of its tier material.
+- **Scan beams** — bright horizontal or vertical sweeps used to indicate transformative passes (the uncloak, the back-face reveal, future level-ups). Always hot orange-white at the leading edge.
+- Trajectories arc and fall under gravity. Never straight-line. Never confetti-style explosion.
+
+**Where it appears today.** Frame's Earn Moment uses the full vocabulary. **Where it appears next.** Tally's level-up beat, Horizon's progression milestones, Pursuer Card unlock moments — all should draw from this vocabulary, not invent local one-offs.
+
+**Anti-patterns for motion + particles.** Confetti bursts on routine actions. Sparkles on hover states. Frantic counters. "Achievement Unlocked!" pop-ups. Generic mobile-game gamification (see anti-ref #4). The vocabulary is reserved for *meaningful* moments; everywhere else, the kit breathes.
+
 ### The Frame (headline primitive)
 
 **Concept.** The PlatPursuit-branded housing that surrounds badge artwork. Binder slot, museum case, graded-card sleeve. The Frame is the *brand*; the artwork inside is the *content*.
@@ -69,16 +96,44 @@ The test for any badge-rendering decision: *does this respect the card metaphor?
 
 **Where it appears.** Badge Gallery, Badge detail hero, Pursuit home active progressions, cross-link panels on Game detail, share images, notifications, recap slides. Anywhere a badge renders.
 
-**Visual character (early reads, pre-tokens).**
+**Visual character (committed via the Frame prototype).**
 
-- Bordered shape that surrounds the artwork without crowding it
-- Subtle metallic gleam reserved for higher tiers (CSS gradients + conic, no skeumorphic textures)
-- Tier reinforcement is light because the badge's existing tier-backing does the heavy lifting
-- Earned vs. unearned state is *not* greyscale (greyscale reads "disabled," wrong feeling). Likely: full-color art behind a translucent veil with the Frame in a "blueprint" mode
-- Hover: gentle breathing scale + foil shimmer pass on Gold/Platinum tiers
-- Earned variant displays earn date and tier as native metadata (absorbing what would otherwise be a separate Stamp primitive)
+- Bordered shape (1px solid earned, 1px dashed unearned) that surrounds the artwork without crowding it.
+- Corner notches at all four corners as the brand mark — diamond-shaped, tier-colored, the same shape across every Frame.
+- Tier reinforcement is *layered* across chrome, art backdrop, and notches. (Originally drafted as "light"; the prototype proved a fully-tier-tinted card reads as more cohesive and survives customization layers without losing its tier identity.)
+- Hover: gentle multi-property motion (translate + rotate + scale on separate easing curves) plus a tier-tinted gleam sweep. (Originally drafted as "breathing scale + foil shimmer"; the multi-property motion proved more organic and is now the kit-level hover language.)
+- Earn engraving lives in the plinth: a small italic "Earn #N" line treated as if etched into chrome with a faux-deboss text-shadow. Tabular figures. The N is the Pursuer's permanent earn-rank — locked in forever, the limited-edition serial of the trading-card metaphor. Subtle pulse on the rare #1 case.
+- Each Frame is flippable. Click-to-flip reveals a back face with description, stats (earn date, stages, rarity, next tier), and footer.
 
-**Anti-patterns.** Heavy ornate scrollwork (period piece). Generic rounded card (no identity). Frame that visually shouts (the art should be the loudest element). Treatment that varies wildly between tiers (Bronze to Platinum should feel like the same family, not different products).
+**States.**
+
+| State | Visual treatment |
+|---|---|
+| Earned | Solid tier border. Tier-tinted chrome + art backdrop. Full-color badge artwork. Engraving visible in plinth. |
+| Unearned · dim (default lock) | Dashed tier border. Diagonal-stripe veil over art. Lock icon centered. "?" ribbon. Engraving slot reserved (placeholder, height-matched). |
+| Unearned · blueprint | Dashed tier border. Art container becomes cyan blueprint grid on dark indigo. Badge layers desaturated + dimmed. "Fabricating" banner across art top. Lock cyan-tinted. Builds incrementally bottom-up as stages clear (mask reveals by completion %). |
+| Pinned | Solid tier border. Tier-tinted edge glow (slow pulse on Gold + Platinum). "Pursuing" ribbon. Optional map-pin chip at top-left corner. Exact treatment (tier-coupled vs brand-accent-decoupled) TBD from prototype A/B/C/D options. |
+
+**The Earn Moment.**
+
+The choreographed transition from Unearned-blueprint to Earned. Plays once when the final stage clears. ~20 seconds. Twelve phases, in order:
+
+1. **Build pulse** — final stage clears; weld sparks fly; build mask climbs to 100%.
+2. **Cooling** — card lifts off the surface; banner exits, lock fades, construction line cools.
+3. **Border weld lap** — welding torch traces the card's perimeter; each side flips from dashed to solid as the torch finishes it. The frame is sealed.
+4. **Sealed pulse** — brief warm border glow as the seal settles.
+5. **Uncloak scan** — horizontal beam sweeps bottom-to-top over the full card; blueprint grid + cyan veil dissolve in the beam's wake; title and plinth text brighten as the beam passes.
+6. Strip blueprint and unearned class hooks.
+7. **Completion sheen** — diagonal sheen sweep across the card as the "stamp of completion."
+8. **Front engraving etch** — welding head traces the actual text bounds of "Earn #N" with hot sparks; engraving glows hot then cools to tier color.
+9. **Flip to back.**
+10. **Back scan** — vertical beam sweeps right-to-left over the back face; description, stats, and footer reveal in its wake.
+11. **Flip back to front.**
+12. **Settle** — card descends from its lift with a tier-tinted glow flourish; rests at hover elevation.
+
+The Earn Moment is the canonical demonstration of the kit's motion + particle vocabulary. The reference implementation lives in `templates/design/frame_preview.html`. Future earn moments (Pursuer level-up, Horizon completion) should draw from this same vocabulary, not invent new one-offs.
+
+**Anti-patterns.** Heavy ornate scrollwork (period piece). Generic rounded card (no identity). Frame that visually shouts (the art should be the loudest element). Treatment that varies wildly between tiers (Bronze to Platinum should feel like the same family, not different products). Greyscale unearned state (reads "disabled," wrong feeling).
 
 ### The Pursuer Card
 
@@ -132,8 +187,8 @@ The test for any badge-rendering decision: *does this respect the card metaphor?
 
 Earlier drafts of this kit included Stamp (provenance marker) and Pin (wayfinding marker) as core primitives. They were demoted to *small treatments inside Frame and Pursuer Card* because their work overlapped with the larger primitives:
 
-- **Stamp's provenance work** (earn date + tier display) lives in the Frame's earned-state variant.
-- **Pin's wayfinding work** (current state, what's next) lives in the Frame's active-state variant and the Horizon primitive.
+- **Stamp's provenance work** (earn date + tier display) lives in the Frame's earned-state variant. The Frame prototype made this concrete: the earn engraving ("Earn #N") in the plinth is the Stamp's home. The Pursuer's permanent earn-rank is the provenance mark. A small PP-monogram corner stamp also exists as an optional secondary brand mark; whether to ship it is TBD from team feedback.
+- **Pin's wayfinding work** (current state, what's next) lives in the Frame's Pinned-state variant and the Horizon primitive. The Frame prototype tested four Pinned treatments (edge glow alone, pin chip + tier glow, pin chip + brand-accent glow, pin chip + accent border + glow); final pick is TBD from team feedback.
 
 They survive as design details (a slightly off-register tier stamp in a badge corner, an active-state highlight for what you're working on) but they don't earn pillar status.
 
@@ -200,6 +255,8 @@ What's dangerous (PSN-derivative):
 
 The test: would this read as *homage to a PlayStation player* without reading as *Sony copy to a Sony lawyer*? Both halves matter.
 
+**Cyan as the kit accent.** The Frame prototype introduced a luminous teal-cyan (oklch ≈ 55% 0.2 hue 206, the project's primary token) in two places: the blueprint mode's grid + ribbon styling, and the Pinned-state edge glow option. This is deliberately PSN-era informed — the cool luminous accent on dark surfaces, the DualSense / PS5 mood, but never their actual colors. The kit treats cyan as *the* brand accent for "currently active" and "in progress" cues, distinct from tier colors. The Horizon (which the doc calls out as "cooler the further from completion") should inherit this same cyan rather than introducing a competing accent. The Pursuer Card's "currently working on" affordances should too. One brand accent across the kit, not three.
+
 ---
 
 ## How to Use This Document
@@ -218,10 +275,12 @@ When this document and a downstream design disagree, this document wins. When th
 ## Open Threads
 
 - **Section 4 (Tokens)** opens when Phase 1 gamification surfaces begin design. Premature now.
-- **Frame variant inventory** (earned, unearned, hover, pinned, premium, etc.) needs explicit enumeration before the badge gallery is rebuilt.
+- **Frame variant inventory** (earned, unearned, hover, pinned, premium, etc.) — resolved for the first four via the Frame prototype (see The Frame § States above). Premium variant deferred until gamification Phase 1 ships.
+- **Frame post-feedback decisions** awaiting team review of `templates/design/frame_preview.html`: final Pinned treatment (one of A/B/C/D), whether the PP corner stamp ships alongside the engraving, exact polish on the Earn Moment timing.
 - **Pursuer Card scale variants** (hero / compact / mini / share) need explicit sizes and content rules before the Logbook is designed.
-- **Tally typography choice.** The display face for headline numbers is the single highest-leverage type decision; needs a focused exploration when Section 4 opens.
-- **Motion vocabulary ownership.** Whether the level-up beat, the Frame hover shimmer, and the Horizon pulse all share a unified easing/timing system or each gets its own. Decision deferred to Section 4.
+- **Tally typography choice.** The display face for headline numbers is the single highest-leverage type decision; needs a focused exploration when Section 4 opens. The engraving's tabular-figure treatment in the Frame is a first pass; the Tally type may or may not reuse it.
+- **Motion vocabulary ownership** — resolved at the kit level (see § Kit-level vocabulary: Motion + Particles above). Specific easing curves and durations still token-level work for Section 4.
+- **Cyan brand accent application** — committed in the Frame prototype for blueprint + Pinned. Horizon and Pursuer Card should inherit; final calibration when each is designed.
 
 ---
 
@@ -229,5 +288,6 @@ When this document and a downstream design disagree, this document wins. When th
 
 - [Product Identity](product-identity.md): the strategic frame this visual identity serves. **When this document and product-identity.md disagree, product-identity wins.**
 - [Visual Identity References](visual-identity-references.md): curated real-world references for each primitive (Phase A mood-board content). Working doc for sketching, prototyping, and Figma mood boards.
+- [Frame design preview](../../templates/design/frame_preview.html) (served at `/design/frame/`): the reference implementation for the Frame primitive. Captures the tier variants, states (Earned / Unearned dim / Unearned blueprint / Pinned), engraving treatment, motion + particle vocabulary, and the full Earn Moment choreography. Where this doc and the prototype disagree on Frame details, the prototype is the source of truth — this doc records the strategic shape, the prototype records the committed implementation.
 - [Gamification Plan](gamification-plan.md): Phase 1 surfaces (Pursuit home, Logbook, Badge Gallery) are the first major work to be designed natively in this visual identity.
 - [Design System Reference](../reference/design-system.md): the existing site-wide tokens, patterns, and component blueprints. Will be refreshed in service of this identity once Section 4 opens.
