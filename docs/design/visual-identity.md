@@ -22,6 +22,14 @@ The explorer's-office framing still holds, but the Frame prototype made a second
 
 The card is a 2026 collector's piece being made on a 2026 workbench, then displayed in a 2026 archive. The three Brief reads (collector / adventurer / number-watcher) all sit on top of a fourth quiet read: *maker*. The Frame's Earn Moment is the canonical demonstration of this layer; future earn moments for other primitives should draw from the same vocabulary.
 
+**The kind of industrial we are.** "Industrial" is wide; most of it is off-brand for us. The flavor we mean is the **modern artisan's workshop** — the Patek watchmaker's bench, the knifemaker's forge, the bespoke restoration shop, the Hasselblad assembly room. Precision craft. Single-piece work. Hand attention. Mid-century industrial design (Bauhaus, Eames, modernist factory) is adjacent and safe: honest materials, function-first. Everything else is off-limits:
+
+- **Cyberpunk industrial** (Blade Runner neon factories, ghost-in-the-shell) → drifts into anti-ref #5 (ironic / cool-detached).
+- **Steampunk** (Victorian machines, brass cogs, leather + bronze) → anti-ref #2 (fantasy cosplay).
+- **Factory-floor commodity production** (assembly lines, mass-scale, undifferentiated) → anti-ref #1 (sterile / generic).
+
+When a future design decision invokes the industrial vibe, the test is: *would this fit in a Patek watchmaker's atelier?* If yes, on-brand. If it'd fit in a sci-fi factory or a steampunk machine room or an IKEA flat-pack warehouse, redesign.
+
 ---
 
 ## 2. Adjectives
@@ -62,6 +70,24 @@ Every badge is conceptually a high-quality collectible card. The four primitives
 | Pack-pull moment | Tier-earned celebration |
 
 The test for any badge-rendering decision: *does this respect the card metaphor?* If a treatment makes a badge feel like a generic icon instead of a collectible artifact, it's wrong.
+
+### The Album (badge gallery as trading-card binder)
+
+If the Frame turns a badge into a trading card, the Badge Gallery turns the collection into an album. The trading-card metaphor doesn't stop at the individual card; it extends to the surface that displays the collection. The Badge Gallery is the kit's canonical "binder / display" — slots for each card, labeled spaces, the satisfaction of seeing your collection housed.
+
+**Visual character (to be designed; current Badge Gallery predates this kit).**
+
+- Distinct **slots** per badge, each clearly labeled (series, name) — not a wall of identically-spaced grid cards.
+- Empty slots are **visible and named**. The "I haven't earned that one yet" gap is part of the collector's pull; an empty slot should look like a real place a card belongs, not a missing data row.
+- Series grouping: pages or sections by series, not one flat alphabetical wall.
+- Subtle slot chrome that feels like high-quality binder pages (the sleeves), not generic CSS grid cells.
+- A finished collection (all slots filled) is a visible achievement; an in-progress collection is visibly in-progress.
+
+**Where it appears.** Badge Gallery as a primary surface. Smaller manifestations in the Logbook hero, on profile pages, on series detail pages.
+
+**Anti-patterns.** A generic Tailwind grid of cards (loses the album-ness). A wall of identical `[?]` placeholders (no differentiation, kills the collector pull). Card-per-cell with no slot chrome (the slot itself is part of the metaphor — without it, it's just a grid).
+
+**Future expansion.** When non-badge trading cards eventually ship (Pursuer cards as a literal collectible, series cards, game cards), the album concept extends to those surfaces. The Badge Gallery is the first album; not the only one.
 
 ### Kit-level vocabulary: Motion + Particles
 
@@ -277,6 +303,7 @@ When this document and a downstream design disagree, this document wins. When th
 - **Section 4 (Tokens)** opens when Phase 1 gamification surfaces begin design. Premature now.
 - **Frame variant inventory** (earned, unearned, hover, pinned, premium, etc.) — resolved for the first four via the Frame prototype (see The Frame § States above). Premium variant deferred until gamification Phase 1 ships.
 - **Frame post-feedback decisions** awaiting team review of `templates/design/frame_preview.html`: final Pinned treatment (one of A/B/C/D), whether the PP corner stamp ships alongside the engraving, exact polish on the Earn Moment timing.
+- **Badge Gallery as Album.** The existing Badge Gallery predates this kit and renders badges in a generic grid. A rebuild informed by the Album concept (slots, labels, series grouping, named empty slots) is the natural next surface after the Frame primitive is locked. Same priority as Pursuer Card sizing.
 - **Pursuer Card scale variants** (hero / compact / mini / share) need explicit sizes and content rules before the Logbook is designed.
 - **Tally typography choice.** The display face for headline numbers is the single highest-leverage type decision; needs a focused exploration when Section 4 opens. The engraving's tabular-figure treatment in the Frame is a first pass; the Tally type may or may not reuse it.
 - **Motion vocabulary ownership** — resolved at the kit level (see § Kit-level vocabulary: Motion + Particles above). Specific easing curves and durations still token-level work for Section 4.
