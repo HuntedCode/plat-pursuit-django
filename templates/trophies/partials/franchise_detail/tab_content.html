@@ -1,0 +1,125 @@
+{% load humanize %}
+{% comment %}
+    Renders the active tab's body on the franchise detail page (collections /
+    also_featured / games). Extracted into a partial so sort changes can swap
+    just this block via HTMX without a full page reload.
+
+    Required context:
+      current_tab: 'collections' | 'also_featured' | 'games'
+      object: Franchise
+      sort_choices, current_sort
+      main_groups, also_featured_groups, related_entries
+{% endcomment %}
+{% if current_tab == 'collections' %}
+    {# -- Related Collections Grid -- #}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-2.5">
+        {% for entry in related_entries %}
+            <a href="{% url 'franchise_detail' slug=entry.slug %}"
+               class="card bg-base-200/90 border-2 border-base-300 shadow-md hover:shadow-lg hover:border-primary/50 transition-all duration-200 group overflow-hidden">
+                <div class="card-body p-3 md:p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-14 md:w-16 aspect-[3/4] shrink-0 rounded-lg bg-base-300 flex items-center justify-center overflow-hidden">
+                            {% if entry.representative_igdb_cover_id %}
+                                <img src="https://images.igdb.com/igdb/image/upload/t_cover_big/{{ entry.representative_igdb_cover_id }}.png"
+                                     alt="{{ entry.name }}"
+                                     class="w-full h-full object-cover object-top" loading="lazy" />
+                            {% elif entry.representative_concept_icon %}
+                                <img src="{{ entry.representative_concept_icon }}" alt="{{ entry.name }}"
+                                     class="w-full h-full object-cover object-top" loading="lazy" />
+                            {% elif entry.representative_title_image %}
+                                <img src="{{ entry.representative_title_image }}" alt="{{ entry.name }}"
+                                     class="w-full h-full object-cover object-top" loading="lazy" />
+                            {% elif entry.representative_title_icon %}
+                                <img src="{{ entry.representative_title_icon }}" alt="{{ entry.name }}"
+                                     class="w-full h-full object-contain p-2" loading="lazy" />
+                            {% else %}
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 md:w-7 md:h-7 text-primary/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                    <polyline points="2 17 12 22 22 17"></polyline>
+                                    <polyline points="2 12 12 17 22 12"></polyline>
+                                </svg>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="font-bold text-sm md:text-base line-clamp-1 group-hover:text-primary transition-colors">
+                                {{ entry.name }}
+                            </h3>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                                <span class="badge badge-xs badge-ghost italic">{{ entry.get_source_type_display }}</span>
+                                <span class="badge badge-xs badge-ghost">
+                                    {{ entry.related_game_count|intcomma }} game{{ entry.related_game_count|pluralize }}{% if entry.related_version_count != entry.related_game_count %} &middot; {{ entry.related_version_count|intcomma }} version{{ entry.related_version_count|pluralize }}{% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+{% elif current_tab == 'also_featured' %}
+    {# -- Sort Toolbar (HTMX swaps #franchise-tab-content; tab carried via hidden input) -- #}
+    <form method="get"
+          hx-get="{% url 'franchise_detail' slug=object.slug %}"
+          hx-target="#franchise-tab-content"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-indicator="#franchise-tab-content"
+          class="card bg-base-200/90 border-2 border-base-300 shadow-md mb-3">
+        <div class="card-body p-2.5 md:p-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <label for="franchise-sort" class="text-xs md:text-sm text-base-content/60 font-medium shrink-0">Sort by:</label>
+                <select name="sort" id="franchise-sort"
+                        class="select select-bordered select-sm md:select-md flex-1 md:flex-none md:min-w-[220px]"
+                        onchange="htmx.trigger(this.form, 'submit')">
+                    {% for value, display in sort_choices %}
+                        <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" name="tab" value="also_featured" />
+                <noscript>
+                    <button type="submit" class="btn btn-sm md:btn-md btn-primary">Apply</button>
+                </noscript>
+            </div>
+        </div>
+    </form>
+
+    <div class="card bg-base-200/90 border border-base-300/60 mb-3">
+        <div class="card-body p-3 md:p-4">
+            <p class="text-xs md:text-sm text-base-content/60 italic">
+                Games where <span class="font-medium text-base-content/80 not-italic">{{ object.name }}</span>
+                appears as a featured IP, tie-in, or crossover, but isn't the game's primary identity.
+            </p>
+        </div>
+    </div>
+
+    {% include 'trophies/partials/franchise_detail/game_groups_list.html' with groups=also_featured_groups empty_message="No tie-in titles found for this franchise." %}
+
+{% else %}
+    {# -- Sort Toolbar (HTMX swaps #franchise-tab-content) -- #}
+    <form method="get"
+          hx-get="{% url 'franchise_detail' slug=object.slug %}"
+          hx-target="#franchise-tab-content"
+          hx-swap="innerHTML"
+          hx-push-url="true"
+          hx-indicator="#franchise-tab-content"
+          class="card bg-base-200/90 border-2 border-base-300 shadow-md mb-3">
+        <div class="card-body p-2.5 md:p-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <label for="franchise-sort" class="text-xs md:text-sm text-base-content/60 font-medium shrink-0">Sort by:</label>
+                <select name="sort" id="franchise-sort"
+                        class="select select-bordered select-sm md:select-md flex-1 md:flex-none md:min-w-[220px]"
+                        onchange="htmx.trigger(this.form, 'submit')">
+                    {% for value, display in sort_choices %}
+                        <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" name="tab" value="games" />
+                <noscript>
+                    <button type="submit" class="btn btn-sm md:btn-md btn-primary">Apply</button>
+                </noscript>
+            </div>
+        </div>
+    </form>
+
+    {% include 'trophies/partials/franchise_detail/game_groups_list.html' with groups=main_groups empty_message="No games found in this franchise yet." %}
+{% endif %}

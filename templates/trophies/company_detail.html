@@ -213,18 +213,36 @@
 
     {% include 'partials/ad_unit.html' with ad_slot="9209595625" %}
 
-    {# -- Games by Role -- #}
-    {% for section in sections %}
-        {% include 'trophies/partials/company_detail/role_section.html' with section=section %}
-    {% empty %}
-        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg">
-            <div class="card-body items-center text-center py-12">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-                    <rect x="2" y="6" width="20" height="12" rx="2"></rect>
-                </svg>
-                <p class="text-base-content/40 text-sm mt-2">No games found for this company yet.</p>
+    {# -- Sort Toolbar (HTMX-swaps the #company-sections list; no full page reload) -- #}
+    {% if sections %}
+        <form method="get"
+              hx-get="{% url 'company_detail' slug=object.slug %}"
+              hx-target="#company-sections"
+              hx-swap="innerHTML"
+              hx-push-url="true"
+              hx-indicator="#company-sections"
+              class="card bg-base-200/90 border-2 border-base-300 shadow-md mb-3">
+            <div class="card-body p-2.5 md:p-3">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <label for="company-sort" class="text-xs md:text-sm text-base-content/60 font-medium shrink-0">Sort by:</label>
+                    <select name="sort" id="company-sort"
+                            class="select select-bordered select-sm md:select-md flex-1 md:flex-none md:min-w-[220px]"
+                            onchange="htmx.trigger(this.form, 'submit')">
+                        {% for value, display in sort_choices %}
+                            <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                    <noscript>
+                        <button type="submit" class="btn btn-sm md:btn-md btn-primary">Apply</button>
+                    </noscript>
+                </div>
             </div>
-        </div>
-    {% endfor %}
+        </form>
+    {% endif %}
+
+    {# -- Games by Role (swap target) -- #}
+    <div id="company-sections" class="transition-opacity duration-150">
+        {% include 'trophies/partials/company_detail/sections_list.html' %}
+    </div>
 
 {% endblock %}

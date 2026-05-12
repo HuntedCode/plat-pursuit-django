@@ -192,8 +192,18 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
     """Detail page for a single franchise showing games grouped by IGDB entry."""
     model = Franchise
     template_name = 'trophies/franchise_detail.html'
+    partial_template_name = 'trophies/partials/franchise_detail/tab_content.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
+
+    def get_template_names(self):
+        # On HTMX requests (sort dropdown), return only the tab-content
+        # partial so the page header, tabs, and ad slot stay put. Non-HTMX
+        # requests render the full page so deep-linked ?sort=... / ?tab=...
+        # URLs still work for bookmarks / first paint.
+        if getattr(self.request, 'htmx', False):
+            return [self.partial_template_name]
+        return [self.template_name]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

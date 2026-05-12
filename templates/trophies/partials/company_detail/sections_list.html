@@ -1,0 +1,22 @@
+{% comment %}
+    Renders every role section on the company detail page. Extracted into a
+    partial so the sort toolbar can swap this block via HTMX without a full
+    page reload. Returned standalone (no base.html) when the request is HTMX,
+    embedded inside the full page template otherwise.
+
+    Required context:
+      sections: list of section dicts (see CompanyDetailView)
+      user_progress_stats: truthy when viewer has a linked profile
+{% endcomment %}
+{% for section in sections %}
+    {% include 'trophies/partials/company_detail/role_section.html' with section=section %}
+{% empty %}
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg">
+        <div class="card-body items-center text-center py-12">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-base-content/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+            </svg>
+            <p class="text-base-content/40 text-sm mt-2">No games found for this company yet.</p>
+        </div>
+    </div>
+{% endfor %}

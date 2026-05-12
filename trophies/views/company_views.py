@@ -217,8 +217,18 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
     """
     model = Company
     template_name = 'trophies/company_detail.html'
+    partial_template_name = 'trophies/partials/company_detail/sections_list.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
+
+    def get_template_names(self):
+        # On HTMX requests (sort dropdown), return only the role-sections
+        # partial so the rest of the page (header, anchor nav, sort toolbar)
+        # stays in place. Non-HTMX requests render the full page so deep
+        # links to ?sort=... still work for bookmarks / first paint.
+        if getattr(self.request, 'htmx', False):
+            return [self.partial_template_name]
+        return [self.template_name]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -289,9 +299,12 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
                 if group_game_ids & role_game_ids[slug]:
                     role_groups[slug].append(group)
 
-        # Sort each role list by alpha default.
+        # Sort each role list using the requested sort key (shared with
+        # Franchise detail via grouping.SORT_CHOICES). Default 'alpha' keeps
+        # existing URLs/bookmarks stable.
+        sort_val = self.request.GET.get('sort', 'alpha')
         for slug, *_ in _ROLE_SPECS:
-            role_groups[slug] = grouping.sort_groups(role_groups[slug], 'alpha')
+            role_groups[slug] = grouping.sort_groups(role_groups[slug], sort_val)
 
         # Aggregate stats across ALL games (deduplicated by IGDB group).
         total_trophies = sum(g['total_trophies'] for g in all_groups)
@@ -359,6 +372,8 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             context['company_total_players'] = game_agg.get('total_players')
 
         context['sections'] = sections
+        context['sort_choices'] = grouping.SORT_CHOICES
+        context['current_sort'] = sort_val
         context['hero_cover'] = hero_cover
         context['total_games'] = total_games
         context['total_versions'] = total_versions
