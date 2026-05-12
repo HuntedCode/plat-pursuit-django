@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.db import transaction
-from django.db.models import Count, F, IntegerField, Q, Value
+from django.db.models import Count, F, IntegerField, Prefetch, Q, Value
 from django.db.models.functions import Cast, Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -746,11 +746,18 @@ class ConceptFranchiseInline(admin.TabularInline):
 class ConceptAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'concept_id', 'unified_title', 'title_lock', 'title_reviewed_at',
-        'family_display', 'release_date', 'publisher_name', 'genres',
+        'family_display', 'release_date', 'developers_display', 'publisher_name', 'genres',
     )
     list_select_related = ('family',)
     list_filter = ('family__is_verified', 'title_lock')
-    search_fields = ('concept_id', 'unified_title', 'slug', 'family__canonical_name')
+    # Searching ``concept_companies__company__name`` matches ANY linked
+    # company (developer, publisher, porter, supporter). Broader than just
+    # developers, but more useful in practice — admins typing a studio name
+    # find the concept regardless of the role flag.
+    search_fields = (
+        'concept_id', 'unified_title', 'slug', 'family__canonical_name',
+        'concept_companies__company__name',
+    )
     raw_id_fields = ('family',)
     readonly_fields = ('title_reviewed_at',)
     actions = [
@@ -760,6 +767,24 @@ class ConceptAdmin(admin.ModelAdmin):
         'clear_title_review',
     ]
     inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
+
+    def get_queryset(self, request):
+        # Prefetch only the developer-flagged ConceptCompany rows so the
+        # changelist's "Developers" column doesn't N+1 across the page.
+        return super().get_queryset(request).prefetch_related(
+            Prefetch(
+                'concept_companies',
+                queryset=ConceptCompany.objects.filter(is_developer=True).select_related('company'),
+                to_attr='_developer_links',
+            )
+        )
+
+    def developers_display(self, obj):
+        devs = getattr(obj, '_developer_links', None) or []
+        if not devs:
+            return '—'
+        return ', '.join(cc.company.name for cc in devs)
+    developers_display.short_description = 'Developers'
 
     def family_display(self, obj):
         if not obj.family_id:
