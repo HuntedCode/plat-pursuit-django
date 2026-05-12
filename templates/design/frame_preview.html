@@ -953,8 +953,8 @@
                 0 24px 38px rgba(0, 0, 0, 0.55),
                 0 0 0 1px var(--frame-border);
             transition:
-                transform 950ms cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 950ms ease-out;
+                transform calc(950ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow calc(950ms * var(--earn-scale, 1)) ease-out;
         }
         .pp-earn-cooling .pp-frame__fab-banner {
             animation: pp-earn-banner-exit 650ms ease-in forwards;
@@ -994,7 +994,7 @@
          * uniformly during the same 1.2s window. The scan reads as the
          * tier-tinted background being generated under the beam. */
         .pp-earn-uncloak {
-            transition: --scan-fwd 2200ms cubic-bezier(0.4, 0, 0.2, 1);
+            transition: --scan-fwd calc(2200ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1);
         }
         /* Mask formula: remaps the face-relative --scan-fwd into the
          * grid's coord space so the mask boundary tracks the beam's
@@ -1036,10 +1036,70 @@
                 black 100%
             );
         }
-        .pp-earn-uncloak.pp-frame--blueprint .pp-frame__layer {
-            opacity: 1;
-            filter: saturate(1) brightness(1);
-            transition: opacity 2200ms ease-out, filter 2200ms ease-out;
+        /* Badge sear + shake. The badge stays in its blueprint state
+         * (opacity 0.82, dimmed filter) throughout the scan - it's a
+         * ghost of itself while the background is being scanned in.
+         * Only during the sear does the badge MATERIALIZE: opacity
+         * climbs from 0.82 → 1.0, filter restores through peak red-
+         * white hot heat back to neutral, all while shaking. Feels
+         * like the badge is being welded into solid existence on top
+         * of the freshly revealed background. The drop-shadow filters
+         * follow the badge PNG's alpha channel so the halo traces the
+         * actual silhouette, not the rectangular bounding box. */
+        .pp-earn-searing .pp-frame__layer {
+            animation:
+                pp-earn-sear calc(1800ms * var(--earn-scale, 1)) ease-out forwards,
+                pp-earn-shake calc(1800ms * var(--earn-scale, 1)) ease-in-out;
+        }
+        @keyframes pp-earn-sear {
+            0% {
+                opacity: 0.82;
+                filter: saturate(0.6) brightness(0.85);
+            }
+            30% {
+                opacity: 0.9;
+                filter: saturate(0.9) brightness(0.95)
+                        drop-shadow(0 0 4px rgba(255, 230, 150, 0.7))
+                        drop-shadow(0 0 10px rgba(255, 170, 70, 0.45));
+            }
+            65% {
+                opacity: 1;
+                filter: saturate(1.55) brightness(1.22)
+                        drop-shadow(0 0 7px rgba(255, 250, 230, 1))
+                        drop-shadow(0 0 18px rgba(255, 180, 80, 0.95))
+                        drop-shadow(0 0 36px rgba(255, 100, 40, 0.65))
+                        drop-shadow(0 0 56px rgba(220, 70, 30, 0.35));
+            }
+            85% {
+                opacity: 1;
+                filter: saturate(1.2) brightness(1.08)
+                        drop-shadow(0 0 5px rgba(255, 220, 130, 0.55))
+                        drop-shadow(0 0 11px rgba(255, 160, 70, 0.32))
+                        drop-shadow(0 0 22px rgba(255, 110, 50, 0.15));
+            }
+            100% {
+                opacity: 1;
+                filter: saturate(1) brightness(1);
+            }
+        }
+        /* Shake amplitude scales with heat: subtle at the edges,
+         * vigorous around peak welding (mid-animation). Max ~0.7px
+         * displacement so the badge reads as "vibrating" not "moving." */
+        @keyframes pp-earn-shake {
+            0%   { transform: translate(0, 0); }
+            5%   { transform: translate(-0.2px, 0.15px); }
+            12%  { transform: translate(0.3px, -0.25px); }
+            20%  { transform: translate(-0.5px, 0.4px); }
+            28%  { transform: translate(0.6px, 0.5px); }
+            36%  { transform: translate(-0.7px, -0.4px); }
+            44%  { transform: translate(0.5px, 0.6px); }
+            52%  { transform: translate(-0.6px, -0.5px); }
+            60%  { transform: translate(0.7px, 0.3px); }
+            68%  { transform: translate(-0.5px, 0.5px); }
+            76%  { transform: translate(0.4px, -0.4px); }
+            84%  { transform: translate(-0.3px, 0.3px); }
+            92%  { transform: translate(0.15px, -0.15px); }
+            100% { transform: translate(0, 0); }
         }
         /* Completion sheen sweep - after the border weld + uncloak finish,
          * the existing hover-A gleam plays once across the card as the
@@ -1056,14 +1116,16 @@
                 transparent 25%,
                 rgba(255, 255, 255, 0.4) 50%,
                 transparent 75%);
-            animation: pp-earn-gleam-sweep 1400ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            animation: pp-earn-gleam-sweep calc(700ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
         /* Gold/Platinum tier-tinted gleam */
         .pp-earn-gleaming.pp-frame--gold .pp-frame__gleam {
             background: linear-gradient(105deg,
-                transparent 25%,
-                rgba(255, 220, 130, 0.5) 50%,
-                transparent 75%);
+                transparent 22%,
+                rgba(255, 210, 120, 0.55) 42%,
+                rgba(255, 245, 200, 0.75) 50%,
+                rgba(255, 210, 120, 0.55) 58%,
+                transparent 78%);
         }
         .pp-earn-gleaming.pp-frame--platinum .pp-frame__gleam {
             background: linear-gradient(105deg,
@@ -1204,6 +1266,22 @@
             75%  { top: 100%; left: 0%;   }
             100% { top: 0%;   left: 0%;   }
         }
+        /* Two-welder variant - heads start at top-center and travel in
+         * opposite directions around the perimeter, meeting at bottom-
+         * center. Halves the perimeter per welder, so the seal moment
+         * finishes in roughly half the time of a single-welder lap. */
+        @keyframes pp-border-weld-trace-right {
+            0%   { top: 0%;   left: 50%;  }
+            33%  { top: 0%;   left: 100%; }
+            67%  { top: 100%; left: 100%; }
+            100% { top: 100%; left: 50%;  }
+        }
+        @keyframes pp-border-weld-trace-left {
+            0%   { top: 0%;   left: 50%; }
+            33%  { top: 0%;   left: 0%;  }
+            67%  { top: 100%; left: 0%;  }
+            100% { top: 100%; left: 50%; }
+        }
 
         /* Progressive border seal: as the welding torch finishes each
          * side of the perimeter, that side flips from dashed (unearned
@@ -1217,7 +1295,7 @@
          * animation (fade in → hold → fade out → settle back to cooling
          * shadow) so the removal doesn't snap. */
         .pp-earn-sealed {
-            animation: pp-earn-sealed-pulse 1400ms ease-in-out forwards;
+            animation: pp-earn-sealed-pulse calc(1400ms * var(--earn-scale, 1)) ease-in-out forwards;
         }
         @keyframes pp-earn-sealed-pulse {
             0% {
@@ -1255,7 +1333,7 @@
         .pp-earn-engraving .pp-frame__engraving {
             position: relative;
             clip-path: inset(0 100% 0 0);
-            transition: clip-path 3s linear;
+            transition: clip-path calc(3s * var(--earn-scale, 1)) linear;
         }
         .pp-earn-engraving .pp-frame__engraving--placeholder > * {
             visibility: visible;
@@ -1264,27 +1342,37 @@
          * slow-burn feel. Delayed 0.4s so the etching starts dim and
          * brightens as the head finishes. */
         .pp-earn-engraving .pp-frame__engraving-num {
-            animation: pp-earn-engrave-glow 3s ease-out 0.4s forwards;
+            animation: pp-earn-engrave-glow calc(3s * var(--earn-scale, 1)) ease-out calc(0.4s * var(--earn-scale, 1)) forwards;
         }
         @keyframes pp-earn-engrave-glow {
             0% {
                 color: rgba(255, 255, 255, 1);
                 text-shadow:
                     0 1px 0 rgba(0, 0, 0, 0.55),
-                    0 0 8px rgba(255, 200, 100, 1),
-                    0 0 18px rgba(255, 150, 50, 0.7);
+                    0 0 9px rgba(255, 220, 130, 1),
+                    0 0 20px rgba(255, 150, 50, 0.85),
+                    0 0 34px rgba(255, 100, 40, 0.45);
+            }
+            30% {
+                color: rgba(255, 250, 220, 1);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 11px rgba(255, 230, 150, 0.95),
+                    0 0 22px rgba(255, 170, 70, 0.7),
+                    0 0 38px rgba(255, 110, 50, 0.35);
             }
             55% {
                 color: rgba(255, 230, 150, 1);
                 text-shadow:
                     0 1px 0 rgba(0, 0, 0, 0.55),
-                    0 0 6px rgba(255, 200, 100, 0.5);
+                    0 0 7px rgba(255, 200, 100, 0.55),
+                    0 0 14px rgba(255, 160, 70, 0.25);
             }
             100% {
                 color: rgba(245, 215, 120, 0.95);
                 text-shadow:
                     0 1px 0 rgba(0, 0, 0, 0.55),
-                    0 0 4px rgba(240, 198, 74, 0.22);
+                    0 0 5px rgba(240, 198, 74, 0.3);
             }
         }
         /* Welding head riding the etch edge. JS sets initial left/transition
@@ -1313,6 +1401,16 @@
         .pp-spark--etch {
             width: 2.5px;
             height: 2.5px;
+        }
+        /* "Behind" variant - z-index auto so the spark renders behind
+         * the badge layers (when inserted before them in DOM order).
+         * Used for the sear burst, where sparks scatter from behind the
+         * badge image. Slightly larger + brighter than the default
+         * spark so they read well against the badge backdrop. */
+        .pp-spark--behind {
+            z-index: auto;
+            width: 6px;
+            height: 6px;
         }
 
         /* Tier-colored spark variants - mixed into the spark spawns
@@ -1365,7 +1463,7 @@
          * the moment of landing. The card briefly overshoots its resting
          * position, then settles as the glow blooms and fades. */
         .pp-earn-cooling.pp-earn-settling {
-            animation: pp-earn-settle-flourish 2000ms cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+            animation: pp-earn-settle-flourish calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
         }
         @keyframes pp-earn-settle-flourish {
             0% {
@@ -1378,17 +1476,19 @@
                 transform: translateY(2px);
                 box-shadow:
                     0 14px 26px rgba(0, 0, 0, 0.5),
-                    0 0 0 1.5px rgba(255, 220, 130, 0.95),
-                    0 0 30px rgba(255, 200, 100, 0.6),
-                    0 0 64px rgba(245, 175, 80, 0.35);
+                    0 0 0 1.5px rgba(255, 230, 140, 1),
+                    0 0 32px rgba(255, 210, 110, 0.75),
+                    0 0 68px rgba(245, 175, 80, 0.5),
+                    0 0 110px rgba(220, 140, 50, 0.25);
             }
             70% {
                 transform: translateY(-1px);
                 box-shadow:
                     0 10px 22px rgba(0, 0, 0, 0.4),
-                    0 0 0 1.3px rgba(255, 220, 130, 0.6),
-                    0 0 24px rgba(255, 200, 100, 0.32),
-                    0 0 50px rgba(245, 175, 80, 0.15);
+                    0 0 0 1.3px rgba(255, 220, 130, 0.7),
+                    0 0 26px rgba(255, 200, 100, 0.4),
+                    0 0 56px rgba(245, 175, 80, 0.22),
+                    0 0 80px rgba(220, 140, 50, 0.1);
             }
             100% {
                 transform: translateY(0);
@@ -1396,6 +1496,155 @@
                     0 8px 18px rgba(0, 0, 0, 0.3),
                     0 0 0 1px var(--frame-border);
             }
+        }
+
+        /* ============================================================
+         * Tier-specific earn-moment overrides
+         *
+         * The base earn-moment keyframes are tuned for GOLD (the
+         * baseline). Bronze and Silver scale DOWN visual intensity;
+         * Platinum scales UP. Each tier overrides:
+         *   - The sear keyframe (peak heat halo count + saturation)
+         *   - The shake keyframe (amplitude)
+         *   - The settle keyframe (halo size + color tint)
+         *   - The engrave-glow keyframe (final color)
+         *   - The sheen sweep gradient
+         * Durations are NOT overridden here; they're driven by
+         * --earn-scale which is set per tier in JS.
+         * ============================================================ */
+
+        /* ---------------- BRONZE ---------------- */
+        @keyframes pp-earn-sear-bronze {
+            0%   { opacity: 0.82; filter: saturate(0.6) brightness(0.85); }
+            30%  {
+                opacity: 0.88;
+                filter: saturate(0.85) brightness(0.92)
+                        drop-shadow(0 0 3px rgba(255, 220, 140, 0.55));
+            }
+            65%  {
+                opacity: 1;
+                filter: saturate(1.2) brightness(1.08)
+                        drop-shadow(0 0 4px rgba(255, 220, 140, 0.75))
+                        drop-shadow(0 0 13px rgba(220, 130, 50, 0.5));
+            }
+            85%  {
+                opacity: 1;
+                filter: saturate(1.05) brightness(1.02)
+                        drop-shadow(0 0 3px rgba(255, 200, 130, 0.32));
+            }
+            100% { opacity: 1; filter: saturate(1) brightness(1); }
+        }
+        @keyframes pp-earn-shake-bronze {
+            0%   { transform: translate(0, 0); }
+            5%   { transform: translate(-0.15px, 0.1px); }
+            12%  { transform: translate(0.2px, -0.15px); }
+            20%  { transform: translate(-0.35px, 0.3px); }
+            28%  { transform: translate(0.4px, 0.35px); }
+            36%  { transform: translate(-0.45px, -0.3px); }
+            44%  { transform: translate(0.35px, 0.4px); }
+            52%  { transform: translate(-0.4px, -0.35px); }
+            60%  { transform: translate(0.4px, 0.2px); }
+            68%  { transform: translate(-0.3px, 0.3px); }
+            76%  { transform: translate(0.2px, -0.25px); }
+            84%  { transform: translate(-0.2px, 0.2px); }
+            92%  { transform: translate(0.1px, -0.1px); }
+            100% { transform: translate(0, 0); }
+        }
+        @keyframes pp-earn-settle-flourish-bronze {
+            0% {
+                transform: translateY(-14px);
+                box-shadow:
+                    0 24px 38px rgba(0, 0, 0, 0.55),
+                    0 0 0 1px var(--frame-border);
+            }
+            45% {
+                transform: translateY(2px);
+                box-shadow:
+                    0 14px 26px rgba(0, 0, 0, 0.5),
+                    0 0 0 1.3px rgba(220, 150, 80, 0.85),
+                    0 0 24px rgba(220, 150, 80, 0.45),
+                    0 0 52px rgba(200, 122, 59, 0.22);
+            }
+            70% {
+                transform: translateY(-1px);
+                box-shadow:
+                    0 10px 22px rgba(0, 0, 0, 0.4),
+                    0 0 0 1.1px rgba(220, 150, 80, 0.5),
+                    0 0 18px rgba(220, 150, 80, 0.22);
+            }
+            100% {
+                transform: translateY(0);
+                box-shadow:
+                    0 8px 18px rgba(0, 0, 0, 0.3),
+                    0 0 0 1px var(--frame-border);
+            }
+        }
+        @keyframes pp-earn-engrave-glow-bronze {
+            0% {
+                color: rgba(255, 255, 255, 1);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 7px rgba(255, 200, 100, 0.85),
+                    0 0 16px rgba(255, 150, 70, 0.55);
+            }
+            30% {
+                color: rgba(255, 240, 200, 1);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 9px rgba(255, 200, 100, 0.65),
+                    0 0 17px rgba(255, 150, 70, 0.4);
+            }
+            55% {
+                color: rgba(255, 220, 150, 1);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 5px rgba(255, 180, 80, 0.4);
+            }
+            100% {
+                color: rgba(220, 150, 80, 0.95);
+                text-shadow:
+                    0 1px 0 rgba(0, 0, 0, 0.55),
+                    0 0 4px rgba(200, 122, 59, 0.25);
+            }
+        }
+        .pp-frame--bronze.pp-earn-searing .pp-frame__layer {
+            animation:
+                pp-earn-sear-bronze calc(1800ms * var(--earn-scale, 1)) ease-out forwards,
+                pp-earn-shake-bronze calc(1800ms * var(--earn-scale, 1)) ease-in-out;
+        }
+        .pp-frame--bronze.pp-earn-cooling.pp-earn-settling {
+            animation: pp-earn-settle-flourish-bronze calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+        }
+        .pp-earn-engraving.pp-frame--bronze .pp-frame__engraving-num {
+            animation-name: pp-earn-engrave-glow-bronze;
+        }
+        /* Bronze sheen: 3-stop subtler gradient (vs Gold's 5-stop) */
+        .pp-earn-gleaming.pp-frame--bronze .pp-frame__gleam {
+            background: linear-gradient(105deg,
+                transparent 28%,
+                rgba(220, 150, 80, 0.42) 50%,
+                transparent 72%);
+        }
+        /* Bronze tier label: bronze-colored final state for the scan
+         * brightening pulse during uncloak (matches the Gold pattern). */
+        @keyframes pp-earn-scan-brighten-tier-bronze {
+            0% {
+                color: rgba(255, 255, 255, 0.4);
+                text-shadow: none;
+            }
+            50% {
+                color: rgba(255, 220, 150, 1);
+                text-shadow:
+                    0 0 7px rgba(255, 230, 150, 1),
+                    0 0 16px rgba(255, 200, 100, 0.6);
+            }
+            100% {
+                color: rgba(220, 150, 80, 0.95);
+                text-shadow: none;
+            }
+        }
+        .pp-earn-uncloak.pp-frame--bronze .pp-frame__title::after {
+            animation: pp-earn-scan-brighten-tier-bronze 500ms ease-out 1900ms forwards;
         }
 
         /* PHASE 6: Back face scan reveal. The back lands blank (chrome
@@ -1408,7 +1657,7 @@
             visibility: hidden;
         }
         .pp-earn-back-scan {
-            transition: --scan-back 2000ms cubic-bezier(0.4, 0, 0.2, 1);
+            transition: --scan-back calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1);
         }
         .pp-earn-back-scan .pp-frame__face--back > * {
             visibility: visible;
@@ -3019,70 +3268,142 @@
                 <strong>The Earn Moment:</strong> the choreographed sequence that plays when the final stage clears. Heavy and deliberate, because these badges don&rsquo;t come along often. Build line completes with welding sparks &rarr; card lifts off the page (and stays lifted) &rarr; a welding torch laps the perimeter, sealing the frame &rarr; sealed-border glow &rarr; horizontal scan beam sweeps bottom-to-top, generating the tier-tinted background &rarr; a sheen sweeps across the card as the &ldquo;stamp of completion&rdquo; &rarr; the front engraving slow-burns in &rarr; card flips to its back face &rarr; a vertical scan beam sweeps right-to-left, revealing the back content &rarr; card finally settles back down. The flip doubles as a teaching moment for the click-to-flip interaction.
             </p>
 
-            <div class="pp-anim-controls">
-                <button type="button" class="pp-anim-btn pp-anim-btn--replay" id="pp-earn-play">Play earn moment</button>
-                <button type="button" class="pp-anim-btn" id="pp-earn-reset">Reset</button>
-            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-10">
 
-            <div class="flex justify-start">
-                <div class="w-56">
-                    <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint pp-frame--flippable pp-anim-weld pp-hover-a pp-earn-back-staged" id="pp-earn-target" style="--pp-build: 90%">
-                        <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
-                        <div class="pp-frame__inner">
-                            <div class="pp-frame__face pp-frame__face--front">
-                                <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
-                                <div class="pp-frame__art">
-                                    <div class="pp-frame__blueprint-grid"></div>
-                                    <div class="pp-frame__fab-banner">Fabricating</div>
-                                    <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
-                                    <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
-                                    <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
-                                    <div class="pp-frame__locked">
-                                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
-                                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                        </svg>
+                <div>
+                    <div class="demo-label">Gold tier (baseline)</div>
+                    <div class="pp-anim-controls">
+                        <button type="button" class="pp-anim-btn pp-anim-btn--replay" id="pp-earn-play">Play earn moment</button>
+                        <button type="button" class="pp-anim-btn" id="pp-earn-reset">Reset</button>
+                    </div>
+                    <div class="w-56">
+                        <div class="pp-frame pp-frame--gold pp-frame--unearned pp-frame--blueprint pp-frame--flippable pp-anim-weld pp-hover-a pp-earn-back-staged" id="pp-earn-target" style="--pp-build: 90%">
+                            <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                            <div class="pp-frame__inner">
+                                <div class="pp-frame__face pp-frame__face--front">
+                                    <div class="pp-frame__title"><div class="pp-frame__series">Marvel Universe</div></div>
+                                    <div class="pp-frame__art">
+                                        <div class="pp-frame__blueprint-grid"></div>
+                                        <div class="pp-frame__fab-banner">Fabricating</div>
+                                        <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/3_backdrop.png' %}" alt="" />
+                                        <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                                        <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/3_foreground.png' %}" alt="" />
+                                        <div class="pp-frame__locked">
+                                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                            </svg>
+                                        </div>
+                                        <div class="pp-frame__gleam"></div>
                                     </div>
-                                    <div class="pp-frame__gleam"></div>
-                                </div>
-                                <div class="pp-frame__plinth">
-                                    <div class="pp-frame__name">Default Badge</div>
-                                    <div class="pp-frame__plinth-meta">
-                                        <span id="pp-earn-meta">9 of 10 stages</span>
-                                        <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
-                                    </div>
-                                    <div class="pp-frame__engraving pp-frame__engraving--placeholder" id="pp-earn-engraving">
-                                        <span>Earn</span>
-                                        <span class="pp-frame__engraving-num">#247</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="pp-frame__face pp-frame__face--back">
-                                <div class="pp-frame__back-header">
-                                    <div class="pp-frame__series">Marvel Universe</div>
-                                    <div class="pp-frame__name">Default Badge</div>
-                                </div>
-                                <div class="pp-frame__back-body">
-                                    <p class="pp-frame__back-desc">Awarded for platinuming every Marvel-licensed game in the catalogue.</p>
-                                    <div class="pp-frame__back-stats">
-                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">May 11, 2026</div></div>
-                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">10 / 10</div></div>
-                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">3% · #247</div></div>
-                                        <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Platinum</div></div>
+                                    <div class="pp-frame__plinth">
+                                        <div class="pp-frame__name">Default Badge</div>
+                                        <div class="pp-frame__plinth-meta">
+                                            <span id="pp-earn-meta">9 of 10 stages</span>
+                                            <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
+                                        </div>
+                                        <div class="pp-frame__engraving pp-frame__engraving--placeholder" id="pp-earn-engraving">
+                                            <span class="pp-frame__engraving-num">#247</span>
+                                            <span>of all time</span>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="pp-frame__back-footer">
-                                    <span>PlatPursuit</span>
-                                    <span class="pp-frame__back-flip-hint">click to flip</span>
+                                <div class="pp-frame__face pp-frame__face--back">
+                                    <div class="pp-frame__back-header">
+                                        <div class="pp-frame__series">Marvel Universe</div>
+                                        <div class="pp-frame__name">Default Badge</div>
+                                    </div>
+                                    <div class="pp-frame__back-body">
+                                        <p class="pp-frame__back-desc">Awarded for platinuming every Marvel-licensed game in the catalogue.</p>
+                                        <div class="pp-frame__back-stats">
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">May 12, 2026</div></div>
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">10 / 10</div></div>
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">3% · #247</div></div>
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Platinum</div></div>
+                                        </div>
+                                    </div>
+                                    <div class="pp-frame__back-footer">
+                                        <span>PlatPursuit</span>
+                                        <span class="pp-frame__back-flip-hint">click to flip</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+                    <p class="text-xs text-white/45 mt-3 leading-snug">
+                        ~21 seconds &middot; 2 sparks per tick &middot; 4-halo peak heat &middot; 5-stop sheen gradient &middot; large 3-ring settle halo.
+                    </p>
                 </div>
+
+                <div>
+                    <div class="demo-label">Bronze tier (scaled down)</div>
+                    <div class="pp-anim-controls">
+                        <button type="button" class="pp-anim-btn pp-anim-btn--replay" id="pp-earn-play-bronze">Play earn moment</button>
+                        <button type="button" class="pp-anim-btn" id="pp-earn-reset-bronze">Reset</button>
+                    </div>
+                    <div class="w-56">
+                        <div class="pp-frame pp-frame--bronze pp-frame--unearned pp-frame--blueprint pp-frame--flippable pp-anim-weld pp-hover-a pp-earn-back-staged" id="pp-earn-target-bronze" style="--pp-build: 90%">
+                            <span class="pp-frame__corner-bl"></span><span class="pp-frame__corner-br"></span>
+                            <div class="pp-frame__inner">
+                                <div class="pp-frame__face pp-frame__face--front">
+                                    <div class="pp-frame__title"><div class="pp-frame__series">Resident Evil</div></div>
+                                    <div class="pp-frame__art">
+                                        <div class="pp-frame__blueprint-grid"></div>
+                                        <div class="pp-frame__fab-banner">Fabricating</div>
+                                        <img class="pp-frame__layer" src="{% static 'images/badges/backdrops/1_backdrop.png' %}" alt="" />
+                                        <img class="pp-frame__layer" src="{% static 'images/badges/default.png' %}" alt="" />
+                                        <img class="pp-frame__layer" src="{% static 'images/badges/foregrounds/1_foreground.png' %}" alt="" />
+                                        <div class="pp-frame__locked">
+                                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="3" y="11" width="18" height="11" rx="1.5" ry="1.5"/>
+                                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                            </svg>
+                                        </div>
+                                        <div class="pp-frame__gleam"></div>
+                                    </div>
+                                    <div class="pp-frame__plinth">
+                                        <div class="pp-frame__name">Default Badge</div>
+                                        <div class="pp-frame__plinth-meta">
+                                            <span id="pp-earn-meta-bronze">9 of 10 stages</span>
+                                            <span class="pp-frame__rarity pp-frame__rarity--common"><svg><use href="#rarity-dot"/></svg>22%</span>
+                                        </div>
+                                        <div class="pp-frame__engraving pp-frame__engraving--placeholder" id="pp-earn-engraving-bronze">
+                                            <span class="pp-frame__engraving-num">#3,612</span>
+                                            <span>of all time</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="pp-frame__face pp-frame__face--back">
+                                    <div class="pp-frame__back-header">
+                                        <div class="pp-frame__series">Resident Evil</div>
+                                        <div class="pp-frame__name">Default Badge</div>
+                                    </div>
+                                    <div class="pp-frame__back-body">
+                                        <p class="pp-frame__back-desc">Awarded for platinuming five Resident Evil titles from the mainline series.</p>
+                                        <div class="pp-frame__back-stats">
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Earned</div><div class="pp-frame__back-stat-value">May 12, 2026</div></div>
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Stages</div><div class="pp-frame__back-stat-value">10 / 10</div></div>
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Rarity</div><div class="pp-frame__back-stat-value">22% · #3,612</div></div>
+                                            <div class="pp-frame__back-stat"><div class="pp-frame__back-stat-label">Next tier</div><div class="pp-frame__back-stat-value">Silver</div></div>
+                                        </div>
+                                    </div>
+                                    <div class="pp-frame__back-footer">
+                                        <span>PlatPursuit</span>
+                                        <span class="pp-frame__back-flip-hint">click to flip</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-xs text-white/45 mt-3 leading-snug">
+                        ~16 seconds (0.75&times; duration) &middot; 1 spark per tick &middot; 2-halo peak heat &middot; 3-stop sheen gradient &middot; smaller bronze settle halo.
+                    </p>
+                </div>
+
             </div>
 
-            <p class="demo-caption mt-4">
-                Click <em>Play earn moment</em> to watch the full sequence. About 20 seconds end-to-end. The card runs through twelve phases: build &rarr; lift &rarr; border weld lap &rarr; sealed pulse &rarr; uncloak scan &rarr; resolve &rarr; completion sheen &rarr; front engraving &rarr; flip to back &rarr; back scan &rarr; flip to front &rarr; settle (with a final glow flourish). Sparks pick up tier-tinted variants. The plinth height is identical pre- and post-earn (placeholder engraving slot reserves the space), so the card doesn&rsquo;t jump size at the transition.
+            <p class="demo-caption mt-6">
+                Same choreography, same vocabulary, different intensity. Bronze runs at <code>0.75&times;</code> the duration with lower spark density, simpler halo stacks, and bronze-tinted glow / engraving end-state. Tier-scale driven by a single <code>--earn-scale</code> CSS variable on the card + a <code>sparkCount</code> multiplier in JS, so Silver and Platinum can be added without re-authoring the choreography.
             </p>
         </div>
 
@@ -4064,8 +4385,8 @@
                             <span class="pp-frame__rarity pp-frame__rarity--mythic"><svg><use href="#rarity-sparkle"/></svg>0.3%</span>
                         </div>
                         <div class="pp-frame__engraving pp-frame__engraving--first">
-                            <span>Earn</span>
                             <span class="pp-frame__engraving-num">#1</span>
+                            <span>of all time</span>
                         </div>
                     </div>
                 </div>
@@ -4087,8 +4408,8 @@
                             <span class="pp-frame__rarity pp-frame__rarity--rare"><svg><use href="#rarity-diamond"/></svg>3%</span>
                         </div>
                         <div class="pp-frame__engraving">
-                            <span>Earn</span>
                             <span class="pp-frame__engraving-num">#247</span>
+                            <span>of all time</span>
                         </div>
                     </div>
                 </div>
@@ -4110,8 +4431,8 @@
                             <span class="pp-frame__rarity pp-frame__rarity--uncommon"><svg><use href="#rarity-dot"/></svg>8%</span>
                         </div>
                         <div class="pp-frame__engraving">
-                            <span>Earn</span>
                             <span class="pp-frame__engraving-num">#1,902</span>
+                            <span>of all time</span>
                         </div>
                     </div>
                 </div>
@@ -4133,8 +4454,8 @@
                             <span class="pp-frame__rarity pp-frame__rarity--common"><svg><use href="#rarity-dot"/></svg>22%</span>
                         </div>
                         <div class="pp-frame__engraving">
-                            <span>Earn</span>
                             <span class="pp-frame__engraving-num">#14,802</span>
+                            <span>of all time</span>
                         </div>
                     </div>
                 </div>
@@ -4327,23 +4648,54 @@
         // hot welding sparks.
         //   1. T=0-1800ms:     Build pulse 90% → 100% with weld sparks
         //   2. T=1800ms:       .pp-earn-cooling - lift + atmosphere stays
-        //   3. T=2900-5000ms:  Border weld lap over blueprint chrome
-        //   4. T=5000-6400ms:  Sealed border pulse (fade in, hold, fade out)
-        //   5. T=6500ms:       .pp-earn-uncloak - SCAN bottom→top, 2200ms
-        //   6. T=8750ms:       Strip blueprint/unearned
-        //   7. T=8900ms:       .pp-earn-gleaming - sheen sweep (1400ms)
-        //   8. T=10500ms:      Front engraving etch (3000ms over text only)
-        //   9. T=13700ms:      .is-flipped - card flips to back face
-        //  10. T=14550ms:      .pp-earn-back-scan - SCAN right→left, 2000ms
-        //  11. T=17400ms:      Flip BACK to front (.is-flipped removed)
-        //  12. T=18300ms:      .pp-earn-settling - descend + glow flourish
-        (() => {
-            const target = document.getElementById('pp-earn-target');
-            const playBtn = document.getElementById('pp-earn-play');
-            const resetBtn = document.getElementById('pp-earn-reset');
-            const meta = document.getElementById('pp-earn-meta');
-            const engraving = document.getElementById('pp-earn-engraving');
+        //   3. T=2900-4300ms:  Twin-welder border seal (top-center → meet at bottom)
+        //   4. T=4300-5700ms:  Sealed border pulse (fade in, hold, fade out)
+        //   5. T=5800ms:       .pp-earn-uncloak - SCAN bottom→top, 2200ms
+        //                      (badge stays in blueprint-dim state throughout)
+        //   6. T=8200-10000ms: .pp-earn-searing - badge materializes,
+        //                      heats red-white hot (peak at 65%) + shakes
+        //                      (welded onto bg). Sparks fire 0-1170ms
+        //                      during heat-up only, then cut for the
+        //                      cool-down phase. Blueprint/unearned classes
+        //                      stripped at sear end.
+        //   7. T=10200ms:      .pp-earn-gleaming - sheen sweep (700ms, snappy)
+        //   8. T=11100ms:      Front engraving etch (3000ms over text only)
+        //   9. T=14300ms:      .is-flipped - card flips to back face
+        //  10. T=15150ms:      .pp-earn-back-scan - SCAN right→left, 2000ms
+        //  11. T=18000ms:      Flip BACK to front (.is-flipped removed)
+        //  12. T=18900ms:      .pp-earn-settling - descend + glow flourish
+        const TIER_EARN_SCALE = {
+            bronze:   { duration: 0.75, sparkCount: 1 },
+            silver:   { duration: 0.9,  sparkCount: 1 },
+            gold:     { duration: 1.0,  sparkCount: 2 },
+            platinum: { duration: 1.25, sparkCount: 3 },
+        };
+
+        function makeEarnMomentController(config) {
+            const target = document.getElementById(config.targetId);
+            const playBtn = document.getElementById(config.playBtnId);
+            const resetBtn = document.getElementById(config.resetBtnId);
+            const meta = document.getElementById(config.metaId);
+            const engraving = document.getElementById(config.engravingId);
             if (!target || !playBtn || !resetBtn) return;
+
+            // Tier-scale: shorter timings + lower spark density for lower
+            // tiers, longer + denser for higher tiers. Read from the
+            // card's tier class so each card auto-calibrates.
+            const tier = (() => {
+                if (target.classList.contains('pp-frame--bronze'))   return 'bronze';
+                if (target.classList.contains('pp-frame--silver'))   return 'silver';
+                if (target.classList.contains('pp-frame--platinum')) return 'platinum';
+                return 'gold';
+            })();
+            const scale = TIER_EARN_SCALE[tier] || TIER_EARN_SCALE.gold;
+            const dScale = scale.duration;
+            const sparkCount = scale.sparkCount;
+            const t = (ms) => Math.round(ms * dScale);
+
+            // Set --earn-scale so the CSS animations + transitions scale
+            // their durations in lock-step with the JS timings.
+            target.style.setProperty('--earn-scale', dScale);
 
             let timers = [];
             let buildTimer = null;
@@ -4468,6 +4820,7 @@
                 target.classList.remove(
                     'pp-earn-cooling',
                     'pp-earn-uncloak',
+                    'pp-earn-searing',
                     'pp-earn-gleaming',
                     'pp-earn-engraving',
                     'pp-earn-settling',
@@ -4520,61 +4873,86 @@
                 // PHASE 2: Cooling - card lifts, banner/lock/line fade.
                 timers.push(setTimeout(() => {
                     target.classList.add('pp-earn-cooling');
-                }, 1800));
+                }, t(1800)));
 
-                // PHASE 3: Border weld lap (2100ms over still-blueprint chrome).
-                // As the welder finishes each side, that side flips from
-                // dashed to solid - the seal "follows" the torch around.
+                // PHASE 3: Twin-welder border seal (1400ms, was 2100ms).
+                // Two welding heads start at top-center and trace the
+                // perimeter in opposite directions, meeting at bottom-
+                // center. Each side flips from dashed to solid as the
+                // welders that touch it finish; both side edges flip
+                // simultaneously when the welders reach the bottom
+                // corners.
                 timers.push(setTimeout(() => {
                     target.classList.remove('is-animating');
                     target.querySelectorAll('.pp-spark:not(.pp-spark--etch)').forEach(s => s.remove());
 
-                    const head = document.createElement('span');
-                    head.className = 'pp-frame__border-weld-head';
-                    head.style.animationDuration = '2100ms';
-                    target.appendChild(head);
-                    timers.push(setTimeout(() => head.remove(), 2150));
+                    const dur = t(1400);
+                    const headR = document.createElement('span');
+                    headR.className = 'pp-frame__border-weld-head';
+                    headR.style.animation = `pp-border-weld-trace-right ${dur}ms linear forwards`;
+                    target.appendChild(headR);
+                    const headL = document.createElement('span');
+                    headL.className = 'pp-frame__border-weld-head';
+                    headL.style.animation = `pp-border-weld-trace-left ${dur}ms linear forwards`;
+                    target.appendChild(headL);
+                    timers.push(setTimeout(() => { headR.remove(); headL.remove(); }, dur + 50));
 
-                    // Stage the per-side seal switches at corner-crossings:
-                    // welder reaches each next corner at 525ms intervals.
-                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-top'),    525));
-                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-right'),  1050));
-                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-bottom'), 1575));
-                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-left'),   2100));
+                    // Per-side seal switches (scaled with the weld duration):
+                    //   33% - both welders reach top corners → top edge solid
+                    //   67% - welders reach bottom corners → right + left both solid
+                    //   100% - welders meet at bottom-center → bottom solid
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-top'),    Math.round(dur * 0.33)));
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-right'),  Math.round(dur * 0.67)));
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-left'),   Math.round(dur * 0.67)));
+                    timers.push(setTimeout(() => target.classList.add('pp-earn-weld-bottom'), dur));
 
                     const startTime = Date.now();
-                    const dur = 2100;
                     borderTimer = setInterval(() => {
                         const elapsed = Date.now() - startTime;
                         const progress = Math.min(elapsed / dur, 1);
                         if (progress >= 1) { clearInterval(borderTimer); borderTimer = null; return; }
-                        let leftPct, topPct, edge;
-                        if (progress < 0.25) {
-                            leftPct = (progress / 0.25) * 100;
-                            topPct = 0;
-                            edge = 'top';
-                        } else if (progress < 0.5) {
-                            leftPct = 100;
-                            topPct = ((progress - 0.25) / 0.25) * 100;
-                            edge = 'right';
-                        } else if (progress < 0.75) {
-                            leftPct = 100 - ((progress - 0.5) / 0.25) * 100;
-                            topPct = 100;
-                            edge = 'bottom';
+
+                        // Right welder: top-center → top-right → bottom-right → bottom-center
+                        let leftR, topR, edgeR;
+                        if (progress < 0.33) {
+                            leftR = 50 + (progress / 0.33) * 50;
+                            topR = 0;
+                            edgeR = 'top';
+                        } else if (progress < 0.67) {
+                            leftR = 100;
+                            topR = ((progress - 0.33) / 0.34) * 100;
+                            edgeR = 'right';
                         } else {
-                            leftPct = 0;
-                            topPct = 100 - ((progress - 0.75) / 0.25) * 100;
-                            edge = 'left';
+                            leftR = 100 - ((progress - 0.67) / 0.33) * 50;
+                            topR = 100;
+                            edgeR = 'bottom';
                         }
-                        spawnBorderSpark(leftPct, topPct, edge);
+                        spawnBorderSpark(leftR, topR, edgeR);
+
+                        // Left welder: top-center → top-left → bottom-left → bottom-center
+                        let leftL, topL, edgeL;
+                        if (progress < 0.33) {
+                            leftL = 50 - (progress / 0.33) * 50;
+                            topL = 0;
+                            edgeL = 'top';
+                        } else if (progress < 0.67) {
+                            leftL = 0;
+                            topL = ((progress - 0.33) / 0.34) * 100;
+                            edgeL = 'left';
+                        } else {
+                            leftL = ((progress - 0.67) / 0.33) * 50;
+                            topL = 100;
+                            edgeL = 'bottom';
+                        }
+                        spawnBorderSpark(leftL, topL, edgeL);
                     }, 36);
-                }, 2900));
+                }, t(2900)));
 
                 // PHASE 4: Sealed glow pulse (1400ms self-contained
                 // animation: fade in → hold → fade out → settle back).
                 timers.push(setTimeout(() => {
                     target.classList.add('pp-earn-sealed');
-                }, 5000));
+                }, t(4300)));
 
                 // PHASE 5: Uncloak SCAN - bottom-to-top beam over the
                 // WHOLE front face (plinth → art → title), 2200ms.
@@ -4618,7 +4996,7 @@
                     });
 
                     const startTime = Date.now();
-                    const dur = 2200;
+                    const dur = t(2200);
                     const scanSparkTimer = setInterval(() => {
                         const elapsed = Date.now() - startTime;
                         const progress = Math.min(elapsed / dur, 1);
@@ -4648,20 +5026,97 @@
                         setTimeout(() => spark.remove(), sDur + 50);
                     }, 42);
                     timers.push(setTimeout(() => clearInterval(scanSparkTimer), dur + 50));
-                }, 6500));
+                }, t(5800)));
 
-                // PHASE 6: Strip blueprint/unearned - card is now in earned base
+                // PHASE 6: Badge sears onto the freshly revealed background.
+                // The badge stays in its blueprint state (semi-transparent,
+                // dimmed) all the way through the scan. Only NOW does it
+                // materialize - opacity climbs from 0.82 → 1.0 while the
+                // filter glows red-white hot and the artwork vibrates, as
+                // if being welded onto the new surface. 1500ms.
+                // Tier-colored sparks scatter radially from BEHIND the
+                // badge image during the sear - the molten material being
+                // welded carries the tier's color, fanning out in all
+                // directions regardless of the badge's shape.
                 timers.push(setTimeout(() => {
-                    target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
-                }, 8750));
+                    target.classList.add('pp-earn-searing');
 
-                // PHASE 7: Completion sheen sweep across the card
+                    const art = target.querySelector('.pp-frame__art');
+                    if (art) {
+                        // Sparks fire only during the heat-up phase
+                        // (0% → 65% of the sear animation). After peak
+                        // heat the welding is "done" and the badge
+                        // cools without further sparks.
+                        const sparkDur = t(1170);
+                        const sparkStart = Date.now();
+                        const tierClass = 'pp-spark--tier-' + getTier();
+                        // Insert sparks BEFORE the badge default artwork
+                        // (layers[1]), so they render above the backdrop
+                        // (layers[0], typically opaque) but behind the
+                        // badge silhouette. Sparks emerging from center
+                        // are then hidden where the badge is opaque and
+                        // visible around its actual shape.
+                        const layers = art.querySelectorAll('.pp-frame__layer');
+                        const insertTarget = layers[1] || layers[0] || null;
+
+                        // Spark density scales with tier (sparkCount per
+                        // tick). Bronze=1, Silver=1, Gold=2, Platinum=3.
+                        const spawnOne = () => {
+                            const spark = document.createElement('div');
+                            spark.className = 'pp-spark pp-spark--behind';
+                            spark.classList.add(tierClass);
+                            // Umbrella spread: angle is constrained to an
+                            // upper semicircle (-π to 0), so sparks fly
+                            // from horizontal-left through straight-up
+                            // to horizontal-right. None go downward.
+                            // Subtle gravity arc: peak upward at the
+                            // 20% mark, then drift back down to 70% of
+                            // peak by the 100% mark while continuing to
+                            // fly outward horizontally.
+                            const angle = -Math.PI + Math.random() * Math.PI;
+                            const distance = 90 + Math.random() * 130;
+                            const peakX = Math.cos(angle) * distance;
+                            const peakY = Math.sin(angle) * distance;
+                            spark.style.left = '50%';
+                            spark.style.top = '50%';
+                            spark.style.bottom = 'auto';
+                            spark.style.setProperty('--spark-x-mid', (peakX * 0.55) + 'px');
+                            spark.style.setProperty('--spark-y-mid', peakY + 'px');
+                            spark.style.setProperty('--spark-x-end', peakX + 'px');
+                            spark.style.setProperty('--spark-y-end', (peakY * 0.7) + 'px');
+                            const sDur = 600 + Math.random() * 400;
+                            spark.style.setProperty('--spark-dur', sDur + 'ms');
+
+                            if (insertTarget) art.insertBefore(spark, insertTarget);
+                            else art.appendChild(spark);
+                            setTimeout(() => spark.remove(), sDur + 50);
+                        };
+                        const sparkTimer = setInterval(() => {
+                            const elapsed = Date.now() - sparkStart;
+                            if (elapsed >= sparkDur) { clearInterval(sparkTimer); return; }
+                            for (let i = 0; i < sparkCount; i++) spawnOne();
+                        }, 28);
+
+                        timers.push(setTimeout(() => clearInterval(sparkTimer), sparkDur + 50));
+                    }
+                }, t(8200)));
+                // At sear end: drop the searing class AND strip blueprint/
+                // unearned in the same tick. The searing animation's
+                // forwards state holds the layer at full opacity / neutral
+                // filter while blueprint comes off, so there's no flash
+                // back to blueprint-dim before the next phase.
+                timers.push(setTimeout(() => {
+                    target.classList.remove('pp-earn-searing');
+                    target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
+                }, t(10000)));
+
+                // PHASE 7: Completion sheen sweep
                 timers.push(setTimeout(() => {
                     target.classList.add('pp-earn-gleaming');
-                }, 8900));
+                }, t(10200)));
                 timers.push(setTimeout(() => {
                     target.classList.remove('pp-earn-gleaming');
-                }, 10300));
+                }, t(10900)));
 
                 // PHASE 8: Front engraving etch - 3000ms slow burn.
                 // The head lives in the plinth (NOT inside the engraving)
@@ -4715,9 +5170,11 @@
                     head.style.left = headStartPct + '%';
                     head.style.top = headTopPct + '%';
                     head.style.opacity = '1';
-                    head.style.transition = 'left 3s linear, opacity 300ms ease-out 2.7s';
+                    const etchTotalMs = t(3000);
+                    const etchFadeDelayMs = Math.round(etchTotalMs * 0.9);
+                    head.style.transition = `left ${etchTotalMs}ms linear, opacity 300ms ease-out ${etchFadeDelayMs}ms`;
                     plinth.appendChild(head);
-                    timers.push(setTimeout(() => head.remove(), 3200));
+                    timers.push(setTimeout(() => head.remove(), etchTotalMs + 200));
 
                     // Trigger both transitions on the next frame so they
                     // start in lock-step at the actual text's left edge.
@@ -4731,7 +5188,7 @@
                     // in plinth coordinates so they aren't clipped by the
                     // engraving's reveal mask.
                     const startTime = Date.now();
-                    const dur = 3000;
+                    const dur = etchTotalMs;
                     etchTimer = setInterval(() => {
                         const elapsed = Date.now() - startTime;
                         const progress = Math.min(elapsed / dur, 1);
@@ -4755,39 +5212,57 @@
                         plinth.appendChild(spark);
                         setTimeout(() => spark.remove(), sDur + 50);
                     }, 65);
-                }, 10500));
+                }, t(11100)));
 
                 // PHASE 9: Flip to back face. Card is still lifted.
                 timers.push(setTimeout(() => {
                     target.classList.add('is-flipped');
-                }, 13700));
+                }, t(14300)));
 
-                // PHASE 10: Back face SCAN - 2000ms right-to-left.
+                // PHASE 10: Back face SCAN - right-to-left reveal.
                 timers.push(setTimeout(() => {
                     target.classList.remove('pp-earn-back-staged');
                     target.classList.add('pp-earn-back-scan');
                     requestAnimationFrame(() => {
                         target.style.setProperty('--scan-back', '100%');
                     });
-                }, 14550));
+                }, t(15150)));
 
                 // PHASE 11: Flip BACK to front. Brief dwell on the back
                 // so the stats can be read, then flip back so the card
                 // settles facing forward.
                 timers.push(setTimeout(() => {
                     target.classList.remove('is-flipped');
-                }, 17400));
+                }, t(18000)));
 
                 // PHASE 12: Settle - card descends from its lift with a
                 // tier-tinted glow flourish at the moment of landing.
                 timers.push(setTimeout(() => {
                     target.classList.add('pp-earn-settling');
-                }, 18300));
+                }, t(18900)));
             };
 
             playBtn.addEventListener('click', play);
             resetBtn.addEventListener('click', reset);
-        })();
+        }
+
+        // Wire up each earn-moment demo card. Tier is inferred from the
+        // card's tier class, which drives both the JS timing scale and
+        // the CSS animation durations (via --earn-scale).
+        makeEarnMomentController({
+            targetId:    'pp-earn-target',
+            playBtnId:   'pp-earn-play',
+            resetBtnId:  'pp-earn-reset',
+            metaId:      'pp-earn-meta',
+            engravingId: 'pp-earn-engraving',
+        });
+        makeEarnMomentController({
+            targetId:    'pp-earn-target-bronze',
+            playBtnId:   'pp-earn-play-bronze',
+            resetBtnId:  'pp-earn-reset-bronze',
+            metaId:      'pp-earn-meta-bronze',
+            engravingId: 'pp-earn-engraving-bronze',
+        });
 
         // Chrome mode toggle (Section 10) - scoped to buttons with data-chrome
         document.querySelectorAll('[data-chrome-mode]').forEach(section => {
