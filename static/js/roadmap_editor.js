@@ -2580,17 +2580,21 @@
                 phaseSelect.value = guideData.phase;
             }
 
-            if (body || youtubeUrl) {
+            const hasContent = !!(body || youtubeUrl);
+            if (hasContent) {
                 statusBadge.textContent = 'Written';
                 statusBadge.classList.add('badge-success');
             } else {
                 statusBadge.textContent = 'Empty';
             }
 
-            // Open if has content
-            if (body || youtubeUrl) {
-                el.setAttribute('open', '');
-            }
+            // Auto-collapse rows that already have content so the editor
+            // opens to "what still needs to be written" instead of a wall
+            // of filled-in guides. Empty rows stay open so the writer can
+            // immediately type. (Render only runs at editor init, so any
+            // in-session edits to a previously-closed row stay open via
+            // the writer's own click — no risk of stomping unsaved work.)
+            el.open = !hasContent;
 
             // Collect current flags from checkboxes
             function getFlags() {

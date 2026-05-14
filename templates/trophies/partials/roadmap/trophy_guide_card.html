@@ -2,11 +2,14 @@
 {# Single trophy guide entry. Expects: guide (TrophyGuide), roadmap_trophies, profile_earned #}
 
 {% with trophy=roadmap_trophies|get_item:guide.trophy_id earned_data=profile_earned|get_item:guide.trophy_id %}
-{# Closed by default: a long platinum can have 50+ guides; expanding all on #}
-{# first paint creates a wall of text. Readers click to open the ones they  #}
-{# need. Deep links (TOC clicks, trophy-mention pills, ?#trophy-guide-X     #}
-{# in URL) auto-open via roadmap-detail.js's navigateToGuide/handleDeepLink. #}
+{# Open by default — the trophy guide content is the main value of this    #}
+{# page, so the reader should see it without having to click. Earned       #}
+{# trophies are auto-collapsed on page load by roadmap-detail.js's         #}
+{# initEarnedCollapse() since the guide is no longer actionable for that   #}
+{# trophy. Deep links (TOC clicks, trophy-mention pills, ?#trophy-guide-X  #}
+{# in URL) re-open closed details via navigateToGuide/handleDeepLink.      #}
 <details id="trophy-guide-{{ guide.trophy_id }}"
+        open
         data-toc-section
         data-order="{{ guide.trophy_id }}"
         data-type="{% if trophy %}{{ trophy.trophy_type }}{% endif %}"
