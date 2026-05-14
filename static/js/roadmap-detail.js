@@ -130,7 +130,7 @@
                     target.open = true;
                 }
 
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                scrollAnchorIntoView(target, { block: 'start' });
                 history.replaceState(null, '', '#' + targetId);
             });
         });
@@ -315,7 +315,7 @@
                 const targetId = link.getAttribute('href').slice(1);
                 const target = document.getElementById(targetId);
                 if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    scrollAnchorIntoView(target, { block: 'start' });
                     history.replaceState(null, '', '#' + targetId);
                 }
             });
@@ -760,6 +760,66 @@
         });
     }
 
+    // ── Anchor-Scroll Helper ───────────────────────────────────────────
+    //
+    //  Lazy-loaded images above the scroll target reflow the page as they
+    //  load, pushing the target down — by the time the smooth scroll
+    //  completes, the target is often below the fold. Two-prong fix:
+    //
+    //   1. PRE-LOAD: walk lazy images that sit above the target and flip
+    //      `loading="lazy"` -> `loading="eager"` so the browser starts
+    //      fetching them immediately. Eliminates the "I scrolled but the
+    //      target slid out from under me" effect for most cases.
+    //   2. RE-ANCHOR: a few follow-up scrollIntoView passes at 400ms /
+    //      900ms / 1500ms with `behavior: 'auto'` (instant) so any
+    //      lingering reflow (slow-network images, images outside our
+    //      eager pass) gets corrected for. Only fires when the target
+    //      has actually drifted, so a stable target doesn't get re-jumped.
+    //
+    //  `block`: 'start' respects scroll-padding-top (sticky chrome). Use
+    //  'center' explicitly when you want vertical centering.
+    // ─────────────────────────────────────────────────────────────────
+    function scrollAnchorIntoView(target, opts = {}) {
+        if (!target) return;
+        const block = opts.block || 'start';
+        eagerLoadImagesAbove(target);
+        target.scrollIntoView({ behavior: 'smooth', block });
+        // Re-anchor sweep — `auto` (instant) so corrections don't
+        // visibly compete with the initial smooth scroll. The drift
+        // threshold prevents re-jumping a target that's already
+        // settled in the right place.
+        const reAnchor = () => {
+            const rect = target.getBoundingClientRect();
+            const idealTop = block === 'center'
+                ? (window.innerHeight - rect.height) / 2
+                : (parseInt(getComputedStyle(document.documentElement).scrollPaddingTop, 10) || 0);
+            if (Math.abs(rect.top - idealTop) > 8) {
+                target.scrollIntoView({ behavior: 'auto', block });
+            }
+        };
+        setTimeout(reAnchor, 400);
+        setTimeout(reAnchor, 900);
+        setTimeout(reAnchor, 1500);
+    }
+
+    function eagerLoadImagesAbove(target) {
+        const targetTop = target.getBoundingClientRect().top + window.scrollY;
+        document.querySelectorAll('img[loading="lazy"]').forEach((img) => {
+            // Use offsetTop chain (faster than per-img getBoundingClientRect)
+            // when the image is in the normal flow; getBoundingClientRect
+            // as a fallback only.
+            let imgTop = 0;
+            let el = img;
+            while (el && el.offsetParent) {
+                imgTop += el.offsetTop;
+                el = el.offsetParent;
+            }
+            if (imgTop < targetTop) {
+                img.loading = 'eager';
+            }
+        });
+    }
+
     // ── Trophy Link Navigation ─────────────────────────────────────────
 
     function navigateToGuide(href) {
@@ -778,9 +838,11 @@
             target.open = true;
         }
 
-        // Wait a frame for layout, then scroll and highlight
+        // Wait a frame for layout, then scroll and highlight. Use the
+        // helper so lazy-loaded images above the target don't push it
+        // out of frame mid-scroll.
         requestAnimationFrame(() => {
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            scrollAnchorIntoView(target, { block: 'center' });
 
             target.classList.add('ring-2', 'ring-primary/50');
             setTimeout(() => {
@@ -854,11 +916,13 @@
             target.open = true;
         }
 
-        // Slight delay to let layout settle, then scroll
+        // Slight delay to let layout settle, then scroll via the helper
+        // (eager-loads lazy images above the target + re-anchors as
+        // reflow settles so the deep-link target doesn't drift out of
+        // view).
         requestAnimationFrame(() => {
             setTimeout(() => {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                // Highlight
+                scrollAnchorIntoView(target, { block: 'start' });
                 target.classList.add('ring-2', 'ring-primary/50');
                 setTimeout(() => {
                     target.classList.remove('ring-2', 'ring-primary/50');
@@ -1685,7 +1749,7 @@
                     `.collectible-type-chip[data-type-slug="${slug}"]`
                 );
                 if (chip) chip.click();
-                this.rootEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (this.rootEl) scrollAnchorIntoView(this.rootEl, { block: 'start' });
             });
         },
     };
