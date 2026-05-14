@@ -440,6 +440,8 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
         order = ['-last_updated_datetime']
         if sort_val == 'oldest':
             order = ['last_updated_datetime']
+        elif sort_val == 'latest_trophy':
+            order = [OrderBy(F('most_recent_trophy_date'), descending=True, nulls_last=True), Lower('game__title_name')]
         elif sort_val == 'alpha':
             order = [Lower('game__title_name')]
         elif sort_val == 'completion':

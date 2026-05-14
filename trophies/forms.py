@@ -307,6 +307,7 @@ class ProfileGamesForm(forms.Form):
         choices=[
             ('recent', 'Recently Played'),
             ('oldest', 'Oldest Played'),
+            ('latest_trophy', 'Latest Trophy'),
             ('alpha', 'Alphabetical'),
             ('completion', 'Highest Completion'),
             ('completion_inv', 'Lowest Completion'),
