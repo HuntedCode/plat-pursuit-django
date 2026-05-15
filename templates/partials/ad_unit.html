@@ -1,5 +1,9 @@
 {% if ADSENSE_ENABLED %}
-<div class="flex justify-center overflow-hidden" style="display:none; max-height:150px;">
+{# Wrapper is intentionally visible from the start: hiding it with #}
+{# display:none breaks AdSense responsive sizing (availableWidth=0  #}
+{# TagError) and the slot never fills. Empty flex collapses to 0   #}
+{# height anyway, so there's no empty-box layout cost.             #}
+<div class="flex justify-center overflow-hidden" style="max-height:150px;">
     <ins class="adsbygoogle"
         style="display:block; max-height:150px; max-width:728px; width:100%;"
         data-ad-client="{{ ADSENSE_PUB_ID }}"
@@ -12,16 +16,16 @@
         var wrapper = document.currentScript.parentElement;
         var ins = wrapper.querySelector('.adsbygoogle');
         var resolved = false;
-        var observer = new MutationObserver(function(mutations) {
+        var observer = new MutationObserver(function() {
             if (resolved) return;
             var status = ins.getAttribute('data-ad-status');
             if (status === 'filled') {
                 resolved = true;
-                wrapper.style.display = '';
                 wrapper.classList.add('my-6');
                 observer.disconnect();
             } else if (status === 'unfilled') {
                 resolved = true;
+                wrapper.style.display = 'none';
                 observer.disconnect();
             }
         });
