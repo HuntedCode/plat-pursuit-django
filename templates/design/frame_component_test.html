@@ -1,0 +1,268 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frame Component Test Harness · PlatPursuit</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <style>
+        body {
+            background:
+                radial-gradient(ellipse at top, rgba(40, 60, 100, 0.18), transparent 60%),
+                #0e1014;
+            color: #e8e9ec;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container { max-width: 1280px; margin: 0 auto; padding: 32px 24px 64px; }
+        h1 { font-size: 28px; font-weight: 800; margin: 0 0 8px; }
+        h2 { font-size: 17px; font-weight: 700; margin: 32px 0 6px; }
+        .lede { font-size: 13px; color: rgba(255, 255, 255, 0.55); margin: 0 0 28px; max-width: 720px; line-height: 1.55; }
+        .demo-section {
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            padding: 24px 24px 28px;
+            margin-bottom: 22px;
+        }
+        .demo-section p {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.55);
+            margin: 0 0 18px;
+            line-height: 1.55;
+            max-width: 760px;
+        }
+        .demo-label {
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 8px;
+        }
+        .demo-grid { display: grid; gap: 24px; }
+        .demo-grid--4   { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .demo-grid--3   { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .demo-grid--1   { grid-template-columns: minmax(0, 1fr); }
+        .demo-row {
+            display: flex; flex-wrap: wrap; align-items: end; gap: 28px;
+        }
+        .earn-controls {
+            margin-top: 8px;
+            display: flex; flex-wrap: wrap; gap: 4px;
+        }
+        .earn-btn {
+            background: rgba(63, 205, 220, 0.12);
+            border: 1px solid rgba(63, 205, 220, 0.5);
+            color: rgba(180, 230, 245, 1);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 160ms ease, border-color 160ms ease;
+        }
+        .earn-btn:hover {
+            background: rgba(63, 205, 220, 0.22);
+            border-color: rgba(63, 205, 220, 0.85);
+        }
+        .earn-btn--reset {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.18);
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .earn-btn--reset:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+    </style>
+</head>
+<body>
+    {# Mount the rarity SVG sprite (this template doesn't extend base.html). #}
+    {% include "components/_frame_rarity_sprite.html" %}
+
+    <div class="container">
+        <h1>Frame Component Test Harness</h1>
+        <p class="lede">
+            Renders every state × size × tier × pinned combination through the production partial at <code>templates/components/frame.html</code>. Use this page to verify visual parity after CSS / JS changes. The original design prototype lives at <a href="{% url 'design_frame_preview' %}" style="color: #5FE0EE;">/design/frame/</a>; it's preserved as design history.
+        </p>
+
+        <!-- 1. Tier matrix (earned, default size) -->
+        <div class="demo-section">
+            <h2>1. Tier matrix (earned, default size)</h2>
+            <p>All four tiers at default size, state = <code>earned</code>. Each tier's series name + rarity comes from the test fixture; the visual chrome is auto-derived from the tier class.</p>
+            <div class="demo-grid demo-grid--4">
+                {% for frame in tiers_earned %}
+                    <div>
+                        <div class="demo-label">{{ frame.tier|title }}</div>
+                        {% include "components/frame.html" with frame=frame %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 2. Sizes (gold, earned) -->
+        <div class="demo-section">
+            <h2>2. Size variants (gold, earned)</h2>
+            <p>Large → Default → Compact → Mini. Compact and Mini hide the title bar + plinth and show a single-letter tier banner (B/S/G/P) via CSS <code>::after</code>.</p>
+            <div class="demo-row">
+                {% for frame in sizes_gold %}
+                    <div>
+                        <div class="demo-label">{{ frame.size|title }}</div>
+                        {% include "components/frame.html" with frame=frame %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 3. State × tier grid -->
+        {% for row in state_grid %}
+        <div class="demo-section">
+            <h2>3. State: {{ row.label }} × all tiers</h2>
+            {% if row.state == 'in_progress' %}
+            <p>Blueprint mode with the Fabricating banner, cyan veil, construction line at <code>--pp-build: 80%</code>. Each tier keeps its chrome identity.</p>
+            {% else %}
+            <p>Blueprint at 0% with the "To Earn" stamp. Lock icon centered, no progress data. Tier chrome stays intact even in the unlit state.</p>
+            {% endif %}
+            <div class="demo-grid demo-grid--4">
+                {% for frame in row.cards %}
+                    <div>
+                        <div class="demo-label">{{ frame.tier|title }}</div>
+                        {% include "components/frame.html" with frame=frame %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- 4. Pinned (Variant D: accent border + map-pin chip) -->
+        <div class="demo-section">
+            <h2>4. Pinned (Variant D, accent border + chip)</h2>
+            <p>Pin Variant D pairs the cyan accent edge with the map-pin chip at top-left. <code>is_pinned</code> combines with any state — the chip + border carry the "actively pursuing / featured" signal independent of earned vs in-progress vs unearned. Compact / mini get the single-letter ribbon override instead of a "Pursuing" text label since space is tight.</p>
+            <div class="demo-grid demo-grid--3">
+                {% for frame in pinned_examples %}
+                    <div>
+                        <div class="demo-label">Gold · {{ frame.state|cut:"_" }}</div>
+                        {% include "components/frame.html" with frame=frame %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 5. Title marquee -->
+        <div class="demo-section">
+            <h2>5. Title scroll (long series name)</h2>
+            <p>If the series name overflows the title bar, JS toggles <code>.is-scrolling</code> on <code>.pp-frame__series</code> and CSS marquees the text continuously. Hover over the card to pause. Reduced motion suppresses the marquee and falls back to ellipsis truncation.</p>
+            <div class="demo-grid demo-grid--3">
+                {% for frame in marquee_examples %}
+                    <div>
+                        <div class="demo-label">Overflow case</div>
+                        {% include "components/frame.html" with frame=frame %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 5b. Set engraving + current-cycle print -->
+        <div class="demo-section">
+            <h2>5b. Set engraving + current-cycle print</h2>
+            <p>
+                Two new pieces, one metaphor: <strong>etched chrome stays permanent</strong> (mint engraving + set number, both deboss-shadowed into the chrome surface), <strong>ink gets reprinted</strong> each maintenance cycle (the name, dates, rarity, and the new "current cycle" line). Left card: pristine post-earn, no maintenance has happened yet so no current-cycle print. Right card: post-repair, the print has been refreshed with the latest cycle's standing. The set number in the bottom-right is shared across every badge of the same series + tier &mdash; like a print-run stamp on a card set.
+            </p>
+            <div class="demo-grid demo-grid--4">
+                {% for row in print_examples %}
+                    <div>
+                        <div class="demo-label">{{ row.tier|title }} &middot; pristine</div>
+                        {% include "components/frame.html" with frame=row.pristine %}
+                    </div>
+                    <div>
+                        <div class="demo-label">{{ row.tier|title }} &middot; reprinted (cycle 3)</div>
+                        {% include "components/frame.html" with frame=row.reprinted %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 5c. Maintenance state -->
+        <div class="demo-section">
+            <h2>5c. Maintenance state</h2>
+            <p>
+                A maintenance card is one that's <em>been earned before</em> (mint and set engravings permanent) but is currently <strong>dormant</strong> &mdash; a new game in the series has shipped and the user needs to re-earn the badge to reactivate it. The badge sleeps cool while every repair-CTA signal stays warm &mdash; the temperature contrast carries the whole mood: dormant, waiting, but unmistakably labeled for action.
+            </p>
+            <div class="demo-grid demo-grid--3">
+                <div>
+                    <div class="demo-label">Gold &middot; in maintenance &middot; 4 of 5 repaired</div>
+                    {% include "components/frame.html" with frame=maintenance_example %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 5d. Active → Maintenance moment harness -->
+        <div class="demo-section">
+            <h2>5d. Active &rarr; Maintenance moment</h2>
+            <p>
+                The choreographed transition from active to maintenance. Fired only when a user is first being told their badge has entered a maintenance cycle (e.g. on notification click) &mdash; not on every render of a maintenance card. ~2.55 seconds. The card starts in its full active appearance (mint engraving, set engraving, earned date, full-color badge), then: badge cools to dormant, plinth fades, repair signals fade in, the RESTORING banner slides down from above, the MAINTENANCE band drops from above with a slight bounce and impact shake on landing, the meta line swaps from "Earned [date]" to "4 of 5 repaired," and the REACTIVATE label settles in as the wake-up call.
+            </p>
+            <div class="demo-grid demo-grid--3">
+                <div>
+                    <div class="demo-label">Gold &middot; staged active</div>
+                    {% include "components/frame.html" with frame=maintenance_staged %}
+                    <div class="earn-controls">
+                        <button type="button" class="earn-btn" data-maint-play="{{ maintenance_staged.dom_id }}">Play</button>
+                        <button type="button" class="earn-btn earn-btn--reset" data-maint-reset="{{ maintenance_staged.dom_id }}">Reset</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. Earn moment harness -->
+        <div class="demo-section">
+            <h2>6. Earn moment harness</h2>
+            <p>One card per tier in pre-play state (blueprint at 90%). Click <strong>Play</strong> to trigger the full twelve-phase choreography. Per-tier scaling: Bronze 0.75× (~16s), Silver 0.9× (~19s), Gold 1.0× (~21s), Platinum 1.25× (~26s, with the chromatic shimmer flourish on settle).</p>
+            <div class="demo-grid demo-grid--4">
+                {% for item in earn_harness %}
+                    <div>
+                        <div class="demo-label">{{ item.tier|title }}</div>
+                        {% include "components/frame.html" with frame=item.frame %}
+                        <div class="earn-controls">
+                            <button type="button" class="earn-btn" data-earn-play="{{ item.frame.dom_id }}">Play</button>
+                            <button type="button" class="earn-btn earn-btn--reset" data-earn-reset="{{ item.frame.dom_id }}">Reset</button>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/frame.js' %}"></script>
+    <script>
+        document.querySelectorAll('[data-earn-play]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = document.getElementById(btn.getAttribute('data-earn-play'));
+                if (target) PlatPursuit.Frame.triggerEarnMoment(target);
+            });
+        });
+        document.querySelectorAll('[data-earn-reset]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = document.getElementById(btn.getAttribute('data-earn-reset'));
+                if (target) PlatPursuit.Frame.cancelEarnMoment(target);
+            });
+        });
+        document.querySelectorAll('[data-maint-play]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = document.getElementById(btn.getAttribute('data-maint-play'));
+                if (target) PlatPursuit.Frame.triggerMaintenanceMoment(target);
+            });
+        });
+        document.querySelectorAll('[data-maint-reset]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var target = document.getElementById(btn.getAttribute('data-maint-reset'));
+                if (target) PlatPursuit.Frame.cancelMaintenanceMoment(target);
+            });
+        });
+    </script>
+</body>
+</html>

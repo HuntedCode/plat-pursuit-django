@@ -1,0 +1,2755 @@
+/* ============================================================
+ * The Frame — PlatPursuit Badge Chrome
+ *
+ * Production stylesheet for the Frame component. Source of truth
+ * for the visual primitive that wraps every badge wherever it
+ * renders. See docs/reference/frame-component.md for the full
+ * data contract, public API, and integration notes.
+ *
+ * Bundled into output.css via @import "./components/frame.css"
+ * in static/css/input.css. Namespace: .pp-frame, .pp-earn-*,
+ * .pp-spark, .pp-anim-weld, .pp-hover-a.
+ *
+ * Sections:
+ *   1.  CSS variables & tier tokens
+ *   2.  Base structure
+ *   3.  Size variants
+ *   4.  Tier styling
+ *   5.  State: earned (engraving, hover lift, gleam sweep)
+ *   6.  State: blueprint / unearned (grid, lock, --pp-build mask)
+ *   7.  State: pinned (Variant D)
+ *   8.  Hover (pp-hover-a)
+ *   9.  Flippable + back face
+ *   10. Earn moment phases (all .pp-earn-*)
+ *   11. Sparks (.pp-spark + tier tints)
+ *   12. Flair slot (future Flair package extension surface)
+ *   13. Title scroll marquee
+ *   14. Reduced-motion override
+ * ============================================================ */
+
+
+/* ============================================================
+ * 1. CSS variables & tier tokens
+ * ============================================================ */
+:root {
+    --tier-bronze: #c87a3b;
+    --tier-silver: #cdd0d4;
+    --tier-gold: #f0c64a;
+    --tier-platinum: #cfe8f0;
+    --tier-bronze-dim: #6e3f1e;
+    --tier-silver-dim: #6c7077;
+    --tier-gold-dim: #7a5f1a;
+    --tier-platinum-dim: #5b7a86;
+
+    --frame-bg: rgba(20, 22, 28, 0.88);
+    --frame-border: rgba(255, 255, 255, 0.08);
+    --frame-chrome-bg: rgba(20, 22, 28, 0.92);
+    --frame-art-bg: rgba(20, 22, 28, 0.85);
+
+    --frame-aspect: 1 / 1;
+    --frame-art-pad: 10px;
+}
+
+@property --pp-build {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 0%;
+}
+@property --maint-ascent {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 0%;
+}
+@property --scan-fwd {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 0%;
+}
+@property --scan-back {
+    syntax: "<percentage>";
+    inherits: true;
+    initial-value: 0%;
+}
+@property --art-bottom {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 0;
+}
+@property --art-range {
+    syntax: "<number>";
+    inherits: true;
+    initial-value: 1;
+}
+
+
+/* ============================================================
+ * 2. Base structure
+ * ============================================================ */
+.pp-frame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--frame-bg);
+    border: 1px solid var(--frame-border);
+    border-radius: 6px;
+    overflow: visible;
+    transition: transform 280ms ease, box-shadow 280ms ease, border-color 280ms ease;
+    cursor: pointer;
+}
+
+/* Corner notches: tier-aware brand mark at every corner. */
+.pp-frame::before,
+.pp-frame::after,
+.pp-frame > .pp-frame__corner-bl,
+.pp-frame > .pp-frame__corner-br {
+    content: "";
+    position: absolute;
+    width: var(--notch-size, 7px);
+    height: var(--notch-size, 7px);
+    background: var(--frame-bg);
+    border: 1px solid var(--frame-border);
+    transform: rotate(45deg);
+    z-index: 5;
+    pointer-events: none;
+    transition: opacity 600ms ease, box-shadow 600ms ease;
+}
+.pp-frame::before { top: calc(var(--notch-size, 7px) / -2); left: calc(var(--notch-size, 7px) / -2); }
+.pp-frame::after  { top: calc(var(--notch-size, 7px) / -2); right: calc(var(--notch-size, 7px) / -2); }
+.pp-frame > .pp-frame__corner-bl { bottom: calc(var(--notch-size, 7px) / -2); left: calc(var(--notch-size, 7px) / -2); }
+.pp-frame > .pp-frame__corner-br { bottom: calc(var(--notch-size, 7px) / -2); right: calc(var(--notch-size, 7px) / -2); }
+
+/* Title bar (series left, tier label right). The tier label is
+ * rendered as a ::after pseudo-element so no per-card HTML
+ * changes are needed; tier name + color come from the tier
+ * class. Compact size overrides this to a single letter; mini
+ * hides the title bar entirely. */
+.pp-frame__title {
+    position: relative;
+    background: var(--frame-chrome-bg);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--frame-border);
+    z-index: 5;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+.pp-frame__series {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+.pp-frame__title::after {
+    content: "";
+    flex-shrink: 0;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    line-height: 1.3;
+}
+.pp-frame--bronze .pp-frame__title::after {
+    content: "Bronze";
+    color: rgba(220, 150, 80, 0.95);
+}
+.pp-frame--silver .pp-frame__title::after {
+    content: "Silver";
+    color: rgba(215, 220, 225, 0.95);
+}
+.pp-frame--gold .pp-frame__title::after {
+    content: "Gold";
+    color: rgba(245, 215, 120, 1);
+    text-shadow: 0 0 4px rgba(240, 198, 74, 0.3);
+}
+.pp-frame--platinum .pp-frame__title::after {
+    content: "Platinum";
+    color: rgba(220, 240, 250, 1);
+    text-shadow: 0 0 5px rgba(207, 232, 240, 0.45);
+}
+.pp-frame--unearned .pp-frame__title::after {
+    color: rgba(255, 255, 255, 0.4);
+    text-shadow: none;
+}
+
+/* Art container (tier-tinted by default). */
+.pp-frame__art {
+    position: relative;
+    aspect-ratio: var(--frame-aspect);
+    background: var(--frame-art-bg);
+    overflow: hidden;
+}
+.pp-frame__layer {
+    position: absolute;
+    top: var(--frame-art-pad);
+    left: var(--frame-art-pad);
+    width: calc(100% - (var(--frame-art-pad) * 2));
+    height: calc(100% - (var(--frame-art-pad) * 2));
+    object-fit: contain;
+    display: block;
+    pointer-events: none;
+}
+
+/* Plinth (badge name + meta line). */
+.pp-frame__plinth {
+    position: relative;
+    background: var(--frame-chrome-bg);
+    padding: 7px 10px;
+    border-top: 1px solid var(--frame-border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    z-index: 2;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+.pp-frame__plinth-name-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+.pp-frame__name {
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+.pp-frame__plinth-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.04em;
+}
+
+/* Rarity icons (common = dim text, uncommon/rare/mythic = svg
+ * symbol + tier color). */
+.pp-frame__rarity {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.pp-frame__rarity svg { width: 10px; height: 10px; flex-shrink: 0; }
+.pp-frame__rarity--common   { color: rgba(255, 255, 255, 0.5); font-weight: 600; }
+.pp-frame__rarity--uncommon { color: rgba(170, 220, 195, 0.9); }
+.pp-frame__rarity--rare {
+    color: rgba(245, 205, 105, 1);
+    text-shadow: 0 0 5px rgba(240, 200, 100, 0.35);
+}
+.pp-frame__rarity--mythic {
+    color: rgba(225, 245, 255, 1);
+    text-shadow: 0 0 6px rgba(180, 220, 255, 0.55);
+    animation: pp-mythic-pulse 2.6s ease-in-out infinite;
+}
+@keyframes pp-mythic-pulse {
+    0%, 100% { opacity: 0.88; text-shadow: 0 0 4px rgba(180, 220, 255, 0.4); }
+    50%      { opacity: 1;    text-shadow: 0 0 10px rgba(180, 220, 255, 0.75); }
+}
+
+/* Gleam covers the full art container. Sweep is driven by
+ * .pp-hover-a (or .pp-earn-gleaming during the earn moment). */
+.pp-frame__gleam {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 400ms ease;
+    z-index: 2;
+}
+
+
+/* ============================================================
+ * 3. Size variants
+ *
+ * Large : detail-page hero
+ * Default (no class) : gallery / grid views
+ * Compact : in-progress badges, title + plinth hidden, ribbon
+ *           shows single-letter tier banner (B/S/G/P)
+ * Mini   : inline / chip use, title + plinth hidden, ribbon
+ *          shows single-letter tier banner
+ * ============================================================ */
+.pp-frame--large {
+    width: 320px;
+    max-width: 100%;
+    --frame-art-pad: 14px;
+}
+.pp-frame--large .pp-frame__series       { font-size: 10px; }
+.pp-frame--large .pp-frame__title::after { font-size: 10px; }
+.pp-frame--large .pp-frame__name         { font-size: 15px; }
+.pp-frame--large .pp-frame__plinth-meta  { font-size: 10px; }
+
+/* Compact: title bar + plinth hidden. Tier identity carried
+ * entirely by the chrome (border color + tier-tinted notches +
+ * backdrop gradient). No ribbon — the chrome is enough at this
+ * size, and the ribbon read as redundant noise. */
+.pp-frame--compact .pp-frame__title  { display: none; }
+.pp-frame--compact .pp-frame__plinth { display: none; }
+.pp-frame--compact .pp-frame__art    { border-radius: 5px; }
+
+/* Mini: same approach as compact — chrome-only tier identity. */
+.pp-frame--mini {
+    max-width: 110px;
+    --frame-art-pad: 5px;
+}
+.pp-frame--mini .pp-frame__title   { display: none; }
+.pp-frame--mini .pp-frame__plinth  { display: none; }
+.pp-frame--mini .pp-frame__art     { border-radius: 5px; }
+.pp-frame--mini.pp-frame--bronze   { --notch-size: 5px; }
+.pp-frame--mini.pp-frame--silver   { --notch-size: 5px; }
+.pp-frame--mini.pp-frame--gold     { --notch-size: 6px; }
+.pp-frame--mini.pp-frame--platinum { --notch-size: 7px; }
+
+
+/* ============================================================
+ * 4. Tier styling
+ *
+ * Each tier sets its own --notch-size, chrome bg, art bg, and
+ * border tokens. Ribbon + corner notches get tier gradients.
+ * Platinum gets a subtle shimmer animation on its notches.
+ * ============================================================ */
+.pp-frame--bronze {
+    --notch-size: 7px;
+    --frame-chrome-bg: linear-gradient(180deg, rgba(50, 28, 12, 0.95), rgba(32, 18, 6, 0.96));
+    --frame-art-bg: linear-gradient(180deg, rgba(70, 40, 15, 0.7), rgba(30, 20, 8, 0.85));
+    border-color: rgba(200, 122, 59, 0.4);
+}
+.pp-frame--bronze::before,
+.pp-frame--bronze::after,
+.pp-frame--bronze > .pp-frame__corner-bl,
+.pp-frame--bronze > .pp-frame__corner-br {
+    background: linear-gradient(135deg, var(--tier-bronze) 0%, var(--tier-bronze-dim) 100%);
+    border-color: rgba(200, 122, 59, 0.8);
+}
+
+.pp-frame--silver {
+    --notch-size: 8px;
+    --frame-chrome-bg: linear-gradient(180deg, rgba(38, 42, 50, 0.95), rgba(24, 27, 33, 0.96));
+    --frame-art-bg: linear-gradient(180deg, rgba(50, 55, 65, 0.7), rgba(20, 24, 30, 0.85));
+    border-color: rgba(205, 208, 212, 0.4);
+}
+.pp-frame--silver::before,
+.pp-frame--silver::after,
+.pp-frame--silver > .pp-frame__corner-bl,
+.pp-frame--silver > .pp-frame__corner-br {
+    background: linear-gradient(135deg, var(--tier-silver) 0%, var(--tier-silver-dim) 100%);
+    border-color: rgba(205, 208, 212, 0.8);
+    box-shadow: 0 0 2px rgba(205, 208, 212, 0.25);
+}
+
+.pp-frame--gold {
+    --notch-size: 9px;
+    --frame-chrome-bg: linear-gradient(180deg, rgba(50, 38, 12, 0.95), rgba(28, 22, 8, 0.96));
+    --frame-art-bg: linear-gradient(180deg, rgba(70, 55, 20, 0.7), rgba(35, 26, 10, 0.85));
+    border-color: rgba(240, 198, 74, 0.55);
+    box-shadow: 0 0 0 1px rgba(240, 198, 74, 0.12) inset;
+}
+.pp-frame--gold::before,
+.pp-frame--gold::after,
+.pp-frame--gold > .pp-frame__corner-bl,
+.pp-frame--gold > .pp-frame__corner-br {
+    background: linear-gradient(135deg, var(--tier-gold) 0%, var(--tier-gold-dim) 100%);
+    border-color: rgba(240, 198, 74, 0.9);
+    box-shadow: 0 0 4px rgba(240, 198, 74, 0.4);
+}
+
+.pp-frame--platinum {
+    --notch-size: 10px;
+    --frame-chrome-bg: linear-gradient(180deg, rgba(30, 44, 56, 0.95), rgba(16, 25, 34, 0.96));
+    --frame-art-bg: linear-gradient(180deg, rgba(40, 60, 80, 0.6), rgba(18, 30, 40, 0.85));
+    border-color: rgba(207, 232, 240, 0.6);
+    box-shadow: 0 0 0 1px rgba(207, 232, 240, 0.18) inset;
+}
+.pp-frame--platinum::before,
+.pp-frame--platinum::after,
+.pp-frame--platinum > .pp-frame__corner-bl,
+.pp-frame--platinum > .pp-frame__corner-br {
+    background: linear-gradient(135deg,
+        var(--tier-platinum) 0%,
+        #ffffff 30%,
+        var(--tier-platinum) 55%,
+        var(--tier-platinum-dim) 90%);
+    border-color: rgba(207, 232, 240, 0.95);
+    box-shadow: 0 0 5px rgba(207, 232, 240, 0.5);
+    animation: pp-notch-shimmer 3.2s ease-in-out infinite;
+}
+@keyframes pp-notch-shimmer {
+    0%, 100% { opacity: 0.85; box-shadow: 0 0 4px rgba(207, 232, 240, 0.4); }
+    50%      { opacity: 1;    box-shadow: 0 0 9px rgba(207, 232, 240, 0.75); }
+}
+
+
+/* ============================================================
+ * 5. State: earned (engraving, hover lift, gleam)
+ *
+ * The engraving lives at the bottom of the plinth: a small caps
+ * label + tabular-figure number with a faux "engraved into
+ * chrome" shadow (dark bottom + faint top hairline). Each
+ * Pursuer's frame carries their permanent earn-rank engraved
+ * into the plinth (decorated format: "#247 of all time").
+ * ============================================================ */
+.pp-frame__engraving {
+    margin-top: 2px;
+    padding-top: 4px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.07);
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 5px;
+    font-size: 7.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: rgba(255, 255, 255, 0.35);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+.pp-frame__engraving-num {
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.55),
+        0 -0.5px 0 rgba(255, 255, 255, 0.08);
+}
+.pp-frame--bronze   .pp-frame__engraving-num { color: rgba(220, 150, 80, 0.9); }
+.pp-frame--silver   .pp-frame__engraving-num { color: rgba(215, 220, 225, 0.9); }
+.pp-frame--gold     .pp-frame__engraving-num {
+    color: rgba(245, 215, 120, 0.95);
+    text-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.55),
+        0 0 4px rgba(240, 198, 74, 0.22);
+}
+.pp-frame--platinum .pp-frame__engraving-num {
+    color: rgba(220, 240, 250, 0.95);
+    text-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.55),
+        0 0 5px rgba(207, 232, 240, 0.28);
+}
+.pp-frame--unearned .pp-frame__engraving,
+.pp-frame--unearned .pp-frame__engraving-num { color: rgba(255, 255, 255, 0.35); }
+
+/* Placeholder engraving slot — reserves vertical space on
+ * pinned / in-progress / pre-earn cards so plinth height stays
+ * constant across states. */
+.pp-frame__engraving--placeholder > * {
+    visibility: hidden;
+}
+
+/* First-earn celebration — subtle steady pulse on the
+ * engraving number for #1 holders. */
+.pp-frame__engraving--first .pp-frame__engraving-num {
+    animation: pp-engraving-first 3.2s ease-in-out infinite;
+}
+@keyframes pp-engraving-first {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 1; }
+}
+
+/* Current-cycle print line — RENDERED AS PRINTED INK ON CHROME,
+ * not engraved. Lives inline-right of the badge name on the
+ * same row, vertically stacking above the rarity (same column).
+ * Refreshed each maintenance cycle alongside name / dates /
+ * rarity; the mint engraving below stays permanent. Faint cyan
+ * tint signals "active / current standing." */
+.pp-frame__cycle-print {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.2;
+    color: rgba(160, 215, 235, 0.72);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.pp-frame__cycle-print-num {
+    font-weight: 800;
+    color: rgba(195, 235, 250, 0.95);
+    margin-right: 4px;
+    letter-spacing: 0;
+}
+.pp-frame__cycle-print-label {
+    opacity: 0.78;
+}
+
+/* Set number — engraved in the bottom-right corner of the plinth.
+ * Shared across every badge of the same (series, tier) — it's
+ * the print-run / edition stamp, like a manufacturer's mark on
+ * a watch case-back. Etched chrome treatment matching the mint
+ * engraving (deboss text-shadow), tier-tinted, ambient. Always
+ * 4 digits zero-padded (e.g. 0009, 0247) so the stamp reads as
+ * a fixed-format part number. */
+.pp-frame__set-mark {
+    position: absolute;
+    bottom: 5px;
+    right: 9px;
+    font-size: 8.5px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    color: rgba(255, 255, 255, 0.38);
+    text-shadow:
+        0 1px 0 rgba(0, 0, 0, 0.6),
+        0 -0.5px 0 rgba(255, 255, 255, 0.08);
+    line-height: 1;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+    z-index: 3;
+}
+.pp-frame--bronze   .pp-frame__set-mark { color: rgba(220, 180, 130, 0.5); }
+.pp-frame--silver   .pp-frame__set-mark { color: rgba(225, 230, 240, 0.5); }
+.pp-frame--gold     .pp-frame__set-mark { color: rgba(245, 220, 140, 0.55); }
+.pp-frame--platinum .pp-frame__set-mark { color: rgba(220, 240, 250, 0.6); }
+
+/* Shared hover lift + tier-tinted outer shadow. Gleam sweep
+ * sits on .pp-hover-a below. */
+.pp-frame:hover { transform: translateY(-4px); }
+.pp-frame--bronze:hover {
+    box-shadow: 0 8px 28px rgba(200, 122, 59, 0.22), 0 0 0 1px rgba(200, 122, 59, 0.55);
+}
+.pp-frame--silver:hover {
+    box-shadow: 0 8px 28px rgba(205, 208, 212, 0.22), 0 0 0 1px rgba(205, 208, 212, 0.55);
+}
+.pp-frame--gold:hover {
+    box-shadow: 0 10px 32px rgba(240, 198, 74, 0.28), 0 0 0 1px rgba(240, 198, 74, 0.65);
+}
+.pp-frame--platinum:hover {
+    box-shadow: 0 12px 36px rgba(207, 232, 240, 0.32), 0 0 0 1px rgba(207, 232, 240, 0.75);
+}
+
+
+/* ============================================================
+ * 6. State: blueprint / unearned
+ *
+ * Unearned badges render as an architectural blueprint of what
+ * the Pursuer is working toward. As stages are earned, the
+ * badge builds upward from the bottom of the blueprint into
+ * full-color rendered art (controlled by --pp-build 0-100%).
+ *
+ * Pass progress as inline style on the card:
+ *   <div class="pp-frame ... pp-frame--blueprint" style="--pp-build: 80%">
+ * ============================================================ */
+.pp-frame--unearned {
+    background: rgba(20, 22, 28, 0.92);
+    border-style: dashed;
+    cursor: default;
+}
+.pp-frame--unearned .pp-frame__art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(180deg, rgba(20, 22, 28, 0.55), rgba(20, 22, 28, 0.78)),
+        repeating-linear-gradient(45deg,
+            transparent 0px, transparent 6px,
+            rgba(255, 255, 255, 0.03) 6px, rgba(255, 255, 255, 0.03) 7px);
+    pointer-events: none;
+    z-index: 4;
+}
+.pp-frame--unearned .pp-frame__locked {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    color: rgba(255, 255, 255, 0.55);
+}
+.pp-frame--unearned .pp-frame__name { color: rgba(255, 255, 255, 0.6); }
+.pp-frame--unearned:hover { transform: translateY(-2px); }
+
+.pp-frame--blueprint { --pp-build: 0%; }
+
+/* Blueprint grid lives on a dedicated child so we can crossfade
+ * between blueprint mode and the tier-tinted earned background
+ * smoothly via opacity during the Earn Moment. */
+.pp-frame__blueprint-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    background:
+        repeating-linear-gradient(0deg,
+            rgba(120, 200, 230, 0.18) 0,
+            rgba(120, 200, 230, 0.18) 1px,
+            transparent 1px,
+            transparent 14px),
+        repeating-linear-gradient(90deg,
+            rgba(120, 200, 230, 0.18) 0,
+            rgba(120, 200, 230, 0.18) 1px,
+            transparent 1px,
+            transparent 14px),
+        linear-gradient(135deg, rgba(18, 32, 52, 0.96), rgba(10, 18, 32, 0.98));
+}
+.pp-frame--blueprint .pp-frame__blueprint-grid { opacity: 1; }
+
+/* Cyan veil over the art area on blueprint+unearned so even
+ * the built portion reads as "draft / in production." */
+.pp-frame--blueprint.pp-frame--unearned .pp-frame__art::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(40, 90, 130, 0.18), rgba(20, 50, 80, 0.28));
+    z-index: 3;
+    pointer-events: none;
+    display: block;
+}
+
+/* Mask the badge layers so only the built portion renders.
+ * The transparent stop ends AT the build line, and the lower
+ * buffer width is `min(6%, 100% - build)` so the transition
+ * zone shrinks to zero at the edges:
+ *   • build = 0%   → all stops collapse to 0% → layer hidden
+ *   • build = 100% → buffer = 0, mask is solid 0-100% → full
+ *                    badge visible (no top sliver fading)
+ *   • build in between → 6%-wide soft transition at the line
+ *
+ * Without the dynamic buffer, build = 100% would still leave a
+ * 6% top-of-badge fade that only resolves when the blueprint
+ * class is stripped at the end of phase 6 — visually reading as
+ * "the top spawns in" later in the earn moment.
+ *
+ * Slight desaturation + brightness drop on the visible portion
+ * so the built area reads as a draft print, not the final card. */
+.pp-frame--blueprint .pp-frame__layer {
+    -webkit-mask-image: linear-gradient(
+        to top,
+        black 0%,
+        black calc(var(--pp-build) - min(6%, 100% - var(--pp-build))),
+        transparent var(--pp-build),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to top,
+        black 0%,
+        black calc(var(--pp-build) - min(6%, 100% - var(--pp-build))),
+        transparent var(--pp-build),
+        transparent 100%
+    );
+    opacity: 0.82;
+    filter: saturate(0.6) brightness(0.85);
+}
+
+/* Construction line — subtle horizontal glow at the build edge. */
+.pp-frame--blueprint .pp-frame__art::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: var(--pp-build);
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(160, 220, 240, 0.85) 25%,
+        rgba(220, 240, 250, 1) 50%,
+        rgba(160, 220, 240, 0.85) 75%,
+        transparent 100%);
+    box-shadow:
+        0 0 5px rgba(160, 220, 240, 0.65),
+        0 0 12px rgba(160, 220, 240, 0.3);
+    z-index: 5;
+    pointer-events: none;
+}
+
+/* Fabricating banner across the top of the art container. */
+.pp-frame__fab-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 6;
+    background: linear-gradient(90deg,
+        rgba(12, 32, 52, 0.94),
+        rgba(28, 58, 90, 0.94),
+        rgba(12, 32, 52, 0.94));
+    color: rgba(190, 230, 245, 0.95);
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    padding: 4px 0 3px;
+    text-align: center;
+    border-bottom: 1px solid rgba(120, 200, 230, 0.5);
+    animation: pp-fab-pulse 2.4s ease-in-out infinite;
+    pointer-events: none;
+}
+.pp-frame__fab-banner::after {
+    content: "...";
+    display: inline-block;
+    width: 1.6em;
+    text-align: left;
+    animation: pp-fab-dots 1.6s steps(1, end) infinite;
+}
+@keyframes pp-fab-dots {
+    0%   { content: ""; }
+    25%  { content: "."; }
+    50%  { content: ".."; }
+    75%  { content: "..."; }
+}
+@keyframes pp-fab-pulse {
+    0%, 100% { opacity: 0.88; }
+    50%      { opacity: 1; }
+}
+
+/* Blueprint mode: cyan-tinted lock, dashed ribbon styling. */
+.pp-frame--blueprint.pp-frame--unearned .pp-frame__locked {
+    color: rgba(160, 220, 240, 0.55);
+    z-index: 5;
+}
+
+/* Small "TO EARN" technical stamp shown on 0%-build cards.
+ * Built-progress cards drop this in favor of the construction
+ * line. */
+.pp-frame__blueprint-mark {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    color: rgba(160, 220, 240, 0.7);
+    text-transform: uppercase;
+    pointer-events: none;
+}
+
+/* Schematic glow hover — the blueprint analogue of the earned
+ * card's tier-warm gleam. The grid lines crisp up subtly, the
+ * hover-shadow shifts to a cool cyan (so a blueprint hover never
+ * reads as "earned"), and the dashed border brightens. Pinned
+ * blueprint cards already carry the accent pulse, so this hover
+ * gives way to that signal via :not(.pp-frame--pinned-accent). */
+.pp-frame--blueprint .pp-frame__blueprint-grid {
+    transition: filter 240ms ease;
+}
+.pp-frame--blueprint:hover .pp-frame__blueprint-grid {
+    filter: brightness(1.5) saturate(1.15);
+}
+.pp-frame--blueprint:not(.pp-frame--pinned-accent):hover {
+    box-shadow:
+        0 8px 28px rgba(120, 200, 230, 0.22),
+        0 0 0 1px rgba(120, 200, 230, 0.55);
+    border-color: rgba(160, 220, 240, 0.7);
+}
+
+/* Weld build animation — the default building motion.
+ * Activated alongside .is-animating; JS bumps --pp-build to
+ * the new target. The construction line briefly glows hot
+ * (orange-white) and welding sparks fly. */
+.pp-anim-weld { transition: --pp-build 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+.pp-anim-weld.is-animating .pp-frame__art::before {
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 215, 130, 0.95) 25%,
+        rgba(255, 250, 230, 1) 50%,
+        rgba(255, 215, 130, 0.95) 75%,
+        transparent 100%);
+    box-shadow:
+        0 0 6px rgba(255, 200, 100, 0.95),
+        0 0 14px rgba(255, 160, 50, 0.55),
+        0 0 28px rgba(255, 120, 30, 0.25);
+    height: 1.5px;
+    transition:
+        background 350ms ease-in,
+        box-shadow 350ms ease-in,
+        height 350ms ease-in;
+}
+/* Reset helper — suppress the --pp-build transition while a
+ * reset is in progress (JS toggles this class around resets). */
+.pp-frame--blueprint.pp-anim-resetting { transition: none !important; }
+/* Maintenance reset — kill all maintenance transitions during the
+ * Reset snap-back so the card returns to its staged appearance
+ * instantly instead of playing the cool / stripe / plinth-swap
+ * transitions in reverse. */
+.pp-frame--maintenance.pp-anim-resetting,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__layer,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__plinth,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__name,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__plinth-meta,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__damage-overlay,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__repair-pips,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__cycle-print--maintenance,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__repair-banner,
+.pp-frame--maintenance.pp-anim-resetting .pp-frame__art::before {
+    transition: none !important;
+    animation: none !important;
+}
+
+
+/* ============================================================
+ * 6.5. State: maintenance
+ *
+ * Earned badges enter MAINTENANCE when a new game ships in the
+ * series — the achievement still happened (mint engraving stays
+ * permanent), but the badge is currently dormant and the user
+ * needs to re-earn it. Different from blueprint (never earned):
+ * the engravings are a permanent record, only the PRINTED layer
+ * fades. Three visual directions are mocked here as variant
+ * classes for side-by-side comparison; once a direction is
+ * picked, we'll fold the chosen treatment into the canonical
+ * .pp-frame--maintenance rules and drop the other two.
+ *
+ * Common across all three variants: decorative animations pause
+ * (mythic pulse, platinum notch shimmer, first-earn pulse,
+ * pinned-accent pulse — anything that signals "active"). The
+ * card's own hover gleam is suppressed (badge isn't active).
+ * ============================================================ */
+.pp-frame--maintenance .pp-frame__rarity--mythic,
+.pp-frame--maintenance.pp-frame--platinum::before,
+.pp-frame--maintenance.pp-frame--platinum::after,
+.pp-frame--maintenance.pp-frame--platinum > .pp-frame__corner-bl,
+.pp-frame--maintenance.pp-frame--platinum > .pp-frame__corner-br,
+.pp-frame--maintenance .pp-frame__engraving--first .pp-frame__engraving-num {
+    animation: none;
+}
+.pp-hover-a.pp-frame--maintenance .pp-frame__gleam,
+.pp-hover-a.pp-frame--maintenance:hover .pp-frame__gleam {
+    opacity: 0 !important;
+    transform: translateX(-100%) !important;
+    transition: none !important;
+}
+
+/* -------- Shared maintenance visuals (all variants) -------- */
+
+/* Repair banner at the top of the art — amber/warm counterpart
+ * to the blueprint's cyan FABRICATING banner. Pulses with the
+ * same cadence so the two states feel like cousins. */
+.pp-frame__repair-banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 6;
+    background: linear-gradient(90deg,
+        rgba(48, 16, 4, 0.94),
+        rgba(120, 55, 22, 0.94),
+        rgba(48, 16, 4, 0.94));
+    color: rgba(255, 200, 140, 0.95);
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    padding: 4px 0 3px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 140, 60, 0.55);
+    animation: pp-fab-pulse 2.4s ease-in-out infinite;
+    pointer-events: none;
+}
+.pp-frame__repair-banner::after {
+    content: "...";
+    display: inline-block;
+    width: 1.6em;
+    text-align: left;
+    animation: pp-fab-dots 1.6s steps(1, end) infinite;
+}
+
+/* Damage overlay — diagonal hatched warning pattern, masked so
+ * it renders only ABOVE the --pp-build line. The repaired bottom
+ * portion of the badge stays clean (visible behind the overlay's
+ * transparent zone); the unrepaired upper portion is covered by
+ * the warning hatch + a slight red wash. Unmistakable read of
+ * "broken" without hiding the badge artwork itself. */
+.pp-frame__damage-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(45deg,
+            rgba(230, 110, 50, 0.45) 0,
+            rgba(230, 110, 50, 0.45) 5px,
+            transparent 5px,
+            transparent 11px),
+        linear-gradient(180deg, rgba(60, 18, 8, 0.4), rgba(95, 35, 14, 0.55));
+    -webkit-mask-image: linear-gradient(
+        to top,
+        transparent 0%,
+        transparent calc(var(--pp-build, 0%) - 3%),
+        black calc(var(--pp-build, 0%) + 3%),
+        black 100%
+    );
+    mask-image: linear-gradient(
+        to top,
+        transparent 0%,
+        transparent calc(var(--pp-build, 0%) - 3%),
+        black calc(var(--pp-build, 0%) + 3%),
+        black 100%
+    );
+}
+
+/* Amber repair line riding the --pp-build height — the warm
+ * counterpart to blueprint's cyan construction line. Marks the
+ * boundary between repaired (below) and broken (above). Bumped
+ * thickness + glow so the boundary reads loud at a glance. */
+.pp-frame--maintenance .pp-frame__art::before {
+    content: "";
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    bottom: var(--pp-build, 0%);
+    height: 2.5px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 165, 80, 1) 20%,
+        rgba(255, 235, 170, 1) 50%,
+        rgba(255, 165, 80, 1) 80%,
+        transparent 100%);
+    box-shadow:
+        0 0 8px rgba(255, 175, 90, 0.95),
+        0 0 18px rgba(255, 140, 50, 0.6),
+        0 0 32px rgba(255, 100, 40, 0.35);
+    z-index: 5;
+    pointer-events: none;
+}
+
+/* Stage pips — discrete progress markers in the plinth, one
+ * per stage. Done = bright amber gradient with glow. Remaining
+ * = dim amber outline. Renders below the meta line, pairs with
+ * the "X of Y repaired" text for a redundant scannable signal. */
+.pp-frame__repair-pips {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+.pp-frame__repair-pip {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 5px;
+    border-radius: 2px;
+    background: rgba(80, 35, 12, 0.55);
+    border: 1px solid rgba(255, 165, 80, 0.32);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.35) inset;
+}
+.pp-frame__repair-pip--done {
+    background: linear-gradient(180deg, rgba(255, 215, 140, 1) 0%, rgba(225, 145, 60, 1) 100%);
+    border-color: rgba(255, 220, 150, 0.95);
+    box-shadow:
+        0 0 5px rgba(255, 175, 90, 0.7),
+        0 1px 0 rgba(255, 235, 180, 0.4) inset,
+        0 -1px 0 rgba(120, 60, 18, 0.35) inset;
+}
+
+/* Cycle-print slot when in maintenance — re-tinted per variant
+ * below. Bumped font + brightness + a soft warm glow so the
+ * status label reads with the punch of a warning light rather
+ * than a translucent footnote. */
+.pp-frame__cycle-print--maintenance {
+    color: rgba(255, 215, 150, 1);
+    font-size: 10.5px;
+    text-shadow:
+        0 0 6px rgba(255, 155, 70, 0.55),
+        0 1px 0 rgba(0, 0, 0, 0.5);
+}
+.pp-frame__cycle-print--maintenance .pp-frame__cycle-print-label {
+    opacity: 1;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+}
+
+/* Cool-dormant badge layer — the badge "sleeps cool" while every
+ * repair-CTA signal stays warm. The temperature contrast carries
+ * the whole maintenance mood: a dormant card surrounded by warm
+ * wake-up calls. Engravings (mint + set) stay at full opacity —
+ * etched chrome doesn't age.
+ *
+ * The transitions below run when the active→maintenance moment
+ * animation plays. For a card rendered DIRECTLY in maintenance
+ * state (no animation), the transitions still apply but settle
+ * instantly because the staging class is never present. */
+/* Active→Maintenance phase transitions. Beats are spread out so
+ * each phase has its own visible moment instead of overlapping
+ * into mush:
+ *   T=0-1500    badge cools, plinth fades
+ *   T=1700-2400 signals fade in (overlay, pips, label, line)
+ *   T=2500-3000 RESTORING banner slides down
+ *   (JS) T=3100-3850  MAINTENANCE band drop keyframe + impact
+ *   (JS) T=3700        meta text swap
+ *   (JS) T=4100        complete; ambient sparks begin
+ */
+/* Transitions for the maintenance state.
+ *
+ * Badge cool-down runs during the printing-pass beam in Phase 2.
+ * The stripes follow as their own beat AFTER the beam ends:
+ * descent in Phase 2b, retract in Phase 2c. Plinth swap follows
+ * in Phase 3, each step its own discrete moment for cohesion.
+ *
+ * Two finer-grained hidden classes:
+ *   .pp-maint-stripes-hidden        — keeps stripes invisible (held
+ *                                     by --pp-build:110% via !important);
+ *                                     removed at Phase 2b start (after
+ *                                     the print pass beam).
+ *   .pp-maint-plinth-extras-hidden  — keeps pips + REACTIVATE label
+ *                                     invisible; removed at Phase 3b
+ *                                     when the plinth is below the
+ *                                     clipwrap mid-swap. */
+.pp-frame--maintenance {
+    transition: --pp-build 800ms cubic-bezier(0.45, 0.05, 0.55, 0.95),
+                --maint-ascent 1800ms cubic-bezier(0.4, 0.1, 0.6, 0.9);
+}
+.pp-frame--maintenance .pp-frame__layer {
+    filter: saturate(0.5) hue-rotate(-8deg) brightness(0.92);
+    transition: filter 1500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pp-frame--maintenance .pp-frame__name,
+.pp-frame--maintenance .pp-frame__plinth-meta {
+    opacity: 0.72;
+    transition: opacity 600ms ease-out;
+}
+.pp-frame--maintenance .pp-frame__damage-overlay {
+    transition: opacity 400ms ease-out;
+}
+.pp-frame--maintenance .pp-frame__repair-pips,
+.pp-frame--maintenance .pp-frame__cycle-print--maintenance {
+    transition: opacity 300ms ease-out;
+}
+
+/* Stripes-hidden — keeps the damage overlay invisible by
+ * holding --pp-build at 110% (the mask fully clips at this
+ * value, and the repair line sits off the top of the art).
+ * Used by staged cards during Phase 1 (diagnostic scans) and
+ * removed at Phase 2 start so the stripes descend WITH the
+ * print pass beam. !important is needed because the inline
+ * style="--pp-build: X%" from the partial would otherwise win. */
+.pp-maint-stripes-hidden.pp-frame--maintenance {
+    --pp-build: 110% !important;
+}
+
+/* Ascent overlay — full-face element that handles the bottom-up
+ * stripes growth during Phase 2. Lives at the FACE level (not
+ * inside the art) so its mask uses face-relative percentages,
+ * the same coordinate system the print pass beam sweeps in. The
+ * title bar (z-index 5) and plinth-clipwrap (z-index 5) sit
+ * above this overlay (z-index 4), so the user only sees stripes
+ * inside the art region — but the mask boundary moves in
+ * perfect lockstep with the beam, no bezier inversion needed.
+ *
+ * Hidden by default (opacity 0); revealed only while the
+ * ascending class is on. The art-level damage overlay is
+ * hidden during the same window so the two don't fight; once
+ * the ascent ends and the ascending class lifts, the art-level
+ * overlay takes over with --pp-build at -3% (full coverage),
+ * which is what the ascent ends at face-relative — visually
+ * seamless. */
+.pp-frame__damage-overlay-face {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0;
+    background:
+        repeating-linear-gradient(45deg,
+            rgba(230, 110, 50, 0.45) 0,
+            rgba(230, 110, 50, 0.45) 5px,
+            transparent 5px,
+            transparent 11px),
+        linear-gradient(180deg, rgba(60, 18, 8, 0.4), rgba(95, 35, 14, 0.55));
+    -webkit-mask-image: linear-gradient(
+        to top,
+        black 0%,
+        black calc(var(--maint-ascent, 0%) - 3%),
+        transparent calc(var(--maint-ascent, 0%) + 3%),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to top,
+        black 0%,
+        black calc(var(--maint-ascent, 0%) - 3%),
+        transparent calc(var(--maint-ascent, 0%) + 3%),
+        transparent 100%
+    );
+}
+.pp-maint-stripes-ascending .pp-frame__damage-overlay-face {
+    opacity: 1;
+}
+.pp-maint-stripes-ascending .pp-frame__damage-overlay {
+    opacity: 0;
+}
+.pp-maint-stripes-ascending.pp-frame--maintenance .pp-frame__art::before {
+    opacity: 0;
+}
+
+/* Plinth-extras-hidden — keeps the pips + REACTIVATE label
+ * invisible until Phase 3 (plinth swap). They reveal AT the
+ * moment the plinth is at translateY(100%) below the clipwrap
+ * (invisible), so the user sees them only when the new plinth
+ * slides back up from below. */
+.pp-maint-plinth-extras-hidden .pp-frame__repair-pips,
+.pp-maint-plinth-extras-hidden .pp-frame__cycle-print--maintenance {
+    opacity: 0;
+}
+
+/* Plinth clipwrap — overflow-hidden envelope so the plinth can
+ * translateY off the bottom of the card during the swap without
+ * leaking below the card boundary. Always present in the DOM;
+ * inert when the plinth sits at translateY(0). Inherits the
+ * card's bottom corner-rounding so the clip boundary matches
+ * the card's actual silhouette. */
+.pp-frame__plinth-clipwrap {
+    position: relative;
+    overflow: hidden;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+    z-index: 5;
+}
+/* Plinth slide transition — JS animates transform during the
+ * Phase 3 swap. The transition is on the plinth itself so that
+ * inline transform changes (set by JS) animate smoothly. */
+.pp-frame__plinth {
+    transition: transform 650ms cubic-bezier(0.4, 0, 0.5, 1);
+    will-change: transform;
+}
+/* Banner — hidden by default in maintenance state. Visibility
+ * snaps via class-change rather than transition (CSS spec has
+ * a "visible wins" quirk on visibility transitions from
+ * hidden→visible that ignores transition-delay, so we drive the
+ * reveal through an explicit .pp-maint-banner-shown class). */
+.pp-frame--maintenance .pp-frame__repair-banner {
+    transform: translateY(-110%);
+    opacity: 0;
+    visibility: hidden;
+    animation: none;
+    transition: transform 950ms cubic-bezier(0.36, 0.66, 0.4, 1),
+                opacity 950ms ease-out;
+}
+.pp-frame--maintenance.pp-maint-banner-shown .pp-frame__repair-banner {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+    animation: pp-fab-pulse 2.4s ease-in-out infinite;
+}
+.pp-frame--maintenance .pp-frame__art::before {
+    transition: opacity 400ms ease-out;
+}
+/* Repair line — visibility is governed by --pp-build alone
+ * (bottom: var(--pp-build)). At --pp-build:110% the line is
+ * positioned above the visible art, so no explicit opacity hide
+ * is needed; the stripes-hidden class handles it via --pp-build. */
+
+/* Staging state — applied alongside .pp-frame--maintenance to
+ * hold the card in its pre-animation "still active" appearance.
+ * PlatPursuit.Frame.triggerMaintenanceMoment removes this class
+ * to play the active→maintenance transition. Without the JS, a
+ * staged card just sits visually identical to an earned one
+ * with the maintenance DOM rendered hidden. */
+.pp-frame--maint-staged.pp-frame--maintenance .pp-frame__layer {
+    filter: saturate(1) hue-rotate(0deg) brightness(1);
+}
+.pp-frame--maint-staged.pp-frame--maintenance .pp-frame__name,
+.pp-frame--maint-staged.pp-frame--maintenance .pp-frame__plinth-meta {
+    opacity: 1;
+}
+/* Signal-hide for the staged state is now handled by two
+ * finer-grained classes added by the partial alongside
+ * .pp-frame--maint-staged for staged cards: stripes-hidden
+ * (removed at Phase 2 start so stripes descend with the beam)
+ * and plinth-extras-hidden (removed mid-Phase 3 plinth swap). */
+/* Staged banner — already hidden by the base
+ * .pp-frame--maintenance rule above. No additional staged
+ * override needed since the .pp-maint-banner-shown class is
+ * what controls reveal. */
+.pp-frame--maint-staged.pp-frame--maintenance .pp-frame__art::before {
+    opacity: 0;
+}
+/* Staged band — already hidden by the base .pp-frame__maint-stamp
+ * rule (opacity: 0). No additional override needed. */
+
+/* Maintenance band drop — the dramatic beat of the choreography.
+ * Triggered by adding .pp-maint-band-drop on the card; the band
+ * falls from above the frame, slightly overshoots its centered
+ * resting position, and snaps back. The bezier in the animation
+ * timing function carries the overshoot. */
+@keyframes pp-maint-band-drop {
+    0% {
+        transform: translate(-50%, calc(-50% - 280px)) rotate(-5deg);
+        opacity: 0;
+    }
+    18% { opacity: 1; }
+    65% {
+        transform: translate(-50%, calc(-50% + 14px)) rotate(-5deg);
+        opacity: 1;
+    }
+    82% {
+        transform: translate(-50%, calc(-50% - 7px)) rotate(-5deg);
+    }
+    100% {
+        transform: translate(-50%, -50%) rotate(-5deg);
+        opacity: 1;
+    }
+}
+.pp-maint-band-drop .pp-frame__maint-stamp {
+    animation: pp-maint-band-drop 1300ms cubic-bezier(0.36, 0.66, 0.4, 1) forwards;
+}
+
+/* Tiny shake on the whole card at the band's moment of impact —
+ * sells the "clack" without needing a sound. Added briefly by JS
+ * at the band's ~65% keyframe (~490ms into the drop). */
+@keyframes pp-maint-impact-shake {
+    0%, 100% { transform: translateY(0); }
+    25%      { transform: translateY(2px); }
+    50%      { transform: translateY(-1px); }
+    75%      { transform: translateY(1px); }
+}
+.pp-maint-impact-shake {
+    animation: pp-maint-impact-shake 220ms ease-out;
+}
+
+/* Maintenance band — a heavy amber plastic plate stretched
+ * across the center of the card, bolted to the chrome with a
+ * grommet at each end. Slight tilt suggests it was riveted on
+ * by hand. Rendered only when state=maintenance.
+ *
+ * Hidden by default (opacity: 0). Two paths to reveal:
+ *   - Direct maintenance cards get .pp-maint-band-shown from the
+ *     partial, which sets opacity:1 statically.
+ *   - The active→maintenance choreography adds .pp-maint-band-drop
+ *     to play the drop keyframe; that keyframe ends at opacity:1
+ *     and uses `forwards` to hold it there. */
+.pp-frame__maint-stamp {
+    opacity: 0;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-5deg);
+    padding: 7px 28px;
+    background: linear-gradient(180deg,
+        rgba(252, 215, 95, 1) 0%,
+        rgba(245, 195, 70, 1) 45%,
+        rgba(220, 165, 50, 1) 100%);
+    border: 2px solid rgba(115, 72, 18, 0.95);
+    border-radius: 3px;
+    color: rgba(40, 22, 4, 1);
+    font-size: 13.5px;
+    font-weight: 900;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+    z-index: 8;
+    pointer-events: none;
+    box-shadow:
+        0 5px 9px rgba(0, 0, 0, 0.6),
+        0 1px 0 rgba(255, 240, 180, 0.45) inset,
+        0 -1px 0 rgba(130, 80, 20, 0.55) inset,
+        0 0 0 1px rgba(255, 240, 180, 0.2) inset;
+    text-shadow: 0 1px 0 rgba(255, 240, 190, 0.45);
+}
+/* Left grommet — the metal stud anchoring the left end of the
+ * band to the chrome. Dark inset + bright rim + tiny glint sells
+ * the "punched through and riveted" effect. */
+.pp-frame__maint-stamp::before,
+.pp-frame__maint-stamp::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%,
+        rgba(255, 235, 175, 0.7) 0%,
+        rgba(90, 55, 14, 1) 30%,
+        rgba(35, 18, 4, 1) 70%,
+        rgba(10, 4, 0, 1) 100%);
+    box-shadow:
+        0 0 0 1px rgba(255, 235, 175, 0.55),
+        0 1px 1px rgba(0, 0, 0, 0.5) inset,
+        0 0 3px rgba(255, 220, 140, 0.3);
+}
+.pp-frame__maint-stamp::before { left: 6px; }
+.pp-frame__maint-stamp::after  { right: 6px; }
+
+/* Show the band statically (no animation) — used by direct
+ * maintenance cards on initial render so the band is visible
+ * from the start. The choreography uses pp-maint-band-drop
+ * instead. */
+.pp-frame--maintenance.pp-maint-band-shown .pp-frame__maint-stamp {
+    opacity: 1;
+}
+
+/* Diagnostic scan — thin cyan horizontal line that sweeps over
+ * the badge during the cool-down phase of the active→maintenance
+ * choreography. Two top-to-bottom passes back-to-back read as
+ * "system examining the card before tagging it out." Injected
+ * dynamically by JS so it lives exactly one cycle per play. */
+.pp-frame__diag-scan {
+    position: absolute;
+    opacity: 0;
+    z-index: 5;
+    pointer-events: none;
+    box-shadow:
+        0 0 6px rgba(140, 220, 240, 0.95),
+        0 0 14px rgba(80, 180, 220, 0.6),
+        0 0 26px rgba(60, 150, 200, 0.3);
+}
+.pp-frame__diag-scan--v {
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(140, 220, 240, 0.92) 22%,
+        rgba(220, 245, 255, 1) 50%,
+        rgba(140, 220, 240, 0.92) 78%,
+        transparent 100%);
+    animation: pp-maint-diag-scan-v 550ms ease-in-out forwards;
+}
+.pp-frame__diag-scan--h {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        rgba(140, 220, 240, 0.92) 22%,
+        rgba(220, 245, 255, 1) 50%,
+        rgba(140, 220, 240, 0.92) 78%,
+        transparent 100%);
+    animation: pp-maint-diag-scan-h 550ms ease-in-out forwards;
+}
+@keyframes pp-maint-diag-scan-v {
+    0%   { top: 0%;   opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+@keyframes pp-maint-diag-scan-h {
+    0%   { left: 0%;   opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+}
+
+/* Printing-pass beam — heavy, deliberate sweep bottom-to-top
+ * across the entire card face during the transformation phase.
+ * Slower and beefier than the two quick diagnostic scans above;
+ * reads as a print head depositing the new "dormant" status
+ * onto the card. Near-linear motion so it feels mechanical
+ * rather than springy, with a faint cyan ink trail beneath the
+ * beam (::after) for the deposit suggestion.
+ *
+ * While the beam passes, CSS transitions handle the badge
+ * cool-down, plinth fade, and signal reveals; JS swaps the meta
+ * text mid-sweep. */
+.pp-frame__diag-beam {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 5px;
+    bottom: 0%;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(140, 220, 240, 0.95) 16%,
+        rgba(240, 252, 255, 1) 50%,
+        rgba(140, 220, 240, 0.95) 84%,
+        transparent 100%);
+    box-shadow:
+        0 0 14px rgba(180, 232, 248, 1),
+        0 0 32px rgba(140, 220, 240, 0.8),
+        0 0 60px rgba(80, 180, 220, 0.55),
+        0 0 95px rgba(50, 150, 200, 0.3);
+    opacity: 0;
+    z-index: 7;
+    pointer-events: none;
+    animation: pp-maint-diag-beam-sweep 1800ms cubic-bezier(0.4, 0.1, 0.6, 0.9) forwards;
+}
+/* Ink trail — soft cyan wake fading below the beam, hinting at
+ * "the printer is laying something down." Travels with the beam
+ * because it's an ::after positioned just below the element. */
+.pp-frame__diag-beam::after {
+    content: "";
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 100%;
+    height: 36px;
+    background: linear-gradient(180deg,
+        rgba(140, 220, 240, 0.42) 0%,
+        rgba(140, 220, 240, 0.18) 35%,
+        rgba(140, 220, 240, 0.06) 70%,
+        transparent 100%);
+    pointer-events: none;
+}
+@keyframes pp-maint-diag-beam-sweep {
+    0%   { bottom: 0%;   opacity: 0; }
+    6%   { opacity: 1; }
+    94%  { opacity: 1; }
+    100% { bottom: 100%; opacity: 0; }
+}
+
+
+/* ============================================================
+ * 7. State: pinned (Variant D only — accent border + chip)
+ *
+ * The pinned badge is the one the Pursuer is actively pursuing
+ * (or has chosen to feature). The accent (luminous cyan) glow
+ * decouples "pinned" from tier color so the pinned card reads
+ * as "currently active in the system" rather than another tier
+ * echo. Variant D pairs the accent glow with an accent border
+ * for the strongest wayfinding signal.
+ * ============================================================ */
+.pp-frame--pinned-accent {
+    box-shadow:
+        0 0 0 1px rgba(63, 205, 220, 0.7),
+        0 0 18px rgba(63, 205, 220, 0.32),
+        0 0 34px rgba(63, 205, 220, 0.14);
+    animation: pp-pinned-pulse-accent 4s ease-in-out infinite;
+}
+@keyframes pp-pinned-pulse-accent {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(63, 205, 220, 0.7),  0 0 16px rgba(63, 205, 220, 0.28), 0 0 30px rgba(63, 205, 220, 0.12); }
+    50%      { box-shadow: 0 0 0 1px rgba(63, 205, 220, 0.85), 0 0 26px rgba(63, 205, 220, 0.42), 0 0 42px rgba(63, 205, 220, 0.2); }
+}
+.pp-frame--pinned-accent-border {
+    border-color: rgba(63, 205, 220, 0.85);
+}
+
+/* Pin chip — small circular badge with a map-pin icon, rotated
+ * slightly so it reads as a physical pin pressed into the chrome. */
+.pp-frame__pin {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    box-shadow:
+        0 2px 6px rgba(0, 0, 0, 0.5),
+        0 0 0 2px rgba(20, 24, 30, 0.95);
+    transform: rotate(-14deg);
+    pointer-events: none;
+    background: linear-gradient(135deg, #5FE0EE, #1FA5BD);
+}
+.pp-frame__pin svg {
+    width: 13px;
+    height: 13px;
+    color: #fff;
+}
+
+
+/* ============================================================
+ * 8. Hover (pp-hover-a) — the default and only hover variant
+ *
+ * Tier-tinted gleam beam sweeps across the card at 105deg on
+ * hover, paired with the shared translateY(-4px) lift defined
+ * in Section 5.
+ * ============================================================ */
+.pp-hover-a .pp-frame__gleam {
+    background: linear-gradient(105deg, transparent 30%, var(--gleam-color, rgba(255,255,255,0.2)) 50%, transparent 70%);
+    transform: translateX(-100%);
+    opacity: 0;
+    transition: transform 900ms ease, opacity 200ms ease;
+}
+.pp-hover-a:hover .pp-frame__gleam {
+    transform: translateX(100%);
+    opacity: 1;
+}
+.pp-hover-a.pp-frame--bronze { --gleam-color: rgba(255, 200, 150, 0.20); }
+.pp-hover-a.pp-frame--silver { --gleam-color: rgba(220, 230, 245, 0.30); }
+.pp-hover-a.pp-frame--gold   { --gleam-color: rgba(255, 220, 130, 0.42); }
+.pp-hover-a.pp-frame--platinum .pp-frame__gleam {
+    background: linear-gradient(105deg, transparent 25%,
+        rgba(180, 220, 255, 0.42) 40%,
+        rgba(255, 200, 220, 0.42) 50%,
+        rgba(180, 255, 220, 0.42) 60%,
+        transparent 75%);
+}
+/* Suppress the gleam while flipped so it doesn't co-fire with
+ * the flip animation. */
+.pp-hover-a.is-flipped .pp-frame__gleam,
+.pp-hover-a.is-flipped:hover .pp-frame__gleam {
+    opacity: 0 !important;
+    transform: translateX(-100%) !important;
+    transition: none !important;
+}
+/* Suppress the warm gleam on blueprint / unearned cards — a hot
+ * weld-sheen on a not-yet-earned badge reads wrong. Pinned blueprint
+ * cards keep their accent border + chip as the active wayfinding
+ * signal; the gleam stays off. */
+.pp-hover-a.pp-frame--blueprint .pp-frame__gleam,
+.pp-hover-a.pp-frame--blueprint:hover .pp-frame__gleam,
+.pp-hover-a.pp-frame--unearned .pp-frame__gleam,
+.pp-hover-a.pp-frame--unearned:hover .pp-frame__gleam {
+    opacity: 0 !important;
+    transform: translateX(-100%) !important;
+    transition: none !important;
+}
+
+
+/* ============================================================
+ * 9. Flippable + back face
+ *
+ * Click anywhere on a .pp-frame--flippable card to flip; click
+ * again to flip back. JS controller handles the toggle.
+ * Each face draws its own inset border so the edge stays crisp
+ * during the 3D transform.
+ * ============================================================ */
+.pp-frame--flippable {
+    perspective: 1400px;
+    cursor: pointer;
+}
+.pp-frame--flippable .pp-frame__inner {
+    position: relative;
+    width: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.75s cubic-bezier(0.4, 0.0, 0.2, 1);
+    will-change: transform;
+}
+.pp-frame--flippable .pp-frame__face {
+    box-shadow: inset 0 0 0 1px var(--frame-border);
+}
+.pp-frame--bronze.pp-frame--flippable   .pp-frame__face { box-shadow: inset 0 0 0 1px rgba(200, 122, 59, 0.4); }
+.pp-frame--silver.pp-frame--flippable   .pp-frame__face { box-shadow: inset 0 0 0 1px rgba(205, 208, 212, 0.4); }
+.pp-frame--gold.pp-frame--flippable     .pp-frame__face { box-shadow: inset 0 0 0 1px rgba(240, 198, 74, 0.55); }
+.pp-frame--platinum.pp-frame--flippable .pp-frame__face { box-shadow: inset 0 0 0 1px rgba(207, 232, 240, 0.6); }
+.pp-frame--flippable.is-flipped .pp-frame__inner {
+    transform: rotateY(180deg);
+}
+.pp-frame__face {
+    position: relative;
+    width: 100%;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.pp-frame__face--back {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: rotateY(180deg);
+    background: var(--frame-chrome-bg);
+    padding: 14px 14px 12px;
+    color: white;
+    justify-content: space-between;
+}
+.pp-frame--bronze   .pp-frame__face--back { border-top: 2px solid var(--tier-bronze); }
+.pp-frame--silver   .pp-frame__face--back { border-top: 2px solid var(--tier-silver); }
+.pp-frame--gold     .pp-frame__face--back { border-top: 2px solid var(--tier-gold); }
+.pp-frame--platinum .pp-frame__face--back { border-top: 2px solid var(--tier-platinum); }
+.pp-frame__back-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 8px;
+}
+.pp-frame__back-header .pp-frame__series { margin-bottom: 1px; }
+.pp-frame__back-header .pp-frame__name   { font-size: 13px; }
+.pp-frame__back-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 10px;
+    overflow: hidden;
+}
+.pp-frame__back-desc {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.4;
+    font-style: italic;
+}
+.pp-frame__back-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.pp-frame__back-stat {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 5px 7px;
+}
+.pp-frame__back-stat-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+.pp-frame__back-stat-value {
+    font-size: 11px;
+    color: white;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.pp-frame__back-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 700;
+}
+.pp-frame__back-flip-hint {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 8px;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    font-weight: 500;
+}
+
+
+/* ============================================================
+ * 10. Earn moment phases
+ *
+ * The choreographed completion sequence (~21s at gold scale,
+ * scaled per tier via --earn-scale: bronze 0.75x, silver 0.9x,
+ * gold 1.0x, platinum 1.25x). See PlatPursuit.Frame.triggerEarnMoment
+ * in static/js/frame.js for phase orchestration.
+ * ============================================================ */
+
+/* PHASE 2: Cooling — card lifts, banner / lock / construction
+ * line fade out. */
+.pp-earn-cooling {
+    transform: translateY(-14px);
+    box-shadow:
+        0 24px 38px rgba(0, 0, 0, 0.55),
+        0 0 0 1px var(--frame-border);
+    transition:
+        transform calc(950ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow calc(950ms * var(--earn-scale, 1)) ease-out;
+}
+.pp-earn-cooling .pp-frame__fab-banner {
+    animation: pp-earn-banner-exit 650ms ease-in forwards;
+}
+@keyframes pp-earn-banner-exit {
+    0%   { transform: translateY(0);     opacity: 1; }
+    100% { transform: translateY(-110%); opacity: 0; }
+}
+.pp-earn-cooling .pp-frame__locked {
+    opacity: 0;
+    transform: scale(0.85);
+    transition: opacity 600ms ease-in, transform 600ms ease-in;
+}
+.pp-earn-uncloak .pp-frame__locked,
+.pp-earn-engraving .pp-frame__locked,
+.pp-earn-settling .pp-frame__locked,
+.pp-earn-back-engraving .pp-frame__locked {
+    display: none;
+}
+.pp-earn-cooling.pp-frame--blueprint .pp-frame__art::before {
+    opacity: 0;
+    transition: opacity 500ms ease-out;
+}
+
+/* PHASE 3.5: Border weld lap — two welding heads ride the
+ * perimeter from top-center, meeting at bottom-center. Sparks
+ * fly outward from each edge. JS injects the head elements. */
+.pp-frame__border-weld-head {
+    position: absolute;
+    top: 0%;
+    left: 0%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(255, 240, 180, 0.95) 30%,
+        rgba(255, 170, 60, 0.85) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 8px rgba(255, 220, 130, 1),
+        0 0 18px rgba(255, 150, 50, 0.7),
+        0 0 32px rgba(255, 120, 30, 0.35);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 11;
+}
+@keyframes pp-border-weld-trace-right {
+    0%   { top: 0%;   left: 50%;  }
+    33%  { top: 0%;   left: 100%; }
+    67%  { top: 100%; left: 100%; }
+    100% { top: 100%; left: 50%;  }
+}
+@keyframes pp-border-weld-trace-left {
+    0%   { top: 0%;   left: 50%; }
+    33%  { top: 0%;   left: 0%;  }
+    67%  { top: 100%; left: 0%;  }
+    100% { top: 100%; left: 50%; }
+}
+
+/* Progressive border seal: as the welding torch finishes each
+ * side, that side flips from dashed (unearned default) to solid
+ * (welded). */
+.pp-earn-weld-top.pp-frame--unearned    { border-top-style: solid; }
+.pp-earn-weld-right.pp-frame--unearned  { border-right-style: solid; }
+.pp-earn-weld-bottom.pp-frame--unearned { border-bottom-style: solid; }
+.pp-earn-weld-left.pp-frame--unearned   { border-left-style: solid; }
+
+/* PHASE 4: Sealed glow pulse — self-contained (fade in → hold
+ * → fade out → settle) so the class removal doesn't snap. */
+.pp-earn-sealed {
+    animation: pp-earn-sealed-pulse calc(1400ms * var(--earn-scale, 1)) ease-in-out forwards;
+}
+@keyframes pp-earn-sealed-pulse {
+    0% {
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1px var(--frame-border);
+    }
+    28% {
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1.5px rgba(255, 215, 130, 0.95),
+            0 0 18px rgba(255, 180, 80, 0.6),
+            0 0 36px rgba(255, 140, 50, 0.32);
+    }
+    66% {
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1.5px rgba(255, 215, 130, 0.95),
+            0 0 18px rgba(255, 180, 80, 0.6),
+            0 0 36px rgba(255, 140, 50, 0.32);
+    }
+    100% {
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1px var(--frame-border);
+    }
+}
+
+/* PHASE 5: Uncloak — blueprint atmosphere is scanned away by a
+ * bright horizontal beam sweeping bottom-to-top. The mask
+ * remaps face-relative --scan-fwd into the grid's coord space
+ * so the boundary tracks the beam's actual position over the
+ * art (not the grid's own height). */
+.pp-earn-uncloak {
+    transition: --scan-fwd calc(2200ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pp-earn-uncloak.pp-frame--blueprint .pp-frame__blueprint-grid {
+    -webkit-mask-image: linear-gradient(
+        to top,
+        transparent 0%,
+        transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+        black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+        black 100%
+    );
+    mask-image: linear-gradient(
+        to top,
+        transparent 0%,
+        transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+        black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+        black 100%
+    );
+}
+.pp-earn-uncloak.pp-frame--unearned .pp-frame__art::after {
+    -webkit-mask-image: linear-gradient(
+        to top,
+        transparent 0%,
+        transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+        black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+        black 100%
+    );
+    mask-image: linear-gradient(
+        to top,
+        transparent 0%,
+        transparent calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) - 3%),
+        black calc((var(--scan-fwd) - var(--art-bottom) * 100%) / var(--art-range) + 3%),
+        black 100%
+    );
+}
+
+/* Horizontal scan beam riding the --scan-fwd boundary. */
+.pp-frame__scan-beam-h {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    bottom: var(--scan-fwd, 0%);
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 215, 130, 0.95) 20%,
+        rgba(255, 255, 255, 1) 50%,
+        rgba(255, 215, 130, 0.95) 80%,
+        transparent 100%);
+    box-shadow:
+        0 0 8px rgba(255, 200, 100, 1),
+        0 0 22px rgba(255, 150, 50, 0.7),
+        0 0 42px rgba(255, 120, 30, 0.3);
+    z-index: 6;
+    pointer-events: none;
+}
+
+/* As the uncloak scan passes each text row, that row briefly
+ * brightens with a warm welding glow. Keyframes that transition
+ * between distinct unearned and earned colors use `forwards` so
+ * the elevated end-state persists. */
+@keyframes pp-earn-scan-brighten {
+    0%, 100% { text-shadow: 0 0 0 transparent; }
+    50% {
+        text-shadow:
+            0 0 7px rgba(255, 230, 150, 1),
+            0 0 16px rgba(255, 200, 100, 0.6);
+        color: rgba(255, 255, 255, 1);
+    }
+}
+@keyframes pp-earn-scan-brighten-name {
+    0% {
+        color: rgba(255, 255, 255, 0.6);
+        text-shadow: 0 0 0 transparent;
+    }
+    50% {
+        color: rgba(255, 255, 255, 1);
+        text-shadow:
+            0 0 7px rgba(255, 230, 150, 1),
+            0 0 16px rgba(255, 200, 100, 0.6);
+    }
+    100% {
+        color: rgba(255, 255, 255, 1);
+        text-shadow: 0 0 0 transparent;
+    }
+}
+.pp-earn-uncloak .pp-frame__plinth-meta {
+    animation: pp-earn-scan-brighten 500ms ease-out 100ms;
+}
+.pp-earn-uncloak .pp-frame__name {
+    animation: pp-earn-scan-brighten-name 500ms ease-out 280ms forwards;
+}
+.pp-earn-uncloak .pp-frame__series {
+    animation: pp-earn-scan-brighten 500ms ease-out 1900ms;
+}
+
+/* PHASE 6: Badge sears onto the freshly revealed background.
+ * The badge stays in its blueprint state through the scan; only
+ * here does it materialize — opacity climbs 0.82→1.0 while the
+ * filter glows red-white hot and the artwork vibrates. The
+ * drop-shadow filters follow the badge PNG's alpha channel so
+ * the halo traces the actual silhouette. Base keyframes are
+ * tuned for GOLD; per-tier overrides scale intensity. */
+.pp-earn-searing .pp-frame__layer {
+    animation:
+        pp-earn-sear calc(1800ms * var(--earn-scale, 1)) ease-out forwards,
+        pp-earn-shake calc(1800ms * var(--earn-scale, 1)) ease-in-out;
+}
+@keyframes pp-earn-sear {
+    0%   { opacity: 0.82; filter: saturate(0.6) brightness(0.85); }
+    30% {
+        opacity: 0.9;
+        filter: saturate(0.9) brightness(0.95)
+                drop-shadow(0 0 4px rgba(255, 230, 150, 0.7))
+                drop-shadow(0 0 10px rgba(255, 170, 70, 0.45));
+    }
+    65% {
+        opacity: 1;
+        filter: saturate(1.55) brightness(1.22)
+                drop-shadow(0 0 7px rgba(255, 250, 230, 1))
+                drop-shadow(0 0 18px rgba(255, 180, 80, 0.95))
+                drop-shadow(0 0 36px rgba(255, 100, 40, 0.65))
+                drop-shadow(0 0 56px rgba(220, 70, 30, 0.35));
+    }
+    85% {
+        opacity: 1;
+        filter: saturate(1.2) brightness(1.08)
+                drop-shadow(0 0 5px rgba(255, 220, 130, 0.55))
+                drop-shadow(0 0 11px rgba(255, 160, 70, 0.32))
+                drop-shadow(0 0 22px rgba(255, 110, 50, 0.15));
+    }
+    100% { opacity: 1; filter: saturate(1) brightness(1); }
+}
+@keyframes pp-earn-shake {
+    0%   { transform: translate(0, 0); }
+    5%   { transform: translate(-0.2px, 0.15px); }
+    12%  { transform: translate(0.3px, -0.25px); }
+    20%  { transform: translate(-0.5px, 0.4px); }
+    28%  { transform: translate(0.6px, 0.5px); }
+    36%  { transform: translate(-0.7px, -0.4px); }
+    44%  { transform: translate(0.5px, 0.6px); }
+    52%  { transform: translate(-0.6px, -0.5px); }
+    60%  { transform: translate(0.7px, 0.3px); }
+    68%  { transform: translate(-0.5px, 0.5px); }
+    76%  { transform: translate(0.4px, -0.4px); }
+    84%  { transform: translate(-0.3px, 0.3px); }
+    92%  { transform: translate(0.15px, -0.15px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* PHASE 7: Completion sheen sweep — the hover-A gleam played
+ * once as the "stamp of completion." */
+@keyframes pp-earn-gleam-sweep {
+    0%   { transform: translateX(-110%); opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translateX(110%); opacity: 0; }
+}
+.pp-earn-gleaming .pp-frame__gleam {
+    background: linear-gradient(105deg,
+        transparent 25%,
+        rgba(255, 255, 255, 0.4) 50%,
+        transparent 75%);
+    animation: pp-earn-gleam-sweep calc(700ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.pp-earn-gleaming.pp-frame--gold .pp-frame__gleam {
+    background: linear-gradient(105deg,
+        transparent 22%,
+        rgba(255, 210, 120, 0.55) 42%,
+        rgba(255, 245, 200, 0.75) 50%,
+        rgba(255, 210, 120, 0.55) 58%,
+        transparent 78%);
+}
+.pp-earn-gleaming.pp-frame--platinum .pp-frame__gleam {
+    background: linear-gradient(105deg,
+        transparent 25%,
+        rgba(180, 220, 255, 0.45) 40%,
+        rgba(255, 200, 220, 0.45) 50%,
+        rgba(180, 255, 220, 0.45) 60%,
+        transparent 75%);
+}
+
+/* PHASE 8: Engraving etches in via clip-path with a traveling
+ * welding head + sparks. JS measures text bounds and sets
+ * inline clip-path on the engraving + the head's transition. */
+.pp-earn-engraving .pp-frame__engraving {
+    position: relative;
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path calc(3s * var(--earn-scale, 1)) linear;
+}
+.pp-earn-engraving .pp-frame__engraving--placeholder > * {
+    visibility: visible;
+}
+.pp-earn-engraving .pp-frame__engraving-num {
+    animation: pp-earn-engrave-glow calc(3s * var(--earn-scale, 1)) ease-out calc(0.4s * var(--earn-scale, 1)) forwards;
+}
+@keyframes pp-earn-engrave-glow {
+    0% {
+        color: rgba(255, 255, 255, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 9px rgba(255, 220, 130, 1),
+            0 0 20px rgba(255, 150, 50, 0.85),
+            0 0 34px rgba(255, 100, 40, 0.45);
+    }
+    30% {
+        color: rgba(255, 250, 220, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 11px rgba(255, 230, 150, 0.95),
+            0 0 22px rgba(255, 170, 70, 0.7),
+            0 0 38px rgba(255, 110, 50, 0.35);
+    }
+    55% {
+        color: rgba(255, 230, 150, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 7px rgba(255, 200, 100, 0.55),
+            0 0 14px rgba(255, 160, 70, 0.25);
+    }
+    100% {
+        color: rgba(245, 215, 120, 0.95);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 5px rgba(240, 198, 74, 0.3);
+    }
+}
+.pp-frame__etch-head {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(255, 240, 180, 0.95) 30%,
+        rgba(255, 170, 60, 0.85) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 6px rgba(255, 220, 130, 1),
+        0 0 16px rgba(255, 150, 50, 0.6);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* PHASE 10: Back face SCAN reveal. Right-to-left vertical beam
+ * sweeps across the back face, revealing the content as it
+ * passes. The face background stays visible; only the content
+ * children are masked. */
+.pp-earn-back-staged .pp-frame__face--back > * {
+    visibility: hidden;
+}
+.pp-earn-back-scan {
+    transition: --scan-back calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pp-earn-back-scan .pp-frame__face--back > * {
+    visibility: visible;
+    -webkit-mask-image: linear-gradient(
+        to left,
+        black 0%,
+        black calc(var(--scan-back, 0%) - 1%),
+        transparent calc(var(--scan-back, 0%) + 1%),
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to left,
+        black 0%,
+        black calc(var(--scan-back, 0%) - 1%),
+        transparent calc(var(--scan-back, 0%) + 1%),
+        transparent 100%
+    );
+}
+.pp-earn-back-scan .pp-frame__face--back::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    right: var(--scan-back, 0%);
+    background: linear-gradient(180deg,
+        transparent 0%,
+        rgba(255, 215, 130, 0.95) 20%,
+        rgba(255, 255, 255, 1) 50%,
+        rgba(255, 215, 130, 0.95) 80%,
+        transparent 100%);
+    box-shadow:
+        0 0 8px rgba(255, 200, 100, 1),
+        0 0 22px rgba(255, 150, 50, 0.7);
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* PHASE 12: Settle — card descends from its lifted state with
+ * a final tier-tinted glow flourish at the moment of landing. */
+.pp-earn-cooling.pp-earn-settling {
+    animation: pp-earn-settle-flourish calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+}
+@keyframes pp-earn-settle-flourish {
+    0% {
+        transform: translateY(-14px);
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1px var(--frame-border);
+    }
+    45% {
+        transform: translateY(2px);
+        box-shadow:
+            0 14px 26px rgba(0, 0, 0, 0.5),
+            0 0 0 1.5px rgba(255, 230, 140, 1),
+            0 0 32px rgba(255, 210, 110, 0.75),
+            0 0 68px rgba(245, 175, 80, 0.5),
+            0 0 110px rgba(220, 140, 50, 0.25);
+    }
+    70% {
+        transform: translateY(-1px);
+        box-shadow:
+            0 10px 22px rgba(0, 0, 0, 0.4),
+            0 0 0 1.3px rgba(255, 220, 130, 0.7),
+            0 0 26px rgba(255, 200, 100, 0.4),
+            0 0 56px rgba(245, 175, 80, 0.22),
+            0 0 80px rgba(220, 140, 50, 0.1);
+    }
+    100% {
+        transform: translateY(0);
+        box-shadow:
+            0 8px 18px rgba(0, 0, 0, 0.3),
+            0 0 0 1px var(--frame-border);
+    }
+}
+
+/* ---------------- Tier label brightening per tier ---------- */
+/* Gold (baseline): unearned rgba(0.4) white → gold + soft shadow. */
+@keyframes pp-earn-scan-brighten-tier-gold {
+    0% {
+        color: rgba(255, 255, 255, 0.4);
+        text-shadow: none;
+    }
+    50% {
+        color: rgba(255, 230, 150, 1);
+        text-shadow:
+            0 0 7px rgba(255, 230, 150, 1),
+            0 0 16px rgba(255, 200, 100, 0.6);
+    }
+    100% {
+        color: rgba(245, 215, 120, 1);
+        text-shadow: 0 0 4px rgba(240, 198, 74, 0.3);
+    }
+}
+.pp-earn-uncloak.pp-frame--gold .pp-frame__title::after {
+    animation: pp-earn-scan-brighten-tier-gold 500ms ease-out 1900ms forwards;
+}
+
+
+/* ============================================================
+ * TIER-SPECIFIC EARN-MOMENT OVERRIDES
+ *
+ * Base keyframes above are tuned for GOLD. Each tier overrides:
+ *   - sear (peak heat halo count + saturation)
+ *   - shake (amplitude)
+ *   - settle (halo size + tier-tinted color)
+ *   - engrave-glow (final tier color)
+ *   - sheen gradient
+ *   - scan-brighten-tier (final tier label color)
+ * Durations come from --earn-scale, set per tier by JS.
+ * ============================================================ */
+
+/* ---------------- BRONZE (0.75x scale, reduced halo count) - */
+@keyframes pp-earn-sear-bronze {
+    0%   { opacity: 0.82; filter: saturate(0.6) brightness(0.85); }
+    30%  {
+        opacity: 0.88;
+        filter: saturate(0.85) brightness(0.92)
+                drop-shadow(0 0 3px rgba(255, 220, 140, 0.55));
+    }
+    65%  {
+        opacity: 1;
+        filter: saturate(1.2) brightness(1.08)
+                drop-shadow(0 0 4px rgba(255, 220, 140, 0.75))
+                drop-shadow(0 0 13px rgba(220, 130, 50, 0.5));
+    }
+    85%  {
+        opacity: 1;
+        filter: saturate(1.05) brightness(1.02)
+                drop-shadow(0 0 3px rgba(255, 200, 130, 0.32));
+    }
+    100% { opacity: 1; filter: saturate(1) brightness(1); }
+}
+@keyframes pp-earn-shake-bronze {
+    0%   { transform: translate(0, 0); }
+    5%   { transform: translate(-0.15px, 0.1px); }
+    12%  { transform: translate(0.2px, -0.15px); }
+    20%  { transform: translate(-0.35px, 0.3px); }
+    28%  { transform: translate(0.4px, 0.35px); }
+    36%  { transform: translate(-0.45px, -0.3px); }
+    44%  { transform: translate(0.35px, 0.4px); }
+    52%  { transform: translate(-0.4px, -0.35px); }
+    60%  { transform: translate(0.4px, 0.2px); }
+    68%  { transform: translate(-0.3px, 0.3px); }
+    76%  { transform: translate(0.2px, -0.25px); }
+    84%  { transform: translate(-0.2px, 0.2px); }
+    92%  { transform: translate(0.1px, -0.1px); }
+    100% { transform: translate(0, 0); }
+}
+@keyframes pp-earn-settle-flourish-bronze {
+    0% {
+        transform: translateY(-14px);
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1px var(--frame-border);
+    }
+    45% {
+        transform: translateY(2px);
+        box-shadow:
+            0 14px 26px rgba(0, 0, 0, 0.5),
+            0 0 0 1.3px rgba(220, 150, 80, 0.85),
+            0 0 24px rgba(220, 150, 80, 0.45),
+            0 0 52px rgba(200, 122, 59, 0.22);
+    }
+    70% {
+        transform: translateY(-1px);
+        box-shadow:
+            0 10px 22px rgba(0, 0, 0, 0.4),
+            0 0 0 1.1px rgba(220, 150, 80, 0.5),
+            0 0 18px rgba(220, 150, 80, 0.22);
+    }
+    100% {
+        transform: translateY(0);
+        box-shadow:
+            0 8px 18px rgba(0, 0, 0, 0.3),
+            0 0 0 1px var(--frame-border);
+    }
+}
+@keyframes pp-earn-engrave-glow-bronze {
+    0% {
+        color: rgba(255, 255, 255, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 7px rgba(255, 200, 100, 0.85),
+            0 0 16px rgba(255, 150, 70, 0.55);
+    }
+    30% {
+        color: rgba(255, 240, 200, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 9px rgba(255, 200, 100, 0.65),
+            0 0 17px rgba(255, 150, 70, 0.4);
+    }
+    55% {
+        color: rgba(255, 220, 150, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 5px rgba(255, 180, 80, 0.4);
+    }
+    100% {
+        color: rgba(220, 150, 80, 0.95);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 4px rgba(200, 122, 59, 0.25);
+    }
+}
+@keyframes pp-earn-scan-brighten-tier-bronze {
+    0% {
+        color: rgba(255, 255, 255, 0.4);
+        text-shadow: none;
+    }
+    50% {
+        color: rgba(255, 220, 150, 1);
+        text-shadow:
+            0 0 7px rgba(255, 230, 150, 1),
+            0 0 16px rgba(255, 200, 100, 0.6);
+    }
+    100% {
+        color: rgba(220, 150, 80, 0.95);
+        text-shadow: none;
+    }
+}
+.pp-frame--bronze.pp-earn-searing .pp-frame__layer {
+    animation:
+        pp-earn-sear-bronze calc(1800ms * var(--earn-scale, 1)) ease-out forwards,
+        pp-earn-shake-bronze calc(1800ms * var(--earn-scale, 1)) ease-in-out;
+}
+.pp-frame--bronze.pp-earn-cooling.pp-earn-settling {
+    animation: pp-earn-settle-flourish-bronze calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+}
+.pp-earn-engraving.pp-frame--bronze .pp-frame__engraving-num {
+    animation-name: pp-earn-engrave-glow-bronze;
+}
+.pp-earn-gleaming.pp-frame--bronze .pp-frame__gleam {
+    background: linear-gradient(105deg,
+        transparent 28%,
+        rgba(220, 150, 80, 0.42) 50%,
+        transparent 72%);
+}
+.pp-earn-uncloak.pp-frame--bronze .pp-frame__title::after {
+    animation: pp-earn-scan-brighten-tier-bronze 500ms ease-out 1900ms forwards;
+}
+
+
+/* ---------------- SILVER (0.9x scale, cool-metal intermediate) - */
+@keyframes pp-earn-sear-silver {
+    0%   { opacity: 0.82; filter: saturate(0.6) brightness(0.85); }
+    30%  {
+        opacity: 0.9;
+        filter: saturate(0.92) brightness(0.96)
+                drop-shadow(0 0 4px rgba(225, 235, 245, 0.62))
+                drop-shadow(0 0 9px rgba(180, 200, 220, 0.4));
+    }
+    65%  {
+        opacity: 1;
+        filter: saturate(1.38) brightness(1.16)
+                drop-shadow(0 0 6px rgba(245, 250, 255, 0.88))
+                drop-shadow(0 0 15px rgba(190, 210, 230, 0.72))
+                drop-shadow(0 0 28px rgba(150, 175, 200, 0.4));
+    }
+    85%  {
+        opacity: 1;
+        filter: saturate(1.12) brightness(1.05)
+                drop-shadow(0 0 4px rgba(220, 232, 245, 0.45))
+                drop-shadow(0 0 9px rgba(180, 200, 220, 0.22));
+    }
+    100% { opacity: 1; filter: saturate(1) brightness(1); }
+}
+@keyframes pp-earn-shake-silver {
+    0%   { transform: translate(0, 0); }
+    5%   { transform: translate(-0.18px, 0.12px); }
+    12%  { transform: translate(0.25px, -0.2px); }
+    20%  { transform: translate(-0.42px, 0.34px); }
+    28%  { transform: translate(0.5px, 0.42px); }
+    36%  { transform: translate(-0.58px, -0.34px); }
+    44%  { transform: translate(0.44px, 0.5px); }
+    52%  { transform: translate(-0.5px, -0.42px); }
+    60%  { transform: translate(0.58px, 0.25px); }
+    68%  { transform: translate(-0.42px, 0.42px); }
+    76%  { transform: translate(0.32px, -0.32px); }
+    84%  { transform: translate(-0.25px, 0.25px); }
+    92%  { transform: translate(0.12px, -0.12px); }
+    100% { transform: translate(0, 0); }
+}
+@keyframes pp-earn-settle-flourish-silver {
+    0% {
+        transform: translateY(-14px);
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1px var(--frame-border);
+    }
+    45% {
+        transform: translateY(2px);
+        box-shadow:
+            0 14px 26px rgba(0, 0, 0, 0.5),
+            0 0 0 1.4px rgba(215, 220, 225, 0.9),
+            0 0 28px rgba(215, 220, 225, 0.55),
+            0 0 58px rgba(180, 195, 210, 0.28);
+    }
+    70% {
+        transform: translateY(-1px);
+        box-shadow:
+            0 10px 22px rgba(0, 0, 0, 0.4),
+            0 0 0 1.2px rgba(215, 220, 225, 0.6),
+            0 0 22px rgba(215, 220, 225, 0.28);
+    }
+    100% {
+        transform: translateY(0);
+        box-shadow:
+            0 8px 18px rgba(0, 0, 0, 0.3),
+            0 0 0 1px var(--frame-border);
+    }
+}
+@keyframes pp-earn-engrave-glow-silver {
+    0% {
+        color: rgba(255, 255, 255, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 8px rgba(235, 240, 250, 0.9),
+            0 0 18px rgba(195, 210, 230, 0.6);
+    }
+    30% {
+        color: rgba(245, 250, 255, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 10px rgba(220, 230, 245, 0.75),
+            0 0 20px rgba(180, 200, 220, 0.45);
+    }
+    55% {
+        color: rgba(230, 235, 245, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 6px rgba(200, 215, 230, 0.5);
+    }
+    100% {
+        color: rgba(215, 220, 225, 0.95);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 3px rgba(215, 220, 225, 0.25);
+    }
+}
+@keyframes pp-earn-scan-brighten-tier-silver {
+    0% {
+        color: rgba(255, 255, 255, 0.4);
+        text-shadow: none;
+    }
+    50% {
+        color: rgba(240, 245, 252, 1);
+        text-shadow:
+            0 0 7px rgba(220, 230, 245, 1),
+            0 0 16px rgba(180, 200, 220, 0.6);
+    }
+    100% {
+        color: rgba(215, 220, 225, 0.95);
+        text-shadow: none;
+    }
+}
+.pp-frame--silver.pp-earn-searing .pp-frame__layer {
+    animation:
+        pp-earn-sear-silver calc(1800ms * var(--earn-scale, 1)) ease-out forwards,
+        pp-earn-shake-silver calc(1800ms * var(--earn-scale, 1)) ease-in-out;
+}
+.pp-frame--silver.pp-earn-cooling.pp-earn-settling {
+    animation: pp-earn-settle-flourish-silver calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+}
+.pp-earn-engraving.pp-frame--silver .pp-frame__engraving-num {
+    animation-name: pp-earn-engrave-glow-silver;
+}
+.pp-earn-gleaming.pp-frame--silver .pp-frame__gleam {
+    background: linear-gradient(105deg,
+        transparent 26%,
+        rgba(215, 225, 240, 0.5) 42%,
+        rgba(245, 250, 255, 0.65) 50%,
+        rgba(215, 225, 240, 0.5) 58%,
+        transparent 74%);
+}
+.pp-earn-uncloak.pp-frame--silver .pp-frame__title::after {
+    animation: pp-earn-scan-brighten-tier-silver 500ms ease-out 1900ms forwards;
+}
+
+
+/* ---------------- PLATINUM (1.25x scale, max + chromatic flourish) - */
+@keyframes pp-earn-sear-platinum {
+    0%   { opacity: 0.82; filter: saturate(0.6) brightness(0.85); }
+    30%  {
+        opacity: 0.92;
+        filter: saturate(0.95) brightness(0.98)
+                drop-shadow(0 0 5px rgba(220, 240, 250, 0.78))
+                drop-shadow(0 0 12px rgba(170, 210, 240, 0.5));
+    }
+    65%  {
+        opacity: 1;
+        filter: saturate(1.7) brightness(1.28)
+                drop-shadow(0 0 8px rgba(255, 255, 255, 1))
+                drop-shadow(0 0 20px rgba(220, 240, 250, 1))
+                drop-shadow(0 0 40px rgba(170, 215, 245, 0.78))
+                drop-shadow(0 0 62px rgba(120, 180, 220, 0.42));
+    }
+    85%  {
+        opacity: 1;
+        filter: saturate(1.28) brightness(1.12)
+                drop-shadow(0 0 6px rgba(230, 245, 252, 0.65))
+                drop-shadow(0 0 13px rgba(180, 220, 245, 0.4))
+                drop-shadow(0 0 26px rgba(130, 185, 225, 0.2));
+    }
+    100% { opacity: 1; filter: saturate(1) brightness(1); }
+}
+@keyframes pp-earn-shake-platinum {
+    0%   { transform: translate(0, 0); }
+    5%   { transform: translate(-0.22px, 0.18px); }
+    12%  { transform: translate(0.32px, -0.28px); }
+    20%  { transform: translate(-0.55px, 0.45px); }
+    28%  { transform: translate(0.68px, 0.55px); }
+    36%  { transform: translate(-0.78px, -0.45px); }
+    44%  { transform: translate(0.58px, 0.68px); }
+    52%  { transform: translate(-0.68px, -0.58px); }
+    60%  { transform: translate(0.78px, 0.35px); }
+    68%  { transform: translate(-0.58px, 0.58px); }
+    76%  { transform: translate(0.45px, -0.45px); }
+    84%  { transform: translate(-0.35px, 0.35px); }
+    92%  { transform: translate(0.18px, -0.18px); }
+    100% { transform: translate(0, 0); }
+}
+@keyframes pp-earn-settle-flourish-platinum {
+    0% {
+        transform: translateY(-14px);
+        box-shadow:
+            0 24px 38px rgba(0, 0, 0, 0.55),
+            0 0 0 1px var(--frame-border);
+    }
+    45% {
+        transform: translateY(2px);
+        box-shadow:
+            0 14px 26px rgba(0, 0, 0, 0.5),
+            0 0 0 1.7px rgba(220, 240, 250, 1),
+            0 0 38px rgba(207, 232, 240, 0.85),
+            0 0 78px rgba(170, 215, 245, 0.55),
+            0 0 130px rgba(63, 205, 220, 0.32);
+    }
+    70% {
+        transform: translateY(-1px);
+        box-shadow:
+            0 10px 22px rgba(0, 0, 0, 0.4),
+            0 0 0 1.4px rgba(220, 240, 250, 0.78),
+            0 0 30px rgba(207, 232, 240, 0.48),
+            0 0 62px rgba(170, 215, 245, 0.26),
+            0 0 92px rgba(63, 205, 220, 0.12);
+    }
+    100% {
+        transform: translateY(0);
+        box-shadow:
+            0 8px 18px rgba(0, 0, 0, 0.3),
+            0 0 0 1px var(--frame-border);
+    }
+}
+@keyframes pp-earn-engrave-glow-platinum {
+    0% {
+        color: rgba(255, 255, 255, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 10px rgba(255, 255, 255, 1),
+            0 0 22px rgba(207, 232, 240, 0.95),
+            0 0 38px rgba(120, 180, 220, 0.55);
+    }
+    30% {
+        color: rgba(240, 250, 255, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 12px rgba(220, 240, 250, 0.95),
+            0 0 24px rgba(170, 215, 245, 0.78),
+            0 0 42px rgba(120, 185, 225, 0.42);
+    }
+    55% {
+        color: rgba(225, 245, 252, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 8px rgba(207, 232, 240, 0.62),
+            0 0 16px rgba(170, 215, 245, 0.32);
+    }
+    100% {
+        color: rgba(220, 240, 250, 1);
+        text-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.55),
+            0 0 5px rgba(207, 232, 240, 0.55),
+            0 0 12px rgba(180, 220, 240, 0.25);
+    }
+}
+@keyframes pp-earn-scan-brighten-tier-platinum {
+    0% {
+        color: rgba(255, 255, 255, 0.4);
+        text-shadow: none;
+    }
+    50% {
+        color: rgba(245, 252, 255, 1);
+        text-shadow:
+            0 0 8px rgba(220, 240, 250, 1),
+            0 0 18px rgba(170, 215, 245, 0.7);
+    }
+    100% {
+        color: rgba(220, 240, 250, 1);
+        text-shadow: 0 0 5px rgba(207, 232, 240, 0.45);
+    }
+}
+/* Platinum's distinguishing flourish: a brief chromatic hue
+ * rotation on the post-settle gleam, staying within the
+ * silver-cyan vocabulary (not full-spectrum holographic). */
+@keyframes pp-earn-platinum-shimmer {
+    0%   { filter: hue-rotate(0deg); }
+    50%  { filter: hue-rotate(8deg); }
+    100% { filter: hue-rotate(0deg); }
+}
+.pp-frame--platinum.pp-earn-searing .pp-frame__layer {
+    animation:
+        pp-earn-sear-platinum calc(1800ms * var(--earn-scale, 1)) ease-out forwards,
+        pp-earn-shake-platinum calc(1800ms * var(--earn-scale, 1)) ease-in-out;
+}
+.pp-frame--platinum.pp-earn-cooling.pp-earn-settling {
+    animation:
+        pp-earn-settle-flourish-platinum calc(2000ms * var(--earn-scale, 1)) cubic-bezier(0.34, 1.2, 0.4, 1) forwards;
+}
+.pp-frame--platinum.pp-earn-settling .pp-frame__gleam {
+    animation: pp-earn-platinum-shimmer calc(1400ms * var(--earn-scale, 1)) ease-in-out;
+    opacity: 1;
+}
+.pp-earn-engraving.pp-frame--platinum .pp-frame__engraving-num {
+    animation-name: pp-earn-engrave-glow-platinum;
+}
+.pp-earn-uncloak.pp-frame--platinum .pp-frame__title::after {
+    animation: pp-earn-scan-brighten-tier-platinum 500ms ease-out 1900ms forwards;
+}
+
+
+/* ============================================================
+ * 11. Sparks
+ *
+ * Welding-style sparks spawned by the JS controller during the
+ * build animation, border weld, uncloak scan, sear burst, and
+ * engraving etch. Each spark gets random arc trajectory via
+ * inline --spark-x-mid/-end / --spark-y-mid/-end / --spark-dur.
+ * ============================================================ */
+.pp-spark {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(255, 240, 180, 0.95) 30%,
+        rgba(255, 170, 60, 0.7) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 4px rgba(255, 220, 130, 0.9),
+        0 0 9px rgba(255, 150, 50, 0.45);
+    pointer-events: none;
+    z-index: 7;
+    animation: pp-spark-fly var(--spark-dur, 750ms) cubic-bezier(0.2, 0.7, 0.4, 1) forwards;
+}
+@keyframes pp-spark-fly {
+    0%   { transform: translate(0, 0); opacity: 1; }
+    20%  { transform: translate(var(--spark-x-mid), var(--spark-y-mid)) scale(0.95); opacity: 1; }
+    100% { transform: translate(var(--spark-x-end), var(--spark-y-end)) scale(0.25); opacity: 0; }
+}
+.pp-spark--etch {
+    width: 2.5px;
+    height: 2.5px;
+}
+.pp-spark--behind {
+    z-index: auto;
+    width: 6px;
+    height: 6px;
+}
+.pp-spark--tier-bronze {
+    background: radial-gradient(circle,
+        rgba(255, 230, 180, 1) 0%,
+        rgba(245, 175, 100, 0.95) 30%,
+        rgba(200, 110, 50, 0.7) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 4px rgba(245, 175, 100, 0.95),
+        0 0 10px rgba(200, 110, 50, 0.45);
+}
+.pp-spark--tier-silver {
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(225, 230, 240, 0.95) 30%,
+        rgba(170, 180, 195, 0.7) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 4px rgba(220, 230, 245, 0.95),
+        0 0 10px rgba(180, 195, 215, 0.5);
+}
+.pp-spark--tier-gold {
+    background: radial-gradient(circle,
+        rgba(255, 250, 220, 1) 0%,
+        rgba(255, 220, 130, 0.95) 30%,
+        rgba(220, 170, 60, 0.7) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 4px rgba(255, 220, 130, 0.95),
+        0 0 10px rgba(220, 170, 60, 0.5);
+}
+.pp-spark--tier-platinum {
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(225, 240, 250, 0.95) 30%,
+        rgba(170, 200, 225, 0.75) 65%,
+        transparent 100%);
+    box-shadow:
+        0 0 4px rgba(220, 240, 250, 1),
+        0 0 11px rgba(180, 215, 240, 0.55);
+}
+/* Ambient repair spark — bright, hot, and substantial so they
+ * read clearly against the busy hatched warning overlay. Spawned
+ * periodically by the JS controller from random points within
+ * the badge artwork, arcing outward like sparks flying off the
+ * badge as it's being repaired. Sized + glowed to read from a
+ * gallery thumbnail, not just a hover-over inspection. */
+.pp-spark--maint {
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle,
+        rgba(255, 255, 245, 1) 0%,
+        rgba(255, 240, 180, 1) 18%,
+        rgba(255, 195, 95, 0.98) 42%,
+        rgba(240, 130, 50, 0.85) 68%,
+        rgba(190, 80, 30, 0.45) 86%,
+        transparent 100%);
+    box-shadow:
+        0 0 10px rgba(255, 240, 180, 1),
+        0 0 22px rgba(255, 190, 90, 0.85),
+        0 0 42px rgba(255, 140, 60, 0.55),
+        0 0 70px rgba(255, 100, 40, 0.28);
+}
+
+
+/* ============================================================
+ * 12. Flair slot (future Flair package extension surface)
+ *
+ * v1 ships with NO flair variants. The slot below is preserved
+ * so a future Flair package can layer in custom backgrounds,
+ * borders, or effects without restructuring the partial. Use
+ * <span class="pp-frame__flair pp-flair--{slug}"></span> and
+ * author the flair-specific CSS in a separate stylesheet.
+ *
+ * Transparent chrome mode is also retained as a hook —
+ * data-chrome-mode="transparent" on a wrapping container drops
+ * title + plinth opacity so a background flair can bleed
+ * through. v1 doesn't toggle this, but the future Flair
+ * picker will.
+ * ============================================================ */
+.pp-frame__flair {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+
+/* ============================================================
+ * 13. Title scroll marquee
+ *
+ * The series name in the title bar truncates with ellipsis by
+ * default. When JS detects overflow it adds .is-scrolling to
+ * the .pp-frame__series element; CSS then animates the inner
+ * .pp-frame__series-track. The series clips overflow at its
+ * own flex-allocated width — without that, the marquee text
+ * would slide UNDER the tier label rendered by the title bar's
+ * ::after pseudo-element.
+ *
+ * The track switches from inline (default) to inline-block
+ * when scrolling so transform: translateX(...) takes effect.
+ * Doubled content (via ::after on the track) gives a seamless
+ * loop. Pause on hover so users can read the full text.
+ * ============================================================ */
+.pp-frame__series-track {
+    display: inline;
+}
+.pp-frame__series.is-scrolling {
+    text-overflow: clip;
+}
+.pp-frame__series.is-scrolling .pp-frame__series-track {
+    display: inline-block;
+    white-space: nowrap;
+    animation: pp-frame-title-marquee 12s linear infinite;
+}
+.pp-frame__series.is-scrolling .pp-frame__series-track::after {
+    content: attr(data-text);
+    padding-left: 2em;
+}
+.pp-frame__title:hover .pp-frame__series.is-scrolling .pp-frame__series-track {
+    animation-play-state: paused;
+}
+@keyframes pp-frame-title-marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(calc(-50% - 1em)); }
+}
+
+
+/* ============================================================
+ * 14. Reduced-motion override
+ *
+ * Honor prefers-reduced-motion. Suppress decorative animations,
+ * disable the hover gleam sweep, snap the flip to instant,
+ * disable the title marquee. The JS controller independently
+ * gates the earn moment choreography.
+ * ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+    .pp-frame,
+    .pp-frame::before,
+    .pp-frame::after,
+    .pp-frame > .pp-frame__corner-bl,
+    .pp-frame > .pp-frame__corner-br {
+        transition: none !important;
+        animation: none !important;
+    }
+    .pp-frame:hover {
+        transform: none !important;
+    }
+    .pp-hover-a .pp-frame__gleam,
+    .pp-hover-a:hover .pp-frame__gleam {
+        opacity: 0 !important;
+        transition: none !important;
+        animation: none !important;
+    }
+    .pp-frame--flippable .pp-frame__inner {
+        transition: none !important;
+    }
+    .pp-frame__series.is-scrolling,
+    .pp-frame__series.is-scrolling .pp-frame__series-track {
+        animation: none !important;
+        transform: none !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline;
+    }
+    .pp-frame--platinum::before,
+    .pp-frame--platinum::after,
+    .pp-frame--platinum > .pp-frame__corner-bl,
+    .pp-frame--platinum > .pp-frame__corner-br,
+    .pp-frame--pinned-accent,
+    .pp-frame__rarity--mythic,
+    .pp-frame__engraving--first .pp-frame__engraving-num,
+    .pp-frame__fab-banner {
+        animation: none !important;
+    }
+}

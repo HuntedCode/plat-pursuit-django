@@ -1,0 +1,144 @@
+{% load humanize %}
+{# Frame front-face content. Shared between flippable and non-flippable variants. #}
+{# Expects: frame (dict), tier (str), state (str). #}
+
+<div class="pp-frame__title">
+    <div class="pp-frame__series"><span class="pp-frame__series-track" data-text="{{ frame.series_name }}">{{ frame.series_name }}</span></div>
+</div>
+
+<div class="pp-frame__art">
+    {% if state == 'in_progress' or state == 'unearned' %}
+        <div class="pp-frame__blueprint-grid"></div>
+        {% if state == 'in_progress' %}
+            <div class="pp-frame__fab-banner">Fabricating</div>
+        {% endif %}
+    {% endif %}
+
+    {% if state == 'maintenance' or frame.is_maint_staged %}
+        {# Repair banner — amber/warm counterpart to the blueprint's #}
+        {# cyan FABRICATING banner. Signals the card is in maintenance. #}
+        <div class="pp-frame__repair-banner">Restoring</div>
+    {% endif %}
+
+    {% for layer in frame.art_layers %}
+        <img class="pp-frame__layer" src="{{ layer }}" alt="" />
+    {% endfor %}
+
+    {% if state == 'maintenance' or frame.is_maint_staged %}
+        {# Damage overlay — masked so it shows ONLY in the unrepaired #}
+        {# upper portion above --pp-build. Hatched warning pattern reads #}
+        {# unmistakably as "broken / needs attention." Bottom (repaired) #}
+        {# stays untouched, showing the badge in its restored form. #}
+        <div class="pp-frame__damage-overlay"></div>
+    {% endif %}
+
+    {% if state == 'in_progress' or state == 'unearned' %}
+        <div class="pp-frame__locked">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+        </div>
+        {% if state == 'unearned' %}
+            <div class="pp-frame__blueprint-mark">To Earn</div>
+        {% endif %}
+    {% endif %}
+
+    {% if state == 'maintenance' or frame.is_maint_staged %}
+        {# Maintenance band riveted across the center of the art. Carries #}
+        {# the "needs repair" signal unmistakably from across a gallery. #}
+        <div class="pp-frame__maint-stamp">{{ frame.maintenance_stamp|default:"Maintenance" }}</div>
+    {% endif %}
+
+    <div class="pp-frame__gleam"></div>
+</div>
+
+{% if state == 'maintenance' or frame.is_maint_staged %}
+    {# Ascent-only damage overlay — spans the WHOLE face so its #}
+    {# stripes mask is in the same coordinate system as the print #}
+    {# pass beam (both face-relative). The title bar + plinth #}
+    {# chrome sit at a higher z-index and cover the parts outside #}
+    {# the art region, so the user only sees stripes within the #}
+    {# art — but the mask boundary tracks the beam exactly with no #}
+    {# coordinate-conversion math. Used only while the ascending #}
+    {# class is on; the art-level overlay takes over for retract. #}
+    <div class="pp-frame__damage-overlay-face"></div>
+{% endif %}
+
+<div class="pp-frame__plinth-clipwrap">
+<div class="pp-frame__plinth">
+    <div class="pp-frame__plinth-name-row">
+        <div class="pp-frame__name">{{ frame.badge_name }}</div>
+        {% if state == 'earned' and frame.current_rank %}
+            {# Current-cycle PRINT — refreshed alongside the rest of the printed text #}
+            {# (name, dates, rarity) whenever the card is repaired. Mint engraving #}
+            {# below stays etched-in-chrome permanent; this line is part of the print. #}
+            <div class="pp-frame__cycle-print">
+                <span class="pp-frame__cycle-print-num">#{{ frame.current_rank|intcomma }}</span><span class="pp-frame__cycle-print-label">{% if frame.current_cycle %}Cycle {{ frame.current_cycle }}{% else %}Current{% endif %}</span>
+            </div>
+        {% elif state == 'maintenance' or frame.is_maint_staged %}
+            {# Maintenance status — same visual slot as the cycle print, but the #}
+            {# label carries the "needs reactivation" signal instead of a live rank. #}
+            {# Renders for staged-maintenance cards too (hidden by .pp-frame--maint-staged #}
+            {# until the maintenance moment animation reveals it). #}
+            <div class="pp-frame__cycle-print pp-frame__cycle-print--maintenance">
+                <span class="pp-frame__cycle-print-label">{{ frame.maintenance_label|default:"Reactivate" }}</span>
+            </div>
+        {% endif %}
+    </div>
+    <div class="pp-frame__plinth-meta">
+        {% if state == 'earned' %}
+            {# When staged for an upcoming maintenance moment, store the post-animation #}
+            {# "X of Y repaired" text on a data attribute so the JS controller can swap #}
+            {# the visible text mid-choreography. #}
+            <span{% if frame.is_maint_staged and frame.stages_total %} data-meta-maintenance="{{ frame.stages_done|default:0 }} of {{ frame.stages_total }} repaired"{% endif %}>{% if frame.earned_date %}Earned {{ frame.earned_date }}{% endif %}</span>
+        {% elif state == 'maintenance' %}
+            <span>{% if frame.stages_total %}{{ frame.stages_done|default:0 }} of {{ frame.stages_total }} repaired{% endif %}</span>
+        {% else %}
+            <span>{% if frame.stages_total %}{{ frame.stages_done|default:0 }} of {{ frame.stages_total }} stages{% endif %}</span>
+        {% endif %}
+        {% if frame.rarity_class and frame.rarity_pct is not None %}
+            <span class="pp-frame__rarity pp-frame__rarity--{{ frame.rarity_class }}">
+                {% if frame.rarity_class == 'uncommon' %}<svg><use href="#rarity-dot"/></svg>{% endif %}
+                {% if frame.rarity_class == 'rare' %}<svg><use href="#rarity-diamond"/></svg>{% endif %}
+                {% if frame.rarity_class == 'mythic' %}<svg><use href="#rarity-sparkle"/></svg>{% endif %}
+                {{ frame.rarity_pct }}%
+            </span>
+        {% endif %}
+    </div>
+    {% if frame.repair_pips and state == 'maintenance' or frame.repair_pips and frame.is_maint_staged %}
+        {# Stage pips — one per stage, filled for completed repair stages, #}
+        {# outlined for remaining. Discrete count signal that pairs with #}
+        {# the "X of Y repaired" text in the meta line. #}
+        <div class="pp-frame__repair-pips" aria-hidden="true">
+            {% for done in frame.repair_pips %}
+                <span class="pp-frame__repair-pip{% if done %} pp-frame__repair-pip--done{% endif %}"></span>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {% if frame.engraving_rank %}
+        {# Render the final engraving form. For blueprint states (in_progress / unearned) #}
+        {# the placeholder class keeps it visibility:hidden until the earn moment's etch #}
+        {# phase reveals it. Maintenance cards SHOW the mint engraving — it's a permanent #}
+        {# fact that survived into the dormant state. Span ORDER matters: rank first, #}
+        {# label second, so the etch animation's welding head sweeps left to right. #}
+        <div class="pp-frame__engraving{% if state == 'in_progress' or state == 'unearned' %} pp-frame__engraving--placeholder{% endif %}{% if frame.engraving_rank == 1 %} pp-frame__engraving--first{% endif %}">
+            <span class="pp-frame__engraving-num">#{{ frame.engraving_rank|intcomma }}</span>
+            <span>{{ frame.engraving_total_label|default:"of all time" }}</span>
+        </div>
+    {% elif state == 'in_progress' or frame.is_pinned %}
+        {# No rank yet — placeholder reserves engraving height with "#---" filler. #}
+        <div class="pp-frame__engraving pp-frame__engraving--placeholder">
+            <span class="pp-frame__engraving-num">#---</span>
+            <span>not earned yet</span>
+        </div>
+    {% endif %}
+    {% if frame.set_number %}
+        {# Set number — shared across every badge of the same (series, tier). #}
+        {# Engraved in the bottom-right corner of the plinth like a manufacturer's #}
+        {# mark / print-run stamp. Permanent etched-chrome treatment. Zero-padded #}
+        {# to 4 digits — accepts an int (preferred) or a string of 4 digits. #}
+        <span class="pp-frame__set-mark">{{ frame.set_number|stringformat:"04d" }}</span>
+    {% endif %}
+</div>
+</div>
