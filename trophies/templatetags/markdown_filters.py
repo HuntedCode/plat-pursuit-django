@@ -258,17 +258,18 @@ def _render_step_pill(step_key, steps):
         )
     title = step.get('title') or ''
     position = step.get('position') or '?'
-    label = f'Step {position}' + (f': {title}' if title else '')
-    # Numbered-step glyph in the trail icon for instant scan recognition
-    # of "this is a step reference". `data-color="primary"` matches the
-    # step card's left-stripe accent so the visual loop closes.
+    # Display reads "Step N" — short and uniform regardless of how long
+    # the step's title is. The full "Step N: Title" lives in the `title`
+    # attr (native browser tooltip) so readers can hover to see what
+    # the step is about without bloating inline prose.
+    full_label = f'Step {position}' + (f': {title}' if title else '')
+    short_label = f'Step {position}'
     return (
         f'<a href="#step-{escape(step_key)}" '
         f'class="roadmap-ref-pill" data-color="primary" '
         f'data-ref-kind="step" data-ref-id="{escape(step_key)}" '
-        f'title="Jump to {escape(label)}">'
-        f'<span class="roadmap-ref-pill-badge">#{escape(str(position))}</span>'
-        f'<span class="roadmap-ref-pill-name">{escape(title or f"Step {position}")}</span>'
+        f'title="Jump to {escape(full_label)}">'
+        f'<span class="roadmap-ref-pill-name">{escape(short_label)}</span>'
         f'</a>'
     )
 
