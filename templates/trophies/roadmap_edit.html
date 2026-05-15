@@ -525,6 +525,16 @@
                         Associated Trophies <span class="trophy-count-badge badge badge-xs badge-ghost ml-1">0</span>
                     </summary>
                     <div class="collapse-content px-3 pb-3">
+                        {# Filter toggle: hides trophies already associated   #}
+                        {# with any OTHER step in this roadmap, so an author #}
+                        {# can scan only "what's left to associate" without  #}
+                        {# the noise of trophies already claimed. Trophies   #}
+                        {# checked in THIS step stay visible regardless so   #}
+                        {# the author can still uncheck them.                #}
+                        <label class="flex items-center gap-1.5 text-[11px] text-base-content/55 hover:text-base-content/80 cursor-pointer mb-2">
+                            <input type="checkbox" class="trophy-picker-hide-used checkbox checkbox-xs">
+                            <span>Hide trophies used by other steps</span>
+                        </label>
                         <div class="trophy-picker grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-60 overflow-y-auto"></div>
                     </div>
                 </details>

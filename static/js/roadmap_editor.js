@@ -2079,10 +2079,25 @@
 
             checkbox.addEventListener('change', () => {
                 saveTrophyAssociations(step.id, el);
+                // Other steps' "hide used" filter depends on what's checked
+                // here — keep them in sync after every toggle.
+                refreshAllAssociatedTrophyFilters();
             });
 
             picker.appendChild(item);
         });
+
+        // Wire the "hide trophies used by other steps" toggle for THIS
+        // step's picker. Cross-step state pulled from BranchProxy each
+        // time so renames + step add/delete are picked up automatically.
+        const hideUsedCb = el.querySelector('.trophy-picker-hide-used');
+        if (hideUsedCb) {
+            hideUsedCb.addEventListener('change', () => applyAssociatedTrophyFilter(el));
+        }
+        // Initial pass — covers the case where the step is rendered with
+        // an existing checked filter (e.g., after a tab switch or
+        // re-render that preserves checkbox state via DOM persistence).
+        applyAssociatedTrophyFilter(el);
 
         // Event listeners
         const debouncedStepSave = debounce(() => saveStep(step.id, el), 800);
@@ -2184,6 +2199,54 @@
 
         tabData.steps = newSteps;
         renderSteps(activeTabId);
+    }
+
+    /**
+     * Apply the per-step "Hide trophies used by other steps" filter to
+     * one step element. Walks all OTHER steps in the active tab's
+     * BranchProxy state, collects every trophy id they've associated,
+     * then hides matching picker rows in this step — UNLESS the trophy
+     * is also checked in this step (so the author can still uncheck it).
+     *
+     * BranchProxy is the source of truth: it reflects the canonical
+     * state including any in-flight edits, while `tabsData` lags behind
+     * for some mutation paths.
+     */
+    function applyAssociatedTrophyFilter(stepEl) {
+        const cb = stepEl.querySelector('.trophy-picker-hide-used');
+        const picker = stepEl.querySelector('.trophy-picker');
+        if (!picker) return;
+        const rows = picker.querySelectorAll('label');
+
+        if (!cb || !cb.checked) {
+            rows.forEach(r => r.classList.remove('hidden'));
+            return;
+        }
+
+        const stepId = parseInt(stepEl.dataset.stepId || stepEl.dataset.itemId, 10);
+        const tab = BranchProxy.findTab(activeTabId);
+        const usedElsewhere = new Set();
+        (tab?.steps || []).forEach(s => {
+            if (s.id === stepId) return;
+            (s.trophy_ids || []).forEach(id => usedElsewhere.add(parseInt(id, 10)));
+        });
+
+        rows.forEach(row => {
+            const checkbox = row.querySelector('.trophy-checkbox');
+            if (!checkbox) return;
+            const tid = parseInt(checkbox.dataset.trophyId, 10);
+            // Keep visible when checked here — the author may want to
+            // un-associate it from this step. Otherwise hide if it's
+            // already claimed by another step.
+            const shouldHide = usedElsewhere.has(tid) && !checkbox.checked;
+            row.classList.toggle('hidden', shouldHide);
+        });
+    }
+
+    /** Re-apply the filter across every rendered step. Call after any
+     *  trophy-association change so cross-step visibility stays in sync. */
+    function refreshAllAssociatedTrophyFilters() {
+        document.querySelectorAll('.step-card').forEach(applyAssociatedTrophyFilter);
     }
 
     async function saveStep(stepId, el) {
