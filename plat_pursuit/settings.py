@@ -140,6 +140,8 @@ CONTENT_SECURITY_POLICY = {
             "https://tpc.googlesyndication.com",      # AdSense
             "https://www.google.com",                 # AdSense
             "https://fundingchoicesmessages.google.com",  # Funding Choices CMP
+            "https://ep1.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js)
+            "https://ep2.adtrafficquality.google",    # AdSense traffic quality (SODAR sodar2.js, backup)
         ],
         "style-src": [
             "'self'",
@@ -184,6 +186,7 @@ CONTENT_SECURITY_POLICY = {
             "https://googleads.g.doubleclick.net",     # AdSense ad serving
             "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
             "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
+            "https://fundingchoicesmessages.google.com",  # Funding Choices CMP consent event logging
         ],
         "worker-src": [
             "'self'",
