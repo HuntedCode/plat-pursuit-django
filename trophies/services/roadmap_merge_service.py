@@ -50,6 +50,7 @@ A failure at any step rolls back the transaction and surfaces a `MergeError`.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -398,13 +399,24 @@ def _apply_roadmap_fields(
 def _apply_steps(
     live_roadmap: Roadmap, steps_payload: list, profile, is_editor: bool,
     changes: _ChangeCounts,
-) -> None:
+) -> dict:
+    """Diff and apply steps. Returns a `{payload_id: live_id}` map so the
+    post-merge ref translator can rewrite `[[step:-N]]` body references
+    to the freshly-created live ids.
+
+    Existing steps map identity (live_id -> live_id). Brand-new steps
+    have a negative payload id (assigned by BranchProxy.nextId at create
+    time, preserved on the wire); their live id is recorded under the
+    same negative key.
+    """
     live_steps = {step.id: step for step in live_roadmap.steps.all()}
+    step_id_map: dict = {sid: sid for sid in live_steps.keys()}
 
     for index, step_payload in enumerate(steps_payload):
         step_id = step_payload.get('id')
-        # New step.
-        if step_id is None:
+        # New step — `id is None` (legacy callers) or `id < 0` (current
+        # editor; preserves negatives for body-ref translation).
+        if step_id is None or (isinstance(step_id, int) and step_id < 0):
             new_youtube_url = step_payload.get('youtube_url') or ''
             step = RoadmapStep.objects.create(
                 roadmap=live_roadmap,
@@ -419,6 +431,8 @@ def _apply_steps(
             )
             _replace_step_trophies(step, step_payload.get('trophy_ids', []))
             changes.step_creates += 1
+            if step_id is not None:
+                step_id_map[step_id] = step.id
             continue
 
         if step_id not in live_steps:
@@ -505,6 +519,8 @@ def _apply_steps(
             )
         RoadmapStep.objects.filter(id__in=actually_deleted).delete()
         changes.step_deletes += len(actually_deleted)
+
+    return step_id_map
 
 
 def _apply_trophy_guides(
@@ -736,6 +752,103 @@ def _apply_collectible_areas(
         # lose their meaning).
 
     return area_id_map
+
+
+def _translate_branch_refs(
+    live_roadmap: Roadmap, step_id_map: dict, area_id_map: dict,
+) -> None:
+    """Rewrite `[[step:-N]]` and `[[area:-N]]` body refs to live ids/slugs.
+
+    The editor lets writers reference newly-created (still-unsaved) steps
+    and areas via the `[[step:<id>]]` / `[[area:<id-or-slug>]]` tokens.
+    Brand-new entities have negative payload ids assigned by
+    `BranchProxy.nextId`; without translation those refs would break the
+    moment the entity is materialized with a live id.
+
+    This pass runs AFTER all entity merges so both id maps are populated:
+      * `step_id_map`: {payload_id: live_id}
+      * `area_id_map`: {payload_id: live_id}
+
+    For areas we additionally resolve live_id -> live_slug here so the
+    rewritten token uses the human-readable slug form (which is what the
+    reader's anchor href expects).
+
+    Idempotent: tokens that already point at a positive live id are
+    left untouched. Tokens that point at an unmappable id (deleted
+    entity) are also left as-is so the reader's "broken pill" affordance
+    surfaces them to the author.
+    """
+    if not step_id_map and not area_id_map:
+        return
+
+    # Build slug lookup once so we don't refetch areas per body field.
+    area_slug_by_payload_id: dict[int, str] = {}
+    if area_id_map:
+        live_slugs = dict(
+            RoadmapCollectibleArea.objects
+            .filter(id__in=set(area_id_map.values()))
+            .values_list('id', 'slug')
+        )
+        for payload_id, live_id in area_id_map.items():
+            slug = live_slugs.get(live_id)
+            if slug:
+                area_slug_by_payload_id[payload_id] = slug
+
+    _step_re = re.compile(r'\[\[step:(-?\d+)\]\]')
+    _area_re = re.compile(r'\[\[area:(-?\d+)\]\]')
+
+    def _rewrite(text: str) -> str:
+        if not text:
+            return text
+        rewrote = text
+        if step_id_map:
+            def _step_sub(m):
+                old = int(m.group(1))
+                live = step_id_map.get(old)
+                return f'[[step:{live}]]' if live is not None else m.group(0)
+            rewrote = _step_re.sub(_step_sub, rewrote)
+        if area_slug_by_payload_id:
+            def _area_sub(m):
+                old = int(m.group(1))
+                live_slug = area_slug_by_payload_id.get(old)
+                return f'[[area:{live_slug}]]' if live_slug else m.group(0)
+            rewrote = _area_re.sub(_area_sub, rewrote)
+        return rewrote
+
+    # Roadmap-level body fields.
+    roadmap_dirty = []
+    new_intro = _rewrite(live_roadmap.introduction)
+    if new_intro != live_roadmap.introduction:
+        live_roadmap.introduction = new_intro
+        roadmap_dirty.append('introduction')
+    new_tips = _rewrite(live_roadmap.general_tips)
+    if new_tips != live_roadmap.general_tips:
+        live_roadmap.general_tips = new_tips
+        roadmap_dirty.append('general_tips')
+    if roadmap_dirty:
+        live_roadmap.save(update_fields=roadmap_dirty)
+
+    # Step descriptions.
+    for step in live_roadmap.steps.all():
+        new_desc = _rewrite(step.description)
+        if new_desc != step.description:
+            step.description = new_desc
+            step.save(update_fields=['description'])
+
+    # Trophy guide bodies.
+    for guide in live_roadmap.trophy_guides.all():
+        new_body = _rewrite(guide.body)
+        if new_body != guide.body:
+            guide.body = new_body
+            guide.save(update_fields=['body'])
+
+    # Collectible item bodies.
+    for ctype in live_roadmap.collectible_types.all():
+        for item in ctype.items.all():
+            new_body = _rewrite(item.body)
+            if new_body != item.body:
+                item.body = new_body
+                item.save(update_fields=['body'])
 
 
 def _apply_area_markers(
@@ -1211,7 +1324,9 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
 
         changes = _ChangeCounts()
         _apply_roadmap_fields(roadmap, payload, profile, is_editor, changes)
-        _apply_steps(roadmap, payload.get('steps') or [], profile, is_editor, changes)
+        step_id_map = _apply_steps(
+            roadmap, payload.get('steps') or [], profile, is_editor, changes,
+        )
         _apply_trophy_guides(
             roadmap, payload.get('trophy_guides') or [],
             profile, is_editor, changes,
@@ -1233,6 +1348,12 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
             roadmap, payload.get('collectible_areas') or [],
             area_id_map, profile, is_editor, changes,
         )
+        # Post-pass: rewrite `[[step:-N]]` and `[[area:-N]]` body
+        # references to use the freshly-created live ids / slugs. Without
+        # this, references inserted before the entity's first save would
+        # break (the negative ids don't exist post-merge). Runs after all
+        # entity merges so both id maps are populated.
+        _translate_branch_refs(roadmap, step_id_map, area_id_map)
 
         if changes.any():
             roadmap.save(update_fields=['updated_at'])

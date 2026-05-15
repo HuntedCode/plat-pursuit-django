@@ -60,7 +60,7 @@
                             Introduction
                         </h2>
                         <div class="rounded-lg border border-base-content/5 border-l-4 border-l-info/30 bg-white/[0.03] p-3 md:p-4">
-                            <div class="prose-roadmap">{{ roadmap.introduction|render_roadmap_markdown:game.controller_icon_set|render_collectible_pills:collectibles_by_slug }}</div>
+                            <div class="prose-roadmap">{{ roadmap.introduction|render_roadmap_markdown:game.controller_icon_set|render_roadmap_refs:roadmap_refs }}</div>
                         </div>
                     </div>
                 </div>
@@ -82,7 +82,7 @@
                             General Tips
                         </h2>
                         <div class="rounded-lg border border-base-content/5 border-l-4 border-l-warning/30 bg-white/[0.03] p-3 md:p-4">
-                            <div class="prose-roadmap">{{ roadmap.general_tips|render_roadmap_markdown:game.controller_icon_set|render_collectible_pills:collectibles_by_slug }}</div>
+                            <div class="prose-roadmap">{{ roadmap.general_tips|render_roadmap_markdown:game.controller_icon_set|render_roadmap_refs:roadmap_refs }}</div>
                         </div>
                     </div>
                 </div>

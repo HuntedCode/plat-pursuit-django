@@ -11,11 +11,64 @@ from trophies.services.checklist_service import ChecklistService
 register = template.Library()
 
 
-# Matches `[[slug]]` collectible references emitted by the roadmap editor.
-# Slugs are server-generated via Django's slugify so they only contain
-# `[a-z0-9-]`. The regex caps slug length to match SlugField(max_length=50)
-# and refuses leading hyphens to mirror slugify's output.
-_COLLECTIBLE_REF_RE = re.compile(r'\[\[([a-z0-9](?:[a-z0-9-]{0,49}))\]\]')
+# Matches `[[...]]` reference tokens emitted by the roadmap editor.
+# Two shapes:
+#   - typed:  [[step:42]]  [[area:chapter-1]]  [[section:tips]]
+#   - bare:   [[journals]]   (legacy / collectible-type slug)
+# The bare form is preserved so existing content keeps working without
+# migration; new content can use either. Both shapes cap the key at 50
+# chars (SlugField max_length) and refuse leading hyphens to mirror
+# Django slugify's output.
+_ROADMAP_REF_RE = re.compile(
+    r'\[\['
+    r'(?:'
+        r'(step|area|section):([a-z0-9](?:[a-z0-9-]{0,49}))'  # typed: kind:key
+    r'|'
+        r'([a-z0-9](?:[a-z0-9-]{0,49}))'                       # bare: collectible slug
+    r')'
+    r'\]\]'
+)
+
+# Static metadata for `[[section:*]]` refs — these target hardcoded
+# anchors on the reader page (general-tips, roadmap-steps, collectibles)
+# so we don't need a runtime lookup, just a label + icon + color tint.
+_SECTION_REFS = {
+    'tips': {
+        'anchor': 'general-tips',
+        'label': 'General Tips',
+        'color': 'warning',
+        'icon_path': (
+            'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3'
+            'm3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547'
+            'A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895'
+            '-.356-1.754-.988-2.386l-.548-.547z'
+        ),
+    },
+    'steps': {
+        'anchor': 'roadmap-steps',
+        'label': 'Steps',
+        'color': 'primary',
+        'icon_path': (
+            'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 '
+            '00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2'
+            ' 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01'
+        ),
+    },
+    'collectibles': {
+        'anchor': 'collectibles',
+        'label': 'Collectibles',
+        'color': 'secondary',
+        'icon_path': (
+            'M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09'
+            'L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846'
+            'a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00'
+            '-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 '
+            '00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455'
+            '-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 '
+            '6l-1.035.259a3.375 3.375 0 00-2.456 2.456z'
+        ),
+    },
+}
 
 
 @register.filter(name='render_markdown')
@@ -65,70 +118,187 @@ def render_roadmap_markdown(text, icon_set='ps4'):
     return mark_safe(html)
 
 
-@register.filter(name='render_collectible_pills', is_safe=True)
-def render_collectible_pills(html, collectibles_by_slug):
-    """Replace ``[[slug]]`` tokens in rendered roadmap HTML with pills.
+@register.filter(name='render_roadmap_refs', is_safe=True)
+def render_roadmap_refs(html, refs):
+    """Replace `[[...]]` reference tokens in rendered roadmap HTML with pills.
 
-    Chains after :func:`render_roadmap_markdown` so markdown + bleach have
-    already run; we inject our own trusted span markup on top. The slug
-    regex restricts to ``[a-z0-9-]`` so the value is safe to interpolate.
-    Display fields (name, description) come from author-authored content
+    Four token shapes, all dispatched through the same regex pass:
+
+      * ``[[slug]]`` — collectible type (legacy / shorthand)
+      * ``[[step:<id>]]`` — individual step
+      * ``[[area:<slug>]]`` — individual collectible area
+      * ``[[section:<key>]]`` — top-level section anchor (`tips`, `steps`,
+        `collectibles`)
+
+    Chains after :func:`render_roadmap_markdown` so markdown + bleach
+    have already run; we inject our own trusted span / anchor markup on
+    top. The regex restricts keys to ``[a-z0-9-]`` so values are safe
+    to interpolate. Display fields come from author-authored content
     and ARE escaped.
 
-    Unknown slugs (renamed type / typo / deleted type) render as a muted
-    "broken" pill so the author can spot them after a delete rather than
-    having references silently disappear.
+    Unknown / orphaned refs render as a muted "broken" pill so the
+    author can spot them after a delete rather than having references
+    silently disappear.
 
-    Expects ``collectibles_by_slug`` as ``{slug: type_obj}`` where
-    ``type_obj`` exposes ``name``, ``color``, ``icon``, ``description``,
-    and ``total_count``. The reader-side JS reads ``data-slug`` to wire
-    the click handler that scrolls to the Collectibles Tracker section.
+    Expects ``refs`` as a dict::
+
+        {
+            'collectibles': {slug: type_obj},
+            'steps':        {step_id_str: {'title': ..., 'position': ...}},
+            'areas':        {area_slug: {'name': ...}},
+        }
+
+    Section refs (`[[section:tips]]`) are static metadata, no lookup.
+    Reader-side JS wires click handlers off the rendered classes
+    (`.collectible-pill`, `.roadmap-ref-pill`).
     """
     if not html:
         return html
-    types = collectibles_by_slug or {}
+    refs = refs or {}
+    collectibles = refs.get('collectibles') or {}
+    steps = refs.get('steps') or {}
+    areas = refs.get('areas') or {}
 
     def _replace(match):
-        slug = match.group(1)
-        ctype = types.get(slug)
-        if ctype is None:
-            return (
-                f'<span class="collectible-pill is-broken" data-slug="{escape(slug)}" '
-                f'title="No collectible defined for [[{escape(slug)}]]">'
-                f'[[{escape(slug)}]]'
-                f'</span>'
-            )
-        icon = (getattr(ctype, 'icon', '') or '📦')
-        # Inline `[[slug]]` pills always read as a *category* reference
-        # ("see all the [[journals]] in this chapter"), so display the
-        # plural form. Falls back to singular when name_plural is blank
-        # (legacy types from before the field shipped).
-        display = (
-            getattr(ctype, 'display_name_plural', None)
-            or getattr(ctype, 'name_plural', '')
-            or getattr(ctype, 'name', '')
-            or slug
-        )
-        # `data-name` keeps the singular for any UI that wants to refer
-        # to a single instance (currently unused; preserved as an
-        # affordance for future per-item linking).
-        name_singular = getattr(ctype, 'name', '') or slug
-        color = getattr(ctype, 'color', 'primary') or 'primary'
-        description = getattr(ctype, 'description', '') or ''
-        total = getattr(ctype, 'total_count', None)
-        total_attr = f' data-total="{total}"' if total else ''
+        kind = match.group(1)
+        key = match.group(2)
+        bare_slug = match.group(3)
+
+        if bare_slug is not None:
+            return _render_collectible_pill(bare_slug, collectibles)
+        if kind == 'step':
+            return _render_step_pill(key, steps)
+        if kind == 'area':
+            return _render_area_pill(key, areas)
+        if kind == 'section':
+            return _render_section_pill(key)
+        # Unreachable given the regex, but defensive.
+        return match.group(0)
+
+    return mark_safe(_ROADMAP_REF_RE.sub(_replace, html))
+
+
+# Backward-compat alias — older content / templates may still reference
+# `render_collectible_pills`. Redirects to the unified renderer with a
+# compat shim that wraps the bare collectibles dict in the new refs
+# shape, so behavior is identical.
+@register.filter(name='render_collectible_pills', is_safe=True)
+def render_collectible_pills(html, collectibles_by_slug):
+    """Compat alias — prefer ``render_roadmap_refs:roadmap_refs``."""
+    return render_roadmap_refs(html, {'collectibles': collectibles_by_slug or {}})
+
+
+def _render_collectible_pill(slug, collectibles):
+    ctype = collectibles.get(slug)
+    if ctype is None:
         return (
-            f'<span class="collectible-pill" '
-            f'data-slug="{escape(slug)}" '
-            f'data-color="{escape(color)}" '
-            f'data-name="{escape(name_singular)}" '
-            f'data-name-plural="{escape(display)}" '
-            f'data-icon="{escape(icon)}" '
-            f'data-description="{escape(description)}"'
-            f'{total_attr}>'
-            f'{escape(icon)}'
-            f'<span class="collectible-pill-name">{escape(display)}</span>'
+            f'<span class="collectible-pill is-broken" data-slug="{escape(slug)}" '
+            f'title="No collectible defined for [[{escape(slug)}]]">'
+            f'[[{escape(slug)}]]'
             f'</span>'
         )
+    icon = (getattr(ctype, 'icon', '') or '📦')
+    # Inline `[[slug]]` pills always read as a *category* reference
+    # ("see all the [[journals]] in this chapter"), so display the
+    # plural form. Falls back to singular when name_plural is blank
+    # (legacy types from before the field shipped).
+    display = (
+        getattr(ctype, 'display_name_plural', None)
+        or getattr(ctype, 'name_plural', '')
+        or getattr(ctype, 'name', '')
+        or slug
+    )
+    name_singular = getattr(ctype, 'name', '') or slug
+    color = getattr(ctype, 'color', 'primary') or 'primary'
+    description = getattr(ctype, 'description', '') or ''
+    total = getattr(ctype, 'total_count', None)
+    total_attr = f' data-total="{total}"' if total else ''
+    return (
+        f'<span class="collectible-pill" '
+        f'data-slug="{escape(slug)}" '
+        f'data-color="{escape(color)}" '
+        f'data-name="{escape(name_singular)}" '
+        f'data-name-plural="{escape(display)}" '
+        f'data-icon="{escape(icon)}" '
+        f'data-description="{escape(description)}"'
+        f'{total_attr}>'
+        f'{escape(icon)}'
+        f'<span class="collectible-pill-name">{escape(display)}</span>'
+        f'</span>'
+    )
 
-    return mark_safe(_COLLECTIBLE_REF_RE.sub(_replace, html))
+
+def _render_step_pill(step_key, steps):
+    step = steps.get(step_key)
+    if step is None:
+        return (
+            f'<span class="roadmap-ref-pill is-broken" '
+            f'title="No step found for [[step:{escape(step_key)}]]">'
+            f'[[step:{escape(step_key)}]]</span>'
+        )
+    title = step.get('title') or ''
+    position = step.get('position') or '?'
+    label = f'Step {position}' + (f': {title}' if title else '')
+    # Numbered-step glyph in the trail icon for instant scan recognition
+    # of "this is a step reference". `data-color="primary"` matches the
+    # step card's left-stripe accent so the visual loop closes.
+    return (
+        f'<a href="#step-{escape(step_key)}" '
+        f'class="roadmap-ref-pill" data-color="primary" '
+        f'data-ref-kind="step" data-ref-id="{escape(step_key)}" '
+        f'title="Jump to {escape(label)}">'
+        f'<span class="roadmap-ref-pill-badge">#{escape(str(position))}</span>'
+        f'<span class="roadmap-ref-pill-name">{escape(title or f"Step {position}")}</span>'
+        f'</a>'
+    )
+
+
+def _render_area_pill(area_slug, areas):
+    area = areas.get(area_slug)
+    if area is None:
+        return (
+            f'<span class="roadmap-ref-pill is-broken" '
+            f'title="No area found for [[area:{escape(area_slug)}]]">'
+            f'[[area:{escape(area_slug)}]]</span>'
+        )
+    name = area.get('name') or area_slug
+    return (
+        f'<a href="#collectible-area-{escape(area_slug)}" '
+        f'class="roadmap-ref-pill" data-color="accent" '
+        f'data-ref-kind="area" data-ref-slug="{escape(area_slug)}" '
+        f'title="Jump to {escape(name)}">'
+        # Inline location-pin SVG (Heroicons map-pin outline). Avoid
+        # emoji here so the icon scales with text-color/opacity rules
+        # the same way the rest of the pill does.
+        f'<svg xmlns="http://www.w3.org/2000/svg" class="roadmap-ref-pill-icon" '
+        f'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" '
+        f'd="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>'
+        f'<path stroke-linecap="round" stroke-linejoin="round" '
+        f'd="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>'
+        f'</svg>'
+        f'<span class="roadmap-ref-pill-name">{escape(name)}</span>'
+        f'</a>'
+    )
+
+
+def _render_section_pill(section_key):
+    meta = _SECTION_REFS.get(section_key)
+    if meta is None:
+        return (
+            f'<span class="roadmap-ref-pill is-broken" '
+            f'title="No section found for [[section:{escape(section_key)}]]">'
+            f'[[section:{escape(section_key)}]]</span>'
+        )
+    return (
+        f'<a href="#{escape(meta["anchor"])}" '
+        f'class="roadmap-ref-pill" data-color="{escape(meta["color"])}" '
+        f'data-ref-kind="section" data-ref-section="{escape(section_key)}" '
+        f'title="Jump to the {escape(meta["label"])} section">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" class="roadmap-ref-pill-icon" '
+        f'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        f'<path stroke-linecap="round" stroke-linejoin="round" d="{meta["icon_path"]}"/>'
+        f'</svg>'
+        f'<span class="roadmap-ref-pill-name">{escape(meta["label"])}</span>'
+        f'</a>'
+    )

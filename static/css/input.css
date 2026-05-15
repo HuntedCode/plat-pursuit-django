@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/frame.css";
 @plugin "daisyui";
 
 @theme {
@@ -2000,6 +2001,43 @@ details[open]::details-content {
 .collectible-pill[data-color="error"]     { @apply bg-error/15 text-error border-error/30 hover:bg-error/25; }
 .collectible-pill.is-broken {
   @apply bg-base-300/40 text-base-content/40 border-base-content/20 italic line-through cursor-help;
+}
+
+/* ===== Roadmap section / step / area refs ============================
+   Inline pills emitted by `render_roadmap_refs` for the typed `[[step:N]]`,
+   `[[area:slug]]`, and `[[section:*]]` token forms. Shares the same pill
+   geometry as collectibles for visual consistency, but renders as `<a>`
+   (these are navigational anchors, not category references) and includes
+   an inline icon or numbered badge.
+   ============================================================================ */
+.roadmap-ref-pill {
+  @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[0.85em] font-medium align-baseline cursor-pointer transition-colors no-underline;
+  white-space: nowrap;
+  /* Override the prose-roadmap `a` rule so these pills don't render
+     with the underline + base-content link color. */
+  text-decoration: none !important;
+}
+.roadmap-ref-pill .roadmap-ref-pill-icon {
+  @apply w-3 h-3 shrink-0;
+}
+.roadmap-ref-pill .roadmap-ref-pill-name {
+  @apply font-semibold;
+}
+.roadmap-ref-pill .roadmap-ref-pill-badge {
+  /* Numbered "#5" badge for step refs — slightly tighter than the name. */
+  @apply font-bold tabular-nums text-[0.9em] px-1 rounded bg-current/15;
+  /* `bg-current/15` keeps the chip-on-chip in the same color family as
+     the pill itself; no need for a separate per-color rule here. */
+}
+.roadmap-ref-pill[data-color="primary"]   { @apply bg-primary/15 text-primary border-primary/30 hover:bg-primary/25; }
+.roadmap-ref-pill[data-color="secondary"] { @apply bg-secondary/15 text-secondary border-secondary/30 hover:bg-secondary/25; }
+.roadmap-ref-pill[data-color="accent"]    { @apply bg-accent/15 text-accent border-accent/30 hover:bg-accent/25; }
+.roadmap-ref-pill[data-color="info"]      { @apply bg-info/15 text-info border-info/30 hover:bg-info/25; }
+.roadmap-ref-pill[data-color="success"]   { @apply bg-success/15 text-success border-success/30 hover:bg-success/25; }
+.roadmap-ref-pill[data-color="warning"]   { @apply bg-warning/15 text-warning border-warning/30 hover:bg-warning/25; }
+.roadmap-ref-pill[data-color="error"]     { @apply bg-error/15 text-error border-error/30 hover:bg-error/25; }
+.roadmap-ref-pill.is-broken {
+  @apply bg-base-300/40 text-base-content/40 border-base-content/20 italic cursor-help;
 }
 
 /* Editor swatch + picker (small square in each Collectibles row, in the

@@ -201,16 +201,39 @@ class RoadmapPreviewView(APIView):
             icon_set = getattr(game, 'controller_icon_set', 'ps4') if game else 'ps4'
 
         from trophies.services.checklist_service import ChecklistService
-        from trophies.templatetags.markdown_filters import render_collectible_pills
+        from trophies.templatetags.markdown_filters import render_roadmap_refs
 
         # Same pipeline as the reader's `render_roadmap_markdown` filter:
-        # markdown2 + bleach + spoilers, then pill substitution. Empty
-        # input renders as empty so the editor can show "(nothing to
-        # preview)" without a special branch on this side.
+        # markdown2 + bleach + spoilers, then ref substitution (covers
+        # collectible pills + step/area/section refs). Empty input
+        # renders as empty so the editor can show "(nothing to preview)"
+        # without a special branch on this side.
         html = ChecklistService.process_markdown(
             text, icon_set=icon_set, enable_spoilers=True,
         )
         types_by_slug = {t.slug: t for t in roadmap.collectible_types.all() if t.slug}
-        html = render_collectible_pills(html, types_by_slug)
+        steps_by_id = {}
+        for idx, step in enumerate(roadmap.steps.all()):
+            steps_by_id[str(step.id)] = {
+                'title': step.title or '',
+                'position': idx + 1,
+            }
+        # Areas keyed by both slug and stringified id so an unsaved-area
+        # token like `[[area:-2]]` resolves to a "broken" pill rather
+        # than rendering correctly with the old slug. Negative ids
+        # naturally won't match either key, which is the desired
+        # preview behavior — author sees a broken pill until save +
+        # translator runs.
+        areas_by_key = {}
+        for a in roadmap.collectible_areas.all():
+            entry = {'name': a.name or a.slug or f'Area {a.id}'}
+            if a.slug:
+                areas_by_key[a.slug] = entry
+            areas_by_key[str(a.id)] = entry
+        html = render_roadmap_refs(html, {
+            'collectibles': types_by_slug,
+            'steps': steps_by_id,
+            'areas': areas_by_key,
+        })
 
         return Response({'html': html})

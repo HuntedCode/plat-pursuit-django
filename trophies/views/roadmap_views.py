@@ -146,6 +146,34 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             ct.slug: ct for ct in roadmap.collectible_types.all()
         }
 
+        # Unified ref dict for `render_roadmap_refs`. Bundles the
+        # collectible-type lookup with steps + areas so the renderer
+        # can resolve `[[step:N]]`, `[[area:slug]]`, and `[[section:*]]`
+        # in addition to the bare `[[slug]]` collectible form.
+        # Keys are stringified to match how the regex captures them.
+        steps_by_id = {}
+        for idx, step in enumerate(roadmap.steps.all()):
+            steps_by_id[str(step.id)] = {
+                'title': step.title or '',
+                'position': idx + 1,
+            }
+        # Areas are keyed by BOTH slug and stringified id so a token can
+        # resolve via either form. Saved content always uses slug (the
+        # merge-time translator rewrites `[[area:-N]]` -> slug); the id
+        # path is purely a safety net for any pre-translation content
+        # that might somehow still be in the database.
+        areas_by_key = {}
+        for a in roadmap.collectible_areas.all():
+            entry = {'name': a.name or a.slug or f'Area {a.id}'}
+            if a.slug:
+                areas_by_key[a.slug] = entry
+            areas_by_key[str(a.id)] = entry
+        context['roadmap_refs'] = {
+            'collectibles': context['collectibles_by_slug'],
+            'steps': steps_by_id,
+            'areas': areas_by_key,
+        }
+
         # Collectible Tracker context — only built when the roadmap has
         # at least one type with at least one item. The tracker section
         # renders from this dict; absence means "no collectibles, hide

@@ -97,7 +97,7 @@
     {% if item.body or item.youtube_url or item.gallery_images %}
     <div class="collectible-item-rich-panel border-t px-2 py-2 space-y-2">
         {% if item.body %}
-        <div class="prose-roadmap text-xs">{{ item.body|render_roadmap_markdown:game.controller_icon_set|render_collectible_pills:collectibles_by_slug }}</div>
+        <div class="prose-roadmap text-xs">{{ item.body|render_roadmap_markdown:game.controller_icon_set|render_roadmap_refs:roadmap_refs }}</div>
         {% endif %}
         {% if item.youtube_url %}
         {# Same divider treatment trophy guides use: thin top border +     #}

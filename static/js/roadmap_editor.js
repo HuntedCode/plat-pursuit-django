@@ -1238,9 +1238,11 @@
         toWirePayload() {
             const cloned = JSON.parse(JSON.stringify(this.state));
             (cloned.tabs || []).forEach(tab => {
-                (tab.steps || []).forEach(step => {
-                    if (typeof step.id === 'number' && step.id < 0) step.id = null;
-                });
+                // Steps: keep negative ids on the wire so the merge service
+                // can build a step_id_map and rewrite `[[step:-N]]` body
+                // references to the freshly-created live ids. (Trophy
+                // guides and collectibles already preserve negatives for
+                // similar reasons.)
                 (tab.trophy_guides || []).forEach(g => {
                     if (typeof g.id === 'number' && g.id < 0) g.id = null;
                 });
@@ -3027,6 +3029,14 @@
                 return;
             }
 
+            // Section / step / area link picker — inserts `[[step:N]]`,
+            // `[[area:slug]]`, or `[[section:*]]` tokens that the reader
+            // renders as color-coded pills via render_roadmap_refs.
+            if (fmtKey === 'section-link') {
+                showRoadmapRefPicker(textarea);
+                return;
+            }
+
             // Image upload button
             if (fmtKey === 'image') {
                 uploadImage(textarea);
@@ -3320,6 +3330,152 @@
                     `[${trophyName}](#trophy-guide-${trophyId})`,
                 );
             },
+        });
+    }
+
+    /**
+     * Roadmap-ref picker — opens a modal grouped into Sections / Steps /
+     * Areas, lets the writer pick one, inserts the matching `[[...]]`
+     * token at the textarea cursor. Reader's `render_roadmap_refs`
+     * renders the token as a color-coded pill.
+     *
+     * Sections are static (Steps / Tips / Collectibles) and always
+     * available. Steps + Areas come from the active tab's data; the
+     * group is hidden when empty so the picker stays compact for
+     * roadmaps that don't yet have any.
+     */
+    function showRoadmapRefPicker(textarea) {
+        const activePanel = document.querySelector(`.roadmap-tab-panel:not(.hidden)`);
+        const tabId = activePanel ? parseInt(activePanel.dataset.tabId, 10) : null;
+        // Read from the canonical BranchProxy state, not the `tabsData`
+        // mirror. saveStep / patch flows write to BranchProxy first; the
+        // mirror is updated lazily and goes stale between mutations
+        // (e.g., title edits don't propagate to the mirror, so the
+        // picker would show the old title until the next add/sync).
+        const tab = BranchProxy.findTab(tabId);
+        const steps = (tab?.steps || []).slice().sort(
+            (a, b) => (a.order ?? 0) - (b.order ?? 0),
+        );
+        const areas = (tab?.collectible_areas || []).slice().sort(
+            (a, b) => (a.order ?? 0) - (b.order ?? 0),
+        );
+
+        document.getElementById('roadmap-ref-picker')?.remove();
+
+        const picker = document.createElement('div');
+        picker.id = 'roadmap-ref-picker';
+        picker.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50';
+
+        // Per-group rendering. Each option button carries `data-token`
+        // with the literal `[[...]]` that should be inserted on click.
+        const sectionRows = [
+            { token: '[[section:steps]]', label: 'Steps section', sub: 'Jump to the full Steps list', color: 'primary' },
+            { token: '[[section:tips]]', label: 'Tips section', sub: 'Jump to the General Tips card', color: 'warning' },
+            { token: '[[section:collectibles]]', label: 'Collectibles section', sub: 'Jump to the Collectibles tracker', color: 'secondary' },
+        ];
+
+        function renderOptions(filter) {
+            const f = (filter || '').toLowerCase().trim();
+            const matches = (haystack) =>
+                !f || (haystack || '').toLowerCase().includes(f);
+
+            const sectionsHtml = sectionRows
+                .filter(r => matches(r.label) || matches(r.sub))
+                .map(r => `
+                    <button class="roadmap-ref-option flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-token="${HTMLUtils.escape(r.token)}">
+                        <span class="w-7 h-7 rounded shrink-0 flex items-center justify-center bg-${r.color}/15 text-${r.color}">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2L19 21z"/></svg>
+                        </span>
+                        <span class="flex-1 min-w-0">
+                            <span class="block text-sm font-medium truncate">${HTMLUtils.escape(r.label)}</span>
+                            <span class="block text-[11px] text-base-content/50 truncate">${HTMLUtils.escape(r.sub)}</span>
+                        </span>
+                    </button>
+                `).join('');
+
+            const stepsHtml = steps
+                .map((s, i) => ({ s, position: i + 1 }))
+                .filter(({ s }) => matches(s.title))
+                .map(({ s, position }) => `
+                    <button class="roadmap-ref-option flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-token="[[step:${s.id}]]">
+                        <span class="w-7 h-7 rounded shrink-0 flex items-center justify-center bg-primary/15 text-primary text-xs font-bold tabular-nums">#${position}</span>
+                        <span class="flex-1 min-w-0">
+                            <span class="block text-sm font-medium truncate">${HTMLUtils.escape(s.title || `Step ${position}`)}</span>
+                        </span>
+                    </button>
+                `).join('');
+
+            const areasHtml = areas
+                .filter(a => matches(a.name) || matches(a.slug))
+                .map(a => {
+                    // Slug is server-generated at merge — brand-new (still
+                    // negative-id) areas don't have one yet. Fall back to
+                    // the ID so the token is at least valid; the merge
+                    // service rewrites ID-based tokens to slug-based at
+                    // save time once the live slug is known.
+                    const key = a.slug || String(a.id);
+                    return `
+                    <button class="roadmap-ref-option flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-token="[[area:${HTMLUtils.escape(key)}]]">
+                        <span class="w-7 h-7 rounded shrink-0 flex items-center justify-center bg-accent/15 text-accent">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        </span>
+                        <span class="flex-1 min-w-0">
+                            <span class="block text-sm font-medium truncate">${HTMLUtils.escape(a.name || a.slug || `Area ${a.id}`)}</span>
+                        </span>
+                    </button>
+                `}).join('');
+
+            const groupHeader = (label) => `
+                <div class="text-[10px] uppercase tracking-wider font-semibold text-base-content/45 px-2 pt-2 pb-0.5">${label}</div>
+            `;
+
+            return [
+                sectionsHtml ? groupHeader('Sections') + sectionsHtml : '',
+                stepsHtml ? groupHeader('Steps') + stepsHtml : '',
+                areasHtml ? groupHeader('Areas') + areasHtml : '',
+            ].join('') || `<p class="text-sm italic text-base-content/40 text-center py-6">No matches.</p>`;
+        }
+
+        picker.innerHTML = `
+            <div class="bg-base-200 border-2 border-base-300 rounded-xl shadow-2xl w-[90vw] max-w-md max-h-[70vh] flex flex-col">
+                <div class="flex items-center justify-between p-3 border-b border-base-300">
+                    <h3 class="text-sm font-bold">Insert section / step / area link</h3>
+                    <button class="btn btn-ghost btn-xs btn-circle" id="roadmap-ref-close">&times;</button>
+                </div>
+                <div class="p-2 border-b border-base-300">
+                    <input type="text" class="input input-bordered input-sm w-full" id="roadmap-ref-search" placeholder="Search...">
+                </div>
+                <div class="overflow-y-auto flex-1 p-2 space-y-0.5" id="roadmap-ref-list"></div>
+            </div>
+        `;
+        document.body.appendChild(picker);
+
+        const list = picker.querySelector('#roadmap-ref-list');
+        const search = picker.querySelector('#roadmap-ref-search');
+        list.innerHTML = renderOptions('');
+        search.focus();
+        search.addEventListener('input', () => { list.innerHTML = renderOptions(search.value); });
+
+        list.addEventListener('click', (e) => {
+            const opt = e.target.closest('.roadmap-ref-option');
+            if (!opt) return;
+            const token = opt.dataset.token;
+            picker.remove();
+            // Surrounding spaces so the token doesn't glue onto adjacent
+            // text in a way the regex can't catch (e.g., `foo[[step:5]]`
+            // would still match, but it makes the source less readable).
+            insertTextPreservingUndo(textarea, token);
+        });
+
+        picker.querySelector('#roadmap-ref-close').addEventListener('click', () => picker.remove());
+        picker.addEventListener('click', (e) => {
+            if (e.target === picker) picker.remove();
+        });
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                picker.remove();
+                document.removeEventListener('keydown', escHandler);
+            }
         });
     }
 

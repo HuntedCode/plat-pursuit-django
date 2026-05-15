@@ -885,6 +885,38 @@
                 navigateToGuide(link.getAttribute('href'));
             });
         });
+
+        // `[[step:N]]` / `[[area:slug]]` / `[[section:*]]` pills emitted
+        // by render_roadmap_refs. They're plain `<a href="#anchor">` so
+        // the browser would handle them, but routing through
+        // scrollAnchorIntoView gets us the lazy-image-reflow correction
+        // + auto-opening of any collapsed <details> ancestors.
+        document.querySelectorAll('.roadmap-ref-pill[href]').forEach((link) => {
+            // Broken pills render as <span> (no href) — already excluded
+            // by the [href] selector above.
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = link.getAttribute('href').slice(1);
+                const target = document.getElementById(targetId);
+                if (!target) return;
+                // Open any collapsed ancestor <details> so the target is
+                // actually visible after the scroll. (Step refs land
+                // outside details; area refs land on a <details> directly
+                // — and the area might be auto-collapsed when complete.)
+                if (target.tagName === 'DETAILS' && !target.open) {
+                    target.open = true;
+                }
+                let parent = target.parentElement;
+                while (parent) {
+                    if (parent.tagName === 'DETAILS' && !parent.open) {
+                        parent.open = true;
+                    }
+                    parent = parent.parentElement;
+                }
+                scrollAnchorIntoView(target, { block: 'start' });
+                history.replaceState(null, '', '#' + targetId);
+            });
+        });
     }
 
     // ── Deep Link Handling ──────────────────────────────────────────────
