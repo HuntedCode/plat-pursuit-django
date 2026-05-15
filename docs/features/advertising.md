@@ -31,6 +31,7 @@ Each slot ID is a separate ad unit in AdSense, which enables per-page revenue re
 | `1688153315` | sidebar-right | Desktop right rail, sticky | `templates/base.html` |
 | `9347573919` | mobile-banner | Bottom mobile, 320x50, dismissible | `templates/base.html` |
 | `4478966946` | ppc-game-detail | Game detail, below community tabs | `templates/trophies/game_detail.html` |
+| `2324440264` | ppc-roadmap-detail | Trophy roadmap/guide detail, below Introduction section | `templates/trophies/roadmap_detail.html` |
 | `8944812256` | ppc-franchise-detail | Franchise detail + list | `templates/trophies/franchise_{detail,list}.html` |
 | `9209595625` | ppc-company | Company detail + list | `templates/trophies/company_{detail,list}.html` |
 | `3933218215` | ppc-engine | Engine detail + list | `templates/trophies/engine_{detail,list}.html` |
