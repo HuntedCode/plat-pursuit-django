@@ -26,6 +26,7 @@ from collections import defaultdict
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import F
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -107,17 +108,15 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
             return context
 
         # Get user's platinum trophies (including shovelware - filtered client-side
-        # via the toggle in the page header). Note: we deliberately do NOT use
-        # `nulls_last=True` on earned_date_time here even though most date
-        # querysets in the codebase do. Postgres' default for DESC is NULLS
-        # FIRST, which puts NULL-date plats at idx 0+ and gives them the
-        # highest platinum_number. This agrees with the share-card count's
-        # NULL-branch logic (see ShareableDataService.get_platinum_share_data),
-        # so flipping to nulls_last here would silently desync the listing
-        # ordinal from the rendered card. The `-id` secondary sort breaks
-        # ties (PSN sometimes returns identical timestamps for trophies popped
-        # the same second) so the listing's ordinal exactly matches the
-        # share-card's tuple-comparison count.
+        # via the toggle in the page header). `nulls_last=True` puts NULL-date
+        # platinums (rare; PSN occasionally returns no timestamp for very old
+        # or hidden trophies) at the END of the listing so the newest-by-date
+        # plat reliably gets the highest ordinal (`#total_count`). The
+        # share-card count in ShareableDataService.get_platinum_share_data is
+        # the coupled pair to this ordering: flipping one without the other
+        # silently desyncs the listing's ordinal from the rendered card. The
+        # `-id` secondary sort breaks ties (PSN sometimes returns identical
+        # timestamps for trophies popped the same second).
         earned_platinums = EarnedTrophy.objects.filter(
             profile=profile,
             earned=True,
@@ -126,7 +125,7 @@ class MyPlatinumSharesView(LoginRequiredMixin, _RequireLinkedProfileMixin, Profi
             'trophy__game',
             'trophy__game__concept',
             'trophy__game__concept__igdb_match',
-        ).order_by('-earned_date_time', '-id')
+        ).order_by(F('earned_date_time').desc(nulls_last=True), '-id')
 
         # Calculate platinum number for each trophy (for milestone display).
         # Since the queryset is ordered newest-first, the newest plat is

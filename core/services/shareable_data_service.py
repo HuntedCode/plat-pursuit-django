@@ -184,7 +184,7 @@ class ShareableDataService:
         ).first()
 
         # Count total platinums earned up to and including this one. The
-        # ordering is `(-earned_date_time, -id)` (NULLs first for date) — see
+        # ordering is `(earned_date_time DESC NULLS LAST, -id)` — see
         # MyPlatinumSharesView for the matching listing order. We use a
         # tuple-style comparison so ties on earned_date_time break by id:
         # otherwise two plats popped the same second would both come back as
@@ -199,16 +199,18 @@ class ShareableDataService:
         earned_year = None
 
         if earned_date:
-            # Listing places NULL-date plats above all valid-date plats
-            # (Postgres DESC NULLS FIRST), so a valid-date plat's ordinal
-            # only counts other VALID plats that are not-newer than it.
+            # Listing places NULL-date plats AFTER all valid-date plats
+            # (DESC NULLS LAST), so a valid-date plat's ordinal counts every
+            # NULL-date plat plus the valid plats that are not-newer than it.
             earned_year = earned_date.year
             total_plats = plat_qs.filter(
-                Q(earned_date_time__lt=earned_date)
+                Q(earned_date_time__isnull=True)
+                | Q(earned_date_time__lt=earned_date)
                 | Q(earned_date_time=earned_date, id__lte=earned_trophy.id)
             ).count()
 
-            # Yearly count uses the same tuple-comparison clamped to year start.
+            # Yearly count uses the same tuple-comparison clamped to year
+            # start. NULL-date plats are excluded (they have no year).
             from datetime import datetime
             year_start = datetime(earned_year, 1, 1, tzinfo=earned_date.tzinfo)
             yearly_plats = plat_qs.filter(
@@ -218,12 +220,13 @@ class ShareableDataService:
                 | Q(earned_date_time=earned_date, id__lte=earned_trophy.id)
             ).count()
         else:
-            # NULL-date plat: listing places these at the very top, sorted by
-            # `-id` within the NULL group, so its ordinal is (NULL plats with
-            # id <= this id) + (every valid-date plat in the library).
+            # NULL-date plat: listing places these at the END of the timeline,
+            # sorted by `-id` within the NULL group, so its ordinal is just
+            # (NULL plats with id <= this id). Valid-date plats all sort
+            # newer in the listing and are NOT included.
             total_plats = plat_qs.filter(
-                Q(earned_date_time__isnull=False)
-                | Q(earned_date_time__isnull=True, id__lte=earned_trophy.id)
+                earned_date_time__isnull=True,
+                id__lte=earned_trophy.id,
             ).count()
             # Yearly count is meaningless without a date.
             yearly_plats = 0
