@@ -3278,17 +3278,37 @@
         const search = picker.querySelector('#trophy-link-search');
 
         function renderList(filter) {
-            const filtered = filter
-                ? trophies.filter(t => t.name.toLowerCase().includes(filter.toLowerCase()))
+            // Filter matches both name AND description so writers can
+            // narrow by content too — useful when scanning a long list
+            // for "the one about boss XYZ" without remembering the
+            // trophy's literal name.
+            const f = (filter || '').toLowerCase();
+            const filtered = f
+                ? trophies.filter(t =>
+                    (t.name || '').toLowerCase().includes(f)
+                    || (t.detail || '').toLowerCase().includes(f)
+                  )
                 : trophies;
 
-            list.innerHTML = filtered.map(t => `
-                <button class="trophy-link-option flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-trophy-id="${t.trophy_id}" data-trophy-name="${t.name.replace(/"/g, '&quot;')}">
-                    <img src="${t.icon_url}" alt="" class="w-7 h-7 rounded object-cover shrink-0">
-                    <span class="text-sm truncate flex-1">${t.name}</span>
-                    <span class="badge badge-xs ${TROPHY_TYPE_COLORS[t.type] || 'badge-ghost'} shrink-0">${t.type}</span>
+            list.innerHTML = filtered.map(t => {
+                const detail = HTMLUtils.escape(t.detail || '');
+                // Description renders as a small italic second line,
+                // line-clamped to 2 lines so a long description doesn't
+                // blow out the row. Skipped entirely for trophies with
+                // no detail text (rare — usually hidden trophies).
+                const detailHtml = detail
+                    ? `<span class="block text-[11px] italic text-base-content/55 line-clamp-2 leading-tight pr-1">${detail}</span>`
+                    : '';
+                return `
+                <button class="trophy-link-option flex items-start gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-trophy-id="${t.trophy_id}" data-trophy-name="${t.name.replace(/"/g, '&quot;')}">
+                    <img src="${t.icon_url}" alt="" class="w-7 h-7 rounded object-cover shrink-0 mt-0.5">
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-sm font-medium truncate">${HTMLUtils.escape(t.name)}</span>
+                        ${detailHtml}
+                    </span>
+                    <span class="badge badge-xs ${TROPHY_TYPE_COLORS[t.type] || 'badge-ghost'} shrink-0 mt-1">${t.type}</span>
                 </button>
-            `).join('');
+            `;}).join('');
         }
 
         renderList();
