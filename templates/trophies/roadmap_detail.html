@@ -8,6 +8,36 @@
 {{ trophy_phases|json_script:"roadmap-trophy-phases" }}
 <div id="roadmap-detail">
 
+    {# ═══ Sign-In CTA for anonymous viewers tracking collectibles ═══     #}
+    {# Anonymous users get localStorage-only progress tracking. This       #}
+    {# floating banner sits below the sticky chrome and surfaces the      #}
+    {# offer to sign in for cross-device sync. Hidden by default — JS     #}
+    {# (CollectibleTracker._maybeShowLoginCta) reveals it once we know   #}
+    {# they have actual local progress AND haven't dismissed it before.  #}
+    {# Permanent dismiss writes a global localStorage key.                #}
+    {% if has_collectibles and not user.is_authenticated %}
+    <div id="collectibles-login-cta"
+         class="hidden fixed left-0 right-0 z-40 pointer-events-none"
+         style="top: calc(var(--chrome-height, 5rem) + 0.5rem);">
+        <div class="container mx-auto px-3 flex justify-center">
+            <div class="pointer-events-auto inline-flex max-w-full items-center gap-2 rounded-lg border border-info/40 bg-info/15 backdrop-blur-sm shadow-lg shadow-black/20 px-3 py-2 text-xs md:text-sm text-base-content">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-info shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span class="min-w-0">
+                    Your collectibles progress is saved on this device only.
+                    <a href="{% url 'account_login' %}?next={{ request.get_full_path }}" class="font-semibold underline hover:no-underline">Sign in</a>
+                    to sync across devices.
+                </span>
+                <button type="button"
+                        id="collectibles-login-cta-dismiss"
+                        class="ml-1 shrink-0 text-base-content/50 hover:text-base-content transition-colors"
+                        aria-label="Dismiss">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {# ═══ Preview Banner ═══ #}

@@ -1112,6 +1112,7 @@
             this._wireSearch();
             this._wireHideFound();
             this._wirePillClicks();
+            this._wireLoginCta();
             this._restoreAnonProgress();
             // Initial chip state: every chip has a `data-state="active"` if
             // its filter is the current selection. The "All" chip starts
@@ -1119,6 +1120,50 @@
             // so the colored ring CSS picks it up.
             this._setActiveTypeFilter('all');
             this._recomputeTotals();
+            // After restore + initial recompute, surface the CTA if the
+            // user has anything saved already (returning visit to the
+            // page). First-toggle path goes through `_setItemFound`.
+            this._maybeShowLoginCta();
+        },
+
+        // In-memory "dismissed this page load" flag. Not persisted — a
+        // refresh / next-roadmap-load resurfaces the banner if local
+        // progress still exists. Within the same view, prevents the
+        // banner from re-appearing every time the writer ticks another
+        // checkbox after dismissing.
+        _loginCtaDismissed: false,
+
+        // Wires the dismiss button on the sign-in CTA banner. Page-load
+        // scoped (see `_loginCtaDismissed` above).
+        _wireLoginCta() {
+            const btn = document.getElementById('collectibles-login-cta-dismiss');
+            if (!btn) return;
+            btn.addEventListener('click', () => {
+                this._loginCtaDismissed = true;
+                document.getElementById('collectibles-login-cta')?.classList.add('hidden');
+            });
+        },
+
+        // Show the sign-in CTA when:
+        //   - banner exists in DOM (server only renders it for anon
+        //     viewers on roadmaps that have collectibles)
+        //   - user hasn't dismissed it this page load
+        //   - they've actually invested progress on this device (any
+        //     localStorage entry for this roadmap's found set)
+        // Idempotent — safe to call from init AND from _setItemFound.
+        _maybeShowLoginCta() {
+            if (this._loginCtaDismissed) return;
+            const cta = document.getElementById('collectibles-login-cta');
+            if (!cta || !cta.classList.contains('hidden')) return;
+            try {
+                const raw = localStorage.getItem(this._localKey());
+                if (!raw) return;
+                const set = JSON.parse(raw);
+                if (!Array.isArray(set) || set.length === 0) return;
+            } catch {
+                return;
+            }
+            cta.classList.remove('hidden');
         },
 
         // ── Found-state row toggles ─────────────────────────────────
@@ -1401,6 +1446,9 @@
             try {
                 localStorage.setItem(this._localKey(), JSON.stringify([...set]));
             } catch (_) { /* storage full / disabled — no-op */ }
+            // Anon just saved local progress — surface the sign-in CTA
+            // (no-op if already shown, dismissed, or set is now empty).
+            this._maybeShowLoginCta();
         },
 
         _restoreAnonProgress() {
