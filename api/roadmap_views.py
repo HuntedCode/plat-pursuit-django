@@ -236,4 +236,41 @@ class RoadmapPreviewView(APIView):
             'areas': areas_by_key,
         })
 
+        # Stamp `data-trophy-type` on each `.trophy-mention` anchor so the
+        # preview panel's CSS picks the right color. On the reader, the
+        # initTrophyMentions() JS pass handles this by looking up the
+        # corresponding trophy guide card's DOM `data-type`; the preview
+        # has no such pass (innerHTML drop), so without server-side
+        # stamping the CSS default (accent) kicks in and every trophy
+        # ref looks like a bronze.
+        import re as _re
+        concept = getattr(roadmap.concept_trophy_group, 'concept', None)
+        game = concept.games.first() if concept else None
+        if game:
+            trophy_type_by_id = dict(
+                game.trophies
+                .filter(trophy_group_id=roadmap.concept_trophy_group.trophy_group_id)
+                .values_list('trophy_id', 'trophy_type')
+            )
+
+            def _stamp_trophy_type(m):
+                pre, href, post = m.group(1), m.group(2), m.group(3)
+                try:
+                    tid = int(href.replace('#trophy-guide-', ''))
+                except (ValueError, TypeError):
+                    return m.group(0)
+                ttype = trophy_type_by_id.get(tid)
+                if not ttype:
+                    return m.group(0)
+                # Inject the attribute. `post` already starts with a
+                # space before `class="trophy-mention"` from the
+                # process_markdown styler.
+                return f'<a {pre}href="{href}" data-trophy-type="{ttype}"{post}>'
+
+            html = _re.sub(
+                r'<a ([^>]*?)href="(#trophy-guide-\d+)"([^>]*class="trophy-mention"[^>]*)>',
+                _stamp_trophy_type,
+                html,
+            )
+
         return Response({'html': html})
