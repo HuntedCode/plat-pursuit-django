@@ -3,6 +3,7 @@ import random
 import time
 
 from django.contrib.staticfiles.finders import find
+from django.templatetags.static import static as static_url
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
@@ -88,6 +89,186 @@ class AboutView(TemplateView):
 
 class ContactView(TemplateView):
     template_name = 'pages/contact.html'
+
+
+class FrameComponentTestView(TemplateView):
+    """Test harness for the Frame component partial.
+
+    Renders every (state x size x tier x is_pinned) variation through
+    `templates/components/frame.html` so the team can verify visual
+    parity after CSS / JS changes. Public direct link, not navigated to
+    from anywhere in the product.
+    """
+    template_name = 'design/frame_component_test.html'
+
+    TIERS = ['bronze', 'silver', 'gold', 'platinum']
+    TIER_LABEL = {'bronze': 'Bronze', 'silver': 'Silver', 'gold': 'Gold', 'platinum': 'Platinum'}
+    TIER_NEXT = {'bronze': 'Silver', 'silver': 'Gold', 'gold': 'Platinum', 'platinum': 'Maxed'}
+    SERIES_BY_TIER = {
+        'bronze': 'Resident Evil',
+        'silver': 'FromSoftware',
+        'gold': 'Marvel Universe',
+        'platinum': 'PSVR Catalogue',
+    }
+    BG_INDEX_BY_TIER = {'bronze': '1', 'silver': '2', 'gold': '3', 'platinum': '4'}
+    RARITY_BY_TIER = {
+        'bronze':   {'class': 'common',   'pct': 47,   'rank': 14802},
+        'silver':   {'class': 'uncommon', 'pct': 12,   'rank': 1902},
+        'gold':     {'class': 'rare',     'pct': 3,    'rank': 247},
+        'platinum': {'class': 'mythic',   'pct': 0.3,  'rank': 11},
+    }
+
+    def _art_layers(self, tier):
+        i = self.BG_INDEX_BY_TIER[tier]
+        return [
+            static_url(f'images/badges/backdrops/{i}_backdrop.png'),
+            static_url('images/badges/default.png'),
+            static_url(f'images/badges/foregrounds/{i}_foreground.png'),
+        ]
+
+    def _base_ctx(self, tier, state, size='default', is_pinned=False, **extra):
+        rarity = self.RARITY_BY_TIER[tier]
+        ctx = {
+            'tier': tier,
+            'state': state,
+            'size': size,
+            'series_name': self.SERIES_BY_TIER[tier],
+            'badge_name': 'Default Badge',
+            'art_layers': self._art_layers(tier),
+            'description': f'Awarded for completing the platinum on a {self.SERIES_BY_TIER[tier]} entry.',
+            'earned_date': 'Jan 21, 2025',
+            'stages_done': 8,
+            'stages_total': 10,
+            'rarity_pct': rarity['pct'],
+            'rarity_rank': rarity['rank'],
+            'rarity_class': rarity['class'],
+            'next_tier_label': self.TIER_NEXT[tier],
+            'is_pinned': is_pinned,
+        }
+        if state == 'earned':
+            ctx['engraving_rank'] = rarity['rank']
+            ctx['stages_done'] = ctx['stages_total']
+        elif state == 'maintenance':
+            # Mint is permanent — survives into the dormant state.
+            # stages_done/total now represent repair progress; caller
+            # can override (e.g. 4 of 5 repaired).
+            ctx['engraving_rank'] = rarity['rank']
+        elif state == 'in_progress':
+            ctx['progress_pct'] = 80
+        elif state == 'unearned':
+            ctx['stages_done'] = 0
+        ctx.update(extra)
+        return ctx
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+
+        # Section 1: tier matrix at default size (earned).
+        ctx['tiers_earned'] = [self._base_ctx(t, 'earned') for t in self.TIERS]
+
+        # Section 2: size matrix at Gold tier.
+        ctx['sizes_gold'] = [
+            self._base_ctx('gold', 'earned', size='large'),
+            self._base_ctx('gold', 'earned', size='default'),
+            self._base_ctx('gold', 'earned', size='compact'),
+            self._base_ctx('gold', 'earned', size='mini'),
+        ]
+
+        # Section 3: state x tier grid (non-earned states only).
+        ctx['state_grid'] = []
+        for state in ('in_progress', 'unearned'):
+            ctx['state_grid'].append({
+                'state': state,
+                'label': state.replace('_', ' ').title(),
+                'cards': [self._base_ctx(t, state) for t in self.TIERS],
+            })
+
+        # Section 4: pinned cards across states (all gold for clarity).
+        ctx['pinned_examples'] = [
+            self._base_ctx('gold', 'earned', is_pinned=True),
+            self._base_ctx('gold', 'in_progress', is_pinned=True),
+            self._base_ctx('gold', 'unearned', is_pinned=True),
+        ]
+
+        # Section 5: title marquee — series name long enough to overflow.
+        long_series_ctx = self._base_ctx('platinum', 'earned')
+        long_series_ctx['series_name'] = 'The Witcher 3: Wild Hunt – Complete Edition Trophies Collection'
+        long_series_ctx['badge_name'] = 'Long Title Test'
+        ctx['marquee_examples'] = [long_series_ctx]
+
+        # Section 5.5: Set engraving + current-cycle print line.
+        # Each card carries:
+        #   - mint engraving (permanent, etched into chrome)
+        #   - set engraving in bottom-right (permanent, shared across all
+        #     badges of the same series + tier — like a print-run stamp)
+        #   - optional current-cycle PRINT line (refreshed each repair cycle
+        #     along with name / dates / rarity; ink on chrome, not etched)
+        # Two columns per tier: pristine (no maintenance cycle yet) vs.
+        # post-repair (current rank + cycle 3 reprinted onto the chrome).
+        set_numbers = {'bronze': 14, 'silver': 89, 'gold': 247, 'platinum': 3}
+        ctx['print_examples'] = []
+        for t in self.TIERS:
+            base = self._base_ctx(t, 'earned')
+            base['set_number'] = set_numbers[t]
+            pristine = dict(base)
+            reprinted = dict(base)
+            reprinted['current_rank'] = max(1, self.RARITY_BY_TIER[t]['rank'] // 8)
+            reprinted['current_cycle'] = 3
+            ctx['print_examples'].append({
+                'tier': t,
+                'pristine': pristine,
+                'reprinted': reprinted,
+            })
+
+        # Section 5c: Maintenance state — canonical .pp-frame--maintenance.
+        # Earned badges enter MAINTENANCE when a new game ships in the
+        # series. The achievement still happened (mint + set engravings
+        # permanent), but the badge is dormant and the user needs to
+        # re-earn it. Cool-dormant badge layer + heavy amber band riveted
+        # across the center + warm REACTIVATE label + hatched warning
+        # overlay on the unrepaired portion + amber repair line at the
+        # build height + stage pips below the meta line.
+        maint_base = self._base_ctx('gold', 'maintenance')
+        maint_base['set_number'] = set_numbers['gold']
+        maint_base['stages_done'] = 4
+        maint_base['stages_total'] = 5
+        maint_base['progress_pct'] = 80  # 4/5 = 80% repaired
+        maint_base['repair_pips'] = [i < 4 for i in range(5)]  # 4 done, 1 remaining
+        ctx['maintenance_example'] = maint_base
+
+        # Section 5d: Active→Maintenance choreography harness. Card
+        # renders as state=earned with is_maint_staged=True, holding it
+        # in the pre-animation "still active" appearance with the
+        # maintenance DOM pre-staged hidden. Play triggers the ~2.55s
+        # transition; Reset returns to staged-active.
+        staged_maint = self._base_ctx('gold', 'earned')
+        staged_maint['set_number'] = set_numbers['gold']
+        staged_maint['stages_done'] = 4
+        staged_maint['stages_total'] = 5
+        staged_maint['progress_pct'] = 80
+        staged_maint['repair_pips'] = [i < 4 for i in range(5)]
+        staged_maint['is_maint_staged'] = True
+        staged_maint['dom_id'] = 'pp-maint-test-gold'
+        ctx['maintenance_staged'] = staged_maint
+
+        # Section 6: earn moment harness — one card per tier with a play
+        # button. Cards are state=in_progress at 90% build, staged for the
+        # earn moment (is_earn_staged=True). The engraving_rank is the FINAL
+        # earned rank; the partial renders it under the placeholder class so
+        # the etch phase reveals the proper "#247 of all time" text. The
+        # back face is also pre-rendered, hidden via .pp-earn-back-staged
+        # until phase 10's back-scan reveals it.
+        ctx['earn_harness'] = []
+        for t in self.TIERS:
+            staged_ctx = self._base_ctx(t, 'in_progress')
+            staged_ctx['progress_pct'] = 90
+            staged_ctx['stages_done'] = 9
+            staged_ctx['dom_id'] = f'pp-earn-test-{t}'
+            staged_ctx['is_earn_staged'] = True
+            staged_ctx['engraving_rank'] = self.RARITY_BY_TIER[t]['rank']
+            ctx['earn_harness'].append({'tier': t, 'frame': staged_ctx})
+
+        return ctx
 
 
 class CommunityHubView(ProfileHotbarMixin, TemplateView):

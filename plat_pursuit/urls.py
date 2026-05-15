@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap,
@@ -343,6 +343,7 @@ urlpatterns = [
     # Used to gather feedback on proposed visual primitives before they're
     # committed to the canonical design system. Not linked from nav.
     path('design/frame/', TemplateView.as_view(template_name='design/frame_preview.html'), name='design_frame_preview'),
+    path('design/frame-component/', FrameComponentTestView.as_view(), name='design_frame_component_test'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
