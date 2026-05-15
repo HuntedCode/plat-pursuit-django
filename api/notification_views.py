@@ -428,98 +428,106 @@ class NotificationRatingView(APIView):
     def post(self, request, pk):
         """Submit or update a rating."""
         try:
-            notification = Notification.objects.get(
-                id=pk,
-                recipient=request.user,
-                notification_type='platinum_earned'
-            )
-        except Notification.DoesNotExist:
+            try:
+                notification = Notification.objects.get(
+                    id=pk,
+                    recipient=request.user,
+                    notification_type='platinum_earned'
+                )
+            except Notification.DoesNotExist:
+                return Response(
+                    {'error': 'Notification not found'},
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+
+            metadata = notification.metadata or {}
+            concept_id = metadata.get('concept_id')
+
+            if not concept_id:
+                return Response(
+                    {'error': 'No concept linked to this game'},
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+
+            from trophies.models import Concept, ConceptTrophyGroup, UserConceptRating
+            from trophies.forms import UserConceptRatingForm
+            from trophies.services.rating_service import RatingService
+            from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
+
+            try:
+                concept = Concept.objects.get(id=concept_id)
+            except Concept.DoesNotExist:
+                return Response(
+                    {'error': 'Concept not found'},
+                    status=http_status.HTTP_404_NOT_FOUND
+                )
+
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response(
+                    {'error': 'Profile not found'},
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+
+            # Resolve default trophy group for access control and cache invalidation
+            ctg = ConceptTrophyGroup.objects.filter(
+                concept=concept, trophy_group_id='default',
+            ).first()
+            if not ctg:
+                return Response(
+                    {'error': 'No trophy data available for this game.'},
+                    status=http_status.HTTP_400_BAD_REQUEST
+                )
+
+            # Access control: must have earned the platinum
+            can, reason = ConceptTrophyGroupService.can_rate_group(profile, concept, ctg)
+            if not can:
+                return Response({'error': reason}, status=http_status.HTTP_403_FORBIDDEN)
+
+            # Look up existing base game rating (concept_trophy_group=None for backward compat)
+            existing_rating = UserConceptRating.objects.filter(
+                profile=profile,
+                concept=concept,
+                concept_trophy_group__isnull=True,
+            ).first()
+
+            form = UserConceptRatingForm(request.data, instance=existing_rating)
+
+            if form.is_valid():
+                rating = form.save(commit=False)
+                rating.profile = profile
+                rating.concept = concept
+                rating.concept_trophy_group = None
+                rating.save()
+
+                # Invalidate caches
+                RatingService.invalidate_cache(concept)
+                RatingService.invalidate_group_cache(concept, ctg)
+
+                # Get updated averages
+                updated_averages = RatingService.get_community_averages(concept)
+
+                # Check for rating milestones
+                from trophies.services.milestone_service import check_all_milestones_for_user
+                check_all_milestones_for_user(profile, criteria_type='rating_count')
+
+                return Response({
+                    'success': True,
+                    'message': 'Rating updated!' if existing_rating else 'Rating submitted successfully!',
+                    'community_averages': updated_averages
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'errors': form.errors
+                }, status=http_status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.exception(f"Notification rating submit error (notification_id={pk}): {e}")
             return Response(
-                {'error': 'Notification not found'},
-                status=http_status.HTTP_404_NOT_FOUND
+                {'error': 'Internal error submitting rating.'},
+                status=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
-        metadata = notification.metadata or {}
-        concept_id = metadata.get('concept_id')
-
-        if not concept_id:
-            return Response(
-                {'error': 'No concept linked to this game'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        from trophies.models import Concept, ConceptTrophyGroup, UserConceptRating
-        from trophies.forms import UserConceptRatingForm
-        from trophies.services.rating_service import RatingService
-        from trophies.services.concept_trophy_group_service import ConceptTrophyGroupService
-
-        try:
-            concept = Concept.objects.get(id=concept_id)
-        except Concept.DoesNotExist:
-            return Response(
-                {'error': 'Concept not found'},
-                status=http_status.HTTP_404_NOT_FOUND
-            )
-
-        profile = getattr(request.user, 'profile', None)
-        if not profile:
-            return Response(
-                {'error': 'Profile not found'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        # Resolve default trophy group for access control and cache invalidation
-        ctg = ConceptTrophyGroup.objects.filter(
-            concept=concept, trophy_group_id='default',
-        ).first()
-        if not ctg:
-            return Response(
-                {'error': 'No trophy data available for this game.'},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-
-        # Access control: must have earned the platinum
-        can, reason = ConceptTrophyGroupService.can_rate_group(profile, concept, ctg)
-        if not can:
-            return Response({'error': reason}, status=http_status.HTTP_403_FORBIDDEN)
-
-        # Look up existing base game rating (concept_trophy_group=None for backward compat)
-        existing_rating = UserConceptRating.objects.filter(
-            profile=profile,
-            concept=concept,
-            concept_trophy_group__isnull=True,
-        ).first()
-
-        form = UserConceptRatingForm(request.data, instance=existing_rating)
-
-        if form.is_valid():
-            rating = form.save(commit=False)
-            rating.profile = profile
-            rating.concept = concept
-            rating.concept_trophy_group = None
-            rating.save()
-
-            # Invalidate caches
-            RatingService.invalidate_cache(concept)
-            RatingService.invalidate_group_cache(concept, ctg)
-
-            # Get updated averages
-            updated_averages = RatingService.get_community_averages(concept)
-
-            # Check for rating milestones
-            from trophies.services.milestone_service import check_all_milestones_for_user
-            check_all_milestones_for_user(profile, criteria_type='rating_count')
-
-            return Response({
-                'success': True,
-                'message': 'Rating updated!' if existing_rating else 'Rating submitted successfully!',
-                'community_averages': updated_averages
-            })
-        else:
-            return Response({
-                'success': False,
-                'errors': form.errors
-            }, status=http_status.HTTP_400_BAD_REQUEST)
 
 
 class AdminNotificationPreviewView(APIView):

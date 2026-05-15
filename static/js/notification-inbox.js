@@ -314,6 +314,23 @@ class NotificationInboxManager {
         });
     }
 
+    _extractFormErrorMessage(errors) {
+        if (!errors || typeof errors !== 'object') return null;
+        for (const field of Object.keys(errors)) {
+            const fieldErrors = errors[field];
+            if (Array.isArray(fieldErrors) && fieldErrors.length) {
+                const first = fieldErrors[0];
+                const text = typeof first === 'string' ? first : first?.message;
+                if (text) {
+                    return field === '__all__' ? text : `${field}: ${text}`;
+                }
+            } else if (typeof fieldErrors === 'string' && fieldErrors) {
+                return field === '__all__' ? fieldErrors : `${field}: ${fieldErrors}`;
+            }
+        }
+        return null;
+    }
+
     async submitRating(notificationId, formData) {
         const submitBtn = document.querySelector('#notification-rating-form button[type="submit"]');
         const originalText = submitBtn?.textContent;
@@ -354,11 +371,16 @@ class NotificationInboxManager {
                 const wasFirstRating = response.message && response.message.includes('submitted');
                 this.loadRatingSection(notificationId, wasFirstRating);
             } else {
-                PlatPursuit.ToastManager.error('Failed to submit rating. Please check your input.');
+                const formMsg = this._extractFormErrorMessage(response.errors);
+                PlatPursuit.ToastManager.error(formMsg || 'Failed to submit rating. Please check your input.');
             }
         } catch (error) {
             console.error('Failed to submit rating:', error);
-            PlatPursuit.ToastManager.error('Failed to submit rating. Please try again.');
+            const errData = await error.response?.json().catch(() => null);
+            const msg = errData?.error
+                || this._extractFormErrorMessage(errData?.errors)
+                || 'Failed to submit rating. Please try again.';
+            PlatPursuit.ToastManager.error(msg);
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
