@@ -1700,6 +1700,12 @@ details[open]::details-content {
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
   vertical-align: baseline;
+  /* Keep pill on a single line. Without this, narrow containers (mobile
+     table cells especially) wrap the trophy name + "Bronze" suffix
+     across two lines and the pill balloons vertically. With nowrap, the
+     pill grows horizontally as needed; the parent table's
+     `overflow-x: auto` wrapper scrolls instead — much better trade. */
+  white-space: nowrap;
 }
 .trophy-mention.trophy-mention::before {
   content: '';
