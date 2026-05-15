@@ -2005,6 +2005,190 @@
         });
     }
 
+    /**
+     * Hover tooltip on `.trophy-mention` anchors — markdown trophy refs
+     * like `[Name](#trophy-guide-X)`. Same singleton pattern as the
+     * collectible pill tooltip, but content is sourced from the
+     * corresponding `[id="trophy-guide-X"]` element on the page
+     * (data attrs for type / earned / rarity / flags + DOM lookups
+     * for name / icon / detail). Works everywhere trophy mentions
+     * appear: step descriptions, general tips, trophy guide bodies,
+     * collectible item rich content.
+     */
+    function initTrophyMentionTooltips() {
+        if (!document.querySelector('.trophy-mention[href^="#trophy-guide-"]')) return;
+
+        const tooltip = document.createElement('div');
+        tooltip.className = 'trophy-mention-tooltip';
+        tooltip.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(tooltip);
+
+        let activeMention = null;
+        let hideTimer = null;
+
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => (
+                { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+            ));
+        }
+
+        function render(mention) {
+            const href = mention.getAttribute('href') || '';
+            const id = href.startsWith('#') ? href.slice(1) : href;
+            const card = document.getElementById(id);
+            if (!card) return false;
+            const type = card.dataset.type || '';
+            const earned = card.dataset.earned === '1';
+            const rarity = parseFloat(card.dataset.rarity || '');
+            const missable = card.dataset.missable === '1';
+            const online = card.dataset.online === '1';
+            const unobtainable = card.dataset.unobtainable === '1';
+            const name = card.querySelector('.trophy-guide-name')?.textContent?.trim() || '';
+            const icon = card.querySelector('.trophy-guide-icon')?.getAttribute('src') || '';
+            // The detail span on the guide card is display:none when empty
+            // (set by the server template). textContent is fine either way.
+            const detail = card.querySelector('.trophy-guide-detail')?.textContent?.trim() || '';
+
+            const earnedBadge = earned ? `
+                <div class="trophy-mention-tooltip-earned-badge" title="Earned">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </div>
+            ` : '';
+
+            const flagBadges = [
+                missable ? '<span class="trophy-mention-tooltip-flag" data-flag="missable">Missable</span>' : '',
+                online ? '<span class="trophy-mention-tooltip-flag" data-flag="online">Online</span>' : '',
+                unobtainable ? '<span class="trophy-mention-tooltip-flag" data-flag="unobtainable">Unobtainable</span>' : '',
+            ].filter(Boolean).join('');
+            const flagsBlock = flagBadges
+                ? `<div class="trophy-mention-tooltip-flags">${flagBadges}</div>`
+                : '';
+
+            const rarityBlock = isFinite(rarity)
+                ? `<span class="trophy-mention-tooltip-rarity">${rarity.toFixed(1)}% earn rate</span>`
+                : '';
+
+            const typeLabel = type
+                ? `<span class="trophy-mention-tooltip-type" data-trophy-type="${escapeHtml(type)}">${escapeHtml(type)}</span>`
+                : '';
+
+            const iconBlock = icon
+                ? `<img class="trophy-mention-tooltip-icon" src="${escapeHtml(icon)}" alt="">`
+                : '';
+
+            const descBlock = detail
+                ? `<p class="trophy-mention-tooltip-description">${escapeHtml(detail)}</p>`
+                : '';
+
+            tooltip.innerHTML = `
+                <div class="trophy-mention-tooltip-header">
+                    ${iconBlock}
+                    <div class="trophy-mention-tooltip-meta">
+                        <span class="trophy-mention-tooltip-name">${escapeHtml(name)}</span>
+                        <div class="trophy-mention-tooltip-type-row">
+                            ${typeLabel}
+                            ${rarityBlock}
+                        </div>
+                    </div>
+                    ${earnedBadge}
+                </div>
+                ${descBlock}
+                ${flagsBlock}
+            `;
+            return true;
+        }
+
+        function position(mention) {
+            const r = mention.getBoundingClientRect();
+            tooltip.style.left = '0px';
+            tooltip.style.top = '0px';
+            const tr = tooltip.getBoundingClientRect();
+            const margin = 6;
+            let left = r.left + r.width / 2 - tr.width / 2;
+            let top = r.bottom + margin;
+            left = Math.max(margin, Math.min(left, window.innerWidth - tr.width - margin));
+            if (top + tr.height > window.innerHeight - margin) {
+                top = r.top - tr.height - margin;
+            }
+            tooltip.style.left = `${left}px`;
+            tooltip.style.top = `${top}px`;
+        }
+
+        function show(mention) {
+            activeMention = mention;
+            if (!render(mention)) {
+                activeMention = null;
+                return;
+            }
+            requestAnimationFrame(() => {
+                if (activeMention !== mention) return;
+                position(mention);
+                tooltip.classList.add('is-visible');
+            });
+        }
+
+        function hide() {
+            tooltip.classList.remove('is-visible');
+            activeMention = null;
+        }
+
+        document.addEventListener('mouseover', (e) => {
+            const mention = e.target.closest('.trophy-mention[href^="#trophy-guide-"]');
+            if (!mention || mention === activeMention) return;
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+            show(mention);
+        });
+        document.addEventListener('mouseout', (e) => {
+            const mention = e.target.closest('.trophy-mention[href^="#trophy-guide-"]');
+            if (!mention || mention !== activeMention) return;
+            // Ignore mouseout when transitioning between internal children
+            // of the same mention (same fix as the collectible pill).
+            const rt = e.relatedTarget;
+            if (rt && mention.contains(rt)) return;
+            hideTimer = setTimeout(hide, 80);
+        });
+        window.addEventListener('scroll', () => {
+            if (activeMention) hide();
+        }, { passive: true });
+
+        // Touch / long-press support, mirroring the collectible pill
+        // tooltip's timestamp-based suppression so a tap navigates and
+        // a long press shows the tooltip without navigating.
+        let longPressTimer = null;
+        let longPressFired = false;
+        let lastLongPressEndAt = 0;
+        document.addEventListener('touchstart', (e) => {
+            const mention = e.target.closest('.trophy-mention[href^="#trophy-guide-"]');
+            if (!mention) return;
+            longPressFired = false;
+            if (longPressTimer) clearTimeout(longPressTimer);
+            longPressTimer = setTimeout(() => {
+                longPressFired = true;
+                show(mention);
+                if (navigator.vibrate) navigator.vibrate(8);
+            }, 400);
+        }, { passive: true });
+        document.addEventListener('touchmove', () => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+            if (longPressFired) {
+                lastLongPressEndAt = Date.now();
+                longPressFired = false;
+                e.preventDefault();
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (Date.now() - lastLongPressEndAt < 120) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            if (activeMention) hide();
+        });
+    }
+
     function init() {
         initProgressBar();
         initScrollspy();
@@ -2021,6 +2205,7 @@
         initImageLightbox();
         CollectibleTracker.init();
         initCollectiblePillTooltips();
+        initTrophyMentionTooltips();
         handleDeepLink();
     }
 

@@ -53,7 +53,11 @@
             </div>
             {# Row 2: description only. Phase is back in row 1 with the title. #}
             {% if trophy.trophy_detail %}
-            <p class="text-xs text-base-content/35 italic mt-0.5 line-clamp-2 pr-1">{{ trophy.trophy_detail }}</p>
+            {# `trophy-guide-detail` class is the lookup hook for the trophy #}
+            {# mention tooltip's description block (initTrophyMentionTooltips #}
+            {# in roadmap-detail.js). Matches the editor's clone-template     #}
+            {# convention so the tooltip JS works from either surface.        #}
+            <p class="trophy-guide-detail text-xs text-base-content/35 italic mt-0.5 line-clamp-2 pr-1">{{ trophy.trophy_detail }}</p>
             {% endif %}
         </div>
         {% else %}

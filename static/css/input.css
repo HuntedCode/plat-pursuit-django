@@ -2278,6 +2278,68 @@ details[open]::details-content {
   @apply text-[11px] italic text-base-content/55 mt-1.5 leading-snug;
 }
 
+/* Trophy mention hover tooltip — same singleton pattern as the
+   collectible pill tooltip but with trophy-specific chrome (cover
+   image, type pill colored by trophy type, rarity, author flags).
+   Sourced from the corresponding `[id="trophy-guide-X"]` element on
+   the page so it stays in sync with the trophy guide card's own
+   metadata (no separate data passing needed). */
+.trophy-mention-tooltip {
+  position: fixed;
+  z-index: 60;
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 140ms ease-out, transform 140ms ease-out;
+  min-width: 220px;
+  max-width: 320px;
+  @apply rounded-lg border border-base-content/15 bg-base-200 shadow-lg shadow-black/30 p-2.5;
+}
+.trophy-mention-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.trophy-mention-tooltip-header {
+  @apply flex items-start gap-2.5;
+}
+.trophy-mention-tooltip-icon {
+  @apply w-10 h-10 rounded object-cover border border-base-content/10 shrink-0;
+}
+.trophy-mention-tooltip-meta {
+  @apply flex-1 min-w-0 flex flex-col gap-0.5 leading-tight;
+}
+.trophy-mention-tooltip-name {
+  @apply text-sm font-semibold text-base-content;
+}
+.trophy-mention-tooltip-type-row {
+  @apply flex items-center gap-1.5 flex-wrap;
+}
+.trophy-mention-tooltip-type {
+  @apply text-[10px] font-bold uppercase tracking-wider;
+}
+.trophy-mention-tooltip-type[data-trophy-type="platinum"] { color: var(--color-info); }
+.trophy-mention-tooltip-type[data-trophy-type="gold"]     { color: var(--color-warning); }
+.trophy-mention-tooltip-type[data-trophy-type="silver"]   { color: #9ca3af; }
+.trophy-mention-tooltip-type[data-trophy-type="bronze"]   { color: var(--color-accent); }
+.trophy-mention-tooltip-rarity {
+  @apply text-[10px] tabular-nums text-base-content/55;
+}
+.trophy-mention-tooltip-earned-badge {
+  @apply inline-flex items-center justify-center w-5 h-5 rounded-full bg-success ring-2 ring-base-200 shrink-0 mt-0.5 text-success-content;
+}
+.trophy-mention-tooltip-description {
+  @apply text-[11px] italic text-base-content/60 mt-1.5 leading-snug line-clamp-3;
+}
+.trophy-mention-tooltip-flags {
+  @apply flex items-center gap-1 flex-wrap mt-1.5;
+}
+.trophy-mention-tooltip-flag {
+  @apply inline-flex items-center gap-0.5 text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full;
+}
+.trophy-mention-tooltip-flag[data-flag="missable"]      { @apply bg-warning/15 text-warning; }
+.trophy-mention-tooltip-flag[data-flag="online"]        { @apply bg-info/15 text-info; }
+.trophy-mention-tooltip-flag[data-flag="unobtainable"]  { @apply bg-error/15 text-error; }
+
 /* Filter fade-out: when a row is being hidden by an active filter
    (Hide found, Missable, type filter, etc.), animate opacity AND
    collapse height/spacing to nothing before applying `hidden`. JS
