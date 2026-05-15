@@ -165,6 +165,8 @@ CONTENT_SECURITY_POLICY = {
             "https://www.google.com",                  # AdSense
             "https://www.gstatic.com",                 # AdSense
             "https://fundingchoicesmessages.google.com",  # Funding Choices CMP UI assets
+            "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR fingerprint pixel)
+            "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR fingerprint pixel, backup)
             "https://images.igdb.com",                 # IGDB company logos & game covers
         ],
         "frame-src": [

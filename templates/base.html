@@ -144,9 +144,22 @@
              data-ad-format="banner"
              {% if ADSENSE_TEST_MODE %}data-adtest="on"{% endif %}></ins>
         <script>
-            if (window.matchMedia('(max-width: 1023.98px)').matches) {
-                (adsbygoogle = window.adsbygoogle || []).push({});
-            }
+            // Defer the push until 'load' so the inline width:320px has been
+            // laid out by the time AdSense reads availableWidth. Pushing
+            // synchronously during parse can read availableWidth=0 and
+            // trigger TagError: "No slot size for availableWidth=0".
+            (function() {
+                function doPush() {
+                    if (window.matchMedia('(max-width: 1023.98px)').matches) {
+                        (adsbygoogle = window.adsbygoogle || []).push({});
+                    }
+                }
+                if (document.readyState === 'complete') {
+                    doPush();
+                } else {
+                    window.addEventListener('load', doPush);
+                }
+            })();
         </script>
         <button id="mobile-ad-close" type="button"
                 class="absolute -top-3 right-2 w-6 h-6 rounded-full bg-base-300 border border-base-content/20 flex items-center justify-center text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors shadow-md"
