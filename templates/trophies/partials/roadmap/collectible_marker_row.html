@@ -23,6 +23,12 @@
    data-trophy-id="{{ marker.trophy_id }}"
    data-next-up="0"
    data-earned="{% if earned_data.earned %}1{% else %}0{% endif %}"
+   {# Filter attributes mirror the collectible item row so the Missable / #}
+   {# DLC toggle buttons act on markers too. `missable` derives from the   #}
+   {# trophy's author-set TrophyGuide.is_missable; `dlc` is roadmap-level  #}
+   {# (every trophy in a non-default-CTG roadmap is DLC).                  #}
+   data-missable="{% if marker.trophy_id in missable_trophy_ids %}1{% else %}0{% endif %}"
+   data-dlc="{% if is_dlc_roadmap %}1{% else %}0{% endif %}"
    {% if earned_data.earned %}
    style="--marker-color: var(--color-success); border-left-color: var(--color-success); background-color: oklch(from var(--color-success) l c h / 0.07);"
    {% else %}

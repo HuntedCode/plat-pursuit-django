@@ -1676,8 +1676,12 @@
 
         _wireHideFound() {
             const cb = this.rootEl.querySelector('.collectibles-hide-found input[type=checkbox]');
-            if (!cb) return;
-            cb.addEventListener('change', () => this._applyFilters());
+            if (cb) cb.addEventListener('change', () => this._applyFilters());
+            // "Hide trophies" toggle — same UX shape as Hide found, but
+            // independent so writers can turn off trophy markers without
+            // affecting the other filters.
+            const hideTrophiesCb = this.rootEl.querySelector('.collectibles-hide-trophies input[type=checkbox]');
+            if (hideTrophiesCb) hideTrophiesCb.addEventListener('change', () => this._applyFilters());
         },
 
         _activeFilters() {
@@ -1685,11 +1689,12 @@
             const typeFilter = active?.dataset.typeFilter || 'all';
             const search = (this.rootEl.querySelector('.collectibles-search')?.value || '').trim().toLowerCase();
             const hideFound = !!this.rootEl.querySelector('.collectibles-hide-found input[type=checkbox]')?.checked;
+            const hideTrophies = !!this.rootEl.querySelector('.collectibles-hide-trophies input[type=checkbox]')?.checked;
             // At most one flag-only filter active at a time (mutually
             // exclusive UI: clicking one disables the other in `_wireFlagFilters`).
             const flagOnlyBtn = this.rootEl.querySelector('.collectibles-flag-filter.is-active');
             const flagOnly = flagOnlyBtn?.dataset.flag || null;
-            return { typeFilter, search, hideFound, flagOnly };
+            return { typeFilter, search, hideFound, hideTrophies, flagOnly };
         },
 
         // Animate row out, then apply `hidden`. Showing is instant — a
@@ -1727,10 +1732,27 @@
                 this._setRowVisible(row, visible);
                 if (visible) anyVisible = true;
             });
-            // Hide whole area groups when none of their rows are visible.
+            // Trophy markers — respect the Missable / DLC flag filter +
+            // the dedicated Hide trophies toggle. Type filter and search
+            // don't apply (markers aren't typed collectibles and aren't
+            // currently searchable); hideFound doesn't apply (markers
+            // track "earned", not "found"). Earned markers already render
+            // with the success treatment regardless of filter state.
+            this.rootEl.querySelectorAll('.collectible-marker-row').forEach(row => {
+                let visible = true;
+                if (f.hideTrophies) visible = false;
+                if (f.flagOnly === 'missable' && row.dataset.missable !== '1') visible = false;
+                if (f.flagOnly === 'dlc' && row.dataset.dlc !== '1') visible = false;
+                this._setRowVisible(row, visible);
+                if (visible) anyVisible = true;
+            });
+            // Hide whole area groups when none of their rows are visible
+            // (items OR markers). Marker-only areas stay visible when
+            // their markers are visible.
             this.rootEl.querySelectorAll('.collectible-area-group').forEach(group => {
-                const visibleRows = group.querySelectorAll('.collectible-item-row:not(.hidden)').length;
-                group.classList.toggle('hidden', visibleRows === 0);
+                const visibleItems = group.querySelectorAll('.collectible-item-row:not(.hidden)').length;
+                const visibleMarkers = group.querySelectorAll('.collectible-marker-row:not(.hidden)').length;
+                group.classList.toggle('hidden', visibleItems + visibleMarkers === 0);
                 // Also hide type sub-blocks within the group when their
                 // rows are all filtered out.
                 group.querySelectorAll('.collectible-area-type-block').forEach(block => {

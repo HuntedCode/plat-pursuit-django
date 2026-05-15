@@ -348,6 +348,19 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         else:
             context['roadmap_trophies'] = {}
 
+        # Trophy nav marker filter metadata: which trophies are tagged
+        # missable on this roadmap (author-set via TrophyGuide.is_missable),
+        # and whether the roadmap itself is a DLC CTG (group != 'default'
+        # means everything in it is DLC). The marker template uses these
+        # to stamp `data-missable` / `data-dlc` so the Missable / DLC
+        # filter toggles in the reader can act on markers just like they
+        # do on collectible items.
+        context['missable_trophy_ids'] = set(
+            roadmap.trophy_guides.filter(is_missable=True)
+            .values_list('trophy_id', flat=True)
+        )
+        context['is_dlc_roadmap'] = trophy_group_id != 'default'
+
         # Profile earned data + progress computation.
         profile_earned = {}
         if (user.is_authenticated and hasattr(user, 'profile')
