@@ -1040,6 +1040,11 @@
         // ── Inline body images: click-to-fullscreen, no extraction ──
         // Body images live wherever the writer placed them in the markdown.
         // Galleries are rendered separately from `gallery_images` (see below).
+        //
+        // stopPropagation prevents the global `Lightbox` delegated handler
+        // in utils.js (which also matches `.prose-roadmap` / `.roadmap-gallery`
+        // images) from firing on top of this richer slideshow lightbox —
+        // without it both overlays open and stack visually.
         container.querySelectorAll('[class*="leading-relaxed"] img').forEach((img) => {
             // Browsers don't surface `alt` as a hover tooltip — only `title`.
             // Backfill `title` from `alt` so older inline images (uploaded
@@ -1047,7 +1052,10 @@
             // still show something on hover.
             if (!img.title && img.alt) img.title = img.alt;
             img.classList.add('cursor-pointer', 'hover:opacity-80', 'transition-opacity');
-            img.addEventListener('click', () => open([img], 0));
+            img.addEventListener('click', (e) => {
+                e.stopPropagation();
+                open([img], 0);
+            });
         });
 
         // ── Structured galleries: per-trophy-guide / per-step thumbnail
@@ -1057,7 +1065,10 @@
             const imgs = Array.from(gallery.querySelectorAll('img'));
             if (!imgs.length) return;
             imgs.forEach((img, i) => {
-                img.addEventListener('click', () => open(imgs, i));
+                img.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    open(imgs, i);
+                });
             });
         });
     }
