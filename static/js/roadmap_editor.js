@@ -3392,6 +3392,7 @@
             { token: '[[section:steps]]', label: 'Steps section', sub: 'Jump to the full Steps list', color: 'primary' },
             { token: '[[section:tips]]', label: 'Tips section', sub: 'Jump to the General Tips card', color: 'warning' },
             { token: '[[section:collectibles]]', label: 'Collectibles section', sub: 'Jump to the Collectibles tracker', color: 'secondary' },
+            { token: '[[section:trophy-guides]]', label: 'Trophy Guides section', sub: 'Jump to the per-trophy guide list', color: 'accent' },
         ];
 
         function renderOptions(filter) {
