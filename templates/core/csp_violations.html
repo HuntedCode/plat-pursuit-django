@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block title %}CSP Violations - Staff{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-3 md:px-5 py-4 md:py-6 space-y-4 md:space-y-6">
+
+  {# ──────────── Page header ──────────── #}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold text-base-content">CSP Violations</h1>
+        <p class="text-xs md:text-sm text-base-content/60 mt-1">
+          {{ total }} of {{ cap }} buffered &middot; rolling Redis list, 30-day TTL.
+        </p>
+      </div>
+      <form method="post" action="{% url 'staff_csp_violations_clear' %}"
+            onsubmit="return confirm('Clear all buffered violations?');">
+        {% csrf_token %}
+        <button type="submit"
+                class="px-3 py-1.5 rounded-lg text-xs md:text-sm border bg-base-200/60 text-base-content/80 border-base-content/10 hover:border-base-content/30 transition-colors">
+          Clear all
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if aggregates %}
+  {# ──────────── Aggregate table (grouped by directive + blocked + document) ──────────── #}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+    <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+      By directive &amp; blocked URI
+    </h2>
+    <div class="overflow-x-auto -mx-4 md:-mx-5 lg:-mx-6">
+      <table class="w-full text-xs md:text-sm">
+        <thead>
+          <tr class="text-left text-base-content/50 border-b border-base-content/10">
+            <th class="px-4 md:px-5 lg:px-6 py-2 font-medium">Count</th>
+            <th class="px-3 py-2 font-medium">Directive</th>
+            <th class="px-3 py-2 font-medium">Blocked URI</th>
+            <th class="px-3 py-2 font-medium hidden md:table-cell">Document</th>
+            <th class="px-4 md:px-5 lg:px-6 py-2 font-medium whitespace-nowrap">Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for agg in aggregates %}
+          <tr class="border-b border-base-content/5">
+            <td class="px-4 md:px-5 lg:px-6 py-2 font-semibold tabular-nums">{{ agg.count }}</td>
+            <td class="px-3 py-2"><code class="text-warning">{{ agg.directive }}</code></td>
+            <td class="px-3 py-2 break-all max-w-md"><code class="text-base-content/80">{{ agg.blocked|default:"(empty)" }}</code></td>
+            <td class="px-3 py-2 break-all max-w-md hidden md:table-cell"><code class="text-base-content/60">{{ agg.document|default:"(empty)" }}</code></td>
+            <td class="px-4 md:px-5 lg:px-6 py-2 text-base-content/60 whitespace-nowrap">
+              <span class="csp-rel-time" data-ts="{{ agg.last_seen_ts }}">{{ agg.last_seen_ts }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ──────────── Recent raw entries ──────────── #}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-4 md:p-5 lg:p-6">
+    <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+      Most recent
+    </h2>
+    <ul class="space-y-2">
+      {% for entry in recent %}
+      <li class="rounded-lg border border-base-content/5 bg-base-200/40 p-3 text-xs">
+        <div class="flex items-start gap-2 flex-wrap">
+          <code class="font-semibold text-warning shrink-0">{{ entry.directive }}</code>
+          <span class="text-base-content/40 shrink-0">&rarr;</span>
+          <code class="break-all text-base-content/80 min-w-0">{{ entry.blocked|default:"(empty)" }}</code>
+          <span class="ml-auto text-base-content/40 csp-rel-time shrink-0" data-ts="{{ entry.ts }}">{{ entry.ts }}</span>
+        </div>
+        {% if entry.source_file %}
+        <div class="text-base-content/60 mt-1 break-all">
+          {{ entry.source_file }}{% if entry.line %}:{{ entry.line }}{% endif %}
+        </div>
+        {% endif %}
+        {% if entry.document %}
+        <div class="text-base-content/40 mt-1 break-all">on {{ entry.document }}</div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% else %}
+  <div class="bg-base-100/60 border border-base-content/10 rounded-xl p-6 md:p-8 text-center">
+    <p class="text-sm text-base-content/60">
+      No violations buffered. Deploy a CSP change and reload some pages to see what trips.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+    function relTime(ms) {
+        if (!ms) return '—';
+        var deltaSec = (Date.now() - ms) / 1000;
+        if (deltaSec < 60) return Math.round(deltaSec) + 's ago';
+        if (deltaSec < 3600) return Math.round(deltaSec / 60) + 'm ago';
+        if (deltaSec < 86400) return Math.round(deltaSec / 3600) + 'h ago';
+        return Math.round(deltaSec / 86400) + 'd ago';
+    }
+    document.querySelectorAll('.csp-rel-time').forEach(function(el) {
+        var ts = parseInt(el.getAttribute('data-ts'), 10);
+        el.textContent = relTime(isNaN(ts) ? 0 : ts);
+    });
+})();
+</script>
+{% endblock %}

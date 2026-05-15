@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import time
@@ -5,10 +6,11 @@ import time
 from django.contrib.staticfiles.finders import find
 from django.templatetags.static import static as static_url
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse_lazy
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView, View
 
 from core.services.analytics_service import get_dashboard_data as get_analytics_dashboard_data
@@ -511,3 +513,169 @@ class HomeView(ProfileHotbarMixin, TemplateView):
             context['did_you_know'] = facts[0]
 
         return context
+
+
+# ── CSP violation reporting ────────────────────────────────────────────────
+# Browsers POST violations to the report-uri configured in settings.py. We
+# buffer them in a capped Redis list and expose a staff dashboard so we can
+# react to CSP misconfigurations without staring at production browser
+# DevTools. No DB model: violations are debug telemetry, not durable data.
+_CSP_REDIS_KEY = 'csp:violations'
+_CSP_REDIS_CAP = 1000
+_CSP_REDIS_TTL_SECONDS = 30 * 24 * 3600
+
+
+def _normalize_csp_reports(payload):
+    """Yield normalized violation dicts from a raw CSP report payload.
+
+    Handles both wire formats:
+      * Legacy `application/csp-report`: a single object wrapped in
+        `{"csp-report": {...}}` with kebab-case keys.
+      * Reporting API `application/reports+json`: a JSON array of report
+        objects, each carrying a `body` dict with camelCase keys.
+    """
+    if isinstance(payload, dict) and 'csp-report' in payload:
+        report = payload['csp-report'] or {}
+        if isinstance(report, dict):
+            yield {
+                'directive': (
+                    report.get('effective-directive')
+                    or report.get('violated-directive')
+                    or 'unknown'
+                ),
+                'blocked': report.get('blocked-uri') or '',
+                'document': report.get('document-uri') or '',
+                'source_file': report.get('source-file') or '',
+                'line': report.get('line-number') or 0,
+            }
+        return
+
+    if isinstance(payload, list):
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            body = item.get('body') or {}
+            if not isinstance(body, dict):
+                continue
+            yield {
+                'directive': (
+                    body.get('effectiveDirective')
+                    or body.get('violatedDirective')
+                    or 'unknown'
+                ),
+                'blocked': body.get('blockedURL') or body.get('blocked-uri') or '',
+                'document': body.get('documentURL') or item.get('url') or '',
+                'source_file': body.get('sourceFile') or '',
+                'line': body.get('lineNumber') or 0,
+            }
+
+
+@csrf_exempt
+def csp_report_ingest(request):
+    """Public POST endpoint for CSP violation reports.
+
+    Browsers send reports as background POSTs without CSRF tokens (and
+    sometimes without credentials), so this view is exempt from CSRF and
+    open to anonymous traffic. The LTRIM cap protects Redis from runaway
+    misconfigurations; rate-limiting per-IP isn't worth the complexity for
+    a debug surface.
+    """
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    try:
+        payload = json.loads((request.body or b'{}').decode('utf-8'))
+    except (ValueError, UnicodeDecodeError):
+        logger.warning("CSP report ingest: invalid JSON body")
+        return HttpResponse(status=204)
+
+    now_ms = int(time.time() * 1000)
+    pipe = redis_client.pipeline()
+    pushed = 0
+    for report in _normalize_csp_reports(payload):
+        report['ts'] = now_ms
+        pipe.lpush(_CSP_REDIS_KEY, json.dumps(report))
+        pushed += 1
+
+    if pushed:
+        pipe.ltrim(_CSP_REDIS_KEY, 0, _CSP_REDIS_CAP - 1)
+        pipe.expire(_CSP_REDIS_KEY, _CSP_REDIS_TTL_SECONDS)
+        try:
+            pipe.execute()
+        except Exception:
+            logger.exception("CSP report ingest: Redis write failed")
+
+    # 204 No Content is the conventional response for report endpoints;
+    # browsers don't render or otherwise act on the body.
+    return HttpResponse(status=204)
+
+
+class CspViolationsView(StaffRequiredMixin, TemplateView):
+    """Staff-only dashboard at /staff/csp-violations/.
+
+    Reads the rolling Redis buffer, aggregates by (directive, blocked URI,
+    document URI), and surfaces both the grouped view (what's hitting) and
+    the recent raw entries (where + when). Not linked from nav: bookmark.
+    """
+    template_name = 'core/csp_violations.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        try:
+            raw_entries = redis_client.lrange(_CSP_REDIS_KEY, 0, _CSP_REDIS_CAP - 1)
+        except Exception:
+            logger.exception("CSP dashboard: Redis read failed")
+            raw_entries = []
+
+        entries = []
+        for raw in raw_entries:
+            try:
+                if isinstance(raw, bytes):
+                    raw = raw.decode('utf-8')
+                entries.append(json.loads(raw))
+            except (ValueError, UnicodeDecodeError):
+                continue
+
+        aggregates = {}
+        for entry in entries:
+            key = (
+                entry.get('directive', ''),
+                entry.get('blocked', ''),
+                entry.get('document', ''),
+            )
+            agg = aggregates.setdefault(key, {
+                'directive': key[0],
+                'blocked': key[1],
+                'document': key[2],
+                'count': 0,
+                'last_seen_ts': 0,
+            })
+            agg['count'] += 1
+            ts = entry.get('ts', 0)
+            if ts > agg['last_seen_ts']:
+                agg['last_seen_ts'] = ts
+
+        context['aggregates'] = sorted(
+            aggregates.values(), key=lambda a: a['last_seen_ts'], reverse=True
+        )
+        context['recent'] = entries[:50]
+        context['total'] = len(entries)
+        context['cap'] = _CSP_REDIS_CAP
+        return context
+
+
+class CspViolationsClearView(StaffRequiredMixin, View):
+    """POST-only: deletes the Redis CSP violations buffer.
+
+    Useful for the "deploy a CSP change, clear the buffer, reload pages,
+    see what's still tripping" workflow. CSRF-protected via the standard
+    middleware; only reachable by staff.
+    """
+
+    def post(self, request, *args, **kwargs):
+        try:
+            redis_client.delete(_CSP_REDIS_KEY)
+        except Exception:
+            logger.exception("CSP dashboard: Redis clear failed")
+        return redirect('staff_csp_violations')

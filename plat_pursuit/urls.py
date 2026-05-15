@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap,
@@ -288,6 +288,11 @@ urlpatterns = [
     # Bookmark-only staff analytics dashboard. Not linked from nav.
     path('staff/analytics/', AnalyticsDashboardView.as_view(), name='staff_analytics'),
     path('staff/analytics/report/', AnalyticsReportView.as_view(), name='staff_analytics_report'),
+    # CSP violation reporting. Ingest endpoint MUST live at the project root
+    # (not under /staff/ or /api/) since browsers POST reports without auth.
+    path('csp-report/', csp_report_ingest, name='csp_report'),
+    path('staff/csp-violations/', CspViolationsView.as_view(), name='staff_csp_violations'),
+    path('staff/csp-violations/clear/', CspViolationsClearView.as_view(), name='staff_csp_violations_clear'),
     path('staff/fundraiser/', FundraiserAdminView.as_view(), name='fundraiser_admin'),
     path('staff/badge-reveal/', BadgeRevealView.as_view(), name='badge_reveal'),
     # NOTE: PlatinumGridView's canonical path is now /tools/platinum-grid/

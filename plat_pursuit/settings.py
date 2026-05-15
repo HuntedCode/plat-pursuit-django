@@ -193,6 +193,8 @@ CONTENT_SECURITY_POLICY = {
             "blob:",                                 # canvas-confetti Web Worker
         ],
         "frame-ancestors": ["'none'"],
+        # Browsers POST violation reports here; viewable at /staff/csp-violations/.
+        "report-uri": ["/csp-report/"],
     },
 }
 
