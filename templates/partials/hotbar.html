@@ -65,10 +65,10 @@
                 <div class="hidden md:flex items-center shrink-0">
                     <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex items-center gap-2" data-form-type="other">
                         {% csrf_token %}
-                        <input id="add-sync-input" type="search" name="psn_username" placeholder="PSN Username" class="input input-accent input-xs md:input-sm w-32 md:w-36 xl:w-48" autocomplete="off" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
-                        <button id="add-sync-btn" type="submit" class="btn btn-accent btn-xs border border-base-300" aria-label="Sync new profile">Sync</button>
-                        <a href="" id="add-sync-anchor" class="btn btn-success btn-xs border border-base-300 hidden" aria-label="Visit synced profile">Visit</a>
-                        <span id="add-sync-load" class="loading loading-spinner loading-sm hidden" role="status" aria-label="Syncing profile"></span>
+                        <input type="search" name="psn_username" placeholder="PSN Username" class="add-sync-input input input-accent input-xs md:input-sm w-32 md:w-36 xl:w-48" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
+                        <button type="submit" class="add-sync-btn btn btn-accent btn-xs border border-base-300" aria-label="Sync new profile">Sync</button>
+                        <a href="" class="add-sync-anchor btn btn-success btn-xs border border-base-300 hidden" aria-label="Visit synced profile">Visit</a>
+                        <span class="add-sync-load loading loading-spinner loading-sm hidden" role="status" aria-label="Syncing profile"></span>
                     </form>
                 </div>
                 <!-- Mobile search toggle -->
@@ -83,8 +83,10 @@
                 <div class="pt-2 pb-1">
                     <form id="sync-form-mobile" method="post" action="{% url 'search_sync_profile' %}" class="flex items-center gap-2" data-form-type="other">
                         {% csrf_token %}
-                        <input type="search" name="psn_username" placeholder="PSN Username" class="input input-accent input-xs flex-1" autocomplete="off" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
-                        <button type="submit" class="btn btn-accent btn-xs border border-base-300">Sync</button>
+                        <input type="search" name="psn_username" placeholder="PSN Username" class="add-sync-input input input-accent input-xs flex-1" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
+                        <button type="submit" class="add-sync-btn btn btn-accent btn-xs border border-base-300" aria-label="Sync new profile">Sync</button>
+                        <a href="" class="add-sync-anchor btn btn-success btn-xs border border-base-300 hidden" aria-label="Visit synced profile">Visit</a>
+                        <span class="add-sync-load loading loading-spinner loading-sm hidden" role="status" aria-label="Syncing profile"></span>
                     </form>
                 </div>
             </div>

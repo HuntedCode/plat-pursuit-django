@@ -24,10 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncQueuePosition = document.getElementById('sync-queue-position');
 
     // DOM elements - Add sync
-    const addSyncBtn = document.getElementById('add-sync-btn');
-    const addSyncLoad = document.getElementById('add-sync-load');
-    const addSyncAnchor = document.getElementById('add-sync-anchor');
-    const addSyncInput = document.getElementById('add-sync-input');
+    // The per-form .add-sync-{btn,load,anchor,input} elements live inside
+    // each sync form (desktop #sync-form, mobile #sync-form-mobile) and are
+    // resolved per-submit so feedback shows up in the form the user actually
+    // used. The error text is shared between both forms.
     const addSyncErrorText = document.getElementById('add-sync-error-text');
 
     // DOM elements - Toggle
@@ -342,22 +342,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Add Sync (Search) ---
 
     /**
-     * Checks the status of a newly added sync
+     * Checks the status of a newly added sync. `refs` resolves to the
+     * .add-sync-{btn,load,anchor,input} elements of the form that submitted,
+     * so feedback updates the form the user actually interacted with.
      */
-    function checkAddSync(data) {
+    function checkAddSync(data, refs) {
         if (data.sync_status === 'error') {
-            hide(addSyncLoad);
-            hide(addSyncInput);
+            hide(refs.load);
+            hide(refs.input);
             if (addSyncErrorText) {
                 addSyncErrorText.textContent = 'Sync error: check spelling or account permissions, then refresh and try again.';
                 show(addSyncErrorText);
             }
             clearInterval(addSyncInterval);
         } else if (data.account_id) {
-            hide(addSyncLoad);
-            if (addSyncAnchor) {
-                addSyncAnchor.href = data.slug;
-                show(addSyncAnchor);
+            hide(refs.load);
+            if (refs.anchor) {
+                refs.anchor.href = data.slug;
+                show(refs.anchor);
             }
             clearInterval(addSyncInterval);
         }
@@ -366,12 +368,12 @@ document.addEventListener('DOMContentLoaded', () => {
     /**
      * Polls for add sync status
      */
-    function pollAddSync(psn_username) {
+    function pollAddSync(psn_username, refs) {
         if (!psn_username || !addSyncStatusUrl) return;
 
         const url = `${addSyncStatusUrl}?psn_username=${encodeURIComponent(psn_username)}`;
         PlatPursuit.API.get(url)
-            .then(data => checkAddSync(data))
+            .then(data => checkAddSync(data, refs))
             .catch(error => console.error('Add sync polling error:', error));
     }
 
@@ -380,16 +382,23 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function handleSyncFormSubmit(e) {
         e.preventDefault();
+        const form = e.target;
+        const refs = {
+            btn:    form.querySelector('.add-sync-btn'),
+            load:   form.querySelector('.add-sync-load'),
+            anchor: form.querySelector('.add-sync-anchor'),
+            input:  form.querySelector('.add-sync-input'),
+        };
 
-        const formData = new FormData(e.target);
-        PlatPursuit.API.postFormData(e.target.action, formData)
+        const formData = new FormData(form);
+        PlatPursuit.API.postFormData(form.action, formData)
             .then(data => {
                 if (data.success) {
-                    hide(addSyncBtn);
-                    show(addSyncLoad);
+                    hide(refs.btn);
+                    show(refs.load);
 
                     setTimeout(() => {
-                        addSyncInterval = setInterval(() => pollAddSync(data.psn_username), 2500);
+                        addSyncInterval = setInterval(() => pollAddSync(data.psn_username, refs), 2500);
                     }, 2500);
                 } else {
                     PlatPursuit.ToastManager.error(data.error || 'Failed to sync profile. Check the username and try again.');
