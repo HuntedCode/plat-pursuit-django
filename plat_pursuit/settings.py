@@ -194,6 +194,7 @@ CONTENT_SECURITY_POLICY = {
             "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
             "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
             "https://fundingchoicesmessages.google.com",  # Funding Choices CMP consent event logging
+            "https://images.igdb.com",                 # AdSense content-categorization scanner fetches cover art via XHR (same origin already trusted on img-src)
         ],
         "worker-src": [
             "'self'",
