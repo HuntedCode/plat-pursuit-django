@@ -1128,9 +1128,7 @@
         // the spark can be appended to the .pp-frame itself (the
         // only ancestor with overflow:visible — both .pp-frame__face
         // and .pp-frame__art have overflow:hidden and would clip
-        // any spark that strayed past their edges). Measuring the
-        // art's bounding box at spawn time keeps sparks emanating
-        // from the badge artwork, not the chrome above/below it.
+        // any spark that strayed past their edges).
         var tr = target.getBoundingClientRect();
         var ar = art.getBoundingClientRect();
         if (tr.width === 0 || tr.height === 0) return;
@@ -1139,32 +1137,57 @@
         var artWidthPct  = (ar.width  / tr.width)  * 100;
         var artHeightPct = (ar.height / tr.height) * 100;
 
+        // Edge-biased spawn: pick the left or right edge of the
+        // art, then place the spark within the outer 28% band of
+        // the art on that side. Restrict vertically to the top
+        // half of the art so sparks read as flying off the upper
+        // edges of the card, not the bottom.
+        var isLeftSide = Math.random() < 0.5;
+        var edgeBandPct = artWidthPct * 0.28;
+        var spawnLeftPct = isLeftSide
+            ? artLeftPct + Math.random() * edgeBandPct
+            : artLeftPct + artWidthPct - edgeBandPct + Math.random() * edgeBandPct;
+        var spawnTopPct = artTopPct + Math.random() * (artHeightPct * 0.5);
+
         var spark = document.createElement('div');
         spark.className = 'pp-spark pp-spark--maint';
-        // Spawn from the central 56% of the art region.
-        spark.style.left = (artLeftPct + (0.22 + Math.random() * 0.56) * artWidthPct) + '%';
-        spark.style.top  = (artTopPct  + (0.22 + Math.random() * 0.56) * artHeightPct) + '%';
+        spark.style.left = spawnLeftPct + '%';
+        spark.style.top  = spawnTopPct + '%';
         spark.style.bottom = 'auto';
-        // Radial arc outward, large enough to actually clear the
-        // card edge (most cards are 250-350px tall — a 100-180px
-        // arc reads as "flying off" rather than dying inside the
-        // badge area).
-        var angle = -Math.PI + Math.random() * Math.PI;     // -180° to 0° (upper half)
-        var distance = 100 + Math.random() * 80;            // 100-180px
+
+        // Trajectory aimed AT the chosen edge (sparks fly off the
+        // side they spawned near), with a slight upward bias so
+        // they rise like welding embers. ±28° random spread keeps
+        // the sparks from looking like a uniform stream.
+        // bias: atan2(-0.35, ±1) — mostly horizontal, lift up.
+        var biasAngle = Math.atan2(-0.35, isLeftSide ? -1 : 1);
+        var spread = (Math.random() - 0.5) * (56 * Math.PI / 180);  // ±28°
+        var angle = biasAngle + spread;
+
+        // Flight distance scales with the Frame variant so sparks
+        // clear the card edge by the same proportional amount on
+        // smaller variants. Default 110-200px, compact ~0.65x,
+        // mini ~0.42x. Matches the CSS spark size overrides for
+        // those variants so the whole effect reads consistently.
+        var distScale = 1;
+        if (target.classList.contains('pp-frame--mini')) {
+            distScale = 0.42;
+        } else if (target.classList.contains('pp-frame--compact')) {
+            distScale = 0.65;
+        }
+        var distance = (110 + Math.random() * 90) * distScale;
         var peakX = Math.cos(angle) * distance;
         var peakY = Math.sin(angle) * distance;             // negative = up
         var xMid = peakX * 0.55;
-        var yMid = peakY;
+        var yMid = peakY * 0.70;
         var xEnd = peakX;
-        var yEnd = peakY * 0.55 + 36;                       // settle slightly down at end
+        var yEnd = peakY * 0.55 + 30 * distScale;           // slight gravity at end
         var dur = 1100 + Math.random() * 600;
         spark.style.setProperty('--spark-x-mid', xMid + 'px');
         spark.style.setProperty('--spark-y-mid', yMid + 'px');
         spark.style.setProperty('--spark-x-end', xEnd + 'px');
         spark.style.setProperty('--spark-y-end', yEnd + 'px');
         spark.style.setProperty('--spark-dur', dur + 'ms');
-        // Append to the CARD (not the art) so the spark escapes
-        // every overflow:hidden boundary inside the card.
         target.appendChild(spark);
         window.setTimeout(function () { spark.remove(); }, dur + 50);
     }

@@ -281,23 +281,13 @@
 /* ============================================================
  * 3. Size variants
  *
- * Large : detail-page hero
- * Default (no class) : gallery / grid views
+ * Default (no class) : gallery / grid views — the primary
+ *           target; fits a 4-wide desktop grid at ~290px.
  * Compact : in-progress badges, title + plinth hidden, ribbon
  *           shows single-letter tier banner (B/S/G/P)
  * Mini   : inline / chip use, title + plinth hidden, ribbon
  *          shows single-letter tier banner
  * ============================================================ */
-.pp-frame--large {
-    width: 320px;
-    max-width: 100%;
-    --frame-art-pad: 14px;
-}
-.pp-frame--large .pp-frame__series       { font-size: 10px; }
-.pp-frame--large .pp-frame__title::after { font-size: 10px; }
-.pp-frame--large .pp-frame__name         { font-size: 15px; }
-.pp-frame--large .pp-frame__plinth-meta  { font-size: 10px; }
-
 /* Compact: title bar + plinth hidden. Tier identity carried
  * entirely by the chrome (border color + tier-tinted notches +
  * backdrop gradient). No ribbon — the chrome is enough at this
@@ -1020,9 +1010,12 @@
     opacity: 0.72;
     transition: opacity 600ms ease-out;
 }
-.pp-frame--maintenance .pp-frame__damage-overlay {
-    transition: opacity 400ms ease-out;
-}
+/* Art-level damage overlay opacity snaps instantly when the
+ * stripes-ascending class lifts. A transition here causes a
+ * visible "flash" — the face-level ascent overlay disappears
+ * with no fade while the art overlay would slowly fade in,
+ * leaving a moment where neither is fully visible. Snapping
+ * both at once keeps the cross-swap seamless. */
 .pp-frame--maintenance .pp-frame__repair-pips,
 .pp-frame--maintenance .pp-frame__cycle-print--maintenance {
     transition: opacity 300ms ease-out;
@@ -1282,6 +1275,57 @@
 }
 .pp-frame__maint-stamp::before { left: 6px; }
 .pp-frame__maint-stamp::after  { right: 6px; }
+
+/* Maintenance band scales down for the smaller Frame variants so
+ * the band reads as part of the card rather than a giant tag
+ * dropped on top. At mini the full "MAINTENANCE" word can't fit
+ * the card width even at the smallest legible font size, so the
+ * band is hidden -- the damage-stripe overlay + warm chrome
+ * carry the maintenance signal at that scale. */
+.pp-frame--compact .pp-frame__maint-stamp {
+    padding: 4px 16px;
+    font-size: 9.5px;
+    border-width: 1px;
+    border-radius: 2px;
+    letter-spacing: 0.16em;
+    box-shadow:
+        0 3px 6px rgba(0, 0, 0, 0.55),
+        0 1px 0 rgba(255, 240, 180, 0.45) inset,
+        0 -1px 0 rgba(130, 80, 20, 0.55) inset,
+        0 0 0 1px rgba(255, 240, 180, 0.2) inset;
+}
+.pp-frame--compact .pp-frame__maint-stamp::before,
+.pp-frame--compact .pp-frame__maint-stamp::after {
+    width: 6px;
+    height: 6px;
+}
+.pp-frame--compact .pp-frame__maint-stamp::before { left: 4px; }
+.pp-frame--compact .pp-frame__maint-stamp::after  { right: 4px; }
+
+/* Mini band -- "MAINTENANCE" is barely legible at this scale but
+ * the yellow plate carries the visual signal at a glance, which
+ * is more valuable than dropping it. Grommets shrink alongside;
+ * the heavy ::before glint stays so the band reads as a riveted
+ * plate rather than a label. */
+.pp-frame--mini .pp-frame__maint-stamp {
+    padding: 2.5px 8px;
+    font-size: 6px;
+    letter-spacing: 0.06em;
+    border-width: 1px;
+    border-radius: 1.5px;
+    box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.55),
+        0 1px 0 rgba(255, 240, 180, 0.45) inset,
+        0 -1px 0 rgba(130, 80, 20, 0.55) inset,
+        0 0 0 1px rgba(255, 240, 180, 0.2) inset;
+}
+.pp-frame--mini .pp-frame__maint-stamp::before,
+.pp-frame--mini .pp-frame__maint-stamp::after {
+    width: 4px;
+    height: 4px;
+}
+.pp-frame--mini .pp-frame__maint-stamp::before { left: 2px; }
+.pp-frame--mini .pp-frame__maint-stamp::after  { right: 2px; }
 
 /* Show the band statically (no animation) — used by direct
  * maintenance cards on initial render so the band is visible
@@ -2637,6 +2681,29 @@
         0 0 22px rgba(255, 190, 90, 0.85),
         0 0 42px rgba(255, 140, 60, 0.55),
         0 0 70px rgba(255, 100, 40, 0.28);
+}
+/* Sparks scale down for the smaller Frame variants so they read as
+ * fitting embers, not oversized blobs covering the whole card.
+ * Flight distance is also scaled in JS (spawnMaintSpark reads the
+ * variant class) so the trajectory clears the card edge by the
+ * same proportional amount as default. */
+.pp-frame--compact .pp-spark--maint {
+    width: 8px;
+    height: 8px;
+    box-shadow:
+        0 0 7px rgba(255, 240, 180, 1),
+        0 0 14px rgba(255, 190, 90, 0.85),
+        0 0 26px rgba(255, 140, 60, 0.55),
+        0 0 42px rgba(255, 100, 40, 0.28);
+}
+.pp-frame--mini .pp-spark--maint {
+    width: 5px;
+    height: 5px;
+    box-shadow:
+        0 0 4px rgba(255, 240, 180, 1),
+        0 0 9px rgba(255, 190, 90, 0.85),
+        0 0 16px rgba(255, 140, 60, 0.55),
+        0 0 26px rgba(255, 100, 40, 0.28);
 }
 
 

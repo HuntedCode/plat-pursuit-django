@@ -57,7 +57,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 |-----|------|----------|-------|
 | `tier` | `"bronze" \| "silver" \| "gold" \| "platinum"` | **yes** | Drives every tier-tinted token. |
 | `state` | `"earned" \| "in_progress" \| "unearned"` | **yes** | Visual state. Pinning is a separate flag (see `is_pinned`). |
-| `size` | `"large" \| "default" \| "compact" \| "mini"` | no | Default `"default"`. |
+| `size` | `"default" \| "compact" \| "mini"` | no | Default `"default"`. |
 | `series_name` | str | **yes** | Title bar left side. |
 | `badge_name` | str | **yes** | Plinth front + back header. |
 | `description` | str | no | Back face only; suppressed if missing. |
@@ -81,8 +81,7 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 
 | Size | Use case | Behavior |
 |------|----------|----------|
-| `large` | Badge / game detail hero | 320px wide, larger type, extra art padding. |
-| `default` | Gallery / grid | Fluid width. Tier label in the title bar (right-aligned). |
+| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Tier label in the title bar (right-aligned). |
 | `compact` | In-progress lists, home screen tiles | Title bar + plinth hidden. Tier identity carried entirely by the chrome (border + tier-tinted notches + backdrop). No on-art banner. |
 | `mini` | Inline / leaderboards / chips | 110px max width. Same chrome-only tier identity as compact. |
 
@@ -139,7 +138,7 @@ Public CSS variables (safe to override at the component, page, or container leve
 | `--tier-bronze` / `-silver` / `-gold` / `-platinum` | warm-cool tier hex | Base tier colors. |
 | `--tier-bronze-dim` / `-silver-dim` / `-gold-dim` / `-platinum-dim` | darker tone | Gradient stops for tier notches + chrome. |
 | `--frame-aspect` | `1 / 1` | Aspect ratio of the art container. |
-| `--frame-art-pad` | `10px` (default), `14px` (large), `5px` (mini) | Inset padding around the art layers. |
+| `--frame-art-pad` | `10px` (default), `5px` (mini) | Inset padding around the art layers. |
 | `--pp-build` | `0%` | Blueprint build height. Pass on the element style for in-progress cards. |
 | `--earn-scale` | `1` | Set by `triggerEarnMoment` per tier (0.75 / 0.9 / 1 / 1.25). |
 

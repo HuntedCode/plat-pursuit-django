@@ -48,6 +48,21 @@
         .demo-row {
             display: flex; flex-wrap: wrap; align-items: end; gap: 28px;
         }
+        /* Section 2 size showcase: explicit cell widths per size so
+         * each variant renders at a representative scale, not its
+         * collapsed intrinsic width. Mirrors section 1's ~290px
+         * default-size column from the grid layout. */
+        .size-cell--default { width: 290px; }
+        .size-cell--compact { width: 200px; }
+        .size-cell--mini    { width: 110px; }
+        /* Default is the production-target size — cap every Frame on
+         * the harness at the same 290px max-width so 3-col / 1-col
+         * sections don't visually inflate the card beyond its
+         * intended scale. Centered within wider grid cells. */
+        .demo-section .pp-frame {
+            max-width: 290px;
+            margin-inline: auto;
+        }
         .earn-controls {
             margin-top: 8px;
             display: flex; flex-wrap: wrap; gap: 4px;
@@ -107,10 +122,10 @@
         <!-- 2. Sizes (gold, earned) -->
         <div class="demo-section">
             <h2>2. Size variants (gold, earned)</h2>
-            <p>Large → Default → Compact → Mini. Compact and Mini hide the title bar + plinth and show a single-letter tier banner (B/S/G/P) via CSS <code>::after</code>.</p>
+            <p>Default → Compact → Mini. Default is the primary target (fits a 4-wide desktop grid at ~290px). Compact and Mini hide the title bar + plinth and show a single-letter tier banner (B/S/G/P) via CSS <code>::after</code>.</p>
             <div class="demo-row">
                 {% for frame in sizes_gold %}
-                    <div>
+                    <div class="size-cell size-cell--{{ frame.size }}">
                         <div class="demo-label">{{ frame.size|title }}</div>
                         {% include "components/frame.html" with frame=frame %}
                     </div>

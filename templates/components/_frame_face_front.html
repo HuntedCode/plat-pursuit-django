@@ -126,8 +126,11 @@
             <span class="pp-frame__engraving-num">#{{ frame.engraving_rank|intcomma }}</span>
             <span>{{ frame.engraving_total_label|default:"of all time" }}</span>
         </div>
-    {% elif state == 'in_progress' or frame.is_pinned %}
+    {% elif state == 'in_progress' or state == 'unearned' or frame.is_pinned %}
         {# No rank yet — placeholder reserves engraving height with "#---" filler. #}
+        {# Applies to both in_progress AND unearned (both "in fabrication" blueprint #}
+        {# states) so every card has the same plinth height regardless of state, and #}
+        {# the set-mark sits in the same bottom-right corner across the whole grid. #}
         <div class="pp-frame__engraving pp-frame__engraving--placeholder">
             <span class="pp-frame__engraving-num">#---</span>
             <span>not earned yet</span>
