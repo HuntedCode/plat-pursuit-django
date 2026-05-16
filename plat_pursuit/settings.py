@@ -133,6 +133,7 @@ CONTENT_SECURITY_POLICY = {
         "script-src": [
             "'self'",
             "'unsafe-inline'",                    # Template <script> blocks
+            "'wasm-unsafe-eval'",                 # AdSense uses WebAssembly for some creative formats. Only enables WebAssembly.compile/instantiate (NOT JS eval); WASM is sandboxed from the DOM, so this is a smaller relaxation than 'unsafe-inline'.
             "https://cdn.jsdelivr.net",           # chart.js, marked, dompurify, confetti
             "https://pagead2.googlesyndication.com",  # AdSense loader
             "https://www.googletagservices.com",      # AdSense
@@ -185,6 +186,7 @@ CONTENT_SECURITY_POLICY = {
         ],
         "connect-src": [
             "'self'",
+            "data:",                                   # XHR/fetch of data: URIs (no network egress; just suppresses CSP noise)
             "https://cdn.jsdelivr.net",                # Source maps for chart.js, marked, dompurify, canvas-confetti
             "https://pagead2.googlesyndication.com",   # AdSense reporting
             "https://googleads.g.doubleclick.net",     # AdSense ad serving
