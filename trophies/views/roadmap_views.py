@@ -408,13 +408,73 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             {'text': f'Roadmap: {group_name}'},
         ]
 
-        # SEO.
+        # SEO. Title aims for under ~60 chars (Google's typical truncation
+        # point) and leads with the game name + "Trophy Guide" — the
+        # high-intent keyword pair search readers use. The roadmap's CTG
+        # display name is appended only when it's a DLC (the default
+        # "Base Game" label adds noise and pushes us over budget).
+        is_dlc = group_name and group_name.lower() != 'base game'
+        if is_dlc:
+            context['seo_title'] = f"{game.title_name}: {group_name} Trophy Guide"
+        else:
+            context['seo_title'] = f"{game.title_name} Trophy Guide & Roadmap"
+
         step_count = len(roadmap.steps.all())
         guide_count = len(roadmap.trophy_guides.all())
-        context['seo_description'] = (
-            f"Trophy roadmap for {game.title_name} ({group_name}). "
-            f"{step_count} steps, {guide_count} trophy guides."
-        )
+        difficulty = getattr(roadmap, 'difficulty', None) or ''
+        estimated_hours = getattr(roadmap, 'estimated_hours', None)
+        playthroughs = getattr(roadmap, 'min_playthroughs', None)
+
+        # Meta description packs the high-intent signals trophy hunters
+        # actually search for — difficulty, time-to-platinum, playthrough
+        # count — into Google's ~155-char budget. Format is conversational
+        # ("Platinum X with our step-by-step guide…") rather than a
+        # fact-dump to read better as a search snippet.
+        desc_parts = [
+            f"Platinum {game.title_name}"
+        ]
+        if is_dlc:
+            desc_parts.append(f" ({group_name})")
+        desc_parts.append(f" with our step-by-step trophy roadmap.")
+        if step_count:
+            desc_parts.append(f" {step_count} steps")
+            if guide_count:
+                desc_parts.append(f", {guide_count} per-trophy guides")
+            desc_parts.append('.')
+        meta_extras = []
+        if difficulty:
+            meta_extras.append(f"Difficulty: {difficulty}")
+        if estimated_hours:
+            meta_extras.append(f"~{int(estimated_hours)} hours")
+        if playthroughs and playthroughs > 1:
+            meta_extras.append(f"{playthroughs} playthroughs")
+        if meta_extras:
+            desc_parts.append(' ' + ' · '.join(meta_extras) + '.')
+        context['seo_description'] = ''.join(desc_parts)[:300]  # cap defensively; Google reads ~155
+
+        # Absolute URL for the game cover so OG/Twitter previews show
+        # the right artwork instead of the site logo fallback. Falls
+        # back to '' so the base.html block keeps its logo default.
+        cover_url = getattr(game, 'display_image_url', '') or ''
+        if cover_url and not cover_url.startswith('http'):
+            cover_url = f"{self.request.scheme}://{self.request.get_host()}{cover_url}"
+        context['seo_image'] = cover_url
+
+        # Contributor display-names for the HowTo schema's `author`
+        # field. Mirrors the visible attribution above the steps so
+        # the structured data matches what the reader sees.
+        contributor_names = []
+        try:
+            for c in (roadmap.contributors or []):
+                name = getattr(c, 'display_psn_username', None) or getattr(c, 'psn_username', None)
+                if name:
+                    contributor_names.append(name)
+        except (AttributeError, TypeError):
+            pass
+        context['roadmap_contributors'] = contributor_names
+
+        # Concept for the JSON-LD `about` (VideoGame reference).
+        context['concept'] = getattr(roadmap.concept_trophy_group, 'concept', None)
 
         context['game'] = game
         # Phase metadata for the always-visible phase pill on each card and

@@ -1,6 +1,6 @@
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
-from trophies.models import Game, Profile, Badge, Checklist, GameList, Challenge
+from trophies.models import Game, Profile, Badge, Checklist, GameList, Challenge, Roadmap
 
 
 class StaticViewSitemap(Sitemap):
@@ -106,6 +106,56 @@ class GuideSitemap(Sitemap):
 
     def location(self, obj):
         return reverse('guide_detail', kwargs={'guide_id': obj.id})
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+
+class RoadmapSitemap(Sitemap):
+    """Published trophy roadmaps — the per-CTG guide pages.
+
+    Each Roadmap is scoped to a single ConceptTrophyGroup (base game or
+    a specific DLC), so each row maps to one detail URL. Only published
+    roadmaps are surfaced; drafts stay out of the index (and they'd be
+    noindexed even if a crawler reached them directly).
+
+    Priority 0.7 — these are high-value destination pages (long-form
+    trophy guides) and we want crawlers to revisit weekly to pick up
+    author edits.
+    """
+    changefreq = 'weekly'
+    priority = 0.7
+    limit = 5000
+
+    def items(self):
+        return (
+            Roadmap.objects
+            .filter(status='published')
+            .select_related('concept_trophy_group__concept')
+            # `.only()` would be ideal here but the URL builder needs to
+            # walk concept_trophy_group -> concept -> game (reverse FK)
+            # to resolve np_communication_id; leaving the row fields in
+            # so the FK navigation works without extra queries.
+            .order_by('-id')
+        )
+
+    def location(self, obj):
+        # Reverse FK: a concept can have multiple games (platforms). For
+        # the URL we need any one — `.first()` is stable and matches the
+        # `game_detail` URL the reader hits from the game page.
+        concept = obj.concept_trophy_group.concept
+        game = concept.games.first() if concept else None
+        if game is None or not game.np_communication_id:
+            return None
+        group_id = obj.concept_trophy_group.trophy_group_id
+        if group_id == 'default':
+            return reverse('roadmap_detail', kwargs={
+                'np_communication_id': game.np_communication_id,
+            })
+        return reverse('roadmap_detail_dlc', kwargs={
+            'np_communication_id': game.np_communication_id,
+            'trophy_group_id': group_id,
+        })
 
     def lastmod(self, obj):
         return obj.updated_at

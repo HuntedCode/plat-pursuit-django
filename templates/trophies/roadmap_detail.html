@@ -1,8 +1,39 @@
 {% extends 'base.html' %}
-{% load static custom_filters markdown_filters humanize %}
+{% load static custom_filters markdown_filters humanize seo_tags %}
 
-{% block title %}{% if roadmap_preview_mode %}[PREVIEW] {% endif %}Trophy Roadmap: {{ game.title_name }} - {{ roadmap.concept_trophy_group.display_name }}{% endblock %}
+{# ─── SEO blocks ────────────────────────────────────────────────────── #}
+{# Title is the high-intent keyword pair (game name + "Trophy Guide"),  #}
+{# built in the view to stay under ~60 chars. `seo_title` is the        #}
+{# canonical source; the [PREVIEW] prefix only fires for staff-visible  #}
+{# draft/unpublished views (paired with a `noindex` robots block).      #}
+{% block title %}{% if roadmap_preview_mode %}[PREVIEW] {% endif %}{{ seo_title }}{% endblock %}
 {% block meta_description %}{{ seo_description }}{% endblock %}
+
+{# Draft / preview roadmaps are staff-only; if a crawler ever finds the #}
+{# URL we want it out of the index until the author publishes.          #}
+{% block robots %}{% if roadmap_preview_mode %}noindex, nofollow{% else %}index, follow{% endif %}{% endblock %}
+
+{# Per-roadmap OG / Twitter image — use the game cover so social shares #}
+{# show the game art instead of the generic site logo. summary_large_   #}
+{# image bumps Twitter to the bigger card now that we have a real image.#}
+{% block og_title %}{{ seo_title }}{% endblock %}
+{% block og_description %}{{ seo_description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_image %}{% if seo_image %}{{ seo_image }}{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block twitter_card_type %}{% if seo_image %}summary_large_image{% else %}summary{% endif %}{% endblock %}
+{% block twitter_title %}{{ seo_title }}{% endblock %}
+{% block twitter_description %}{{ seo_description }}{% endblock %}
+{% block twitter_image %}{% if seo_image %}{{ seo_image }}{% else %}{{ block.super }}{% endif %}{% endblock %}
+
+{# JSON-LD: HowTo (steps + author + about-VideoGame) and optional       #}
+{# VideoObject for the embedded "Play Along" video. Both noop silently  #}
+{# when their inputs are missing, so it's safe to render unconditionally.#}
+{% block extra_head %}
+    {% jsonld_roadmap roadmap game concept request roadmap_contributors %}
+    {% if roadmap.youtube_url %}
+        {% jsonld_video roadmap.youtube_url seo_title seo_description request roadmap.youtube_channel_name %}
+    {% endif %}
+{% endblock %}
 
 {% block content %}
 {{ trophy_phases|json_script:"roadmap-trophy-phases" }}

@@ -25,7 +25,7 @@ from django.views.generic import RedirectView, TemplateView
 from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
-    BadgeSitemap, GameListSitemap, ChallengeSitemap,
+    BadgeSitemap, GameListSitemap, ChallengeSitemap, RoadmapSitemap,
 )
 
 sitemaps = {
@@ -33,6 +33,7 @@ sitemaps = {
     'games': GameSitemap,
     'profiles': ProfileSitemap,
     'badges': BadgeSitemap,
+    'roadmaps': RoadmapSitemap,
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }

@@ -176,6 +176,219 @@ def jsonld_game(game, concept, request):
 
 
 @register.simple_tag
+def jsonld_roadmap(roadmap, game, concept, request, contributors=None):
+    """HowTo + VideoGame combined schema for a trophy roadmap detail page.
+
+    Roadmaps are instructional content (numbered steps + optional time
+    estimates + author attribution), which maps cleanly onto schema.org's
+    `HowTo` type. We pair it with a referenced `VideoGame` so the guide
+    is anchored to the game it covers — improves rich-snippet eligibility
+    and lets the panel show game metadata alongside the steps.
+
+    Inputs are forgiving — missing optional fields are silently dropped.
+    Always returns a valid schema dict with at least name + steps.
+    """
+    if not roadmap or not game:
+        return ''
+
+    base_url = f"{request.scheme}://{request.get_host()}"
+    page_url = request.build_absolute_uri()
+    game_title = game.title_name or ''
+    group_name = ''
+    try:
+        group_name = roadmap.concept_trophy_group.display_name or ''
+    except AttributeError:
+        pass
+
+    # Resolve the cover image for SEO use (same chain as the visible
+    # game cover in the header).
+    image_url = getattr(game, 'display_image_url', None) or ''
+    if image_url and not image_url.startswith('http'):
+        image_url = f"{base_url}{image_url}"
+
+    # Step list → HowToStep array. Each step's anchor URL points back
+    # at the page with the `#step-N` fragment so a search result can
+    # deep-link to a specific step.
+    steps_data = []
+    try:
+        for idx, step in enumerate(roadmap.steps.all(), start=1):
+            step_obj = {
+                "@type": "HowToStep",
+                "position": idx,
+                "name": (step.title or f"Step {idx}")[:200],
+                "url": f"{page_url}#step-{step.id}",
+            }
+            description = (step.description or '').strip()
+            if description:
+                # Strip markdown-ish syntax for the schema text — search
+                # crawlers prefer plain prose. Truncate to keep payload
+                # compact; full text is on the page itself.
+                step_obj["text"] = description[:500]
+            steps_data.append(step_obj)
+    except AttributeError:
+        pass
+
+    data = {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        # The display name should describe what the reader will achieve.
+        "name": f"How to platinum {game_title}" + (
+            f" ({group_name})" if group_name and group_name.lower() != 'base game' else ''
+        ),
+        "url": page_url,
+        "description": _make_roadmap_description(roadmap, game, group_name),
+    }
+    if image_url:
+        data["image"] = image_url
+    if steps_data:
+        data["step"] = steps_data
+
+    # Total time — converts roadmap.estimated_hours into an ISO 8601
+    # duration. PT24H, PT5H etc. Only emit when present.
+    estimated_hours = getattr(roadmap, 'estimated_hours', None)
+    if estimated_hours:
+        try:
+            data["totalTime"] = f"PT{int(estimated_hours)}H"
+        except (TypeError, ValueError):
+            pass
+
+    # Difficulty (if author set it). schema.org doesn't have a strict
+    # vocabulary for HowTo difficulty so we use a Text value.
+    difficulty = getattr(roadmap, 'difficulty', None)
+    if difficulty:
+        data["proficiencyLevel"] = str(difficulty)
+
+    # Author attribution — prefer explicit contributors list (a list of
+    # display names from the `roadmap_authors` template tag); fall back
+    # to the curated PlatPursuit team string if no contributors set.
+    if contributors:
+        names = [c for c in contributors if c]
+        if names:
+            data["author"] = [
+                {"@type": "Person", "name": name} for name in names
+            ]
+    else:
+        data["author"] = {
+            "@type": "Organization",
+            "name": "PlatPursuit Roadmap Team",
+        }
+
+    # `about` references the game itself — search engines use this to
+    # link the guide back to the underlying VideoGame entity.
+    if game_title:
+        about = {
+            "@type": "VideoGame",
+            "name": game_title,
+        }
+        if concept and getattr(concept, 'publisher_name', None):
+            about["publisher"] = {
+                "@type": "Organization",
+                "name": concept.publisher_name,
+            }
+        if concept and getattr(concept, 'release_date', None):
+            about["datePublished"] = concept.release_date.strftime('%Y-%m-%d')
+        if image_url:
+            about["image"] = image_url
+        data["about"] = about
+
+    return _render_jsonld(data)
+
+
+def _make_roadmap_description(roadmap, game, group_name):
+    """Build a SEO-friendly description for the HowTo schema.
+
+    Mirrors the meta description the page emits so search-result snippets
+    and rich-snippet panels read consistently.
+    """
+    step_count = 0
+    guide_count = 0
+    try:
+        step_count = roadmap.steps.count()
+        guide_count = roadmap.trophy_guides.count()
+    except AttributeError:
+        pass
+    parts = [f"Complete trophy guide for {game.title_name}"]
+    if group_name and group_name.lower() != 'base game':
+        parts[0] += f" ({group_name})"
+    parts.append('.')
+    if step_count:
+        parts.append(
+            f" {step_count} step{'s' if step_count != 1 else ''}"
+        )
+        if guide_count:
+            parts.append(
+                f", {guide_count} trophy guide{'s' if guide_count != 1 else ''}."
+            )
+        else:
+            parts.append('.')
+    hours = getattr(roadmap, 'estimated_hours', None)
+    if hours:
+        parts.append(f" Estimated time: {int(hours)} hours.")
+    difficulty = getattr(roadmap, 'difficulty', None)
+    if difficulty:
+        parts.append(f" Difficulty: {difficulty}.")
+    return ''.join(parts)
+
+
+@register.simple_tag
+def jsonld_video(youtube_url, name, description, request, channel_name=''):
+    """VideoObject schema for an embedded YouTube clip.
+
+    Adding this lets search engines surface the embedded "Play Along"
+    video as a rich-snippet card on the roadmap result. Skipped if no
+    URL or if we can't parse the YouTube ID — better to omit the
+    schema than emit a malformed one.
+    """
+    if not youtube_url:
+        return ''
+    video_id = _extract_youtube_id(youtube_url)
+    if not video_id:
+        return ''
+
+    base_url = f"{request.scheme}://{request.get_host()}"
+    data = {
+        "@context": "https://schema.org",
+        "@type": "VideoObject",
+        "name": name or 'Trophy Guide Video',
+        "description": description or name or 'Trophy guide video walkthrough.',
+        "thumbnailUrl": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+        "uploadDate": "2020-01-01",  # placeholder — YouTube oEmbed doesn't expose this on the cached side
+        "contentUrl": youtube_url,
+        "embedUrl": f"https://www.youtube.com/embed/{video_id}",
+    }
+    if channel_name:
+        data["author"] = {
+            "@type": "Person",
+            "name": channel_name,
+        }
+    return _render_jsonld(data)
+
+
+def _extract_youtube_id(url):
+    """Pull the video id from a YouTube URL. Handles the three common
+    formats: youtu.be/X, youtube.com/watch?v=X, youtube.com/embed/X.
+    Returns None on anything we can't confidently parse.
+    """
+    if not url:
+        return None
+    try:
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        if host.endswith('youtu.be'):
+            return parsed.path.lstrip('/').split('/')[0] or None
+        if 'youtube' in host:
+            if parsed.path.startswith('/embed/'):
+                return parsed.path.split('/embed/', 1)[1].split('/')[0] or None
+            qs = parse_qs(parsed.query or '')
+            v = qs.get('v', [None])[0]
+            return v or None
+    except Exception:
+        return None
+    return None
+
+
+@register.simple_tag
 def jsonld_profile(profile, request):
     """ProfilePage schema for profile detail pages."""
     base_url = f"{request.scheme}://{request.get_host()}"
