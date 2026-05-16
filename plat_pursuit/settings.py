@@ -151,6 +151,7 @@ CONTENT_SECURITY_POLICY = {
         "font-src": [
             "'self'",
             "https://fonts.gstatic.com",
+            "http://fonts.gstatic.com",                # AdSense creatives load Google Sans via http
         ],
         "img-src": [
             "'self'",
@@ -171,6 +172,7 @@ CONTENT_SECURITY_POLICY = {
         ],
         "frame-src": [
             "'self'",
+            "https://pagead2.googlesyndication.com",   # AdSense iframes (some creatives served from here)
             "https://googleads.g.doubleclick.net",     # AdSense iframes
             "https://tpc.googlesyndication.com",       # AdSense iframes
             "https://www.google.com",                  # AdSense iframes
@@ -186,6 +188,7 @@ CONTENT_SECURITY_POLICY = {
             "https://cdn.jsdelivr.net",                # Source maps for chart.js, marked, dompurify, canvas-confetti
             "https://pagead2.googlesyndication.com",   # AdSense reporting
             "https://googleads.g.doubleclick.net",     # AdSense ad serving
+            "https://csi.gstatic.com",                 # AdSense performance instrumentation beacons
             "https://ep1.adtrafficquality.google",     # AdSense traffic quality (SODAR)
             "https://ep2.adtrafficquality.google",     # AdSense traffic quality (SODAR, backup)
             "https://fundingchoicesmessages.google.com",  # Funding Choices CMP consent event logging

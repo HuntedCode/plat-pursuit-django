@@ -31,25 +31,38 @@
     <h2 class="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
       By directive &amp; blocked URI
     </h2>
-    <div class="overflow-x-auto -mx-4 md:-mx-5 lg:-mx-6">
-      <table class="w-full text-xs md:text-sm">
+    {# table-layout:fixed (inline since the Tailwind utility isn't compiled  #}
+    {# into output.css) + explicit colgroup widths so long URLs in the      #}
+    {# Blocked/Document columns wrap with break-all instead of pushing the   #}
+    {# adjacent column off-screen. The Document <col> width is reserved but #}
+    {# its cells use hidden md:table-cell, so the column collapses on        #}
+    {# mobile and the freed space flows to Blocked URI.                     #}
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs md:text-sm" style="table-layout: fixed;">
+        <colgroup>
+          <col style="width: 4rem;" />
+          <col style="width: 7.5rem;" />
+          <col />
+          <col style="width: 30%;" />
+          <col style="width: 5.5rem;" />
+        </colgroup>
         <thead>
           <tr class="text-left text-base-content/50 border-b border-base-content/10">
-            <th class="px-4 md:px-5 lg:px-6 py-2 font-medium">Count</th>
+            <th class="px-3 py-2 font-medium">Count</th>
             <th class="px-3 py-2 font-medium">Directive</th>
             <th class="px-3 py-2 font-medium">Blocked URI</th>
             <th class="px-3 py-2 font-medium hidden md:table-cell">Document</th>
-            <th class="px-4 md:px-5 lg:px-6 py-2 font-medium whitespace-nowrap">Last seen</th>
+            <th class="px-3 py-2 font-medium whitespace-nowrap">Last seen</th>
           </tr>
         </thead>
         <tbody>
           {% for agg in aggregates %}
-          <tr class="border-b border-base-content/5">
-            <td class="px-4 md:px-5 lg:px-6 py-2 font-semibold tabular-nums">{{ agg.count }}</td>
-            <td class="px-3 py-2"><code class="text-warning">{{ agg.directive }}</code></td>
-            <td class="px-3 py-2 break-all max-w-md"><code class="text-base-content/80">{{ agg.blocked|default:"(empty)" }}</code></td>
-            <td class="px-3 py-2 break-all max-w-md hidden md:table-cell"><code class="text-base-content/60">{{ agg.document|default:"(empty)" }}</code></td>
-            <td class="px-4 md:px-5 lg:px-6 py-2 text-base-content/60 whitespace-nowrap">
+          <tr class="border-b border-base-content/5 align-top">
+            <td class="px-3 py-2 font-semibold tabular-nums">{{ agg.count }}</td>
+            <td class="px-3 py-2"><code class="text-warning break-all">{{ agg.directive }}</code></td>
+            <td class="px-3 py-2"><code class="text-base-content/80 break-all">{{ agg.blocked|default:"(empty)" }}</code></td>
+            <td class="px-3 py-2 hidden md:table-cell"><code class="text-base-content/60 break-all">{{ agg.document|default:"(empty)" }}</code></td>
+            <td class="px-3 py-2 text-base-content/60 whitespace-nowrap">
               <span class="csp-rel-time" data-ts="{{ agg.last_seen_ts }}">{{ agg.last_seen_ts }}</span>
             </td>
           </tr>
