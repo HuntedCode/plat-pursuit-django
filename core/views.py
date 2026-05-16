@@ -170,7 +170,6 @@ class FrameComponentTestView(TemplateView):
 
         # Section 2: size matrix at Gold tier.
         ctx['sizes_gold'] = [
-            self._base_ctx('gold', 'earned', size='large'),
             self._base_ctx('gold', 'earned', size='default'),
             self._base_ctx('gold', 'earned', size='compact'),
             self._base_ctx('gold', 'earned', size='mini'),
@@ -270,6 +269,314 @@ class FrameComponentTestView(TemplateView):
             staged_ctx['engraving_rank'] = self.RARITY_BY_TIER[t]['rank']
             ctx['earn_harness'].append({'tier': t, 'frame': staged_ctx})
 
+        return ctx
+
+
+class BinderPreviewView(TemplateView):
+    """Workshop page for the Binder primitive at /design/binder/.
+
+    The Binder is the display surface that holds Frames -- physical card
+    binder metaphor: paper-stock pages with binder rings, transparent
+    sleeve pockets, page numbers, all to a 4x4 desktop grid (4 series x
+    4 tiers per page = 16 badges per page). Mobile preserves the page
+    concept but elongates to 2-wide flow.
+
+    Sample data follows the real badge rules so the visual reads as a
+    plausible collection:
+      - Stages: bronze <= silver; gold == platinum >= silver
+      - Progress: all 4 tiers progress in lockstep (small per-tier
+        variation, bronze tends to lead silver, gold tends to lead
+        platinum, never massive gaps)
+      - Maintenance: if one tier of a series is in maintenance, ALL four
+        tiers of that series are
+      - Earn order: bronze first, platinum last; silver typically before
+        gold but gold can rarely jump ahead
+
+    Each card carries a set_number used as the canonical engraved sort
+    key (stable regardless of user sort).
+    """
+    template_name = 'design/binder_preview.html'
+
+    TIERS = ['bronze', 'silver', 'gold', 'platinum']
+    TIER_NEXT = {'bronze': 'Silver', 'silver': 'Gold', 'gold': 'Platinum', 'platinum': 'Maxed'}
+    BG_INDEX_BY_TIER = {'bronze': '1', 'silver': '2', 'gold': '3', 'platinum': '4'}
+    RARITY_BY_TIER = {
+        'bronze':   {'class': 'common',   'pct': 47,   'rank': 14802},
+        'silver':   {'class': 'uncommon', 'pct': 12,   'rank': 1902},
+        'gold':     {'class': 'rare',     'pct': 3,    'rank': 247},
+        'platinum': {'class': 'mythic',   'pct': 0.3,  'rank': 11},
+    }
+
+    # 16 series x 4 tiers = 64 cards across 4 pages of 16 (= 2 full
+    # spreads). Each page carries its own THEME (like a binder tab
+    # divider) -- "PlayStation Classics", "Open World Epics", etc.
+    # The tab UI sticks at top of viewport while the user scrolls
+    # through that page's 16 cards, then gets pushed out by the
+    # next page's tab.
+    #
+    # Color is picked from a curated PALETTE (cobalt / amber / emerald
+    # / violet / crimson / teal / mustard / slate). At production
+    # scale (25+ themes) themes repeat palette colors when they're
+    # conceptually related -- users rarely see more than ~3 tabs at
+    # once during scroll, so repeats are fine. The mapping is
+    # centralized in CSS via the [data-palette] attribute.
+    PAGES_DATA = [
+        {
+            'theme':   'PlayStation Classics',
+            'palette': 'cobalt',
+            'series':  ['Resident Evil', 'Final Fantasy', 'Metal Gear', 'Dark Souls'],
+        },
+        {
+            'theme':   'Cinematic Adventures',
+            'palette': 'amber',
+            'series':  ['Marvel Universe', 'Persona', 'Yakuza', 'The Last of Us'],
+        },
+        {
+            'theme':   'Open World Epics',
+            'palette': 'emerald',
+            'series':  ['God of War', 'Uncharted', 'PSVR Catalog', 'FromSoftware'],
+        },
+        {
+            'theme':   'Heritage Studios',
+            'palette': 'violet',
+            'series':  ['Spider-Man', 'Horizon', 'Gran Turismo', 'Tekken'],
+        },
+    ]
+
+    # Per-series "stories" -- each entry resolves to all four tiers of
+    # one row, honoring the badge rules above. Page 1 leans complete,
+    # page 2 mixes states (including a maintenance row + a rare
+    # gold-before-silver case), page 3 leans frontier, page 4 brings
+    # back more complete + a second maintenance row.
+    SERIES_STORIES = [
+        # Page 1 (mature zone)
+        {'kind': 'complete',         'earned_date': 'Mar 04, 2024'},
+        {'kind': 'complete',         'earned_date': 'Apr 18, 2024'},
+        {'kind': 'gold_jumped',      'earned_date': 'May 22, 2024'},
+        {'kind': 'near_complete',    'earned_date': 'Jul 11, 2024', 'pct': 80},
+        # Page 2 (working edge)
+        {'kind': 'complete',         'earned_date': 'Aug 30, 2024'},
+        {'kind': 'mostly_done',      'earned_date': 'Sep 14, 2024', 'pct': 88},
+        {'kind': 'maintenance',      'earned_date': 'Oct 02, 2024', 'pct': 75},
+        {'kind': 'mid_progress',     'pct': 55},
+        # Page 3 (frontier)
+        {'kind': 'mid_progress',     'pct': 42},
+        {'kind': 'bronze_only',      'earned_date': 'Jan 21, 2025'},
+        {'kind': 'started',          'pct': 18},
+        {'kind': 'untouched'},
+        # Page 4 (continued frontier / mature mix)
+        {'kind': 'complete',         'earned_date': 'Dec 03, 2023'},
+        {'kind': 'maintenance',      'earned_date': 'Nov 15, 2024', 'pct': 60},
+        {'kind': 'near_complete',    'earned_date': 'Feb 14, 2024', 'pct': 70},
+        {'kind': 'started',          'pct': 28},
+    ]
+
+    # Per-series stage profiles. bronze <= silver; gold == platinum
+    # >= silver. Cycled by series index so each row has its own count.
+    STAGE_PROFILES = [
+        {'bronze': 5, 'silver': 5, 'gold': 8,  'platinum': 8},
+        {'bronze': 4, 'silver': 4, 'gold': 7,  'platinum': 7},
+        {'bronze': 5, 'silver': 6, 'gold': 9,  'platinum': 9},
+        {'bronze': 6, 'silver': 6, 'gold': 10, 'platinum': 10},
+        {'bronze': 4, 'silver': 5, 'gold': 8,  'platinum': 8},
+        {'bronze': 7, 'silver': 7, 'gold': 11, 'platinum': 11},
+        {'bronze': 5, 'silver': 5, 'gold': 8,  'platinum': 8},
+        {'bronze': 4, 'silver': 4, 'gold': 6,  'platinum': 6},
+        {'bronze': 6, 'silver': 7, 'gold': 10, 'platinum': 10},
+        {'bronze': 5, 'silver': 5, 'gold': 9,  'platinum': 9},
+        {'bronze': 4, 'silver': 5, 'gold': 7,  'platinum': 7},
+        {'bronze': 8, 'silver': 8, 'gold': 12, 'platinum': 12},
+        {'bronze': 5, 'silver': 5, 'gold': 9,  'platinum': 9},
+        {'bronze': 6, 'silver': 6, 'gold': 10, 'platinum': 10},
+        {'bronze': 5, 'silver': 6, 'gold': 9,  'platinum': 9},
+        {'bronze': 4, 'silver': 4, 'gold': 7,  'platinum': 7},
+    ]
+
+    def _art_layers(self, tier):
+        i = self.BG_INDEX_BY_TIER[tier]
+        return [
+            static_url(f'images/badges/backdrops/{i}_backdrop.png'),
+            static_url('images/badges/default.png'),
+            static_url(f'images/badges/foregrounds/{i}_foreground.png'),
+        ]
+
+    def _resolve_tier_state(self, story, tier, stages_total):
+        """Given a story kind + tier + stage count, return
+        (state, stages_done, progress_pct). Honors the badge rules."""
+        kind = story['kind']
+
+        if kind == 'complete':
+            return ('earned', stages_total, None)
+
+        if kind == 'maintenance':
+            # All 4 tiers in maintenance, all with consistent repair
+            # progress. Bronze leads slightly (repaired faster).
+            base = story.get('pct', 75)
+            offsets = {'bronze': 10, 'silver': 0, 'gold': 0, 'platinum': -10}
+            pct = max(20, min(90, base + offsets[tier]))
+            repaired = max(1, min(stages_total - 1, int(round(stages_total * pct / 100))))
+            return ('maintenance', repaired, pct)
+
+        if kind == 'near_complete':
+            # B/S/G earned, platinum in progress at high pct.
+            if tier == 'platinum':
+                pct = story.get('pct', 80)
+                return ('in_progress', int(stages_total * pct / 100), pct)
+            return ('earned', stages_total, None)
+
+        if kind == 'mostly_done':
+            # Bronze earned, silver/gold/platinum close to done.
+            if tier == 'bronze':
+                return ('earned', stages_total, None)
+            base = story.get('pct', 88)
+            offsets = {'silver': 4, 'gold': 0, 'platinum': -5}
+            pct = max(5, min(95, base + offsets[tier]))
+            return ('in_progress', int(stages_total * pct / 100), pct)
+
+        if kind == 'gold_jumped':
+            # Rare exception: bronze + gold earned, silver still in
+            # progress, platinum unearned. Honors "platinum last."
+            if tier == 'bronze' or tier == 'gold':
+                return ('earned', stages_total, None)
+            if tier == 'silver':
+                pct = 70
+                return ('in_progress', int(stages_total * pct / 100), pct)
+            return ('unearned', 0, 0)
+
+        if kind == 'mid_progress':
+            # All 4 in progress at similar pct. Bronze leads silver,
+            # gold leads platinum, small gaps.
+            base = story.get('pct', 50)
+            offsets = {'bronze': 5, 'silver': 0, 'gold': 0, 'platinum': -5}
+            pct = max(5, min(95, base + offsets[tier]))
+            return ('in_progress', int(stages_total * pct / 100), pct)
+
+        if kind == 'started':
+            # All 4 just starting, low pct, small bronze lead.
+            base = story.get('pct', 18)
+            offsets = {'bronze': 6, 'silver': 0, 'gold': 0, 'platinum': -4}
+            pct = max(2, min(95, base + offsets[tier]))
+            return ('in_progress', int(stages_total * pct / 100), pct)
+
+        if kind == 'bronze_only':
+            # Bronze earned, others untouched.
+            if tier == 'bronze':
+                return ('earned', stages_total, None)
+            return ('unearned', 0, 0)
+
+        # 'untouched' or unknown -> all unearned.
+        return ('unearned', 0, 0)
+
+    def _build_frame(self, series_name, tier, set_number, story, stages_total):
+        state, stages_done, progress_pct = self._resolve_tier_state(story, tier, stages_total)
+        rarity = self.RARITY_BY_TIER[tier]
+        ctx = {
+            'tier': tier,
+            'state': state,
+            'size': 'default',
+            'series_name': series_name,
+            'badge_name': f'{series_name} Platinum' if tier == 'platinum' else f'{tier.title()} Trophy',
+            'art_layers': self._art_layers(tier),
+            'stages_total': stages_total,
+            'stages_done': stages_done if stages_done is not None else 0,
+            'rarity_pct': rarity['pct'],
+            'rarity_rank': rarity['rank'],
+            'rarity_class': rarity['class'],
+            'next_tier_label': self.TIER_NEXT[tier],
+            'set_number': set_number,
+        }
+        if state == 'earned':
+            ctx['engraving_rank'] = rarity['rank']
+            ctx['earned_date'] = story.get('earned_date', 'Jan 21, 2025')
+        elif state == 'maintenance':
+            ctx['engraving_rank'] = rarity['rank']
+            ctx['progress_pct'] = progress_pct
+            ctx['maintenance_label'] = 'Reactivate'
+            ctx['repair_pips'] = [i < stages_done for i in range(stages_total)]
+        elif state == 'in_progress':
+            ctx['progress_pct'] = progress_pct
+        else:  # unearned
+            ctx['progress_pct'] = 0
+        return ctx
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        pages = []
+        set_num = 1
+        series_idx = 0
+        for page_idx, page_data in enumerate(self.PAGES_DATA):
+            frames = []
+            for series_name in page_data['series']:
+                story = self.SERIES_STORIES[series_idx]
+                stages = self.STAGE_PROFILES[series_idx]
+                for tier in self.TIERS:
+                    frames.append(self._build_frame(series_name, tier, set_num, story, stages[tier]))
+                    set_num += 1
+                series_idx += 1
+            pages.append({
+                'number':  page_idx + 1,
+                'theme':   page_data['theme'],
+                'palette': page_data['palette'],
+                'frames':  frames,
+            })
+
+        # Group pages into spreads (pairs) for the desktop spread view.
+        # If the last spread has no facing page, the template renders an
+        # empty back-cover placeholder on the right.
+        spreads = []
+        for i in range(0, len(pages), 2):
+            spreads.append({
+                'number': i // 2 + 1,
+                'left':  pages[i],
+                'right': pages[i + 1] if i + 1 < len(pages) else None,
+            })
+
+        ctx['pages'] = pages
+        ctx['spreads'] = spreads
+        ctx['total_pages'] = len(pages)
+        ctx['total_spreads'] = len(spreads)
+        ctx['total_cards'] = set_num - 1
+        return ctx
+
+
+class BadgeCollectionListView(BinderPreviewView):
+    """Workshop page for the personal Badge Collection list view at
+    /design/badge-collection/.
+
+    The companion to the Binder primitive: same dataset (reuses the
+    BinderPreviewView's class attributes), completely different shape.
+
+    The Binder is the DISPLAY PIECE -- emotional, immersive, the place
+    users browse to feel good about their collection. This list view is
+    the HUNTING TOOL -- flat, sortable, filterable, the place users go
+    to answer "where's my X" or "what should I work on next." The two
+    are complementary, not competing. Each cards links back to its
+    spot in the binder via #card-NNNN URL anchor.
+    """
+    template_name = 'design/badge_collection_list.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # Flatten the binder's page-grouped data into a single per-card
+        # list with theme + page context attached to each badge.
+        badges = []
+        for page in ctx['pages']:
+            for frame in page['frames']:
+                badge = dict(frame)
+                badge['theme']       = page['theme']
+                badge['palette']     = page['palette']
+                badge['page_number'] = page['number']
+                badges.append(badge)
+        ctx['badges'] = badges
+        # Pre-compute a list of distinct themes (in page order) so the
+        # filter UI can render its chips without scanning the badges.
+        ctx['themes'] = [{'name': p['theme'], 'palette': p['palette']} for p in ctx['pages']]
+        # Drop the heavy nested 'pages' / 'spreads' from the context --
+        # this view doesn't render them and they'd just bloat the
+        # template context for no reason.
+        ctx.pop('pages', None)
+        ctx.pop('spreads', None)
+        ctx.pop('total_spreads', None)
         return ctx
 
 

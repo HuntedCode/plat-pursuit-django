@@ -1,0 +1,1550 @@
+{% load static humanize %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Binder Preview · PlatPursuit</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <style>
+        /* ============================================================
+         * BINDER PRIMITIVE WORKSHOP (SPREAD VIEW)
+         *
+         * The Binder is the display surface for Frames -- physical card
+         * binder metaphor, now rendered as left+right page SPREADS like
+         * an open binder lying flat on a desk. The spine sits in the
+         * middle of the spread with three vertical hole-punch rings
+         * binding the pages.
+         *
+         * One spread = two pages = 32 badges visible at once. The
+         * desktop view stacks spreads vertically for the workshop;
+         * the production page-flip interaction (3D rotateY around the
+         * spine) is a later step. Mobile reverts to single-page
+         * stacking with horizontal rings at the top of each page.
+         *
+         * Each page = 4x4 grid:
+         *   row = one badge series (bronze -> silver -> gold -> platinum)
+         *   col = a single tier of that series
+         * ============================================================ */
+        :root {
+            --binder-spine:        rgba(12, 13, 17, 1);
+            --binder-spine-edge:   rgba(0, 0, 0, 0.6);
+            --binder-sleeve-bg:    rgba(255, 255, 255, 0.015);
+            --binder-sleeve-edge:  rgba(255, 255, 255, 0.045);
+        }
+        /* The binder is the positioning context for the page-flip
+         * layering, and provides perspective for the 3D rotation.
+         *
+         * The variables below are the binder's "industrial" defaults
+         * -- brushed gunmetal spine + brushed gunmetal cover. They're
+         * what the user sees on first load (production look pre-
+         * customization). Variants override them via data attributes:
+         *   data-binder-spine="brass"        - warm brass binding
+         *   data-binder-cover="leather"      - dark warm leather
+         *   data-binder-cover="canvas"       - olive heavy canvas
+         * New variants are one ruleset each -- copy any block and
+         * retune the HSL values. */
+        .pp-binder {
+            position: relative;
+            perspective: 2200px;
+
+            /* Spine + rings (default: gunmetal) */
+            --spine-edge:   hsl(220,  8%,  8%);
+            --spine-mid:    hsl(220, 10%, 32%);
+            --spine-light:  hsl(220, 10%, 50%);
+            --ring-top:     hsl(220, 10%, 50%);
+            --ring-mid:     hsl(220, 10%, 24%);
+            --ring-bot:     hsl(220, 12%,  8%);
+            --ring-rim:     hsla(220, 18%, 70%, 0.45);
+            --ring-hole:    hsl(220, 25%,  4%);
+
+            /* Cover + nameplate (default: industrial brushed metal).
+             * --cover-texture is a multi-layer background-image
+             * specific to each material:
+             *   industrial = vertical brushed-metal streaks
+             *   leather    = pebble-grain dot pattern (offset radials)
+             *   canvas     = cross-weave warp+weft repeating stripes
+             * --cover-texture-size matches the number of layers in
+             * --cover-texture (sizes are comma-separated per layer). */
+            --cover-bg-1:      hsl(220,  8%, 22%);
+            --cover-bg-2:      hsl(220, 10%, 12%);
+            --cover-highlight: hsla(220, 18%, 65%, 0.22);
+            --cover-stitch:    hsla(220, 18%, 65%, 0.28);
+            --cover-edge:      hsla(220, 14%, 32%, 0.85);
+            --cover-texture:
+                repeating-linear-gradient(90deg,
+                    rgba(255, 255, 255, 0.018) 0,
+                    rgba(255, 255, 255, 0.018) 1px,
+                    transparent 1px,
+                    transparent 3px),
+                repeating-linear-gradient(90deg,
+                    rgba(0, 0, 0, 0.04) 0,
+                    rgba(0, 0, 0, 0.04) 1px,
+                    transparent 1px,
+                    transparent 7px);
+            --cover-texture-size: 100% 100%, 100% 100%;
+            --plate-bg-1:      hsl(220, 12%, 42%);
+            --plate-bg-2:      hsl(220, 14%, 22%);
+            --plate-text:      hsl(40,  25%, 88%);
+            --plate-edge:      hsl(220, 14%, 50%);
+            --plate-rim:       hsla(220, 25%, 80%, 0.35);
+
+            /* Content page paper. The cover variant tints these too
+             * so switching covers shifts the WHOLE binder's mood --
+             * industrial = neutral cool paper, leather = warmer
+             * yellowed paper, canvas = warm cream paper. */
+            --binder-paper:        rgba(24, 26, 32, 0.96);
+            --binder-paper-edge:   rgba(255, 255, 255, 0.07);
+        }
+        .pp-binder[data-binder-spine="brass"] {
+            --spine-edge:   hsl(35, 40%, 12%);
+            --spine-mid:    hsl(38, 55%, 38%);
+            --spine-light:  hsl(42, 65%, 58%);
+            --ring-top:     hsl(42, 58%, 56%);
+            --ring-mid:     hsl(38, 55%, 28%);
+            --ring-bot:     hsl(34, 45%, 10%);
+            --ring-rim:     hsla(48, 75%, 75%, 0.55);
+            --ring-hole:    hsl(28, 35%,  6%);
+        }
+        .pp-binder[data-binder-cover="leather"] {
+            --cover-bg-1:      hsl(20, 28%, 14%);
+            --cover-bg-2:      hsl(18, 30%,  7%);
+            --cover-highlight: hsla(30, 50%, 38%, 0.45);
+            --cover-stitch:    hsla(35, 60%, 55%, 0.4);
+            --cover-edge:      hsla(20, 32%, 22%, 0.85);
+            --plate-bg-1:      hsl(38, 38%, 34%);
+            --plate-bg-2:      hsl(36, 38%, 18%);
+            --plate-text:      hsl(36, 55%, 80%);
+            --plate-edge:      hsl(38, 38%, 44%);
+            --plate-rim:       hsla(42, 60%, 70%, 0.4);
+            /* Pebble-grain texture -- two offset dot tilings give a
+             * mottled leather feel. */
+            --cover-texture:
+                radial-gradient(circle at 25% 25%,
+                    rgba(255, 215, 170, 0.075) 0.7px,
+                    transparent 1.4px),
+                radial-gradient(circle at 75% 60%,
+                    rgba(255, 215, 170, 0.05) 0.6px,
+                    transparent 1.3px),
+                radial-gradient(circle at 50% 90%,
+                    rgba(0, 0, 0, 0.08) 0.8px,
+                    transparent 1.6px);
+            --cover-texture-size: 9px 9px, 13px 13px, 11px 11px;
+            /* Warmer yellowed paper to match the leather mood. */
+            --binder-paper:        hsla(30, 14%, 11%, 0.96);
+            --binder-paper-edge:   hsla(35, 45%, 70%, 0.08);
+        }
+        .pp-binder[data-binder-cover="canvas"] {
+            --cover-bg-1:      hsl(85,  10%, 22%);
+            --cover-bg-2:      hsl(85,  12%, 12%);
+            --cover-highlight: hsla(85, 18%, 38%, 0.35);
+            --cover-stitch:    hsla(40, 35%, 60%, 0.32);
+            --cover-edge:      hsla(85, 14%, 30%, 0.85);
+            --plate-bg-1:      hsl(40, 22%, 38%);
+            --plate-bg-2:      hsl(40, 24%, 20%);
+            --plate-text:      hsl(35, 35%, 84%);
+            --plate-edge:      hsl(40, 22%, 44%);
+            --plate-rim:       hsla(40, 38%, 72%, 0.4);
+            /* Cross-weave texture -- warp (vertical) + weft
+             * (horizontal) thin stripes simulate woven fabric. */
+            --cover-texture:
+                repeating-linear-gradient(0deg,
+                    rgba(255, 240, 220, 0.05) 0,
+                    rgba(255, 240, 220, 0.05) 1px,
+                    transparent 1px,
+                    transparent 4px),
+                repeating-linear-gradient(90deg,
+                    rgba(255, 240, 220, 0.05) 0,
+                    rgba(255, 240, 220, 0.05) 1px,
+                    transparent 1px,
+                    transparent 4px),
+                repeating-linear-gradient(0deg,
+                    rgba(0, 0, 0, 0.04) 0,
+                    rgba(0, 0, 0, 0.04) 1px,
+                    transparent 1px,
+                    transparent 8px);
+            --cover-texture-size: 100% 100%, 100% 100%, 100% 100%;
+            /* Olive-tinted paper to match the canvas / military mood. */
+            --binder-paper:        hsla(85, 10%, 11%, 0.96);
+            --binder-paper-edge:   hsla(60, 25%, 70%, 0.08);
+        }
+        body {
+            background:
+                /* Top blue haze -- preserved from the original. */
+                radial-gradient(ellipse at top, rgba(40, 60, 100, 0.14), transparent 60%),
+                /* Subtle vertical workshop grain. Two layered repeating
+                 * patterns -- thin highlight stripes + wider shadow
+                 * stripes -- read as a wood-plank / workbench surface
+                 * behind the binder. Very faint so the binder stays
+                 * the visual focus. */
+                repeating-linear-gradient(90deg,
+                    rgba(255, 255, 255, 0.006) 0,
+                    rgba(255, 255, 255, 0.006) 1px,
+                    transparent 1px,
+                    transparent 4px),
+                repeating-linear-gradient(90deg,
+                    rgba(0, 0, 0, 0.06) 0,
+                    rgba(0, 0, 0, 0.06) 2px,
+                    transparent 2px,
+                    transparent 240px),
+                #0c0d11;
+            color: #e8e9ec;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 28px 24px 80px; }
+        h1 { font-size: 26px; font-weight: 800; margin: 0 0 6px; letter-spacing: -0.005em; }
+        .lede {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.55);
+            margin: 0 0 24px;
+            max-width: 760px;
+            line-height: 1.55;
+        }
+        .lede code {
+            background: rgba(255, 255, 255, 0.06);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        a { color: #5FE0EE; }
+
+        /* ── Cover page ────────────────────────────────────────────────
+         * The binder's front cover, rendered as a full page that
+         * threads through the same spine as every content page.
+         * Material (industrial / leather / canvas) is controlled by
+         * the --cover-* tokens cascaded from [data-binder-cover].
+         * Future: a Pursuer Card slot will live on the left of the
+         * cover content area when that primitive ships -- the
+         * .pp-binder__cover-content flex container is ready for it.
+         */
+        .pp-binder__page--cover {
+            /* Full-page-height cover. Per-mode min-heights below match
+             * a content page's natural height in that mode so the
+             * cover reads as a real first page of the binder, not a
+             * banner. */
+            display: flex;
+            flex-direction: column;
+            background:
+                /* diagonal sheen -- glancing light over the cover */
+                linear-gradient(135deg,
+                    rgba(255, 255, 255, 0.04) 0%,
+                    transparent 30%,
+                    transparent 70%,
+                    rgba(0, 0, 0, 0.18) 100%),
+                /* corner highlight -- the brightest spot upper-left */
+                radial-gradient(ellipse at 22% 18%,
+                    var(--cover-highlight),
+                    transparent 60%),
+                /* base material gradient */
+                linear-gradient(180deg,
+                    var(--cover-bg-1) 0%,
+                    var(--cover-bg-2) 100%);
+            border-color: var(--cover-edge);
+            box-shadow:
+                0 1px 0 rgba(255, 255, 255, 0.05) inset,
+                0 -1px 0 rgba(0, 0, 0, 0.55) inset,
+                0 22px 44px rgba(0, 0, 0, 0.6),
+                0 6px 14px rgba(0, 0, 0, 0.5);
+        }
+        /* Override the paper-grain ::before with a per-material texture
+         * overlay -- brushed-metal streaks / leather pebbling / canvas
+         * weave, driven by --cover-texture + --cover-texture-size.
+         * !important is needed because the base .pp-binder__page::before
+         * rule appears later in the stylesheet and would otherwise win
+         * the background-shorthand cascade. */
+        .pp-binder__page--cover::before {
+            background:
+                var(--cover-texture) !important;
+            background-size: var(--cover-texture-size) !important;
+            opacity: 1 !important;
+        }
+        /* Real binder covers don't have punched holes -- the rings
+         * only thread through the pages BETWEEN the covers. Hide the
+         * ring elements on both front + back covers. !important is
+         * needed because the desktop single/compact mode rule has
+         * higher specificity (4-class chain) than this 2-class rule
+         * and would otherwise re-display the rings. The spine bar
+         * (::after) still extends through, so the binding mechanism
+         * stays visible behind the covers. */
+        .pp-binder__page--cover .pp-binder__page-rings {
+            display: none !important;
+        }
+        /* Inner content area of the cover -- a flex row so the future
+         * Pursuer Card can slot in on the left while the nameplate
+         * sits center / right. For now just the plate, centered. */
+        .pp-binder__cover-content {
+            position: relative;
+            display: flex;
+            flex: 1;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 0;
+            min-height: 0;
+        }
+        /* Stitched edge along the bottom of the cover -- dashes mimic
+         * where the cover material meets the page block below. Color
+         * comes from --cover-stitch so it shifts per material (warm
+         * thread for leather, cool for industrial, etc.). */
+        .pp-binder__cover-content::after {
+            content: "";
+            position: absolute;
+            left: 32px;
+            right: 32px;
+            bottom: 6px;
+            height: 1px;
+            background-image: repeating-linear-gradient(90deg,
+                var(--cover-stitch) 0,
+                var(--cover-stitch) 4px,
+                transparent 4px,
+                transparent 9px);
+            pointer-events: none;
+        }
+        /* Back cover -- same material + spine treatment as the front
+         * (it inherits via the .pp-binder__page--cover class), but
+         * the inner content is bottom-aligned and uses an embossed
+         * brand stamp instead of the centered nameplate. Subtle, like
+         * a manufacturer's mark on the back of a real binder. */
+        .pp-binder__page--cover-back .pp-binder__cover-content {
+            align-items: flex-end;
+            padding-bottom: 56px;
+        }
+        .pp-binder__cover-stamp {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.32em;
+            text-transform: uppercase;
+            color: var(--cover-stitch);
+            opacity: 0.85;
+            /* Embossed-into-material effect via opposing inset shadows
+             * stacked on the text. */
+            text-shadow:
+                0 1px 0 rgba(255, 255, 255, 0.06),
+                0 -1px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        /* Brass / engraved nameplate centered on the cover. Colors
+         * cascade from --plate-* tokens so the nameplate finish
+         * matches the cover material (industrial = brushed steel
+         * plate, leather = brass, canvas = bronze). */
+        .pp-binder__cover-plate {
+            display: inline-block;
+            padding: 14px 56px;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--plate-text);
+            background: linear-gradient(180deg,
+                var(--plate-bg-1) 0%,
+                var(--plate-bg-2) 100%);
+            border: 1px solid var(--plate-edge);
+            border-radius: 3px;
+            box-shadow:
+                inset 0 1px 0 var(--plate-rim),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+                0 3px 8px rgba(0, 0, 0, 0.55);
+            text-shadow:
+                0 1px 0 rgba(0, 0, 0, 0.55),
+                0 -1px 0 rgba(0, 0, 0, 0.25);
+            white-space: nowrap;
+        }
+
+        /* ── Cover corner protectors ───────────────────────────────────
+         * Four L-shaped accents at the outer corners of each cover,
+         * filled with the same cover material (cascades from
+         * --cover-bg-* per variant). A subtle outer border + drop
+         * shadow defines them as raised pieces against the cover.
+         * Future: could become a customization (none / brass / silver
+         * / blackened steel) -- this base scaffolding makes that an
+         * easy add since each corner element is already isolated. */
+        .pp-binder__cover-corner {
+            position: absolute;
+            width: 38px;
+            height: 38px;
+            background: linear-gradient(135deg,
+                var(--cover-bg-1) 0%,
+                var(--cover-bg-2) 100%);
+            border: 1px solid rgba(0, 0, 0, 0.5);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.07),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 2px 4px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            z-index: 3;
+        }
+        /* L-shapes via clip-path -- each corner exposes the cover
+         * along its OUTER two edges while the inner area is
+         * notched out so the protector wraps the corner. */
+        .pp-binder__cover-corner--tl {
+            top: -1px; left: -1px;
+            border-radius: 5px 0 0 0;
+            clip-path: polygon(0 0, 100% 0, 100% 38%, 38% 38%, 38% 100%, 0 100%);
+        }
+        .pp-binder__cover-corner--tr {
+            top: -1px; right: -1px;
+            border-radius: 0 5px 0 0;
+            clip-path: polygon(0 0, 100% 0, 100% 100%, 62% 100%, 62% 38%, 0 38%);
+        }
+        .pp-binder__cover-corner--bl {
+            bottom: -1px; left: -1px;
+            border-radius: 0 0 0 5px;
+            clip-path: polygon(0 0, 38% 0, 38% 62%, 100% 62%, 100% 100%, 0 100%);
+        }
+        .pp-binder__cover-corner--br {
+            bottom: -1px; right: -1px;
+            border-radius: 0 0 5px 0;
+            clip-path: polygon(62% 0, 100% 0, 100% 100%, 0 100%, 0 62%, 62% 62%);
+        }
+
+        /* ── Bookmark ribbon ───────────────────────────────────────────
+         * Deep-red fabric ribbon attached at the top of the front
+         * cover, hanging down through the binder. V-cut tail at the
+         * bottom. Z-stacked above pages but below the controls bar.
+         * Lives INSIDE the front cover so it inherits the cover's
+         * centered per-mode positioning (the cover's max-width +
+         * margin auto carries the ribbon's horizontal placement).
+         * Future customization: ribbon color + visibility toggle. */
+        .pp-binder__cover-bookmark {
+            position: absolute;
+            top: -6px;
+            left: 60px;
+            width: 16px;
+            height: 1900px;
+            background: linear-gradient(180deg,
+                hsl(355, 70%, 38%) 0%,
+                hsl(355, 75%, 30%) 50%,
+                hsl(355, 70%, 38%) 100%);
+            box-shadow:
+                inset 2px 0 1px rgba(255, 255, 255, 0.18),
+                inset -2px 0 1px rgba(0, 0, 0, 0.55),
+                inset 0 2px 1px rgba(255, 255, 255, 0.12),
+                3px 6px 12px rgba(0, 0, 0, 0.55),
+                1px 2px 4px rgba(0, 0, 0, 0.4);
+            /* Faint vertical thread/weave streaks for fabric texture. */
+            background-image:
+                repeating-linear-gradient(90deg,
+                    rgba(255, 255, 255, 0.04) 0,
+                    rgba(255, 255, 255, 0.04) 1px,
+                    transparent 1px,
+                    transparent 3px),
+                linear-gradient(180deg,
+                    hsl(355, 70%, 38%) 0%,
+                    hsl(355, 75%, 30%) 50%,
+                    hsl(355, 70%, 38%) 100%);
+            /* Pointed V tail at the bottom of the ribbon. */
+            clip-path: polygon(
+                0 0, 100% 0,
+                100% calc(100% - 16px),
+                50% 100%,
+                0 calc(100% - 16px)
+            );
+            z-index: 8;
+            pointer-events: none;
+        }
+
+        /* Sticky controls header. */
+        .pp-binder__controls {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 18px;
+            margin-bottom: 24px;
+            background: rgba(14, 16, 22, 0.92);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+        }
+        .pp-binder__controls-group {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.55);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .pp-binder__control-chip {
+            padding: 6px 12px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 12px;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            transition: background 160ms ease, border-color 160ms ease;
+        }
+        .pp-binder__control-chip--active {
+            background: rgba(63, 205, 220, 0.12);
+            border-color: rgba(63, 205, 220, 0.55);
+            color: rgba(180, 230, 245, 1);
+        }
+        .pp-binder__control-chip:hover {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+
+
+        /* ── Vertical-scroll single + compact modes ───────────────────
+         * Both modes stack ALL pages vertically in DOM order -- no
+         * pagination, no flip. The view toggle controls page SIZE,
+         * not which page is visible. Single uses the full design
+         * width (~1342px); Compact tightens to ~900px for denser
+         * scanning. Spread mode (handled below) keeps its
+         * side-by-side spread layout.
+         *
+         * Rings + reinforcement strip ALWAYS sit on the left edge,
+         * mirroring a real 3-ring binder where every page hinges
+         * at the same spine. No more side-swapping. */
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__spread {
+            display: flex;
+            flex-direction: column;
+            margin: 0 auto;
+            box-shadow: none;
+            background: transparent;
+            border-radius: 0;
+            /* Tight gap so the per-page spine bars on the left edge
+             * read as a single continuous binding mechanism running
+             * the length of the binder. The strip's negative bottom
+             * margin (below) bridges across this gap. */
+            gap: 18px;
+            padding-bottom: 18px;
+        }
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__spine,
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page--empty {
+            display: none;
+        }
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page,
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page--left,
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page--right {
+            display: block;
+            flex: 0 0 auto;
+            border-radius: 4px;
+            border: 1px solid var(--binder-paper-edge);
+            box-shadow:
+                0 1px 0 rgba(255, 255, 255, 0.04) inset,
+                0 -1px 0 rgba(0, 0, 0, 0.45) inset,
+                0 18px 38px rgba(0, 0, 0, 0.55),
+                0 4px 10px rgba(0, 0, 0, 0.4);
+        }
+        /* Page widths tuned so cards land at exact transform scale
+         * (no sub-pixel rasterization).
+         *   Single: 1366 - 96 padding (68+28) - 42 gaps = 1228
+         *           1228 / 4 = 307 cell, slightly wider than 290
+         *           sleeve content target, so cards still hit 1.0.
+         *           Bumped from 1342 to accommodate wider spine
+         *           binding margin (68 instead of 56 padding-left).
+         *   Compact: pp-frame--compact variant fills the cell
+         *           naturally at ~190px, no transform involved.
+         * The cover page matches each mode's width so it stacks
+         * flush above the spreads below it -- the spine bar reads
+         * as continuous from cover into the content pages. */
+        .pp-binder[data-mode="single"] .pp-binder__spread,
+        .pp-binder[data-mode="single"] .pp-binder__page--cover {
+            max-width: 1366px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .pp-binder[data-mode="compact"] .pp-binder__spread,
+        .pp-binder[data-mode="compact"] .pp-binder__page--cover {
+            max-width: 920px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__page--cover {
+            max-width: 1300px;
+            margin: 0 auto 24px;
+        }
+        /* Cover height per mode -- matches a content page's natural
+         * height so the cover reads as a real first page of the
+         * binder (not a short banner). Numbers approximate the
+         * actual content-page heights given the 4x4 grid of cards
+         * at each mode's card size. */
+        .pp-binder[data-mode="single"] .pp-binder__page--cover {
+            min-height: 1620px;
+        }
+        .pp-binder[data-mode="compact"] .pp-binder__page--cover {
+            min-height: 880px;
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__page--cover {
+            min-height: 440px;
+        }
+        /* Tight gap between the cover page and the first spread so
+         * the spine bar threads through both without an awkward
+         * void. The cover's spine extends -18px past its bottom
+         * (same as every page), meeting the next page's spine top. */
+        .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page--cover {
+            margin-bottom: 18px;
+        }
+
+        /* Spine-side chrome on every page (single + compact modes).
+         * Three layers along the left edge:
+         *   1. Binding margin (extra left padding so the 4x4 grid
+         *      never crashes into the rings or reinforcement strip).
+         *   2. Reinforcement strip (::after pseudo): subtle plastic
+         *      gradient + inset shadow + inner seam line.
+         *   3. Hole-punch rings: 22px metal rings centered in the
+         *      strip, three of them, space-between vertical.
+         * Always on the LEFT -- consistent across pages so scrolling
+         * doesn't make the binder spine appear to jump sides. */
+        @media (min-width: 1024px) {
+            .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page {
+                padding-left: 68px;
+                padding-right: 28px;
+            }
+            .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                /* Extends 18px below the page to bridge the gap to
+                 * the next page's spine bar, making the binding
+                 * mechanism read as one continuous spine. The very
+                 * last page's strip just hangs in the void below;
+                 * no visual harm since it goes into the binder
+                 * background. */
+                bottom: -18px;
+                left: 0;
+                width: 56px;
+                pointer-events: none;
+                z-index: 1;
+                /* Industrial binding spine. Two stacked gradients:
+                 * (1) faint vertical brushed-metal streaks via the
+                 *     top-bottom gradient.
+                 * (2) rounded "metal bar" depth via the left-right
+                 *     gradient (darker at edges, lighter in the
+                 *     middle, like light catching a cylindrical
+                 *     surface).
+                 * Pages stack tightly enough that the per-page bars
+                 * read as one continuous spine. Color comes from
+                 * --spine-* tokens on .pp-binder so the spine
+                 * material is swappable per variant. */
+                background:
+                    linear-gradient(to bottom,
+                        transparent 0%,
+                        rgba(255, 255, 255, 0.025) 35%,
+                        rgba(255, 255, 255, 0.015) 65%,
+                        transparent 100%),
+                    linear-gradient(to right,
+                        var(--spine-edge) 0%,
+                        var(--spine-mid) 30%,
+                        var(--spine-light) 50%,
+                        var(--spine-mid) 70%,
+                        var(--spine-edge) 100%);
+                box-shadow:
+                    inset 1px 0 0 rgba(180, 180, 200, 0.18),
+                    inset -10px 0 14px -8px rgba(0, 0, 0, 0.7);
+                /* No bottom radius -- the strip extends past the
+                 * page bottom to bridge gaps, so flat edges meet
+                 * the next strip cleanly. */
+                border-top-left-radius: 4px;
+                border-bottom-left-radius: 0;
+            }
+            .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page .pp-binder__page-rings {
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                align-items: center;
+                position: absolute;
+                top: 14%;
+                bottom: 14%;
+                width: 24px;
+                /* Centered in the 56px-wide spine bar
+                 * (56 - 24) / 2 = 16. */
+                left: 16px;
+                right: auto;
+                pointer-events: none;
+                z-index: 2;
+            }
+            .pp-binder:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page .pp-binder__page-rings .pp-binder__ring {
+                flex-basis: 22px;
+                width: 22px;
+                height: 22px;
+            }
+        }
+
+        /* Entry + exit animation: each page slides + fades both
+         * directions as it crosses the viewport. JS toggles two
+         * classes per page based on the IntersectionObserver state:
+         *   .is-visible  -> page is currently in view
+         *   .is-above    -> page is above the viewport (exited at top)
+         * Default state (neither class) = page is below the viewport.
+         *
+         * The transform direction mirrors which side the page is on,
+         * so exits at the top fade UPWARD and exits at the bottom
+         * fade DOWNWARD -- both moves continue with the scroll's
+         * apparent direction instead of fighting it. */
+        .pp-binder__page {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 650ms cubic-bezier(0.22, 1, 0.36, 1),
+                        transform 650ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .pp-binder__page.is-above {
+            transform: translateY(-40px);
+        }
+        .pp-binder__page.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .pp-binder__page {
+                opacity: 1;
+                transform: none;
+                transition: none;
+            }
+        }
+        /* While the user changes view mode, pages re-evaluate their
+         * visibility instantly -- no transition. Without this, a page
+         * that was off-screen in the previous mode but on-screen in
+         * the new one would suddenly run the entry animation, while
+         * pages that were already visible stay still. Staggered,
+         * looks odd. The class is added by JS for one frame around
+         * the mode switch. */
+        .pp-binder__page.is-mode-snap {
+            transition: none !important;
+        }
+
+        /* ── Spread ──────────────────────────────────────────────────
+         * Left page + spine + right page. Stack of spreads is
+         * vertically scrollable in the workshop; the production
+         * version will show one spread at a time with a 3D flip.
+         */
+        .pp-binder__spread {
+            display: flex;
+            align-items: stretch;
+            margin: 0 auto 48px;
+            max-width: 1300px;
+            box-shadow:
+                0 18px 38px rgba(0, 0, 0, 0.55),
+                0 4px 10px rgba(0, 0, 0, 0.4);
+            border-radius: 4px;
+        }
+
+        /* ── Page ─────────────────────────────────────────────────────
+         * Left and right pages share most styling; only the corner
+         * radii and inner shadow differ so each leans into the spine.
+         */
+        .pp-binder__page {
+            position: relative;
+            flex: 1 1 50%;
+            min-width: 0;
+            background: var(--binder-paper);
+            border: 1px solid var(--binder-paper-edge);
+            padding: 28px 28px 32px;
+        }
+        .pp-binder__page--left {
+            border-radius: 4px 0 0 4px;
+            border-right: none;
+            /* Inner shadow leaning toward the spine (right edge). */
+            box-shadow: inset -10px 0 18px -8px rgba(0, 0, 0, 0.55);
+        }
+        .pp-binder__page--right {
+            border-radius: 0 4px 4px 0;
+            border-left: none;
+            /* Inner shadow leaning toward the spine (left edge). */
+            box-shadow: inset 10px 0 18px -8px rgba(0, 0, 0, 0.55);
+        }
+        /* Empty back-cover placeholder (final spread, odd page count). */
+        .pp-binder__page--empty {
+            background:
+                repeating-linear-gradient(135deg,
+                    rgba(255, 255, 255, 0.015) 0,
+                    rgba(255, 255, 255, 0.015) 12px,
+                    transparent 12px,
+                    transparent 24px),
+                var(--binder-paper);
+        }
+        /* Subtle paper-grain texture overlay on each page. */
+        .pp-binder__page::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(0deg,
+                    transparent 0px,
+                    transparent 2px,
+                    rgba(255, 255, 255, 0.012) 2px,
+                    rgba(255, 255, 255, 0.012) 3px);
+            opacity: 0.6;
+        }
+
+        /* ── Spine ───────────────────────────────────────────────────
+         * Dark central gutter where the binder mechanism lives. Three
+         * metal hole-punch rings run down the spine, evenly spaced.
+         * Cast shadow onto both facing pages via inset box-shadow on
+         * left and right page elements.
+         */
+        .pp-binder__spine {
+            flex: 0 0 56px;
+            position: relative;
+            background:
+                linear-gradient(90deg,
+                    rgba(0, 0, 0, 0.55) 0%,
+                    rgba(0, 0, 0, 0.85) 50%,
+                    rgba(0, 0, 0, 0.55) 100%),
+                var(--binder-spine);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14% 0;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.025),
+                inset 0 -1px 0 var(--binder-spine-edge);
+        }
+        .pp-binder__ring {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            /* Ring body uses the --ring-* palette tokens defined on
+             * .pp-binder. Gunmetal default; switches to brass via
+             * [data-binder-spine="brass"]. */
+            background: linear-gradient(180deg,
+                var(--ring-top) 0%,
+                var(--ring-mid) 50%,
+                var(--ring-bot) 100%);
+            box-shadow:
+                inset 0 1px 0 var(--ring-rim),
+                inset 0 -1px 1px rgba(0, 0, 0, 0.55),
+                0 2px 3px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+        /* Hole-punch shadow inside each ring -- the dark pit where
+         * the binding mechanism threads through. */
+        .pp-binder__ring::after {
+            content: "";
+            position: absolute;
+            inset: 28%;
+            border-radius: 50%;
+            background: radial-gradient(circle,
+                var(--ring-hole) 0%,
+                rgba(0, 0, 0, 1) 100%);
+            box-shadow:
+                0 1px 1px rgba(0, 0, 0, 0.8) inset,
+                0 0 2px rgba(0, 0, 0, 0.5) inset;
+        }
+
+        /* Mobile-only horizontal ring strip at the top of each page.
+         * Hidden on desktop where the spine carries the rings. */
+        .pp-binder__page-rings {
+            display: none;
+        }
+
+        .pp-binder__page-number {
+            position: absolute;
+            bottom: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: rgba(255, 255, 255, 0.32);
+            text-transform: uppercase;
+        }
+
+        /* ── Theme tab ────────────────────────────────────────────────
+         * Each page carries its own theme (e.g. "PlayStation Classics").
+         * The tab is position: sticky -- it sits at the top of its
+         * page when natural, sticks to the top of the viewport while
+         * the user scrolls through the page's cards, and gets pushed
+         * out by the next page's tab once that page reaches the top.
+         *
+         * Color comes from a curated palette of 8 named entries
+         * (cobalt / amber / emerald / violet / crimson / teal /
+         * mustard / slate), assigned per theme via [data-palette].
+         * Each palette sets --tab-c1 (gradient top) and --tab-c2
+         * (gradient bottom); the base rule below consumes them so
+         * the tab styling stays in one place. Themes repeat palette
+         * entries at scale (~25 themes / 8 colors) but adjacent
+         * tabs are picked manually to avoid collisions.
+         *
+         * top:60px clears the sticky controls bar at the top of
+         * the viewport (which sits at top:0 + ~52px tall +
+         * 8px breathing). */
+        .pp-binder__page-tab {
+            position: sticky;
+            top: 60px;
+            /* z-index 15 sits above the Frame's internal layers:
+             * fab-banner (z-index 6), damage-overlay (z-index 4),
+             * rings (z-index 5), maint-stamp (z-index 8) -- so the
+             * tab always paints on top of any card chrome that
+             * happens to be at the top edge of the page. Still
+             * below the controls bar (z-index 20). */
+            z-index: 15;
+            display: block;
+            width: fit-content;
+            margin: -14px 32px 18px auto;
+            padding: 7px 16px;
+            /* Default palette colors -- overridden via [data-palette]. */
+            --tab-c1: hsl(35, 55%, 56%);
+            --tab-c2: hsl(35, 52%, 40%);
+            background: linear-gradient(180deg, var(--tab-c1) 0%, var(--tab-c2) 100%);
+            color: rgba(20, 12, 0, 0.95);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            line-height: 1;
+            white-space: nowrap;
+            border-radius: 3px 3px 5px 5px;
+            border: 1px solid rgba(0, 0, 0, 0.4);
+            box-shadow:
+                0 5px 12px rgba(0, 0, 0, 0.55),
+                0 1px 2px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.35),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.2);
+            pointer-events: auto;
+        }
+        /* Curated palette. Tuned for readability on dark theme +
+         * mutual visual distinction at scan distance. Add a new
+         * entry here when the product introduces a theme that
+         * doesn't fit an existing color. */
+        .pp-binder__page-tab[data-palette="cobalt"]  { --tab-c1: hsl(215, 55%, 55%); --tab-c2: hsl(215, 60%, 38%); }
+        .pp-binder__page-tab[data-palette="amber"]   { --tab-c1: hsl(28,  65%, 58%); --tab-c2: hsl(28,  60%, 42%); }
+        .pp-binder__page-tab[data-palette="emerald"] { --tab-c1: hsl(140, 48%, 48%); --tab-c2: hsl(140, 52%, 34%); }
+        .pp-binder__page-tab[data-palette="violet"]  { --tab-c1: hsl(280, 45%, 58%); --tab-c2: hsl(280, 45%, 42%); }
+        .pp-binder__page-tab[data-palette="crimson"] { --tab-c1: hsl(355, 60%, 55%); --tab-c2: hsl(355, 60%, 40%); }
+        .pp-binder__page-tab[data-palette="teal"]    { --tab-c1: hsl(180, 55%, 45%); --tab-c2: hsl(180, 60%, 30%); }
+        .pp-binder__page-tab[data-palette="mustard"] { --tab-c1: hsl(45,  68%, 53%); --tab-c2: hsl(45,  68%, 38%); }
+        .pp-binder__page-tab[data-palette="slate"]   { --tab-c1: hsl(218, 18%, 55%); --tab-c2: hsl(218, 22%, 38%); }
+        /* In spread mode, the left page's tab sits on its LEFT side
+         * (its outer edge), matching how a real binder tab divider
+         * faces outward away from the spine. Right page keeps its
+         * tab on the right. Single + compact modes keep all tabs
+         * on the right (consistent with all-rings-on-left). */
+        .pp-binder[data-mode="spread"] .pp-binder__page--left .pp-binder__page-tab {
+            margin-left: 32px;
+            margin-right: auto;
+        }
+        /* Page numbers in spread mode push down slightly so the tab
+         * doesn't visually crash the corner page number. */
+        .pp-binder[data-mode="spread"] .pp-binder__page-number {
+            opacity: 0.6;
+        }
+        /* Default placement: page number on the right -- the outer/free
+         * edge of the page, opposite the rings on the left. Applies in
+         * Single and Compact view modes where pages render alone, so
+         * every page (odd or even) gets its number on the same side.
+         * Mirrors the theme-tab rule above (right by default, left for
+         * spread-mode left pages only). */
+        .pp-binder__page-number { right: 18px; }
+        /* Spread mode: the left page's number moves to its own outer
+         * (left) edge, like a real bound book where verso page numbers
+         * sit on the outside-left and recto on the outside-right. */
+        .pp-binder[data-mode="spread"] .pp-binder__page--left .pp-binder__page-number {
+            left: 18px;
+            right: auto;
+        }
+
+        /* ── Sleeves grid ─────────────────────────────────────────────
+         * 4 cols x 4 rows = 16 sleeves per page. Each row is one badge
+         * series across all four tiers (bronze->silver->gold->platinum).
+         */
+        .pp-binder__sleeves {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .pp-binder__sleeve {
+            position: relative;
+            padding: 7px;
+            border-radius: 7px;
+            background: var(--binder-sleeve-bg);
+            border: 1px solid var(--binder-sleeve-edge);
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.025),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+                0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        .pp-binder__sleeve::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            pointer-events: none;
+            background: linear-gradient(135deg,
+                rgba(255, 255, 255, 0.04) 0%,
+                rgba(255, 255, 255, 0) 35%,
+                rgba(255, 255, 255, 0) 65%,
+                rgba(255, 255, 255, 0.02) 100%);
+        }
+        /* Pocket depth -- a soft inset shadow at the card's outer
+         * bounds (matching the sleeve's 7px padding) that paints
+         * ON TOP of the card edges. Reads as "card sits below the
+         * plastic surface" / "card is INSIDE the sleeve pocket"
+         * rather than "card is laid on top of plastic." The shadow
+         * is darker at the top (light coming from above hits the
+         * sleeve rim and casts down) and lighter at the bottom. */
+        .pp-binder__sleeve::after {
+            content: "";
+            position: absolute;
+            inset: 7px;
+            border-radius: 6px;
+            pointer-events: none;
+            z-index: 1;
+            box-shadow:
+                inset 0 2px 5px rgba(0, 0, 0, 0.32),
+                inset 0 -1px 2px rgba(0, 0, 0, 0.15),
+                inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+        }
+        /* Deep-link landing highlight -- when the user arrives at the
+         * binder via /design/binder/#card-NNNN (from the Badge
+         * Collection list), the targeted sleeve briefly pulses with a
+         * cyan ring so they can immediately see where they landed. */
+        .pp-binder__sleeve:target {
+            animation: pp-sleeve-target-pulse 2.4s ease-out 1;
+        }
+        @keyframes pp-sleeve-target-pulse {
+            0%   { box-shadow:
+                       0 0 0 0 rgba(63, 205, 220, 0),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.025),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+                       0 1px 2px rgba(0, 0, 0, 0.3); }
+            30%  { box-shadow:
+                       0 0 0 5px rgba(63, 205, 220, 0.55),
+                       0 0 22px 8px rgba(63, 205, 220, 0.32),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.025),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+                       0 1px 2px rgba(0, 0, 0, 0.3); }
+            100% { box-shadow:
+                       0 0 0 0 rgba(63, 205, 220, 0),
+                       inset 0 1px 0 rgba(255, 255, 255, 0.025),
+                       inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+                       0 1px 2px rgba(0, 0, 0, 0.3); }
+        }
+        /* Card -> Collection-list jump button. The reverse of the
+         * "View ->" link on each row of the collection list: from the
+         * binder, hover a sleeve and a small chip appears top-right
+         * that jumps to that same badge's row in the list view.
+         * Hidden by default (opacity 0, pointer-events off) so it
+         * never competes with the card art; revealed on sleeve hover
+         * or keyboard focus-within. Sits above the pocket-depth
+         * overlay (z-index 2 > the ::after's 1). */
+        .pp-binder__sleeve-jump {
+            position: absolute;
+            top: 9px;
+            right: 9px;
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 3px 7px;
+            border-radius: 3px;
+            background: rgba(14, 16, 22, 0.85);
+            border: 1px solid rgba(63, 205, 220, 0.55);
+            color: rgba(180, 230, 245, 1);
+            font-size: 9.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-decoration: none;
+            opacity: 0;
+            transform: translateY(-2px);
+            pointer-events: none;
+            transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+        }
+        .pp-binder__sleeve:hover .pp-binder__sleeve-jump,
+        .pp-binder__sleeve:focus-within .pp-binder__sleeve-jump {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+        /* Hover ramps UP, not down: keep the chip's dark backing solid
+         * (so it stays legible over any card art) and brighten the cyan
+         * accents -- border, text, and a soft glow halo -- so the chip
+         * reads as "now active / clickable" instead of fading away. */
+        .pp-binder__sleeve-jump:hover {
+            background: rgba(20, 28, 38, 0.95);
+            border-color: rgba(120, 230, 245, 1);
+            color: rgba(220, 245, 252, 1);
+            box-shadow:
+                0 0 0 1px rgba(63, 205, 220, 0.35),
+                0 0 12px rgba(63, 205, 220, 0.45),
+                0 3px 8px rgba(0, 0, 0, 0.55);
+        }
+        /* Compact + spread modes pack frames tighter -- the jump chip
+         * shrinks to a single arrow glyph so it doesn't crowd the
+         * smaller card chrome. */
+        .pp-binder[data-mode="compact"] .pp-binder__sleeve-jump-label,
+        .pp-binder[data-mode="spread"]  .pp-binder__sleeve-jump-label {
+            display: none;
+        }
+        .pp-binder[data-mode="compact"] .pp-binder__sleeve-jump,
+        .pp-binder[data-mode="spread"]  .pp-binder__sleeve-jump {
+            padding: 2px 5px;
+            font-size: 11px;
+        }
+
+        /* Frames render at their native size via the existing Frame
+         * size variants -- no transform: scale is involved anywhere
+         * in the binder. The JS at the bottom of the template
+         * toggles pp-frame--compact / pp-frame--mini classes on
+         * every .pp-frame when the view mode changes:
+         *   Single   -> default variant (title + art + plinth, full)
+         *   Compact  -> pp-frame--compact (chrome-only: art + tier
+         *               identity via border/notches, no title/plinth)
+         *   Spread   -> pp-frame--mini    (chrome-only, smaller)
+         * The page-width tunings below give cells the right size for
+         * each variant's natural rendering, so text never goes
+         * through a transform and stays crisp at every mode. */
+        .pp-binder__sleeve .pp-frame {
+            margin: 0;
+            max-width: 100%;
+        }
+        /* In the spread overview, the mini variant's 110px max-width
+         * would leave empty cell space. Let it fill the cell so the
+         * grid reads as a packed binder page. */
+        .pp-binder[data-mode="spread"] .pp-frame--mini {
+            max-width: none;
+        }
+
+        /* ── Mobile (single-page stacking) ────────────────────────────
+         * Below 1023px the spread folds to a column: spine hides,
+         * each page renders with its own top-of-page horizontal ring
+         * strip (the previous vertical-stack-with-rings layout).
+         * 16 cards/page is preserved by collapsing the 4x4 grid to
+         * 2x8 so card readability survives narrow viewports.
+         */
+        @media (max-width: 1023px) {
+            .container { padding: 18px 12px 60px; }
+            .pp-binder__spread {
+                flex-direction: column;
+                box-shadow: none;
+                margin-bottom: 0;
+            }
+            .pp-binder__spine { display: none; }
+            .pp-binder__page,
+            .pp-binder__page--left,
+            .pp-binder__page--right {
+                border-radius: 4px;
+                border: 1px solid var(--binder-paper-edge);
+                box-shadow:
+                    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+                    0 -1px 0 rgba(0, 0, 0, 0.45) inset,
+                    0 14px 32px rgba(0, 0, 0, 0.55),
+                    0 2px 6px rgba(0, 0, 0, 0.4);
+                /* Bottom padding bumped from 26px so the last row of
+                 * cards has real breathing room above the centered
+                 * "Page X / Y" label that sits at bottom: 10px. */
+                padding: 34px 14px 46px;
+                /* Margin is bottom-only on mobile. The desktop rule
+                 * used `0 auto 22px` to center, but in a flex column
+                 * with align-items: stretch (the spread on mobile),
+                 * `margin: 0 auto` absorbs all the free space and
+                 * locks the page at its intrinsic content width.
+                 * That's why every page was collapsing to fit only
+                 * the cards inside, leaving the rest of the viewport
+                 * empty. Stretching beats centering on mobile. */
+                margin: 0 0 22px;
+                /* Belt-and-suspenders: explicitly fill the flex
+                 * column cross-axis in case any selector later in
+                 * the cascade reintroduces auto margins. */
+                width: 100%;
+                box-sizing: border-box;
+            }
+            /* The per-mode max-widths from the desktop block
+             * (single 1366px / compact 920px / spread 1300px) leave the
+             * binder choked against narrow viewports. Let every page +
+             * cover fill the container on mobile regardless of mode. */
+            .pp-binder[data-mode="single"]  .pp-binder__spread,
+            .pp-binder[data-mode="single"]  .pp-binder__page--cover,
+            .pp-binder[data-mode="compact"] .pp-binder__spread,
+            .pp-binder[data-mode="compact"] .pp-binder__page--cover,
+            .pp-binder[data-mode="spread"]  .pp-binder__page--cover {
+                max-width: none;
+            }
+            /* Hide the Spread overview view-mode button -- at mobile
+             * widths the spread folds to a single-column stack, which is
+             * the same shape as Single. Keeping the button would let the
+             * user pick a state that looks identical to what they
+             * already have. JS at the bottom also auto-snaps any boot-
+             * time Spread state back to Single. */
+            .pp-binder__controls [data-binder-view="spread"] {
+                display: none;
+            }
+            /* Single mode goes 1-column on mobile. The Frame's full
+             * variant (290px design target) is too wide to pair side-by-
+             * side comfortably below ~720px; cards stay legible in a
+             * single stack. Compact stays at 2-up since its chrome-only
+             * cards remain readable at the smaller cell size. */
+            .pp-binder[data-mode="single"] .pp-binder__sleeves {
+                grid-template-columns: 1fr;
+                max-width: 360px;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            /* Cover heights on mobile -- the desktop values
+             * (1620/880/440px) were tuned to match a 4x4 content grid's
+             * height. Mobile cards stack differently (single 1xN,
+             * compact 2xN), so the cover doesn't need to match. A
+             * shorter cover still reads as a real first page of the
+             * binder without leaving an empty void. */
+            .pp-binder[data-mode="single"]  .pp-binder__page--cover,
+            .pp-binder[data-mode="compact"] .pp-binder__page--cover,
+            .pp-binder[data-mode="spread"]  .pp-binder__page--cover {
+                min-height: 360px;
+            }
+            /* Back-cover bottom alignment loses a lot of its inset on a
+             * shorter cover; tighten so the stamp sits closer to the
+             * stitched edge instead of floating in negative space. */
+            .pp-binder__page--cover-back .pp-binder__cover-content {
+                padding-bottom: 28px;
+            }
+            /* Empty placeholder doesn't need to render on mobile. */
+            .pp-binder__page--empty { display: none; }
+            /* Horizontal ring strip at the top of each page. */
+            .pp-binder__page-rings {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: absolute;
+                top: 8px;
+                left: 6%;
+                right: 6%;
+                pointer-events: none;
+            }
+            .pp-binder__page-rings .pp-binder__ring {
+                width: 14px;
+                height: 14px;
+            }
+            .pp-binder__page-number {
+                left: 50% !important;
+                right: auto !important;
+                transform: translateX(-50%);
+            }
+            .pp-binder__sleeves {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+            }
+            .pp-binder__sleeve { padding: 6px; }
+        }
+    </style>
+</head>
+<body>
+    {# Mount the rarity SVG sprite (this template doesn't extend base.html). #}
+    {% include "components/_frame_rarity_sprite.html" %}
+
+    <div class="container">
+        <h1>Binder Preview</h1>
+        <p class="lede">
+            The display piece — three view modes share the same data, all vertical scroll. <strong>Single</strong> (default) renders every page at the Frame's 290px design size with full chrome — most readable. <strong>Compact</strong> swaps the Frame to its chrome-only variant (~200px square cards) for denser scrolling. <strong>Spread</strong> shows facing pages side-by-side in their bound layout. For finding/sorting specific badges, see the <a href="{% url 'design_badge_collection_list' %}">Badge Collection list</a> — same data, hunting-tool shape.
+        </p>
+
+        <div class="pp-binder" data-mode="single" data-binder-cover="industrial" data-binder-spine="gunmetal">
+
+            <div class="pp-binder__controls">
+                <div class="pp-binder__controls-group">
+                    <span>View</span>
+                    <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-view="single">Single page</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-view="compact">Compact</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-view="spread">Spread overview</button>
+                </div>
+                <div class="pp-binder__controls-group">
+                    <span>Cover</span>
+                    <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-cover="industrial">Industrial</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-cover="leather">Leather</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-cover="canvas">Canvas</button>
+                </div>
+                <div class="pp-binder__controls-group">
+                    <span>Spine</span>
+                    <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-spine="gunmetal">Gunmetal</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-spine="brass">Brass</button>
+                </div>
+                <div class="pp-binder__controls-group">
+                    <span>{{ total_cards }} cards · {{ total_pages }} pages</span>
+                </div>
+            </div>
+
+            {# Cover page — first page of the binder, threading through the same spine as #}
+            {# every other page. Material is controlled by [data-binder-cover] on the parent. #}
+            {# Future: Pursuer Card slot goes on the left of the cover when that primitive ships. #}
+            <article class="pp-binder__page pp-binder__page--cover" aria-label="Binder front cover">
+                {# Corner protectors live only on the OUTER (free) edge -- #}
+                {# the spine is on the left, so the right edge gets the   #}
+                {# protectors. Real binders only protect outer corners,   #}
+                {# never the bound edge. #}
+                <span class="pp-binder__cover-corner pp-binder__cover-corner--tr" aria-hidden="true"></span>
+                <span class="pp-binder__cover-corner pp-binder__cover-corner--br" aria-hidden="true"></span>
+                <span class="pp-binder__cover-bookmark" aria-hidden="true"></span>
+                <div class="pp-binder__page-rings" aria-hidden="true">
+                    <span class="pp-binder__ring"></span>
+                    <span class="pp-binder__ring"></span>
+                    <span class="pp-binder__ring"></span>
+                </div>
+                <div class="pp-binder__cover-content">
+                    <div class="pp-binder__cover-plate">Badge Collection</div>
+                </div>
+            </article>
+
+            {% for spread in spreads %}
+                <div class="pp-binder__spread">
+                    <article class="pp-binder__page pp-binder__page--left" data-page-index="{{ spread.left.number|add:-1 }}">
+                        <div class="pp-binder__page-tab" data-palette="{{ spread.left.palette }}">{{ spread.left.theme }}</div>
+                        <div class="pp-binder__page-rings" aria-hidden="true">
+                            <span class="pp-binder__ring"></span>
+                            <span class="pp-binder__ring"></span>
+                            <span class="pp-binder__ring"></span>
+                        </div>
+                        <div class="pp-binder__sleeves">
+                            {% for frame in spread.left.frames %}
+                                <div class="pp-binder__sleeve" id="card-{{ frame.set_number|stringformat:"04d" }}">
+                                    {% include "components/frame.html" with frame=frame %}
+                                    <a class="pp-binder__sleeve-jump"
+                                       href="{% url 'design_badge_collection_list' %}#row-{{ frame.set_number|stringformat:"04d" }}"
+                                       title="Jump to this badge's row in the Collection list">
+                                        <span class="pp-binder__sleeve-jump-label">List</span>
+                                        <span aria-hidden="true">&nearr;</span>
+                                    </a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="pp-binder__page-number">Page {{ spread.left.number }} / {{ total_pages }}</div>
+                    </article>
+
+                    <div class="pp-binder__spine" aria-hidden="true">
+                        <span class="pp-binder__ring"></span>
+                        <span class="pp-binder__ring"></span>
+                        <span class="pp-binder__ring"></span>
+                    </div>
+
+                    {% if spread.right %}
+                        <article class="pp-binder__page pp-binder__page--right" data-page-index="{{ spread.right.number|add:-1 }}">
+                            <div class="pp-binder__page-tab" data-palette="{{ spread.right.palette }}">{{ spread.right.theme }}</div>
+                            <div class="pp-binder__page-rings" aria-hidden="true">
+                                <span class="pp-binder__ring"></span>
+                                <span class="pp-binder__ring"></span>
+                                <span class="pp-binder__ring"></span>
+                            </div>
+                            <div class="pp-binder__sleeves">
+                                {% for frame in spread.right.frames %}
+                                    <div class="pp-binder__sleeve" id="card-{{ frame.set_number|stringformat:"04d" }}">
+                                        {% include "components/frame.html" with frame=frame %}
+                                        <a class="pp-binder__sleeve-jump"
+                                           href="{% url 'design_badge_collection_list' %}#row-{{ frame.set_number|stringformat:"04d" }}"
+                                           title="Jump to this badge's row in the Collection list">
+                                            <span class="pp-binder__sleeve-jump-label">List</span>
+                                            <span aria-hidden="true">&nearr;</span>
+                                        </a>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <div class="pp-binder__page-number">Page {{ spread.right.number }} / {{ total_pages }}</div>
+                        </article>
+                    {% else %}
+                        <article class="pp-binder__page pp-binder__page--right pp-binder__page--empty" aria-hidden="true"></article>
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            {# Back cover -- closes the binder. Same material + spine #}
+            {# as the front cover but with a subtle embossed brand mark #}
+            {# along the bottom instead of the centered nameplate. #}
+            <article class="pp-binder__page pp-binder__page--cover pp-binder__page--cover-back" aria-label="Binder back cover">
+                {# Corner protectors only on the OUTER (right) edge -- #}
+                {# the spine is on the left side of the back cover too. #}
+                <span class="pp-binder__cover-corner pp-binder__cover-corner--tr" aria-hidden="true"></span>
+                <span class="pp-binder__cover-corner pp-binder__cover-corner--br" aria-hidden="true"></span>
+                <div class="pp-binder__page-rings" aria-hidden="true">
+                    <span class="pp-binder__ring"></span>
+                    <span class="pp-binder__ring"></span>
+                    <span class="pp-binder__ring"></span>
+                </div>
+                <div class="pp-binder__cover-content">
+                    <div class="pp-binder__cover-stamp">PlatPursuit &middot; Collector's Binder</div>
+                </div>
+            </article>
+        </div>
+    </div>
+
+    <script src="{% static 'js/frame.js' %}"></script>
+    <script>
+        // Binder state -- view mode is the only thing tracked now.
+        // Pages render in a vertical scroll; navigation is just scroll.
+        var binder = document.querySelector('.pp-binder');
+
+        // Swap the Frame size-variant class on every card in the binder
+        // when the view mode changes. No transform: scale anywhere --
+        // each variant has its own hand-tuned values in frame.css so
+        // text and 1px borders render natively crisp at every size.
+        function applyFrameVariant(mode) {
+            document.querySelectorAll('.pp-binder .pp-frame').forEach(function (frame) {
+                frame.classList.remove('pp-frame--compact', 'pp-frame--mini');
+                if (mode === 'compact') {
+                    frame.classList.add('pp-frame--compact');
+                } else if (mode === 'spread') {
+                    frame.classList.add('pp-frame--mini');
+                }
+                // 'single' = no extra class (default variant, all chrome)
+            });
+        }
+
+        // Compute a page's visibility state from its current rect.
+        // Mirrors the IntersectionObserver config below (rootMargin
+        // -10% bottom, threshold 0.08) so manual sync stays
+        // consistent with what the IO would say.
+        function syncPageState(page) {
+            var rect = page.getBoundingClientRect();
+            var vh = window.innerHeight;
+            var rootBottom = vh * 0.9;
+            var intersect = Math.max(0, Math.min(rect.bottom, rootBottom) - Math.max(rect.top, 0));
+            var ratio = rect.height > 0 ? intersect / rect.height : 0;
+            var inView = ratio >= 0.08;
+            page.classList.toggle('is-visible', inView);
+            page.classList.toggle('is-above', !inView && rect.top < 0);
+        }
+
+        var isFirstModeSet = true;
+        function setMode(mode) {
+            var pages = document.querySelectorAll('.pp-binder__page');
+            // On a mode SWITCH (not the initial load), snap all page
+            // visibility states without animation so pages don't
+            // stagger entry as their viewport intersection changes.
+            var snap = !isFirstModeSet;
+            isFirstModeSet = false;
+            if (snap) {
+                pages.forEach(function (p) { p.classList.add('is-mode-snap'); });
+            }
+
+            binder.setAttribute('data-mode', mode);
+            document.querySelectorAll('[data-binder-view]').forEach(function (btn) {
+                btn.classList.toggle('pp-binder__control-chip--active', btn.getAttribute('data-binder-view') === mode);
+            });
+            applyFrameVariant(mode);
+
+            if (snap) {
+                // Force layout so getBoundingClientRect returns
+                // post-mode-change positions, then sync each page's
+                // visibility classes synchronously.
+                void binder.offsetWidth;
+                pages.forEach(syncPageState);
+                // Re-enable transitions on next frame so future scrolls
+                // animate normally.
+                requestAnimationFrame(function () {
+                    pages.forEach(function (p) { p.classList.remove('is-mode-snap'); });
+                });
+            }
+        }
+
+        document.querySelectorAll('[data-binder-view]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                setMode(btn.getAttribute('data-binder-view'));
+            });
+        });
+
+        // ── Material customization toggles ──────────────────────────
+        // Cover material + spine binding swap via data attributes on
+        // the .pp-binder. CSS variables cascade from there, so every
+        // dependent element (cover, rings, spine bar) re-paints in
+        // the new finish without any JS-level color juggling.
+        function setBinderAttr(attr, value) {
+            binder.setAttribute(attr, value);
+            document.querySelectorAll('[' + attr + ']').forEach(function (btn) {
+                if (btn.tagName === 'BUTTON') {
+                    btn.classList.toggle('pp-binder__control-chip--active', btn.getAttribute(attr) === value);
+                }
+            });
+        }
+        document.querySelectorAll('button[data-binder-cover]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                setBinderAttr('data-binder-cover', btn.getAttribute('data-binder-cover'));
+            });
+        });
+        document.querySelectorAll('button[data-binder-spine]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                setBinderAttr('data-binder-spine', btn.getAttribute('data-binder-spine'));
+            });
+        });
+
+        // Spread mode is desktop-only -- below 1024px every mode folds
+        // to a single-column stack, so Spread renders identically to
+        // Single and the choice is moot. The Spread button is hidden via
+        // CSS at that width; this guard also catches the case where the
+        // user resizes a desktop browser down while parked in Spread,
+        // snapping them back to Single instead of leaving an active-but-
+        // hidden state. Re-check on resize so a window resize from
+        // desktop to mobile doesn't leave a hidden Spread state active.
+        var MOBILE_BREAK = 1023;
+        function ensureModeMobileSafe() {
+            if (window.innerWidth <= MOBILE_BREAK && binder.getAttribute('data-mode') === 'spread') {
+                setMode('single');
+            }
+        }
+        window.addEventListener('resize', ensureModeMobileSafe);
+
+        // Initial setup -- default to single mode.
+        setMode('single');
+        ensureModeMobileSafe();
+
+        // ── Scroll-driven entry + exit animation ─────────────────────
+        // Pages fade + slide as they cross the viewport in either
+        // direction. The IO keeps observing so we get both enter
+        // and leave callbacks. On exit, we tag the page .is-above
+        // if its top edge is now above the viewport (so the CSS
+        // exit transform goes UP); otherwise .is-above is removed
+        // and the default downward transform applies (exit at the
+        // bottom). Either way the motion continues in the user's
+        // scroll direction instead of bouncing back.
+        //
+        // Side effect when a page becomes visible: stamp
+        // fetchpriority="high" on the <img> tags of the next two
+        // pages (in either direction). Doesn't trigger new requests
+        // -- the browser is already loading images eagerly -- but
+        // bumps the queue so the soon-to-be-visible pages come
+        // through before the ones farther down. Each page is only
+        // bumped once via the data-priority-bumped flag.
+        var PRELOAD_RADIUS = 2;
+        function bumpImagePriority(page) {
+            if (!page || page.dataset.priorityBumped === '1') return;
+            page.dataset.priorityBumped = '1';
+            page.querySelectorAll('img').forEach(function (img) {
+                img.setAttribute('fetchpriority', 'high');
+            });
+        }
+
+        if ('IntersectionObserver' in window) {
+            var io = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    var page = entry.target;
+                    if (entry.isIntersecting) {
+                        page.classList.add('is-visible');
+                        page.classList.remove('is-above');
+                        // Prioritize the nearby pages so the next
+                        // 2 above + 2 below are queue-bumped.
+                        var idx = parseInt(page.getAttribute('data-page-index'), 10);
+                        bumpImagePriority(page);
+                        for (var offset = 1; offset <= PRELOAD_RADIUS; offset++) {
+                            bumpImagePriority(document.querySelector('[data-page-index="' + (idx + offset) + '"]'));
+                            bumpImagePriority(document.querySelector('[data-page-index="' + (idx - offset) + '"]'));
+                        }
+                    } else {
+                        page.classList.remove('is-visible');
+                        page.classList.toggle('is-above', entry.boundingClientRect.top < 0);
+                    }
+                });
+            }, {
+                rootMargin: '0px 0px -10% 0px',
+                threshold: 0.08
+            });
+            document.querySelectorAll('.pp-binder__page').forEach(function (page) {
+                io.observe(page);
+            });
+        } else {
+            // Fallback: just reveal everything.
+            document.querySelectorAll('.pp-binder__page').forEach(function (page) {
+                page.classList.add('is-visible');
+            });
+        }
+    </script>
+</body>
+</html>

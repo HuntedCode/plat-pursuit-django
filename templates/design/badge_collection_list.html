@@ -1,0 +1,560 @@
+{% load static humanize %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Badge Collection · PlatPursuit Workshop</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <style>
+        /* ============================================================
+         * BADGE COLLECTION LIST -- workshop companion to the Binder.
+         *
+         * Where the Binder is the DISPLAY PIECE (browsing, ambience,
+         * vibe), this is the HUNTING TOOL (sort, filter, find). Same
+         * data, different intent. Each row deep-links back to the
+         * badge's spot in the binder via #card-NNNN URL anchor.
+         * ============================================================ */
+        :root {
+            --row-bg-1:        rgba(22, 24, 30, 0.92);
+            --row-bg-2:        rgba(18, 20, 26, 0.92);
+            --row-edge:        rgba(255, 255, 255, 0.06);
+            --row-hover-bg:    rgba(40, 46, 58, 0.7);
+            --table-head-bg:   rgba(16, 18, 24, 0.95);
+            --table-head-edge: rgba(255, 255, 255, 0.1);
+        }
+        body {
+            background:
+                radial-gradient(ellipse at top, rgba(40, 60, 100, 0.14), transparent 60%),
+                #0c0d11;
+            color: #e8e9ec;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container { max-width: 1320px; margin: 0 auto; padding: 28px 24px 80px; }
+        h1 { font-size: 26px; font-weight: 800; margin: 0 0 6px; letter-spacing: -0.005em; }
+        .lede {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.55);
+            margin: 0 0 24px;
+            max-width: 760px;
+            line-height: 1.55;
+        }
+        .lede code {
+            background: rgba(255, 255, 255, 0.06);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        a { color: #5FE0EE; }
+
+        /* ── Toolbar (sticky, filters + search + sort) ───────────────── */
+        .pp-list__toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            background: rgba(14, 16, 22, 0.94);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+        }
+        .pp-list__group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .pp-list__group + .pp-list__group {
+            border-left: 1px solid rgba(255, 255, 255, 0.07);
+            padding-left: 14px;
+        }
+        .pp-list__chip {
+            padding: 5px 11px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 11.5px;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            transition: background 160ms ease, border-color 160ms ease;
+        }
+        .pp-list__chip:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+        .pp-list__chip.is-active {
+            background: rgba(63, 205, 220, 0.14);
+            border-color: rgba(63, 205, 220, 0.6);
+            color: rgba(180, 230, 245, 1);
+        }
+        .pp-list__search {
+            flex: 1;
+            min-width: 180px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 4px;
+            color: #e8e9ec;
+            font-size: 12.5px;
+        }
+        .pp-list__search:focus {
+            outline: none;
+            border-color: rgba(63, 205, 220, 0.55);
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .pp-list__stats {
+            margin-left: auto;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255, 255, 255, 0.55);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Cross-link to binder ───────────────────────────────────── */
+        .pp-list__crosslink {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            margin-bottom: 12px;
+            background: rgba(63, 205, 220, 0.08);
+            border: 1px solid rgba(63, 205, 220, 0.35);
+            border-radius: 4px;
+            color: rgba(180, 230, 245, 1);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            text-decoration: none;
+        }
+        .pp-list__crosslink:hover {
+            background: rgba(63, 205, 220, 0.14);
+            border-color: rgba(63, 205, 220, 0.6);
+        }
+
+        /* ── Table ──────────────────────────────────────────────────── */
+        .pp-list__table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 12.5px;
+            background: rgba(14, 16, 22, 0.5);
+            border: 1px solid var(--row-edge);
+            border-radius: 6px;
+            /* NO overflow: hidden here -- it establishes a scrolling
+             * context that breaks the thead's position: sticky (the
+             * sticky boundary becomes the table itself instead of the
+             * viewport, so the header overlaps the rows). Corner
+             * rounding is restored via per-cell border-radius below. */
+        }
+        /* Restore table corner rounding without overflow:hidden. */
+        .pp-list__table thead th:first-child { border-top-left-radius: 6px; }
+        .pp-list__table thead th:last-child  { border-top-right-radius: 6px; }
+        .pp-list__table tbody tr:last-child td:first-child { border-bottom-left-radius: 6px; }
+        .pp-list__table tbody tr:last-child td:last-child  { border-bottom-right-radius: 6px; }
+        .pp-list__table thead th {
+            position: sticky;
+            /* The toolbar above this table is also sticky and wraps to
+             * multiple lines at narrower viewports. A hardcoded `top`
+             * leaves the thead hiding behind the wrapped toolbar (which
+             * also has the higher z-index). The JS at the bottom of the
+             * page measures the toolbar's actual height on load + on
+             * resize and writes it to --pp-toolbar-h, so the thead always
+             * sticks immediately below the toolbar regardless of wrap. */
+            top: var(--pp-toolbar-h, 64px);
+            z-index: 5;
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(255, 255, 255, 0.62);
+            background: var(--table-head-bg);
+            border-bottom: 1px solid var(--table-head-edge);
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .pp-list__table thead th:hover {
+            color: rgba(180, 230, 245, 1);
+        }
+        .pp-list__table thead th.is-sorted-asc::after  { content: " ↑"; opacity: 0.7; }
+        .pp-list__table thead th.is-sorted-desc::after { content: " ↓"; opacity: 0.7; }
+        .pp-list__table tbody tr {
+            background: var(--row-bg-1);
+            transition: background 120ms ease;
+            border-left: 3px solid transparent;
+        }
+        .pp-list__table tbody tr:nth-child(even) { background: var(--row-bg-2); }
+        .pp-list__table tbody tr:hover {
+            background: var(--row-hover-bg);
+        }
+        .pp-list__table tbody tr[data-tier="bronze"]   { border-left-color: rgba(200, 122, 59, 0.6); }
+        .pp-list__table tbody tr[data-tier="silver"]   { border-left-color: rgba(205, 208, 212, 0.6); }
+        .pp-list__table tbody tr[data-tier="gold"]     { border-left-color: rgba(240, 198, 74, 0.7); }
+        .pp-list__table tbody tr[data-tier="platinum"] { border-left-color: rgba(207, 232, 240, 0.7); }
+        .pp-list__table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--row-edge);
+            vertical-align: middle;
+            font-variant-numeric: tabular-nums;
+        }
+        .pp-list__table tbody tr:last-child td { border-bottom: none; }
+
+        /* Anchor target: when a row is deep-linked from the binder
+         * (#row-NNNN), pulse a cyan highlight so the eye lands. The
+         * scroll-margin-top accounts for the sticky toolbar (~52px)
+         * plus the sticky thead (~36px) so the row lands cleanly
+         * below the chrome rather than tucked behind it. */
+        .pp-list__table tbody tr {
+            /* Inbound deep-link from the binder lands here. Calc adds the
+             * dynamically-measured toolbar height + the thead's own
+             * height (~36px) + a small breath so the row sits comfortably
+             * below the sticky chrome instead of tucked under it. */
+            scroll-margin-top: calc(var(--pp-toolbar-h, 64px) + 48px);
+        }
+        .pp-list__table tbody tr:target {
+            animation: pp-row-target-pulse 2.4s ease-out 1;
+        }
+        @keyframes pp-row-target-pulse {
+            0%   { background: rgba(63, 205, 220, 0.28); box-shadow: inset 3px 0 0 rgba(63, 205, 220, 0.9); }
+            40%  { background: rgba(63, 205, 220, 0.18); box-shadow: inset 3px 0 0 rgba(63, 205, 220, 0.7); }
+            100% { background: var(--row-bg-1);          box-shadow: none; }
+        }
+
+        /* ── Tier chips ─────────────────────────────────────────────── */
+        .pp-list__tier {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 3px;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            border: 1px solid;
+        }
+        .pp-list__tier--bronze   { color: rgba(220, 150, 80, 1);  border-color: rgba(200, 122, 59, 0.45); background: rgba(200, 122, 59, 0.1); }
+        .pp-list__tier--silver   { color: rgba(220, 225, 235, 1); border-color: rgba(205, 208, 212, 0.45); background: rgba(205, 208, 212, 0.1); }
+        .pp-list__tier--gold     { color: rgba(245, 220, 130, 1); border-color: rgba(240, 198, 74, 0.5);   background: rgba(240, 198, 74, 0.1); }
+        .pp-list__tier--platinum { color: rgba(220, 240, 250, 1); border-color: rgba(207, 232, 240, 0.55); background: rgba(207, 232, 240, 0.1); }
+
+        /* ── State badge ─────────────────────────────────────────────── */
+        .pp-list__state {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .pp-list__state--earned       { color: rgba(160, 230, 180, 1);  background: rgba(50, 140, 80, 0.18); }
+        .pp-list__state--in_progress  { color: rgba(180, 220, 240, 1); background: rgba(63, 130, 180, 0.18); }
+        .pp-list__state--maintenance  { color: rgba(255, 200, 120, 1); background: rgba(200, 130, 50, 0.18); }
+        .pp-list__state--unearned     { color: rgba(170, 175, 185, 1); background: rgba(80, 84, 92, 0.22); }
+
+        /* ── Theme cell (uses same palette tokens as binder tabs) ───── */
+        .pp-list__theme {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11.5px;
+            color: rgba(255, 255, 255, 0.82);
+            white-space: nowrap;
+        }
+        .pp-list__theme-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+        }
+        .pp-list__theme-dot[data-palette="cobalt"]  { background: hsl(215, 55%, 50%); }
+        .pp-list__theme-dot[data-palette="amber"]   { background: hsl(28,  62%, 52%); }
+        .pp-list__theme-dot[data-palette="emerald"] { background: hsl(140, 48%, 44%); }
+        .pp-list__theme-dot[data-palette="violet"]  { background: hsl(280, 45%, 52%); }
+        .pp-list__theme-dot[data-palette="crimson"] { background: hsl(355, 55%, 48%); }
+        .pp-list__theme-dot[data-palette="teal"]    { background: hsl(180, 55%, 38%); }
+        .pp-list__theme-dot[data-palette="mustard"] { background: hsl(45,  65%, 48%); }
+        .pp-list__theme-dot[data-palette="slate"]   { background: hsl(218, 18%, 48%); }
+
+        .pp-list__set-mark {
+            color: rgba(255, 255, 255, 0.75);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            font-size: 11.5px;
+        }
+        .pp-list__series {
+            color: rgba(255, 255, 255, 0.92);
+            font-weight: 600;
+        }
+        .pp-list__progress {
+            color: rgba(180, 220, 240, 0.85);
+            font-variant-numeric: tabular-nums;
+            font-size: 11.5px;
+        }
+        .pp-list__rank {
+            color: rgba(245, 220, 130, 0.9);
+            font-weight: 700;
+            font-size: 11.5px;
+        }
+        .pp-list__binder-link {
+            display: inline-block;
+            padding: 4px 10px;
+            border: 1px solid rgba(63, 205, 220, 0.4);
+            border-radius: 3px;
+            color: rgba(180, 230, 245, 1);
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-decoration: none;
+            transition: background 140ms ease, border-color 140ms ease;
+        }
+        .pp-list__binder-link:hover {
+            background: rgba(63, 205, 220, 0.14);
+            border-color: rgba(63, 205, 220, 0.7);
+        }
+
+        .pp-list__empty {
+            padding: 60px 30px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.45);
+            font-size: 13px;
+        }
+
+        @media (max-width: 1023px) {
+            .container { padding: 18px 12px 60px; }
+            .pp-list__table { font-size: 11.5px; }
+            .pp-list__table thead th,
+            .pp-list__table tbody td { padding: 8px 10px; }
+            /* Hide less-essential columns on narrow screens. */
+            .pp-list__col--theme,
+            .pp-list__col--rank { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Badge Collection</h1>
+        <p class="lede">
+            The hunting tool. Same data as the <a href="{% url 'design_binder_preview' %}">Binder</a> but flattened to a sortable, filterable list. Each row deep-links back to the badge's spot in the binder via <code>#card-NNNN</code> anchor. Use this view to find specific badges, sort by what you care about, and filter down to the cards you're tracking — then jump back to the binder to enjoy them.
+        </p>
+
+        <a href="{% url 'design_binder_preview' %}" class="pp-list__crosslink">&larr; Back to the Binder</a>
+
+        <div class="pp-list__toolbar">
+            <div class="pp-list__group">
+                <span>Tier</span>
+                <button type="button" class="pp-list__chip is-active" data-filter-tier="all">All</button>
+                <button type="button" class="pp-list__chip" data-filter-tier="bronze">Bronze</button>
+                <button type="button" class="pp-list__chip" data-filter-tier="silver">Silver</button>
+                <button type="button" class="pp-list__chip" data-filter-tier="gold">Gold</button>
+                <button type="button" class="pp-list__chip" data-filter-tier="platinum">Platinum</button>
+            </div>
+            <div class="pp-list__group">
+                <span>State</span>
+                <button type="button" class="pp-list__chip is-active" data-filter-state="all">All</button>
+                <button type="button" class="pp-list__chip" data-filter-state="earned">Earned</button>
+                <button type="button" class="pp-list__chip" data-filter-state="in_progress">In Progress</button>
+                <button type="button" class="pp-list__chip" data-filter-state="maintenance">Maintenance</button>
+                <button type="button" class="pp-list__chip" data-filter-state="unearned">Unearned</button>
+            </div>
+            <div class="pp-list__group">
+                <span>Theme</span>
+                <button type="button" class="pp-list__chip is-active" data-filter-theme="all">All</button>
+                {% for theme in themes %}
+                    <button type="button" class="pp-list__chip" data-filter-theme="{{ theme.name|slugify }}" data-filter-palette="{{ theme.palette }}">{{ theme.name }}</button>
+                {% endfor %}
+            </div>
+            <input type="text" class="pp-list__search" placeholder="Search series or badge…" data-search />
+            <div class="pp-list__stats" data-visible-count>{{ badges|length }} of {{ badges|length }}</div>
+        </div>
+
+        <table class="pp-list__table">
+            <thead>
+                <tr>
+                    <th data-sort="set_number" class="is-sorted-asc">Set #</th>
+                    <th data-sort="series">Series</th>
+                    <th data-sort="tier">Tier</th>
+                    <th data-sort="state">State</th>
+                    <th data-sort="progress">Earned / Progress</th>
+                    <th data-sort="rarity">Rarity</th>
+                    <th data-sort="rank" class="pp-list__col--rank">Rank</th>
+                    <th data-sort="theme" class="pp-list__col--theme">Theme</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for badge in badges %}
+                    <tr id="row-{{ badge.set_number|stringformat:"04d" }}"
+                        data-tier="{{ badge.tier }}"
+                        data-state="{{ badge.state }}"
+                        data-theme="{{ badge.theme|slugify }}"
+                        data-series="{{ badge.series_name|lower }}"
+                        data-badge="{{ badge.badge_name|lower }}"
+                        data-set-number="{{ badge.set_number }}"
+                        data-rarity-pct="{{ badge.rarity_pct }}"
+                        data-rank="{{ badge.engraving_rank|default:0 }}"
+                        data-progress="{{ badge.progress_pct|default:0 }}">
+                        <td class="pp-list__set-mark">#{{ badge.set_number|stringformat:"04d" }}</td>
+                        <td class="pp-list__series">{{ badge.series_name }}</td>
+                        <td><span class="pp-list__tier pp-list__tier--{{ badge.tier }}">{{ badge.tier|title }}</span></td>
+                        <td>
+                            {% if badge.state == 'in_progress' %}
+                                <span class="pp-list__state pp-list__state--in_progress">In Progress</span>
+                            {% else %}
+                                <span class="pp-list__state pp-list__state--{{ badge.state }}">{{ badge.state|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="pp-list__progress">
+                            {% if badge.state == 'earned' %}{{ badge.earned_date }}
+                            {% elif badge.state == 'maintenance' %}{{ badge.stages_done|default:0 }} / {{ badge.stages_total }} repaired
+                            {% elif badge.state == 'in_progress' %}{{ badge.progress_pct }}% &middot; {{ badge.stages_done|default:0 }} / {{ badge.stages_total }} stages
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>{{ badge.rarity_pct }}%</td>
+                        <td class="pp-list__rank pp-list__col--rank">
+                            {% if badge.engraving_rank %}#{{ badge.engraving_rank|intcomma }}{% else %}—{% endif %}
+                        </td>
+                        <td class="pp-list__col--theme">
+                            <span class="pp-list__theme">
+                                <span class="pp-list__theme-dot" data-palette="{{ badge.palette }}"></span>
+                                {{ badge.theme }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{% url 'design_binder_preview' %}#card-{{ badge.set_number|stringformat:"04d" }}" class="pp-list__binder-link">View &rarr;</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="pp-list__empty" data-empty-message hidden>No badges match the current filters.</div>
+    </div>
+
+    <script>
+        // ── Sort + filter + search behaviour ─────────────────────────
+        // All client-side: the table is fully rendered up-front and the
+        // controls just toggle row visibility / re-order. Real product
+        // would pair with HTMX or a real query API, but this is enough
+        // for a workshop prototype.
+        // Sticky-thead offset: measure the toolbar (which wraps at narrow
+        // widths) and feed its real height into --pp-toolbar-h so the
+        // thead pins immediately below it. ResizeObserver catches both
+        // viewport resize and chip-wrap reflows.
+        var toolbarEl = document.querySelector('.pp-list__toolbar');
+        function syncToolbarOffset() {
+            if (!toolbarEl) return;
+            document.documentElement.style.setProperty('--pp-toolbar-h', toolbarEl.offsetHeight + 'px');
+        }
+        syncToolbarOffset();
+        if (toolbarEl && typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(syncToolbarOffset).observe(toolbarEl);
+        }
+        window.addEventListener('resize', syncToolbarOffset);
+
+        var table = document.querySelector('.pp-list__table tbody');
+        var rows  = Array.from(table.querySelectorAll('tr'));
+        var stats = document.querySelector('[data-visible-count]');
+        var emptyMsg = document.querySelector('[data-empty-message]');
+        var totalRows = rows.length;
+        var activeFilters = { tier: 'all', state: 'all', theme: 'all' };
+        var searchTerm = '';
+        var sortKey = 'set_number';
+        var sortDir = 'asc';
+
+        function applyFilters() {
+            var visible = 0;
+            rows.forEach(function (row) {
+                var tierOk  = activeFilters.tier  === 'all' || row.getAttribute('data-tier')  === activeFilters.tier;
+                var stateOk = activeFilters.state === 'all' || row.getAttribute('data-state') === activeFilters.state;
+                var themeOk = activeFilters.theme === 'all' || row.getAttribute('data-theme') === activeFilters.theme;
+                var searchOk = searchTerm === ''
+                    || row.getAttribute('data-series').indexOf(searchTerm) !== -1
+                    || row.getAttribute('data-badge').indexOf(searchTerm) !== -1;
+                var show = tierOk && stateOk && themeOk && searchOk;
+                row.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            stats.textContent = visible + ' of ' + totalRows;
+            emptyMsg.hidden = visible !== 0;
+        }
+
+        function getSortValue(row, key) {
+            switch (key) {
+                case 'set_number': return parseInt(row.getAttribute('data-set-number'), 10);
+                case 'series':     return row.getAttribute('data-series');
+                case 'tier':       return ['bronze', 'silver', 'gold', 'platinum'].indexOf(row.getAttribute('data-tier'));
+                case 'state':      return ['earned', 'maintenance', 'in_progress', 'unearned'].indexOf(row.getAttribute('data-state'));
+                case 'progress':   return parseFloat(row.getAttribute('data-progress'));
+                case 'rarity':     return parseFloat(row.getAttribute('data-rarity-pct'));
+                case 'rank':       return parseInt(row.getAttribute('data-rank'), 10);
+                case 'theme':      return row.getAttribute('data-theme');
+                default:           return 0;
+            }
+        }
+
+        function applySort() {
+            var sorted = rows.slice().sort(function (a, b) {
+                var av = getSortValue(a, sortKey);
+                var bv = getSortValue(b, sortKey);
+                if (av < bv) return sortDir === 'asc' ? -1 : 1;
+                if (av > bv) return sortDir === 'asc' ?  1 : -1;
+                return 0;
+            });
+            sorted.forEach(function (row) { table.appendChild(row); });
+            document.querySelectorAll('th[data-sort]').forEach(function (th) {
+                th.classList.remove('is-sorted-asc', 'is-sorted-desc');
+                if (th.getAttribute('data-sort') === sortKey) {
+                    th.classList.add(sortDir === 'asc' ? 'is-sorted-asc' : 'is-sorted-desc');
+                }
+            });
+        }
+
+        document.querySelectorAll('[data-filter-tier], [data-filter-state], [data-filter-theme]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var attr = chip.getAttribute('data-filter-tier')  ? 'tier'
+                         : chip.getAttribute('data-filter-state') ? 'state'
+                         : 'theme';
+                var value = chip.getAttribute('data-filter-' + attr);
+                activeFilters[attr] = value;
+                document.querySelectorAll('[data-filter-' + attr + ']').forEach(function (c) {
+                    c.classList.toggle('is-active', c === chip);
+                });
+                applyFilters();
+            });
+        });
+
+        document.querySelector('[data-search]').addEventListener('input', function (e) {
+            searchTerm = e.target.value.toLowerCase().trim();
+            applyFilters();
+        });
+
+        document.querySelectorAll('th[data-sort]').forEach(function (th) {
+            th.addEventListener('click', function () {
+                var key = th.getAttribute('data-sort');
+                if (sortKey === key) {
+                    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortKey = key;
+                    sortDir = 'asc';
+                }
+                applySort();
+            });
+        });
+    </script>
+</body>
+</html>

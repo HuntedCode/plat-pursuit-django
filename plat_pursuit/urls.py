@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap, RoadmapSitemap,
@@ -350,6 +350,8 @@ urlpatterns = [
     # committed to the canonical design system. Not linked from nav.
     path('design/frame/', TemplateView.as_view(template_name='design/frame_preview.html'), name='design_frame_preview'),
     path('design/frame-component/', FrameComponentTestView.as_view(), name='design_frame_component_test'),
+    path('design/binder/', BinderPreviewView.as_view(), name='design_binder_preview'),
+    path('design/badge-collection/', BadgeCollectionListView.as_view(), name='design_badge_collection_list'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
