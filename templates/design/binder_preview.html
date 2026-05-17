@@ -2598,6 +2598,21 @@
                 originalPagesStageOrder.forEach(function (el) {
                     if (el.parentNode === pagesStage) pagesStage.appendChild(el);
                 });
+                // Re-sync visibility after the DOM restore. The
+                // outer setMode wrapper ran syncPageState BEFORE
+                // this function (so before the DOM restore), which
+                // means it computed page rects from spread-mode's
+                // reordered layout -- spread[0] was sitting at the
+                // END of pages-stage (the belt-and-suspenders
+                // reorderCurrentToTop fallback), so its pages'
+                // rects were way down the page, often off-screen,
+                // and is-visible got stripped. With the DOM now
+                // back in logical order, those pages are at the
+                // top again and need is-visible re-added. is-mode-
+                // snap is still active on every page (setMode adds
+                // it and removes it in its own rAF, which hasn't
+                // fired yet), so this snaps without a fade.
+                document.querySelectorAll('.pp-binder__page').forEach(syncPageState);
             }
         }
 
