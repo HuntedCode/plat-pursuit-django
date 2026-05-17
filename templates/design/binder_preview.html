@@ -46,7 +46,15 @@
          * retune the HSL values. */
         .pp-binder {
             position: relative;
-            perspective: 2200px;
+            /* perspective was leftover from an abandoned 3D page-flip
+             * experiment. Nothing in the current code uses 3D transforms
+             * (rotateX/Y or translateZ), but the perspective rule still
+             * forces every descendant into a 3D rendering context. On
+             * mobile especially, that causes sub-pixel GPU rasterization
+             * of any element with a transform -- the page entry animation
+             * (translateY) leaves cards rendered to a GPU layer at
+             * fractional coords, which reads as a soft blur. Dropping
+             * the perspective restores native-resolution rendering. */
 
             /* Spine + rings (default: gunmetal) */
             --spine-edge:   hsl(220,  8%,  8%);
@@ -92,8 +100,11 @@
             /* Content page paper. The cover variant tints these too
              * so switching covers shifts the WHOLE binder's mood --
              * industrial = neutral cool paper, leather = warmer
-             * yellowed paper, canvas = warm cream paper. */
-            --binder-paper:        rgba(24, 26, 32, 0.96);
+             * yellowed paper, canvas = warm cream paper. Fully opaque
+             * (the previous 0.96 alpha leaked the workshop background
+             * through the flip-mode page rotation, where two semi-
+             * transparent layers compounded into a visible strip). */
+            --binder-paper:        rgb(24, 26, 32);
             --binder-paper-edge:   rgba(255, 255, 255, 0.07);
         }
         .pp-binder[data-binder-spine="brass"] {
@@ -131,7 +142,7 @@
                     transparent 1.6px);
             --cover-texture-size: 9px 9px, 13px 13px, 11px 11px;
             /* Warmer yellowed paper to match the leather mood. */
-            --binder-paper:        hsla(30, 14%, 11%, 0.96);
+            --binder-paper:        hsl(30, 14%, 11%);
             --binder-paper-edge:   hsla(35, 45%, 70%, 0.08);
         }
         .pp-binder[data-binder-cover="canvas"] {
@@ -165,7 +176,7 @@
                     transparent 8px);
             --cover-texture-size: 100% 100%, 100% 100%, 100% 100%;
             /* Olive-tinted paper to match the canvas / military mood. */
-            --binder-paper:        hsla(85, 10%, 11%, 0.96);
+            --binder-paper:        hsl(85, 10%, 11%);
             --binder-paper-edge:   hsla(60, 25%, 70%, 0.08);
         }
         body {
@@ -308,7 +319,9 @@
          * a manufacturer's mark on the back of a real binder. */
         .pp-binder__page--cover-back .pp-binder__cover-content {
             align-items: flex-end;
-            padding-bottom: 56px;
+            /* Banner-shaped back cover -- stamp sits closer to the
+             * stitched edge instead of floating in a tall void. */
+            padding-bottom: 28px;
         }
         .pp-binder__cover-stamp {
             font-family: Georgia, 'Times New Roman', serif;
@@ -413,7 +426,14 @@
             top: -6px;
             left: 60px;
             width: 16px;
-            height: 1900px;
+            /* Banner cover is ~280px tall; the ribbon extends 160px
+             * past the banner bottom (into the negative space above
+             * the first spread) so it reads as a real bookmark
+             * threaded through the cover, not glued onto it. Less
+             * than the previous 1900px (which was sized for the
+             * full-page-height cover); long enough to look like
+             * it's hanging out of the binder. */
+            height: 440px;
             background: linear-gradient(180deg,
                 hsl(355, 70%, 38%) 0%,
                 hsl(355, 75%, 30%) 50%,
@@ -559,23 +579,22 @@
             margin-left: auto;
             margin-right: auto;
         }
-        .pp-binder[data-mode="spread"] .pp-binder__page--cover {
-            max-width: 1300px;
-            margin: 0 auto 24px;
-        }
-        /* Cover height per mode -- matches a content page's natural
-         * height so the cover reads as a real first page of the
-         * binder (not a short banner). Numbers approximate the
-         * actual content-page heights given the 4x4 grid of cards
-         * at each mode's card size. */
-        .pp-binder[data-mode="single"] .pp-binder__page--cover {
-            min-height: 1620px;
-        }
-        .pp-binder[data-mode="compact"] .pp-binder__page--cover {
-            min-height: 880px;
-        }
-        .pp-binder[data-mode="spread"] .pp-binder__page--cover {
-            min-height: 440px;
+        /* Cover sizing for Spread mode is moot -- covers are display:none
+         * in Spread (the user navigates via flip animation between
+         * spreads only; the cover lives in Single/Compact). */
+        /* Cover height -- banner shape across all modes. The cover
+         * carries the same material, nameplate, corner protectors,
+         * bookmark, and stitched edge as before, but no longer tries
+         * to match a content page's height. Two reasons: (1) on
+         * single mode the 1620px void above the first spread made
+         * the binder feel front-loaded with empty material; (2) a
+         * banner reads as a "title card" / lid of the binder, more
+         * like a publication's cover plate, which is the actual
+         * intent. Height stays consistent across modes since the
+         * cover's content (nameplate front / stamp back) is the
+         * same regardless of which view is active. */
+        .pp-binder__page--cover {
+            min-height: 280px;
         }
         /* Tight gap between the cover page and the first spread so
          * the spine bar threads through both without an awkward
@@ -921,7 +940,14 @@
          * faces outward away from the spine. Right page keeps its
          * tab on the right. Single + compact modes keep all tabs
          * on the right (consistent with all-rings-on-left). */
-        .pp-binder[data-mode="spread"] .pp-binder__page--left .pp-binder__page-tab {
+        /* Direct-child combinator (`>`) is intentional: without it, this
+         * rule's descendant selector would ALSO match the tab inside a
+         * cloned right-page sitting inside a left-page flip-leaf's back
+         * face. That bled left-alignment onto right-page clones during
+         * backward flips, putting their tab on the wrong side. Limiting
+         * to direct children means only the live left-page's own tab
+         * gets re-aligned. */
+        .pp-binder[data-mode="spread"] .pp-binder__page--left > .pp-binder__page-tab {
             margin-left: 32px;
             margin-right: auto;
         }
@@ -1097,16 +1123,509 @@
          *   Spread   -> pp-frame--mini    (chrome-only, smaller)
          * The page-width tunings below give cells the right size for
          * each variant's natural rendering, so text never goes
-         * through a transform and stays crisp at every mode. */
+         * through a transform and stays crisp at every mode.
+         *
+         * Default cap is 290px -- the Frame's stated design target
+         * (see frame-component.md and the /design/frame-component/
+         * test harness). The binder's spread max-width is 1366px,
+         * which divided across a 4-column grid gives ~307px cells.
+         * Without a cap, the default Frame would stretch ~6% past
+         * its design width on the binder versus the test harness,
+         * making the same component look subtly larger in one place
+         * than the other. margin: 0 auto centers the capped frame
+         * inside the wider sleeve cell. */
         .pp-binder__sleeve .pp-frame {
-            margin: 0;
+            margin: 0 auto;
+            max-width: 290px;
+        }
+        /* The compact and mini variants have their own native widths
+         * defined in frame.css (compact ~200px, mini ~110px). Let
+         * them override the 290px cap when in use -- otherwise the
+         * cap would constrain only the default variant, but the
+         * `max-width: 290px` would also overrule the variant's own
+         * "max-width: none" default. */
+        .pp-binder__sleeve .pp-frame--compact,
+        .pp-binder__sleeve .pp-frame--mini {
             max-width: 100%;
         }
-        /* In the spread overview, the mini variant's 110px max-width
-         * would leave empty cell space. Let it fill the cell so the
-         * grid reads as a packed binder page. */
-        .pp-binder[data-mode="spread"] .pp-frame--mini {
+        /* Mini-variant fill was for the previous Spread Overview mode
+         * (mini cards, vertical scroll between spreads). The new
+         * Spread mode locks to the compact variant for the flip
+         * choreography, so no fill override is needed. */
+
+        /* ── Gallery presentation ─────────────────────────────────────
+         * Strips the binder dressing (cover, spine, rings, page paper,
+         * pocket plastic, page numbers, bookmark) and renders just the
+         * cards in a clean grid, grouped by theme. Same data, same
+         * card sizing (Single = full Frame, Compact = chrome-only),
+         * just no chrome. Mobile force-defaults here because the
+         * binder metaphor doesn't survive narrow viewports; on desktop
+         * it's a user-elected escape hatch from the binder dressing.
+         *
+         * Theme tab survives as a flatter section header so the
+         * curation reads ("PlayStation Classics" still divides one
+         * group from the next), but loses its tab/sticker shape.
+         */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page--cover,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__spine,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page-rings,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page-number,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__cover-bookmark {
+            display: none !important;
+        }
+        /* Pages become invisible containers -- no paper, no border,
+         * no shadow, no spine-side reinforcement. Margins replace the
+         * spine's continuous-binding visual cue: extra space between
+         * groups so theme boundaries read on their own. */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page--left,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page--right {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+            margin: 0 0 56px;
+        }
+        /* Kill the desktop spine-side strip + binding padding -- the
+         * rings are gone, so there's nothing to pad around. */
+        .pp-binder[data-binder-presentation="gallery"]:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page {
+            padding-left: 0;
+            padding-right: 0;
+        }
+        .pp-binder[data-binder-presentation="gallery"]:is([data-mode="single"], [data-mode="compact"]) .pp-binder__page::after {
+            display: none;
+        }
+        /* Spread mode in gallery: the central spine vanishes, so the
+         * two page columns just sit side-by-side. Flex container
+         * keeps the row layout; box-shadow + bg already cleared. */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__spread {
+            background: transparent;
+            box-shadow: none;
+            gap: 32px;
+        }
+        /* Sleeves drop the plastic-pocket effect -- no inset shadow,
+         * no plastic sheen, no padding. Cards sit on the page (which
+         * is itself transparent) with just the grid gap between them. */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__sleeve {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            padding: 0;
+        }
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__sleeve::before,
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__sleeve::after {
+            display: none;
+        }
+        /* Theme tab -> section header. Keeps the palette tint as a
+         * border-bottom accent so themes still read at a glance, but
+         * sheds the tab/sticker geometry. Sticky offset adjusted to
+         * sit just below the controls bar (no rings + ring strip
+         * above it in gallery). */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page-tab {
+            display: block;
+            width: 100%;
             max-width: none;
+            margin: 0 0 18px;
+            padding: 10px 12px 8px;
+            background: transparent;
+            color: var(--tab-c1);
+            border: none;
+            border-bottom: 2px solid var(--tab-c1);
+            border-radius: 0;
+            box-shadow: none;
+            text-shadow: none;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            top: 56px;
+            /* Smoothly transition into the stuck backdrop so the
+             * appearance change doesn't snap. */
+            transition: background-color 180ms ease, backdrop-filter 180ms ease;
+        }
+        /* When the header is actually stuck under the controls bar,
+         * it floats over the next row of cards -- the transparent
+         * at-rest look becomes hard to read. The IntersectionObserver
+         * sentinel below adds .is-stuck only at that moment, swapping
+         * in a translucent dark backdrop with a frosted blur. Keeps
+         * the at-rest gallery look the team liked while making the
+         * sticky state legible. */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__page-tab.is-stuck {
+            background-color: rgba(14, 16, 22, 0.88);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+        }
+        /* (Back-face cloning is gone -- Option B uses destination
+         * peek-through instead. All .pp-binder__flip-leaf-back rules
+         * have been removed; the destination spread underneath at
+         * z-index 1 is what becomes visible past 90 deg.) */
+
+        /* The sentinel is a 1px-tall invisible element placed just
+         * before each gallery section header. JS-managed; the IO
+         * watches it to flip .is-stuck on the header when the
+         * sentinel scrolls out of the viewport top band. */
+        .pp-binder__page-tab-sentinel {
+            display: block;
+            height: 1px;
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: transparent;
+            pointer-events: none;
+        }
+        /* The Spread + Cover + Spine control groups are binder-specific;
+         * hide them in Gallery to keep the toolbar focused. View modes
+         * Single + Compact still apply (card sizing); Spread doesn't
+         * fit a chrome-less gallery, so its button hides too. */
+        .pp-binder[data-binder-presentation="gallery"] [data-binder-cover],
+        .pp-binder[data-binder-presentation="gallery"] [data-binder-spine],
+        .pp-binder[data-binder-presentation="gallery"] [data-binder-view="spread"] {
+            display: none;
+        }
+        /* The control groups themselves should collapse when all their
+         * chips are hidden (Cover + Spine groups in Gallery). */
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__controls-group:has([data-binder-cover]),
+        .pp-binder[data-binder-presentation="gallery"] .pp-binder__controls-group:has([data-binder-spine]) {
+            display: none;
+        }
+
+        /* ── Flip mode ───────────────────────────────────────────────
+         * Horizontal page-flip presentation: one spread on screen at a
+         * time, no vertical scrolling BETWEEN spreads. The cover, all
+         * the unseen spreads, and the back cover are still rendered;
+         * they're stacked in the same position with only the current
+         * one visible. Prev/Next buttons + drag-the-right-edge both
+         * trigger a rotateY animation around the spine, with the back
+         * face of the flipping leaf pre-loaded with the destination
+         * spread's left page so the motion shows real content turning
+         * over, not a blank back side.
+         *
+         * Card sizing in Flip is independent of the View toggle --
+         * pick "Default" (full frame, vertical scroll WITHIN a spread)
+         * or "Compact" (chrome-only cards, no scroll needed) via the
+         * Flip Cards sub-toggle. */
+        .pp-binder[data-mode="spread"] {
+            position: relative;
+        }
+        /* All spreads + covers stack at the same position. The "page
+         * stage" wrapper carries perspective so the rotateY animation
+         * has depth. Height is set by the natural height of the
+         * tallest spread (controlled by CSS min-height; JS doesn't
+         * touch this). */
+        .pp-binder[data-mode="spread"] .pp-binder__pages-stage {
+            position: relative;
+            perspective: 2400px;
+            transform-style: preserve-3d;
+            margin: 0 auto;
+            max-width: 1300px;
+        }
+        /* Propagate the 3D context down through the spread so the
+         * flipping leaf's rotateY isn't flattened by an intermediate
+         * `transform-style: flat`. Default would collapse the rotation
+         * into a 2D mirror -- the leaf would invisibly mirror, and the
+         * back face we attach below would never become visible. */
+        .pp-binder[data-mode="spread"] .pp-binder__spread {
+            transform-style: preserve-3d;
+        }
+        /* Hide all spreads + covers by default in flip; only the
+         * current + next get revealed. Current stays in normal flow
+         * so it drives the stage's height; next overlays absolutely
+         * behind so its content peeks through during the rotation. */
+        .pp-binder[data-mode="spread"] .pp-binder__spread,
+        .pp-binder[data-mode="spread"] .pp-binder__page--cover {
+            display: none;
+        }
+        /* is-current sits at translateZ(0.5px) -- in preserve-3d, that's
+         * sub-pixel (0.5/2400 perspective ~= 0.02% scale, imperceptible)
+         * but enough to win paint order over is-next at Z=0. z-index is
+         * unreliable in preserve-3d across browsers; an explicit Z
+         * difference is the only thing that works everywhere. Without
+         * this, is-next (later in DOM order than is-current on initial
+         * load) paints on top, and the user sees the NEXT spread where
+         * the CURRENT one should be -- the "page 1 shows page 3" bug.
+         * JS additionally moves is-current to the end of pages-stage as
+         * a belt-and-suspenders fallback for any browser where z-axis
+         * sorting still fails. */
+        .pp-binder[data-mode="spread"] .pp-binder__spread.is-current {
+            display: flex;
+            position: relative;
+            z-index: 2;
+            margin: 0 auto;
+            transform: translateZ(0.5px);
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__spread.is-next {
+            display: flex;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            margin: 0 auto;
+            z-index: 1;
+        }
+        /* The flipping leaf -- right page (forward flip) or left page
+         * (backward flip) -- gets a temporary class while animating.
+         * transform-style: preserve-3d so the back face we pre-attach
+         * shows when the leaf passes 90 degrees. transform-origin
+         * pivots on the spine edge. */
+        .pp-binder[data-mode="spread"] .pp-binder__page.pp-binder__flip-leaf {
+            transform-style: preserve-3d;
+            /* Plastic-page feel: longer duration + a softer curve with
+             * a hint of settle at the end. Curve breakdown:
+             *   (0.32, 0.0)  -- soft start, page resists gravity briefly
+             *   (0.18, 1.04) -- accelerates through 90, slight overshoot
+             *                   at the very end so the page "settles" on
+             *                   the other side rather than locking flat.
+             * Reads more like a thick plastic protector sheet than a
+             * rigid mechanical hinge (the old cubic-bezier(0.6,0,0.4,1)
+             * was symmetric and felt machined). */
+            transition: transform 880ms cubic-bezier(0.32, 0, 0.18, 1.04),
+                        opacity 160ms ease;
+            z-index: 4;
+            will-change: transform;
+        }
+        /* Pivot point sits at the SPINE CENTER, not the page edge.
+         * The spine element (.pp-binder__spine) is 56px wide and lives
+         * BETWEEN the two pages, so the right page's inner edge is at
+         * `left: 0` of its own box but 28px shy of where the actual
+         * bind line is. transform-origin gets pushed -28px to land the
+         * pivot at the spine center; without this, the flipped leaf
+         * lands short by half-the-spine-width, leaving a visible gap
+         * where the rotated page meets the resting left page. Same
+         * trick mirrored for the backward flip. */
+        .pp-binder[data-mode="spread"] .pp-binder__page--right.pp-binder__flip-leaf {
+            transform-origin: -28px center;
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__page--left.pp-binder__flip-leaf {
+            transform-origin: calc(100% + 28px) center;
+        }
+        /* Soft drop-shadow under the lifting leaf -- adds tactile depth.
+         * Animates in alongside the rotation. */
+        .pp-binder[data-mode="spread"] .pp-binder__flip-leaf {
+            box-shadow:
+                0 1px 0 rgba(255, 255, 255, 0.04) inset,
+                0 -1px 0 rgba(0, 0, 0, 0.45) inset,
+                0 25px 50px rgba(0, 0, 0, 0.7),
+                0 8px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Opaque structural backgrounds. Applied to ALL spread-mode
+         * cards (not just the rotating leaf's descendants) so the
+         * clone on the leaf's back face and the actual destination
+         * spread underneath render with byte-identical chrome. Without
+         * this, the destination's sleeve has 0.015-alpha bg while the
+         * clone has paper bg -- subtle color shift at the spread swap
+         * = landing flash. */
+        .pp-binder[data-mode="spread"] .pp-binder__sleeves,
+        .pp-binder[data-mode="spread"] .pp-binder__sleeve,
+        .pp-binder[data-mode="spread"] .pp-frame,
+        .pp-binder[data-mode="spread"] .pp-frame__face {
+            background: var(--binder-paper);
+        }
+        /* Opaque-gradient tier overrides for ALL spread-mode cards (not
+         * just the rotating leaf's descendants). Two reasons:
+         *   1. The rotating leaf's chrome needs opaque gradients to
+         *      prevent see-through under 3D compositing.
+         *   2. The destination spread needs to MATCH the cloned content
+         *      on the leaf's back face exactly -- if the clone uses
+         *      opaque gradients and the actual destination uses the
+         *      semi-transparent production gradients, the swap at
+         *      flip-land produces a subtle color shift that reads as
+         *      a landing flash.
+         * Cards in Single + Compact modes still use the production
+         * semi-transparent gradients (unchanged). */
+        .pp-binder[data-mode="spread"] .pp-frame--bronze {
+            --frame-chrome-bg: linear-gradient(180deg, rgb(50, 28, 12), rgb(32, 18, 6));
+            --frame-art-bg:    linear-gradient(180deg, rgb(70, 40, 15), rgb(30, 20, 8));
+        }
+        .pp-binder[data-mode="spread"] .pp-frame--silver {
+            --frame-chrome-bg: linear-gradient(180deg, rgb(38, 42, 50), rgb(24, 27, 33));
+            --frame-art-bg:    linear-gradient(180deg, rgb(50, 55, 65), rgb(20, 24, 30));
+        }
+        .pp-binder[data-mode="spread"] .pp-frame--gold {
+            --frame-chrome-bg: linear-gradient(180deg, rgb(50, 38, 12), rgb(28, 22, 8));
+            --frame-art-bg:    linear-gradient(180deg, rgb(70, 55, 20), rgb(35, 26, 10));
+        }
+        .pp-binder[data-mode="spread"] .pp-frame--platinum {
+            --frame-chrome-bg: linear-gradient(180deg, rgb(30, 44, 56), rgb(16, 25, 34));
+            --frame-art-bg:    linear-gradient(180deg, rgb(40, 60, 80), rgb(18, 30, 40));
+        }
+        /* The paper-grain ::before pseudo (opacity 0.6 in base CSS)
+         * paints on its own compositing layer in 3D rotation and was
+         * a viable leak source for spine-side transparency. Force the
+         * ::before to fully opaque paper for the flip duration. The
+         * grain texture is gone for the ~880ms flip, restored on
+         * land when the leaf class drops. */
+        .pp-binder[data-mode="spread"] .pp-binder__flip-leaf::before {
+            background: var(--binder-paper);
+            opacity: 1;
+        }
+        /* Leaf children except the back face: backface-visibility:hidden
+         * so the front-face content (sleeves, cards, page-tab) doesn't
+         * render mirror-flipped past 90 deg. The back face has its own
+         * rotateY(180) plus backface-visibility:hidden too -- its "back"
+         * faces the viewer when leaf=0 (so invisible), and its "front"
+         * faces the viewer when leaf=-180 (so visible). Front and back
+         * faces naturally swap visibility at 90 deg. */
+        .pp-binder[data-mode="spread"] .pp-binder__flip-leaf > :not(.pp-binder__flip-leaf-back) {
+            backface-visibility: hidden;
+        }
+        /* The cloned destination content rendered on the back of the
+         * rotating leaf. position:absolute inset:0 fills the leaf's
+         * content area; rotateY(180) flips the cloned content so when
+         * the leaf rotates to +/-180 the net rotation is 0 and the
+         * destination reads right-way-up. The opaque paper bg seals
+         * any sub-pixel gaps along the rotation axis. */
+        .pp-binder__flip-leaf-back {
+            position: absolute;
+            inset: 0;
+            backface-visibility: hidden;
+            transform: rotateY(180deg);
+            background: var(--binder-paper);
+            border-radius: inherit;
+        }
+        /* The cloned page's tab uses position:sticky in the base CSS,
+         * which gives unreliable offsets inside the back face's
+         * rotateY(180) containing block. Force relative so the tab
+         * sits at its natural document position -- matches where the
+         * destination's tab will be when the flip lands. */
+        .pp-binder__flip-leaf-back .pp-binder__page-tab {
+            position: relative;
+            top: auto;
+        }
+        /* Drag-handle bands -- wider than v1 (140px each) so the grab
+         * region matches the visual affordance. The soft gradient
+         * highlights only on hover, telegraphing where to start the
+         * drag. user-select: none prevents the browser from selecting
+         * card text or rendering text-selection highlights during a
+         * drag, which v1 leaked through to the spread content. */
+        .pp-binder[data-mode="spread"] .pp-binder__flip-drag-zone {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 140px;
+            z-index: 6;
+            cursor: grab;
+            background: linear-gradient(
+                to var(--drag-hint-dir, left),
+                rgba(255, 255, 255, 0.04) 0%,
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 200ms ease;
+            touch-action: pan-y;  /* allow vertical scroll, suppress horiz pan */
+            user-select: none;
+            -webkit-user-select: none;
+            /* Push the drag zones forward in 3D so the pages-stage's
+             * preserve-3d depth ordering keeps them above the spreads
+             * (which sit at Z=0 / -1px). z-index alone gets overridden
+             * by 3D Z-position in preserve-3d contexts. */
+            transform: translateZ(10px);
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__flip-drag-zone--right {
+            right: 0;
+            --drag-hint-dir: left;
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__flip-drag-zone--left {
+            left: 0;
+            --drag-hint-dir: right;
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__flip-drag-zone:hover {
+            opacity: 1;
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__flip-drag-zone:active {
+            cursor: grabbing;
+        }
+        /* Disabled state -- no more pages to flip in this direction.
+         * Pointer events off (so the zone doesn't even register hover),
+         * opacity stays at 0, default cursor restored. JS toggles the
+         * .is-disabled class based on currentSpreadIdx. */
+        .pp-binder[data-mode="spread"] .pp-binder__flip-drag-zone.is-disabled {
+            pointer-events: none;
+            cursor: default;
+            opacity: 0 !important;
+        }
+        /* While a flip is mid-drag, suppress text selection on the
+         * entire spread stage so the highlight rectangle doesn't follow
+         * the pointer across the cards. The .pp-binder__flip-dragging
+         * class is toggled by JS at pointerdown / pointerup. */
+        .pp-binder[data-mode="spread"].pp-binder__flip-dragging,
+        .pp-binder[data-mode="spread"].pp-binder__flip-dragging * {
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+        /* Flip nav overlay -- pill-shaped Prev/Next + counter pinned
+         * to the bottom of the viewport. Only visible in flip mode. */
+        .pp-binder__flip-nav {
+            display: none;
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 25;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 14px;
+            background: rgba(14, 16, 22, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+        }
+        .pp-binder[data-mode="spread"] .pp-binder__flip-nav {
+            display: inline-flex;
+        }
+        .pp-binder__flip-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.04);
+            color: rgba(220, 230, 240, 0.95);
+            font-size: 16px;
+            line-height: 1;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+        }
+        .pp-binder__flip-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.35);
+        }
+        .pp-binder__flip-btn:active {
+            transform: scale(0.94);
+        }
+        .pp-binder__flip-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .pp-binder__flip-counter {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.7);
+            font-variant-numeric: tabular-nums;
+            min-width: 90px;
+            text-align: center;
+        }
+        /* Mobile banner -- 1023px and below only. Sits above the binder
+         * to remind users the binder is desktop-built; mobile gets the
+         * Gallery presentation automatically. */
+        .pp-binder__mobile-banner {
+            display: none;
+            margin: 0 0 18px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg,
+                rgba(63, 205, 220, 0.12),
+                rgba(63, 205, 220, 0.06));
+            border: 1px solid rgba(63, 205, 220, 0.35);
+            border-radius: 6px;
+            color: rgba(180, 230, 245, 1);
+            font-size: 12px;
+            letter-spacing: 0.03em;
+            text-align: center;
         }
 
         /* ── Mobile (single-page stacking) ────────────────────────────
@@ -1164,43 +1683,56 @@
             .pp-binder[data-mode="spread"]  .pp-binder__page--cover {
                 max-width: none;
             }
-            /* Hide the Spread overview view-mode button -- at mobile
-             * widths the spread folds to a single-column stack, which is
-             * the same shape as Single. Keeping the button would let the
-             * user pick a state that looks identical to what they
-             * already have. JS at the bottom also auto-snaps any boot-
-             * time Spread state back to Single. */
+            /* Hide the Spread view-mode button on mobile. The new Spread
+             * mode is the drag-to-flip page-turn experience -- it needs
+             * precise pointer control + room for the rotateY animation,
+             * neither of which mobile has comfortably. JS also force-
+             * snaps Spread -> Single on resize-down so a boot-time Spread
+             * state doesn't leave the user looking at a hidden mode. */
             .pp-binder__controls [data-binder-view="spread"] {
                 display: none;
+            }
+            /* Mobile force-defaults to Gallery presentation (the binder
+             * dressing fights narrow viewports -- pocket sleeves cramp,
+             * spine + rings become decorative noise, cover banner takes
+             * a quarter of the screen before any card shows). Hide the
+             * Binder option so the toggle still reads but only Gallery
+             * is selectable; the JS also force-snaps any boot-time
+             * Binder state to Gallery on resize-down. */
+            .pp-binder__controls [data-binder-presentation="binder"] {
+                display: none;
+            }
+            /* The whole Presentation group becomes single-option on
+             * mobile; collapse it entirely since there's nothing to
+             * toggle. */
+            .pp-binder__controls-group:has([data-binder-presentation]) {
+                display: none;
+            }
+            /* Mobile banner -- only here, only on mobile. */
+            .pp-binder__mobile-banner {
+                display: block;
             }
             /* Single mode goes 1-column on mobile. The Frame's full
              * variant (290px design target) is too wide to pair side-by-
              * side comfortably below ~720px; cards stay legible in a
              * single stack. Compact stays at 2-up since its chrome-only
-             * cards remain readable at the smaller cell size. */
+             * cards remain readable at the smaller cell size.
+             *
+             * Max-width: 302px caps a single sleeve at the Frame's
+             * 290px design target + the sleeve's 6px padding each side.
+             * Previously 360px, which let the Frame stretch ~20% wider
+             * than designed -- the cards looked oversized vs every
+             * other surface. Now they render at the same physical
+             * size as the desktop grid cell. */
             .pp-binder[data-mode="single"] .pp-binder__sleeves {
                 grid-template-columns: 1fr;
-                max-width: 360px;
+                max-width: 302px;
                 margin-left: auto;
                 margin-right: auto;
             }
-            /* Cover heights on mobile -- the desktop values
-             * (1620/880/440px) were tuned to match a 4x4 content grid's
-             * height. Mobile cards stack differently (single 1xN,
-             * compact 2xN), so the cover doesn't need to match. A
-             * shorter cover still reads as a real first page of the
-             * binder without leaving an empty void. */
-            .pp-binder[data-mode="single"]  .pp-binder__page--cover,
-            .pp-binder[data-mode="compact"] .pp-binder__page--cover,
-            .pp-binder[data-mode="spread"]  .pp-binder__page--cover {
-                min-height: 360px;
-            }
-            /* Back-cover bottom alignment loses a lot of its inset on a
-             * shorter cover; tighten so the stamp sits closer to the
-             * stitched edge instead of floating in negative space. */
-            .pp-binder__page--cover-back .pp-binder__cover-content {
-                padding-bottom: 28px;
-            }
+            /* Cover banner is already 280px tall across all modes from
+             * the base rule, so no mobile-specific min-height override
+             * is needed -- the banner shape suits mobile naturally. */
             /* Empty placeholder doesn't need to render on mobile. */
             .pp-binder__page--empty { display: none; }
             /* Horizontal ring strip at the top of each page. */
@@ -1228,6 +1760,29 @@
                 gap: 12px;
             }
             .pp-binder__sleeve { padding: 6px; }
+
+            /* Mobile entry animation is opacity-only -- no transform.
+             * The desktop rule keeps `transform: translateY(0)` on
+             * .is-visible pages, which sounds inert but actually
+             * pins the page to its own GPU compositing layer.
+             * Mobile browsers rasterize that layer at fractional
+             * pixel positions, producing a "sharp during animation,
+             * soft at rest" blur -- the page reads crisp while
+             * sliding from 40px to 0, then visibly softens once it
+             * settles. Dropping the transform on mobile sends the
+             * page back to inline rendering, sharp at rest. The
+             * translateY effect adds little on a vertically-
+             * scrolling phone UI anyway (the user is already
+             * moving content vertically). Fade-in alone still
+             * reads as a deliberate entry. */
+            .pp-binder__page,
+            .pp-binder__page.is-visible,
+            .pp-binder__page.is-above {
+                transform: none;
+            }
+            .pp-binder__page {
+                transition: opacity 500ms ease-out;
+            }
         }
     </style>
 </head>
@@ -1238,17 +1793,29 @@
     <div class="container">
         <h1>Binder Preview</h1>
         <p class="lede">
-            The display piece — three view modes share the same data, all vertical scroll. <strong>Single</strong> (default) renders every page at the Frame's 290px design size with full chrome — most readable. <strong>Compact</strong> swaps the Frame to its chrome-only variant (~200px square cards) for denser scrolling. <strong>Spread</strong> shows facing pages side-by-side in their bound layout. For finding/sorting specific badges, see the <a href="{% url 'design_badge_collection_list' %}">Badge Collection list</a> — same data, hunting-tool shape.
+            The display piece. Three views: <strong>Single</strong> (default Frame, vertical scroll) and <strong>Compact</strong> (chrome-only cards, denser scroll) both stack pages down the page. <strong>Spread</strong> renders one facing-page spread on screen at a time with a 3D page-flip between spreads — Prev/Next buttons or drag the right/left edge to turn. The <strong>Presentation</strong> toggle switches the chrome itself: <em>Binder</em> keeps the cover, spine, rings, and pocket sleeves; <em>Gallery</em> strips them for a clean card-grid (mobile defaults here). For finding/sorting specific badges, see the <a href="{% url 'design_badge_collection_list' %}">Badge Collection list</a> — same data, hunting-tool shape.
         </p>
 
-        <div class="pp-binder" data-mode="single" data-binder-cover="industrial" data-binder-spine="gunmetal">
+        {# Mobile banner: surfaces only below 1024px (CSS-gated). Reminds  #}
+        {# the user the binder is built for desktop -- mobile gets Gallery #}
+        {# automatically, the cover + flip mechanics don't ship there.    #}
+        <div class="pp-binder__mobile-banner" role="note">
+            For the full binder experience, view on a desktop.
+        </div>
+
+        <div class="pp-binder" data-binder-presentation="binder" data-mode="single" data-binder-cover="industrial" data-binder-spine="gunmetal">
 
             <div class="pp-binder__controls">
+                <div class="pp-binder__controls-group">
+                    <span>Presentation</span>
+                    <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-presentation="binder">Binder</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-presentation="gallery">Gallery</button>
+                </div>
                 <div class="pp-binder__controls-group">
                     <span>View</span>
                     <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-view="single">Single page</button>
                     <button type="button" class="pp-binder__control-chip" data-binder-view="compact">Compact</button>
-                    <button type="button" class="pp-binder__control-chip" data-binder-view="spread">Spread overview</button>
+                    <button type="button" class="pp-binder__control-chip" data-binder-view="spread">Spread</button>
                 </div>
                 <div class="pp-binder__controls-group">
                     <span>Cover</span>
@@ -1265,6 +1832,22 @@
                     <span>{{ total_cards }} cards · {{ total_pages }} pages</span>
                 </div>
             </div>
+
+            {# Flip-mode navigation overlay. Floating Prev/Next buttons that #}
+            {# call the same flip function as the drag gesture, plus a small #}
+            {# "Spread N / M" indicator. Hidden in all other modes via CSS.  #}
+            <div class="pp-binder__flip-nav" aria-hidden="true">
+                <button type="button" class="pp-binder__flip-btn pp-binder__flip-btn--prev" data-flip-nav="prev" aria-label="Previous spread">&larr;</button>
+                <span class="pp-binder__flip-counter" data-flip-counter>Spread 1 / {{ total_spreads }}</span>
+                <button type="button" class="pp-binder__flip-btn pp-binder__flip-btn--next" data-flip-nav="next" aria-label="Next spread">&rarr;</button>
+            </div>
+
+            {# Pages stage: scopes the perspective for flip mode, and    #}
+            {# in all other modes is just a transparent wrapper that     #}
+            {# inherits layout from .pp-binder. Everything below renders #}
+            {# normally in single/compact/spread; only when data-mode=   #}
+            {# "flip" is the perspective + absolute stacking engaged.    #}
+            <div class="pp-binder__pages-stage">
 
             {# Cover page — first page of the binder, threading through the same spine as #}
             {# every other page. Material is controlled by [data-binder-cover] on the parent. #}
@@ -1364,6 +1947,8 @@
                     <div class="pp-binder__cover-stamp">PlatPursuit &middot; Collector's Binder</div>
                 </div>
             </article>
+
+            </div>{# /.pp-binder__pages-stage #}
         </div>
     </div>
 
@@ -1377,13 +1962,18 @@
         // when the view mode changes. No transform: scale anywhere --
         // each variant has its own hand-tuned values in frame.css so
         // text and 1px borders render natively crisp at every size.
+        //
+        // Spread mode (the page-flip experience) locks to the compact
+        // variant: full-frame cards squish horizontally when forced
+        // into a 4-wide grid across 2 facing pages, and the mini variant
+        // is too small to read without scrolling. Compact threads that
+        // needle and keeps the spread feeling like a binder, not a
+        // contact sheet.
         function applyFrameVariant(mode) {
             document.querySelectorAll('.pp-binder .pp-frame').forEach(function (frame) {
                 frame.classList.remove('pp-frame--compact', 'pp-frame--mini');
-                if (mode === 'compact') {
+                if (mode === 'compact' || mode === 'spread') {
                     frame.classList.add('pp-frame--compact');
-                } else if (mode === 'spread') {
-                    frame.classList.add('pp-frame--mini');
                 }
                 // 'single' = no extra class (default variant, all chrome)
             });
@@ -1391,7 +1981,7 @@
 
         // Compute a page's visibility state from its current rect.
         // Mirrors the IntersectionObserver config below (rootMargin
-        // -10% bottom, threshold 0.08) so manual sync stays
+        // -10% bottom, threshold 0) so manual sync stays
         // consistent with what the IO would say.
         function syncPageState(page) {
             var rect = page.getBoundingClientRect();
@@ -1399,7 +1989,7 @@
             var rootBottom = vh * 0.9;
             var intersect = Math.max(0, Math.min(rect.bottom, rootBottom) - Math.max(rect.top, 0));
             var ratio = rect.height > 0 ? intersect / rect.height : 0;
-            var inView = ratio >= 0.08;
+            var inView = ratio > 0;
             page.classList.toggle('is-visible', inView);
             page.classList.toggle('is-above', !inView && rect.top < 0);
         }
@@ -1465,26 +2055,599 @@
                 setBinderAttr('data-binder-spine', btn.getAttribute('data-binder-spine'));
             });
         });
+        // Presentation toggle -- swaps the entire chrome treatment:
+        // Binder keeps the cover / spine / rings / pocket sleeves;
+        // Gallery strips them for a clean card grid (still grouped
+        // by theme). Same data attribute pattern as the cover/spine
+        // toggles; CSS scoped under [data-binder-presentation="gallery"]
+        // does the heavy lifting.
+        document.querySelectorAll('button[data-binder-presentation]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                setBinderAttr('data-binder-presentation', btn.getAttribute('data-binder-presentation'));
+                // Gallery can't be in Spread mode -- the central spine
+                // is gone, so the side-by-side facing-pages layout has
+                // no anchor. If the user was in Spread, fall back to
+                // Single (the only other multi-card-per-row mode that
+                // makes sense without the binder dressing).
+                if (btn.getAttribute('data-binder-presentation') === 'gallery'
+                    && binder.getAttribute('data-mode') === 'spread') {
+                    setMode('single');
+                }
+            });
+        });
 
-        // Spread mode is desktop-only -- below 1024px every mode folds
-        // to a single-column stack, so Spread renders identically to
-        // Single and the choice is moot. The Spread button is hidden via
-        // CSS at that width; this guard also catches the case where the
-        // user resizes a desktop browser down while parked in Spread,
-        // snapping them back to Single instead of leaving an active-but-
-        // hidden state. Re-check on resize so a window resize from
-        // desktop to mobile doesn't leave a hidden Spread state active.
-        var MOBILE_BREAK = 1023;
-        function ensureModeMobileSafe() {
-            if (window.innerWidth <= MOBILE_BREAK && binder.getAttribute('data-mode') === 'spread') {
-                setMode('single');
+        // ── Flip mode controller ─────────────────────────────────────
+        // Horizontal page-flip presentation: one spread on screen at a
+        // time, rotateY animation around the spine when advancing.
+        // Two entry points fire the same flip(): Prev/Next buttons in
+        // the floating nav overlay, and a drag-the-edge gesture on
+        // the right (forward) or left (backward) 80px-wide bands of
+        // the spread.
+        //
+        // State transitions:
+        // - Enter flip from another mode: hide all spreads except
+        //   currentSpreadIdx + the next one (z-1 behind, peeking
+        //   through during the rotation).
+        // - Flip: clone destination spread's left/right page into the
+        //   flipping leaf's back face so the rotation shows real
+        //   content, not a blank back. Animate. On settle, advance the
+        //   index, reset transforms, re-sync visibility classes.
+        // - Exit flip to another mode: tear down all flip-specific
+        //   classes/inline styles so spreads render normally again.
+        var FLIP_DUR = 880;            // matches CSS transition duration
+        var FLIP_THRESHOLD = 0.5;      // drag past 50% of half-spread to commit
+        var spreads = [];
+        var totalSpreads = 0;
+        var currentSpreadIdx = 0;
+        var flipInProgress = false;
+        var flipDragZones = [];
+        var pagesStage = document.querySelector('.pp-binder__pages-stage');
+        // Snapshot the original DOM order of pages-stage children
+        // (front cover, every spread, back cover) so we can restore it
+        // on exit from spread mode. updateFlipSlideState reorders
+        // children every flip (moving is-current to the end so it
+        // paints on top in preserve-3d), which otherwise leaves the
+        // single/compact/gallery views with spreads in a jumbled
+        // order -- and the next call to refreshSpreadList would find
+        // spread[0] = whatever happens to be first in DOM, not the
+        // logical first spread.
+        var originalPagesStageOrder = pagesStage ? Array.from(pagesStage.children) : [];
+        // Tracks the post-animation cleanup timer. A reference lets us
+        // cancel a pending currentSpreadIdx++ / -- if the user switches
+        // modes mid-flip -- without this, the stale timer fires after
+        // the mode switch and silently moves the index while the user
+        // is in Single/Compact, leaving the counter desynced from the
+        // visible spread once they come back.
+        var pendingFlipTimer = null;
+
+        function refreshSpreadList() {
+            spreads = Array.from(document.querySelectorAll('.pp-binder__spread'));
+            totalSpreads = spreads.length;
+            if (currentSpreadIdx >= totalSpreads) currentSpreadIdx = Math.max(0, totalSpreads - 1);
+        }
+        refreshSpreadList();
+
+        function clearPendingFlipTimer() {
+            if (pendingFlipTimer !== null) {
+                window.clearTimeout(pendingFlipTimer);
+                pendingFlipTimer = null;
             }
         }
-        window.addEventListener('resize', ensureModeMobileSafe);
+
+        // Single point of truth for which spread sits BEHIND the current
+        // one at z-index 1. Previously the flip-mode code had three
+        // separate places setting/clearing `is-next` (updateFlipSlideState
+        // for the canonical state, plus pointerdown handlers for both
+        // drag directions), and they'd disagree -- a backward drag would
+        // add is-next to spreads[currentIdx - 1] without removing it from
+        // spreads[currentIdx + 1], leaving BOTH spreads visible behind
+        // and the later-in-DOM one (the forward neighbor) winning the
+        // z-index battle. The user saw the wrong spread peeking through
+        // during backward drags and read it as the flip going backwards.
+        function markIsNext(idx) {
+            spreads.forEach(function (s, i) {
+                s.classList.toggle('is-next', i === idx);
+            });
+        }
+
+        // Canonical rest state. ONLY is-current is set; is-next is
+        // applied transiently by the drag pointerdown / flipForward /
+        // flipBackward handlers themselves, and is cleared the next
+        // time this runs. Keeping is-next out of the rest state means
+        // there's no second spread fighting for paint order on initial
+        // entry into spread mode -- the "page 1 shows page 3" bug.
+        function updateFlipSlideState() {
+            spreads.forEach(function (s, i) {
+                s.classList.toggle('is-current', i === currentSpreadIdx);
+                s.classList.remove('is-next');
+            });
+            reorderCurrentToTop();
+        }
+
+        // Belt-and-suspenders for the layering. is-current has CSS
+        // translateZ(0.5px) which already puts it above is-next at Z=0
+        // in pages-stage's preserve-3d context, but on browsers where
+        // z-axis sorting at sub-pixel deltas is rounded to ties, last
+        // child in DOM also wins. We move is-current to the end of
+        // pages-stage to cover that case.
+        function reorderCurrentToTop() {
+            if (!pagesStage) return;
+            var currentEl = spreads[currentSpreadIdx];
+            if (currentEl && currentEl.parentNode === pagesStage) {
+                pagesStage.appendChild(currentEl);
+            }
+        }
+
+        function updateFlipCounter() {
+            var counter = document.querySelector('[data-flip-counter]');
+            if (counter) counter.textContent = 'Spread ' + (currentSpreadIdx + 1) + ' / ' + totalSpreads;
+            var prev = document.querySelector('[data-flip-nav="prev"]');
+            var next = document.querySelector('[data-flip-nav="next"]');
+            if (prev) prev.disabled = (currentSpreadIdx === 0);
+            if (next) next.disabled = (currentSpreadIdx >= totalSpreads - 1);
+            // Mirror the boundary state onto the drag zones so the
+            // hover affordance doesn't light up at a wall (right edge
+            // on the last spread, left edge on the first). CSS for
+            // .is-disabled kills pointer-events + opacity.
+            var rightZone = document.querySelector('.pp-binder__flip-drag-zone--right');
+            var leftZone = document.querySelector('.pp-binder__flip-drag-zone--left');
+            if (rightZone) rightZone.classList.toggle('is-disabled', currentSpreadIdx >= totalSpreads - 1);
+            if (leftZone) leftZone.classList.toggle('is-disabled', currentSpreadIdx === 0);
+        }
+
+        // Build the back-face element for a flipping leaf. The dest
+        // page (the one revealed when the leaf finishes rotating) is
+        // cloned in so the rotation shows real content turning over.
+        // IDs stripped so the cloned subtree doesn't duplicate the
+        // anchor targets used by the binder<->collection deep-links.
+        function makeBackFace(sourcePage) {
+            var back = document.createElement('div');
+            back.className = 'pp-binder__flip-leaf-back';
+            var clone = sourcePage.cloneNode(true);
+            clone.removeAttribute('id');
+            clone.querySelectorAll('[id]').forEach(function (n) { n.removeAttribute('id'); });
+            // Reset the cloned page's positioning so it fills the back
+            // face naturally (no inherited absolute + offset jitter).
+            clone.style.position = 'static';
+            clone.style.width = '100%';
+            clone.style.transform = 'none';
+            clone.style.opacity = '1';
+            back.appendChild(clone);
+            return back;
+        }
+
+        function teardownFlipLeaf(leaf) {
+            if (!leaf) return;
+            // Suppress transitions during cleanup (the 880ms transform
+            // transition on the leaf would otherwise cascade-fight with
+            // the base page's 650ms transition once the leaf class
+            // drops). is-mode-snap parks the page at its current rest
+            // state instantly, then we strip it on the next frame.
+            leaf.classList.add('is-mode-snap');
+            leaf.classList.remove('pp-binder__flip-leaf');
+            leaf.style.transform = '';
+            leaf.style.transition = '';
+            // Remove the back-face element (cloned destination content).
+            var back = leaf.querySelector(':scope > .pp-binder__flip-leaf-back');
+            if (back) back.remove();
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    leaf.classList.remove('is-mode-snap');
+                });
+            });
+        }
+
+        // Forward flip: advance currentSpreadIdx by 1. Rotates the
+        // right page of the current spread around its left edge from
+        // 0 to -180deg. Returns a Promise that resolves when the
+        // animation completes (or rejects if a flip is already in
+        // progress / no next spread exists).
+        function flipForward(opts) {
+            if (flipInProgress) return;
+            if (currentSpreadIdx >= totalSpreads - 1) return;
+            var fromDragRotation = opts && typeof opts.fromRotation === 'number' ? opts.fromRotation : 0;
+            flipInProgress = true;
+
+            var currentSpread = spreads[currentSpreadIdx];
+            var nextSpread = spreads[currentSpreadIdx + 1];
+            var rightPage = currentSpread.querySelector('.pp-binder__page--right');
+            var nextLeftPage = nextSpread.querySelector('.pp-binder__page--left');
+            if (!rightPage || !nextLeftPage) {
+                flipInProgress = false;
+                return;
+            }
+
+            // Make sure the destination spread is the ONLY one marked
+            // is-next. Idempotent against drag-commit (the pointerdown
+            // handler already calls markIsNext for the same destination).
+            markIsNext(currentSpreadIdx + 1);
+
+            // Set up the flipping leaf if not already wired (drag
+            // commits arrive here with the leaf class + back face
+            // already added from pointerdown). Button-triggered flips
+            // need to set them up here.
+            if (!rightPage.classList.contains('pp-binder__flip-leaf')) {
+                var back = makeBackFace(nextLeftPage);
+                rightPage.appendChild(back);
+                rightPage.classList.add('pp-binder__flip-leaf');
+            }
+
+            // Proportional duration: how long to travel from the
+            // current rotation to -180. CSS transitions have a fixed
+            // duration regardless of distance, so a release at -100
+            // would otherwise take the full 880ms to cover the last
+            // 80 degrees -- slow settling + perceptible gap before
+            // the spread swap. Scaling the duration to the remaining
+            // distance makes short commits feel responsive while
+            // full button-triggered flips still take the full 880ms.
+            // Floored at 200ms so micro-commits still get a smooth
+            // settle instead of snapping.
+            var remaining = 180 - Math.abs(fromDragRotation);
+            var commitDur = Math.max(200, FLIP_DUR * (remaining / 180));
+
+            // Establish the starting transform explicitly before
+            // animating. Critical for button-triggered flips: without
+            // this step, the page's transform comes from the CSS rule
+            // for .is-visible (translateY(0)), and the browser can't
+            // smoothly interpolate that matrix to rotateY(-180) -- it
+            // just snaps. Setting an explicit rotateY starting state
+            // (fromDragRotation for drag commits, 0 for buttons) gives
+            // the transition two rotateY endpoints to interpolate
+            // between, producing a clean animation.
+            rightPage.style.transition = 'none';
+            rightPage.style.transform = 'rotateY(' + fromDragRotation + 'deg)';
+            void rightPage.offsetWidth;
+            rightPage.style.transition = 'transform ' + commitDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.04)';
+            rightPage.style.transform = 'rotateY(-180deg)';
+
+            clearPendingFlipTimer();
+            pendingFlipTimer = window.setTimeout(function () {
+                currentSpreadIdx++;
+                updateFlipSlideState();
+                updateFlipCounter();
+                requestAnimationFrame(function () {
+                    teardownFlipLeaf(rightPage);
+                    flipInProgress = false;
+                    pendingFlipTimer = null;
+                });
+            }, commitDur + 30);
+        }
+
+        // Backward flip: decrement currentSpreadIdx by 1. Rotates the
+        // left page of the current spread around its right edge from
+        // 0 to +180deg.
+        function flipBackward(opts) {
+            if (flipInProgress) return;
+            if (currentSpreadIdx <= 0) return;
+            var fromDragRotation = opts && typeof opts.fromRotation === 'number' ? opts.fromRotation : 0;
+            flipInProgress = true;
+
+            var currentSpread = spreads[currentSpreadIdx];
+            var prevSpread = spreads[currentSpreadIdx - 1];
+            var leftPage = currentSpread.querySelector('.pp-binder__page--left');
+            var prevRightPage = prevSpread.querySelector('.pp-binder__page--right');
+            if (!leftPage || !prevRightPage) {
+                flipInProgress = false;
+                return;
+            }
+
+            // Reassign is-next from the canonical forward neighbor to
+            // the backward destination. markIsNext clears any other
+            // spread's is-next, so the prev spread is the only one
+            // visible behind during the rotation.
+            markIsNext(currentSpreadIdx - 1);
+
+            if (!leftPage.classList.contains('pp-binder__flip-leaf')) {
+                var back = makeBackFace(prevRightPage);
+                leftPage.appendChild(back);
+                leftPage.classList.add('pp-binder__flip-leaf');
+            }
+
+            // Proportional duration -- see flipForward for the rationale.
+            var remaining = 180 - Math.abs(fromDragRotation);
+            var commitDur = Math.max(200, FLIP_DUR * (remaining / 180));
+
+            // Establish starting rotateY explicitly (see flipForward).
+            leftPage.style.transition = 'none';
+            leftPage.style.transform = 'rotateY(' + fromDragRotation + 'deg)';
+            void leftPage.offsetWidth;
+            leftPage.style.transition = 'transform ' + commitDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.04)';
+            leftPage.style.transform = 'rotateY(180deg)';
+
+            clearPendingFlipTimer();
+            pendingFlipTimer = window.setTimeout(function () {
+                currentSpreadIdx--;
+                updateFlipSlideState();
+                updateFlipCounter();
+                requestAnimationFrame(function () {
+                    teardownFlipLeaf(leftPage);
+                    flipInProgress = false;
+                    pendingFlipTimer = null;
+                });
+            }, commitDur + 30);
+        }
+
+        // Cancel an in-progress drag: spring the page back to 0
+        // rotation, then clean up.
+        function springBackFlip(leaf, fromRotation) {
+            if (!leaf) return;
+            // Proportional duration based on how far the leaf needs to
+            // travel back. A release at -10 deg should spring back
+            // nearly instantly, not over a full 880ms. Floored at 200ms
+            // for smoothness on tiny rotations.
+            var traveled = Math.abs(fromRotation || 0);
+            var springDur = Math.max(200, FLIP_DUR * (traveled / 180));
+            void leaf.offsetWidth;
+            leaf.style.transition = 'transform ' + springDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.04)';
+            leaf.style.transform = 'rotateY(0deg)';
+            clearPendingFlipTimer();
+            pendingFlipTimer = window.setTimeout(function () {
+                teardownFlipLeaf(leaf);
+                updateFlipSlideState();
+                flipInProgress = false;
+                pendingFlipTimer = null;
+            }, springDur + 30);
+        }
+
+        // Drag-to-flip handlers. Drag zones are inserted into the
+        // pages stage on flip-mode entry and removed on exit. They're
+        // 80px-wide slim bands on the right and left edges that map
+        // horizontal drag delta to rotateY in real time. Vertical
+        // scroll passes through via touch-action: pan-y.
+        var dragState = null;
+        function attachDragZones() {
+            if (!pagesStage) return;
+            ['right', 'left'].forEach(function (side) {
+                if (pagesStage.querySelector('.pp-binder__flip-drag-zone--' + side)) return;
+                var z = document.createElement('div');
+                z.className = 'pp-binder__flip-drag-zone pp-binder__flip-drag-zone--' + side;
+                z.setAttribute('data-flip-drag', side);
+                pagesStage.appendChild(z);
+                flipDragZones.push(z);
+                wireDragZone(z, side);
+            });
+        }
+        function removeDragZones() {
+            flipDragZones.forEach(function (z) { z.remove(); });
+            flipDragZones = [];
+        }
+        function wireDragZone(zone, side) {
+            zone.addEventListener('pointerdown', function (e) {
+                if (flipInProgress) return;
+                if (side === 'right' && currentSpreadIdx >= totalSpreads - 1) return;
+                if (side === 'left'  && currentSpreadIdx <= 0) return;
+
+                var spread = spreads[currentSpreadIdx];
+                var rect = spread.getBoundingClientRect();
+                var halfWidth = rect.width / 2;
+                if (halfWidth < 1) return;
+
+                var page, sourcePage;
+                if (side === 'right') {
+                    page = spread.querySelector('.pp-binder__page--right');
+                    sourcePage = spreads[currentSpreadIdx + 1].querySelector('.pp-binder__page--left');
+                    markIsNext(currentSpreadIdx + 1);
+                } else {
+                    page = spread.querySelector('.pp-binder__page--left');
+                    sourcePage = spreads[currentSpreadIdx - 1].querySelector('.pp-binder__page--right');
+                    markIsNext(currentSpreadIdx - 1);
+                }
+                if (!page || !sourcePage) return;
+
+                flipInProgress = true;
+                // Clone the destination's matching page onto the back
+                // face. Past 90 deg the cloned content rotates into
+                // view, giving the flip a real "page turning over"
+                // feel instead of vanishing into the destination flat.
+                var back = makeBackFace(sourcePage);
+                page.appendChild(back);
+                page.classList.add('pp-binder__flip-leaf');
+                page.style.transition = 'none';
+
+                // Suppress text selection across the entire spread for
+                // the duration of the drag. Without this, the browser
+                // selects card text under the moving pointer and shows
+                // ugly highlight rectangles trailing the drag.
+                binder.classList.add('pp-binder__flip-dragging');
+
+                dragState = {
+                    side: side,
+                    page: page,
+                    startX: e.clientX,
+                    halfWidth: halfWidth,
+                    rotation: 0,
+                    pointerId: e.pointerId
+                };
+                try { zone.setPointerCapture(e.pointerId); } catch (_) {}
+                e.preventDefault();
+            });
+
+            zone.addEventListener('pointermove', function (e) {
+                if (!dragState) return;
+                var dx = e.clientX - dragState.startX;
+                var pct, rotation;
+                if (dragState.side === 'right') {
+                    // dx is negative as user drags left; map to rotation in [-180, 0]
+                    pct = Math.max(-1, Math.min(0, dx / dragState.halfWidth));
+                    rotation = pct * 180;
+                } else {
+                    // dx is positive as user drags right; map to rotation in [0, 180]
+                    pct = Math.max(0, Math.min(1, dx / dragState.halfWidth));
+                    rotation = pct * 180;
+                }
+                dragState.rotation = rotation;
+                dragState.page.style.transform = 'rotateY(' + rotation + 'deg)';
+            });
+
+            function endDrag(e) {
+                if (!dragState) return;
+                var state = dragState;
+                dragState = null;
+                binder.classList.remove('pp-binder__flip-dragging');
+                try { zone.releasePointerCapture(state.pointerId); } catch (_) {}
+                // Re-enable transition for the final commit / spring-back
+                state.page.style.transition = '';
+                if (Math.abs(state.rotation) >= 180 * FLIP_THRESHOLD) {
+                    flipInProgress = false;
+                    if (state.side === 'right') {
+                        flipForward({ fromRotation: state.rotation });
+                    } else {
+                        flipBackward({ fromRotation: state.rotation });
+                    }
+                } else {
+                    springBackFlip(state.page, state.rotation);
+                }
+            }
+            zone.addEventListener('pointerup', endDrag);
+            zone.addEventListener('pointercancel', endDrag);
+        }
+
+        function enterFlipMode() {
+            // Deliberately NOT calling refreshSpreadList() here. The
+            // spreads array was populated once at script init from
+            // the pristine DOM order; every subsequent flip reorders
+            // pages-stage's children (is-current gets appended to the
+            // end so it paints on top in preserve-3d), so re-querying
+            // would return them in scrambled order and spreads[0]
+            // would no longer correspond to the logical first spread.
+            // That was the bug behind "page 1 is wrong on entry into
+            // spread mode" after any prior flip.
+            if (totalSpreads === 0) return;
+            currentSpreadIdx = 0;
+            updateFlipSlideState();
+            updateFlipCounter();
+            attachDragZones();
+            // setMode runs syncPageState for ALL pages right after it
+            // sets data-mode=spread, which is BEFORE this function
+            // runs updateFlipSlideState. At that moment every spread
+            // is still display:none (no is-current yet), so every
+            // page's bounding rect is (0,0,0,0) and syncPageState
+            // strips is-visible off all of them -- which leaves the
+            // pages of the newly-current spread invisible (opacity:0)
+            // until the IntersectionObserver eventually fires async.
+            // is-mode-snap is still active for this frame, so re-
+            // running syncPageState now snaps is-visible on without
+            // a 650ms fade. Without this, page 1 loads blank.
+            var currentEl = spreads[currentSpreadIdx];
+            if (currentEl) {
+                currentEl.querySelectorAll('.pp-binder__page').forEach(syncPageState);
+            }
+        }
+        function exitFlipMode() {
+            // Cancel any in-flight cleanup so it can't fire after the
+            // mode switch and silently bump currentSpreadIdx (which
+            // would leave the counter desynced from the visible spread
+            // next time the user comes back to Spread mode).
+            clearPendingFlipTimer();
+            flipInProgress = false;
+            binder.classList.remove('pp-binder__flip-dragging');
+            spreads.forEach(function (s) {
+                s.classList.remove('is-current', 'is-next');
+                var leaf = s.querySelector('.pp-binder__flip-leaf');
+                teardownFlipLeaf(leaf);
+            });
+            removeDragZones();
+            // Restore the pristine DOM order. Every flip moved
+            // is-current to the end of pages-stage for paint-order
+            // reasons in preserve-3d. That's fine while we're in
+            // spread mode, but single/compact/gallery views need
+            // spreads in logical sequence, AND the next enterFlipMode
+            // expects spreads[0] = the original first spread.
+            if (pagesStage) {
+                originalPagesStageOrder.forEach(function (el) {
+                    if (el.parentNode === pagesStage) pagesStage.appendChild(el);
+                });
+            }
+        }
+
+        // Wire prev/next buttons.
+        document.querySelectorAll('[data-flip-nav]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.getAttribute('data-flip-nav') === 'next') flipForward();
+                else flipBackward();
+            });
+        });
+
+        // Mode change interception: enter/exit Spread (flip) mode on
+        // every mode change so the spread-specific DOM (drag zones,
+        // is-current classes, transforms) is set up exactly once per
+        // transition and torn down cleanly on exit. The internal flip-
+        // mode helpers keep their "flip" naming since they describe
+        // the animation, but the user-facing mode value is "spread".
+        var originalSetMode = setMode;
+        setMode = function (mode) {
+            var prevMode = binder.getAttribute('data-mode');
+            originalSetMode(mode);
+            if (prevMode !== 'spread' && mode === 'spread') {
+                enterFlipMode();
+            } else if (prevMode === 'spread' && mode !== 'spread') {
+                exitFlipMode();
+            }
+        };
+
+        // Two desktop-only behaviors get mobile guards:
+        // (1) Spread view mode: needs precise pointer control for the
+        //     drag-to-flip mechanic + horizontal screen real estate
+        //     for the facing pages. Force back to Single on a narrow
+        //     viewport.
+        // (2) Binder presentation: the binder dressing fights narrow
+        //     viewports (pocket sleeves cramp, spine + rings become
+        //     noise, cover banner eats too much vertical space).
+        //     Force-snap to Gallery presentation on a narrow viewport.
+        //     Re-checked on resize so a window drag from desktop down
+        //     to mobile doesn't leave a hidden Binder state active.
+        var MOBILE_BREAK = 1023;
+        function ensureMobileSafe() {
+            if (window.innerWidth <= MOBILE_BREAK) {
+                if (binder.getAttribute('data-mode') === 'spread') {
+                    setMode('single');
+                }
+                if (binder.getAttribute('data-binder-presentation') === 'binder') {
+                    setBinderAttr('data-binder-presentation', 'gallery');
+                }
+            }
+        }
+        window.addEventListener('resize', ensureMobileSafe);
 
         // Initial setup -- default to single mode.
         setMode('single');
-        ensureModeMobileSafe();
+        ensureMobileSafe();
+
+        // ── Gallery sticky-header backdrop detection ─────────────────
+        // The gallery section header is a clean transparent banner at
+        // rest (palette-tinted text + border-bottom), which looks great
+        // sitting in its natural position above the cards. The moment
+        // it stickies under the controls bar, though, it floats over
+        // the next row of cards and becomes hard to read against the
+        // varied card art. To keep both looks, we add an `.is-stuck`
+        // class only when the header is actually pinned -- CSS swaps
+        // in a translucent dark backdrop with frosted blur at that
+        // moment, and the at-rest gallery aesthetic stays untouched.
+        //
+        // Detection uses a sentinel pattern: a 1px invisible element
+        // inserted just before each header marks the header's natural
+        // top position. The IO's rootMargin shrinks the viewport top
+        // by the sticky offset (56px), so when the sentinel scrolls
+        // out of that band, the IO reports !isIntersecting -- and we
+        // know the header is stuck. Standard pattern, no scroll
+        // listener, no perf cost on idle scroll.
+        if ('IntersectionObserver' in window) {
+            var headerIO = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    var header = entry.target.nextElementSibling;
+                    if (header && header.classList.contains('pp-binder__page-tab')) {
+                        header.classList.toggle('is-stuck', !entry.isIntersecting);
+                    }
+                });
+            }, { rootMargin: '-57px 0px 0px 0px', threshold: 0 });
+
+            document.querySelectorAll('.pp-binder__page-tab').forEach(function (tab) {
+                var sentinel = document.createElement('div');
+                sentinel.className = 'pp-binder__page-tab-sentinel';
+                tab.parentNode.insertBefore(sentinel, tab);
+                headerIO.observe(sentinel);
+            });
+        }
 
         // ── Scroll-driven entry + exit animation ─────────────────────
         // Pages fade + slide as they cross the viewport in either
@@ -1533,8 +2696,16 @@
                     }
                 });
             }, {
+                /* threshold: 0 means "fire on any intersection." The
+                 * old 0.08 required 8% of the page in the viewport,
+                 * which on tall mobile pages (2400px+ for a 2-col
+                 * stack of 16 cards) meant ~190px of scrolling INTO
+                 * the page before the entry animation fired. With
+                 * threshold 0 the page fades in the moment it
+                 * touches the viewport bottom (still shaved 10% so
+                 * the trigger has scroll room to play out). */
                 rootMargin: '0px 0px -10% 0px',
-                threshold: 0.08
+                threshold: 0
             });
             document.querySelectorAll('.pp-binder__page').forEach(function (page) {
                 io.observe(page);
