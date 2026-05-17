@@ -1,0 +1,1672 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horizon — PlatPursuit Design Workshop</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&display=swap">
+
+    <style>
+        /* ============================================================
+         * HORIZON PRIMITIVE WORKSHOP
+         *
+         * Horizon is the signature treatment for "the path forward" --
+         * the glow on the edge of any unfinished progression. The
+         * doc names four traits:
+         *
+         *   - subtle gradient at the leading edge
+         *   - color carries semantic weight: warmer the closer you
+         *     are, cooler the further
+         *   - gentle pulse on near-completion (the "go finish it"
+         *     nudge)
+         *   - faint marker at the next stop (optional)
+         *
+         * Plus the anti-patterns:
+         *   - literal arrows (too directive)
+         *   - heavy dramatic gradients (it's a hint, not a flag)
+         *   - "Click to continue" CTAs (mood, not button)
+         *   - decorative-only (must pair with a real percentage)
+         *
+         * This workshop tests Horizon at four forms (linear bar,
+         * stepped pips, radial arc, vertical fill) across every
+         * completion level, scale, and marker variant, then
+         * demonstrates the Tally + Horizon composition that the
+         * Logbook Job row depends on.
+         *
+         * Section map:
+         *   1. The Horizon         -- canonical linear bar
+         *   2. The Forms           -- linear / stepped / radial / vertical
+         *   3. Color Progression   -- 5/25/50/75/95/99% completion
+         *   4. Scale Ladder        -- hero / row / inline / micro
+         *   5. Variants            -- markers + pulse + interactive slider
+         *   6. Tally + Horizon     -- canonical Job row composition
+         *   7. Anti-patterns       -- what we are NOT
+         *   8. Decision Criteria   -- mini-blurb rubric
+         * ============================================================ */
+
+        :root {
+            --ws-bg-deep:        rgb(8, 10, 14);
+            --ws-bg-base:        rgb(14, 17, 22);
+            --ws-bg-card:        rgb(20, 24, 32);
+            --ws-bg-card-hi:     rgb(26, 32, 42);
+            --ws-border:         rgba(255, 255, 255, 0.08);
+            --ws-border-hi:      rgba(255, 255, 255, 0.14);
+            --ws-text:           rgba(255, 255, 255, 0.92);
+            --ws-text-soft:      rgba(255, 255, 255, 0.55);
+            --ws-text-muted:     rgba(255, 255, 255, 0.35);
+            --ws-accent:         rgb(110, 200, 230);
+            --ws-accent-dim:     rgba(110, 200, 230, 0.6);
+            --ws-accent-faint:   rgba(110, 200, 230, 0.15);
+            --ws-warn:           rgb(220, 130, 70);
+
+            /* Horizon palette. Cool end = brand cyan (inherited from
+             * Frame's blueprint accent); warm end = amber-gold; hot
+             * end = bright white-amber for the near-completion punch.
+             * The shift between bands is the load-bearing semantic --
+             * warmer the closer you are, cooler the further. */
+            --hz-cool-1:    rgb(70, 165, 200);
+            --hz-cool-2:    rgb(110, 200, 230);
+            --hz-warming-1: rgb(140, 200, 200);
+            --hz-warming-2: rgb(200, 195, 145);
+            --hz-warm-1:    rgb(220, 180, 110);
+            --hz-warm-2:    rgb(255, 200, 100);
+            --hz-hot-1:     rgb(255, 200, 110);
+            --hz-hot-2:     rgb(255, 230, 170);
+            --hz-track:     rgba(255, 255, 255, 0.06);
+            --hz-track-edge:rgba(255, 255, 255, 0.04);
+
+            --ws-body: 'Inter', system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(ellipse at top, rgba(110, 200, 230, 0.04), transparent 50%),
+                var(--ws-bg-deep);
+            color: var(--ws-text);
+            font-family: var(--ws-body);
+            font-size: 15px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        /* ============================================================
+         * Workshop chrome (mirrors Tally workshop layout for
+         * consistency between primitive prototypes).
+         * ============================================================ */
+        .ws-header {
+            border-bottom: 1px solid var(--ws-border);
+            padding: 40px 48px 32px;
+            background: linear-gradient(180deg, var(--ws-bg-base), var(--ws-bg-deep));
+        }
+        .ws-header h1 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+        }
+        .ws-header h1 span {
+            color: var(--ws-text-soft);
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .ws-header h2 {
+            margin: 0 0 14px;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        .ws-header p {
+            margin: 0;
+            max-width: 760px;
+            color: var(--ws-text-soft);
+            font-size: 16px;
+        }
+        .ws-header p + p { margin-top: 12px; }
+        .ws-header strong { color: var(--ws-text); font-weight: 600; }
+        .ws-header em { color: var(--ws-text); font-style: italic; }
+
+        .ws-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 14px 48px;
+            border-bottom: 1px solid var(--ws-border);
+            background: var(--ws-bg-deep);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .ws-nav a {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ws-text-soft);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: background 160ms ease, color 160ms ease;
+        }
+        .ws-nav a:hover {
+            background: var(--ws-bg-card);
+            color: var(--ws-text);
+        }
+
+        main {
+            padding: 0 48px 120px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .ws-section {
+            padding: 80px 0 40px;
+            border-bottom: 1px dashed var(--ws-border);
+        }
+        .ws-section:last-child { border-bottom: none; }
+        .ws-section > header {
+            margin-bottom: 36px;
+            max-width: 800px;
+        }
+        .ws-section > header h3 {
+            margin: 0 0 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-section > header h3 .ws-num {
+            color: var(--ws-text-muted);
+            margin-right: 8px;
+        }
+        .ws-section > header h2 {
+            margin: 0 0 14px;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+        }
+        .ws-section > header p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 15px;
+        }
+        .ws-section > header p + p { margin-top: 10px; }
+        .ws-section > header code {
+            background: var(--ws-bg-card);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            color: var(--ws-accent);
+            font-family: ui-monospace, 'JetBrains Mono', monospace;
+        }
+
+        /* ============================================================
+         * Horizon primitive -- core CSS
+         *
+         * Color bands shift the gradient based on overall completion.
+         * The `data-progress-band` attribute on a `.hz` element picks
+         * one of cool / warming / warm / hot. JS computes the band
+         * from a 0-100 progress value (see slider in Section 5) and
+         * sets the attribute live.
+         * ============================================================ */
+        .hz {
+            --hz-fill: var(--horizon-progress, 0);
+        }
+        /* Linear bar -- the canonical form. */
+        .hz-bar {
+            position: relative;
+            width: 100%;
+            height: 8px;
+            background: var(--hz-track);
+            border-radius: 999px;
+            overflow: visible;
+            box-shadow: inset 0 1px 1px var(--hz-track-edge);
+        }
+        .hz-bar__fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--horizon-progress, 0%);
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--hz-cool-1), var(--hz-cool-2));
+            transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1),
+                        background 400ms ease,
+                        box-shadow 400ms ease;
+        }
+        .hz-bar__fill::after {
+            /* leading edge glow -- bleeds into the dark track to
+             * communicate "the path keeps going from here." */
+            content: "";
+            position: absolute;
+            top: -3px;
+            right: -8px;
+            bottom: -3px;
+            width: 16px;
+            border-radius: 999px;
+            background: radial-gradient(ellipse at left center,
+                var(--hz-cool-2) 0%,
+                transparent 70%);
+            opacity: 0.55;
+            pointer-events: none;
+            transition: background 400ms ease, opacity 400ms ease;
+        }
+        /* Color bands. Same physical fill width, the gradient + glow
+         * shift cool -> warming -> warm -> hot as we close in. */
+        .hz-bar[data-progress-band="cool"]    .hz-bar__fill              { background: linear-gradient(90deg, var(--hz-cool-1), var(--hz-cool-2)); }
+        .hz-bar[data-progress-band="cool"]    .hz-bar__fill::after       { background: radial-gradient(ellipse at left center, var(--hz-cool-2) 0%, transparent 70%); opacity: 0.55; }
+        .hz-bar[data-progress-band="warming"] .hz-bar__fill              { background: linear-gradient(90deg, var(--hz-cool-2) 0%, var(--hz-warming-1) 60%, var(--hz-warming-2) 100%); }
+        .hz-bar[data-progress-band="warming"] .hz-bar__fill::after       { background: radial-gradient(ellipse at left center, var(--hz-warming-2) 0%, transparent 70%); opacity: 0.7; }
+        .hz-bar[data-progress-band="warm"]    .hz-bar__fill              { background: linear-gradient(90deg, var(--hz-warming-1) 0%, var(--hz-warm-1) 50%, var(--hz-warm-2) 100%); }
+        .hz-bar[data-progress-band="warm"]    .hz-bar__fill::after       { background: radial-gradient(ellipse at left center, var(--hz-warm-2) 0%, transparent 70%); opacity: 0.85; }
+        .hz-bar[data-progress-band="hot"]     .hz-bar__fill              { background: linear-gradient(90deg, var(--hz-warm-1) 0%, var(--hz-hot-1) 50%, var(--hz-hot-2) 100%); }
+        .hz-bar[data-progress-band="hot"]     .hz-bar__fill::after       { background: radial-gradient(ellipse at left center, var(--hz-hot-2) 0%, transparent 70%); opacity: 1; }
+        .hz-bar[data-progress-band="hot"]     .hz-bar__fill              { animation: hz-hot-pulse 2.4s ease-in-out infinite; }
+        @keyframes hz-hot-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 220, 170, 0); }
+            50%      { box-shadow: 0 0 14px 2px rgba(255, 220, 170, 0.35); }
+        }
+        /* Marker -- a faint tick that lives just BEYOND the fill,
+         * showing the next stop. The doc lists it as optional;
+         * Section 5 tests with / without. */
+        .hz-bar__marker {
+            position: absolute;
+            top: -4px;
+            bottom: -4px;
+            width: 2px;
+            background: var(--ws-text-muted);
+            border-radius: 1px;
+            left: var(--horizon-marker, 100%);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .hz-bar__marker::before {
+            content: "";
+            position: absolute;
+            top: -3px;
+            left: -2px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--ws-text-muted);
+            opacity: 0.6;
+        }
+
+        /* Stepped pips -- discrete count of done vs remaining. The
+         * filled pips inherit the same color band as a linear bar at
+         * the same completion %. The first un-filled pip is the "next
+         * stop" marker. */
+        .hz-pips {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .hz-pips__pip {
+            flex: 1 1 auto;
+            min-width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background: var(--hz-track);
+            box-shadow: inset 0 1px 1px var(--hz-track-edge);
+            transition: background 320ms ease, box-shadow 320ms ease, transform 320ms ease;
+        }
+        .hz-pips__pip[data-state="done"]                                  { background: var(--hz-cool-2); }
+        .hz-pips[data-progress-band="cool"]    .hz-pips__pip[data-state="done"] { background: var(--hz-cool-2);    box-shadow: 0 0 4px rgba(110, 200, 230, 0.45); }
+        .hz-pips[data-progress-band="warming"] .hz-pips__pip[data-state="done"] { background: var(--hz-warming-2); box-shadow: 0 0 6px rgba(200, 195, 145, 0.45); }
+        .hz-pips[data-progress-band="warm"]    .hz-pips__pip[data-state="done"] { background: var(--hz-warm-2);    box-shadow: 0 0 8px rgba(255, 200, 100, 0.5); }
+        .hz-pips[data-progress-band="hot"]     .hz-pips__pip[data-state="done"] { background: var(--hz-hot-2);     box-shadow: 0 0 10px rgba(255, 220, 170, 0.65); }
+        .hz-pips__pip[data-state="next"] {
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: inset 0 0 0 1px var(--ws-text-muted);
+        }
+        .hz-pips[data-progress-band="hot"] .hz-pips__pip[data-state="next"] {
+            animation: hz-hot-pulse 2.4s ease-in-out infinite;
+        }
+
+        /* Radial arc -- circular Horizon. Most aggressive at hero
+         * scale (Pursuer Level toward next milestone). The arc itself
+         * is an SVG; this CSS sets the ring track + the warming glow
+         * applied to the arc via `stroke` + `filter`. */
+        .hz-arc {
+            display: inline-block;
+            position: relative;
+        }
+        .hz-arc svg { display: block; }
+        .hz-arc__track { stroke: var(--hz-track); }
+        .hz-arc__fill {
+            transition: stroke 400ms ease, filter 400ms ease;
+            stroke-linecap: round;
+        }
+        .hz-arc[data-progress-band="cool"]    .hz-arc__fill { stroke: var(--hz-cool-2);    filter: drop-shadow(0 0 4px rgba(110, 200, 230, 0.45)); }
+        .hz-arc[data-progress-band="warming"] .hz-arc__fill { stroke: var(--hz-warming-2); filter: drop-shadow(0 0 5px rgba(200, 195, 145, 0.55)); }
+        .hz-arc[data-progress-band="warm"]    .hz-arc__fill { stroke: var(--hz-warm-2);    filter: drop-shadow(0 0 7px rgba(255, 200, 100, 0.65)); }
+        .hz-arc[data-progress-band="hot"]     .hz-arc__fill { stroke: var(--hz-hot-2);     filter: drop-shadow(0 0 10px rgba(255, 220, 170, 0.8)); animation: hz-hot-pulse-glow 2.4s ease-in-out infinite; }
+        @keyframes hz-hot-pulse-glow {
+            0%, 100% { filter: drop-shadow(0 0 10px rgba(255, 220, 170, 0.8)); }
+            50%      { filter: drop-shadow(0 0 16px rgba(255, 230, 180, 1)); }
+        }
+
+        /* Vertical fill -- the Frame's --pp-build language as a
+         * standalone Horizon form. The fill rises from bottom to top
+         * (the badge being fabricated). Used in blueprint mode. */
+        .hz-vert {
+            position: relative;
+            width: 56px;
+            height: 220px;
+            background: var(--hz-track);
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 1px var(--hz-track-edge), inset 0 -1px 1px var(--hz-track-edge);
+        }
+        .hz-vert__fill {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: var(--horizon-progress, 0%);
+            background: linear-gradient(0deg, var(--hz-cool-1), var(--hz-cool-2));
+            transition: height 400ms cubic-bezier(0.22, 1, 0.36, 1),
+                        background 400ms ease,
+                        box-shadow 400ms ease;
+        }
+        .hz-vert__fill::after {
+            /* leading edge -- the top of the fill, the "construction
+             * line" from the Frame's blueprint mode. */
+            content: "";
+            position: absolute;
+            top: -2px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(180deg,
+                rgba(255, 255, 255, 0.6) 0%,
+                rgba(255, 255, 255, 0) 100%);
+            opacity: 0.85;
+            transition: background 400ms ease;
+        }
+        .hz-vert[data-progress-band="cool"]    .hz-vert__fill { background: linear-gradient(0deg, var(--hz-cool-1), var(--hz-cool-2)); }
+        .hz-vert[data-progress-band="warming"] .hz-vert__fill { background: linear-gradient(0deg, var(--hz-cool-2) 0%, var(--hz-warming-1) 60%, var(--hz-warming-2) 100%); }
+        .hz-vert[data-progress-band="warm"]    .hz-vert__fill { background: linear-gradient(0deg, var(--hz-warming-1) 0%, var(--hz-warm-1) 50%, var(--hz-warm-2) 100%); }
+        .hz-vert[data-progress-band="hot"]     .hz-vert__fill { background: linear-gradient(0deg, var(--hz-warm-1) 0%, var(--hz-hot-1) 50%, var(--hz-hot-2) 100%); animation: hz-hot-pulse 2.4s ease-in-out infinite; }
+
+        /* ============================================================
+         * Layout primitives for the workshop sections.
+         * ============================================================ */
+        .ws-card {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 32px;
+            transition: border-color 240ms ease, background 240ms ease;
+        }
+        .ws-card:hover {
+            border-color: var(--ws-border-hi);
+            background: var(--ws-bg-card-hi);
+        }
+        .ws-card h4 {
+            margin: 0 0 6px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--ws-text);
+        }
+        .ws-card p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .ws-card__pct {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+            font-variant-numeric: tabular-nums;
+            margin-left: 8px;
+        }
+
+        /* ------------------------------------------------------------
+         * Section 1: The Horizon canonical
+         * Big hero card showing a single linear bar at ~62% with all
+         * the Horizon traits visible: gradient, leading-edge glow,
+         * marker, label callouts. The "this is the primitive" anchor.
+         * ------------------------------------------------------------ */
+        .hz-hero {
+            background:
+                radial-gradient(ellipse at top right, rgba(255, 200, 100, 0.05), transparent 50%),
+                radial-gradient(ellipse at top left,  rgba(110, 200, 230, 0.05), transparent 50%),
+                var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 12px;
+            padding: 48px 56px 56px;
+            position: relative;
+        }
+        .hz-hero__label {
+            margin: 0 0 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+        }
+        .hz-hero__sublabel {
+            margin: 0 0 28px;
+            font-size: 14px;
+            color: var(--ws-text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .hz-hero__bar {
+            margin-bottom: 36px;
+        }
+        .hz-hero__bar .hz-bar { height: 12px; }
+        .hz-hero__bar .hz-bar__marker { top: -6px; bottom: -6px; }
+        .hz-hero__callouts {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+        .hz-hero__callout {
+            padding: 16px 18px;
+            background: var(--ws-bg-deep);
+            border: 1px dashed var(--ws-border);
+            border-radius: 6px;
+        }
+        .hz-hero__callout h5 {
+            margin: 0 0 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .hz-hero__callout p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+
+        /* ------------------------------------------------------------
+         * Section 2: The Forms
+         * Four cards, one per form. Same overall completion (~65%)
+         * so the team can see how the language translates across
+         * shapes.
+         * ------------------------------------------------------------ */
+        .hz-forms {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .hz-form {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 32px;
+        }
+        .hz-form__head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 22px;
+            gap: 12px;
+        }
+        .hz-form__head h4 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ws-text);
+            letter-spacing: 0.04em;
+        }
+        .hz-form__head .hz-form__where {
+            font-size: 11px;
+            color: var(--ws-text-muted);
+            letter-spacing: 0.04em;
+        }
+        .hz-form__body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 140px;
+            padding: 20px 0 28px;
+        }
+        .hz-form__note {
+            margin: 14px 0 0;
+            padding-top: 14px;
+            border-top: 1px dashed var(--ws-border);
+            font-size: 12.5px;
+            line-height: 1.55;
+            color: var(--ws-text-soft);
+        }
+        .hz-form__note strong { color: var(--ws-text); font-weight: 600; }
+
+        /* ------------------------------------------------------------
+         * Section 3: Color progression
+         * Six rows, each one bar at the same scale but different
+         * completion %. Proves the warm/cool semantic. The team
+         * watches the eye DRAGGING from the cool top rows to the hot
+         * bottom rows.
+         * ------------------------------------------------------------ */
+        .hz-progress {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 32px 36px;
+        }
+        .hz-progress__row {
+            display: grid;
+            grid-template-columns: 110px 1fr 110px;
+            align-items: center;
+            gap: 22px;
+            padding: 18px 0;
+            border-top: 1px dashed var(--ws-border);
+        }
+        .hz-progress__row:first-of-type { border-top: none; padding-top: 0; }
+        .hz-progress__row:last-of-type  { padding-bottom: 0; }
+        .hz-progress__pct {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+        }
+        .hz-progress__band {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .hz-progress__band[data-band="cool"]    { color: var(--hz-cool-2); }
+        .hz-progress__band[data-band="warming"] { color: var(--hz-warming-2); }
+        .hz-progress__band[data-band="warm"]    { color: var(--hz-warm-2); }
+        .hz-progress__band[data-band="hot"]     { color: var(--hz-hot-2); }
+
+        /* ------------------------------------------------------------
+         * Section 4: Scale ladder
+         * Four sizes of the linear bar, plus four sizes of pips, plus
+         * three sizes of the radial. All at 60% completion (warming
+         * band) so they read consistently.
+         * ------------------------------------------------------------ */
+        .hz-scales {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .hz-scale {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 32px;
+        }
+        .hz-scale h4 {
+            margin: 0 0 22px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+        }
+        .hz-scale__row {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            align-items: center;
+            gap: 18px;
+            padding: 14px 0;
+            border-top: 1px dashed var(--ws-border);
+        }
+        .hz-scale__row:first-of-type { border-top: none; padding-top: 0; }
+        .hz-scale__row label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+        .hz-scale__row[data-size="hero"]   .hz-bar { height: 12px; }
+        .hz-scale__row[data-size="row"]    .hz-bar { height: 6px; }
+        .hz-scale__row[data-size="inline"] .hz-bar { height: 4px; }
+        .hz-scale__row[data-size="micro"]  .hz-bar { height: 2.5px; }
+        .hz-scale__row[data-size="hero"]   .hz-pips { gap: 8px; }
+        .hz-scale__row[data-size="hero"]   .hz-pips__pip { height: 12px; min-width: 12px; border-radius: 6px; }
+        .hz-scale__row[data-size="row"]    .hz-pips__pip { height: 8px;  min-width: 8px;  border-radius: 4px; }
+        .hz-scale__row[data-size="inline"] .hz-pips__pip { height: 6px;  min-width: 6px;  border-radius: 3px; }
+        .hz-scale__row[data-size="micro"]  .hz-pips__pip { height: 4px;  min-width: 4px;  border-radius: 2px; }
+
+        /* ------------------------------------------------------------
+         * Section 5: Variants
+         * Marker A/B/C (none / dot / styled tick) plus an interactive
+         * slider that lets reviewers scrub progress from 0-100 and
+         * watch the color bands + glow + pulse react.
+         * ------------------------------------------------------------ */
+        .hz-variants {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+            margin-bottom: 36px;
+        }
+        .hz-variant {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 28px 24px;
+        }
+        .hz-variant h4 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .hz-variant p {
+            margin: 0 0 24px;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .hz-variant--marker-none  .hz-bar__marker { display: none; }
+        .hz-variant--marker-dot   .hz-bar__marker { width: 0; background: transparent; }
+        .hz-variant--marker-dot   .hz-bar__marker::before { left: -4px; top: -2px; width: 10px; height: 10px; opacity: 0.85; }
+        .hz-variant--marker-tick  .hz-bar__marker { width: 2px; background: var(--ws-text-muted); }
+        .hz-variant--marker-tick  .hz-bar__marker::before { display: none; }
+
+        .hz-slider {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 32px 36px 28px;
+        }
+        .hz-slider__header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 18px;
+        }
+        .hz-slider__title {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--ws-text);
+        }
+        .hz-slider__readout {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+        .hz-slider__readout small {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            margin-left: 8px;
+            font-variant-numeric: tabular-nums;
+        }
+        .hz-slider__bar { margin-bottom: 26px; }
+        .hz-slider__bar .hz-bar { height: 12px; }
+        .hz-slider__input {
+            width: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        .hz-slider__input::-webkit-slider-runnable-track {
+            height: 4px;
+            background: var(--hz-track);
+            border-radius: 2px;
+        }
+        .hz-slider__input::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--ws-accent);
+            margin-top: -7px;
+            cursor: grab;
+            box-shadow: 0 0 8px rgba(110, 200, 230, 0.5);
+        }
+        .hz-slider__input::-moz-range-track {
+            height: 4px;
+            background: var(--hz-track);
+            border-radius: 2px;
+        }
+        .hz-slider__input::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border: none;
+            border-radius: 50%;
+            background: var(--ws-accent);
+            cursor: grab;
+            box-shadow: 0 0 8px rgba(110, 200, 230, 0.5);
+        }
+
+        /* ------------------------------------------------------------
+         * Section 6: Tally + Horizon composition
+         * The canonical Job row -- Tally number left, Horizon bar
+         * trailing toward the next level.
+         * ------------------------------------------------------------ */
+        .hz-pairing {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 36px 40px;
+        }
+        .hz-job-row {
+            display: grid;
+            grid-template-columns: 120px 1fr 100px;
+            align-items: center;
+            gap: 28px;
+            padding: 22px 0;
+            border-top: 1px dashed var(--ws-border);
+        }
+        .hz-job-row:first-of-type { border-top: none; padding-top: 0; }
+        .hz-job-row__num {
+            font-size: 56px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -0.04em;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            font-family: 'Inter', sans-serif;
+        }
+        .hz-job-row__num small {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            margin-top: 6px;
+        }
+        .hz-job-row__bar {
+            position: relative;
+        }
+        .hz-job-row__meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--ws-text-muted);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        .hz-job-row__meta strong { color: var(--ws-text-soft); font-weight: 600; }
+        .hz-job-row__next {
+            text-align: right;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ws-text-soft);
+            font-variant-numeric: tabular-nums;
+        }
+        .hz-job-row__next strong {
+            display: block;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--ws-text);
+            letter-spacing: -0.02em;
+            margin-top: 4px;
+        }
+
+        /* ------------------------------------------------------------
+         * Section 7: Anti-patterns
+         * Visual examples of what NOT to do. Each card uses the same
+         * structure as a "good" Horizon, but commits one of the
+         * listed sins, with a "DO NOT SHIP" stamp + reason.
+         * ------------------------------------------------------------ */
+        .hz-anti {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .hz-anti__card {
+            background: var(--ws-bg-card);
+            border: 1px dashed rgba(220, 90, 90, 0.45);
+            border-radius: 8px;
+            padding: 28px 32px;
+            position: relative;
+        }
+        .hz-anti__stamp {
+            position: absolute;
+            top: 18px;
+            right: 24px;
+            padding: 4px 10px;
+            background: rgba(220, 90, 90, 0.15);
+            border: 1px solid rgba(220, 90, 90, 0.5);
+            border-radius: 999px;
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            color: rgb(255, 140, 130);
+            text-transform: uppercase;
+        }
+        .hz-anti__title {
+            margin: 0 100px 4px 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ws-text);
+        }
+        .hz-anti__reason {
+            margin: 0 0 22px;
+            font-size: 12.5px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .hz-anti__demo {
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+        }
+        /* Anti-pattern 1: literal arrow */
+        .hz-anti-arrow {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+        }
+        .hz-anti-arrow .hz-bar { flex: 1; height: 10px; }
+        .hz-anti-arrow__chevron {
+            font-size: 32px;
+            color: var(--ws-accent);
+            line-height: 1;
+            animation: hz-anti-shake 1.2s ease-in-out infinite;
+        }
+        @keyframes hz-anti-shake {
+            0%, 100% { transform: translateX(0); }
+            50%      { transform: translateX(4px); }
+        }
+        /* Anti-pattern 2: heavy dramatic gradient */
+        .hz-anti-heavy { width: 100%; }
+        .hz-anti-heavy .hz-bar { height: 16px; }
+        .hz-anti-heavy .hz-bar__fill {
+            background: linear-gradient(90deg,
+                rgb(120, 60, 220) 0%,
+                rgb(220, 60, 180) 25%,
+                rgb(255, 110, 60) 50%,
+                rgb(255, 220, 60) 75%,
+                rgb(60, 220, 130) 100%) !important;
+        }
+        .hz-anti-heavy .hz-bar__fill::after {
+            background: radial-gradient(ellipse at left center, rgba(255, 255, 0, 1), transparent 70%) !important;
+            opacity: 1 !important;
+        }
+        /* Anti-pattern 3: CTA */
+        .hz-anti-cta { display: flex; align-items: center; gap: 16px; width: 100%; }
+        .hz-anti-cta .hz-bar { flex: 1; height: 10px; }
+        .hz-anti-cta__btn {
+            padding: 8px 16px;
+            background: var(--ws-accent);
+            color: var(--ws-bg-deep);
+            border: none;
+            border-radius: 999px;
+            font-family: var(--ws-body);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        /* Anti-pattern 4: decorative-only (no real %) */
+        .hz-anti-deco { width: 100%; }
+        .hz-anti-deco .hz-bar { height: 10px; }
+        .hz-anti-deco .hz-bar__fill {
+            animation: hz-anti-decor 4s linear infinite;
+            background: linear-gradient(90deg, var(--hz-cool-2), var(--hz-warm-2)) !important;
+        }
+        @keyframes hz-anti-decor {
+            0%   { width: 25%; }
+            50%  { width: 75%; }
+            100% { width: 25%; }
+        }
+
+        /* ------------------------------------------------------------
+         * Section 8: Decision criteria (mini-blurb format)
+         * ------------------------------------------------------------ */
+        .ws-criteria {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-criterion {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 24px 28px;
+        }
+        .ws-criterion__num {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            background: var(--ws-accent-faint);
+            color: var(--ws-accent);
+            border: 1px solid var(--ws-accent-dim);
+            border-radius: 50%;
+            font-family: var(--ws-body);
+            font-size: 11px;
+            font-weight: 800;
+            margin-right: 10px;
+            vertical-align: middle;
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-criterion h4 {
+            margin: 0 0 14px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.005em;
+            color: var(--ws-text);
+        }
+        .ws-criterion p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .ws-criterion em { color: var(--ws-text); font-style: italic; }
+        .ws-criterion code {
+            font-family: ui-monospace, 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--ws-accent);
+            background: transparent;
+            padding: 0 2px;
+        }
+
+        /* ------------------------------------------------------------
+         * Workshop footer
+         * ------------------------------------------------------------ */
+        .ws-footer {
+            margin-top: 60px;
+            padding: 32px;
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .ws-footer h4 {
+            margin: 0 0 12px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .ws-footer ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .ws-footer li + li { margin-top: 4px; }
+
+        @media (max-width: 980px) {
+            .ws-header, main, .ws-nav { padding-left: 24px; padding-right: 24px; }
+            .hz-forms, .hz-scales, .hz-variants, .hz-anti, .ws-criteria {
+                grid-template-columns: 1fr;
+            }
+            .hz-hero__callouts { grid-template-columns: repeat(2, 1fr); }
+            .hz-job-row { grid-template-columns: 80px 1fr; }
+            .hz-job-row__next { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header class="ws-header">
+        <h1>Horizon <span>Design Workshop</span></h1>
+        <h2>The treatment for the path forward.</h2>
+        <p>Horizon is the glow on the edge of any unfinished progression — the far wall of the planning desk where the next stop is marked but not yet reached. Wherever progress is shown (XP bar, stage progression, tier completion, Pursuer Level toward next milestone, blueprint <code>--pp-build</code> mask), Horizon communicates <em>there's more this way</em> without literal arrows or "Click to continue" CTAs. The treatment lives in four forms — <strong>linear bar</strong>, <strong>stepped pips</strong>, <strong>radial arc</strong>, <strong>vertical fill</strong> — and inherits the brand's cyan accent on the cool end, shifting toward amber as completion approaches.</p>
+        <p>This workshop covers Horizon comprehensively (linear, stepped, radial, vertical) since progress indicators appear across the whole product, not just gamification. The team's decisions to converge on: form vocabulary, color progression aggressiveness, marker style, near-completion pulse intensity, Tally pairing rules.</p>
+    </header>
+
+    <nav class="ws-nav">
+        <a href="#canonical">1. The Horizon</a>
+        <a href="#forms">2. The Forms</a>
+        <a href="#progression">3. Color Progression</a>
+        <a href="#scales">4. Scale Ladder</a>
+        <a href="#variants">5. Variants &amp; Interaction</a>
+        <a href="#pairing">6. Tally + Horizon</a>
+        <a href="#anti">7. Anti-patterns</a>
+        <a href="#criteria">8. Decision Criteria</a>
+    </nav>
+
+    <main>
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 1: The Horizon canonical                           #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="canonical" class="ws-section">
+            <header>
+                <h3><span class="ws-num">01</span> The Horizon</h3>
+                <h2>The canonical form, all traits visible.</h2>
+                <p>One linear bar at ~64% completion, sized at hero scale (12px tall). All four Horizon traits are visible: the cool-to-warm gradient, the leading-edge glow that bleeds beyond the fill, the faint marker at the next stop, and the warming band shift. This is the primitive's anchor — every other section refers back to this baseline.</p>
+            </header>
+            <div class="hz-hero hz">
+                <p class="hz-hero__label">Pursuer Level 47 · 64% to Level 48</p>
+                <p class="hz-hero__sublabel">3,200 / 5,000 XP · 1,800 to go</p>
+                <div class="hz-hero__bar">
+                    <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 64%; --horizon-marker: 64%;">
+                        <div class="hz-bar__fill"></div>
+                        <div class="hz-bar__marker"></div>
+                    </div>
+                </div>
+                <div class="hz-hero__callouts">
+                    <div class="hz-hero__callout">
+                        <h5>1 · Subtle gradient</h5>
+                        <p>Cool-leaning at the base of the fill, warming as it approaches the leading edge. The gradient is the doc's literal "subtle" — no rainbow, no drama.</p>
+                    </div>
+                    <div class="hz-hero__callout">
+                        <h5>2 · Leading-edge glow</h5>
+                        <p>The right edge bleeds beyond the fill into the dark track. The eye reads the glow as "the path keeps going," not "the fill is done."</p>
+                    </div>
+                    <div class="hz-hero__callout">
+                        <h5>3 · Color semantic</h5>
+                        <p>Warmer the closer to 100%, cooler the further. This bar is in the <em>warming</em> band — past the cool baseline, not yet at the hot "almost there" pulse.</p>
+                    </div>
+                    <div class="hz-hero__callout">
+                        <h5>4 · Faint marker</h5>
+                        <p>An optional tick just beyond the fill marks the next stop. Mood, not arrow — gentle enough to ignore, present enough to feel.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 2: The Forms                                       #}
+        {# Four cards demonstrating each form at the same ~65%.       #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="forms" class="ws-section">
+            <header>
+                <h3><span class="ws-num">02</span> The Forms</h3>
+                <h2>One language. Four shapes.</h2>
+                <p>The Horizon language translates across four canonical shapes. Each handles a different progress context but inherits the same color semantic, glow language, and pulse behavior. All four below sit in the same color band (<em>warming</em>, ~65% completion) so you can compare apples-to-apples.</p>
+            </header>
+            <div class="hz-forms">
+                <article class="hz-form">
+                    <div class="hz-form__head">
+                        <h4>Linear bar</h4>
+                        <span class="hz-form__where">XP · level · roadmap · completion</span>
+                    </div>
+                    <div class="hz-form__body" style="width: 100%;">
+                        <div class="hz-bar" data-progress-band="warming" style="width: 100%; --horizon-progress: 65%; --horizon-marker: 65%; height: 10px;">
+                            <div class="hz-bar__fill"></div>
+                            <div class="hz-bar__marker"></div>
+                        </div>
+                    </div>
+                    <p class="hz-form__note"><strong>Where it lives:</strong> the canonical form. Any continuous-progression indicator. Job rows, Pursuer Level toward next milestone, roadmap completion, tier progression, content unlocking, sync progress.</p>
+                </article>
+
+                <article class="hz-form">
+                    <div class="hz-form__head">
+                        <h4>Stepped pips</h4>
+                        <span class="hz-form__where">stages · checklist · multi-step</span>
+                    </div>
+                    <div class="hz-form__body" style="width: 100%;">
+                        <div class="hz-pips" data-progress-band="warming" style="width: 100%;">
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="next"></span>
+                            <span class="hz-pips__pip"></span>
+                        </div>
+                    </div>
+                    <p class="hz-form__note"><strong>Where it lives:</strong> discrete-count progressions. Stage rosters in a badge series, checklist steps in onboarding, multi-step forms, milestone counts. The "next" pip (outlined, the leading edge) is the marker analogue.</p>
+                </article>
+
+                <article class="hz-form">
+                    <div class="hz-form__head">
+                        <h4>Radial arc</h4>
+                        <span class="hz-form__where">hero · completion ring · status</span>
+                    </div>
+                    <div class="hz-form__body">
+                        <div class="hz-arc" data-progress-band="warming">
+                            <svg width="120" height="120" viewBox="0 0 120 120">
+                                <circle class="hz-arc__track" cx="60" cy="60" r="52" fill="none" stroke-width="8"></circle>
+                                <circle class="hz-arc__fill"  cx="60" cy="60" r="52" fill="none" stroke-width="8"
+                                    stroke-dasharray="326.7" stroke-dashoffset="114.3"
+                                    transform="rotate(-90 60 60)"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="hz-form__note"><strong>Where it lives:</strong> compact circular contexts. Pursuer Level rings on a profile chip, a single-badge completion ring, a sync-status ring on the navbar, a campaign progress ring on a roadmap header.</p>
+                </article>
+
+                <article class="hz-form">
+                    <div class="hz-form__head">
+                        <h4>Vertical fill</h4>
+                        <span class="hz-form__where">blueprint · being-built · ascent</span>
+                    </div>
+                    <div class="hz-form__body">
+                        <div class="hz-vert" data-progress-band="warming" style="--horizon-progress: 65%;">
+                            <div class="hz-vert__fill"></div>
+                        </div>
+                    </div>
+                    <p class="hz-form__note"><strong>Where it lives:</strong> bottom-up "being constructed" contexts. The Frame's blueprint <code>--pp-build</code> mask is already this form; the language unifies it. Useful for stage progression where the metaphor is <em>climbing</em>, not just <em>filling</em>.</p>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 3: Color progression                               #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="progression" class="ws-section">
+            <header>
+                <h3><span class="ws-num">03</span> Color Progression</h3>
+                <h2>The same bar at six completion levels.</h2>
+                <p>Watch the eye DRAG from cool blue at the top to hot amber at the bottom. This is the doc's <em>warmer the closer, cooler the further</em> made literal. Four bands: <strong>cool</strong> (0–30%), <strong>warming</strong> (30–65%), <strong>warm</strong> (65–90%), <strong>hot</strong> (90–100%). The hot band gets the gentle pulse — the "go finish it" nudge.</p>
+            </header>
+            <div class="hz-progress">
+                <div class="hz-progress__row">
+                    <span class="hz-progress__pct">5%</span>
+                    <div class="hz-bar" data-progress-band="cool" style="--horizon-progress: 5%;">
+                        <div class="hz-bar__fill"></div>
+                    </div>
+                    <span class="hz-progress__band" data-band="cool">Cool</span>
+                </div>
+                <div class="hz-progress__row">
+                    <span class="hz-progress__pct">25%</span>
+                    <div class="hz-bar" data-progress-band="cool" style="--horizon-progress: 25%;">
+                        <div class="hz-bar__fill"></div>
+                    </div>
+                    <span class="hz-progress__band" data-band="cool">Cool</span>
+                </div>
+                <div class="hz-progress__row">
+                    <span class="hz-progress__pct">50%</span>
+                    <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 50%;">
+                        <div class="hz-bar__fill"></div>
+                    </div>
+                    <span class="hz-progress__band" data-band="warming">Warming</span>
+                </div>
+                <div class="hz-progress__row">
+                    <span class="hz-progress__pct">75%</span>
+                    <div class="hz-bar" data-progress-band="warm" style="--horizon-progress: 75%;">
+                        <div class="hz-bar__fill"></div>
+                    </div>
+                    <span class="hz-progress__band" data-band="warm">Warm</span>
+                </div>
+                <div class="hz-progress__row">
+                    <span class="hz-progress__pct">95%</span>
+                    <div class="hz-bar" data-progress-band="hot" style="--horizon-progress: 95%;">
+                        <div class="hz-bar__fill"></div>
+                    </div>
+                    <span class="hz-progress__band" data-band="hot">Hot · pulsing</span>
+                </div>
+                <div class="hz-progress__row">
+                    <span class="hz-progress__pct">99%</span>
+                    <div class="hz-bar" data-progress-band="hot" style="--horizon-progress: 99%;">
+                        <div class="hz-bar__fill"></div>
+                    </div>
+                    <span class="hz-progress__band" data-band="hot">Hot · pulsing</span>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 4: Scale Ladder                                    #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="scales" class="ws-section">
+            <header>
+                <h3><span class="ws-num">04</span> Scale Ladder</h3>
+                <h2>Same Horizon. Four sizes.</h2>
+                <p>Horizon lives at multiple scales: <strong>hero</strong> (the Logbook Pursuer Level bar, ~12px tall), <strong>row</strong> (a Job-row XP bar, ~6px), <strong>inline</strong> (a chip-level indicator, ~4px), <strong>micro</strong> (a pip or status sliver, ~2.5px). The right Horizon holds at every scale — some treatments look great big and disappear small. All bars below are at the same 60% completion (<em>warming</em> band).</p>
+            </header>
+            <div class="hz-scales">
+                <article class="hz-scale">
+                    <h4>Linear bar</h4>
+                    <div class="hz-scale__row" data-size="hero">
+                        <label>Hero · 12px</label>
+                        <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%;">
+                            <div class="hz-bar__fill"></div>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" data-size="row">
+                        <label>Row · 6px</label>
+                        <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%;">
+                            <div class="hz-bar__fill"></div>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" data-size="inline">
+                        <label>Inline · 4px</label>
+                        <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%;">
+                            <div class="hz-bar__fill"></div>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" data-size="micro">
+                        <label>Micro · 2.5px</label>
+                        <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%;">
+                            <div class="hz-bar__fill"></div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hz-scale">
+                    <h4>Stepped pips</h4>
+                    <div class="hz-scale__row" data-size="hero">
+                        <label>Hero · 12px</label>
+                        <div class="hz-pips" data-progress-band="warming">
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="next"></span>
+                            <span class="hz-pips__pip"></span>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" data-size="row">
+                        <label>Row · 8px</label>
+                        <div class="hz-pips" data-progress-band="warming">
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="next"></span>
+                            <span class="hz-pips__pip"></span>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" data-size="inline">
+                        <label>Inline · 6px</label>
+                        <div class="hz-pips" data-progress-band="warming">
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="next"></span>
+                            <span class="hz-pips__pip"></span>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" data-size="micro">
+                        <label>Micro · 4px</label>
+                        <div class="hz-pips" data-progress-band="warming">
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="next"></span>
+                            <span class="hz-pips__pip"></span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hz-scale">
+                    <h4>Radial arc</h4>
+                    <div class="hz-scale__row" style="grid-template-columns: 90px 1fr; align-items: center;">
+                        <label>Hero · 140px</label>
+                        <div class="hz-arc" data-progress-band="warming">
+                            <svg width="140" height="140" viewBox="0 0 140 140">
+                                <circle class="hz-arc__track" cx="70" cy="70" r="62" fill="none" stroke-width="9"></circle>
+                                <circle class="hz-arc__fill"  cx="70" cy="70" r="62" fill="none" stroke-width="9"
+                                    stroke-dasharray="389.6" stroke-dashoffset="155.8" transform="rotate(-90 70 70)"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" style="grid-template-columns: 90px 1fr; align-items: center;">
+                        <label>Row · 80px</label>
+                        <div class="hz-arc" data-progress-band="warming">
+                            <svg width="80" height="80" viewBox="0 0 80 80">
+                                <circle class="hz-arc__track" cx="40" cy="40" r="34" fill="none" stroke-width="6"></circle>
+                                <circle class="hz-arc__fill"  cx="40" cy="40" r="34" fill="none" stroke-width="6"
+                                    stroke-dasharray="213.6" stroke-dashoffset="85.4" transform="rotate(-90 40 40)"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" style="grid-template-columns: 90px 1fr; align-items: center;">
+                        <label>Inline · 36px</label>
+                        <div class="hz-arc" data-progress-band="warming">
+                            <svg width="36" height="36" viewBox="0 0 36 36">
+                                <circle class="hz-arc__track" cx="18" cy="18" r="15" fill="none" stroke-width="3.5"></circle>
+                                <circle class="hz-arc__fill"  cx="18" cy="18" r="15" fill="none" stroke-width="3.5"
+                                    stroke-dasharray="94.2" stroke-dashoffset="37.7" transform="rotate(-90 18 18)"></circle>
+                            </svg>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hz-scale">
+                    <h4>Vertical fill</h4>
+                    <div class="hz-scale__row" style="grid-template-columns: 90px 1fr; align-items: center;">
+                        <label>Hero · 220px</label>
+                        <div class="hz-vert" data-progress-band="warming" style="--horizon-progress: 60%;">
+                            <div class="hz-vert__fill"></div>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" style="grid-template-columns: 90px 1fr; align-items: center;">
+                        <label>Row · 140px</label>
+                        <div class="hz-vert" data-progress-band="warming" style="--horizon-progress: 60%; height: 140px; width: 40px;">
+                            <div class="hz-vert__fill"></div>
+                        </div>
+                    </div>
+                    <div class="hz-scale__row" style="grid-template-columns: 90px 1fr; align-items: center;">
+                        <label>Inline · 60px</label>
+                        <div class="hz-vert" data-progress-band="warming" style="--horizon-progress: 60%; height: 60px; width: 18px; border-radius: 3px;">
+                            <div class="hz-vert__fill"></div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 5: Variants & Interaction                          #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="variants" class="ws-section">
+            <header>
+                <h3><span class="ws-num">05</span> Variants &amp; Interaction</h3>
+                <h2>The marker question, plus a live scrubber.</h2>
+                <p>The doc lists the next-stop marker as <em>optional</em>. Three options below: no marker, dot marker, tick marker. Below them: a slider that scrubs progress from 0–100% live so the team can feel how the bands transition and watch the near-completion pulse engage past 90%.</p>
+            </header>
+            <div class="hz-variants">
+                <article class="hz-variant hz-variant--marker-none">
+                    <h4>A — No marker</h4>
+                    <p>Just the gradient + glow. Cleanest read, but loses the "next stop" affordance.</p>
+                    <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%; --horizon-marker: 60%; height: 10px;">
+                        <div class="hz-bar__fill"></div>
+                        <div class="hz-bar__marker"></div>
+                    </div>
+                </article>
+                <article class="hz-variant hz-variant--marker-dot">
+                    <h4>B — Dot marker</h4>
+                    <p>A faint dot just beyond the fill. Reads as a destination without shouting.</p>
+                    <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%; --horizon-marker: 60%; height: 10px;">
+                        <div class="hz-bar__fill"></div>
+                        <div class="hz-bar__marker"></div>
+                    </div>
+                </article>
+                <article class="hz-variant hz-variant--marker-tick">
+                    <h4>C — Tick marker</h4>
+                    <p>A short vertical tick just beyond the fill. Most directive of the three — risks anti-ref #1.</p>
+                    <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%; --horizon-marker: 60%; height: 10px;">
+                        <div class="hz-bar__fill"></div>
+                        <div class="hz-bar__marker"></div>
+                    </div>
+                </article>
+            </div>
+
+            <div class="hz-slider">
+                <div class="hz-slider__header">
+                    <h4 class="hz-slider__title">Scrub progress · feel the bands</h4>
+                    <span class="hz-slider__readout">
+                        <span data-slider-readout>50</span>%
+                        <small data-slider-band>Warming</small>
+                    </span>
+                </div>
+                <div class="hz-slider__bar">
+                    <div class="hz-bar" data-progress-band="warming" data-slider-bar style="--horizon-progress: 50%; --horizon-marker: 50%;">
+                        <div class="hz-bar__fill"></div>
+                        <div class="hz-bar__marker"></div>
+                    </div>
+                </div>
+                <input type="range" class="hz-slider__input" min="0" max="100" value="50" data-slider-input>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 6: Tally + Horizon composition                     #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="pairing" class="ws-section">
+            <header>
+                <h3><span class="ws-num">06</span> Tally + Horizon Composition</h3>
+                <h2>The canonical Job row.</h2>
+                <p>The visual-identity doc names this composition explicitly: <em>"A Job row in the Logbook is Tally + Horizon: the level number rendered in Tally style, with an XP progress bar in Horizon style trailing toward the next level. The two primitives compose, they don't compete."</em> Below: four sample Job rows at different progression levels showing how the pairing reads across the four color bands.</p>
+                <p>(The Tally face here is Inter as a placeholder — once the team picks Tally's face in the Tally workshop, this section automatically benefits.)</p>
+            </header>
+            <div class="hz-pairing">
+                <div class="hz-job-row">
+                    <div class="hz-job-row__num">
+                        14
+                        <small>Crafter Job</small>
+                    </div>
+                    <div class="hz-job-row__bar">
+                        <div class="hz-bar" data-progress-band="cool" style="--horizon-progress: 18%; --horizon-marker: 18%; height: 6px;">
+                            <div class="hz-bar__fill"></div>
+                            <div class="hz-bar__marker"></div>
+                        </div>
+                        <div class="hz-job-row__meta">
+                            <span><strong>900</strong> / 5,000 XP</span>
+                            <span>Cool · plenty of road</span>
+                        </div>
+                    </div>
+                    <div class="hz-job-row__next">
+                        Next
+                        <strong>Lv. 15</strong>
+                    </div>
+                </div>
+                <div class="hz-job-row">
+                    <div class="hz-job-row__num">
+                        23
+                        <small>Adventurer Job</small>
+                    </div>
+                    <div class="hz-job-row__bar">
+                        <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 55%; --horizon-marker: 55%; height: 6px;">
+                            <div class="hz-bar__fill"></div>
+                            <div class="hz-bar__marker"></div>
+                        </div>
+                        <div class="hz-job-row__meta">
+                            <span><strong>2,750</strong> / 5,000 XP</span>
+                            <span>Warming · halfway</span>
+                        </div>
+                    </div>
+                    <div class="hz-job-row__next">
+                        Next
+                        <strong>Lv. 24</strong>
+                    </div>
+                </div>
+                <div class="hz-job-row">
+                    <div class="hz-job-row__num">
+                        41
+                        <small>Completionist Job</small>
+                    </div>
+                    <div class="hz-job-row__bar">
+                        <div class="hz-bar" data-progress-band="warm" style="--horizon-progress: 78%; --horizon-marker: 78%; height: 6px;">
+                            <div class="hz-bar__fill"></div>
+                            <div class="hz-bar__marker"></div>
+                        </div>
+                        <div class="hz-job-row__meta">
+                            <span><strong>3,900</strong> / 5,000 XP</span>
+                            <span>Warm · closing in</span>
+                        </div>
+                    </div>
+                    <div class="hz-job-row__next">
+                        Next
+                        <strong>Lv. 42</strong>
+                    </div>
+                </div>
+                <div class="hz-job-row">
+                    <div class="hz-job-row__num">
+                        58
+                        <small>Hunter Job</small>
+                    </div>
+                    <div class="hz-job-row__bar">
+                        <div class="hz-bar" data-progress-band="hot" style="--horizon-progress: 96%; --horizon-marker: 96%; height: 6px;">
+                            <div class="hz-bar__fill"></div>
+                            <div class="hz-bar__marker"></div>
+                        </div>
+                        <div class="hz-job-row__meta">
+                            <span><strong>4,800</strong> / 5,000 XP</span>
+                            <span>Hot · go finish it</span>
+                        </div>
+                    </div>
+                    <div class="hz-job-row__next">
+                        Next
+                        <strong>Lv. 59</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 7: Anti-patterns                                   #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="anti" class="ws-section">
+            <header>
+                <h3><span class="ws-num">07</span> Anti-patterns</h3>
+                <h2>What we are NOT.</h2>
+                <p>The doc lists four specific anti-patterns for the Horizon. Each card below renders a deliberate violation with a "do-not-ship" stamp and a reason. The goal of this section is mutual recognition — when someone proposes a Horizon variant in code review, this section is the shared dictionary of "this drifted into a bad lane, fix it."</p>
+            </header>
+            <div class="hz-anti">
+                <article class="hz-anti__card">
+                    <span class="hz-anti__stamp">Do not ship</span>
+                    <h4 class="hz-anti__title">1. Literal arrows / chevrons</h4>
+                    <p class="hz-anti__reason">A blinking chevron beside the bar is too directive. The Horizon's job is to communicate "there's more this way" through mood — gradient + glow + warm shift — not a literal pointing finger. If a CTA-class arrow shows up next to a bar, the bar is failing.</p>
+                    <div class="hz-anti__demo">
+                        <div class="hz-anti-arrow">
+                            <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 60%;">
+                                <div class="hz-bar__fill"></div>
+                            </div>
+                            <span class="hz-anti-arrow__chevron">›</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hz-anti__card">
+                    <span class="hz-anti__stamp">Do not ship</span>
+                    <h4 class="hz-anti__title">2. Heavy dramatic gradients</h4>
+                    <p class="hz-anti__reason">The Horizon's gradient is a <em>hint</em>, not a flag. Rainbow gradients, hard purple-to-yellow ramps, neon stops — these belong in mobile-game UI (anti-ref #4). The shift is supposed to feel like sunlight warming, not a casino billboard.</p>
+                    <div class="hz-anti__demo">
+                        <div class="hz-anti-heavy">
+                            <div class="hz-bar" style="--horizon-progress: 60%;">
+                                <div class="hz-bar__fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hz-anti__card">
+                    <span class="hz-anti__stamp">Do not ship</span>
+                    <h4 class="hz-anti__title">3. "Click to continue" CTAs</h4>
+                    <p class="hz-anti__reason">The Horizon is <em>mood</em>, not a button. Bolting a CTA onto the bar collapses the primitive into a navigation control. If a CTA truly belongs in the surface, place it elsewhere — outside the Horizon's space — so the bar keeps doing its quiet "more this way" job without competing.</p>
+                    <div class="hz-anti__demo">
+                        <div class="hz-anti-cta">
+                            <div class="hz-bar" data-progress-band="warm" style="--horizon-progress: 80%;">
+                                <div class="hz-bar__fill"></div>
+                            </div>
+                            <button class="hz-anti-cta__btn" type="button">Continue →</button>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="hz-anti__card">
+                    <span class="hz-anti__stamp">Do not ship</span>
+                    <h4 class="hz-anti__title">4. Decorative-only (no real %)</h4>
+                    <p class="hz-anti__reason">A Horizon that animates without ever tracking a real value is the worst kind of dishonest. The doc names it explicitly: must always pair with a real percentage, never decorative-only. The fill below loops 25→75→25 — pretty, also a lie.</p>
+                    <div class="hz-anti__demo">
+                        <div class="hz-anti-deco">
+                            <div class="hz-bar">
+                                <div class="hz-bar__fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 8: Decision criteria                               #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="criteria" class="ws-section">
+            <header>
+                <h3><span class="ws-num">08</span> Decision Criteria</h3>
+                <h2>Five tests. Pass all five.</h2>
+                <p>Argue against the criteria, not the candidates.</p>
+            </header>
+            <div class="ws-criteria">
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">1</span>Translates across all four forms</h4>
+                    <p>Same language reads in linear, stepped, radial, and vertical. Fails when one form needs special rules to look right. See Section 2.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">2</span>Holds at every scale</h4>
+                    <p>Hero, row, inline, micro. Fails when the glow vanishes at micro or the gradient banding becomes visible at hero. See Section 4.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">3</span>The color semantic reads on first scan</h4>
+                    <p>A new user should feel "I'm close" vs "I just started" without reading any text. Fails when the warm/cool shift is too subtle (no signal) or too aggressive (anti-ref territory). See Section 3.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">4</span>Composes with Tally cleanly</h4>
+                    <p>In the canonical Job row, Tally is the protagonist and Horizon trails. Fails when the bar fights the number for attention. See Section 6.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">5</span>Passes the anti-refs</h4>
+                    <p>No literal arrows, no rainbow gradients, no CTAs, no decorative-only animations. See Section 7.</p>
+                </article>
+            </div>
+        </section>
+
+        <div class="ws-footer">
+            <h4>How to use this workshop</h4>
+            <ul>
+                <li><strong>Sections 1–2</strong> are the form vocabulary. Pick the four forms (linear / stepped / radial / vertical) as the canonical set, or argue to add / drop a form.</li>
+                <li><strong>Section 3</strong> is the color semantic. The cool → warming → warm → hot ramp is the load-bearing decision; calibrate aggressiveness here.</li>
+                <li><strong>Section 4</strong> is the scale survival check. If any form breaks at micro, decide the smallest scale we'll commit to.</li>
+                <li><strong>Section 5</strong> is the marker decision. Pick A, B, or C. The slider is for feel-the-bands gut-checking.</li>
+                <li><strong>Section 6</strong> is the canonical composition. Once Tally locks, this section reflects the picked face automatically.</li>
+                <li><strong>Section 7</strong> is shared vocabulary for code review. Quote a card by number when flagging a Horizon variant that drifted.</li>
+                <li><strong>Section 8</strong> is the rubric. Five tests, pass all five.</li>
+            </ul>
+        </div>
+    </main>
+
+    <script>
+        /* ============================================================
+         * HORIZON WORKSHOP -- interactive scrubber
+         *
+         * One slider in Section 5. As the user drags, it:
+         *   - updates the linear bar's --horizon-progress
+         *   - moves the marker to match
+         *   - sets the data-progress-band attribute so the gradient
+         *     + glow + pulse react
+         *   - updates the readout digits + band label
+         * ============================================================ */
+        (function () {
+            var input    = document.querySelector('[data-slider-input]');
+            var bar      = document.querySelector('[data-slider-bar]');
+            var readout  = document.querySelector('[data-slider-readout]');
+            var bandText = document.querySelector('[data-slider-band]');
+            if (!input || !bar || !readout || !bandText) return;
+
+            function bandFor(pct) {
+                // Match the bands documented in Section 3.
+                if (pct < 30) return { key: 'cool',    label: 'Cool · plenty of road' };
+                if (pct < 65) return { key: 'warming', label: 'Warming · in the climb' };
+                if (pct < 90) return { key: 'warm',    label: 'Warm · closing in' };
+                return                  { key: 'hot',     label: 'Hot · go finish it' };
+            }
+
+            function apply(pct) {
+                pct = Math.max(0, Math.min(100, pct));
+                bar.style.setProperty('--horizon-progress', pct + '%');
+                bar.style.setProperty('--horizon-marker',   pct + '%');
+                var b = bandFor(pct);
+                bar.setAttribute('data-progress-band', b.key);
+                readout.textContent = Math.round(pct);
+                bandText.textContent = b.label;
+            }
+
+            input.addEventListener('input', function () {
+                apply(parseFloat(input.value));
+            });
+            // Initial sync from the input's default value.
+            apply(parseFloat(input.value));
+        })();
+    </script>
+</body>
+</html>

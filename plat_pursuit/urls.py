@@ -353,6 +353,7 @@ urlpatterns = [
     path('design/binder/', BinderPreviewView.as_view(), name='design_binder_preview'),
     path('design/badge-collection/', BadgeCollectionListView.as_view(), name='design_badge_collection_list'),
     path('design/tally/', TemplateView.as_view(template_name='design/tally_preview.html'), name='design_tally_preview'),
+    path('design/horizon/', TemplateView.as_view(template_name='design/horizon_preview.html'), name='design_horizon_preview'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
