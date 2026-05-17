@@ -77,10 +77,7 @@
                 initialSnapshot: null,
                 maintTimers: [],
                 maintResolve: null,
-                maintSnapshot: null,
-                maintSparkTimer: null,
-                maintSparkObserver: null,
-                maintSparkVisible: false
+                maintSnapshot: null
             };
             FRAME_STATE.set(target, s);
         }
@@ -901,10 +898,6 @@
         target.classList.remove('pp-maint-band-drop', 'pp-maint-impact-shake');
         target.querySelectorAll('.pp-frame__diag-scan, .pp-frame__diag-beam').forEach(function (el) { el.remove(); });
 
-        // Ambient sparks should NOT keep firing while the card is
-        // staged-active; stop them before restoring staged state.
-        stopMaintenanceSparks(target);
-
         // Suppress CSS transitions during the snap-back so the card
         // returns to staged-active appearance instantly, without
         // running the active→maintenance fades in reverse.
@@ -1096,10 +1089,11 @@
                 emit('impact');
             }, 9145));
 
-            // PHASE 4d (T=10000): settle complete; ambient sparks.
+            // PHASE 4d (T=10000): settle complete. The maintenance
+            // band carries its own ambient sheen sweep via CSS, so
+            // there's no JS-driven ambient effect to start here.
             state.maintTimers.push(window.setTimeout(function () {
                 emit('complete');
-                startMaintenanceSparks(target);
                 if (typeof opts.onComplete === 'function') opts.onComplete();
                 if (state.maintResolve === resolve) {
                     state.maintResolve = null;
@@ -1111,155 +1105,12 @@
 
 
     /* --------------------------------------------------------
-     * Ambient repair sparks
-     *
-     * While a card sits in the maintenance state, periodic warm
-     * sparks shoot off the repair line — sells the "this badge
-     * is being actively repaired" texture. Each card spawns
-     * sparks on its own staggered cadence (1.5-3.0s between
-     * sparks). An IntersectionObserver pauses spawning when the
-     * card scrolls off-screen so a gallery of 50 maintenance
-     * cards doesn't churn timers for unseen cards.
-     * -------------------------------------------------------- */
-    function spawnMaintSpark(target) {
-        var art = target.querySelector('.pp-frame__art');
-        if (!art) return;
-        // Resolve spawn position in CARD-relative percentages so
-        // the spark can be appended to the .pp-frame itself (the
-        // only ancestor with overflow:visible — both .pp-frame__face
-        // and .pp-frame__art have overflow:hidden and would clip
-        // any spark that strayed past their edges).
-        var tr = target.getBoundingClientRect();
-        var ar = art.getBoundingClientRect();
-        if (tr.width === 0 || tr.height === 0) return;
-        var artLeftPct   = ((ar.left - tr.left) / tr.width)  * 100;
-        var artTopPct    = ((ar.top  - tr.top)  / tr.height) * 100;
-        var artWidthPct  = (ar.width  / tr.width)  * 100;
-        var artHeightPct = (ar.height / tr.height) * 100;
-
-        // Edge-biased spawn: pick the left or right edge of the
-        // art, then place the spark within the outer 28% band of
-        // the art on that side. Restrict vertically to the top
-        // half of the art so sparks read as flying off the upper
-        // edges of the card, not the bottom.
-        var isLeftSide = Math.random() < 0.5;
-        var edgeBandPct = artWidthPct * 0.28;
-        var spawnLeftPct = isLeftSide
-            ? artLeftPct + Math.random() * edgeBandPct
-            : artLeftPct + artWidthPct - edgeBandPct + Math.random() * edgeBandPct;
-        var spawnTopPct = artTopPct + Math.random() * (artHeightPct * 0.5);
-
-        var spark = document.createElement('div');
-        spark.className = 'pp-spark pp-spark--maint';
-        spark.style.left = spawnLeftPct + '%';
-        spark.style.top  = spawnTopPct + '%';
-        spark.style.bottom = 'auto';
-
-        // Trajectory aimed AT the chosen edge (sparks fly off the
-        // side they spawned near), with a slight upward bias so
-        // they rise like welding embers. ±28° random spread keeps
-        // the sparks from looking like a uniform stream.
-        // bias: atan2(-0.35, ±1) — mostly horizontal, lift up.
-        var biasAngle = Math.atan2(-0.35, isLeftSide ? -1 : 1);
-        var spread = (Math.random() - 0.5) * (56 * Math.PI / 180);  // ±28°
-        var angle = biasAngle + spread;
-
-        // Flight distance scales with the Frame variant so sparks
-        // clear the card edge by the same proportional amount on
-        // smaller variants. Default 110-200px, compact ~0.65x,
-        // mini ~0.42x. Matches the CSS spark size overrides for
-        // those variants so the whole effect reads consistently.
-        var distScale = 1;
-        if (target.classList.contains('pp-frame--mini')) {
-            distScale = 0.42;
-        } else if (target.classList.contains('pp-frame--compact')) {
-            distScale = 0.65;
-        }
-        var distance = (110 + Math.random() * 90) * distScale;
-        var peakX = Math.cos(angle) * distance;
-        var peakY = Math.sin(angle) * distance;             // negative = up
-        var xMid = peakX * 0.55;
-        var yMid = peakY * 0.70;
-        var xEnd = peakX;
-        var yEnd = peakY * 0.55 + 30 * distScale;           // slight gravity at end
-        var dur = 1100 + Math.random() * 600;
-        spark.style.setProperty('--spark-x-mid', xMid + 'px');
-        spark.style.setProperty('--spark-y-mid', yMid + 'px');
-        spark.style.setProperty('--spark-x-end', xEnd + 'px');
-        spark.style.setProperty('--spark-y-end', yEnd + 'px');
-        spark.style.setProperty('--spark-dur', dur + 'ms');
-        target.appendChild(spark);
-        window.setTimeout(function () { spark.remove(); }, dur + 50);
-    }
-
-    function scheduleNextMaintSpark(target, delayOverride) {
-        var state = getState(target);
-        if (!state.maintSparkVisible) return;
-        if (!target.classList.contains('pp-frame--maintenance')) return;
-        if (target.classList.contains('pp-frame--maint-staged')) return;
-        var delay = (typeof delayOverride === 'number')
-            ? delayOverride
-            : 800 + Math.random() * 1000;  // tighter cadence: 0.8-1.8s
-        state.maintSparkTimer = window.setTimeout(function () {
-            spawnMaintSpark(target);
-            scheduleNextMaintSpark(target);
-        }, delay);
-    }
-
-    function startMaintenanceSparks(target) {
-        if (!target) return;
-        var state = getState(target);
-        if (state.maintSparkObserver) return; // already wired
-        if (!target.classList.contains('pp-frame--maintenance')) return;
-        if (target.classList.contains('pp-frame--maint-staged')) return;
-        if (reducedMotion) return; // skip ambient motion under prefers-reduced-motion
-
-        if (typeof window.IntersectionObserver === 'function') {
-            state.maintSparkObserver = new IntersectionObserver(function (entries) {
-                var visible = !!(entries[0] && entries[0].isIntersecting);
-                state.maintSparkVisible = visible;
-                if (visible && !state.maintSparkTimer) {
-                    // Fire the FIRST spark almost immediately so the user
-                    // sees motion right away (no 1.8s blind wait), then
-                    // settle into the normal ambient cadence.
-                    scheduleNextMaintSpark(target, 250);
-                } else if (!visible && state.maintSparkTimer) {
-                    window.clearTimeout(state.maintSparkTimer);
-                    state.maintSparkTimer = null;
-                }
-            });
-            state.maintSparkObserver.observe(target);
-        } else {
-            // Fallback: spawn unconditionally (very old browsers).
-            state.maintSparkVisible = true;
-            scheduleNextMaintSpark(target, 250);
-        }
-    }
-
-    function stopMaintenanceSparks(target) {
-        if (!target) return;
-        var state = getState(target);
-        if (state.maintSparkTimer) {
-            window.clearTimeout(state.maintSparkTimer);
-            state.maintSparkTimer = null;
-        }
-        if (state.maintSparkObserver) {
-            state.maintSparkObserver.disconnect();
-            state.maintSparkObserver = null;
-        }
-        state.maintSparkVisible = false;
-        target.querySelectorAll('.pp-spark--maint').forEach(function (el) { el.remove(); });
-    }
-
-
-    /* --------------------------------------------------------
      * Lifecycle
      * -------------------------------------------------------- */
     function destroy(target) {
         if (!target) return;
         cancelEarnMoment(target);
         cancelMaintenanceMoment(target);
-        stopMaintenanceSparks(target);
         var state = FRAME_STATE.get(target);
         if (state) {
             if (state.resizeObserver) {
@@ -1276,14 +1127,9 @@
         WIRED.add(target);
         wireFlip(target);
         wireTitleScroll(target);
-        // Cards rendered directly in maintenance state get ambient
-        // repair sparks. Staged-for-animation cards skip until the
-        // active→maintenance moment completes (which then calls
-        // startMaintenanceSparks itself).
-        if (target.classList.contains('pp-frame--maintenance')
-            && !target.classList.contains('pp-frame--maint-staged')) {
-            startMaintenanceSparks(target);
-        }
+        // No per-card JS init for the maintenance state -- the ambient
+        // sheen sweep on the maintenance band is pure CSS, scoped to
+        // .pp-frame--maintenance .pp-frame__maint-stamp.
     }
 
     function init(root) {

@@ -1229,10 +1229,28 @@
     left: 50%;
     transform: translate(-50%, -50%) rotate(-5deg);
     padding: 7px 28px;
-    background: linear-gradient(180deg,
-        rgba(252, 215, 95, 1) 0%,
-        rgba(245, 195, 70, 1) 45%,
-        rgba(220, 165, 50, 1) 100%);
+    /* Two layered backgrounds: a moving highlight sheen and the
+     * static brass gradient under it. The sheen is sized 300% wide
+     * so it can travel from off-left to off-right; the base
+     * gradient stays at 100% width and 0,0 throughout. Both
+     * background-positions animate together in the keyframes, with
+     * the brass one held at 0,0 -- letting us slide ONLY the sheen
+     * across the plate every 4.5s. */
+    background:
+        linear-gradient(105deg,
+            transparent 0%,
+            transparent 38%,
+            rgba(255, 255, 220, 0.55) 50%,
+            transparent 62%,
+            transparent 100%),
+        linear-gradient(180deg,
+            rgba(252, 215, 95, 1) 0%,
+            rgba(245, 195, 70, 1) 45%,
+            rgba(220, 165, 50, 1) 100%);
+    background-size: 300% 100%, 100% 100%;
+    background-repeat: no-repeat, no-repeat;
+    background-position: -100% 0, 0 0;
+    animation: pp-maint-band-sheen 4.5s ease-in-out infinite;
     border: 2px solid rgba(115, 72, 18, 0.95);
     border-radius: 3px;
     color: rgba(40, 22, 4, 1);
@@ -1250,6 +1268,25 @@
         0 -1px 0 rgba(130, 80, 20, 0.55) inset,
         0 0 0 1px rgba(255, 240, 180, 0.2) inset;
     text-shadow: 0 1px 0 rgba(255, 240, 190, 0.45);
+}
+/* Sheen sweep -- slow, ambient, pure CSS. Replaces the JS-driven
+ * spark trails. The highlight gradient slides from off-left to
+ * off-right, then holds offscreen for ~40% of the cycle before
+ * restarting. Sells "this card is in active repair" with one
+ * focused motion cue on the band itself instead of competing
+ * pyrotechnics across the whole card. */
+@keyframes pp-maint-band-sheen {
+    0%   { background-position: -100% 0, 0 0; }
+    55%  { background-position:  200% 0, 0 0; }
+    100% { background-position:  200% 0, 0 0; }
+}
+/* Respect reduced-motion: hold the band at its quiet brass state,
+ * no sheen sweep. */
+@media (prefers-reduced-motion: reduce) {
+    .pp-frame__maint-stamp {
+        animation: none;
+        background-position: 200% 0, 0 0;
+    }
 }
 /* Left grommet — the metal stud anchoring the left end of the
  * band to the chrome. Dark inset + bright rim + tiny glint sells
@@ -1283,24 +1320,24 @@
  * band is hidden -- the damage-stripe overlay + warm chrome
  * carry the maintenance signal at that scale. */
 .pp-frame--compact .pp-frame__maint-stamp {
-    padding: 4px 16px;
-    font-size: 9.5px;
+    padding: 3px 12px;
+    font-size: 7.5px;
     border-width: 1px;
     border-radius: 2px;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.12em;
     box-shadow:
-        0 3px 6px rgba(0, 0, 0, 0.55),
+        0 2px 5px rgba(0, 0, 0, 0.55),
         0 1px 0 rgba(255, 240, 180, 0.45) inset,
         0 -1px 0 rgba(130, 80, 20, 0.55) inset,
         0 0 0 1px rgba(255, 240, 180, 0.2) inset;
 }
 .pp-frame--compact .pp-frame__maint-stamp::before,
 .pp-frame--compact .pp-frame__maint-stamp::after {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
 }
-.pp-frame--compact .pp-frame__maint-stamp::before { left: 4px; }
-.pp-frame--compact .pp-frame__maint-stamp::after  { right: 4px; }
+.pp-frame--compact .pp-frame__maint-stamp::before { left: 3px; }
+.pp-frame--compact .pp-frame__maint-stamp::after  { right: 3px; }
 
 /* Mini band -- "MAINTENANCE" is barely legible at this scale but
  * the yellow plate carries the visual signal at a glance, which
@@ -2660,51 +2697,12 @@
         0 0 4px rgba(220, 240, 250, 1),
         0 0 11px rgba(180, 215, 240, 0.55);
 }
-/* Ambient repair spark — bright, hot, and substantial so they
- * read clearly against the busy hatched warning overlay. Spawned
- * periodically by the JS controller from random points within
- * the badge artwork, arcing outward like sparks flying off the
- * badge as it's being repaired. Sized + glowed to read from a
- * gallery thumbnail, not just a hover-over inspection. */
-.pp-spark--maint {
-    width: 12px;
-    height: 12px;
-    background: radial-gradient(circle,
-        rgba(255, 255, 245, 1) 0%,
-        rgba(255, 240, 180, 1) 18%,
-        rgba(255, 195, 95, 0.98) 42%,
-        rgba(240, 130, 50, 0.85) 68%,
-        rgba(190, 80, 30, 0.45) 86%,
-        transparent 100%);
-    box-shadow:
-        0 0 10px rgba(255, 240, 180, 1),
-        0 0 22px rgba(255, 190, 90, 0.85),
-        0 0 42px rgba(255, 140, 60, 0.55),
-        0 0 70px rgba(255, 100, 40, 0.28);
-}
-/* Sparks scale down for the smaller Frame variants so they read as
- * fitting embers, not oversized blobs covering the whole card.
- * Flight distance is also scaled in JS (spawnMaintSpark reads the
- * variant class) so the trajectory clears the card edge by the
- * same proportional amount as default. */
-.pp-frame--compact .pp-spark--maint {
-    width: 8px;
-    height: 8px;
-    box-shadow:
-        0 0 7px rgba(255, 240, 180, 1),
-        0 0 14px rgba(255, 190, 90, 0.85),
-        0 0 26px rgba(255, 140, 60, 0.55),
-        0 0 42px rgba(255, 100, 40, 0.28);
-}
-.pp-frame--mini .pp-spark--maint {
-    width: 5px;
-    height: 5px;
-    box-shadow:
-        0 0 4px rgba(255, 240, 180, 1),
-        0 0 9px rgba(255, 190, 90, 0.85),
-        0 0 16px rgba(255, 140, 60, 0.55),
-        0 0 26px rgba(255, 100, 40, 0.28);
-}
+/* Ambient maintenance sparks were removed in favor of the band's
+ * own sheen sweep (see the .pp-frame__maint-stamp animation in the
+ * State: maintenance section above). Sparks ran on a JS timer per
+ * visible card and drew attention away from the rest of the chrome;
+ * the sheen is pure CSS, lives on the band itself, and reads as
+ * "this card is in repair" without competing with the badge art. */
 
 
 /* ============================================================
