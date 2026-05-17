@@ -97,7 +97,11 @@
     cursor: pointer;
 }
 
-/* Corner notches: tier-aware brand mark at every corner. */
+/* Corner notches: tier-aware brand mark at every corner. The
+ * z-index sits above every blueprint / unearned overlay element
+ * (fab-banner at 6, construction line at 5, blueprint-mark at 5,
+ * the unearned art::after veil at 4) so the tier-tinted diamond
+ * always reads cleanly at the corner regardless of state. */
 .pp-frame::before,
 .pp-frame::after,
 .pp-frame > .pp-frame__corner-bl,
@@ -109,7 +113,7 @@
     background: var(--frame-bg);
     border: 1px solid var(--frame-border);
     transform: rotate(45deg);
-    z-index: 5;
+    z-index: 10;
     pointer-events: none;
     transition: opacity 600ms ease, box-shadow 600ms ease;
 }
@@ -199,11 +203,14 @@
     pointer-events: none;
 }
 
-/* Plinth (badge name + meta line). */
+/* Plinth (badge name + meta line + corner labels). The extra
+ * padding-bottom reserves a "footer strip" for the absolute
+ * engraving (bottom-left) and set-mark (bottom-right) so they
+ * don't overlap the meta line that sits above them in flow. */
 .pp-frame__plinth {
     position: relative;
     background: var(--frame-chrome-bg);
-    padding: 7px 10px;
+    padding: 7px 10px 22px;
     border-top: 1px solid var(--frame-border);
     display: flex;
     flex-direction: column;
@@ -283,27 +290,75 @@
  *
  * Default (no class) : gallery / grid views — the primary
  *           target; fits a 4-wide desktop grid at ~290px.
- * Compact : in-progress badges, title + plinth hidden, ribbon
- *           shows single-letter tier banner (B/S/G/P)
- * Mini   : inline / chip use, title + plinth hidden, ribbon
- *          shows single-letter tier banner
+ * Compact : in-progress badges + dense lists. Slim chrome with
+ *           series title, rank engraving, and set-mark only.
+ * Mini   : inline / chip use. Same slim chrome as compact, just
+ *          tighter padding + smaller type.
+ *
+ * Compact + Mini show ONLY three textual identifiers: the series
+ * name in the title bar, the engraving rank in the bottom-left
+ * of the plinth, and the set-mark in the bottom-right. Badge
+ * name, earned date, rarity, and cycle-print all drop -- at
+ * these sizes the chrome itself plus those three identifiers
+ * carry the badge's identity without crowding the art.
  * ============================================================ */
-/* Compact: title bar + plinth hidden. Tier identity carried
- * entirely by the chrome (border color + tier-tinted notches +
- * backdrop gradient). No ribbon — the chrome is enough at this
- * size, and the ribbon read as redundant noise. */
-.pp-frame--compact .pp-frame__title  { display: none; }
-.pp-frame--compact .pp-frame__plinth { display: none; }
-.pp-frame--compact .pp-frame__art    { border-radius: 5px; }
+.pp-frame--compact .pp-frame__title {
+    padding: 3px 9px;
+}
+.pp-frame--compact .pp-frame__title::after { display: none; }
+.pp-frame--compact .pp-frame__series      { font-size: 8px; letter-spacing: 0.08em; }
+.pp-frame--compact .pp-frame__plinth {
+    padding: 0 9px 14px;
+    gap: 0;
+    min-height: 14px;
+}
+.pp-frame--compact .pp-frame__plinth-name-row,
+.pp-frame--compact .pp-frame__plinth-meta { display: none; }
+.pp-frame--compact .pp-frame__engraving {
+    bottom: 3px;
+    left: 7px;
+    font-size: 6.5px;
+    letter-spacing: 0.18em;
+    gap: 4px;
+}
+.pp-frame--compact .pp-frame__engraving-num { font-size: 8px; }
+.pp-frame--compact .pp-frame__set-mark {
+    bottom: 3px;
+    right: 7px;
+    font-size: 7.5px;
+    letter-spacing: 0.14em;
+}
 
-/* Mini: same approach as compact — chrome-only tier identity. */
 .pp-frame--mini {
     max-width: 110px;
     --frame-art-pad: 5px;
 }
-.pp-frame--mini .pp-frame__title   { display: none; }
-.pp-frame--mini .pp-frame__plinth  { display: none; }
-.pp-frame--mini .pp-frame__art     { border-radius: 5px; }
+.pp-frame--mini .pp-frame__title {
+    padding: 2px 6px;
+}
+.pp-frame--mini .pp-frame__title::after { display: none; }
+.pp-frame--mini .pp-frame__series      { font-size: 6.5px; letter-spacing: 0.06em; }
+.pp-frame--mini .pp-frame__plinth {
+    padding: 0 6px 11px;
+    gap: 0;
+    min-height: 11px;
+}
+.pp-frame--mini .pp-frame__plinth-name-row,
+.pp-frame--mini .pp-frame__plinth-meta { display: none; }
+.pp-frame--mini .pp-frame__engraving {
+    bottom: 2px;
+    left: 5px;
+    font-size: 5.5px;
+    letter-spacing: 0.14em;
+    gap: 3px;
+}
+.pp-frame--mini .pp-frame__engraving-num { font-size: 6.5px; }
+.pp-frame--mini .pp-frame__set-mark {
+    bottom: 2px;
+    right: 5px;
+    font-size: 6.5px;
+    letter-spacing: 0.12em;
+}
 .pp-frame--mini.pp-frame--bronze   { --notch-size: 5px; }
 .pp-frame--mini.pp-frame--silver   { --notch-size: 5px; }
 .pp-frame--mini.pp-frame--gold     { --notch-size: 6px; }
@@ -397,20 +452,26 @@
  * Pursuer's frame carries their permanent earn-rank engraved
  * into the plinth (decorated format: "#247 of all time").
  * ============================================================ */
+/* Engraving sits absolute in the bottom-left corner of the
+ * plinth, mirroring the set-mark in the bottom-right. The "of
+ * all time" subtitle was retired -- the # prefix on its own
+ * reads as the rank, and the two-corner balance keeps the
+ * plinth chrome legible without an extra row of decoration. */
 .pp-frame__engraving {
-    margin-top: 2px;
-    padding-top: 4px;
-    border-top: 1px dashed rgba(255, 255, 255, 0.07);
+    position: absolute;
+    bottom: 5px;
+    left: 9px;
     display: flex;
-    justify-content: center;
     align-items: baseline;
     gap: 5px;
     font-size: 7.5px;
     text-transform: uppercase;
     letter-spacing: 0.22em;
     color: rgba(255, 255, 255, 0.35);
-    line-height: 1.1;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    z-index: 3;
 }
 .pp-frame__engraving-num {
     font-size: 9.5px;
@@ -2014,9 +2075,11 @@
 
 /* PHASE 8: Engraving etches in via clip-path with a traveling
  * welding head + sparks. JS measures text bounds and sets
- * inline clip-path on the engraving + the head's transition. */
+ * inline clip-path on the engraving + the head's transition.
+ * (Don't override position here -- the engraving is absolute by
+ * default now, bottom-left of the plinth, and the clip-path
+ * reveal works the same on absolute as on relative.) */
 .pp-earn-engraving .pp-frame__engraving {
-    position: relative;
     clip-path: inset(0 100% 0 0);
     transition: clip-path calc(3s * var(--earn-scale, 1)) linear;
 }

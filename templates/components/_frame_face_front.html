@@ -117,23 +117,23 @@
         </div>
     {% endif %}
     {% if frame.engraving_rank %}
-        {# Render the final engraving form. For blueprint states (in_progress / unearned) #}
-        {# the placeholder class keeps it visibility:hidden until the earn moment's etch #}
-        {# phase reveals it. Maintenance cards SHOW the mint engraving — it's a permanent #}
-        {# fact that survived into the dormant state. Span ORDER matters: rank first, #}
-        {# label second, so the etch animation's welding head sweeps left to right. #}
+        {# Permanent earn-rank engraved in the bottom-left corner of the plinth, #}
+        {# opposite the set-mark in the bottom-right. The "of all time" subtitle #}
+        {# was retired -- the # prefix on the number reads as the rank cleanly on #}
+        {# its own, and the cleaner two-corner layout balances the plinth chrome. #}
+        {# Maintenance cards SHOW the mint engraving -- it's a permanent fact that #}
+        {# survived into the dormant state. Blueprint states use the placeholder #}
+        {# class so the engraving stays visibility:hidden until the earn moment's #}
+        {# etch phase reveals it. #}
         <div class="pp-frame__engraving{% if state == 'in_progress' or state == 'unearned' %} pp-frame__engraving--placeholder{% endif %}{% if frame.engraving_rank == 1 %} pp-frame__engraving--first{% endif %}">
             <span class="pp-frame__engraving-num">#{{ frame.engraving_rank|intcomma }}</span>
-            <span>{{ frame.engraving_total_label|default:"of all time" }}</span>
         </div>
     {% elif state == 'in_progress' or state == 'unearned' or frame.is_pinned %}
-        {# No rank yet — placeholder reserves engraving height with "#---" filler. #}
-        {# Applies to both in_progress AND unearned (both "in fabrication" blueprint #}
-        {# states) so every card has the same plinth height regardless of state, and #}
-        {# the set-mark sits in the same bottom-right corner across the whole grid. #}
+        {# No rank yet -- placeholder for the engraving slot. Visibility-hidden #}
+        {# (via the .placeholder class) keeps it out of view while still claiming #}
+        {# the corner so the earn moment's etch animation has a settled target. #}
         <div class="pp-frame__engraving pp-frame__engraving--placeholder">
             <span class="pp-frame__engraving-num">#---</span>
-            <span>not earned yet</span>
         </div>
     {% endif %}
     {% if frame.set_number %}
