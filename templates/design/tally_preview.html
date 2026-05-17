@@ -1,0 +1,2160 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tally — PlatPursuit Design Workshop</title>
+
+    {# Type candidates + references for the Tally primitive exploration. #}
+    {# Four candidates, two reference benchmarks: #}
+    {#   Inter               -- candidate: safe baseline grotesque (opsz axis) #}
+    {#   Space Grotesk       -- candidate: distinctive indie-tech grotesque #}
+    {#   Bricolage Grotesque -- candidate: variable display sans w/ opsz + wdth + wght #}
+    {#   JetBrains Mono      -- candidate: ledger / data monospace #}
+    {#   Archivo             -- REFERENCE: industrial-signage grotesque (DIN heritage) #}
+    {#   Press Start 2P      -- REFERENCE: pixel game UI (anti-ref #4 benchmark) #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Space+Grotesk:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=JetBrains+Mono:wght@400;500;700;800&family=Archivo:wght@400;500;600;700;800;900&family=Press+Start+2P&display=swap">
+
+    <style>
+        /* ============================================================
+         * TALLY PRIMITIVE WORKSHOP
+         *
+         * Tally is the signature treatment for how numbers, levels,
+         * XP, and milestones render. The doc names its typeface choice
+         * as "the single highest-leverage type decision" in the kit.
+         *
+         * This workshop tests four candidate display faces side-by-side
+         * at every scale Tally appears, then layers in the dynamic
+         * pieces: ticking-up animation variants, the level-up moment,
+         * and the fresh-decay treatment for recently-earned numbers.
+         *
+         * Section map:
+         *   1. The Showdown        -- same number, four faces, 120px
+         *   2. Scale Ladder        -- headline / section / inline / micro
+         *   3. Tabular figures     -- digit alignment confirmation
+         *   4. Tick-up animation   -- slot / flip / weighted count A/B/C
+         *   5. Level-up moment     -- choreographed celebratory beat
+         *   6. Fresh-decay         -- just-earned / recent / settled
+         * ============================================================ */
+
+        /* ------------------------------------------------------------
+         * Workshop tokens. Mirrors production site palette tokens so
+         * the workshop reads like a page that could exist in the real
+         * app, not a typography test sheet.
+         * ------------------------------------------------------------ */
+        :root {
+            --ws-bg-deep:        rgb(8, 10, 14);
+            --ws-bg-base:        rgb(14, 17, 22);
+            --ws-bg-card:        rgb(20, 24, 32);
+            --ws-bg-card-hi:     rgb(26, 32, 42);
+            --ws-border:         rgba(255, 255, 255, 0.08);
+            --ws-border-hi:      rgba(255, 255, 255, 0.14);
+            --ws-text:           rgba(255, 255, 255, 0.92);
+            --ws-text-soft:      rgba(255, 255, 255, 0.55);
+            --ws-text-muted:     rgba(255, 255, 255, 0.35);
+            --ws-accent:         rgb(110, 200, 230);
+            --ws-accent-dim:     rgba(110, 200, 230, 0.6);
+            --ws-accent-faint:   rgba(110, 200, 230, 0.15);
+            --ws-gold:           rgb(245, 215, 120);
+            --ws-warn:           rgb(220, 130, 70);
+
+            /* Typeface stacks. The Tally exploration picks ONE of the
+             * four candidates for production; the two reference faces
+             * (Archivo, Press Start 2P) are calibration benchmarks
+             * only -- they ship if and only if the brief secretly
+             * wanted them, which it shouldn't. The rest of the site
+             * keeps its own default sans for body copy. */
+            --ws-face-inter:      'Inter', system-ui, sans-serif;
+            --ws-face-space:      'Space Grotesk', 'Inter', sans-serif;
+            --ws-face-bricolage:  'Bricolage Grotesque', 'Inter', sans-serif;
+            --ws-face-jbmono:     'JetBrains Mono', ui-monospace, monospace;
+            --ws-face-archivo:    'Archivo', 'Inter', sans-serif;
+            --ws-face-press:      'Press Start 2P', 'JetBrains Mono', monospace;
+
+            --ws-body:            'Inter', system-ui, sans-serif;
+
+            /* Active candidate -- the face the user has "picked" via
+             * the Section 1 pick buttons. Sections 4-6 inherit this
+             * variable so the dynamic pieces (tick-up, level-up,
+             * fresh-decay) render in whichever candidate is being
+             * previewed. Default is Inter, swapped by JS on click. */
+            --ws-face-active:        var(--ws-face-inter);
+            --ws-face-active-weight: 900;
+            --ws-face-active-vsettings: "opsz" 32;
+            --ws-face-active-letter: -0.04em;
+        }
+        body[data-active-face="inter"] {
+            --ws-face-active:        var(--ws-face-inter);
+            --ws-face-active-weight: 900;
+            --ws-face-active-vsettings: "opsz" 32;
+            --ws-face-active-letter: -0.04em;
+        }
+        body[data-active-face="space"] {
+            --ws-face-active:        var(--ws-face-space);
+            --ws-face-active-weight: 700; /* Space Grotesk maxes at 700 */
+            --ws-face-active-vsettings: normal;
+            --ws-face-active-letter: -0.05em;
+        }
+        body[data-active-face="bricolage"] {
+            --ws-face-active:        var(--ws-face-bricolage);
+            --ws-face-active-weight: 800;
+            --ws-face-active-vsettings: "opsz" 96, "wdth" 100, "wght" 800;
+            --ws-face-active-letter: -0.04em;
+        }
+        body[data-active-face="jbmono"] {
+            --ws-face-active:        var(--ws-face-jbmono);
+            --ws-face-active-weight: 800;
+            --ws-face-active-vsettings: normal;
+            --ws-face-active-letter: -0.04em;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(ellipse at top, rgba(110, 200, 230, 0.04), transparent 50%),
+                var(--ws-bg-deep);
+            color: var(--ws-text);
+            font-family: var(--ws-body);
+            font-size: 15px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        /* ------------------------------------------------------------
+         * Workshop chrome: header, sticky in-page nav, main column.
+         * ------------------------------------------------------------ */
+        .ws-header {
+            border-bottom: 1px solid var(--ws-border);
+            padding: 40px 48px 32px;
+            background: linear-gradient(180deg, var(--ws-bg-base), var(--ws-bg-deep));
+        }
+        .ws-header h1 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+        }
+        .ws-header h1 span {
+            color: var(--ws-text-soft);
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .ws-header h2 {
+            margin: 0 0 14px;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        .ws-header p {
+            margin: 0;
+            max-width: 720px;
+            color: var(--ws-text-soft);
+            font-size: 16px;
+        }
+        .ws-header p + p { margin-top: 12px; }
+        .ws-header strong { color: var(--ws-text); font-weight: 600; }
+
+        .ws-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 14px 48px;
+            border-bottom: 1px solid var(--ws-border);
+            background: var(--ws-bg-deep);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .ws-nav a {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ws-text-soft);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: background 160ms ease, color 160ms ease;
+        }
+        .ws-nav a:hover {
+            background: var(--ws-bg-card);
+            color: var(--ws-text);
+        }
+
+        main {
+            padding: 0 48px 120px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .ws-section {
+            padding: 80px 0 40px;
+            border-bottom: 1px dashed var(--ws-border);
+        }
+        .ws-section:last-child { border-bottom: none; }
+        .ws-section > header {
+            margin-bottom: 36px;
+            max-width: 760px;
+        }
+        .ws-section > header h3 {
+            margin: 0 0 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-section > header h3 .ws-num {
+            color: var(--ws-text-muted);
+            margin-right: 8px;
+        }
+        .ws-section > header h2 {
+            margin: 0 0 14px;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+        }
+        .ws-section > header p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 15px;
+        }
+        .ws-section > header p + p { margin-top: 10px; }
+
+        /* ------------------------------------------------------------
+         * Section 1: The Showdown
+         *
+         * The strip at the top is the tightest direct comparison --
+         * same number, same scale, no card chrome between candidates.
+         * The eye lands all four faces simultaneously rather than
+         * jumping card-to-card. Below the strip, the per-candidate
+         * cards offer the deeper read (demo numbers + tradeoff notes).
+         * ------------------------------------------------------------ */
+        .ws-strip {
+            margin-bottom: 36px;
+            padding: 32px 32px 28px;
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+        }
+        .ws-strip__label {
+            margin: 0 0 22px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+            font-family: var(--ws-body);
+        }
+        .ws-strip__label em {
+            color: var(--ws-text-muted);
+            font-style: normal;
+            font-weight: 500;
+            margin-left: 8px;
+            letter-spacing: 0.04em;
+            text-transform: none;
+        }
+        .ws-strip__row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+            align-items: end;
+        }
+        .ws-strip__refs {
+            margin-top: 26px;
+            padding-top: 22px;
+            border-top: 1px dashed var(--ws-border);
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-strip__cell {
+            text-align: center;
+            padding: 8px 4px 12px;
+            border-radius: 6px;
+            transition: background 160ms ease;
+        }
+        .ws-strip__cell:hover { background: var(--ws-bg-deep); }
+        .ws-strip__cell-num {
+            font-size: 112px;
+            line-height: 1;
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            display: block;
+            margin-bottom: 12px;
+        }
+        .ws-strip__cell-name {
+            margin: 0;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            font-family: var(--ws-body);
+        }
+        /* Per-face overrides for the strip cells. Mirrors what the
+         * showdown cards do, in compact form. */
+        .ws-strip__cell[data-face="inter"]     .ws-strip__cell-num { font-family: var(--ws-face-inter); font-variation-settings: "opsz" 32; }
+        .ws-strip__cell[data-face="space"]     .ws-strip__cell-num { font-family: var(--ws-face-space); font-weight: 700; letter-spacing: -0.05em; }
+        .ws-strip__cell[data-face="bricolage"] .ws-strip__cell-num { font-family: var(--ws-face-bricolage); font-variation-settings: "opsz" 96, "wdth" 100, "wght" 800; }
+        .ws-strip__cell[data-face="jbmono"]    .ws-strip__cell-num { font-family: var(--ws-face-jbmono); font-weight: 800; letter-spacing: -0.04em; }
+        .ws-strip__cell[data-face="archivo"]   .ws-strip__cell-num { font-family: var(--ws-face-archivo); font-weight: 900; letter-spacing: -0.05em; }
+        .ws-strip__cell[data-face="press"]     .ws-strip__cell-num { font-family: var(--ws-face-press); font-size: 78px; font-weight: 400; letter-spacing: 0; }
+
+        .ws-showdown {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-face {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 32px 24px;
+            position: relative;
+            transition: border-color 240ms ease, background 240ms ease;
+        }
+        .ws-face:hover {
+            border-color: var(--ws-border-hi);
+            background: var(--ws-bg-card-hi);
+        }
+        .ws-face__meta {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .ws-face__name {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--ws-text);
+        }
+        .ws-face__name code {
+            font-family: var(--ws-face-jbmono);
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--ws-text-muted);
+            margin-left: 8px;
+            letter-spacing: 0;
+        }
+        .ws-face__vibe {
+            margin: 0;
+            font-size: 12px;
+            color: var(--ws-text-soft);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        .ws-face__hero {
+            font-size: 120px;
+            line-height: 0.95;
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            margin: 0;
+        }
+        .ws-face__demo {
+            display: flex;
+            align-items: baseline;
+            gap: 24px;
+            margin-top: 18px;
+            color: var(--ws-text-soft);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-face__demo > span:nth-child(1) {
+            font-size: 52px;
+            font-weight: 700;
+            color: var(--ws-text);
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+        .ws-face__demo > span:nth-child(2) {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            line-height: 1;
+        }
+        .ws-face__demo > span:nth-child(3) {
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0;
+            line-height: 1;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+        .ws-face__notes {
+            margin: 22px 0 0;
+            padding: 14px 16px 14px;
+            background: var(--ws-bg-deep);
+            border: 1px dashed var(--ws-border);
+            border-radius: 6px;
+            font-size: 12.5px;
+            line-height: 1.55;
+            color: var(--ws-text-soft);
+            font-family: var(--ws-body);
+        }
+        .ws-face__notes strong { color: var(--ws-text); font-weight: 600; }
+
+        /* Typeface application. The .ws-face element applies one face,
+         * and every typographic element inside inherits it via the
+         * tier-specific overrides below. */
+        .ws-face[data-face="inter"]      { font-family: var(--ws-face-inter); }
+        .ws-face[data-face="inter"] .ws-face__hero {
+            font-variation-settings: "opsz" 32;
+        }
+        .ws-face[data-face="space"]      { font-family: var(--ws-face-space); }
+        .ws-face[data-face="space"] .ws-face__hero {
+            font-weight: 700; /* Space Grotesk maxes at 700 */
+            letter-spacing: -0.05em;
+        }
+        .ws-face[data-face="bricolage"]  { font-family: var(--ws-face-bricolage); }
+        .ws-face[data-face="bricolage"] .ws-face__hero {
+            font-variation-settings: "opsz" 96, "wdth" 100, "wght" 800;
+            letter-spacing: -0.04em;
+        }
+        .ws-face[data-face="bricolage"] .ws-face__demo > span:nth-child(1) {
+            font-variation-settings: "opsz" 60, "wdth" 100, "wght" 700;
+        }
+        .ws-face[data-face="jbmono"]     { font-family: var(--ws-face-jbmono); }
+        .ws-face[data-face="jbmono"] .ws-face__hero {
+            font-weight: 800;
+            letter-spacing: -0.04em;
+        }
+        .ws-face[data-face="jbmono"] .ws-face__demo > span:nth-child(1) {
+            font-weight: 700;
+        }
+        .ws-face[data-face="archivo"]    { font-family: var(--ws-face-archivo); }
+        .ws-face[data-face="archivo"] .ws-face__hero {
+            font-weight: 900;
+            letter-spacing: -0.05em;
+        }
+        .ws-face[data-face="press"]      { font-family: var(--ws-face-press); }
+        .ws-face[data-face="press"] .ws-face__hero {
+            /* Press Start 2P only ships at 400 weight (the chunky pixel
+             * letterforms have no weight axis); it's also visually
+             * larger than the other faces at the same px size because
+             * of how its pixel grid rasterizes. We scale down to keep
+             * the comparison fair. */
+            font-weight: 400;
+            font-size: 84px;
+            letter-spacing: 0;
+            line-height: 1;
+        }
+        .ws-face[data-face="press"] .ws-face__demo > span:nth-child(1) {
+            font-weight: 400;
+            font-size: 32px;
+            letter-spacing: 0;
+        }
+        .ws-face[data-face="press"] .ws-face__demo > span:nth-child(2) {
+            font-weight: 400;
+            font-size: 14px;
+            letter-spacing: 0;
+        }
+        .ws-face[data-face="press"] .ws-face__demo > span:nth-child(3) {
+            font-family: var(--ws-body);
+        }
+
+        /* Reference badge -- pinned to the card to make clear that
+         * Archivo + Press Start 2P are calibration anchors, not
+         * candidates to ship. The badge sits inline with the face
+         * name in the meta row. */
+        .ws-face__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            margin-left: 8px;
+            background: rgba(220, 130, 70, 0.15);
+            border: 1px solid rgba(220, 130, 70, 0.45);
+            border-radius: 999px;
+            font-family: var(--ws-body);
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--ws-warn);
+            text-transform: uppercase;
+            vertical-align: middle;
+        }
+        .ws-face[data-role="reference"] {
+            border-style: dashed;
+            border-color: rgba(220, 130, 70, 0.25);
+        }
+        .ws-face[data-role="reference"]:hover {
+            border-color: rgba(220, 130, 70, 0.5);
+        }
+
+        /* Pick button -- sits at the bottom of each CANDIDATE card
+         * (references intentionally don't get one; they aren't
+         * pickable). Clicking sets the active face for Sections 4-6
+         * so the dynamic pieces preview in that typeface. */
+        .ws-face__pick {
+            margin-top: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: transparent;
+            color: var(--ws-text-soft);
+            border: 1px solid var(--ws-border-hi);
+            border-radius: 999px;
+            font-family: var(--ws-body);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+        }
+        .ws-face__pick:hover {
+            background: var(--ws-bg-deep);
+            color: var(--ws-text);
+            border-color: var(--ws-accent-dim);
+        }
+        .ws-face__pick::before {
+            content: "";
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: 1.5px solid var(--ws-text-muted);
+            transition: background 160ms ease, border-color 160ms ease;
+        }
+        /* Picked state -- the body's data-active-face attribute drives
+         * which face card lights up. Cyan fill on the indicator dot,
+         * cyan border on the card, label flips to "Active pick". */
+        body[data-active-face="inter"]     .ws-face[data-face="inter"],
+        body[data-active-face="space"]     .ws-face[data-face="space"],
+        body[data-active-face="bricolage"] .ws-face[data-face="bricolage"],
+        body[data-active-face="jbmono"]    .ws-face[data-face="jbmono"] {
+            border-color: var(--ws-accent-dim);
+            background: var(--ws-bg-card-hi);
+            box-shadow: 0 0 0 1px var(--ws-accent-dim), 0 0 24px rgba(110, 200, 230, 0.12);
+        }
+        body[data-active-face="inter"]     .ws-face[data-face="inter"]     .ws-face__pick,
+        body[data-active-face="space"]     .ws-face[data-face="space"]     .ws-face__pick,
+        body[data-active-face="bricolage"] .ws-face[data-face="bricolage"] .ws-face__pick,
+        body[data-active-face="jbmono"]    .ws-face[data-face="jbmono"]    .ws-face__pick {
+            background: var(--ws-accent-faint);
+            color: var(--ws-accent);
+            border-color: var(--ws-accent);
+        }
+        body[data-active-face="inter"]     .ws-face[data-face="inter"]     .ws-face__pick::before,
+        body[data-active-face="space"]     .ws-face[data-face="space"]     .ws-face__pick::before,
+        body[data-active-face="bricolage"] .ws-face[data-face="bricolage"] .ws-face__pick::before,
+        body[data-active-face="jbmono"]    .ws-face[data-face="jbmono"]    .ws-face__pick::before {
+            background: var(--ws-accent);
+            border-color: var(--ws-accent);
+            box-shadow: 0 0 8px rgba(110, 200, 230, 0.55);
+        }
+        /* Banner that appears across the top of Sections 4-6 to label
+         * which candidate is currently being previewed. Keeps the
+         * comparison anchored. */
+        .ws-active-banner {
+            margin: 0 0 28px;
+            padding: 12px 18px;
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-left: 3px solid var(--ws-accent);
+            border-radius: 6px;
+            font-family: var(--ws-body);
+            font-size: 12px;
+            color: var(--ws-text-soft);
+            letter-spacing: 0.04em;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .ws-active-banner strong {
+            color: var(--ws-accent);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+        .ws-active-banner [data-active-name] {
+            color: var(--ws-text);
+            font-weight: 600;
+            margin-left: 6px;
+        }
+
+        /* ------------------------------------------------------------
+         * Section 2: Scale Ladder
+         *
+         * For each typeface, show the four scales Tally appears at:
+         *   headline (Pursuer Level, ~96px)
+         *   section (Job Level, ~48px)
+         *   inline (XP award, ~24px)
+         *   micro (counter, ~14px)
+         *
+         * Goal: confirm the typeface holds at every scale -- some
+         * display faces look amazing at 120px and fall apart at 14px.
+         * ------------------------------------------------------------ */
+        .ws-scales {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-scale {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 32px;
+        }
+        .ws-scale__name {
+            margin: 0 0 24px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+            font-family: var(--ws-body);
+        }
+        .ws-scale__row {
+            display: grid;
+            grid-template-columns: 90px 1fr;
+            align-items: baseline;
+            gap: 18px;
+            padding: 12px 0;
+            border-top: 1px dashed var(--ws-border);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-scale__row:first-of-type { border-top: none; padding-top: 0; }
+        .ws-scale__row-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            font-family: var(--ws-body);
+        }
+        .ws-scale__row-context {
+            font-family: var(--ws-body);
+            font-size: 11px;
+            color: var(--ws-text-muted);
+            margin-left: 10px;
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .ws-scale__row-headline { font-size: 96px;  font-weight: 900; line-height: 1;     letter-spacing: -0.04em; color: var(--ws-text); }
+        .ws-scale__row-section  { font-size: 48px;  font-weight: 800; line-height: 1;     letter-spacing: -0.03em; color: var(--ws-text); }
+        .ws-scale__row-inline   { font-size: 22px;  font-weight: 700; line-height: 1.2;   letter-spacing: -0.01em; color: var(--ws-text); }
+        .ws-scale__row-micro    { font-size: 13px;  font-weight: 600; line-height: 1.4;   letter-spacing: 0.02em;  color: var(--ws-text-soft); }
+        .ws-scale__row-headline + .ws-scale__row-context,
+        .ws-scale__row-section + .ws-scale__row-context,
+        .ws-scale__row-inline + .ws-scale__row-context,
+        .ws-scale__row-micro + .ws-scale__row-context {
+            display: block;
+            margin: 6px 0 0;
+        }
+
+        .ws-scale[data-face="inter"]    { font-family: var(--ws-face-inter); }
+        .ws-scale[data-face="space"]    { font-family: var(--ws-face-space); }
+        .ws-scale[data-face="space"] .ws-scale__row-headline,
+        .ws-scale[data-face="space"] .ws-scale__row-section { font-weight: 700; letter-spacing: -0.05em; }
+        .ws-scale[data-face="bricolage"] { font-family: var(--ws-face-bricolage); }
+        .ws-scale[data-face="bricolage"] .ws-scale__row-headline {
+            font-variation-settings: "opsz" 96, "wdth" 100, "wght" 800;
+        }
+        .ws-scale[data-face="bricolage"] .ws-scale__row-section {
+            font-variation-settings: "opsz" 48, "wdth" 100, "wght" 700;
+        }
+        .ws-scale[data-face="bricolage"] .ws-scale__row-inline {
+            font-variation-settings: "opsz" 22, "wdth" 100, "wght" 700;
+        }
+        .ws-scale[data-face="bricolage"] .ws-scale__row-micro {
+            font-variation-settings: "opsz" 13, "wdth" 100, "wght" 600;
+        }
+        .ws-scale[data-face="jbmono"]   { font-family: var(--ws-face-jbmono); }
+        .ws-scale[data-face="jbmono"] .ws-scale__row-headline,
+        .ws-scale[data-face="jbmono"] .ws-scale__row-section { font-weight: 800; letter-spacing: -0.04em; }
+        .ws-scale[data-face="archivo"]  { font-family: var(--ws-face-archivo); }
+        .ws-scale[data-face="archivo"] .ws-scale__row-headline,
+        .ws-scale[data-face="archivo"] .ws-scale__row-section { font-weight: 900; letter-spacing: -0.05em; }
+        .ws-scale[data-face="press"]    { font-family: var(--ws-face-press); }
+        .ws-scale[data-face="press"] .ws-scale__row-headline {
+            /* Press Start 2P: scale down to match the visual size of
+             * other faces (its pixel grid renders chunky-large). */
+            font-size: 64px;
+            font-weight: 400;
+            letter-spacing: 0;
+            line-height: 1;
+        }
+        .ws-scale[data-face="press"] .ws-scale__row-section {
+            font-size: 32px;
+            font-weight: 400;
+            letter-spacing: 0;
+        }
+        .ws-scale[data-face="press"] .ws-scale__row-inline {
+            font-size: 14px;
+            font-weight: 400;
+            letter-spacing: 0;
+        }
+        .ws-scale[data-face="press"] .ws-scale__row-micro {
+            font-size: 10px;
+            font-weight: 400;
+            letter-spacing: 0;
+        }
+        /* Reference-tagged ladders get the same dashed border treatment
+         * as their showdown counterparts. */
+        .ws-scale[data-role="reference"] {
+            border-style: dashed;
+            border-color: rgba(220, 130, 70, 0.25);
+        }
+
+        /* ------------------------------------------------------------
+         * Section 3: Tabular vs Proportional figures
+         *
+         * In tabular figures every digit is the same width, so columns
+         * of numbers stack cleanly (1 doesn't render narrower than 0).
+         * The Tally lives in columns (level lists, XP awards, milestone
+         * counters) more often than not, so tabular is the default --
+         * but worth proving with a side-by-side. The same column of
+         * numbers rendered both ways below makes the point obvious. */
+        .ws-tabular {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 36px;
+        }
+        .ws-tabular__col h4 {
+            margin: 0 0 14px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+            font-family: var(--ws-body);
+        }
+        .ws-tabular__list {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 24px 28px;
+            font-variation-settings: normal;
+            font-family: var(--ws-face-inter);
+        }
+        .ws-tabular__list[data-mode="tabular"]      { font-variant-numeric: tabular-nums; }
+        .ws-tabular__list[data-mode="proportional"] { font-variant-numeric: proportional-nums; }
+        .ws-tabular__row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 10px 0;
+            border-top: 1px dashed var(--ws-border);
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--ws-text);
+        }
+        .ws-tabular__row:first-child { border-top: none; padding-top: 0; }
+        .ws-tabular__row span:first-child {
+            font-family: var(--ws-body);
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.04em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+
+        /* Glyph stress -- production numbers don't always look like
+         * `1,247`. They include `%`, `+`, `−`, `#`, decimals, label
+         * prefixes ("Lv. 47"), and abbreviated forms ("1.2k"). Some
+         * typefaces have beautiful digits but a wonky `%` glyph or a
+         * thin `+`; we surface those here before committing. Row per
+         * candidate, columns are the test glyphs -- scan rows to see
+         * how each face handles the edge cases, scan columns to
+         * compare faces glyph-by-glyph. */
+        .ws-glyphs {
+            margin-top: 40px;
+            padding-top: 32px;
+            border-top: 1px dashed var(--ws-border);
+        }
+        .ws-glyphs__title {
+            margin: 0 0 8px;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--ws-text);
+        }
+        .ws-glyphs__intro {
+            margin: 0 0 26px;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.55;
+            max-width: 760px;
+        }
+        .ws-glyphs__row {
+            display: grid;
+            grid-template-columns: 130px repeat(6, 1fr);
+            gap: 14px;
+            align-items: baseline;
+            padding: 18px 0;
+            border-top: 1px dashed var(--ws-border);
+        }
+        .ws-glyphs__row:first-of-type { border-top: 1px solid var(--ws-border); }
+        .ws-glyphs__row[data-role="reference"] {
+            background: rgba(220, 130, 70, 0.03);
+            margin: 0 -14px;
+            padding-left: 14px;
+            padding-right: 14px;
+            border-radius: 4px;
+        }
+        .ws-glyphs__head {
+            grid-template-columns: 130px repeat(6, 1fr);
+            padding-bottom: 10px;
+            border-top: none;
+        }
+        .ws-glyphs__head span {
+            font-family: var(--ws-body);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+        .ws-glyphs__label {
+            font-family: var(--ws-body);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+        }
+        .ws-glyphs__cell {
+            font-size: 38px;
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+        }
+        /* Per-face overrides for the glyph cells. */
+        .ws-glyphs__row[data-face="inter"]     .ws-glyphs__cell { font-family: var(--ws-face-inter); font-variation-settings: "opsz" 32; font-weight: 800; }
+        .ws-glyphs__row[data-face="space"]     .ws-glyphs__cell { font-family: var(--ws-face-space); font-weight: 700; letter-spacing: -0.04em; }
+        .ws-glyphs__row[data-face="bricolage"] .ws-glyphs__cell { font-family: var(--ws-face-bricolage); font-variation-settings: "opsz" 38, "wdth" 100, "wght" 700; }
+        .ws-glyphs__row[data-face="jbmono"]    .ws-glyphs__cell { font-family: var(--ws-face-jbmono); font-weight: 700; letter-spacing: -0.02em; }
+        .ws-glyphs__row[data-face="archivo"]   .ws-glyphs__cell { font-family: var(--ws-face-archivo); font-weight: 800; letter-spacing: -0.04em; }
+        .ws-glyphs__row[data-face="press"]     .ws-glyphs__cell { font-family: var(--ws-face-press); font-size: 22px; font-weight: 400; letter-spacing: 0; }
+
+        /* ------------------------------------------------------------
+         * Section 4: Tick-up animation A/B/C
+         *
+         * Three options for how a Tally number "counts up":
+         *   A - Slot-machine roll       (digits scroll vertically)
+         *   B - Flip-card               (digits flip on horizontal axis)
+         *   C - Weighted count-up       (digits increment with deceleration)
+         *
+         * Click the play button on each card to trigger. The numeric
+         * end-state is the same; the *feel* differs. The doc names
+         * "frantic counter spinning" as an explicit anti-pattern.
+         * ------------------------------------------------------------ */
+        .ws-tickup {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+        }
+        .ws-tick {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 28px 24px;
+            text-align: center;
+            position: relative;
+        }
+        .ws-tick__name {
+            margin: 0 0 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .ws-tick__vibe {
+            margin: 0 0 32px;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+        }
+        .ws-tick__display {
+            font-size: 96px;
+            font-weight: var(--ws-face-active-weight);
+            font-variation-settings: var(--ws-face-active-vsettings);
+            line-height: 1;
+            letter-spacing: var(--ws-face-active-letter);
+            font-variant-numeric: tabular-nums;
+            color: var(--ws-text);
+            font-family: var(--ws-face-active);
+            margin-bottom: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100px;
+        }
+        .ws-tick__display [data-digit] {
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+            height: 1em;
+            line-height: 1;
+        }
+        .ws-tick__display .ws-tick__reel {
+            display: flex;
+            flex-direction: column;
+            transition: transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .ws-tick__display .ws-tick__reel > span {
+            height: 1em;
+            line-height: 1;
+        }
+        .ws-tick__display [data-static] {
+            display: inline-block;
+        }
+        .ws-tick__btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 18px;
+            background: var(--ws-accent-faint);
+            color: var(--ws-accent);
+            border: 1px solid var(--ws-accent-dim);
+            border-radius: 999px;
+            font-family: var(--ws-body);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 160ms ease, color 160ms ease;
+        }
+        .ws-tick__btn:hover {
+            background: var(--ws-accent);
+            color: var(--ws-bg-deep);
+        }
+        .ws-tick__btn:active { transform: translateY(1px); }
+
+        /* Variant B: flip-card. Each digit lives inside a 3D card that
+         * flips around its horizontal axis. */
+        .ws-tick[data-variant="flip"] .ws-tick__display [data-digit] {
+            perspective: 600px;
+            overflow: visible;
+        }
+        .ws-tick[data-variant="flip"] .ws-tick__reel {
+            display: inline-block;
+            transform-style: preserve-3d;
+            transition: transform 700ms cubic-bezier(0.2, 0.85, 0.3, 1.0);
+        }
+        .ws-tick[data-variant="flip"] .ws-tick__reel.is-flipping {
+            transform: rotateX(-180deg);
+        }
+
+        /* ------------------------------------------------------------
+         * Section 5: Level-up moment
+         *
+         * Choreographed beat when a Pursuer levels up (e.g., 47 -> 48).
+         * Phases: digit transitions, cyan edge glow pulses outward,
+         * a brief settle. Draws from the Frame's motion + particle
+         * vocabulary (see visual-identity.md Kit-level vocabulary).
+         * ------------------------------------------------------------ */
+        .ws-levelup {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 56px 32px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .ws-levelup__label {
+            margin: 0 0 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+        .ws-levelup__sublabel {
+            margin: 0 0 28px;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+        }
+        .ws-levelup__stage {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 180px;
+            min-width: 280px;
+            padding: 0 40px;
+            margin-bottom: 32px;
+            border-radius: 12px;
+            background:
+                radial-gradient(ellipse at center, rgba(110, 200, 230, 0.08), transparent 60%),
+                rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--ws-border);
+            transition: box-shadow 600ms cubic-bezier(0.22, 1, 0.36, 1),
+                        border-color 600ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .ws-levelup__stage.is-popping {
+            box-shadow:
+                0 0 0 1px rgba(110, 200, 230, 0.85) inset,
+                0 0 40px rgba(110, 200, 230, 0.55),
+                0 0 80px rgba(110, 200, 230, 0.3);
+            border-color: var(--ws-accent);
+        }
+        .ws-levelup__number {
+            font-family: var(--ws-face-active);
+            font-size: 140px;
+            font-weight: var(--ws-face-active-weight);
+            font-variation-settings: var(--ws-face-active-vsettings);
+            line-height: 0.95;
+            letter-spacing: var(--ws-face-active-letter);
+            font-variant-numeric: tabular-nums;
+            color: var(--ws-text);
+            position: relative;
+            transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .ws-levelup__number.is-rising  { animation: pp-tally-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .ws-levelup__number.is-leaving { animation: pp-tally-leave 350ms cubic-bezier(0.4, 0, 1, 1) both; }
+        @keyframes pp-tally-rise {
+            0%   { opacity: 0; transform: translateY(40px) scale(0.92); filter: blur(4px); }
+            50%  { opacity: 1; transform: translateY(-8px) scale(1.04); filter: blur(0); }
+            100% { opacity: 1; transform: translateY(0)    scale(1);    filter: blur(0); }
+        }
+        @keyframes pp-tally-leave {
+            0%   { opacity: 1; transform: translateY(0)     scale(1); filter: blur(0); }
+            100% { opacity: 0; transform: translateY(-32px) scale(0.96); filter: blur(3px); }
+        }
+        .ws-levelup__caption {
+            position: absolute;
+            top: 18px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-12px);
+            font-family: var(--ws-body);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.32em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 400ms ease, transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .ws-levelup__caption.is-showing {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .ws-levelup__horizon {
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(110, 200, 230, 0.7) 30%,
+                rgba(220, 240, 250, 1) 50%,
+                rgba(110, 200, 230, 0.7) 70%,
+                transparent 100%);
+            opacity: 0;
+            transition: opacity 350ms ease;
+            box-shadow:
+                0 0 6px rgba(110, 200, 230, 0.85),
+                0 0 14px rgba(110, 200, 230, 0.5);
+        }
+        .ws-levelup__horizon.is-showing { opacity: 1; }
+
+        /* ------------------------------------------------------------
+         * Section 6: Fresh-decay treatment
+         *
+         * "Recently-earned numbers carry a subtle 'fresh' treatment
+         * that decays over hours, so the level you just earned looks
+         * different from one earned weeks ago, just briefly."
+         *
+         * Three stages of decay rendered side-by-side. Same number,
+         * three freshness states, with a label noting when each fires.
+         * ------------------------------------------------------------ */
+        .ws-fresh {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px;
+        }
+        .ws-fresh__cell {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 32px 28px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .ws-fresh__label {
+            margin: 0 0 4px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+        }
+        .ws-fresh__age {
+            margin: 0 0 28px;
+            font-size: 12px;
+            color: var(--ws-text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-fresh__num {
+            font-family: var(--ws-face-active);
+            font-size: 108px;
+            font-weight: var(--ws-face-active-weight);
+            font-variation-settings: var(--ws-face-active-vsettings);
+            line-height: 1;
+            letter-spacing: var(--ws-face-active-letter);
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            position: relative;
+        }
+        /* Just-earned: bright cyan glow + slow shimmer. */
+        .ws-fresh__cell[data-age="just"] .ws-fresh__num {
+            color: rgb(230, 245, 252);
+            text-shadow:
+                0 0 8px rgba(110, 200, 230, 0.8),
+                0 0 18px rgba(110, 200, 230, 0.45),
+                0 0 36px rgba(110, 200, 230, 0.22);
+            animation: pp-tally-shimmer 3.6s ease-in-out infinite;
+        }
+        .ws-fresh__cell[data-age="just"] .ws-fresh__age { color: var(--ws-accent); }
+        @keyframes pp-tally-shimmer {
+            0%, 100% {
+                text-shadow:
+                    0 0 8px rgba(110, 200, 230, 0.8),
+                    0 0 18px rgba(110, 200, 230, 0.45),
+                    0 0 36px rgba(110, 200, 230, 0.22);
+            }
+            50% {
+                text-shadow:
+                    0 0 10px rgba(150, 220, 240, 1),
+                    0 0 24px rgba(110, 200, 230, 0.65),
+                    0 0 48px rgba(110, 200, 230, 0.35);
+            }
+        }
+        /* Recent: subtle warm-cool tint, no animation. */
+        .ws-fresh__cell[data-age="recent"] .ws-fresh__num {
+            color: rgb(218, 232, 240);
+            text-shadow:
+                0 0 4px rgba(110, 200, 230, 0.25),
+                0 0 10px rgba(110, 200, 230, 0.1);
+        }
+        /* Settled: default treatment, no extras. */
+
+        /* ------------------------------------------------------------
+         * Section 7: Decision Criteria
+         *
+         * The shared rubric the team can argue against. Without an
+         * articulated test set, the conversation devolves into "I
+         * just like Inter better." This section names the four tests
+         * the picked face has to pass. Stated together they form a
+         * decision protocol, not just opinions.
+         * ------------------------------------------------------------ */
+        .ws-criteria {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-criterion {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 24px 28px;
+        }
+        .ws-criterion__num {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            background: var(--ws-accent-faint);
+            color: var(--ws-accent);
+            border: 1px solid var(--ws-accent-dim);
+            border-radius: 50%;
+            font-family: var(--ws-body);
+            font-size: 11px;
+            font-weight: 800;
+            margin-right: 10px;
+            vertical-align: middle;
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-criterion h4 {
+            margin: 0 0 14px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.005em;
+            color: var(--ws-text);
+        }
+        .ws-criterion p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .ws-criterion p + p { margin-top: 10px; }
+        .ws-criterion em { color: var(--ws-text); font-style: italic; }
+        .ws-criterion code {
+            font-family: var(--ws-face-jbmono);
+            font-size: 12px;
+            color: var(--ws-accent);
+            background: transparent;
+            padding: 0 2px;
+        }
+
+        /* ------------------------------------------------------------
+         * Workshop footer / closing notes
+         * ------------------------------------------------------------ */
+        .ws-footer {
+            margin-top: 60px;
+            padding: 32px;
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .ws-footer h4 {
+            margin: 0 0 12px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .ws-footer ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .ws-footer li + li { margin-top: 4px; }
+
+        /* ------------------------------------------------------------
+         * Responsive: collapse the side-by-side grids on narrow.
+         * The workshop is desktop-first (you can't really evaluate
+         * type at 120px on a phone) but should still be legible.
+         * ------------------------------------------------------------ */
+        @media (max-width: 980px) {
+            .ws-header, main, .ws-nav { padding-left: 24px; padding-right: 24px; }
+            .ws-showdown, .ws-scales, .ws-fresh, .ws-tabular { grid-template-columns: 1fr; }
+            .ws-tickup { grid-template-columns: 1fr; }
+            .ws-face__hero, .ws-fresh__num { font-size: 88px; }
+            .ws-levelup__number { font-size: 100px; }
+            .ws-scale__row-headline { font-size: 72px; }
+        }
+    </style>
+</head>
+<body data-active-face="inter">
+    <header class="ws-header">
+        <h1>Tally <span>Design Workshop</span></h1>
+        <h2>The treatment for numbers, levels, XP, and milestones.</h2>
+        <p>Tally turns a number from <em>information</em> into <em>satisfaction</em>. It's the headline number on the Logbook, the level on a Job row, the +XP that pops on a sync, the milestone counter that ticks past a round number. The doc names its typeface choice as <strong>"the single highest-leverage type decision"</strong> in the kit — pick wrong and every number in the product reads off. This workshop tests the four candidates side-by-side at every scale Tally appears, then layers in the dynamic pieces: count-up animation, level-up moment, fresh-decay.</p>
+    </header>
+
+    <nav class="ws-nav">
+        <a href="#showdown">1. The Showdown</a>
+        <a href="#scale">2. Scale Ladder</a>
+        <a href="#tabular">3. Tabular &amp; Glyphs</a>
+        <a href="#tickup">4. Tick-up Animation</a>
+        <a href="#levelup">5. Level-up Moment</a>
+        <a href="#fresh">6. Fresh-decay</a>
+        <a href="#criteria">7. Decision Criteria</a>
+    </nav>
+
+    <main>
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 1: The Showdown                                    #}
+        {# Four candidates at headline scale. Same number, four faces.#}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="showdown" class="ws-section">
+            <header>
+                <h3><span class="ws-num">01</span> The Showdown</h3>
+                <h2>Four candidates. Two references. Headline scale.</h2>
+                <p>Each card renders the Pursuer Level <strong>47</strong> at 120px, a milestone count <strong>1,247</strong> at 52px, a recent gain <strong>+250</strong> at 22px, and the inline label <strong>XP earned</strong> at 13px. The face that holds best <em>across all four scales</em> wins, not just the one that looks coolest at 120px.</p>
+                <p>The two <strong>reference</strong> cards (Archivo, Press Start 2P) are calibration anchors, not candidates — they show the design space's edges: how far toward "industrial signage" we could go, and how far toward "RPG / game UI" we'd be wrong to go. Use them to feel where the production picks should sit between.</p>
+                <p>What we're feeling for: character without shouting, weight without aggression, numbers that read as <em>earned</em>, not <em>reported</em>. Anti-references to keep in mind — too dashboard (anti-ref #1), too generic mobile-game (anti-ref #4), too detached / brutalist-cool (anti-ref #5).</p>
+            </header>
+            <div class="ws-strip">
+                <p class="ws-strip__label">Direct comparison <em>candidates only · same number · same scale · no chrome between</em></p>
+                <div class="ws-strip__row">
+                    <div class="ws-strip__cell" data-face="inter"><span class="ws-strip__cell-num">47</span><p class="ws-strip__cell-name">Inter</p></div>
+                    <div class="ws-strip__cell" data-face="space"><span class="ws-strip__cell-num">47</span><p class="ws-strip__cell-name">Space Grotesk</p></div>
+                    <div class="ws-strip__cell" data-face="bricolage"><span class="ws-strip__cell-num">47</span><p class="ws-strip__cell-name">Bricolage Grotesque</p></div>
+                    <div class="ws-strip__cell" data-face="jbmono"><span class="ws-strip__cell-num">47</span><p class="ws-strip__cell-name">JetBrains Mono</p></div>
+                </div>
+            </div>
+            <div class="ws-showdown">
+                {# Card A: Inter — candidate, safe baseline #}
+                <article class="ws-face" data-face="inter">
+                    <div class="ws-face__meta">
+                        <h4 class="ws-face__name">Inter <code>font-family: Inter</code></h4>
+                        <p class="ws-face__vibe">Candidate · safe baseline</p>
+                    </div>
+                    <p class="ws-face__hero">47</p>
+                    <div class="ws-face__demo">
+                        <span>1,247</span>
+                        <span>+250</span>
+                        <span>XP earned</span>
+                    </div>
+                    <p class="ws-face__notes"><strong>What it is:</strong> The default sans-serif of the modern indie web. Variable, with built-in optical sizing so the same family adapts from 14px caption to 120px hero. Famously good numerals.<br><strong>Risk:</strong> Anti-ref #1. Inter renders cleanly but it doesn't carry CHARACTER — a number rendered in Inter could live in any dashboard from Vercel to Linear to Stripe. The team would have to add character through animation + motion alone.</p>
+                    <button type="button" class="ws-face__pick" data-pick-face="inter" data-pick-label="Inter">Pick Inter</button>
+                </article>
+
+                {# Card B: Space Grotesk — candidate, distinctive grotesque #}
+                <article class="ws-face" data-face="space">
+                    <div class="ws-face__meta">
+                        <h4 class="ws-face__name">Space Grotesk <code>font-family: Space Grotesk</code></h4>
+                        <p class="ws-face__vibe">Candidate · distinctive grotesque</p>
+                    </div>
+                    <p class="ws-face__hero">47</p>
+                    <div class="ws-face__demo">
+                        <span>1,247</span>
+                        <span>+250</span>
+                        <span>XP earned</span>
+                    </div>
+                    <p class="ws-face__notes"><strong>What it is:</strong> Geometric grotesque with subtle indie-tech quirk — slightly squared "4", distinctive "1" with a flag, condensed feel without being condensed. The numerals carry quiet personality.<br><strong>Risk:</strong> Maxes at 700 weight (no 800/900 / black), so headlines have a touch less impact than the variable competitors. The geometric character can read slightly "design-agency" if everything else on the page is clean sans.</p>
+                    <button type="button" class="ws-face__pick" data-pick-face="space" data-pick-label="Space Grotesk">Pick Space Grotesk</button>
+                </article>
+
+                {# Card C: Bricolage Grotesque — candidate, quietly distinctive (Fraunces replacement) #}
+                <article class="ws-face" data-face="bricolage">
+                    <div class="ws-face__meta">
+                        <h4 class="ws-face__name">Bricolage Grotesque <code>font-family: Bricolage Grotesque</code></h4>
+                        <p class="ws-face__vibe">Candidate · quietly distinctive</p>
+                    </div>
+                    <p class="ws-face__hero">47</p>
+                    <div class="ws-face__demo">
+                        <span>1,247</span>
+                        <span>+250</span>
+                        <span>XP earned</span>
+                    </div>
+                    <p class="ws-face__notes"><strong>What it is:</strong> Variable display sans with three parametric axes (optical size, width, weight). Personality comes from how the family <em>moves</em> across axes rather than from wonky letterforms — quiet character, fully tunable.<br><strong>Risk:</strong> The same axes that make it powerful are easy to over-design with. Picking one Bricolage configuration to live in the system means committing to specific opsz / wdth / wght values; the wrong combo can drift to generic.</p>
+                    <button type="button" class="ws-face__pick" data-pick-face="bricolage" data-pick-label="Bricolage Grotesque">Pick Bricolage</button>
+                </article>
+
+                {# Card D: JetBrains Mono — candidate, ledger/data mono #}
+                <article class="ws-face" data-face="jbmono">
+                    <div class="ws-face__meta">
+                        <h4 class="ws-face__name">JetBrains Mono <code>font-family: JetBrains Mono</code></h4>
+                        <p class="ws-face__vibe">Candidate · ledger / data mono</p>
+                    </div>
+                    <p class="ws-face__hero">47</p>
+                    <div class="ws-face__demo">
+                        <span>1,247</span>
+                        <span>+250</span>
+                        <span>XP earned</span>
+                    </div>
+                    <p class="ws-face__notes"><strong>What it is:</strong> Monospace by design — every digit is the same width naturally, no <code>tabular-nums</code> needed. Reads as "ledger entry" or "watchmaker's micrometer scale" — leans hard into the <em>numbered ledger</em> half of the explorer's-office metaphor.<br><strong>Risk:</strong> Can read too tech / too code-editor. The Frame's engraving already uses mono tabular figures (first pass); going full mono everywhere risks the whole product reading as a code IDE.</p>
+                    <button type="button" class="ws-face__pick" data-pick-face="jbmono" data-pick-label="JetBrains Mono">Pick JetBrains Mono</button>
+                </article>
+
+                {# Card E: Archivo — REFERENCE, industrial lean #}
+                <article class="ws-face" data-face="archivo" data-role="reference">
+                    <div class="ws-face__meta">
+                        <h4 class="ws-face__name">Archivo <code>font-family: Archivo</code> <span class="ws-face__badge">Industrial · Reference</span></h4>
+                        <p class="ws-face__vibe">DIN-derived engineering signage</p>
+                    </div>
+                    <p class="ws-face__hero">47</p>
+                    <div class="ws-face__demo">
+                        <span>1,247</span>
+                        <span>+250</span>
+                        <span>XP earned</span>
+                    </div>
+                    <p class="ws-face__notes"><strong>What it is:</strong> Geometric grotesque from the DIN / engineering-signage lineage — the typography family of station boards, blueprint annotations, watch-tool callouts. Goes up to weight 900 for proper industrial heft.<br><strong>Why it's here:</strong> Calibration. The visual identity invokes the "Patek watchmaker's atelier / Hasselblad assembly room / Bauhaus" lane explicitly. Archivo shows you how far toward that lane a Tally could lean. If the production pick reads tamer than Archivo, the brief is being underserved; if it reads harder than Archivo, drift toward factory-floor anti-ref #1.</p>
+                </article>
+
+                {# Card F: Press Start 2P — REFERENCE, RPG/game lean #}
+                <article class="ws-face" data-face="press" data-role="reference">
+                    <div class="ws-face__meta">
+                        <h4 class="ws-face__name">Press Start 2P <code>font-family: Press Start 2P</code> <span class="ws-face__badge">RPG · Reference</span></h4>
+                        <p class="ws-face__vibe">Famicom / NES pixel UI</p>
+                    </div>
+                    <p class="ws-face__hero">47</p>
+                    <div class="ws-face__demo">
+                        <span>1,247</span>
+                        <span>+250</span>
+                        <span>XP earned</span>
+                    </div>
+                    <p class="ws-face__notes"><strong>What it is:</strong> The iconic Famicom / NES pixel font. Every digit is rendered on an 8-pixel grid; only one weight; no optical sizing. Pure retro game UI energy.<br><strong>Why it's here:</strong> Max-contrast benchmark for "RPG / video game" energy. This is what we are <em>not</em> — anti-ref #4 (generic mobile-game gamification). Putting it next to the candidates makes it instantly obvious how far the production pick should sit from this lane. If a candidate ever drifts even half-way toward Press Start 2P, redesign.</p>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 2: Scale Ladder                                    #}
+        {# Each face shown at all four Tally scales.                  #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="scale" class="ws-section">
+            <header>
+                <h3><span class="ws-num">02</span> Scale Ladder</h3>
+                <h2>Same face. Four sizes.</h2>
+                <p>Tally lives at multiple scales: <strong>headline</strong> (the Pursuer Level on the Logbook hero, ~96px), <strong>section</strong> (a Job-row level, ~48px), <strong>inline</strong> (an XP award on a sync notification, ~22px), and <strong>micro</strong> (a counter chip, ~13px). The right face holds at every scale — some display faces look great at 120 and fall apart at 14. This is the survivability check.</p>
+            </header>
+            <div class="ws-scales">
+                <article class="ws-scale" data-face="inter">
+                    <h4 class="ws-scale__name">Inter</h4>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Headline</span>
+                        <div>
+                            <span class="ws-scale__row-headline">47</span>
+                            <span class="ws-scale__row-context">Pursuer Level — Logbook hero</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Section</span>
+                        <div>
+                            <span class="ws-scale__row-section">23</span>
+                            <span class="ws-scale__row-context">Job Level — row header</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Inline</span>
+                        <div>
+                            <span class="ws-scale__row-inline">+250</span>
+                            <span class="ws-scale__row-context">XP award — sync toast</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Micro</span>
+                        <div>
+                            <span class="ws-scale__row-micro">1,247 / 5,000</span>
+                            <span class="ws-scale__row-context">Counter chip</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="ws-scale" data-face="space">
+                    <h4 class="ws-scale__name">Space Grotesk</h4>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Headline</span>
+                        <div>
+                            <span class="ws-scale__row-headline">47</span>
+                            <span class="ws-scale__row-context">Pursuer Level — Logbook hero</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Section</span>
+                        <div>
+                            <span class="ws-scale__row-section">23</span>
+                            <span class="ws-scale__row-context">Job Level — row header</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Inline</span>
+                        <div>
+                            <span class="ws-scale__row-inline">+250</span>
+                            <span class="ws-scale__row-context">XP award — sync toast</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Micro</span>
+                        <div>
+                            <span class="ws-scale__row-micro">1,247 / 5,000</span>
+                            <span class="ws-scale__row-context">Counter chip</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="ws-scale" data-face="bricolage">
+                    <h4 class="ws-scale__name">Bricolage Grotesque</h4>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Headline</span>
+                        <div>
+                            <span class="ws-scale__row-headline">47</span>
+                            <span class="ws-scale__row-context">Pursuer Level — Logbook hero</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Section</span>
+                        <div>
+                            <span class="ws-scale__row-section">23</span>
+                            <span class="ws-scale__row-context">Job Level — row header</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Inline</span>
+                        <div>
+                            <span class="ws-scale__row-inline">+250</span>
+                            <span class="ws-scale__row-context">XP award — sync toast</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Micro</span>
+                        <div>
+                            <span class="ws-scale__row-micro">1,247 / 5,000</span>
+                            <span class="ws-scale__row-context">Counter chip</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="ws-scale" data-face="jbmono">
+                    <h4 class="ws-scale__name">JetBrains Mono</h4>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Headline</span>
+                        <div>
+                            <span class="ws-scale__row-headline">47</span>
+                            <span class="ws-scale__row-context">Pursuer Level — Logbook hero</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Section</span>
+                        <div>
+                            <span class="ws-scale__row-section">23</span>
+                            <span class="ws-scale__row-context">Job Level — row header</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Inline</span>
+                        <div>
+                            <span class="ws-scale__row-inline">+250</span>
+                            <span class="ws-scale__row-context">XP award — sync toast</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Micro</span>
+                        <div>
+                            <span class="ws-scale__row-micro">1,247 / 5,000</span>
+                            <span class="ws-scale__row-context">Counter chip</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="ws-scale" data-face="archivo" data-role="reference">
+                    <h4 class="ws-scale__name">Archivo <span class="ws-face__badge">Industrial · Reference</span></h4>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Headline</span>
+                        <div>
+                            <span class="ws-scale__row-headline">47</span>
+                            <span class="ws-scale__row-context">Pursuer Level — Logbook hero</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Section</span>
+                        <div>
+                            <span class="ws-scale__row-section">23</span>
+                            <span class="ws-scale__row-context">Job Level — row header</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Inline</span>
+                        <div>
+                            <span class="ws-scale__row-inline">+250</span>
+                            <span class="ws-scale__row-context">XP award — sync toast</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Micro</span>
+                        <div>
+                            <span class="ws-scale__row-micro">1,247 / 5,000</span>
+                            <span class="ws-scale__row-context">Counter chip</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="ws-scale" data-face="press" data-role="reference">
+                    <h4 class="ws-scale__name">Press Start 2P <span class="ws-face__badge">RPG · Reference</span></h4>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Headline</span>
+                        <div>
+                            <span class="ws-scale__row-headline">47</span>
+                            <span class="ws-scale__row-context">Pursuer Level — Logbook hero</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Section</span>
+                        <div>
+                            <span class="ws-scale__row-section">23</span>
+                            <span class="ws-scale__row-context">Job Level — row header</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Inline</span>
+                        <div>
+                            <span class="ws-scale__row-inline">+250</span>
+                            <span class="ws-scale__row-context">XP award — sync toast</span>
+                        </div>
+                    </div>
+                    <div class="ws-scale__row">
+                        <span class="ws-scale__row-label">Micro</span>
+                        <div>
+                            <span class="ws-scale__row-micro">1,247 / 5,000</span>
+                            <span class="ws-scale__row-context">Counter chip</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 3: Tabular figures                                 #}
+        {# Side-by-side proof that tabular wins for our use cases.    #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="tabular" class="ws-section">
+            <header>
+                <h3><span class="ws-num">03</span> Tabular Figures</h3>
+                <h2>Why every digit needs the same width.</h2>
+                <p>In tabular figures, every digit occupies the same horizontal box, so columns of numbers stack cleanly — the <strong>1</strong> takes the same width as the <strong>0</strong>. The Tally lives in columns more often than not (Job-level rosters, milestone trackers, XP histories), so tabular is the default. The left list below renders proportional figures (default for most faces), the right list uses tabular. Watch how the right column's digits land in the same place.</p>
+                <p>Both columns use the same typeface (Inter) and the same weight; only <code>font-variant-numeric</code> differs.</p>
+            </header>
+            <div class="ws-tabular">
+                <div class="ws-tabular__col">
+                    <h4>Proportional (default)</h4>
+                    <div class="ws-tabular__list" data-mode="proportional">
+                        <div class="ws-tabular__row"><span>Platinums</span><span>1,247</span></div>
+                        <div class="ws-tabular__row"><span>Total Trophies</span><span>24,591</span></div>
+                        <div class="ws-tabular__row"><span>Active Jobs</span><span>11</span></div>
+                        <div class="ws-tabular__row"><span>Highest Level</span><span>87</span></div>
+                        <div class="ws-tabular__row"><span>Day Streak</span><span>108</span></div>
+                    </div>
+                </div>
+                <div class="ws-tabular__col">
+                    <h4>Tabular (Tally default)</h4>
+                    <div class="ws-tabular__list" data-mode="tabular">
+                        <div class="ws-tabular__row"><span>Platinums</span><span>1,247</span></div>
+                        <div class="ws-tabular__row"><span>Total Trophies</span><span>24,591</span></div>
+                        <div class="ws-tabular__row"><span>Active Jobs</span><span>11</span></div>
+                        <div class="ws-tabular__row"><span>Highest Level</span><span>87</span></div>
+                        <div class="ws-tabular__row"><span>Day Streak</span><span>108</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ws-glyphs">
+                <h3 class="ws-glyphs__title">3b · Glyph Stress Test</h3>
+                <p class="ws-glyphs__intro">Production numbers don't always look like <code>1,247</code>. They include percent signs, plus/minus prefixes, hash marks, decimals, label prefixes (<code>Lv. 47</code>), and abbreviated forms (<code>1.2k</code>). Some typefaces nail the digits but have a wonky <code>%</code> glyph or a thin <code>+</code> sign that doesn't carry weight at small sizes. Scan a row to see how one face handles every edge case; scan a column to compare faces head-to-head on one glyph.</p>
+                <div class="ws-glyphs__row ws-glyphs__head">
+                    <span class="ws-glyphs__label">Face</span>
+                    <span>Plain</span>
+                    <span>Percent</span>
+                    <span>Plus</span>
+                    <span>Hash · Rank</span>
+                    <span>Label · Num</span>
+                    <span>Abbrev</span>
+                </div>
+                <div class="ws-glyphs__row" data-face="inter">
+                    <span class="ws-glyphs__label">Inter</span>
+                    <span class="ws-glyphs__cell">1,000,000</span>
+                    <span class="ws-glyphs__cell">47.5%</span>
+                    <span class="ws-glyphs__cell">+250</span>
+                    <span class="ws-glyphs__cell">#1</span>
+                    <span class="ws-glyphs__cell">Lv. 47</span>
+                    <span class="ws-glyphs__cell">1.2k</span>
+                </div>
+                <div class="ws-glyphs__row" data-face="space">
+                    <span class="ws-glyphs__label">Space Grotesk</span>
+                    <span class="ws-glyphs__cell">1,000,000</span>
+                    <span class="ws-glyphs__cell">47.5%</span>
+                    <span class="ws-glyphs__cell">+250</span>
+                    <span class="ws-glyphs__cell">#1</span>
+                    <span class="ws-glyphs__cell">Lv. 47</span>
+                    <span class="ws-glyphs__cell">1.2k</span>
+                </div>
+                <div class="ws-glyphs__row" data-face="bricolage">
+                    <span class="ws-glyphs__label">Bricolage</span>
+                    <span class="ws-glyphs__cell">1,000,000</span>
+                    <span class="ws-glyphs__cell">47.5%</span>
+                    <span class="ws-glyphs__cell">+250</span>
+                    <span class="ws-glyphs__cell">#1</span>
+                    <span class="ws-glyphs__cell">Lv. 47</span>
+                    <span class="ws-glyphs__cell">1.2k</span>
+                </div>
+                <div class="ws-glyphs__row" data-face="jbmono">
+                    <span class="ws-glyphs__label">JetBrains Mono</span>
+                    <span class="ws-glyphs__cell">1,000,000</span>
+                    <span class="ws-glyphs__cell">47.5%</span>
+                    <span class="ws-glyphs__cell">+250</span>
+                    <span class="ws-glyphs__cell">#1</span>
+                    <span class="ws-glyphs__cell">Lv. 47</span>
+                    <span class="ws-glyphs__cell">1.2k</span>
+                </div>
+                <div class="ws-glyphs__row" data-face="archivo" data-role="reference">
+                    <span class="ws-glyphs__label">Archivo · Ref</span>
+                    <span class="ws-glyphs__cell">1,000,000</span>
+                    <span class="ws-glyphs__cell">47.5%</span>
+                    <span class="ws-glyphs__cell">+250</span>
+                    <span class="ws-glyphs__cell">#1</span>
+                    <span class="ws-glyphs__cell">Lv. 47</span>
+                    <span class="ws-glyphs__cell">1.2k</span>
+                </div>
+                <div class="ws-glyphs__row" data-face="press" data-role="reference">
+                    <span class="ws-glyphs__label">Press Start · Ref</span>
+                    <span class="ws-glyphs__cell">1,000,000</span>
+                    <span class="ws-glyphs__cell">47.5%</span>
+                    <span class="ws-glyphs__cell">+250</span>
+                    <span class="ws-glyphs__cell">#1</span>
+                    <span class="ws-glyphs__cell">Lv. 47</span>
+                    <span class="ws-glyphs__cell">1.2k</span>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 4: Tick-up animation A/B/C                         #}
+        {# Three flavors of counting up. Pick the one that feels      #}
+        {# earned, not frantic.                                       #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="tickup" class="ws-section">
+            <header>
+                <h3><span class="ws-num">04</span> Tick-up animation</h3>
+                <h2>Three flavors of counting up.</h2>
+                <p>The doc names <em>"counters that count up from zero — looks arcade-y, kills weight"</em> as an explicit anti-pattern. Tally numbers should feel <em>earned</em>, not <em>frantic</em>. Three options, each playing the same transition (1,247 → 1,297 for a +50 sync gain): a slot-machine vertical roll, a flip-card per-digit reveal, and a weighted count-up that decelerates. Click <strong>Play</strong> on each to compare. Each variant tracks its own running total, so repeated clicks keep advancing by +50.</p>
+            </header>
+            <div class="ws-active-banner">
+                <strong>Previewing</strong>
+                <span>Sections 4–6 render in <span data-active-name>Inter</span>. Use the <em>Pick</em> button on any candidate in Section 1 to swap.</span>
+            </div>
+            <div class="ws-tickup">
+                <article class="ws-tick" data-variant="slot">
+                    <p class="ws-tick__name">A — Slot-machine roll</p>
+                    <p class="ws-tick__vibe">Digits scroll vertically into place. Mechanical, sturdy.</p>
+                    <div class="ws-tick__display" data-tick-display="slot">
+                        <!-- digits rendered by JS -->
+                    </div>
+                    <button class="ws-tick__btn" data-tick-play="slot">Play +50</button>
+                </article>
+
+                <article class="ws-tick" data-variant="flip">
+                    <p class="ws-tick__name">B — Flip-card</p>
+                    <p class="ws-tick__vibe">Each digit flips on its horizontal axis. Tactile, paper-feel.</p>
+                    <div class="ws-tick__display" data-tick-display="flip">
+                        <!-- digits rendered by JS -->
+                    </div>
+                    <button class="ws-tick__btn" data-tick-play="flip">Play +50</button>
+                </article>
+
+                <article class="ws-tick" data-variant="weighted">
+                    <p class="ws-tick__name">C — Weighted count</p>
+                    <p class="ws-tick__vibe">Increments rapidly, decelerates into landing. Soft pulse on settle.</p>
+                    <div class="ws-tick__display" data-tick-display="weighted">
+                        <!-- digits rendered by JS -->
+                    </div>
+                    <button class="ws-tick__btn" data-tick-play="weighted">Play +50</button>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 5: Level-up moment                                 #}
+        {# The choreographed beat when a Pursuer levels up.           #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="levelup" class="ws-section">
+            <header>
+                <h3><span class="ws-num">05</span> Level-up moment</h3>
+                <h2>The beat that a Pursuer notices.</h2>
+                <p>Not every increment is a moment. Tier completion, Pursuer Level milestones, the rare first-time-this-pursuit numbers — those deserve a beat. Old number leaves, new number rises in, a Horizon-style cyan edge pulses outward, the stage glows for a hold-of-breath count, then settles. ~1.4 seconds total. Click <strong>Trigger</strong> to play.</p>
+                <p>This draws from the Frame's motion + particle vocabulary documented in <code>visual-identity.md</code> §3 → Kit-level vocabulary. The level-up beat <em>inherits</em> that language; it doesn't invent a new one.</p>
+            </header>
+            <div class="ws-levelup">
+                <p class="ws-levelup__label">Pursuer Level</p>
+                <p class="ws-levelup__sublabel">Click <strong>Trigger</strong> to play the level-up moment. Loop is mid 47 → 48.</p>
+                <div class="ws-levelup__stage" data-levelup-stage>
+                    <span class="ws-levelup__caption" data-levelup-caption>Level Up</span>
+                    <span class="ws-levelup__number" data-levelup-number>47</span>
+                    <span class="ws-levelup__horizon" data-levelup-horizon></span>
+                </div>
+                <button class="ws-tick__btn" data-levelup-play>Trigger Level-up</button>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 6: Fresh-decay                                     #}
+        {# Three stages of a recently-earned number cooling off.      #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="fresh" class="ws-section">
+            <header>
+                <h3><span class="ws-num">06</span> Fresh-decay treatment</h3>
+                <h2>Just earned. Recently earned. Settled.</h2>
+                <p>"Recently-earned numbers carry a subtle 'fresh' treatment that decays over hours, so the level you just earned looks different from one earned weeks ago, just briefly." Three states, side-by-side. The treatment fades off without ceremony — the user sees their number is "new" for as long as it earns being new, and after that it's just their number.</p>
+            </header>
+            <div class="ws-fresh">
+                <article class="ws-fresh__cell" data-age="just">
+                    <p class="ws-fresh__label">Just earned</p>
+                    <p class="ws-fresh__age">&lt; 1 hour ago</p>
+                    <p class="ws-fresh__num">48</p>
+                </article>
+                <article class="ws-fresh__cell" data-age="recent">
+                    <p class="ws-fresh__label">Recent</p>
+                    <p class="ws-fresh__age">~6 hours ago</p>
+                    <p class="ws-fresh__num">48</p>
+                </article>
+                <article class="ws-fresh__cell" data-age="settled">
+                    <p class="ws-fresh__label">Settled</p>
+                    <p class="ws-fresh__age">&gt; 24 hours ago</p>
+                    <p class="ws-fresh__num">48</p>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 7: Decision Criteria                               #}
+        {# The shared rubric the team converges on.                   #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="criteria" class="ws-section">
+            <header>
+                <h3><span class="ws-num">07</span> Decision Criteria</h3>
+                <h2>Four tests. Pass all four.</h2>
+                <p>Three out of four isn't enough. One failure disqualifies. Argue against the criteria, not the candidates.</p>
+            </header>
+            <div class="ws-criteria">
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">1</span>Holds at every scale</h4>
+                    <p>Same face works at 96px, 48px, 22px, and 13px. Fails when it looks great big and tired small. See Section 2.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">2</span>Reads "earned," not "reported"</h4>
+                    <p>The number should feel like a reward, not a stat. Fails when it looks at home in a Google Analytics screenshot.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">3</span>Doesn't draw attention to itself</h4>
+                    <p>You should notice the <em>number</em>, not the letterforms. Fails when a quirky <code>4</code> or stylized <code>1</code> is the first thing you see.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">4</span>Passes the anti-refs</h4>
+                    <p>Avoid too dashboard (#1), too mobile-game (#4), too brutalist (#5), too twee (#6). The reference cards in Section 1 show the edges.</p>
+                </article>
+            </div>
+        </section>
+
+        <div class="ws-footer">
+            <h4>How to use this workshop</h4>
+            <ul>
+                <li><strong>Sections 1–3</strong> are the typography choice. Strip + cards + scales + tabular + glyph stress. Use the <em>Pick</em> button on a candidate to preview it in Sections 4–6.</li>
+                <li><strong>Section 4</strong> is the count-up flavor (slot / flip / weighted). The doc disqualifies the frantic count-up-from-zero variant; pick one of the three.</li>
+                <li><strong>Section 5</strong> is the celebratory beat. Reserved for <em>meaningful</em> moments only — Pursuer Level milestones, tier completions, the rare first-time numbers.</li>
+                <li><strong>Section 6</strong> is the ambient pacing. Every meaningful number gets a brief "fresh" period, then settles into normal weight without ceremony.</li>
+                <li><strong>Section 7</strong> is the shared rubric. Argue against the criteria, not the candidates. If a candidate fails one of the four tests, it's out.</li>
+            </ul>
+        </div>
+    </main>
+
+    <script>
+        /* ============================================================
+         * TALLY WORKSHOP — animation JS
+         *
+         * Only the dynamic sections need JS: the tick-up variants and
+         * the level-up moment. The type comparison and fresh-decay
+         * sections are pure CSS.
+         * ============================================================ */
+        (function () {
+
+            // ----------------------------------------------------------
+            // Shared: render a number into a tick display as per-digit
+            // spans. Each digit lives in its own .digit-wrap with a
+            // reel inside, so the variants can independently transform.
+            // ----------------------------------------------------------
+            function renderDigits(displayEl, fromNum, toNum) {
+                var toStr = toNum.toLocaleString('en-US');
+                displayEl.innerHTML = '';
+                for (var i = 0; i < toStr.length; i++) {
+                    var ch = toStr[i];
+                    if (ch === ',') {
+                        var sep = document.createElement('span');
+                        sep.setAttribute('data-static', '');
+                        sep.textContent = ',';
+                        displayEl.appendChild(sep);
+                    } else {
+                        var wrap = document.createElement('span');
+                        wrap.setAttribute('data-digit', '');
+                        var reel = document.createElement('span');
+                        reel.className = 'ws-tick__reel';
+                        // pre-populate with the FROM digit; we'll
+                        // animate to the TO digit on play.
+                        var fromStr = fromNum.toLocaleString('en-US');
+                        // align the position in fromStr to the same
+                        // position in toStr; if shorter, leave blank.
+                        var fromIdx = i - (toStr.length - fromStr.length);
+                        var fromCh = (fromIdx >= 0 && fromStr[fromIdx] && fromStr[fromIdx] !== ',') ? fromStr[fromIdx] : '0';
+                        var fromSpan = document.createElement('span');
+                        fromSpan.textContent = fromCh;
+                        reel.appendChild(fromSpan);
+                        wrap.appendChild(reel);
+                        wrap.dataset.fromDigit = fromCh;
+                        wrap.dataset.toDigit = ch;
+                        displayEl.appendChild(wrap);
+                    }
+                }
+            }
+
+            // ----------------------------------------------------------
+            // Variant A: Slot-machine roll.
+            //
+            // Each digit's reel grows downward with all intermediate
+            // digits between from and to (e.g., 6 -> 8 builds 6, 7, 8).
+            // Then we translateY the reel up to land on the target.
+            // Digits later in the number get a small per-digit delay
+            // so the roll cascades left-to-right.
+            // ----------------------------------------------------------
+            function playSlot(displayEl) {
+                var wraps = displayEl.querySelectorAll('[data-digit]');
+                wraps.forEach(function (wrap, idx) {
+                    var from = parseInt(wrap.dataset.fromDigit, 10);
+                    var to = parseInt(wrap.dataset.toDigit, 10);
+                    if (isNaN(from) || isNaN(to) || from === to) return;
+                    var reel = wrap.querySelector('.ws-tick__reel');
+                    // Wrap-around forward (6 -> 1 means 6,7,8,9,0,1).
+                    var steps = (to - from + 10) % 10;
+                    reel.innerHTML = '';
+                    for (var s = 0; s <= steps; s++) {
+                        var d = (from + s) % 10;
+                        var span = document.createElement('span');
+                        span.textContent = d;
+                        reel.appendChild(span);
+                    }
+                    reel.style.transition = 'none';
+                    reel.style.transform = 'translateY(0)';
+                    void reel.offsetWidth;
+                    var delay = idx * 60;
+                    reel.style.transition = 'transform 900ms cubic-bezier(0.16, 1, 0.3, 1) ' + delay + 'ms';
+                    // Shift up by `steps` digit-heights. 1em on the reel
+                    // equals one digit's height (the .ws-tick__display
+                    // sets the font-size, the [data-digit] wrap is 1em
+                    // tall with overflow:hidden, the reel's children are
+                    // 1em each). Using percentage here would be wrong
+                    // because % is relative to the REEL's height, which
+                    // grows with `steps`; the previous (steps * 100)%
+                    // implementation shifted by the full reel + extras
+                    // instead of just `steps` digits.
+                    reel.style.transform = 'translateY(-' + steps + 'em)';
+                });
+            }
+
+            // ----------------------------------------------------------
+            // Variant B: Flip-card.
+            //
+            // Each digit reel rotates -180deg around its X axis. We
+            // need a "back" face on each reel with the target digit.
+            // ----------------------------------------------------------
+            function playFlip(displayEl) {
+                var wraps = displayEl.querySelectorAll('[data-digit]');
+                wraps.forEach(function (wrap, idx) {
+                    var from = wrap.dataset.fromDigit;
+                    var to = wrap.dataset.toDigit;
+                    if (from === to) return;
+                    var reel = wrap.querySelector('.ws-tick__reel');
+                    reel.style.transformStyle = 'preserve-3d';
+                    reel.style.position = 'relative';
+                    reel.style.display = 'inline-block';
+                    reel.innerHTML = '';
+                    var front = document.createElement('span');
+                    front.textContent = from;
+                    front.style.backfaceVisibility = 'hidden';
+                    front.style.display = 'inline-block';
+                    var back = document.createElement('span');
+                    back.textContent = to;
+                    back.style.position = 'absolute';
+                    back.style.top = '0';
+                    back.style.left = '0';
+                    back.style.backfaceVisibility = 'hidden';
+                    back.style.transform = 'rotateX(180deg)';
+                    reel.appendChild(front);
+                    reel.appendChild(back);
+                    reel.style.transition = 'none';
+                    reel.style.transform = 'rotateX(0)';
+                    void reel.offsetWidth;
+                    var delay = idx * 100;
+                    reel.style.transition = 'transform 700ms cubic-bezier(0.2, 0.85, 0.3, 1.0) ' + delay + 'ms';
+                    reel.style.transform = 'rotateX(-180deg)';
+                });
+            }
+
+            // ----------------------------------------------------------
+            // Variant C: Weighted count-up.
+            //
+            // The display is a single span that we update on a
+            // requestAnimationFrame loop. We ease the position from
+            // (from -> to) over ~1100ms with a cubic-bezier-style
+            // deceleration, then pulse the scale at landing.
+            // ----------------------------------------------------------
+            function playWeighted(displayEl) {
+                var from = parseInt(displayEl.dataset.fromNum, 10);
+                var to   = parseInt(displayEl.dataset.toNum, 10);
+                if (isNaN(from) || isNaN(to)) return;
+                // Replace the display content with a single span we
+                // can update each frame.
+                displayEl.innerHTML = '';
+                var span = document.createElement('span');
+                span.textContent = from.toLocaleString('en-US');
+                span.style.display = 'inline-block';
+                span.style.transition = 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)';
+                displayEl.appendChild(span);
+
+                var DURATION = 1100;
+                var startedAt = performance.now();
+                function tick(now) {
+                    var t = Math.min(1, (now - startedAt) / DURATION);
+                    // Ease-out cubic for the deceleration.
+                    var e = 1 - Math.pow(1 - t, 3);
+                    var current = Math.round(from + (to - from) * e);
+                    span.textContent = current.toLocaleString('en-US');
+                    if (t < 1) {
+                        requestAnimationFrame(tick);
+                    } else {
+                        // Settle pulse.
+                        span.style.transform = 'scale(1.06)';
+                        setTimeout(function () { span.style.transform = 'scale(1)'; }, 180);
+                    }
+                }
+                requestAnimationFrame(tick);
+            }
+
+            // ----------------------------------------------------------
+            // Wire each variant button.
+            //
+            // Each variant tracks its OWN running total so repeated
+            // clicks advance the number by +50 from wherever it landed
+            // last time, rather than resetting to the starting value.
+            // This makes the play experience match the real product
+            // (XP just keeps ticking up across syncs) and exposes the
+            // animation's behavior on larger and larger numbers as
+            // they grow into more digits.
+            // ----------------------------------------------------------
+            var INITIAL_TICK = 1247;
+            var TICK_STEP = 50;
+            var tickRunning = {
+                slot:     INITIAL_TICK,
+                flip:     INITIAL_TICK,
+                weighted: INITIAL_TICK
+            };
+
+            function setup(variant) {
+                var display = document.querySelector('[data-tick-display="' + variant + '"]');
+                var btn = document.querySelector('[data-tick-play="' + variant + '"]');
+                if (!display || !btn) return;
+                // Initial render: from === to so no animation, just the
+                // starting number on screen.
+                display.dataset.fromNum = INITIAL_TICK;
+                display.dataset.toNum = INITIAL_TICK;
+                renderDigits(display, INITIAL_TICK, INITIAL_TICK);
+                btn.addEventListener('click', function () {
+                    var from = tickRunning[variant];
+                    var to = from + TICK_STEP;
+                    tickRunning[variant] = to;
+                    display.dataset.fromNum = from;
+                    display.dataset.toNum = to;
+                    renderDigits(display, from, to);
+                    if (variant === 'slot')     return playSlot(display);
+                    if (variant === 'flip')     return playFlip(display);
+                    if (variant === 'weighted') return playWeighted(display);
+                });
+            }
+
+            setup('slot');
+            setup('flip');
+            setup('weighted');
+
+            // ----------------------------------------------------------
+            // Pick-a-face -- swaps the active typeface for Sections 4-6
+            // so the user can preview each candidate in the dynamic
+            // sections (tick-up, level-up, fresh-decay) and decide
+            // which one survives across all three.
+            //
+            // Reference cards (Archivo, Press Start 2P) deliberately
+            // don't have a pick button -- they aren't candidates.
+            // ----------------------------------------------------------
+            document.querySelectorAll('[data-pick-face]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var face = btn.getAttribute('data-pick-face');
+                    var label = btn.getAttribute('data-pick-label') || face;
+                    document.body.setAttribute('data-active-face', face);
+                    document.querySelectorAll('[data-active-name]').forEach(function (el) {
+                        el.textContent = label;
+                    });
+                    // Update each candidate card's pick button label so
+                    // the picked card reads "Active pick" and the
+                    // others reset to their default offer.
+                    document.querySelectorAll('[data-pick-face]').forEach(function (b) {
+                        var bFace = b.getAttribute('data-pick-face');
+                        var bLabel = b.getAttribute('data-pick-label') || bFace;
+                        b.textContent = (bFace === face) ? 'Active pick · Sections 4–6' : 'Pick ' + bLabel;
+                    });
+                });
+            });
+            // Initial paint: reflect the default active face (Inter)
+            // in each button label without simulating a click.
+            (function () {
+                var initial = document.body.getAttribute('data-active-face');
+                document.querySelectorAll('[data-pick-face]').forEach(function (b) {
+                    var bFace = b.getAttribute('data-pick-face');
+                    var bLabel = b.getAttribute('data-pick-label') || bFace;
+                    b.textContent = (bFace === initial) ? 'Active pick · Sections 4–6' : 'Pick ' + bLabel;
+                });
+            })();
+
+            // ----------------------------------------------------------
+            // Level-up moment.
+            // ----------------------------------------------------------
+            var levelupBtn = document.querySelector('[data-levelup-play]');
+            var levelupNum = document.querySelector('[data-levelup-number]');
+            var levelupCap = document.querySelector('[data-levelup-caption]');
+            var levelupStage = document.querySelector('[data-levelup-stage]');
+            var levelupHorizon = document.querySelector('[data-levelup-horizon]');
+
+            if (levelupBtn && levelupNum && levelupCap && levelupStage && levelupHorizon) {
+                var inProgress = false;
+                levelupBtn.addEventListener('click', function () {
+                    if (inProgress) return;
+                    inProgress = true;
+
+                    // Reset to neutral state.
+                    levelupNum.classList.remove('is-leaving', 'is-rising');
+                    levelupNum.textContent = '47';
+                    levelupCap.classList.remove('is-showing');
+                    levelupHorizon.classList.remove('is-showing');
+                    levelupStage.classList.remove('is-popping');
+
+                    void levelupNum.offsetWidth;
+
+                    // Phase 1 (0-350ms): old number leaves.
+                    levelupNum.classList.add('is-leaving');
+
+                    setTimeout(function () {
+                        // Phase 2 (350-1050ms): new number rises in,
+                        // stage glow pops, horizon line ignites.
+                        levelupNum.classList.remove('is-leaving');
+                        levelupNum.textContent = '48';
+                        levelupStage.classList.add('is-popping');
+                        levelupHorizon.classList.add('is-showing');
+                        levelupCap.classList.add('is-showing');
+                        void levelupNum.offsetWidth;
+                        levelupNum.classList.add('is-rising');
+                    }, 350);
+
+                    setTimeout(function () {
+                        // Phase 3 (1400ms): glow + caption fade out.
+                        levelupStage.classList.remove('is-popping');
+                        levelupHorizon.classList.remove('is-showing');
+                        levelupCap.classList.remove('is-showing');
+                    }, 1400);
+
+                    setTimeout(function () {
+                        inProgress = false;
+                    }, 2000);
+                });
+            }
+        })();
+    </script>
+</body>
+</html>
