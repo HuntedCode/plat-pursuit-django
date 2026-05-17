@@ -32,8 +32,9 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | Doc | Description |
 |-----|-------------|
 | [Product Identity](design/product-identity.md) | Strategic identity, 2-minute pitch, IA, hub model, naming, supporting pillars. The strategic frame every other doc serves. |
-| [Visual Identity](design/visual-identity.md) | Visual constitution: brief, six adjectives, four signature primitives (Frame, Pursuer Card, Horizon, Tally), anti-references. The test every visual decision must pass. |
+| [Visual Identity](design/visual-identity.md) | Visual constitution: brief, six adjectives, four signature primitives (Frame, Pursuer Card, Horizon, Tally), Surfaces category (Binder first, more to come), anti-references. The test every visual decision must pass. |
 | [Visual Identity References](design/visual-identity-references.md) | Curated real-world references for each primitive (trading-card chrome, identity-card design, progress UIs, number-as-reward) plus PSN-era and explorer's-office moods. Working doc for sketching/mood-boarding. |
+| [Binder Surface](design/binder-surface.md) | The Binder: first Surface (branded container, not a primitive). Six views, 3D page-flip Spread mode, locked design + technical learnings from the workshop at `/design/binder/`. Code extraction deferred. |
 | [Gamification Plan](design/gamification-plan.md) | Layered Phase 1 to 4+ rollout for the Pursuer + Job system. Phase 1 ships the core loop; later phases earn their place through engagement data. |
 | [Dashboard Module Catalog](design/dashboard-module-catalog.md) | 28-module roadmap with priority tiers, data sources, and implementation status |
 | [Platinum Journey](design/platinum-journey.md) | Premium "patient companion" feature: synthesis layer that knows the user and helps plan their next pursuits |

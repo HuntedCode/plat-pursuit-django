@@ -56,42 +56,51 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 | Key | Type | Required | Notes |
 |-----|------|----------|-------|
 | `tier` | `"bronze" \| "silver" \| "gold" \| "platinum"` | **yes** | Drives every tier-tinted token. |
-| `state` | `"earned" \| "in_progress" \| "unearned"` | **yes** | Visual state. Pinning is a separate flag (see `is_pinned`). |
+| `state` | `"earned" \| "in_progress" \| "unearned" \| "maintenance"` | **yes** | Visual state. Pinning is a separate flag (see `is_pinned`). Maintenance is for cards that have been earned but need re-attention (cyclical badges, "needs reactivation" treatment); pair with `maintenance_label`, `maintenance_stamp`, `repair_pips`, and optionally `is_maint_staged` for the choreographed reveal. |
 | `size` | `"default" \| "compact" \| "mini"` | no | Default `"default"`. |
 | `series_name` | str | **yes** | Title bar left side. |
 | `badge_name` | str | **yes** | Plinth front + back header. |
 | `description` | str | no | Back face only; suppressed if missing. |
 | `art_layers` | list[str] (URLs) | **yes** | Rendered as `<img class="pp-frame__layer">` into `.pp-frame__art`. Three layers is canonical (backdrop, default, foreground) but any number works. |
-| `engraving_rank` | int | no | Earned cards only. `None` suppresses the engraving entirely. Rank `1` triggers the first-earn pulsing animation. |
-| `engraving_total_label` | str | no | Default `"of all time"` — the **decorated** engraving format. |
+| `engraving_rank` | int | no | Earned cards only. `None` suppresses the engraving entirely. Rank `1` triggers the first-earn pulsing animation. Renders alone in the bottom-left corner of the plinth (e.g. `#247`) — the "of all time" subtitle was retired in favor of the cleaner two-corner balance with `set_number`. |
+| `set_number` | int | no | The print-run / edition number engraved in the bottom-right corner of the plinth (zero-padded to 4 digits, e.g. `0247`). Shared across every badge of the same series + tier — the manufacturer's-mark stamp. Renders in earned, in-progress, AND unearned states; tier-color tinted. |
+| `current_rank` | int | no | Earned cards only. The user's CURRENT-cycle rank (refreshed each maintenance cycle), printed as ink on chrome alongside the badge name on the front. Distinct from `engraving_rank` (permanent etched mark) — current_rank is the live, mutable count. |
+| `current_cycle` | int | no | Cycle number that pairs with `current_rank` (e.g. `"Cycle 2"`). Falls back to `"Current"` if missing. |
 | `earned_date` | str | no | Pre-formatted display string (e.g. `"Aug 15, 2024"`). |
 | `stages_done` / `stages_total` | int | no | Used for the back-face stats card and for the in-progress plinth meta line. |
 | `rarity_pct` | float | no | Front + back face. |
 | `rarity_rank` | int | no | Back face only (e.g. `"3% · #2,341"`). |
 | `rarity_class` | `"common" \| "uncommon" \| "rare" \| "mythic"` | yes for earned | Drives the rarity icon (none / dot / diamond / sparkle). |
 | `next_tier_label` | str | no | Back face. Use `"Maxed"` for top-tier holders — the partial automatically relabels the field "Status" instead of "Next tier". |
-| `progress_pct` | int 0-100 | no | In-progress state only. Drives the `--pp-build` inline style (the masked badge fill height). |
+| `progress_pct` | int 0-100 | no | In-progress, unearned, and maintenance states. Drives the `--pp-build` inline style (the masked badge fill height). |
 | `is_pinned` | bool | no | Adds Pin Variant D: cyan accent border + map-pin chip at top-left. Combines with any state. |
-| `is_earn_staged` | bool | no | Stages an in-progress card for an upcoming Earn Moment animation: adds `pp-frame--flippable` + `pp-earn-back-staged` and renders the back face (hidden) so the earn-moment back-scan has content to reveal. Pair with `engraving_rank` (the rank the user will receive when earned) so the etch phase reveals "#X of all time" text. |
+| `is_earn_staged` | bool | no | Stages an in-progress card for an upcoming Earn Moment animation: adds `pp-frame--flippable` + `pp-earn-back-staged` and renders the back face (hidden) so the earn-moment back-scan has content to reveal. Pair with `engraving_rank` (the rank the user will receive when earned) so the etch phase reveals the `#N` text. |
+| `is_maint_staged` | bool | no | Stages an earned card for an upcoming Maintenance Moment animation. Hides the maintenance stripes + plinth extras until the choreography reveals them. |
+| `maintenance_label` | str | no | Plinth label for the maintenance state (defaults to `"Reactivate"`). Sits in the same slot as `current_rank` on earned cards. |
+| `maintenance_stamp` | str | no | Text inside the maintenance band riveted across the art (defaults to `"Maintenance"`). |
+| `repair_pips` | list[bool] | no | Maintenance-state pip row (one per stage, `True` = repaired, `False` = remaining). |
 | `dom_id` | str | no | Sets `id` on the outer `.pp-frame` — needed if you call `PlatPursuit.Frame.triggerEarnMoment` against this card. |
 | `flair_slug` | str | no | Future Flair package extension (v1 has no flair variants, but the slot + class pass-through are wired). |
 | `allow_flip` | bool | no | Default `True` for `state=earned`. Pass `False` if the calling template wraps the Frame in an `<a>` so click-to-flip doesn't fight with navigation. |
+| `extra_class` | str | no | Free-form extra class string appended to the outer `.pp-frame`. Use sparingly — most variants belong in `state`, `size`, or one of the `is_*` flags. |
 
 ## Sizes
 
 | Size | Use case | Behavior |
 |------|----------|----------|
-| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Tier label in the title bar (right-aligned). |
-| `compact` | In-progress lists, home screen tiles | Title bar + plinth hidden. Tier identity carried entirely by the chrome (border + tier-tinted notches + backdrop). No on-art banner. |
-| `mini` | Inline / leaderboards / chips | 110px max width. Same chrome-only tier identity as compact. |
+| `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Title bar shows series (left) + tier label (right). Full plinth: badge name, meta (earned date + rarity), engraving in bottom-left, set-mark in bottom-right. |
+| `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left) and the set-mark (bottom-right); badge name, meta, and cycle print are suppressed. |
+| `mini` | Inline / leaderboards / chips | 110px max width. Same slim-chrome treatment as compact, with even tighter padding and smaller type. |
+
+All three sizes always render the three textual identifiers when present: series name (title bar), `engraving_rank` (bottom-left of plinth), and `set_number` (bottom-right of plinth). The Frame is recognizable across the full scale from this triad alone.
 
 ## States
 
 | State | Visual | Plinth meta | Engraving |
 |-------|--------|-------------|-----------|
-| `earned` | Full reveal. Title bar shows tier. Hover lift + tier-tinted gleam sweep. | "Earned [date]" + rarity | "#[rank] of all time" (or first-earn pulse for `#1`) |
-| `in_progress` | Blueprint mode: cyan grid, lock icon, Fabricating banner, construction line at the `--pp-build` height. | "[done] of [total] stages" + rarity | Placeholder (reserves height) |
-| `unearned` | Blueprint at 0% with "To Earn" stamp. Lock icon centered. | (empty) | (omitted) |
+| `earned` | Full reveal. Title bar shows tier. Hover lift + tier-tinted gleam sweep. | "Earned [date]" + rarity | `#[rank]` in the bottom-left corner of the plinth (first-earn pulse for `#1`); `set_number` mirrored in the bottom-right. |
+| `in_progress` | Blueprint mode: cyan grid, lock icon, Fabricating banner, construction line at the `--pp-build` height. | "[done] of [total] stages" + rarity | Placeholder (the engraving slot stays in its bottom-left position with `visibility:hidden` so the earn-moment etch animation has a settled target); `set_number` still visible in the bottom-right. |
+| `unearned` | Blueprint at 0% with "To Earn" stamp. Lock icon centered. | (empty) | (engraving omitted unless the card is pinned, which falls back to the placeholder); `set_number` still visible. |
 
 `is_pinned` is independent of state — any state can be pinned. Pinned cards get a cyan accent border + the map-pin chip at top-left; on blueprint cards the accent pulse takes priority over the schematic-glow hover.
 

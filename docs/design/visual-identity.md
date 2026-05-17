@@ -75,7 +75,9 @@ The test for any badge-rendering decision: *does this respect the card metaphor?
 
 If the Frame turns a badge into a trading card, the Badge Gallery turns the collection into an album. The trading-card metaphor doesn't stop at the individual card; it extends to the surface that displays the collection. The Badge Gallery is the kit's canonical "binder / display" — slots for each card, labeled spaces, the satisfaction of seeing your collection housed.
 
-**Visual character (to be designed; current Badge Gallery predates this kit).**
+**Implementation: the Binder.** The Album concept was prototyped end-to-end as the **Binder Surface** — a literal three-ring binder vessel for the collection, with cover, spine, rings, page tabs, sleeves, and a 3D page-flip Spread view. The Binder is documented as a Surface (a branded container that arranges Frames) in its own section below; see [Surfaces → The Binder](#surfaces-and-the-binder) and [binder-surface.md](binder-surface.md) for the full design + technical reference. The bullets below are the conceptual rationale that the Binder workshop fulfilled.
+
+**Visual character (delivered by the Binder workshop).**
 
 - Distinct **slots** per badge, each clearly labeled (series, name) — not a wall of identically-spaced grid cards.
 - Empty slots are **visible and named**. The "I haven't earned that one yet" gap is part of the collector's pull; an empty slot should look like a real place a card belongs, not a missing data row.
@@ -218,6 +220,22 @@ Earlier drafts of this kit included Stamp (provenance marker) and Pin (wayfindin
 
 They survive as design details (a slightly off-register tier stamp in a badge corner, an active-state highlight for what you're working on) but they don't earn pillar status.
 
+### Surfaces (and the Binder)
+
+The four primitives above are **atomic** — small, repeated units of brand identity used across the product. Some branded elements in PlatPursuit are categorically different: large, one-per-screen **containers** that *arrange* primitives into a coherent metaphor. Those are **Surfaces**.
+
+Surfaces share two properties with primitives: they're brand-recognition vehicles, and they carry the full visual-identity weight (principles, anti-references, locked designs). But they fail the atomicity test — a Surface isn't a small reusable unit, it's a vessel. Categorizing them separately keeps the four-primitive framing crisp.
+
+**The Binder (first Surface, prototype-locked).** The literal trading-card binder that displays the badge collection: three-ring sleeve binder with cover, spine, rings, page tabs, pocket sleeves, page numbers, bookmark. Six views — five binder configurations (Single / Compact / Spread × Binder / Gallery presentation, minus Spread × Gallery which isn't meaningful) plus a sibling sortable list view at `/design/badge-collection/` for power users. Spread mode is the headline interaction: a real 3D page-flip with drag-to-flip + arrow-button affordances, rotating around the spine. The Binder is the implementation of the Album concept named above. Workshop lives at [`/design/binder/`](../../templates/design/binder_preview.html); full design + technical reference in [binder-surface.md](binder-surface.md). Full code extraction (to production partials + CSS + JS, in the style of the Frame component) is deferred until the Binder gets a real product mounting point.
+
+**Future Surfaces.** Plausible siblings the Binder leaves room for: a **Trophy Case** for completed platinums (one-of-one display, plinth-and-pedestal vocabulary), a **Showcase** for the Pursuer Card hero on the Logbook, a **Wall** for milestone displays (100th platinum, badge series completions). Each would be its own Surface entry, not a primitive.
+
+**Anti-patterns for Surfaces** (in addition to the global anti-references in §5):
+
+- Surfaces that ape primitive vocabulary at scale. A Surface should compose primitives, not redraw them in larger sizes. If a Surface needs to look like "a Frame but big," it's misnamed — that's just a Frame variant.
+- Skeumorphism. A Binder is a *conceptual* binder, not a photoreal leather one. A Trophy Case is a conceptual display, not a wood-grain shelf. The metaphor lives in silhouette and layout, never in texture replication.
+- Surface-on-Surface nesting. A Binder inside a Trophy Case inside a Showcase loses everyone. Surfaces are one-per-screen vessels; if you need composition, use Sections (un-branded layout), not nested Surfaces.
+
 ---
 
 ## 4. Tokens
@@ -291,7 +309,7 @@ This is the test, not the spec. Every visual decision should pass through:
 
 1. **Does it serve the Brief?** If a treatment can't be located inside the explorer's-office metaphor or doesn't honor the three identities (collector, adventurer, number-watcher), it's misaligned.
 2. **Does it pass all six adjectives?** A decision that's prestigious, exploratory, rewarding, modern, charming, and earnest is on-brand. If even one fails, the decision is wrong.
-3. **Does it use the four signatures correctly?** Frame for badges, Pursuer Card for identity, Horizon for progress, Tally for numbers. New visual primitives shouldn't be invented unless an existing one genuinely can't do the work.
+3. **Does it use the four signatures correctly?** Frame for badges, Pursuer Card for identity, Horizon for progress, Tally for numbers. New visual primitives shouldn't be invented unless an existing one genuinely can't do the work. If the decision is a *container* arranging multiple primitives, see §3 → Surfaces — Binder is the first; new Surfaces are allowed but must earn their entry.
 4. **Does it survive the anti-references?** Each top-7 anti-ref is a check; if a proposed design lives inside one of those categories, redesign.
 
 When this document and a downstream design disagree, this document wins. When this document and `product-identity.md` disagree, *product-identity wins*: strategy precedes visual.
@@ -303,7 +321,7 @@ When this document and a downstream design disagree, this document wins. When th
 - **Section 4 (Tokens)** opens when Phase 1 gamification surfaces begin design. Premature now.
 - **Frame variant inventory** (earned, unearned, hover, pinned, premium, etc.) — resolved for the first four via the Frame prototype (see The Frame § States above). Premium variant deferred until gamification Phase 1 ships.
 - **Frame post-feedback decisions** awaiting team review of `templates/design/frame_preview.html`: final Pinned treatment (one of A/B/C/D), whether the PP corner stamp ships alongside the engraving, exact polish on the Earn Moment timing.
-- **Badge Gallery as Album.** The existing Badge Gallery predates this kit and renders badges in a generic grid. A rebuild informed by the Album concept (slots, labels, series grouping, named empty slots) is the natural next surface after the Frame primitive is locked. Same priority as Pursuer Card sizing.
+- **Badge Gallery as Album → Binder Surface.** The Album concept was prototyped end-to-end as the Binder Surface (six views, page-flip choreography, full binder dressing). The existing production Badge Gallery still predates this kit; the Binder workshop is the visual / interaction reference for its rebuild. Full code extraction of the Binder (to production partials + CSS + JS) is deferred until the surface gets a real product mounting point. See [binder-surface.md](binder-surface.md) for the locked design.
 - **Pursuer Card scale variants** (hero / compact / mini / share) need explicit sizes and content rules before the Logbook is designed.
 - **Tally typography choice.** The display face for headline numbers is the single highest-leverage type decision; needs a focused exploration when Section 4 opens. The engraving's tabular-figure treatment in the Frame is a first pass; the Tally type may or may not reuse it.
 - **Motion vocabulary ownership** — resolved at the kit level (see § Kit-level vocabulary: Motion + Particles above). Specific easing curves and durations still token-level work for Section 4.
@@ -316,5 +334,6 @@ When this document and a downstream design disagree, this document wins. When th
 - [Product Identity](product-identity.md): the strategic frame this visual identity serves. **When this document and product-identity.md disagree, product-identity wins.**
 - [Visual Identity References](visual-identity-references.md): curated real-world references for each primitive (Phase A mood-board content). Working doc for sketching, prototyping, and Figma mood boards.
 - [Frame design preview](../../templates/design/frame_preview.html) (served at `/design/frame/`): the reference implementation for the Frame primitive. Captures the tier variants, states (Earned / Unearned dim / Unearned blueprint / Pinned), engraving treatment, motion + particle vocabulary, and the full Earn Moment choreography. Where this doc and the prototype disagree on Frame details, the prototype is the source of truth — this doc records the strategic shape, the prototype records the committed implementation.
+- [Binder Surface](binder-surface.md): the first Surface entry. Full design + technical reference for the Binder workshop ([`/design/binder/`](../../templates/design/binder_preview.html)) and its sibling list view ([`/design/badge-collection/`](../../templates/design/badge_collection_list.html)). The Album concept (named in §3) implemented end-to-end.
 - [Gamification Plan](gamification-plan.md): Phase 1 surfaces (Pursuit home, Logbook, Badge Gallery) are the first major work to be designed natively in this visual identity.
 - [Design System Reference](../reference/design-system.md): the existing site-wide tokens, patterns, and component blueprints. Will be refreshed in service of this identity once Section 4 opens.
