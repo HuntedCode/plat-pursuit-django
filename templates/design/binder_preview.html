@@ -1369,16 +1369,19 @@
          * pivots on the spine edge. */
         .pp-binder[data-mode="spread"] .pp-binder__page.pp-binder__flip-leaf {
             transform-style: preserve-3d;
-            /* Plastic-page feel: longer duration + a softer curve with
-             * a hint of settle at the end. Curve breakdown:
-             *   (0.32, 0.0)  -- soft start, page resists gravity briefly
-             *   (0.18, 1.04) -- accelerates through 90, slight overshoot
-             *                   at the very end so the page "settles" on
-             *                   the other side rather than locking flat.
-             * Reads more like a thick plastic protector sheet than a
-             * rigid mechanical hinge (the old cubic-bezier(0.6,0,0.4,1)
-             * was symmetric and felt machined). */
-            transition: transform 880ms cubic-bezier(0.32, 0, 0.18, 1.04),
+            /* Plastic-page feel: longer duration + a softer curve.
+             * Curve breakdown:
+             *   (0.32, 0.0) -- soft start, page resists gravity briefly
+             *   (0.18, 1.0) -- accelerates through 90, lands at -180 flat.
+             * We previously had y2 = 1.04 to add a slight overshoot for a
+             * "plastic settle" feel, but for the full 0->-180 button-
+             * triggered rotation the overshoot resolves to ~7 degrees past
+             * the end -- the back face wobbles past -180 and back, which
+             * reads as a flash of OLD content at landing. Drag commits
+             * carry a smaller overshoot proportional to the remaining
+             * rotation so didn't show the same wobble. Locking the curve
+             * at y2 = 1.0 lands every flip cleanly without the wobble. */
+            transition: transform 880ms cubic-bezier(0.32, 0, 0.18, 1.0),
                         opacity 160ms ease;
             z-index: 4;
             will-change: transform;
@@ -2150,6 +2153,31 @@
             });
         }
 
+        // Force the destination spread's pages to is-visible
+        // immediately so they're fully opaque by the time the leaf
+        // rotation lands. Without this, pages start at opacity:0
+        // (the .pp-binder__page default) and only fade to 1 over
+        // 650ms once the IntersectionObserver fires; on a button-
+        // triggered flip the 880ms rotation lands while the pages
+        // are still mid-fade, and the swap reveals partially-faded
+        // content -- which reads as the "flash" the user sees on
+        // arrow-button flips but not on drag (drag almost always
+        // takes >650ms so the fade completes naturally before
+        // commit). is-mode-snap disables transitions for one frame
+        // so the visibility change snaps without the fade.
+        function snapDestinationVisible(destIdx) {
+            var dest = spreads[destIdx];
+            if (!dest) return;
+            var pages = dest.querySelectorAll('.pp-binder__page');
+            pages.forEach(function (p) {
+                p.classList.add('is-mode-snap');
+                syncPageState(p);
+            });
+            requestAnimationFrame(function () {
+                pages.forEach(function (p) { p.classList.remove('is-mode-snap'); });
+            });
+        }
+
         // Canonical rest state. ONLY is-current is set; is-next is
         // applied transiently by the drag pointerdown / flipForward /
         // flipBackward handlers themselves, and is cleared the next
@@ -2261,6 +2289,7 @@
             // is-next. Idempotent against drag-commit (the pointerdown
             // handler already calls markIsNext for the same destination).
             markIsNext(currentSpreadIdx + 1);
+            snapDestinationVisible(currentSpreadIdx + 1);
 
             // Set up the flipping leaf if not already wired (drag
             // commits arrive here with the leaf class + back face
@@ -2297,19 +2326,27 @@
             rightPage.style.transition = 'none';
             rightPage.style.transform = 'rotateY(' + fromDragRotation + 'deg)';
             void rightPage.offsetWidth;
-            rightPage.style.transition = 'transform ' + commitDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.04)';
+            rightPage.style.transition = 'transform ' + commitDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.0)';
             rightPage.style.transform = 'rotateY(-180deg)';
 
             clearPendingFlipTimer();
             pendingFlipTimer = window.setTimeout(function () {
+                // Swap classes and tear down the leaf in the SAME tick
+                // so the browser paints one transition: leaf gone +
+                // OLD display:none + NEW is-current, all together. A
+                // requestAnimationFrame split between the two steps
+                // can let the browser paint an intermediate frame
+                // where the leaf has lost its rotate transform but
+                // OLD hasn't gone display:none yet -- the leaf
+                // momentarily snaps back to rotateY(0) showing OLD's
+                // right-page content, which reads as the "flash of
+                // the old page" at landing.
                 currentSpreadIdx++;
                 updateFlipSlideState();
                 updateFlipCounter();
-                requestAnimationFrame(function () {
-                    teardownFlipLeaf(rightPage);
-                    flipInProgress = false;
-                    pendingFlipTimer = null;
-                });
+                teardownFlipLeaf(rightPage);
+                flipInProgress = false;
+                pendingFlipTimer = null;
             }, commitDur + 30);
         }
 
@@ -2336,6 +2373,7 @@
             // spread's is-next, so the prev spread is the only one
             // visible behind during the rotation.
             markIsNext(currentSpreadIdx - 1);
+            snapDestinationVisible(currentSpreadIdx - 1);
 
             if (!leftPage.classList.contains('pp-binder__flip-leaf')) {
                 var back = makeBackFace(prevRightPage);
@@ -2351,19 +2389,20 @@
             leftPage.style.transition = 'none';
             leftPage.style.transform = 'rotateY(' + fromDragRotation + 'deg)';
             void leftPage.offsetWidth;
-            leftPage.style.transition = 'transform ' + commitDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.04)';
+            leftPage.style.transition = 'transform ' + commitDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.0)';
             leftPage.style.transform = 'rotateY(180deg)';
 
             clearPendingFlipTimer();
             pendingFlipTimer = window.setTimeout(function () {
+                // Swap + teardown in the same tick (see flipForward
+                // for why the requestAnimationFrame split was the
+                // source of the landing flash on button flips).
                 currentSpreadIdx--;
                 updateFlipSlideState();
                 updateFlipCounter();
-                requestAnimationFrame(function () {
-                    teardownFlipLeaf(leftPage);
-                    flipInProgress = false;
-                    pendingFlipTimer = null;
-                });
+                teardownFlipLeaf(leftPage);
+                flipInProgress = false;
+                pendingFlipTimer = null;
             }, commitDur + 30);
         }
 
@@ -2378,7 +2417,7 @@
             var traveled = Math.abs(fromRotation || 0);
             var springDur = Math.max(200, FLIP_DUR * (traveled / 180));
             void leaf.offsetWidth;
-            leaf.style.transition = 'transform ' + springDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.04)';
+            leaf.style.transition = 'transform ' + springDur + 'ms cubic-bezier(0.32, 0, 0.18, 1.0)';
             leaf.style.transform = 'rotateY(0deg)';
             clearPendingFlipTimer();
             pendingFlipTimer = window.setTimeout(function () {
@@ -2427,10 +2466,12 @@
                     page = spread.querySelector('.pp-binder__page--right');
                     sourcePage = spreads[currentSpreadIdx + 1].querySelector('.pp-binder__page--left');
                     markIsNext(currentSpreadIdx + 1);
+                    snapDestinationVisible(currentSpreadIdx + 1);
                 } else {
                     page = spread.querySelector('.pp-binder__page--left');
                     sourcePage = spreads[currentSpreadIdx - 1].querySelector('.pp-binder__page--right');
                     markIsNext(currentSpreadIdx - 1);
+                    snapDestinationVisible(currentSpreadIdx - 1);
                 }
                 if (!page || !sourcePage) return;
 
