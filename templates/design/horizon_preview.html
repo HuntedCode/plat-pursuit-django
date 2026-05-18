@@ -6,9 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Horizon — PlatPursuit Design Workshop</title>
 
+    {# Body face: Inter (workshop chrome + labels). #}
+    {# Tally face: Bricolage Grotesque -- locked in the Tally workshop. #}
+    {# Used wherever a Tally-class number appears (the Job-row big #}
+    {# numbers in Section 6, the slider readout, the percent labels). #}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
 
     <style>
         /* ============================================================
@@ -79,7 +83,8 @@
             --hz-track:     rgba(255, 255, 255, 0.06);
             --hz-track-edge:rgba(255, 255, 255, 0.04);
 
-            --ws-body: 'Inter', system-ui, sans-serif;
+            --ws-body:       'Inter', system-ui, sans-serif;
+            --ws-face-tally: 'Bricolage Grotesque', 'Inter', sans-serif;
         }
 
         * { box-sizing: border-box; }
@@ -330,6 +335,16 @@
         .hz-pips[data-progress-band="warming"] .hz-pips__pip[data-state="done"] { background: var(--hz-warming-2); box-shadow: 0 0 6px rgba(200, 195, 145, 0.45); }
         .hz-pips[data-progress-band="warm"]    .hz-pips__pip[data-state="done"] { background: var(--hz-warm-2);    box-shadow: 0 0 8px rgba(255, 200, 100, 0.5); }
         .hz-pips[data-progress-band="hot"]     .hz-pips__pip[data-state="done"] { background: var(--hz-hot-2);     box-shadow: 0 0 10px rgba(255, 220, 170, 0.65); }
+        /* Position-stepped pip color -- each pip gets its color from
+         * its position in the sequence rather than from the parent's
+         * overall band. Result: a row of completed pips shows a soft
+         * cool->warm trail (older = cooler, newer = closer to the
+         * current band), giving the discrete form an internal
+         * gradient story analogous to the linear bar's. */
+        .hz-pips .hz-pips__pip[data-state="done"][data-pos-band="cool"]    { background: var(--hz-cool-2);    box-shadow: 0 0 4px rgba(110, 200, 230, 0.4); }
+        .hz-pips .hz-pips__pip[data-state="done"][data-pos-band="warming"] { background: var(--hz-warming-2); box-shadow: 0 0 6px rgba(200, 195, 145, 0.45); }
+        .hz-pips .hz-pips__pip[data-state="done"][data-pos-band="warm"]    { background: var(--hz-warm-2);    box-shadow: 0 0 8px rgba(255, 200, 100, 0.5); }
+        .hz-pips .hz-pips__pip[data-state="done"][data-pos-band="hot"]     { background: var(--hz-hot-2);     box-shadow: 0 0 10px rgba(255, 220, 170, 0.65); }
         .hz-pips__pip[data-state="next"] {
             background: rgba(255, 255, 255, 0.04);
             box-shadow: inset 0 0 0 1px var(--ws-text-muted);
@@ -349,13 +364,27 @@
         .hz-arc svg { display: block; }
         .hz-arc__track { stroke: var(--hz-track); }
         .hz-arc__fill {
-            transition: stroke 400ms ease, filter 400ms ease;
+            transition: filter 400ms ease;
             stroke-linecap: round;
         }
-        .hz-arc[data-progress-band="cool"]    .hz-arc__fill { stroke: var(--hz-cool-2);    filter: drop-shadow(0 0 4px rgba(110, 200, 230, 0.45)); }
-        .hz-arc[data-progress-band="warming"] .hz-arc__fill { stroke: var(--hz-warming-2); filter: drop-shadow(0 0 5px rgba(200, 195, 145, 0.55)); }
-        .hz-arc[data-progress-band="warm"]    .hz-arc__fill { stroke: var(--hz-warm-2);    filter: drop-shadow(0 0 7px rgba(255, 200, 100, 0.65)); }
-        .hz-arc[data-progress-band="hot"]     .hz-arc__fill { stroke: var(--hz-hot-2);     filter: drop-shadow(0 0 10px rgba(255, 220, 170, 0.8)); animation: hz-hot-pulse-glow 2.4s ease-in-out infinite; }
+        /* Radial arc gradient: the stroke is set via SVG <linearGradient>
+         * inline in each <defs>. The gradient runs top-to-bottom (matching
+         * the arc's clockwise path through 12 -> 3 -> 6) so the cool stop
+         * sits at 12 o'clock and the warm stop sits at 6 o'clock. The
+         * stop colors are CSS variables set per band on the parent .hz-arc,
+         * so the gradient inherits "warmer the closer" without any per-
+         * instance JS. The 2D direction is an approximation for arcs past
+         * ~75% completion, but the band-level color shift compensates: at
+         * the hot band, both stops are warm enough that the leading edge
+         * still reads hot regardless of which clock position it sits at. */
+        .hz-arc[data-progress-band="cool"]    { --hz-arc-grad-from: var(--hz-cool-1);   --hz-arc-grad-to: var(--hz-cool-2); }
+        .hz-arc[data-progress-band="warming"] { --hz-arc-grad-from: var(--hz-cool-2);   --hz-arc-grad-to: var(--hz-warming-2); }
+        .hz-arc[data-progress-band="warm"]    { --hz-arc-grad-from: var(--hz-warming-1); --hz-arc-grad-to: var(--hz-warm-2); }
+        .hz-arc[data-progress-band="hot"]     { --hz-arc-grad-from: var(--hz-warm-1);   --hz-arc-grad-to: var(--hz-hot-2); }
+        .hz-arc[data-progress-band="cool"]    .hz-arc__fill { filter: drop-shadow(0 0 4px rgba(110, 200, 230, 0.45)); }
+        .hz-arc[data-progress-band="warming"] .hz-arc__fill { filter: drop-shadow(0 0 5px rgba(200, 195, 145, 0.55)); }
+        .hz-arc[data-progress-band="warm"]    .hz-arc__fill { filter: drop-shadow(0 0 7px rgba(255, 200, 100, 0.65)); }
+        .hz-arc[data-progress-band="hot"]     .hz-arc__fill { filter: drop-shadow(0 0 10px rgba(255, 220, 170, 0.8)); animation: hz-hot-pulse-glow 2.4s ease-in-out infinite; }
         @keyframes hz-hot-pulse-glow {
             0%, 100% { filter: drop-shadow(0 0 10px rgba(255, 220, 170, 0.8)); }
             50%      { filter: drop-shadow(0 0 16px rgba(255, 230, 180, 1)); }
@@ -403,6 +432,97 @@
         .hz-vert[data-progress-band="warming"] .hz-vert__fill { background: linear-gradient(0deg, var(--hz-cool-2) 0%, var(--hz-warming-1) 60%, var(--hz-warming-2) 100%); }
         .hz-vert[data-progress-band="warm"]    .hz-vert__fill { background: linear-gradient(0deg, var(--hz-warming-1) 0%, var(--hz-warm-1) 50%, var(--hz-warm-2) 100%); }
         .hz-vert[data-progress-band="hot"]     .hz-vert__fill { background: linear-gradient(0deg, var(--hz-warm-1) 0%, var(--hz-hot-1) 50%, var(--hz-hot-2) 100%); animation: hz-hot-pulse 2.4s ease-in-out infinite; }
+
+        /* Segmented bar -- a discrete bar broken into N tier/stage
+         * segments. Used for tier progression (Bronze -> Silver ->
+         * Gold -> Platinum) and similar "you're in section N of M"
+         * surfaces. Done segments take position-stepped band colors
+         * (oldest segment = coolest, most recent = closest to current
+         * band). The CURRENT segment shows internal progress with a
+         * partial fill, exactly like the linear bar but constrained
+         * to that segment's width. Next segments are outlined. */
+        .hz-segments {
+            display: flex;
+            width: 100%;
+            gap: 4px;
+            align-items: stretch;
+        }
+        .hz-segments__seg {
+            flex: 1;
+            height: 14px;
+            background: var(--hz-track);
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 1px 1px var(--hz-track-edge);
+        }
+        .hz-segments__seg[data-state="done"][data-pos-band="cool"]    { background: var(--hz-cool-2);    box-shadow: 0 0 4px rgba(110, 200, 230, 0.4); }
+        .hz-segments__seg[data-state="done"][data-pos-band="warming"] { background: var(--hz-warming-2); box-shadow: 0 0 6px rgba(200, 195, 145, 0.45); }
+        .hz-segments__seg[data-state="done"][data-pos-band="warm"]    { background: var(--hz-warm-2);    box-shadow: 0 0 8px rgba(255, 200, 100, 0.5); }
+        .hz-segments__seg[data-state="done"][data-pos-band="hot"]     { background: var(--hz-hot-2);     box-shadow: 0 0 10px rgba(255, 220, 170, 0.65); }
+        .hz-segments__seg[data-state="current"]::after {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: var(--hz-seg-fill, 50%);
+            background: linear-gradient(90deg, var(--hz-warming-1) 0%, var(--hz-warm-1) 50%, var(--hz-warm-2) 100%);
+            border-radius: 3px;
+            box-shadow: 1px 0 8px rgba(255, 200, 100, 0.55);
+        }
+        .hz-segments__seg[data-state="next"] {
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: inset 0 0 0 1px var(--ws-text-muted);
+        }
+        .hz-segments-labels {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+            width: 100%;
+        }
+        .hz-segments-labels > span {
+            flex: 1;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            text-align: center;
+            font-family: var(--ws-body);
+        }
+        .hz-segments-labels > span[data-state="current"] { color: var(--ws-warm-2, var(--hz-warm-2)); }
+        .hz-segments-labels > span[data-state="done"]    { color: var(--ws-text-soft); }
+
+        /* Vertical pips -- stepped CLIMB visualization. Same coloring
+         * language as horizontal pips, just rotated. Lowest pips are
+         * "oldest" (done first, coolest); the climb goes UP toward
+         * warmer recently-completed pips and the outlined next stop. */
+        .hz-vpips {
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 6px;
+            align-items: stretch;
+            width: 36px;
+            height: 220px;
+        }
+        .hz-vpips__pip {
+            flex: 1 1 auto;
+            min-height: 8px;
+            background: var(--hz-track);
+            border-radius: 4px;
+            box-shadow: inset 0 1px 1px var(--hz-track-edge);
+            transition: background 320ms ease, box-shadow 320ms ease;
+        }
+        .hz-vpips__pip[data-state="done"][data-pos-band="cool"]    { background: var(--hz-cool-2);    box-shadow: 0 0 4px rgba(110, 200, 230, 0.4); }
+        .hz-vpips__pip[data-state="done"][data-pos-band="warming"] { background: var(--hz-warming-2); box-shadow: 0 0 6px rgba(200, 195, 145, 0.45); }
+        .hz-vpips__pip[data-state="done"][data-pos-band="warm"]    { background: var(--hz-warm-2);    box-shadow: 0 0 8px rgba(255, 200, 100, 0.5); }
+        .hz-vpips__pip[data-state="done"][data-pos-band="hot"]     { background: var(--hz-hot-2);     box-shadow: 0 0 10px rgba(255, 220, 170, 0.65); }
+        .hz-vpips__pip[data-state="next"] {
+            background: rgba(255, 255, 255, 0.04);
+            box-shadow: inset 0 0 0 1px var(--ws-text-muted);
+        }
+        .hz-vpips[data-progress-band="hot"] .hz-vpips__pip[data-state="next"] {
+            animation: hz-hot-pulse 2.4s ease-in-out infinite;
+        }
 
         /* ============================================================
          * Layout primitives for the workshop sections.
@@ -470,6 +590,26 @@
             font-size: 14px;
             color: var(--ws-text-muted);
             font-variant-numeric: tabular-nums;
+        }
+
+        /* Inline Tally-class number utility. Wrap any inline number
+         * inside body-text labels in <span class="hz-num"> so the
+         * digits get the Tally face (Bricolage Grotesque) while the
+         * surrounding text stays in the workshop body face (Inter).
+         * Per Option C scope, the Tally typeface applies to ALL
+         * numbers site-wide; this utility makes inline application
+         * trivial without restructuring the surrounding markup. */
+        .hz-num {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 14, "wdth" 100, "wght" 700;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.01em;
+            color: var(--ws-text);
+        }
+        .hz-num--big {
+            font-variation-settings: "opsz" 32, "wdth" 100, "wght" 800;
+            letter-spacing: -0.02em;
         }
         .hz-hero__bar {
             margin-bottom: 36px;
@@ -579,6 +719,8 @@
         .hz-progress__row:first-of-type { border-top: none; padding-top: 0; }
         .hz-progress__row:last-of-type  { padding-bottom: 0; }
         .hz-progress__pct {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 22, "wdth" 100, "wght" 700;
             font-size: 22px;
             font-weight: 700;
             letter-spacing: -0.02em;
@@ -709,6 +851,8 @@
             color: var(--ws-text);
         }
         .hz-slider__readout {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 28, "wdth" 100, "wght" 700;
             font-size: 28px;
             font-weight: 700;
             color: var(--ws-text);
@@ -716,6 +860,8 @@
             letter-spacing: -0.02em;
         }
         .hz-slider__readout small {
+            font-family: var(--ws-body);
+            font-variation-settings: normal;
             font-size: 11px;
             font-weight: 700;
             letter-spacing: 0.14em;
@@ -784,16 +930,19 @@
         }
         .hz-job-row:first-of-type { border-top: none; padding-top: 0; }
         .hz-job-row__num {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 56, "wdth" 100, "wght" 800;
             font-size: 56px;
-            font-weight: 900;
+            font-weight: 800;
             line-height: 1;
             letter-spacing: -0.04em;
             color: var(--ws-text);
             font-variant-numeric: tabular-nums;
-            font-family: 'Inter', sans-serif;
         }
         .hz-job-row__num small {
             display: block;
+            font-family: var(--ws-body);
+            font-variation-settings: normal;
             font-size: 10px;
             font-weight: 700;
             letter-spacing: 0.16em;
@@ -815,7 +964,12 @@
             text-transform: uppercase;
             font-weight: 600;
         }
-        .hz-job-row__meta strong { color: var(--ws-text-soft); font-weight: 600; }
+        .hz-job-row__meta strong {
+            color: var(--ws-text-soft);
+            font-weight: 600;
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 12, "wdth" 100, "wght" 700;
+        }
         .hz-job-row__next {
             text-align: right;
             font-size: 13px;
@@ -825,6 +979,8 @@
         }
         .hz-job-row__next strong {
             display: block;
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 22, "wdth" 100, "wght" 800;
             font-size: 22px;
             font-weight: 800;
             color: var(--ws-text);
@@ -1065,8 +1221,8 @@
                 <p>One linear bar at ~64% completion, sized at hero scale (12px tall). All four Horizon traits are visible: the cool-to-warm gradient, the leading-edge glow that bleeds beyond the fill, the faint marker at the next stop, and the warming band shift. This is the primitive's anchor — every other section refers back to this baseline.</p>
             </header>
             <div class="hz-hero hz">
-                <p class="hz-hero__label">Pursuer Level 47 · 64% to Level 48</p>
-                <p class="hz-hero__sublabel">3,200 / 5,000 XP · 1,800 to go</p>
+                <p class="hz-hero__label">Pursuer Level <span class="hz-num">47</span> · <span class="hz-num">64%</span> to Level <span class="hz-num">48</span></p>
+                <p class="hz-hero__sublabel"><span class="hz-num">3,200</span> / <span class="hz-num">5,000</span> XP · <span class="hz-num">1,800</span> to go</p>
                 <div class="hz-hero__bar">
                     <div class="hz-bar" data-progress-band="warming" style="--horizon-progress: 64%; --horizon-marker: 64%;">
                         <div class="hz-bar__fill"></div>
@@ -1101,8 +1257,9 @@
         <section id="forms" class="ws-section">
             <header>
                 <h3><span class="ws-num">02</span> The Forms</h3>
-                <h2>One language. Four shapes.</h2>
-                <p>The Horizon language translates across four canonical shapes. Each handles a different progress context but inherits the same color semantic, glow language, and pulse behavior. All four below sit in the same color band (<em>warming</em>, ~65% completion) so you can compare apples-to-apples.</p>
+                <h2>One language. Six shapes.</h2>
+                <p>The Horizon language translates across six canonical shapes — the four atomic forms (linear bar, stepped pips, radial arc, vertical fill) plus two composite forms for specific surfaces (segmented bar for tier ladders, vertical pips for stepped climbs). Each handles a different progress context but inherits the same color semantic, glow language, and pulse behavior. All six below sit in the same color band (<em>warming</em>, ~60–65% completion) so you can compare apples-to-apples.</p>
+                <p>Pips, segmented bar, and vertical pips now use <strong>position-stepped</strong> coloring (each done element gets a color from where it sits in the sequence, not just from the overall band) so the discrete forms carry the same internal cool→warm gradient story as the linear bar and vertical fill. The radial arc uses an SVG <code>linearGradient</code> with band-driven stop colors for the same reason.</p>
             </header>
             <div class="hz-forms">
                 <article class="hz-form">
@@ -1126,9 +1283,9 @@
                     </div>
                     <div class="hz-form__body" style="width: 100%;">
                         <div class="hz-pips" data-progress-band="warming" style="width: 100%;">
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="cool"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
                             <span class="hz-pips__pip" data-state="next"></span>
                             <span class="hz-pips__pip"></span>
                         </div>
@@ -1144,8 +1301,15 @@
                     <div class="hz-form__body">
                         <div class="hz-arc" data-progress-band="warming">
                             <svg width="120" height="120" viewBox="0 0 120 120">
+                                <defs>
+                                    <linearGradient id="hz-arc-grad-forms" x1="50%" y1="0%" x2="50%" y2="100%">
+                                        <stop offset="0%"   stop-color="var(--hz-arc-grad-from, currentColor)"></stop>
+                                        <stop offset="100%" stop-color="var(--hz-arc-grad-to,   var(--hz-warm-2))"></stop>
+                                    </linearGradient>
+                                </defs>
                                 <circle class="hz-arc__track" cx="60" cy="60" r="52" fill="none" stroke-width="8"></circle>
                                 <circle class="hz-arc__fill"  cx="60" cy="60" r="52" fill="none" stroke-width="8"
+                                    stroke="url(#hz-arc-grad-forms)"
                                     stroke-dasharray="326.7" stroke-dashoffset="114.3"
                                     transform="rotate(-90 60 60)"></circle>
                             </svg>
@@ -1165,6 +1329,45 @@
                         </div>
                     </div>
                     <p class="hz-form__note"><strong>Where it lives:</strong> bottom-up "being constructed" contexts. The Frame's blueprint <code>--pp-build</code> mask is already this form; the language unifies it. Useful for stage progression where the metaphor is <em>climbing</em>, not just <em>filling</em>.</p>
+                </article>
+
+                <article class="hz-form">
+                    <div class="hz-form__head">
+                        <h4>Segmented bar</h4>
+                        <span class="hz-form__where">tier ladder · multi-section</span>
+                    </div>
+                    <div class="hz-form__body" style="width: 100%; flex-direction: column;">
+                        <div class="hz-segments">
+                            <div class="hz-segments__seg" data-state="done"    data-pos-band="cool"></div>
+                            <div class="hz-segments__seg" data-state="done"    data-pos-band="warming"></div>
+                            <div class="hz-segments__seg" data-state="current" style="--hz-seg-fill: 55%;"></div>
+                            <div class="hz-segments__seg" data-state="next"></div>
+                        </div>
+                        <div class="hz-segments-labels">
+                            <span data-state="done">Bronze</span>
+                            <span data-state="done">Silver</span>
+                            <span data-state="current">Gold</span>
+                            <span>Platinum</span>
+                        </div>
+                    </div>
+                    <p class="hz-form__note"><strong>Where it lives:</strong> tier-ladder progressions (Bronze → Silver → Gold → Platinum), multi-section roadmaps, "you're in section N of M" contexts. Each completed segment carries position-stepped warmth; the <em>current</em> segment shows internal progress like a linear bar; future segments stay outlined.</p>
+                </article>
+
+                <article class="hz-form">
+                    <div class="hz-form__head">
+                        <h4>Vertical pips</h4>
+                        <span class="hz-form__where">stepped climb · ladder rungs</span>
+                    </div>
+                    <div class="hz-form__body">
+                        <div class="hz-vpips" data-progress-band="warming">
+                            <div class="hz-vpips__pip" data-state="done" data-pos-band="cool"></div>
+                            <div class="hz-vpips__pip" data-state="done" data-pos-band="warming"></div>
+                            <div class="hz-vpips__pip" data-state="done" data-pos-band="warming"></div>
+                            <div class="hz-vpips__pip" data-state="next"></div>
+                            <div class="hz-vpips__pip"></div>
+                        </div>
+                    </div>
+                    <p class="hz-form__note"><strong>Where it lives:</strong> stepped <em>climb</em> visualizations where the metaphor is ascent rather than a continuous fill. The vertical-pips form mirrors horizontal pips the same way the vertical-fill mirrors the linear bar. Useful for badge-stage rosters rendered as ladder rungs, or any "rung N of M" surface.</p>
                 </article>
             </div>
         </section>
@@ -1267,9 +1470,9 @@
                     <div class="hz-scale__row" data-size="hero">
                         <label>Hero · 12px</label>
                         <div class="hz-pips" data-progress-band="warming">
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="cool"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
                             <span class="hz-pips__pip" data-state="next"></span>
                             <span class="hz-pips__pip"></span>
                         </div>
@@ -1277,9 +1480,9 @@
                     <div class="hz-scale__row" data-size="row">
                         <label>Row · 8px</label>
                         <div class="hz-pips" data-progress-band="warming">
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="cool"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
                             <span class="hz-pips__pip" data-state="next"></span>
                             <span class="hz-pips__pip"></span>
                         </div>
@@ -1287,9 +1490,9 @@
                     <div class="hz-scale__row" data-size="inline">
                         <label>Inline · 6px</label>
                         <div class="hz-pips" data-progress-band="warming">
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="cool"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
                             <span class="hz-pips__pip" data-state="next"></span>
                             <span class="hz-pips__pip"></span>
                         </div>
@@ -1297,9 +1500,9 @@
                     <div class="hz-scale__row" data-size="micro">
                         <label>Micro · 4px</label>
                         <div class="hz-pips" data-progress-band="warming">
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
-                            <span class="hz-pips__pip" data-state="done"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="cool"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
+                            <span class="hz-pips__pip" data-state="done" data-pos-band="warming"></span>
                             <span class="hz-pips__pip" data-state="next"></span>
                             <span class="hz-pips__pip"></span>
                         </div>
@@ -1312,8 +1515,15 @@
                         <label>Hero · 140px</label>
                         <div class="hz-arc" data-progress-band="warming">
                             <svg width="140" height="140" viewBox="0 0 140 140">
+                                <defs>
+                                    <linearGradient id="hz-arc-grad-hero" x1="50%" y1="0%" x2="50%" y2="100%">
+                                        <stop offset="0%"   stop-color="var(--hz-arc-grad-from, currentColor)"></stop>
+                                        <stop offset="100%" stop-color="var(--hz-arc-grad-to,   var(--hz-warm-2))"></stop>
+                                    </linearGradient>
+                                </defs>
                                 <circle class="hz-arc__track" cx="70" cy="70" r="62" fill="none" stroke-width="9"></circle>
                                 <circle class="hz-arc__fill"  cx="70" cy="70" r="62" fill="none" stroke-width="9"
+                                    stroke="url(#hz-arc-grad-hero)"
                                     stroke-dasharray="389.6" stroke-dashoffset="155.8" transform="rotate(-90 70 70)"></circle>
                             </svg>
                         </div>
@@ -1322,8 +1532,15 @@
                         <label>Row · 80px</label>
                         <div class="hz-arc" data-progress-band="warming">
                             <svg width="80" height="80" viewBox="0 0 80 80">
+                                <defs>
+                                    <linearGradient id="hz-arc-grad-row" x1="50%" y1="0%" x2="50%" y2="100%">
+                                        <stop offset="0%"   stop-color="var(--hz-arc-grad-from, currentColor)"></stop>
+                                        <stop offset="100%" stop-color="var(--hz-arc-grad-to,   var(--hz-warm-2))"></stop>
+                                    </linearGradient>
+                                </defs>
                                 <circle class="hz-arc__track" cx="40" cy="40" r="34" fill="none" stroke-width="6"></circle>
                                 <circle class="hz-arc__fill"  cx="40" cy="40" r="34" fill="none" stroke-width="6"
+                                    stroke="url(#hz-arc-grad-row)"
                                     stroke-dasharray="213.6" stroke-dashoffset="85.4" transform="rotate(-90 40 40)"></circle>
                             </svg>
                         </div>
@@ -1332,8 +1549,15 @@
                         <label>Inline · 36px</label>
                         <div class="hz-arc" data-progress-band="warming">
                             <svg width="36" height="36" viewBox="0 0 36 36">
+                                <defs>
+                                    <linearGradient id="hz-arc-grad-inline" x1="50%" y1="0%" x2="50%" y2="100%">
+                                        <stop offset="0%"   stop-color="var(--hz-arc-grad-from, currentColor)"></stop>
+                                        <stop offset="100%" stop-color="var(--hz-arc-grad-to,   var(--hz-warm-2))"></stop>
+                                    </linearGradient>
+                                </defs>
                                 <circle class="hz-arc__track" cx="18" cy="18" r="15" fill="none" stroke-width="3.5"></circle>
                                 <circle class="hz-arc__fill"  cx="18" cy="18" r="15" fill="none" stroke-width="3.5"
+                                    stroke="url(#hz-arc-grad-inline)"
                                     stroke-dasharray="94.2" stroke-dashoffset="37.7" transform="rotate(-90 18 18)"></circle>
                             </svg>
                         </div>
@@ -1440,7 +1664,7 @@
                             <div class="hz-bar__marker"></div>
                         </div>
                         <div class="hz-job-row__meta">
-                            <span><strong>900</strong> / 5,000 XP</span>
+                            <span><strong>900</strong> / <strong>5,000</strong> XP</span>
                             <span>Cool · plenty of road</span>
                         </div>
                     </div>
@@ -1460,7 +1684,7 @@
                             <div class="hz-bar__marker"></div>
                         </div>
                         <div class="hz-job-row__meta">
-                            <span><strong>2,750</strong> / 5,000 XP</span>
+                            <span><strong>2,750</strong> / <strong>5,000</strong> XP</span>
                             <span>Warming · halfway</span>
                         </div>
                     </div>
@@ -1480,7 +1704,7 @@
                             <div class="hz-bar__marker"></div>
                         </div>
                         <div class="hz-job-row__meta">
-                            <span><strong>3,900</strong> / 5,000 XP</span>
+                            <span><strong>3,900</strong> / <strong>5,000</strong> XP</span>
                             <span>Warm · closing in</span>
                         </div>
                     </div>
@@ -1500,7 +1724,7 @@
                             <div class="hz-bar__marker"></div>
                         </div>
                         <div class="hz-job-row__meta">
-                            <span><strong>4,800</strong> / 5,000 XP</span>
+                            <span><strong>4,800</strong> / <strong>5,000</strong> XP</span>
                             <span>Hot · go finish it</span>
                         </div>
                     </div>
