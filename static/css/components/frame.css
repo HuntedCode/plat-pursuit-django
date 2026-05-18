@@ -292,15 +292,14 @@
  *           target; fits a 4-wide desktop grid at ~290px.
  * Compact : in-progress badges + dense lists. Slim chrome with
  *           series title, rank engraving, and set-mark only.
- * Mini   : inline / chip use. Same slim chrome as compact, just
- *          tighter padding + smaller type.
- *
- * Compact + Mini show ONLY three textual identifiers: the series
- * name in the title bar, the engraving rank in the bottom-left
- * of the plinth, and the set-mark in the bottom-right. Badge
- * name, earned date, rarity, and cycle-print all drop -- at
- * these sizes the chrome itself plus those three identifiers
- * carry the badge's identity without crowding the art.
+ * Mini   : inline / chip use. Chrome-only tier identity -- the
+ *          border color, corner notches, and backdrop carry the
+ *          tier read on their own; no text rendering at this
+ *          scale. Mini was briefly tried with slim chrome (series
+ *          + engraving + set-mark) but the text became unreadable
+ *          at typical mini placements (badge-peek thumbnails in
+ *          the Pursuer Card, leaderboard chips), so the chrome
+ *          was retired and the variant is back to chrome-only.
  * ============================================================ */
 .pp-frame--compact .pp-frame__title {
     padding: 3px 9px;
@@ -329,36 +328,17 @@
     letter-spacing: 0.14em;
 }
 
+/* Mini: chrome-only tier identity. Tier color carried by the
+ * border + corner notches + backdrop gradient. Title bar and
+ * plinth are hidden entirely; the art rounds at all corners to
+ * sit cleanly inside the frame border. */
 .pp-frame--mini {
     max-width: 110px;
     --frame-art-pad: 5px;
 }
-.pp-frame--mini .pp-frame__title {
-    padding: 2px 6px;
-}
-.pp-frame--mini .pp-frame__title::after { display: none; }
-.pp-frame--mini .pp-frame__series      { font-size: 6.5px; letter-spacing: 0.06em; }
-.pp-frame--mini .pp-frame__plinth {
-    padding: 0 6px 11px;
-    gap: 0;
-    min-height: 11px;
-}
-.pp-frame--mini .pp-frame__plinth-name-row,
-.pp-frame--mini .pp-frame__plinth-meta { display: none; }
-.pp-frame--mini .pp-frame__engraving {
-    bottom: 2px;
-    left: 5px;
-    font-size: 5.5px;
-    letter-spacing: 0.14em;
-    gap: 3px;
-}
-.pp-frame--mini .pp-frame__engraving-num { font-size: 6.5px; }
-.pp-frame--mini .pp-frame__set-mark {
-    bottom: 2px;
-    right: 5px;
-    font-size: 6.5px;
-    letter-spacing: 0.12em;
-}
+.pp-frame--mini .pp-frame__title   { display: none; }
+.pp-frame--mini .pp-frame__plinth  { display: none; }
+.pp-frame--mini .pp-frame__art     { border-radius: 5px; }
 .pp-frame--mini.pp-frame--bronze   { --notch-size: 5px; }
 .pp-frame--mini.pp-frame--silver   { --notch-size: 5px; }
 .pp-frame--mini.pp-frame--gold     { --notch-size: 6px; }

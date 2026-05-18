@@ -90,9 +90,9 @@ The JS controller auto-initializes on `DOMContentLoaded`, so Frames rendered by 
 |------|----------|----------|
 | `default` | Gallery / grid (primary target) | Fluid width. Fits a 4-wide desktop grid at ~290px. Title bar shows series (left) + tier label (right). Full plinth: badge name, meta (earned date + rarity), engraving in bottom-left, set-mark in bottom-right. |
 | `compact` | In-progress lists, home screen tiles, dense binder Spread view | Slim chrome. Title bar shows series only (tier label dropped — the chrome already carries tier identity). Plinth shows ONLY the engraving (bottom-left) and the set-mark (bottom-right); badge name, meta, and cycle print are suppressed. |
-| `mini` | Inline / leaderboards / chips | 110px max width. Same slim-chrome treatment as compact, with even tighter padding and smaller type. |
+| `mini` | Inline / leaderboards / chips / Pursuer Card badge peek | 110px max width. **Chrome-only tier identity** — title bar and plinth are hidden entirely. Tier color carries via border + corner notches + backdrop gradient. Mini was briefly trialed with slim chrome (series + engraving + set-mark) but the text became unreadable at typical placements, so the chrome was retired. |
 
-All three sizes always render the three textual identifiers when present: series name (title bar), `engraving_rank` (bottom-left of plinth), and `set_number` (bottom-right of plinth). The Frame is recognizable across the full scale from this triad alone.
+Default + Compact render the textual identifiers when present (series name in the title bar, `engraving_rank` in the bottom-left of the plinth, `set_number` in the bottom-right). Mini drops the text entirely; at that scale the chrome alone has to do the recognition work.
 
 ## States
 
