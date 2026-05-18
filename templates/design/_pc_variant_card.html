@@ -1,0 +1,116 @@
+{% comment %}
+    Pursuer Card variant card -- workshop-only partial.
+
+    Renders one Gold-tier Pursuer Card with optional cosmetic modifier
+    classes applied, plus a caption row below showing the variant name
+    and notes. Used by the customization workshop to show all
+    slot-variants in a consistent grid.
+
+    Params:
+      variant_name      Display name shown under the card.
+      variant_notes     One-sentence description shown below the name.
+      class_mods        Space-separated extra classes appended to .pc.pc--gold.
+      use_ornaments     "true" -> render 4 corner ornament SVGs (overlay slot
+                        variant; CSS hides the default diamond notches).
+      use_particles     "true" -> render .pc__particles div with 5 spans
+                        (drift-spark variant only).
+      use_shimmer       "true" -> render .pc__shimmer-overlay child element
+                        (edge-shimmer variant -- needs a child element so it
+                        doesn't fight the corner-notch ::before/::after).
+{% endcomment %}
+<div class="ws-variant">
+    <div class="ws-variant__card-wrap">
+        <div class="pc pc--gold {{ class_mods }}">
+            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+
+            {% if use_ornaments == "true" %}
+                <span class="pc__ornament" data-pos="tl">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 17 L2 2 L17 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M6 11 L11 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+                        <circle cx="4" cy="4" r="1.5" fill="currentColor"/>
+                        <path d="M2 22 L2 24 M22 2 L24 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+                    </svg>
+                </span>
+                <span class="pc__ornament" data-pos="tr">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 17 L2 2 L17 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M6 11 L11 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+                        <circle cx="4" cy="4" r="1.5" fill="currentColor"/>
+                        <path d="M2 22 L2 24 M22 2 L24 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+                    </svg>
+                </span>
+                <span class="pc__ornament" data-pos="bl">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 17 L2 2 L17 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M6 11 L11 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+                        <circle cx="4" cy="4" r="1.5" fill="currentColor"/>
+                        <path d="M2 22 L2 24 M22 2 L24 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+                    </svg>
+                </span>
+                <span class="pc__ornament" data-pos="br">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M2 17 L2 2 L17 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                        <path d="M6 11 L11 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+                        <circle cx="4" cy="4" r="1.5" fill="currentColor"/>
+                        <path d="M2 22 L2 24 M22 2 L24 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+                    </svg>
+                </span>
+            {% endif %}
+
+            {% if use_particles == "true" %}
+                <div class="pc__particles">
+                    <span></span><span></span><span></span><span></span><span></span>
+                </div>
+            {% endif %}
+
+            {% if use_shimmer == "true" %}
+                <div class="pc__shimmer-overlay"></div>
+            {% endif %}
+
+            <div class="pc__identity">
+                <div class="pc__avatar">PP</div>
+                <div>
+                    <p class="pc__name">PlatPursuit</p>
+                    <p class="pc__title">The Completionist</p>
+                </div>
+            </div>
+
+            <div class="pc__level-block">
+                <p class="pc__level">847<small>Master Lv</small></p>
+                <span class="pc__tier-label">Gold Pursuer</span>
+            </div>
+
+            <div class="pc__horizon">
+                <div class="pc__horizon-bar">
+                    <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                </div>
+                <div class="pc__horizon-meta">
+                    <span><strong>847</strong> / 1,200</span>
+                    <span>41% to Platinum</span>
+                </div>
+            </div>
+
+            <div class="pc__job">
+                <span class="pc__job-label">Top Job</span>
+                <span class="pc__job-name">Crafter</span>
+                <span class="pc__job-level">87</span>
+                <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+            </div>
+
+            <div class="pc__badges-wrap">
+                <p class="pc__badges-label">Recent Badges</p>
+                <div class="pc__badges-row">
+                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="ws-variant__caption">
+        <p class="ws-variant__name">{{ variant_name }}</p>
+        <p class="ws-variant__notes">{{ variant_notes }}</p>
+    </div>
+</div>

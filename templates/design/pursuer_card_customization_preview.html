@@ -1,0 +1,1157 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pursuer Card · Customization — PlatPursuit Design Workshop</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+
+    {# Production Frame CSS for the badge-peek mini variants. #}
+    <link rel="stylesheet" href="{% static 'css/components/frame.css' %}">
+
+    <style>
+        /* ============================================================
+         * PURSUER CARD · CUSTOMIZATION WORKSHOP
+         *
+         * Sibling deep-dive to the main Pursuer Card workshop
+         * (/design/pursuer-card/). This one focuses on the FIVE
+         * customization slots that the parent workshop only named:
+         *
+         *   1. Background          (interior surface texture)
+         *   2. Frame overlay       (decorative ring around border)
+         *   3. Particle/animation  (ambient motion)
+         *   4. Title plate         (active Title rendering)
+         *   5. Showcase config     (badge-peek layout)
+         *
+         * Per the locked-in rule: premium customization is ADDITIVE
+         * on top of the tier-earned base, never replacing it. A
+         * Silver Pursuer cannot purchase Platinum chrome -- the tier
+         * is achievement-locked. Cosmetics add personality on top of
+         * the tier the player earned.
+         *
+         * Section map:
+         *   1. Overview                -- how to read this workshop
+         *   2. Background              -- 4 variants (default + 3)
+         *   3. Frame overlay           -- 4 variants (none + 3)
+         *   4. Particle / animation    -- 4 variants (none + 3)
+         *   5. Title plate             -- 5 variants (plain + 4)
+         *   6. Showcase config         -- 3 variants
+         *   7. Premium bundle preview  -- stacking premium options
+         *   8. Anti-patterns + rubric  -- shared vocabulary
+         * ============================================================ */
+
+        :root {
+            --ws-bg-deep:        rgb(8, 10, 14);
+            --ws-bg-base:        rgb(14, 17, 22);
+            --ws-bg-card:        rgb(20, 24, 32);
+            --ws-bg-card-hi:     rgb(26, 32, 42);
+            --ws-border:         rgba(255, 255, 255, 0.08);
+            --ws-border-hi:      rgba(255, 255, 255, 0.14);
+            --ws-text:           rgba(255, 255, 255, 0.92);
+            --ws-text-soft:      rgba(255, 255, 255, 0.55);
+            --ws-text-muted:     rgba(255, 255, 255, 0.35);
+            --ws-accent:         rgb(110, 200, 230);
+            --ws-accent-dim:     rgba(110, 200, 230, 0.6);
+            --ws-accent-faint:   rgba(110, 200, 230, 0.15);
+            --ws-gold:           rgb(245, 215, 120);
+            --ws-warn:           rgb(220, 130, 70);
+            --ws-premium:        rgb(220, 180, 240);
+            --ws-premium-dim:    rgba(220, 180, 240, 0.55);
+            --ws-premium-faint:  rgba(220, 180, 240, 0.15);
+
+            --ws-body:       'Inter', system-ui, sans-serif;
+            --ws-face-tally: 'Bricolage Grotesque', 'Inter', sans-serif;
+
+            --tier-bronze:        rgb(200, 122, 59);
+            --tier-bronze-dim:    rgb(130, 78, 36);
+            --tier-silver:        rgb(205, 208, 212);
+            --tier-silver-dim:    rgb(140, 144, 152);
+            --tier-gold:          rgb(240, 198, 74);
+            --tier-gold-dim:      rgb(160, 132, 50);
+            --tier-platinum:      rgb(220, 240, 250);
+            --tier-platinum-dim:  rgb(135, 175, 195);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(ellipse at top, rgba(220, 180, 240, 0.04), transparent 50%),
+                var(--ws-bg-deep);
+            color: var(--ws-text);
+            font-family: var(--ws-body);
+            font-size: 15px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        /* ============================================================
+         * Workshop chrome
+         * ============================================================ */
+        .ws-header {
+            border-bottom: 1px solid var(--ws-border);
+            padding: 40px 48px 32px;
+            background: linear-gradient(180deg, var(--ws-bg-base), var(--ws-bg-deep));
+        }
+        .ws-header h1 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+        }
+        .ws-header h1 span {
+            color: var(--ws-text-soft);
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .ws-header h2 {
+            margin: 0 0 14px;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        .ws-header p {
+            margin: 0;
+            max-width: 780px;
+            color: var(--ws-text-soft);
+            font-size: 16px;
+        }
+        .ws-header p + p { margin-top: 12px; }
+        .ws-header strong { color: var(--ws-text); font-weight: 600; }
+        .ws-header em { color: var(--ws-text); font-style: italic; }
+        .ws-header a {
+            color: var(--ws-accent);
+            text-decoration: none;
+            border-bottom: 1px dashed var(--ws-accent-dim);
+        }
+
+        .ws-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 14px 48px;
+            border-bottom: 1px solid var(--ws-border);
+            background: var(--ws-bg-deep);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .ws-nav a {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ws-text-soft);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: background 160ms ease, color 160ms ease;
+        }
+        .ws-nav a:hover { background: var(--ws-bg-card); color: var(--ws-text); }
+
+        main {
+            padding: 0 48px 120px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .ws-section {
+            padding: 80px 0 40px;
+            border-bottom: 1px dashed var(--ws-border);
+        }
+        .ws-section:last-child { border-bottom: none; }
+        .ws-section > header { margin-bottom: 36px; max-width: 800px; }
+        .ws-section > header h3 {
+            margin: 0 0 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+        }
+        .ws-section > header h3 .ws-num { color: var(--ws-text-muted); margin-right: 8px; }
+        .ws-section > header h2 {
+            margin: 0 0 14px;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+        }
+        .ws-section > header p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 15px;
+        }
+        .ws-section > header p + p { margin-top: 10px; }
+        .ws-section > header em { color: var(--ws-text); font-style: italic; }
+        .ws-section > header code {
+            background: var(--ws-bg-card);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            color: var(--ws-accent);
+            font-family: ui-monospace, monospace;
+        }
+
+        /* ============================================================
+         * PURSUER CARD primitive (duplicated from main workshop for
+         * self-containment -- this workshop deep-dives the same card,
+         * but with customization variants layered on top).
+         * ============================================================ */
+        .pc {
+            position: relative;
+            width: 100%;
+            max-width: 320px;
+            background: linear-gradient(180deg, rgba(20, 24, 32, 0.92), rgba(14, 17, 22, 0.95));
+            border: 1px solid var(--pc-border-color, rgba(255, 255, 255, 0.15));
+            border-radius: 10px;
+            overflow: visible;
+            padding: 20px 22px 24px;
+            color: var(--ws-text);
+            font-family: var(--ws-body);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .pc::before,
+        .pc::after,
+        .pc > .pc__corner-bl,
+        .pc > .pc__corner-br {
+            content: "";
+            position: absolute;
+            width: var(--pc-notch-size, 7px);
+            height: var(--pc-notch-size, 7px);
+            background: var(--pc-notch-bg, rgba(20, 24, 32, 1));
+            border: 1px solid var(--pc-notch-border, rgba(255, 255, 255, 0.4));
+            transform: rotate(45deg);
+            z-index: 5;
+            pointer-events: none;
+        }
+        .pc::before { top: calc(var(--pc-notch-size, 7px) / -2); left:  calc(var(--pc-notch-size, 7px) / -2); }
+        .pc::after  { top: calc(var(--pc-notch-size, 7px) / -2); right: calc(var(--pc-notch-size, 7px) / -2); }
+        .pc > .pc__corner-bl { bottom: calc(var(--pc-notch-size, 7px) / -2); left:  calc(var(--pc-notch-size, 7px) / -2); }
+        .pc > .pc__corner-br { bottom: calc(var(--pc-notch-size, 7px) / -2); right: calc(var(--pc-notch-size, 7px) / -2); }
+
+        .pc__identity {
+            display: grid;
+            grid-template-columns: 64px 1fr;
+            gap: 14px;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+        .pc__avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--pc-avatar-from, #364254), var(--pc-avatar-to, #1a212c));
+            border: 1px solid var(--pc-avatar-border, rgba(255, 255, 255, 0.18));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--ws-face-tally);
+            font-weight: 800;
+            font-size: 22px;
+            color: rgba(255, 255, 255, 0.85);
+            letter-spacing: -0.02em;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 4px 14px rgba(0, 0, 0, 0.45);
+            flex-shrink: 0;
+        }
+        .pc__name {
+            margin: 0 0 4px;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--ws-text);
+            line-height: 1.1;
+            font-family: var(--ws-body);
+        }
+        .pc__title {
+            margin: 0;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--pc-title-color, var(--ws-text-soft));
+        }
+        .pc__level-block {
+            padding: 6px 0 4px;
+            position: relative;
+            z-index: 2;
+        }
+        .pc__level {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 96, "wdth" 100, "wght" 800;
+            font-size: 76px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 0.95;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            margin: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+        .pc__level small {
+            font-family: var(--ws-body);
+            font-variation-settings: normal;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            line-height: 1;
+            align-self: end;
+            padding-bottom: 8px;
+        }
+        .pc__tier-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--pc-tier-text, var(--ws-text-soft));
+        }
+        .pc__tier-label::before {
+            content: "";
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            background: var(--pc-tier-color, var(--ws-text-muted));
+            transform: rotate(45deg);
+        }
+        .pc__horizon { margin-top: 10px; position: relative; z-index: 2; }
+        .pc__horizon-bar {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 999px;
+            overflow: visible;
+        }
+        .pc__horizon-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--pc-horizon-pct, 41.2%);
+            border-radius: 999px;
+            background: var(--pc-horizon-grad, linear-gradient(90deg, rgb(200, 195, 145), rgb(220, 180, 110), rgb(255, 200, 100)));
+            box-shadow: 0 0 8px var(--pc-horizon-glow, rgba(255, 200, 100, 0.55));
+        }
+        .pc__horizon-fill::after {
+            content: "";
+            position: absolute;
+            top: -2px;
+            right: -6px;
+            bottom: -2px;
+            width: 12px;
+            border-radius: 999px;
+            background: radial-gradient(ellipse at left center, var(--pc-horizon-edge, rgb(255, 200, 100)) 0%, transparent 70%);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .pc__horizon-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--ws-text-muted);
+        }
+        .pc__horizon-meta strong {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 11, "wdth" 100, "wght" 700;
+            font-weight: 700;
+            color: var(--ws-text-soft);
+            letter-spacing: 0;
+        }
+        .pc__job {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--ws-border);
+            border-radius: 6px;
+            padding: 10px 12px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 4px 12px;
+            align-items: center;
+            position: relative;
+            z-index: 2;
+        }
+        .pc__job-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+        .pc__job-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ws-text);
+        }
+        .pc__job-level {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 22, "wdth" 100, "wght" 800;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            line-height: 1;
+            grid-row: 1 / span 2;
+            grid-column: 2;
+            text-align: right;
+        }
+        .pc__job-bar {
+            grid-column: 1 / span 2;
+            grid-row: 3;
+            margin-top: 6px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+        .pc__job-bar::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--pc-job-pct, 64%);
+            background: linear-gradient(90deg, rgb(110, 200, 230), rgb(200, 195, 145));
+            border-radius: 2px;
+        }
+        .pc__badges-wrap { position: relative; z-index: 2; }
+        .pc__badges-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            margin: 0 0 8px;
+        }
+        .pc__badges-row { display: flex; gap: 8px; }
+        .pc__badge-slot {
+            width: 60px;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .pc__badge-slot .pp-frame--mini {
+            max-width: 100%;
+            width: 100%;
+            cursor: default;
+        }
+        .pc__badge-slot .pp-frame:hover { transform: none; box-shadow: none; }
+        .pc__badge-slot .pp-frame__gleam { display: none; }
+
+        /* Gold tier (the default tier for variant demos -- so the
+         * customization variants are read against a familiar base). */
+        .pc--gold {
+            --pc-border-color:  rgba(240, 198, 74, 0.6);
+            --pc-notch-bg:      linear-gradient(135deg, var(--tier-gold), var(--tier-gold-dim));
+            --pc-notch-border:  rgba(240, 198, 74, 0.85);
+            --pc-notch-size:    9px;
+            --pc-tier-color:    var(--tier-gold);
+            --pc-tier-text:     rgba(245, 215, 120, 1);
+            --pc-avatar-from:   rgba(70, 55, 20, 0.8);
+            --pc-avatar-to:     rgba(30, 24, 8, 0.95);
+            --pc-avatar-border: rgba(240, 198, 74, 0.45);
+            --pc-title-color:   rgba(245, 215, 120, 0.95);
+            background:
+                radial-gradient(ellipse at top, rgba(240, 198, 74, 0.08), transparent 50%),
+                linear-gradient(180deg, rgba(50, 38, 14, 0.55), rgba(14, 17, 22, 0.95));
+            box-shadow: 0 8px 28px rgba(240, 198, 74, 0.06), inset 0 1px 0 rgba(245, 215, 120, 0.07);
+        }
+
+        /* ============================================================
+         * CUSTOMIZATION VARIANTS -- the actual workshop content
+         *
+         * Each variant class layers on top of the base .pc + tier
+         * combo. They modify ONE slot only; multiple can stack via
+         * combined classnames (e.g., .pc--bg-paper.pc--overlay-glow).
+         * ============================================================ */
+
+        /* ────── SLOT 1: Background ──────
+         * Modifies the interior surface. Tier color stays intact;
+         * variant adds texture / pattern / themed surface above it. */
+
+        /* (default = no class needed; baseline gradient lives on .pc--gold) */
+
+        .pc--bg-paper {
+            background:
+                radial-gradient(ellipse at top, rgba(240, 198, 74, 0.08), transparent 50%),
+                repeating-linear-gradient(90deg,
+                    rgba(255, 245, 220, 0.05) 0px,
+                    rgba(255, 245, 220, 0.05) 1px,
+                    transparent 1px, transparent 4px),
+                repeating-linear-gradient(0deg,
+                    rgba(255, 245, 220, 0.05) 0px,
+                    rgba(255, 245, 220, 0.05) 1px,
+                    transparent 1px, transparent 4px),
+                linear-gradient(180deg, rgba(50, 38, 14, 0.55), rgba(14, 17, 22, 0.95));
+        }
+
+        .pc--bg-dots {
+            background:
+                radial-gradient(ellipse at top, rgba(240, 198, 74, 0.08), transparent 50%),
+                radial-gradient(circle at center, rgba(255, 220, 130, 0.22) 1.2px, transparent 1.8px),
+                linear-gradient(180deg, rgba(50, 38, 14, 0.55), rgba(14, 17, 22, 0.95));
+            background-size: auto, 10px 10px, auto;
+        }
+
+        .pc--bg-explorer {
+            background:
+                radial-gradient(ellipse at top, rgba(240, 198, 74, 0.08), transparent 50%),
+                repeating-linear-gradient(45deg,
+                    rgba(255, 240, 200, 0.08) 0px,
+                    rgba(255, 240, 200, 0.08) 1.5px,
+                    transparent 1.5px, transparent 12px),
+                repeating-linear-gradient(-45deg,
+                    rgba(255, 240, 200, 0.08) 0px,
+                    rgba(255, 240, 200, 0.08) 1.5px,
+                    transparent 1.5px, transparent 12px),
+                linear-gradient(180deg, rgba(50, 38, 14, 0.55), rgba(14, 17, 22, 0.95));
+        }
+
+        .pc--bg-aurora {
+            background:
+                radial-gradient(ellipse at top, rgba(240, 198, 74, 0.08), transparent 50%),
+                linear-gradient(135deg,
+                    rgba(110, 200, 230, 0.28) 0%,
+                    rgba(220, 180, 240, 0.18) 35%,
+                    rgba(240, 198, 74, 0.28) 65%,
+                    rgba(110, 200, 230, 0.22) 100%) 0 0 / 220% 220%,
+                linear-gradient(180deg, rgba(50, 38, 14, 0.55), rgba(14, 17, 22, 0.95));
+            animation: pc-aurora-drift 12s ease-in-out infinite;
+        }
+        @keyframes pc-aurora-drift {
+            0%, 100% { background-position: 0% 0%, 0% 0%, 0 0; }
+            50%      { background-position: 0% 0%, 100% 100%, 0 0; }
+        }
+
+        /* ────── SLOT 2: Frame overlay ──────
+         * Decorative ring drawn AROUND the existing border. Sits at
+         * z-index above the card edge but below content. Tier border
+         * remains the actual structural border; overlay is pure
+         * cosmetic addition. */
+
+        .pc--overlay-engraved {
+            box-shadow:
+                inset 0 0 0 3px rgba(0, 0, 0, 0.3),
+                inset 0 0 0 4px rgba(245, 215, 120, 0.25),
+                0 8px 28px rgba(240, 198, 74, 0.06),
+                inset 0 1px 0 rgba(245, 215, 120, 0.07);
+        }
+
+        .pc--overlay-glow {
+            box-shadow:
+                0 0 0 1px rgba(245, 215, 120, 0.55),
+                0 0 18px rgba(240, 198, 74, 0.35),
+                0 0 36px rgba(240, 198, 74, 0.18),
+                0 8px 28px rgba(240, 198, 74, 0.1);
+            animation: pc-overlay-glow-pulse 4.5s ease-in-out infinite;
+        }
+        @keyframes pc-overlay-glow-pulse {
+            0%, 100% { box-shadow:
+                0 0 0 1px rgba(245, 215, 120, 0.55),
+                0 0 18px rgba(240, 198, 74, 0.35),
+                0 0 36px rgba(240, 198, 74, 0.18),
+                0 8px 28px rgba(240, 198, 74, 0.1); }
+            50%      { box-shadow:
+                0 0 0 1px rgba(245, 215, 120, 0.75),
+                0 0 26px rgba(240, 198, 74, 0.55),
+                0 0 52px rgba(240, 198, 74, 0.3),
+                0 8px 28px rgba(240, 198, 74, 0.15); }
+        }
+
+        /* Ornaments REPLACE the default corner notches. The Pursuer
+         * has earned the right to wear an ornamented frame instead
+         * of the default diamond chrome. Hide the four notches when
+         * this variant is active. */
+        .pc--overlay-ornaments::before,
+        .pc--overlay-ornaments::after,
+        .pc--overlay-ornaments > .pc__corner-bl,
+        .pc--overlay-ornaments > .pc__corner-br {
+            display: none;
+        }
+        .pc--overlay-ornaments .pc__ornament {
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            pointer-events: none;
+            z-index: 4;
+            color: rgba(245, 215, 120, 0.85);
+            filter: drop-shadow(0 0 4px rgba(240, 198, 74, 0.35));
+        }
+        .pc--overlay-ornaments .pc__ornament svg { width: 100%; height: 100%; display: block; }
+        .pc--overlay-ornaments .pc__ornament[data-pos="tl"] { top: -3px;    left: -3px;    transform: rotate(0deg); }
+        .pc--overlay-ornaments .pc__ornament[data-pos="tr"] { top: -3px;    right: -3px;   transform: rotate(90deg); }
+        .pc--overlay-ornaments .pc__ornament[data-pos="bl"] { bottom: -3px; left: -3px;    transform: rotate(-90deg); }
+        .pc--overlay-ornaments .pc__ornament[data-pos="br"] { bottom: -3px; right: -3px;   transform: rotate(180deg); }
+
+        /* ────── SLOT 3: Particle / animation ──────
+         * Ambient motion layered over the card. Drift sparks, edge
+         * shimmer, corner glints. Uses absolutely-positioned div
+         * children animated via CSS. Always quiet -- never confetti,
+         * never noisy (anti-ref #4 territory). */
+
+        .pc--particles { position: relative; }
+        .pc__particles {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: 10px;
+            z-index: 1;
+        }
+        .pc__particles span {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255, 230, 170, 0.85) 0%, rgba(245, 215, 120, 0.3) 50%, transparent 100%);
+            opacity: 0;
+        }
+
+        .pc--particle-drift .pc__particles span {
+            width: 6px;
+            height: 6px;
+            animation: pc-particle-drift 8s ease-in-out infinite;
+        }
+        .pc--particle-drift .pc__particles span:nth-child(1) { left: 12%; animation-delay: 0s;   }
+        .pc--particle-drift .pc__particles span:nth-child(2) { left: 28%; animation-delay: 2s;   }
+        .pc--particle-drift .pc__particles span:nth-child(3) { left: 48%; animation-delay: 4.5s; }
+        .pc--particle-drift .pc__particles span:nth-child(4) { left: 68%; animation-delay: 1.5s; }
+        .pc--particle-drift .pc__particles span:nth-child(5) { left: 84%; animation-delay: 6s;   }
+        @keyframes pc-particle-drift {
+            0%   { bottom: -10%; opacity: 0; transform: translateX(0); }
+            10%  { opacity: 0.7; }
+            50%  { transform: translateX(8px); }
+            90%  { opacity: 0.5; }
+            100% { bottom: 110%; opacity: 0; transform: translateX(-6px); }
+        }
+
+        /* Edge shimmer renders as a child overlay element rather than
+         * a ::after pseudo, so it doesn't fight the .pc::after that
+         * draws the top-right corner notch. The overlay clips to the
+         * card's border-radius and sweeps a soft diagonal highlight
+         * band across the entire surface on a ~4s cycle. */
+        .pc__shimmer-overlay {
+            position: absolute;
+            inset: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 3;
+        }
+        .pc--particle-shimmer .pc__shimmer-overlay::before {
+            content: "";
+            position: absolute;
+            top: -25%;
+            bottom: -25%;
+            left: -40%;
+            width: 60%;
+            background: linear-gradient(115deg,
+                transparent 35%,
+                rgba(255, 240, 200, 0.18) 46%,
+                rgba(255, 248, 220, 0.45) 50%,
+                rgba(255, 240, 200, 0.18) 54%,
+                transparent 65%);
+            transform: skewX(-12deg);
+            animation: pc-shimmer-sweep 4.5s ease-in-out infinite;
+        }
+        @keyframes pc-shimmer-sweep {
+            0%       { left: -40%; opacity: 0; }
+            15%      { opacity: 1; }
+            85%      { opacity: 1; }
+            100%     { left: 120%; opacity: 0; }
+        }
+
+        .pc--particle-corner-glints::before,
+        .pc--particle-corner-glints::after,
+        .pc--particle-corner-glints > .pc__corner-bl,
+        .pc--particle-corner-glints > .pc__corner-br {
+            animation: pc-corner-glint 3.6s ease-in-out infinite;
+        }
+        .pc--particle-corner-glints::after            { animation-delay: 0.9s; }
+        .pc--particle-corner-glints > .pc__corner-bl  { animation-delay: 1.8s; }
+        .pc--particle-corner-glints > .pc__corner-br  { animation-delay: 2.7s; }
+        @keyframes pc-corner-glint {
+            0%, 100% { box-shadow: none; filter: brightness(1); }
+            50%      { box-shadow: 0 0 12px rgba(245, 215, 120, 0.85), 0 0 20px rgba(245, 215, 120, 0.55); filter: brightness(1.4); }
+        }
+
+        /* ────── SLOT 4: Title plate ──────
+         * Modifies the .pc__title rendering. Free: plain caps text.
+         * Premium adds plate / banner / engraved treatments. */
+
+        .pc__title { /* default styles defined above */ }
+
+        .pc--title-italic .pc__title {
+            font-style: italic;
+            text-transform: none;
+            letter-spacing: 0.04em;
+            font-size: 12px;
+            color: var(--pc-title-color);
+        }
+
+        /* Engraved: dim gold body with strong directional deboss
+         * shadows -- top edge dark (depression catches shadow),
+         * bottom edge bright (far wall catches light). Larger size
+         * + heavier weight + Bricolage axes push it visibly past
+         * the plain-caps default. */
+        .pc--title-engraved .pc__title {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 14, "wdth" 100, "wght" 800;
+            font-size: 13px;
+            letter-spacing: 0.28em;
+            color: rgba(180, 140, 60, 0.75);
+            text-shadow:
+                -1px -1px 0 rgba(0, 0, 0, 0.7),
+                 0px -1px 0 rgba(0, 0, 0, 0.55),
+                 1px  1px 0 rgba(255, 240, 200, 0.22),
+                 0px  1px 0 rgba(255, 240, 200, 0.18);
+        }
+
+        .pc--title-ribbon .pc__title {
+            display: inline-block;
+            padding: 3px 12px;
+            margin-top: 4px;
+            background: linear-gradient(180deg, rgba(245, 215, 120, 0.85), rgba(180, 140, 60, 0.85));
+            border: 1px solid rgba(245, 215, 120, 0.95);
+            color: rgba(40, 25, 8, 1);
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            border-radius: 2px;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 240, 200, 0.6),
+                inset 0 -1px 0 rgba(130, 90, 30, 0.6),
+                0 2px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        .pc--title-tablet .pc__title {
+            display: inline-block;
+            padding: 4px 10px 3px;
+            margin-top: 3px;
+            background: linear-gradient(180deg, rgba(80, 60, 25, 0.9), rgba(40, 30, 12, 0.95));
+            border: 1px solid rgba(245, 215, 120, 0.45);
+            border-radius: 3px;
+            font-size: 9.5px;
+            letter-spacing: 0.22em;
+            color: rgba(245, 215, 120, 0.92);
+            box-shadow:
+                inset 0 1px 0 rgba(245, 215, 120, 0.15),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+                0 2px 5px rgba(0, 0, 0, 0.4);
+        }
+
+        /* ============================================================
+         * Workshop section layouts
+         * ============================================================ */
+        .ws-variants {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 22px;
+        }
+        .ws-variant {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        .ws-variant__card-wrap {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+        .ws-variant__caption {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .ws-variant__name {
+            margin: 0;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ws-text);
+            letter-spacing: 0.02em;
+        }
+        .ws-variant__notes {
+            margin: 0;
+            font-size: 12.5px;
+            color: var(--ws-text-soft);
+            text-align: center;
+            line-height: 1.5;
+            max-width: 280px;
+        }
+
+        /* Premium bundle preview -- 2-3 cards showing stacked premium
+         * options. Layout similar but cards may be larger. */
+        .ws-bundles {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+        .ws-bundle {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 18px;
+            padding: 32px 28px;
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+        }
+        .ws-bundle__name {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            color: var(--ws-premium);
+            text-transform: uppercase;
+        }
+        .ws-bundle__stack {
+            margin: 0;
+            font-family: ui-monospace, monospace;
+            font-size: 11px;
+            color: var(--ws-text-soft);
+            line-height: 1.6;
+            text-align: center;
+        }
+        .ws-bundle__stack strong { color: var(--ws-accent); font-weight: 700; }
+
+        /* Anti-patterns + criteria (mini grid) */
+        .ws-anti-criteria {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            align-items: start;
+        }
+        .ws-anti, .ws-criteria {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 30px;
+        }
+        .ws-anti h4, .ws-criteria h4 {
+            margin: 0 0 18px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+        }
+        .ws-anti ul, .ws-criteria ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .ws-anti li, .ws-criteria li {
+            position: relative;
+            padding: 12px 0 12px 32px;
+            border-top: 1px dashed var(--ws-border);
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .ws-anti li:first-child, .ws-criteria li:first-child { border-top: none; }
+        .ws-anti li::before {
+            content: "✕";
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 22px;
+            height: 22px;
+            line-height: 22px;
+            text-align: center;
+            font-weight: 800;
+            color: rgb(255, 140, 130);
+            font-size: 12px;
+            background: rgba(220, 90, 90, 0.15);
+            border: 1px solid rgba(220, 90, 90, 0.5);
+            border-radius: 50%;
+        }
+        .ws-criteria li {
+            counter-increment: criteria;
+        }
+        .ws-criteria ul { counter-reset: criteria; }
+        .ws-criteria li::before {
+            content: counter(criteria);
+            position: absolute;
+            left: 0;
+            top: 12px;
+            width: 22px;
+            height: 22px;
+            line-height: 22px;
+            text-align: center;
+            font-weight: 800;
+            font-size: 11px;
+            color: var(--ws-accent);
+            background: var(--ws-accent-faint);
+            border: 1px solid var(--ws-accent-dim);
+            border-radius: 50%;
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-anti em, .ws-criteria em { color: var(--ws-text); font-style: italic; }
+        .ws-anti strong, .ws-criteria strong { color: var(--ws-text); font-weight: 600; }
+
+        @media (max-width: 980px) {
+            .ws-header, main, .ws-nav { padding-left: 24px; padding-right: 24px; }
+            .ws-variants     { grid-template-columns: 1fr; }
+            .ws-bundles      { grid-template-columns: 1fr; }
+            .ws-anti-criteria{ grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="ws-header">
+        <h1>Pursuer Card · Customization <span>Design Workshop</span></h1>
+        <h2>Variants for each customization slot.</h2>
+        <p>Sibling deep-dive to the <a href="{% url 'design_pursuer_card_preview' %}">main Pursuer Card workshop</a>. The parent workshop named the five customization slots in Section 6; this one workshops what actually fills them. Every variant below is a concrete option the team can pick to ship. <em>Badge-peek customization is deferred — covers four of the five slots for now.</em></p>
+        <p>The locked rule from the parent workshop applies throughout: <strong>customization is ADDITIVE on top of the tier-earned base, never replacing it</strong>. A Silver Pursuer cannot equip Platinum chrome — the tier is achievement-locked. Cosmetics add personality within the tier the player earned.</p>
+        <p>How a specific variant gets unlocked (gameplay milestone, customization currency, subscription perk, seasonal event) is intentionally out of scope here. That's an economy decision for later. This workshop just decides which variants are worth shipping as concrete looks.</p>
+        <p>All sample cards below render at Gold tier with Master Level <em>847</em>, so the variants read against a consistent base. In production, every variant ships against all four tiers — the same "frame overlay glow" applies its glow on Bronze, Silver, Gold, and Platinum chrome, just tier-tinted.</p>
+    </header>
+
+    <nav class="ws-nav">
+        <a href="#overview">1. Overview</a>
+        <a href="#background">2. Background</a>
+        <a href="#overlay">3. Frame Overlay</a>
+        <a href="#particle">4. Particles</a>
+        <a href="#title-plate">5. Title Plate</a>
+        <a href="#stacking">6. Stacking Preview</a>
+        <a href="#anti-criteria">7. Anti-patterns &amp; Criteria</a>
+    </nav>
+
+    <main>
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 1: Overview                                        #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="overview" class="ws-section">
+            <header>
+                <h3><span class="ws-num">01</span> Overview</h3>
+                <h2>How the slots work.</h2>
+                <p>Each slot section below shows 3–5 variants of one cosmetic surface. The first card in each grid is always the <em>default</em> appearance that ships to every Pursuer at signup. The remaining cards are the alternative looks the player can equip on top.</p>
+                <p>How any specific variant is unlocked (gameplay milestone, customization currency, subscription perk, seasonal event) is intentionally <em>not</em> a property of this workshop. That's an economy decision that comes later. The purpose here is to lock the visual menu.</p>
+                <p>Variants from different slots stack. A Pursuer can run a textured background plus a glow overlay plus an engraved title plate simultaneously. The stacking preview in Section 6 shows what that combination reads like in practice.</p>
+            </header>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 2: Background slot                                 #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="background" class="ws-section">
+            <header>
+                <h3><span class="ws-num">02</span> Slot 1 · Background</h3>
+                <h2>The interior surface.</h2>
+                <p>The card's interior pattern / texture / animated surface. Sits below the chrome but above the tier-tinted base gradient. Variants below all preserve the Gold tier's warm-amber atmospheric base; they layer a pattern or texture on top.</p>
+            </header>
+            <div class="ws-variants">
+                {% include "design/_pc_variant_card.html" with variant_name="Default" variant_notes="The baseline. Tier-tinted backdrop, subtle radial glow at top. Reads as the canonical Pursuer Card." class_mods="" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Faint paper grain" variant_notes="A subtle parallel-line grain, like aged paper or fine printing. Quiet personality without theming." class_mods="pc--bg-paper" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Dot field" variant_notes="A fine dot pattern. Reads as 'this card has a texture' without committing to a specific theme." class_mods="pc--bg-dots" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Explorer's hatch" variant_notes="Crossed 45° hatching. Subtle 'cartographer's notebook' lean — fits the brief's explorer's-office metaphor." class_mods="pc--bg-explorer" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Aurora drift" variant_notes="A slow color-drift animation (~20 sec cycle). Cool brand-cyan washing into warm tier amber. Quiet, almost imperceptible motion." class_mods="pc--bg-aurora" %}
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 3: Frame overlay slot                              #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="overlay" class="ws-section">
+            <header>
+                <h3><span class="ws-num">03</span> Slot 2 · Frame Overlay</h3>
+                <h2>The decorative ring.</h2>
+                <p>A decorative layer sitting around the card's border. The tier-colored border itself stays exactly as the achievement system rendered it — the overlay sits <em>outside</em> the border and adds character without changing the tier read.</p>
+            </header>
+            <div class="ws-variants">
+                {% include "design/_pc_variant_card.html" with variant_name="None" variant_notes="The baseline. Just the tier border + corner notches. Clean read." class_mods="" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Engraved hairline" variant_notes="A faint tier-colored inner hairline inside the border, like a recessed channel etched into the chrome. Quiet personality without occupying real estate." class_mods="pc--overlay-engraved" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Glow ring" variant_notes="A soft pulsing tier-colored glow extending past the border. Slow ~4 second cycle — present, but never demanding attention." class_mods="pc--overlay-glow" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Ornaments" variant_notes="Small tier-colored flourishes <em>replacing</em> the four default diamond notches — like engraved corner pieces on a Victorian frame, reinterpreted simply. The corner geometry stays, the silhouette changes." class_mods="pc--overlay-ornaments" use_ornaments="true" %}
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 4: Particle / animation                            #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="particle" class="ws-section">
+            <header>
+                <h3><span class="ws-num">04</span> Slot 3 · Particle / Animation</h3>
+                <h2>The ambient motion.</h2>
+                <p>Slow, ambient motion layered on the card. Every variant is calibrated to be <em>imperceptible until noticed</em> — the user catches it in peripheral vision after a few moments of looking, not the moment the card lands on screen. Never confetti, never noisy. Stays within the kit's motion vocabulary documented in <code>visual-identity.md</code>.</p>
+            </header>
+            <div class="ws-variants">
+                {% include "design/_pc_variant_card.html" with variant_name="None" variant_notes="The baseline. Card is quiet. No ambient motion." class_mods="" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Drift sparks" variant_notes="Slow tier-tinted sparks drift upward from the bottom and fade out near the top. 5 particles, ~8-second cycle each, staggered phases. Reads as quiet ember-like ambience." class_mods="pc--particles pc--particle-drift" use_particles="true" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Edge shimmer" variant_notes="A diagonal highlight band sweeps across the card surface every ~4.5 seconds. Single soft sweep, not a strobe. Reads as a brief catch-light off polished metal." class_mods="pc--particle-shimmer" use_shimmer="true" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Corner glints" variant_notes="The four corner notches pulse on a staggered cycle (~3.6 seconds each, 0.9-second offset between corners). Reads as the chrome 'breathing' rather than a particle effect." class_mods="pc--particle-corner-glints" %}
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 5: Title plate                                     #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="title-plate" class="ws-section">
+            <header>
+                <h3><span class="ws-num">05</span> Slot 4 · Title Plate</h3>
+                <h2>How the active Title renders.</h2>
+                <p>The active Title is one of the Pursuer's earned cosmetic strings (e.g., <em>"The Completionist"</em>). Default rendering is plain caps text under the Pursuer Name. Variants here change <em>how the Title is presented</em>, not what the Title says.</p>
+            </header>
+            <div class="ws-variants">
+                {% include "design/_pc_variant_card.html" with variant_name="Plain caps" variant_notes="The baseline. Tier-tinted caps text, generous letter-spacing." class_mods="" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Italic accent" variant_notes="Italic, mixed case, tighter letter-spacing. Reads as a personal motto rather than an awarded title." class_mods="pc--title-italic" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Engraved" variant_notes="Bricolage Grotesque with the Frame's etched-deboss text-shadow. Looks like the Title was engraved into the card itself. Strongest tie to the brand's craft language." class_mods="pc--title-engraved" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Ribbon" variant_notes="A tier-colored ribbon plate behind the Title. Trophy-room banner vibe. Loudest of the premium options — reserves for Titles the player wants others to see." class_mods="pc--title-ribbon" %}
+                {% include "design/_pc_variant_card.html" with variant_name="Engraved tablet" variant_notes="A small chrome tablet around the Title text — a tier-bordered rectangle. Halfway between Engraved and Ribbon: still subtle, but framed." class_mods="pc--title-tablet" %}
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 6: Stacking Preview                                #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="stacking" class="ws-section">
+            <header>
+                <h3><span class="ws-num">06</span> Stacking Preview</h3>
+                <h2>What multiple slots filled at once looks like.</h2>
+                <p>Two sample stacks. Each shows what a Pursuer's card looks like when several customization slots are equipped at the same time. The point is to verify that <em>stacking doesn't over-decorate</em> — even with three or four variants active, the card still reads "Gold Pursuer · Master Level 847," not "ad for a cosmetic pack." If a stack ever crosses that line, the stack's wrong.</p>
+            </header>
+            <div class="ws-bundles">
+                <article class="ws-bundle">
+                    <p class="ws-bundle__name">The Cartographer</p>
+                    <div class="pc pc--gold pc--bg-explorer pc--overlay-engraved pc--title-engraved">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">PP</div>
+                            <div>
+                                <p class="pc__name">PlatPursuit</p>
+                                <p class="pc__title">The Completionist</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">847<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Gold Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar"><div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div></div>
+                            <div class="pc__horizon-meta"><span><strong>847</strong> / 1,200</span><span>41% to Platinum</span></div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Crafter</span>
+                            <span class="pc__job-level">87</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="ws-bundle__stack"><strong>Stack:</strong> bg-explorer + overlay-engraved + title-engraved<br>(quiet · craft · paper feel)</p>
+                </article>
+
+                <article class="ws-bundle">
+                    <p class="ws-bundle__name">The Heralded</p>
+                    <div class="pc pc--gold pc--bg-aurora pc--overlay-glow pc--particle-corner-glints pc--title-ribbon pc--particles">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__particles">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">PP</div>
+                            <div>
+                                <p class="pc__name">PlatPursuit</p>
+                                <p class="pc__title">The Completionist</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">847<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Gold Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar"><div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div></div>
+                            <div class="pc__horizon-meta"><span><strong>847</strong> / 1,200</span><span>41% to Platinum</span></div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Crafter</span>
+                            <span class="pc__job-level">87</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="ws-bundle__stack"><strong>Stack:</strong> bg-aurora + overlay-glow + particle-corner-glints + title-ribbon<br>(loud · showy · the maxed-cosmetic look)</p>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 7: Anti-patterns + criteria                        #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="anti-criteria" class="ws-section">
+            <header>
+                <h3><span class="ws-num">07</span> Anti-patterns &amp; Decision Criteria</h3>
+                <h2>Shared vocabulary for the slot picks.</h2>
+                <p>When the team picks which variants to ship per slot, these are the tests each pick has to pass. The anti-patterns are also the disqualifier list — if a proposed cosmetic falls into one, redesign it before it ships.</p>
+            </header>
+            <div class="ws-anti-criteria">
+                <div class="ws-anti">
+                    <h4>Anti-patterns</h4>
+                    <ul>
+                        <li><strong>Tier override.</strong> A cosmetic that changes the tier-colored chrome read (border color, notch tier tint, backdrop tier tint). Achievement-locked. Never.</li>
+                        <li><strong>Card louder than Pursuer.</strong> A variant where the cosmetic effect is the first thing you notice, not the Pursuer's name + level + tier. Cosmetics frame the Pursuer; they don't compete.</li>
+                        <li><strong>Anti-ref #4 motion.</strong> Confetti, fireworks, glitter bursts, anything that reads "mobile-game gamification." If the motion would feel at home in a casual mobile-game reward screen, it doesn't ship.</li>
+                        <li><strong>Inconsistent across sizes.</strong> An effect that works on the hero size but breaks the compact / mini / share / profile-header variants. Every shipped cosmetic must read correctly on all five sizes.</li>
+                        <li><strong>Lost-access orphan state.</strong> A cosmetic that doesn't gracefully revert when the player loses access (subscription lapses, equipped item un-purchased, seasonal unlock expires). The card should fall back to default for that slot, not break.</li>
+                    </ul>
+                </div>
+                <div class="ws-criteria">
+                    <h4>Decision criteria per variant</h4>
+                    <ul>
+                        <li><strong>Reads quietly until noticed.</strong> First glance: Pursuer's identity. Second glance: the cosmetic. Never the reverse.</li>
+                        <li><strong>Stacks without saturating.</strong> Combining this variant with two or three other premium variants from other slots should still pass the "Pursuer first" test.</li>
+                        <li><strong>Tier-tints correctly.</strong> The variant's tier-color hooks (glows, gradients, accents) inherit from the tier the player earned — Bronze cosmetic ≠ Gold cosmetic in palette.</li>
+                        <li><strong>Holds across all five sizes.</strong> Hero / compact / profile-header / share / mini all need to render it correctly (or drop it cleanly when too small).</li>
+                        <li><strong>Worth what it costs.</strong> Free options should feel like meaningful upgrades over default. Premium options should feel like meaningful upgrades over free. If a tier is too close to the one below, it's wrong.</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -659,6 +659,16 @@ class PursuerCardPreviewView(TemplateView):
         return ctx
 
 
+class PursuerCardCustomizationPreviewView(PursuerCardPreviewView):
+    """Workshop deep-dive into the Pursuer Card's five customization
+    slots (background, frame overlay, particle, title plate, showcase
+    config). Shows variants per slot so the team can pick what ships
+    free vs what ships premium. Inherits PursuerCardPreviewView's
+    mini-Frame contexts for the showcase-layout demos.
+    """
+    template_name = 'design/pursuer_card_customization_preview.html'
+
+
 class CommunityHubView(ProfileHotbarMixin, TemplateView):
     """The Community Hub destination page at /community/.
 
