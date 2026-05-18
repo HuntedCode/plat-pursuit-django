@@ -580,6 +580,85 @@ class BadgeCollectionListView(BinderPreviewView):
         return ctx
 
 
+class PursuerCardPreviewView(TemplateView):
+    """Workshop page for the Pursuer Card primitive at /design/pursuer-card/.
+
+    The Pursuer Card composes the rest of the kit: Tally for the Master
+    Level, Horizon for the XP-to-next-tier bar, and embeds the Frame
+    partial at mini variant for the recent-badge peek row. This view
+    builds out a small set of sample mini-Frame contexts the template
+    can include via `{% include "components/frame.html" %}` to show
+    real Frame chrome at workshop scale -- the prior version of the
+    workshop used CSS-only placeholder boxes that didn't accurately
+    represent the production sizing or visual weight.
+    """
+    template_name = 'design/pursuer_card_preview.html'
+
+    BG_INDEX_BY_TIER = {'bronze': '1', 'silver': '2', 'gold': '3', 'platinum': '4'}
+    SERIES_BY_TIER = {
+        'bronze':   'Resident Evil',
+        'silver':   'FromSoftware',
+        'gold':     'Marvel Universe',
+        'platinum': 'PSVR Catalogue',
+    }
+    RARITY_BY_TIER = {
+        'bronze':   {'class': 'common',   'pct': 47,  'rank': 14802},
+        'silver':   {'class': 'uncommon', 'pct': 12,  'rank': 1902},
+        'gold':     {'class': 'rare',     'pct': 3,   'rank': 247},
+        'platinum': {'class': 'mythic',   'pct': 0.3, 'rank': 11},
+    }
+
+    def _mini_frame(self, tier, set_number=247):
+        """Build a single mini-variant Frame context for the badge peek.
+
+        The mini variant hides plinth-meta + plinth-name-row, so most
+        of these fields don't render visibly. They're still passed for
+        completeness in case the template chooses a larger variant later
+        (compact, default).
+        """
+        i = self.BG_INDEX_BY_TIER[tier]
+        rarity = self.RARITY_BY_TIER[tier]
+        return {
+            'tier': tier,
+            'state': 'earned',
+            'size': 'mini',
+            'series_name': self.SERIES_BY_TIER[tier],
+            'badge_name': 'Default Badge',
+            'art_layers': [
+                static_url(f'images/badges/backdrops/{i}_backdrop.png'),
+                static_url('images/badges/default.png'),
+                static_url(f'images/badges/foregrounds/{i}_foreground.png'),
+            ],
+            'engraving_rank': rarity['rank'],
+            'set_number': set_number,
+            'rarity_pct': rarity['pct'],
+            'rarity_rank': rarity['rank'],
+            'rarity_class': rarity['class'],
+            'earned_date': 'Jan 21, 2025',
+            'stages_done': 10,
+            'stages_total': 10,
+            # Workshop badges don't flip -- they're decorative peeks,
+            # not interactive Frames. Default partial behavior is to
+            # add the flippable structure for earned cards, which adds
+            # DOM weight + a click handler we don't need here.
+            'allow_flip': False,
+        }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # Four reusable mini-Frame contexts (one per tier) the template
+        # mixes and matches across the canonical card, the four tier
+        # cards, the Share size, the composition section, and the
+        # customization diagram. Set numbers vary per tier so the
+        # set-mark in the bottom-right of each mini Frame reads as a
+        # different print-run.
+        ctx['mini_bronze']   = self._mini_frame('bronze',   14)
+        ctx['mini_silver']   = self._mini_frame('silver',   89)
+        ctx['mini_gold']     = self._mini_frame('gold',    247)
+        ctx['mini_platinum'] = self._mini_frame('platinum',  3)
+        return ctx
+
+
 class CommunityHubView(ProfileHotbarMixin, TemplateView):
     """The Community Hub destination page at /community/.
 

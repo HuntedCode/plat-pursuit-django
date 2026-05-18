@@ -1,0 +1,2055 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pursuer Card — PlatPursuit Design Workshop</title>
+
+    {# Body face: Inter. Tally face: Bricolage Grotesque (locked in #}
+    {# the Tally workshop). The Pursuer Card composes Tally for the #}
+    {# Master Level + Horizon for the XP-to-next-tier bar. #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+
+    {# Load the production Frame CSS so the mini-variant badges in #}
+    {# this workshop render with real chrome, not workshop mockups. #}
+    <link rel="stylesheet" href="{% static 'css/components/frame.css' %}">
+
+    <style>
+        /* ============================================================
+         * PURSUER CARD PRIMITIVE WORKSHOP
+         *
+         * The Pursuer Card is the FOURTH primitive in the kit, and
+         * the only composite one -- it uses Tally for the Master
+         * Level number, Horizon for the XP-to-next-tier bar, and
+         * (optionally) embeds Frames as recent-badge peeks. Sibling
+         * to the badge Frame: same family, different content.
+         *
+         * Strategic decisions locked for this workshop:
+         *   - Master Level = SUM of all Job levels (RuneScape style)
+         *   - ~20 Jobs at launch x 99 level cap = max ML ~1,980
+         *   - Tier brackets: Bronze 1-199, Silver 200-599,
+         *                    Gold 600-1199, Platinum 1200+
+         *   - Horizon bar shows progress within current tier toward
+         *     next tier (not progress to next Master Level)
+         *   - Premium customization is ADDITIVE, never replaces base
+         *
+         * Section map:
+         *   1. The Canonical card    -- hero size, Gold tier, annotated
+         *   2. The Four Tiers        -- chrome shift across Bronze->Plat
+         *   3. The Five Sizes        -- hero / compact / profile / share / mini
+         *   4. Frame-language        -- sibling comparison
+         *   5. Composition Layers    -- Tally + Horizon + Frame in one card
+         *   6. Customization Slots   -- named placeholders, free vs premium
+         *   7. Anti-patterns         -- what we are NOT
+         *   8. Decision Criteria     -- mini-blurb rubric
+         * ============================================================ */
+
+        :root {
+            --ws-bg-deep:        rgb(8, 10, 14);
+            --ws-bg-base:        rgb(14, 17, 22);
+            --ws-bg-card:        rgb(20, 24, 32);
+            --ws-bg-card-hi:     rgb(26, 32, 42);
+            --ws-border:         rgba(255, 255, 255, 0.08);
+            --ws-border-hi:      rgba(255, 255, 255, 0.14);
+            --ws-text:           rgba(255, 255, 255, 0.92);
+            --ws-text-soft:      rgba(255, 255, 255, 0.55);
+            --ws-text-muted:     rgba(255, 255, 255, 0.35);
+            --ws-accent:         rgb(110, 200, 230);
+            --ws-accent-dim:     rgba(110, 200, 230, 0.6);
+            --ws-accent-faint:   rgba(110, 200, 230, 0.15);
+
+            --ws-body:       'Inter', system-ui, sans-serif;
+            --ws-face-tally: 'Bricolage Grotesque', 'Inter', sans-serif;
+
+            /* Tier palette -- mirrors the Frame primitive's tier colors. */
+            --tier-bronze:        rgb(200, 122, 59);
+            --tier-bronze-dim:    rgb(130, 78, 36);
+            --tier-silver:        rgb(205, 208, 212);
+            --tier-silver-dim:    rgb(140, 144, 152);
+            --tier-gold:          rgb(240, 198, 74);
+            --tier-gold-dim:      rgb(160, 132, 50);
+            --tier-platinum:      rgb(220, 240, 250);
+            --tier-platinum-dim:  rgb(135, 175, 195);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(ellipse at top, rgba(110, 200, 230, 0.04), transparent 50%),
+                var(--ws-bg-deep);
+            color: var(--ws-text);
+            font-family: var(--ws-body);
+            font-size: 15px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        /* ============================================================
+         * Workshop chrome (matches other primitive workshops)
+         * ============================================================ */
+        .ws-header {
+            border-bottom: 1px solid var(--ws-border);
+            padding: 40px 48px 32px;
+            background: linear-gradient(180deg, var(--ws-bg-base), var(--ws-bg-deep));
+        }
+        .ws-header h1 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+        }
+        .ws-header h1 span {
+            color: var(--ws-text-soft);
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        .ws-header h2 {
+            margin: 0 0 14px;
+            font-size: 38px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.1;
+        }
+        .ws-header p {
+            margin: 0;
+            max-width: 780px;
+            color: var(--ws-text-soft);
+            font-size: 16px;
+        }
+        .ws-header p + p { margin-top: 12px; }
+        .ws-header strong { color: var(--ws-text); font-weight: 600; }
+        .ws-header em { color: var(--ws-text); font-style: italic; }
+        .ws-header code {
+            background: var(--ws-bg-card);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            color: var(--ws-accent);
+            font-family: ui-monospace, monospace;
+        }
+
+        .ws-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 14px 48px;
+            border-bottom: 1px solid var(--ws-border);
+            background: var(--ws-bg-deep);
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .ws-nav a {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--ws-text-soft);
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            transition: background 160ms ease, color 160ms ease;
+        }
+        .ws-nav a:hover {
+            background: var(--ws-bg-card);
+            color: var(--ws-text);
+        }
+
+        main {
+            padding: 0 48px 120px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .ws-section {
+            padding: 80px 0 40px;
+            border-bottom: 1px dashed var(--ws-border);
+        }
+        .ws-section:last-child { border-bottom: none; }
+        .ws-section > header {
+            margin-bottom: 36px;
+            max-width: 800px;
+        }
+        .ws-section > header h3 {
+            margin: 0 0 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: var(--ws-accent);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-section > header h3 .ws-num {
+            color: var(--ws-text-muted);
+            margin-right: 8px;
+        }
+        .ws-section > header h2 {
+            margin: 0 0 14px;
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+        }
+        .ws-section > header p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 15px;
+        }
+        .ws-section > header p + p { margin-top: 10px; }
+        .ws-section > header code {
+            background: var(--ws-bg-card);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            color: var(--ws-accent);
+            font-family: ui-monospace, monospace;
+        }
+
+        /* ============================================================
+         * PURSUER CARD primitive -- core CSS
+         *
+         * Composes three sub-elements:
+         *   .pc__avatar      framed avatar (sibling to Frame's art)
+         *   .pc__identity    name + title block
+         *   .pc__level       Master Level via Tally face
+         *   .pc__horizon     XP-to-next-tier bar
+         *   .pc__job         compact top-Job summary
+         *   .pc__badges      recent-badge peek row
+         *
+         * Tier variants drive chrome color (border + notches +
+         * subtle gradient backdrop), exactly like Frame's tier
+         * variants do. Size variants adjust internal layout +
+         * which sub-elements render.
+         * ============================================================ */
+        .pc {
+            position: relative;
+            width: 320px;
+            background: linear-gradient(180deg, rgba(20, 24, 32, 0.92), rgba(14, 17, 22, 0.95));
+            border: 1px solid var(--pc-border-color, rgba(255, 255, 255, 0.15));
+            border-radius: 10px;
+            overflow: visible;
+            padding: 20px 22px 24px;
+            color: var(--ws-text);
+            font-family: var(--ws-body);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Corner notches -- mirror the Frame's brand mark. Same
+         * shape, same diamond rotation, same tier coloring. The
+         * sibling read is established here. */
+        .pc::before,
+        .pc::after,
+        .pc > .pc__corner-bl,
+        .pc > .pc__corner-br {
+            content: "";
+            position: absolute;
+            width: var(--pc-notch-size, 7px);
+            height: var(--pc-notch-size, 7px);
+            background: var(--pc-notch-bg, rgba(20, 24, 32, 1));
+            border: 1px solid var(--pc-notch-border, rgba(255, 255, 255, 0.4));
+            transform: rotate(45deg);
+            z-index: 5;
+            pointer-events: none;
+        }
+        .pc::before                       { top: calc(var(--pc-notch-size, 7px) / -2); left:  calc(var(--pc-notch-size, 7px) / -2); }
+        .pc::after                        { top: calc(var(--pc-notch-size, 7px) / -2); right: calc(var(--pc-notch-size, 7px) / -2); }
+        .pc > .pc__corner-bl              { bottom: calc(var(--pc-notch-size, 7px) / -2); left:  calc(var(--pc-notch-size, 7px) / -2); }
+        .pc > .pc__corner-br              { bottom: calc(var(--pc-notch-size, 7px) / -2); right: calc(var(--pc-notch-size, 7px) / -2); }
+
+        /* Identity strip -- avatar on the left, name + title on the
+         * right. The avatar is itself a framed mini-Frame: same
+         * border treatment, tier-tinted backdrop, just holding a
+         * Pursuer instead of a badge. */
+        .pc__identity {
+            display: grid;
+            grid-template-columns: 64px 1fr;
+            gap: 14px;
+            align-items: center;
+        }
+        .pc__avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--pc-avatar-from, #364254), var(--pc-avatar-to, #1a212c));
+            border: 1px solid var(--pc-avatar-border, rgba(255, 255, 255, 0.18));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--ws-face-tally);
+            font-weight: 800;
+            font-size: 22px;
+            color: rgba(255, 255, 255, 0.85);
+            letter-spacing: -0.02em;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 4px 14px rgba(0, 0, 0, 0.45);
+            flex-shrink: 0;
+        }
+        .pc__name {
+            margin: 0 0 4px;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--ws-text);
+            line-height: 1.1;
+            font-variation-settings: "opsz" 18;
+            font-family: var(--ws-body);
+        }
+        .pc__title {
+            margin: 0;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--pc-title-color, var(--ws-text-soft));
+        }
+
+        /* Master Level block -- the Tally headline + horizon bar.
+         * The biggest single number on the card; the rest of the
+         * card supports it. */
+        .pc__level-block {
+            padding: 6px 0 4px;
+            position: relative;
+        }
+        .pc__level {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 96, "wdth" 100, "wght" 800;
+            font-size: 76px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 0.95;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            margin: 0;
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+        .pc__level small {
+            font-family: var(--ws-body);
+            font-variation-settings: normal;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            line-height: 1;
+            align-self: end;
+            padding-bottom: 8px;
+        }
+        .pc__tier-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--pc-tier-text, var(--ws-text-soft));
+        }
+        .pc__tier-label::before {
+            content: "";
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            background: var(--pc-tier-color, var(--ws-text-muted));
+            transform: rotate(45deg);
+        }
+
+        /* Horizon bar inside the card -- inherits the same color
+         * band language as the Horizon primitive workshop. */
+        .pc__horizon {
+            margin-top: 10px;
+        }
+        .pc__horizon-bar {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 999px;
+            overflow: visible;
+        }
+        .pc__horizon-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--pc-horizon-pct, 0%);
+            border-radius: 999px;
+            background: var(--pc-horizon-grad, linear-gradient(90deg, rgb(70, 165, 200), rgb(110, 200, 230)));
+            box-shadow: 0 0 8px var(--pc-horizon-glow, rgba(110, 200, 230, 0.5));
+        }
+        .pc__horizon-fill::after {
+            content: "";
+            position: absolute;
+            top: -2px;
+            right: -6px;
+            bottom: -2px;
+            width: 12px;
+            border-radius: 999px;
+            background: radial-gradient(ellipse at left center, var(--pc-horizon-edge, rgb(110, 200, 230)) 0%, transparent 70%);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .pc__horizon-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--ws-text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .pc__horizon-meta strong {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 11, "wdth" 100, "wght" 700;
+            font-weight: 700;
+            color: var(--ws-text-soft);
+            letter-spacing: 0;
+        }
+
+        /* Top Job row -- a compact stat displayed within the card. */
+        .pc__job {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--ws-border);
+            border-radius: 6px;
+            padding: 10px 12px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 4px 12px;
+            align-items: center;
+        }
+        .pc__job-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+        }
+        .pc__job-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ws-text);
+            letter-spacing: -0.005em;
+        }
+        .pc__job-level {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 22, "wdth" 100, "wght" 800;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--ws-text);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            line-height: 1;
+            grid-row: 1 / span 2;
+            grid-column: 2;
+            text-align: right;
+        }
+        .pc__job-bar {
+            grid-column: 1 / span 2;
+            grid-row: 3;
+            margin-top: 6px;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+        .pc__job-bar::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--pc-job-pct, 60%);
+            background: linear-gradient(90deg, rgb(110, 200, 230), rgb(200, 195, 145));
+            border-radius: 2px;
+        }
+
+        /* Recent-badge peek -- 3-4 small thumbnails along the bottom.
+         * Workshop uses styled placeholder boxes representing Frames
+         * at their mini size. Production would embed the actual
+         * Frame partial here at mini variant. */
+        .pc__badges {
+            display: flex;
+            gap: 8px;
+        }
+        .pc__badges-label {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            margin: 0 0 8px;
+        }
+        .pc__badges-row {
+            display: flex;
+            gap: 8px;
+        }
+        /* Badge peek slot -- a wrapper around the real Frame partial
+         * rendered at mini variant. The earlier workshop revision
+         * used CSS-only placeholder boxes here; those didn't reflect
+         * production chrome weight or aspect ratio, so we now embed
+         * `components/frame.html` directly. The slot constrains the
+         * Frame's max-width so it fits the badge peek row, but
+         * everything inside (border, notches, title, art, plinth,
+         * engraving, set-mark) is the real production component.
+         * Empty `art_layers` would also work for a chrome-only view;
+         * the workshop passes real backdrop/badge paths so the team
+         * can see what the badges look like at production scale. */
+        .pc__badge-slot {
+            width: 60px;
+            flex-shrink: 0;
+            position: relative;
+        }
+        .pc__badge-slot .pp-frame--mini {
+            max-width: 100%;
+            width: 100%;
+            cursor: default;
+        }
+        /* Suppress production hover behavior on workshop badges --
+         * these are decorative peeks, not interactive Frames. */
+        .pc__badge-slot .pp-frame:hover { transform: none; box-shadow: none; }
+        .pc__badge-slot .pp-frame__gleam { display: none; }
+        /* The Share-size card has more room, so its badge slots get
+         * a bit bigger to take advantage. */
+        .pc--share .pc__badge-slot { width: 76px; }
+
+        /* ============================================================
+         * Tier variants -- chrome shifts to the tier color
+         * ============================================================ */
+        .pc--bronze {
+            --pc-border-color:  rgba(200, 122, 59, 0.55);
+            --pc-notch-bg:      linear-gradient(135deg, var(--tier-bronze), var(--tier-bronze-dim));
+            --pc-notch-border:  rgba(200, 122, 59, 0.85);
+            --pc-notch-size:    7px;
+            --pc-tier-color:    var(--tier-bronze);
+            --pc-tier-text:     rgba(220, 150, 80, 0.95);
+            --pc-avatar-from:   rgba(70, 40, 15, 0.8);
+            --pc-avatar-to:     rgba(30, 20, 8, 0.95);
+            --pc-avatar-border: rgba(200, 122, 59, 0.4);
+            --pc-title-color:   rgba(220, 150, 80, 0.85);
+            --pc-horizon-grad:  linear-gradient(90deg, rgb(70, 165, 200), rgb(110, 200, 230));
+            --pc-horizon-glow:  rgba(110, 200, 230, 0.5);
+            --pc-horizon-edge:  rgb(110, 200, 230);
+            background:
+                radial-gradient(ellipse at top, rgba(200, 122, 59, 0.06), transparent 50%),
+                linear-gradient(180deg, rgba(50, 28, 12, 0.55), rgba(14, 17, 22, 0.95));
+        }
+        .pc--silver {
+            --pc-border-color:  rgba(205, 208, 212, 0.55);
+            --pc-notch-bg:      linear-gradient(135deg, var(--tier-silver), var(--tier-silver-dim));
+            --pc-notch-border:  rgba(205, 208, 212, 0.85);
+            --pc-notch-size:    8px;
+            --pc-tier-color:    var(--tier-silver);
+            --pc-tier-text:     rgba(215, 220, 225, 0.95);
+            --pc-avatar-from:   rgba(50, 55, 65, 0.8);
+            --pc-avatar-to:     rgba(20, 24, 30, 0.95);
+            --pc-avatar-border: rgba(205, 208, 212, 0.4);
+            --pc-title-color:   rgba(215, 220, 225, 0.85);
+            --pc-horizon-grad:  linear-gradient(90deg, rgb(110, 200, 230), rgb(200, 195, 145));
+            --pc-horizon-glow:  rgba(200, 195, 145, 0.45);
+            --pc-horizon-edge:  rgb(200, 195, 145);
+            background:
+                radial-gradient(ellipse at top, rgba(205, 208, 212, 0.06), transparent 50%),
+                linear-gradient(180deg, rgba(38, 42, 50, 0.55), rgba(14, 17, 22, 0.95));
+        }
+        .pc--gold {
+            --pc-border-color:  rgba(240, 198, 74, 0.6);
+            --pc-notch-bg:      linear-gradient(135deg, var(--tier-gold), var(--tier-gold-dim));
+            --pc-notch-border:  rgba(240, 198, 74, 0.85);
+            --pc-notch-size:    9px;
+            --pc-tier-color:    var(--tier-gold);
+            --pc-tier-text:     rgba(245, 215, 120, 1);
+            --pc-avatar-from:   rgba(70, 55, 20, 0.8);
+            --pc-avatar-to:     rgba(30, 24, 8, 0.95);
+            --pc-avatar-border: rgba(240, 198, 74, 0.45);
+            --pc-title-color:   rgba(245, 215, 120, 0.95);
+            --pc-horizon-grad:  linear-gradient(90deg, rgb(200, 195, 145), rgb(220, 180, 110), rgb(255, 200, 100));
+            --pc-horizon-glow:  rgba(255, 200, 100, 0.55);
+            --pc-horizon-edge:  rgb(255, 200, 100);
+            background:
+                radial-gradient(ellipse at top, rgba(240, 198, 74, 0.08), transparent 50%),
+                linear-gradient(180deg, rgba(50, 38, 14, 0.55), rgba(14, 17, 22, 0.95));
+            box-shadow: 0 8px 28px rgba(240, 198, 74, 0.06), inset 0 1px 0 rgba(245, 215, 120, 0.07);
+        }
+        .pc--platinum {
+            --pc-border-color:  rgba(220, 240, 250, 0.65);
+            --pc-notch-bg:      linear-gradient(135deg, var(--tier-platinum), var(--tier-platinum-dim));
+            --pc-notch-border:  rgba(220, 240, 250, 0.85);
+            --pc-notch-size:    10px;
+            --pc-tier-color:    var(--tier-platinum);
+            --pc-tier-text:     rgba(220, 240, 250, 1);
+            --pc-avatar-from:   rgba(45, 70, 90, 0.8);
+            --pc-avatar-to:     rgba(15, 25, 35, 0.95);
+            --pc-avatar-border: rgba(220, 240, 250, 0.5);
+            --pc-title-color:   rgba(220, 240, 250, 0.95);
+            --pc-horizon-grad:  linear-gradient(90deg, rgb(220, 180, 110), rgb(255, 200, 110), rgb(255, 230, 170));
+            --pc-horizon-glow:  rgba(255, 230, 170, 0.65);
+            --pc-horizon-edge:  rgb(255, 230, 170);
+            background:
+                radial-gradient(ellipse at top, rgba(220, 240, 250, 0.07), transparent 50%),
+                linear-gradient(180deg, rgba(30, 50, 65, 0.6), rgba(14, 17, 22, 0.95));
+            box-shadow: 0 10px 32px rgba(220, 240, 250, 0.08), inset 0 1px 0 rgba(220, 240, 250, 0.08);
+        }
+        /* Platinum is "maxed" -- Horizon bar shows a full / flourish
+         * treatment instead of the standard tier-progress bar, since
+         * there's no further tier to climb to. */
+        .pc--platinum .pc__horizon-fill {
+            animation: pc-platinum-pulse 3.4s ease-in-out infinite;
+        }
+        @keyframes pc-platinum-pulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(255, 230, 170, 0.45); }
+            50%      { box-shadow: 0 0 16px rgba(255, 230, 170, 0.8); }
+        }
+
+        /* ============================================================
+         * Size variants
+         *
+         * Hero      -- the canonical, full card with everything
+         * Compact   -- horizontal, condensed (Pursuit home strip)
+         * Profile   -- wide banner for page headers
+         * Share     -- vertical poster (share images)
+         * Mini      -- chip-sized for inline contexts (comments, etc.)
+         * ============================================================ */
+        /* Hero is responsive within a max: fills its container down
+         * to whatever the grid column allows, up to 320px. Earlier
+         * versions hard-coded 320px, which caused two issues in
+         * Section 2's 4-column tier grid -- the card overflowed the
+         * column at narrower viewports, AND a tier-specific override
+         * pinned the card to 280px (too narrow), which made the
+         * 4-badge peek row spill across the bottom edge. */
+        .pc--hero    { width: 100%; max-width: 320px; }
+        .pc--compact {
+            width: 360px;
+            padding: 14px 18px;
+            display: grid;
+            grid-template-columns: 56px 1fr auto;
+            grid-template-rows: auto auto;
+            gap: 4px 14px;
+            align-items: center;
+        }
+        .pc--compact .pc__avatar     { width: 56px; height: 56px; grid-row: 1 / span 2; grid-column: 1; font-size: 18px; }
+        .pc--compact .pc__name       { grid-row: 1; grid-column: 2; margin: 0; font-size: 15px; }
+        .pc--compact .pc__title      { grid-row: 2; grid-column: 2; }
+        .pc--compact .pc__level-side { grid-row: 1 / span 2; grid-column: 3; text-align: right; }
+        .pc--compact .pc__level-side .pc__level         { font-size: 38px; line-height: 1; font-variation-settings: "opsz" 38, "wdth" 100, "wght" 800; }
+        .pc--compact .pc__level-side .pc__level small   { display: none; }
+        .pc--compact .pc__level-side .pc__tier-label    { font-size: 9px; margin-top: 2px; justify-content: flex-end; }
+        .pc--compact .pc__horizon,
+        .pc--compact .pc__job,
+        .pc--compact .pc__badges-wrap { display: none; }
+
+        .pc--profile {
+            width: 100%;
+            max-width: 760px;
+            padding: 18px 24px 20px;
+            display: grid;
+            grid-template-columns: 72px 1fr auto;
+            grid-template-rows: auto auto auto;
+            gap: 4px 22px;
+            align-items: center;
+        }
+        .pc--profile .pc__avatar     { width: 72px; height: 72px; grid-row: 1 / span 3; grid-column: 1; font-size: 24px; align-self: center; }
+        .pc--profile .pc__name       { grid-row: 1; grid-column: 2; font-size: 19px; margin: 0; }
+        .pc--profile .pc__title      { grid-row: 2; grid-column: 2; }
+        .pc--profile .pc__level-side { grid-row: 1 / span 2; grid-column: 3; text-align: right; align-self: center; }
+        .pc--profile .pc__level-side .pc__level       { font-size: 42px; font-variation-settings: "opsz" 42, "wdth" 100, "wght" 800; line-height: 1; justify-content: flex-end; }
+        .pc--profile .pc__level-side .pc__level small { display: inline-block; padding-bottom: 4px; }
+        .pc--profile .pc__horizon { grid-row: 3; grid-column: 2 / span 2; margin-top: 10px; }
+        .pc--profile .pc__job,
+        .pc--profile .pc__badges-wrap { display: none; }
+        .pc--profile .pc__level-side .pc__tier-label { display: none; }
+
+        /* Share -- vertical poster, taller than the hero. */
+        .pc--share {
+            width: 360px;
+            padding: 28px 28px 32px;
+            gap: 22px;
+        }
+        /* Identity strip column-width has to track the avatar width
+         * here -- default .pc__identity reserves 64px but the share
+         * variant uses an 82px avatar, so the name + title were
+         * landing inside the avatar's column on the default rule. */
+        .pc--share .pc__identity { grid-template-columns: 82px 1fr; gap: 18px; }
+        .pc--share .pc__avatar   { width: 82px; height: 82px; font-size: 26px; }
+        .pc--share .pc__name     { font-size: 22px; }
+        .pc--share .pc__level   { font-size: 92px; font-variation-settings: "opsz" 96, "wdth" 100, "wght" 800; }
+        .pc--share .pc__job     { display: none; }
+        .pc--share .pc__badges-row { gap: 10px; }
+        .pc--share .pc__badge   { width: 56px; height: 56px; }
+        .pc--share .pc__share-mark {
+            text-align: center;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.32em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            margin: -4px 0 0;
+            padding-top: 14px;
+            border-top: 1px dashed var(--ws-border);
+        }
+
+        /* Mini -- chip / comment / leaderboard row. */
+        .pc--mini {
+            width: 180px;
+            padding: 8px 10px;
+            display: grid;
+            grid-template-columns: 30px 1fr auto;
+            grid-template-rows: auto;
+            gap: 8px;
+            align-items: center;
+        }
+        .pc--mini .pc__avatar { width: 30px; height: 30px; border-radius: 4px; font-size: 12px; }
+        .pc--mini .pc__name   { font-size: 12px; margin: 0; font-weight: 600; line-height: 1.1; }
+        .pc--mini .pc__title,
+        .pc--mini .pc__horizon,
+        .pc--mini .pc__job,
+        .pc--mini .pc__badges-wrap { display: none; }
+        .pc--mini .pc__level-side .pc__level       { font-size: 16px; line-height: 1; font-variation-settings: "opsz" 16, "wdth" 100, "wght" 800; }
+        .pc--mini .pc__level-side .pc__level small,
+        .pc--mini .pc__level-side .pc__tier-label  { display: none; }
+        .pc--mini::before, .pc--mini::after,
+        .pc--mini > .pc__corner-bl, .pc--mini > .pc__corner-br {
+            --pc-notch-size: 5px;
+        }
+
+        /* ============================================================
+         * Workshop layouts
+         * ============================================================ */
+        .ws-hero-card {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 32px;
+            align-items: start;
+        }
+        .ws-hero-card__callouts {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 24px 28px;
+        }
+        .ws-hero-card__callouts h4 {
+            margin: 0 0 14px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .ws-hero-card__callouts dl {
+            margin: 0;
+            display: grid;
+            grid-template-columns: 140px 1fr;
+            gap: 12px 16px;
+        }
+        .ws-hero-card__callouts dt {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+            padding-top: 1px;
+        }
+        .ws-hero-card__callouts dd {
+            margin: 0;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .ws-hero-card__callouts dd strong { color: var(--ws-text); font-weight: 600; }
+        .ws-hero-card__callouts dd em { color: var(--ws-text); font-style: italic; }
+        .ws-hero-card__callouts dd code {
+            font-family: ui-monospace, monospace;
+            font-size: 12px;
+            color: var(--ws-accent);
+        }
+
+        .ws-tiers {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 18px;
+        }
+        .ws-tier {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+        .ws-tier__label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.22em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-tier__label[data-tier="bronze"]   { color: var(--tier-bronze); }
+        .ws-tier__label[data-tier="silver"]   { color: var(--tier-silver); }
+        .ws-tier__label[data-tier="gold"]     { color: var(--tier-gold); }
+        .ws-tier__label[data-tier="platinum"] { color: var(--tier-platinum); }
+        /* Cards in the tier comparison fill the grid column. The
+         * 320px max-width on .pc--hero stops them growing past
+         * canonical width on wider viewports. */
+        .ws-tier .pc { width: 100%; }
+        .ws-tier__range {
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 13, "wdth" 100, "wght" 700;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .ws-sizes {
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+        .ws-size-row {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 28px 32px;
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 28px;
+            align-items: start;
+        }
+        .ws-size-row__meta h4 {
+            margin: 0 0 8px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--ws-text);
+        }
+        .ws-size-row__meta p {
+            margin: 0;
+            font-size: 12.5px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .ws-size-row__meta p + p { margin-top: 8px; }
+        .ws-size-row__meta strong { color: var(--ws-text); font-weight: 600; }
+        .ws-size-row__demo {
+            display: flex;
+            justify-content: center;
+            padding: 14px 0;
+        }
+        .ws-size-row[data-size="profile"] .ws-size-row__demo { padding: 14px 28px; }
+
+        .ws-frame-echoes {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 36px 40px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            align-items: start;
+        }
+        .ws-frame-echoes__col h4 {
+            margin: 0 0 18px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            color: var(--ws-text-soft);
+            text-transform: uppercase;
+        }
+        .ws-frame-echoes__demo {
+            display: flex;
+            justify-content: center;
+            padding: 0 0 22px;
+        }
+        .ws-frame-echoes__notes {
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+            padding-top: 18px;
+            border-top: 1px dashed var(--ws-border);
+        }
+
+        /* Fake mini-frame for the Frame-echo side. Imitates the
+         * Frame primitive without rendering the full partial. */
+        .ws-mock-frame {
+            width: 280px;
+            background: linear-gradient(180deg, rgba(50, 38, 14, 0.7), rgba(30, 20, 8, 0.95));
+            border: 1px solid rgba(240, 198, 74, 0.6);
+            border-radius: 5px;
+            overflow: visible;
+            position: relative;
+        }
+        .ws-mock-frame::before, .ws-mock-frame::after,
+        .ws-mock-frame > span.ws-mock-frame__corner-bl,
+        .ws-mock-frame > span.ws-mock-frame__corner-br {
+            content: "";
+            position: absolute;
+            width: 9px;
+            height: 9px;
+            background: linear-gradient(135deg, var(--tier-gold), var(--tier-gold-dim));
+            border: 1px solid rgba(240, 198, 74, 0.85);
+            transform: rotate(45deg);
+            z-index: 5;
+        }
+        .ws-mock-frame::before { top: -4.5px;    left: -4.5px; }
+        .ws-mock-frame::after  { top: -4.5px;    right: -4.5px; }
+        .ws-mock-frame > span.ws-mock-frame__corner-bl { bottom: -4.5px; left: -4.5px; }
+        .ws-mock-frame > span.ws-mock-frame__corner-br { bottom: -4.5px; right: -4.5px; }
+        .ws-mock-frame__title {
+            padding: 6px 10px;
+            border-bottom: 1px solid rgba(240, 198, 74, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+        .ws-mock-frame__title span:first-child { color: rgba(255, 255, 255, 0.7); }
+        .ws-mock-frame__title span:last-child  { color: rgba(245, 215, 120, 1); }
+        .ws-mock-frame__art {
+            aspect-ratio: 1 / 1;
+            background:
+                radial-gradient(ellipse at center, rgba(240, 198, 74, 0.18), transparent 70%),
+                linear-gradient(180deg, rgba(70, 40, 15, 0.7), rgba(30, 20, 8, 0.85));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(245, 215, 120, 0.75);
+            font-size: 60px;
+            font-family: var(--ws-face-tally);
+            font-weight: 800;
+        }
+        .ws-mock-frame__plinth {
+            padding: 7px 10px 18px;
+            border-top: 1px solid rgba(240, 198, 74, 0.3);
+            position: relative;
+        }
+        .ws-mock-frame__plinth-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.92);
+        }
+        .ws-mock-frame__plinth-meta {
+            margin-top: 2px;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.45);
+            letter-spacing: 0.04em;
+        }
+        .ws-mock-frame__plinth-eng {
+            position: absolute;
+            bottom: 4px;
+            left: 9px;
+            font-size: 8px;
+            font-weight: 800;
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 8, "wdth" 100, "wght" 800;
+            letter-spacing: 0.16em;
+            color: rgba(245, 215, 120, 0.85);
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-mock-frame__plinth-set {
+            position: absolute;
+            bottom: 4px;
+            right: 9px;
+            font-size: 8.5px;
+            font-weight: 800;
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 9, "wdth" 100, "wght" 800;
+            letter-spacing: 0.18em;
+            color: rgba(245, 220, 140, 0.55);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Section 5: composition layers (legend cards explaining what
+         * sub-primitive each part of the Pursuer Card uses) */
+        .ws-comp {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 32px;
+            align-items: start;
+        }
+        .ws-comp__layers {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .ws-comp__layer {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-left: 3px solid var(--ws-accent);
+            border-radius: 6px;
+            padding: 16px 20px;
+        }
+        .ws-comp__layer h5 {
+            margin: 0 0 6px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .ws-comp__layer h5 strong {
+            color: var(--ws-text);
+            font-weight: 700;
+            margin-left: 8px;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .ws-comp__layer p {
+            margin: 0;
+            font-size: 13px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .ws-comp__layer code {
+            font-family: ui-monospace, monospace;
+            font-size: 12px;
+            color: var(--ws-accent);
+        }
+
+        /* Section 6: customization slots
+         *
+         * Numbered pin callouts mark each slot's location on the card
+         * without overlaying rectangles that fight the card's actual
+         * content. The pin number maps to the row number in the table
+         * alongside -- so "pin 3 → row 3 → particle slot" reads at a
+         * glance. The card itself stays unannotated so the team can
+         * see the canonical look + the slot-location markers
+         * simultaneously. */
+        .ws-custom {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 32px;
+            align-items: start;
+        }
+        .ws-custom__diagram {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            padding: 20px 20px 20px;
+        }
+        .ws-custom__diagram .pc { position: relative; }
+        .ws-pin {
+            position: absolute;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--ws-accent);
+            color: var(--ws-bg-deep);
+            font-family: var(--ws-body);
+            font-size: 12px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-variant-numeric: tabular-nums;
+            box-shadow:
+                0 0 0 3px var(--ws-bg-card),
+                0 0 0 4px var(--ws-accent),
+                0 0 12px rgba(110, 200, 230, 0.65);
+            z-index: 10;
+            pointer-events: none;
+        }
+        /* Pin anchor points. Each pin sits at the slot it represents,
+         * positioned at the edge so it doesn't cover content. */
+        .ws-pin[data-pin="1"] { top: -13px;  left: -13px; }   /* background slot -- whole card surface, pin at outer corner */
+        .ws-pin[data-pin="2"] { top: -13px;  right: -13px; }  /* frame overlay -- around the border */
+        .ws-pin[data-pin="3"] { top: 50%; right: -13px; transform: translateY(-50%); } /* particle -- ambient on the card */
+        .ws-pin[data-pin="4"] { top: 14px;   right: 30px; }   /* title plate -- near the title in identity strip */
+        .ws-pin[data-pin="5"] { bottom: 60px; right: -13px; } /* showcase config -- near the badge peek */
+
+        .ws-custom__table {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .ws-custom__table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .ws-custom__table th,
+        .ws-custom__table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--ws-border);
+            vertical-align: top;
+        }
+        .ws-custom__table th {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.16em;
+            color: var(--ws-text-muted);
+            text-transform: uppercase;
+            background: var(--ws-bg-deep);
+        }
+        .ws-custom__table tr:last-child td { border-bottom: none; }
+        /* Pin-number column (first column) is fixed-width, accent
+         * color, tabular figures so it mirrors the pin styling. */
+        .ws-custom__table td:first-child {
+            width: 30px;
+            font-family: var(--ws-face-tally);
+            font-variation-settings: "opsz" 14, "wdth" 100, "wght" 800;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--ws-accent);
+            font-variant-numeric: tabular-nums;
+            text-align: center;
+            padding-top: 14px;
+        }
+        .ws-custom__table td:nth-child(2) {
+            font-weight: 700;
+            color: var(--ws-text);
+            white-space: nowrap;
+        }
+        .ws-custom__table td:nth-child(3) { color: var(--ws-text-soft); }
+        .ws-custom__table td:nth-child(4) { color: var(--ws-accent); font-weight: 600; }
+        .ws-custom__table th:first-child  { text-align: center; }
+
+        /* Section 7: anti-patterns -- mirrors Horizon's anti-pattern
+         * cards exactly so the vocabulary is shared. */
+        .ws-anti {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-anti__card {
+            background: var(--ws-bg-card);
+            border: 1px dashed rgba(220, 90, 90, 0.45);
+            border-radius: 8px;
+            padding: 28px 32px;
+            position: relative;
+        }
+        .ws-anti__stamp {
+            position: absolute;
+            top: 18px;
+            right: 24px;
+            padding: 4px 10px;
+            background: rgba(220, 90, 90, 0.15);
+            border: 1px solid rgba(220, 90, 90, 0.5);
+            border-radius: 999px;
+            font-size: 9.5px;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+            color: rgb(255, 140, 130);
+            text-transform: uppercase;
+        }
+        .ws-anti__title {
+            margin: 0 100px 8px 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ws-text);
+        }
+        .ws-anti__reason {
+            margin: 0 0 22px;
+            font-size: 12.5px;
+            color: var(--ws-text-soft);
+            line-height: 1.55;
+        }
+        .ws-anti__reason em { color: var(--ws-text); font-style: italic; }
+        .ws-anti__demo { display: flex; justify-content: center; min-height: 80px; align-items: center; }
+        .ws-anti__demo-generic {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            width: 280px;
+        }
+        .ws-anti__demo-generic .av {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #5a6878, #2a3344);
+        }
+        .ws-anti__demo-generic .nm {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--ws-text);
+        }
+        .ws-anti__demo-generic .nm small {
+            display: block;
+            font-size: 11px;
+            color: var(--ws-text-muted);
+            font-weight: 400;
+            margin-top: 2px;
+        }
+
+        /* Section 8: decision criteria */
+        .ws-criteria {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+        }
+        .ws-criterion {
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            padding: 24px 28px;
+        }
+        .ws-criterion__num {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            background: var(--ws-accent-faint);
+            color: var(--ws-accent);
+            border: 1px solid var(--ws-accent-dim);
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: 800;
+            margin-right: 10px;
+            vertical-align: middle;
+            font-variant-numeric: tabular-nums;
+        }
+        .ws-criterion h4 {
+            margin: 0 0 14px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.005em;
+            color: var(--ws-text);
+        }
+        .ws-criterion p {
+            margin: 0;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .ws-criterion em { color: var(--ws-text); font-style: italic; }
+
+        .ws-footer {
+            margin-top: 60px;
+            padding: 32px;
+            background: var(--ws-bg-card);
+            border: 1px solid var(--ws-border);
+            border-radius: 8px;
+            color: var(--ws-text-soft);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .ws-footer h4 {
+            margin: 0 0 12px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: var(--ws-accent);
+            text-transform: uppercase;
+        }
+        .ws-footer ul { margin: 0; padding-left: 18px; }
+        .ws-footer li + li { margin-top: 4px; }
+        .ws-footer strong { color: var(--ws-text); font-weight: 600; }
+
+        @media (max-width: 980px) {
+            .ws-header, main, .ws-nav { padding-left: 24px; padding-right: 24px; }
+            .ws-tiers          { grid-template-columns: repeat(2, 1fr); }
+            .ws-hero-card,
+            .ws-frame-echoes,
+            .ws-comp,
+            .ws-custom         { grid-template-columns: 1fr; }
+            .ws-size-row       { grid-template-columns: 1fr; }
+            .ws-anti, .ws-criteria { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="ws-header">
+        <h1>Pursuer Card <span>Design Workshop</span></h1>
+        <h2>The Pursuer's trading card. Composes the rest of the kit.</h2>
+        <p>The Pursuer Card is the FOURTH primitive in the kit and the only <em>composite</em> one. It uses <strong>Tally</strong> for the Master Level, <strong>Horizon</strong> for the XP-to-next-tier bar, and embeds <strong>Frames</strong> (at mini variant) for the recent-badge peek row. Sibling to the badge Frame: same family, different content. If Frame is <em>what you've collected</em>, the Pursuer Card is <em>who you are</em>.</p>
+        <p><strong>Master Level</strong> is the sum of all Job levels (RuneScape-style total). At ~20 Jobs × 99-cap each, the theoretical maximum is ~1,980. <strong>Tier brackets:</strong> Bronze <code>1–199</code>, Silver <code>200–599</code>, Gold <code>600–1,199</code>, Platinum <code>1,200+</code>. Horizon shows progress within current tier toward the next tier, not progress to the next Master Level — +1 ML is too granular to celebrate.</p>
+        <p>The card is also the product's strongest <em>cosmetic surface</em>. Section 6 sketches the customization slots: free options provide a base layer of personality; premium <em>adds</em> exclusive options on top, never replaces the achievement tier the player earned.</p>
+    </header>
+
+    <nav class="ws-nav">
+        <a href="#canonical">1. Canonical</a>
+        <a href="#tiers">2. The Four Tiers</a>
+        <a href="#sizes">3. The Five Sizes</a>
+        <a href="#frame">4. Frame Sibling</a>
+        <a href="#composition">5. Composition</a>
+        <a href="#customization">6. Customization Slots</a>
+        <a href="#anti">7. Anti-patterns</a>
+        <a href="#criteria">8. Decision Criteria</a>
+    </nav>
+
+    <main>
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 1: Canonical                                       #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="canonical" class="ws-section">
+            <header>
+                <h3><span class="ws-num">01</span> The Canonical Card</h3>
+                <h2>Hero size. Gold tier. Everything visible.</h2>
+                <p>A Pursuer at Master Level <strong>847</strong> (Gold tier), 47% of the way toward Platinum. All sub-primitives present: Tally renders the Master Level, Horizon trails toward Platinum, three mini-Frames peek at recent badges, the top Job's compact summary sits between them. Each callout on the right names what part of the kit is doing the work.</p>
+            </header>
+            <div class="ws-hero-card">
+                <div>
+                    <div class="pc pc--hero pc--gold">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">PP</div>
+                            <div>
+                                <p class="pc__name">PlatPursuit</p>
+                                <p class="pc__title">The Completionist</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">847<small>Master Level</small></p>
+                            <span class="pc__tier-label">Gold Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar">
+                                <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                            </div>
+                            <div class="pc__horizon-meta">
+                                <span><strong>847</strong> / 1,200</span>
+                                <span>41% to Platinum</span>
+                            </div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Crafter</span>
+                            <span class="pc__job-level">87</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <aside class="ws-hero-card__callouts">
+                    <h4>What's rendering what</h4>
+                    <dl>
+                        <dt>Outer chrome</dt><dd>The Pursuer Card's own primitive shell — border + corner notches + tier-tinted backdrop, mirroring the Frame's chrome language so the two read as siblings.</dd>
+                        <dt>Avatar</dt><dd>Mini-framed identity slot. Same border/notch language as the card itself, just nested.</dd>
+                        <dt>Name + Title</dt><dd>Identity strip. The active <em>Title</em> is one of the Pursuer's earned cosmetic strings (premium offers exclusive Titles).</dd>
+                        <dt>Master Level</dt><dd>Rendered in the <strong>Tally</strong> face (Bricolage Grotesque). Sum of all Job levels. The card's headline number.</dd>
+                        <dt>Tier label</dt><dd>Currently <em>Gold Pursuer</em>. Derived from Master Level brackets, not from badge tier earned.</dd>
+                        <dt>Horizon bar</dt><dd>Progress within current tier toward the next. The bar's color band shifts with proximity to the next tier (cool early, warming through mid, hot near the next bracket).</dd>
+                        <dt>Top Job</dt><dd>The Pursuer's highest-level Job. A compact Tally + Horizon pairing in miniature.</dd>
+                        <dt>Recent Badges</dt><dd>Embedded <strong>Frame</strong> primitives at mini variant. Up to four most-recently-earned badges.</dd>
+                    </dl>
+                </aside>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 2: The Four Tiers                                  #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="tiers" class="ws-section">
+            <header>
+                <h3><span class="ws-num">02</span> The Four Tiers</h3>
+                <h2>Master Level drives chrome.</h2>
+                <p>Four Pursuer Cards at different Master Levels, each showing the tier-tinted chrome shift. The chrome inherits from the Frame's tier palette so the family stays unified. Notice how Platinum is a <em>terminal</em> state — no further tier to climb to — so its Horizon bar takes a celebratory pulse treatment instead of the standard progression bar.</p>
+            </header>
+            <div class="ws-tiers">
+                <div class="ws-tier">
+                    <p class="ws-tier__label" data-tier="bronze">Bronze</p>
+                    <div class="pc pc--hero pc--bronze">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">NK</div>
+                            <div>
+                                <p class="pc__name">newkid</p>
+                                <p class="pc__title">Apprentice Hunter</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">87<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Bronze Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar">
+                                <div class="pc__horizon-fill" style="--pc-horizon-pct: 43.7%;"></div>
+                            </div>
+                            <div class="pc__horizon-meta">
+                                <span><strong>87</strong> / 199</span>
+                                <span>44% to Silver</span>
+                            </div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Scout</span>
+                            <span class="pc__job-level">14</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 30%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="ws-tier__range">ML 1–199</p>
+                </div>
+
+                <div class="ws-tier">
+                    <p class="ws-tier__label" data-tier="silver">Silver</p>
+                    <div class="pc pc--hero pc--silver">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">AR</div>
+                            <div>
+                                <p class="pc__name">arcwalker</p>
+                                <p class="pc__title">Steady Climber</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">387<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Silver Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar">
+                                <div class="pc__horizon-fill" style="--pc-horizon-pct: 46.7%;"></div>
+                            </div>
+                            <div class="pc__horizon-meta">
+                                <span><strong>387</strong> / 599</span>
+                                <span>47% to Gold</span>
+                            </div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Roadmapper</span>
+                            <span class="pc__job-level">38</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 52%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="ws-tier__range">ML 200–599</p>
+                </div>
+
+                <div class="ws-tier">
+                    <p class="ws-tier__label" data-tier="gold">Gold</p>
+                    <div class="pc pc--hero pc--gold">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">PP</div>
+                            <div>
+                                <p class="pc__name">PlatPursuit</p>
+                                <p class="pc__title">The Completionist</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">847<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Gold Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar">
+                                <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                            </div>
+                            <div class="pc__horizon-meta">
+                                <span><strong>847</strong> / 1,200</span>
+                                <span>41% to Platinum</span>
+                            </div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Crafter</span>
+                            <span class="pc__job-level">87</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="ws-tier__range">ML 600–1,199</p>
+                </div>
+
+                <div class="ws-tier">
+                    <p class="ws-tier__label" data-tier="platinum">Platinum</p>
+                    <div class="pc pc--hero pc--platinum">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">EM</div>
+                            <div>
+                                <p class="pc__name">elderworker</p>
+                                <p class="pc__title">Master Pursuer</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">1,456<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Platinum Pursuer · Maxed</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar">
+                                <div class="pc__horizon-fill" style="--pc-horizon-pct: 100%;"></div>
+                            </div>
+                            <div class="pc__horizon-meta">
+                                <span><strong>1,456</strong> / 1,980</span>
+                                <span>Maxed tier</span>
+                            </div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Connoisseur</span>
+                            <span class="pc__job-level">99</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 100%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="ws-tier__range">ML 1,200+</p>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 3: The Five Sizes                                  #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="sizes" class="ws-section">
+            <header>
+                <h3><span class="ws-num">03</span> The Five Sizes</h3>
+                <h2>Same identity. Five surfaces.</h2>
+                <p>The Pursuer Card has to read as one thing across <em>five</em> different surfaces. Each size renders a subset of the canonical contents — at mini we keep only avatar + name + level; at hero we keep everything. The content-shedding rule is consistent: drop the longest-tail content first (badge peek, then top Job, then Horizon details), keep the identity backbone (avatar + name + level) intact.</p>
+            </header>
+            <div class="ws-sizes">
+                <div class="ws-size-row" data-size="hero">
+                    <div class="ws-size-row__meta">
+                        <h4>Hero</h4>
+                        <p>Logbook hero. The full card with every layer present. ~320px wide. Where the Pursuer's identity gets its strongest, most-considered moment.</p>
+                        <p><strong>Contains:</strong> avatar, name, title, Master Level, tier label, Horizon, top Job, badge peek (3–4).</p>
+                    </div>
+                    <div class="ws-size-row__demo">
+                        <div class="pc pc--hero pc--gold">
+                            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                            <div class="pc__identity">
+                                <div class="pc__avatar">PP</div>
+                                <div>
+                                    <p class="pc__name">PlatPursuit</p>
+                                    <p class="pc__title">The Completionist</p>
+                                </div>
+                            </div>
+                            <div class="pc__level-block">
+                                <p class="pc__level">847<small>Master Lv</small></p>
+                                <span class="pc__tier-label">Gold Pursuer</span>
+                            </div>
+                            <div class="pc__horizon">
+                                <div class="pc__horizon-bar">
+                                    <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                                </div>
+                                <div class="pc__horizon-meta">
+                                    <span><strong>847</strong> / 1,200</span>
+                                    <span>41% to Platinum</span>
+                                </div>
+                            </div>
+                            <div class="pc__job">
+                                <span class="pc__job-label">Top Job</span>
+                                <span class="pc__job-name">Crafter</span>
+                                <span class="pc__job-level">87</span>
+                                <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                            </div>
+                            <div class="pc__badges-wrap">
+                                <p class="pc__badges-label">Recent Badges</p>
+                                <div class="pc__badges-row">
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ws-size-row" data-size="compact">
+                    <div class="ws-size-row__meta">
+                        <h4>Compact</h4>
+                        <p>Pursuit-home strip. Horizontal layout, condensed. Identity + level at a glance.</p>
+                        <p><strong>Contains:</strong> avatar, name, title, Master Level + tier.<br><strong>Drops:</strong> Horizon, top Job, badge peek.</p>
+                    </div>
+                    <div class="ws-size-row__demo">
+                        <div class="pc pc--compact pc--gold">
+                            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                            <div class="pc__avatar">PP</div>
+                            <p class="pc__name">PlatPursuit</p>
+                            <p class="pc__title">The Completionist</p>
+                            <div class="pc__level-side">
+                                <p class="pc__level">847</p>
+                                <span class="pc__tier-label">Gold</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ws-size-row" data-size="profile">
+                    <div class="ws-size-row__meta">
+                        <h4>Profile header</h4>
+                        <p>Wide banner across the top of the Profile page. Like Compact but stretched and includes the Horizon trail.</p>
+                        <p><strong>Contains:</strong> avatar, name, title, Master Level, Horizon.<br><strong>Drops:</strong> tier label (redundant with level), top Job, badge peek.</p>
+                    </div>
+                    <div class="ws-size-row__demo">
+                        <div class="pc pc--profile pc--gold">
+                            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                            <div class="pc__avatar">PP</div>
+                            <p class="pc__name">PlatPursuit</p>
+                            <p class="pc__title">The Completionist · Gold Pursuer</p>
+                            <div class="pc__level-side">
+                                <p class="pc__level">847<small>Master Lv</small></p>
+                            </div>
+                            <div class="pc__horizon">
+                                <div class="pc__horizon-bar">
+                                    <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                                </div>
+                                <div class="pc__horizon-meta">
+                                    <span><strong>847</strong> / 1,200</span>
+                                    <span>41% to Platinum</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ws-size-row" data-size="share">
+                    <div class="ws-size-row__meta">
+                        <h4>Share</h4>
+                        <p>Vertical poster for share images (Twitter / Discord / forum sig). The Pursuer's identity rendered for an external audience — slightly more decoration, embedded "PlatPursuit" mark for off-site context.</p>
+                        <p><strong>Contains:</strong> avatar, name, title, Master Level, tier, Horizon, badge peek.<br><strong>Drops:</strong> top Job.</p>
+                    </div>
+                    <div class="ws-size-row__demo">
+                        <div class="pc pc--share pc--gold">
+                            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                            <div class="pc__identity">
+                                <div class="pc__avatar">PP</div>
+                                <div>
+                                    <p class="pc__name">PlatPursuit</p>
+                                    <p class="pc__title">The Completionist</p>
+                                </div>
+                            </div>
+                            <div class="pc__level-block">
+                                <p class="pc__level">847<small>Master Lv</small></p>
+                                <span class="pc__tier-label">Gold Pursuer</span>
+                            </div>
+                            <div class="pc__horizon">
+                                <div class="pc__horizon-bar">
+                                    <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                                </div>
+                                <div class="pc__horizon-meta">
+                                    <span><strong>847</strong> / 1,200</span>
+                                    <span>41% to Platinum</span>
+                                </div>
+                            </div>
+                            <div class="pc__badges-wrap">
+                                <p class="pc__badges-label">Recent Badges</p>
+                                <div class="pc__badges-row">
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                    <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                </div>
+                            </div>
+                            <p class="pc__share-mark">PlatPursuit · platpursuit.com</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ws-size-row" data-size="mini">
+                    <div class="ws-size-row__meta">
+                        <h4>Mini</h4>
+                        <p>Comment chips, leaderboard rows, "earned by these Pursuers" lists. The identity backbone only.</p>
+                        <p><strong>Contains:</strong> avatar, name, Master Level.<br><strong>Drops:</strong> everything else.</p>
+                    </div>
+                    <div class="ws-size-row__demo">
+                        <div class="pc pc--mini pc--gold">
+                            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                            <div class="pc__avatar">PP</div>
+                            <p class="pc__name">PlatPursuit</p>
+                            <div class="pc__level-side">
+                                <p class="pc__level">847</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 4: Frame-language sibling                          #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="frame" class="ws-section">
+            <header>
+                <h3><span class="ws-num">04</span> Frame-language Sibling</h3>
+                <h2>Same family. Different content.</h2>
+                <p>A badge Frame and a Pursuer Card placed side-by-side. The shared vocabulary should read instantly: same border style, same diamond corner notches (tier-tinted, all four corners), same tier-tinted backdrop gradient, same general aspect ratio. What differs is the <em>content</em> — a Frame holds a badge, a Pursuer Card holds a Pursuer.</p>
+            </header>
+            <div class="ws-frame-echoes">
+                <div class="ws-frame-echoes__col">
+                    <h4>Badge Frame</h4>
+                    <div class="ws-frame-echoes__demo">
+                        <div class="ws-mock-frame">
+                            <span class="ws-mock-frame__corner-bl"></span><span class="ws-mock-frame__corner-br"></span>
+                            <div class="ws-mock-frame__title">
+                                <span>Marvel Universe</span>
+                                <span>Gold</span>
+                            </div>
+                            <div class="ws-mock-frame__art">★</div>
+                            <div class="ws-mock-frame__plinth">
+                                <p class="ws-mock-frame__plinth-name">Default Badge</p>
+                                <p class="ws-mock-frame__plinth-meta">Earned Jan 21, 2025 · 3%</p>
+                                <span class="ws-mock-frame__plinth-eng">#247</span>
+                                <span class="ws-mock-frame__plinth-set">0247</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ws-frame-echoes__notes">
+                        Holds a badge. Border + corner notches + tier-tinted backdrop + plinth with engraving + set-mark. The Pursuer's card next to it should look like it came out of the same shop.
+                    </div>
+                </div>
+                <div class="ws-frame-echoes__col">
+                    <h4>Pursuer Card</h4>
+                    <div class="ws-frame-echoes__demo">
+                        <div class="pc pc--hero pc--gold">
+                            <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                            <div class="pc__identity">
+                                <div class="pc__avatar">PP</div>
+                                <div>
+                                    <p class="pc__name">PlatPursuit</p>
+                                    <p class="pc__title">The Completionist</p>
+                                </div>
+                            </div>
+                            <div class="pc__level-block">
+                                <p class="pc__level">847<small>Master Lv</small></p>
+                                <span class="pc__tier-label">Gold Pursuer</span>
+                            </div>
+                            <div class="pc__horizon">
+                                <div class="pc__horizon-bar">
+                                    <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                                </div>
+                                <div class="pc__horizon-meta">
+                                    <span><strong>847</strong> / 1,200</span>
+                                    <span>41% to Platinum</span>
+                                </div>
+                            </div>
+                            <div class="pc__job">
+                                <span class="pc__job-label">Top Job</span>
+                                <span class="pc__job-name">Crafter</span>
+                                <span class="pc__job-level">87</span>
+                                <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ws-frame-echoes__notes">
+                        Holds a Pursuer. <strong>Shared with Frame:</strong> border style, corner notches, tier-tinted backdrop, tier sized notches. <strong>Differs from Frame:</strong> content is the Pursuer (avatar + name + level + Horizon + Job) instead of a badge; no plinth-with-engraving footer; Tally-rendered Master Level takes the visual center where Frame puts the badge art.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 5: Composition Layers                              #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="composition" class="ws-section">
+            <header>
+                <h3><span class="ws-num">05</span> Composition Layers</h3>
+                <h2>The Pursuer Card composes the rest of the kit.</h2>
+                <p>Unlike the other three primitives, the Pursuer Card isn't atomic — every sub-element is itself a kit primitive doing the work it's already good at. Tally renders the headline number. Horizon renders the progress bar. The badge peek embeds Frames at their mini variant. The Pursuer Card's own primitive contribution is the <em>composition rules</em> — what goes where, what scales how, what drops at which size.</p>
+            </header>
+            <div class="ws-comp">
+                <div class="pc pc--hero pc--gold">
+                    <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                    <div class="pc__identity">
+                        <div class="pc__avatar">PP</div>
+                        <div>
+                            <p class="pc__name">PlatPursuit</p>
+                            <p class="pc__title">The Completionist</p>
+                        </div>
+                    </div>
+                    <div class="pc__level-block">
+                        <p class="pc__level">847<small>Master Lv</small></p>
+                        <span class="pc__tier-label">Gold Pursuer</span>
+                    </div>
+                    <div class="pc__horizon">
+                        <div class="pc__horizon-bar">
+                            <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                        </div>
+                        <div class="pc__horizon-meta">
+                            <span><strong>847</strong> / 1,200</span>
+                            <span>41% to Platinum</span>
+                        </div>
+                    </div>
+                    <div class="pc__job">
+                        <span class="pc__job-label">Top Job</span>
+                        <span class="pc__job-name">Crafter</span>
+                        <span class="pc__job-level">87</span>
+                        <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                    </div>
+                    <div class="pc__badges-wrap">
+                        <p class="pc__badges-label">Recent Badges</p>
+                        <div class="pc__badges-row">
+                            <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                            <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                            <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                            <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ws-comp__layers">
+                    <article class="ws-comp__layer">
+                        <h5>Pursuer Card primitive <strong>(this card's chrome)</strong></h5>
+                        <p>The card vessel itself — border, corner notches, tier-tinted backdrop. Same chrome family as the Frame. Defines the composition layout and which sub-elements render at each size.</p>
+                    </article>
+                    <article class="ws-comp__layer">
+                        <h5>Tally <strong>(Master Level + Job Level)</strong></h5>
+                        <p>Bricolage Grotesque, variable-axis tuned for headline scale on the Master Level (96px opsz, weight 800) and section scale on the Job Level (22px). Tabular figures. The numbers feel <em>earned</em>, not reported.</p>
+                    </article>
+                    <article class="ws-comp__layer">
+                        <h5>Horizon <strong>(tier progression + Job XP)</strong></h5>
+                        <p>The Pursuer Card uses Horizon's linear-bar form at <em>row</em> scale (6px tall) for the tier progression and <em>micro</em> scale (3px) inside the Job tile. Color band shifts as the Pursuer closes in on the next tier. Platinum's bar takes a celebratory pulse since there's no next tier.</p>
+                    </article>
+                    <article class="ws-comp__layer">
+                        <h5>Frame <strong>(recent-badge peek)</strong></h5>
+                        <p>The badge thumbnails embed the Frame primitive at <em>mini</em> variant (4 mini-Frames with corner notches in tier color). Production should render the actual <code>components/frame.html</code> partial here, not the workshop's placeholder squares.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 6: Customization Slots                             #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="customization" class="ws-section">
+            <header>
+                <h3><span class="ws-num">06</span> Customization Slots</h3>
+                <h2>Where personality goes.</h2>
+                <p>The Pursuer Card is the product's strongest cosmetic surface — it's on every Logbook hero, every comment, every leaderboard row, every share image. Five slots are exposed for customization. The <em>tier</em> stays earned (driven by Master Level, not bought), but everything else has free + premium expression on top.</p>
+                <p>This section names the slots; it doesn't workshop every cosmetic option. Each slot is a future-workshop unto itself. <strong>Rule:</strong> premium options <em>add</em> to the slot inventory; they never override the achievement tier the Pursuer earned.</p>
+            </header>
+            <div class="ws-custom">
+                <div class="ws-custom__diagram">
+                    <div class="pc pc--hero pc--gold">
+                        <span class="pc__corner-bl"></span><span class="pc__corner-br"></span>
+                        <div class="pc__identity">
+                            <div class="pc__avatar">PP</div>
+                            <div>
+                                <p class="pc__name">PlatPursuit</p>
+                                <p class="pc__title">The Completionist</p>
+                            </div>
+                        </div>
+                        <div class="pc__level-block">
+                            <p class="pc__level">847<small>Master Lv</small></p>
+                            <span class="pc__tier-label">Gold Pursuer</span>
+                        </div>
+                        <div class="pc__horizon">
+                            <div class="pc__horizon-bar">
+                                <div class="pc__horizon-fill" style="--pc-horizon-pct: 41.2%;"></div>
+                            </div>
+                            <div class="pc__horizon-meta">
+                                <span><strong>847</strong> / 1,200</span>
+                                <span>41% to Platinum</span>
+                            </div>
+                        </div>
+                        <div class="pc__job">
+                            <span class="pc__job-label">Top Job</span>
+                            <span class="pc__job-name">Crafter</span>
+                            <span class="pc__job-level">87</span>
+                            <div class="pc__job-bar" style="--pc-job-pct: 64%;"></div>
+                        </div>
+                        <div class="pc__badges-wrap">
+                            <p class="pc__badges-label">Recent Badges</p>
+                            <div class="pc__badges-row">
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_gold %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_silver %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_platinum %}</div>
+                                <div class="pc__badge-slot">{% include "components/frame.html" with frame=mini_bronze %}</div>
+                            </div>
+                        </div>
+                        <span class="ws-pin" data-pin="1">1</span>
+                        <span class="ws-pin" data-pin="2">2</span>
+                        <span class="ws-pin" data-pin="3">3</span>
+                        <span class="ws-pin" data-pin="4">4</span>
+                        <span class="ws-pin" data-pin="5">5</span>
+                    </div>
+                </div>
+                <div class="ws-custom__table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Slot</th>
+                                <th>What it controls</th>
+                                <th>Premium adds</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>1</td>
+                                <td>Background</td>
+                                <td>The card's interior pattern / texture / image. Free: 1–2 default patterns. Default reads as "clean Pursuer Card."</td>
+                                <td>Exclusive patterns, animated subtle backgrounds, themed packs tied to seasons / fundraisers.</td>
+                            </tr>
+                            <tr>
+                                <td>2</td>
+                                <td>Frame overlay</td>
+                                <td>Decorative extra layer around the card's border. Free: none (just the tier border).</td>
+                                <td>Premium-only flourishes (engraved patterns, subtle glow rings, edge motifs). <em>Never</em> changes tier color — just adds on top.</td>
+                            </tr>
+                            <tr>
+                                <td>3</td>
+                                <td>Particle / animation</td>
+                                <td>Subtle ambient motion. Free: none. Default reads as quiet.</td>
+                                <td>Subtle particle effects (drifting sparks for Gold, gentle shimmer for Platinum, etc.). Strictly within the kit's motion vocabulary — no confetti, no anti-ref #4.</td>
+                            </tr>
+                            <tr>
+                                <td>4</td>
+                                <td>Title plate</td>
+                                <td>The visual treatment of the active Title text. Free: plain caps text.</td>
+                                <td>Styled title plates (ribbon, banner, etched chrome) earned through milestones or premium packs.</td>
+                            </tr>
+                            <tr>
+                                <td>5</td>
+                                <td>Showcase config</td>
+                                <td>The badge-peek row layout. Free: 3–4 most-recent badges, default layout.</td>
+                                <td>More slots, alternate layouts (pinned favorites instead of recent, themed showcases like "all Platinums," etc.).</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 7: Anti-patterns                                   #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="anti" class="ws-section">
+            <header>
+                <h3><span class="ws-num">07</span> Anti-patterns</h3>
+                <h2>What we are NOT.</h2>
+                <p>The doc names four specific anti-patterns for the Pursuer Card. Each card below pairs the anti-pattern with a brief reason. Shared code-review vocabulary: quote a card by number when flagging a Pursuer Card variant that drifted.</p>
+            </header>
+            <div class="ws-anti">
+                <article class="ws-anti__card">
+                    <span class="ws-anti__stamp">Do not ship</span>
+                    <h4 class="ws-anti__title">1. Generic "user profile card"</h4>
+                    <p class="ws-anti__reason">Round avatar + handle + bio + maybe a follower count. The interface of every social app on the internet. The Pursuer Card needs to be instantly recognizable as a <em>PlatPursuit</em> Pursuer — if it could live unchanged on Twitter, GitHub, or Discord, it's anti-ref #1 (too dashboard).</p>
+                    <div class="ws-anti__demo">
+                        <div class="ws-anti__demo-generic">
+                            <div class="av"></div>
+                            <div class="nm">PlatPursuit<small>Trophy hunter · 1.2k followers</small></div>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="ws-anti__card">
+                    <span class="ws-anti__stamp">Do not ship</span>
+                    <h4 class="ws-anti__title">2. Card louder than the Pursuer</h4>
+                    <p class="ws-anti__reason">Heavy frame ornaments, glaring backgrounds, oversized "PURSUER CARD" branding. The chrome's job is to <em>frame</em> the Pursuer, not compete with them. If a viewer notices the card decoration before they notice who the Pursuer is, the decoration is wrong.</p>
+                    <div class="ws-anti__demo">
+                        <p style="font-size: 12px; color: var(--ws-text-muted); margin: 0; text-align: center; line-height: 1.5; max-width: 280px;">Cosmetic overlays should never raise their volume above the avatar + name + level. Premium customization is <em>additive on top of the same base</em>, never replacing it.</p>
+                    </div>
+                </article>
+
+                <article class="ws-anti__card">
+                    <span class="ws-anti__stamp">Do not ship</span>
+                    <h4 class="ws-anti__title">3. Inconsistency across sizes</h4>
+                    <p class="ws-anti__reason">Hero says "PlatPursuit, Gold Pursuer, ML 847." Compact says "PlatPursuit, Level 14 Scout." Mini drops the level entirely. The team can't recognize the same Pursuer across surfaces. Identity backbone (avatar + name + level) must hold at every size; <em>only</em> the optional layers shed.</p>
+                    <div class="ws-anti__demo">
+                        <p style="font-size: 12px; color: var(--ws-text-muted); margin: 0; text-align: center; line-height: 1.5; max-width: 280px;">The five sizes share the same core identity. Drop layers from the outside in (badge peek → top Job → Horizon → title), keep the avatar / name / level intact regardless of context.</p>
+                    </div>
+                </article>
+
+                <article class="ws-anti__card">
+                    <span class="ws-anti__stamp">Do not ship</span>
+                    <h4 class="ws-anti__title">4. Customization that fragments recognition</h4>
+                    <p class="ws-anti__reason">Premium options that <em>replace</em> the tier-chrome rather than overlay it. A Silver Pursuer wearing a "Platinum-style" cosmetic pack reads as Platinum at a glance — even though they haven't earned it. The achievement signal degrades, the social system loses meaning. Cosmetics <em>add</em> personality on top of the earned tier; they never override it.</p>
+                    <div class="ws-anti__demo">
+                        <p style="font-size: 12px; color: var(--ws-text-muted); margin: 0; text-align: center; line-height: 1.5; max-width: 280px;">Tier chrome (border color, corner notches, backdrop) is earned and locked. Customization slots (background, particle, title plate, etc.) are tunable.</p>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        {# ────────────────────────────────────────────────────────── #}
+        {# SECTION 8: Decision Criteria                               #}
+        {# ────────────────────────────────────────────────────────── #}
+        <section id="criteria" class="ws-section">
+            <header>
+                <h3><span class="ws-num">08</span> Decision Criteria</h3>
+                <h2>Five tests. Pass all five.</h2>
+                <p>Argue against the criteria, not the candidates.</p>
+            </header>
+            <div class="ws-criteria">
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">1</span>Reads as a sibling to the badge Frame</h4>
+                    <p>Side-by-side, the Pursuer Card and a badge Frame should look like they came from the same shop. Fails when the chrome diverges enough that a viewer reads "two different design languages." See Section 4.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">2</span>Identity backbone holds at every size</h4>
+                    <p>Avatar + name + Master Level must read the same Pursuer across hero / compact / profile / share / mini. Fails when the mini variant becomes unrecognizable next to the hero. See Section 3.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">3</span>Tier reads on first scan</h4>
+                    <p>A Bronze Pursuer and a Platinum Pursuer should be visually distinct at a glance, without reading any text. Master-Level brackets drive the chrome — the chrome carries the prestige. Fails when the brackets are too subtle or too dramatic.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">4</span>Customization is additive</h4>
+                    <p>Premium cosmetics <em>add</em> to the slots; the achievement tier stays earned. Fails when a premium option lets a Silver Pursuer pass for a Platinum (or any tier they didn't earn). See Section 7, anti-pattern #4.</p>
+                </article>
+                <article class="ws-criterion">
+                    <h4><span class="ws-criterion__num">5</span>Passes the anti-refs</h4>
+                    <p>Not a generic profile card (anti-ref #1). Not louder than the Pursuer. Not inconsistent across sizes. Not customization that fragments recognition. See Section 7.</p>
+                </article>
+            </div>
+        </section>
+
+        <div class="ws-footer">
+            <h4>How to use this workshop</h4>
+            <ul>
+                <li><strong>Sections 1–2</strong> are the canonical primitive + the tier system. Lock the tier brackets and the chrome shift between them.</li>
+                <li><strong>Section 3</strong> is the size adaptation. Five surfaces, one identity. Confirm the content-shedding rules feel right per size.</li>
+                <li><strong>Section 4</strong> is the sibling test. The Pursuer Card next to a badge Frame should pass criterion #1.</li>
+                <li><strong>Section 5</strong> names the composition rules — Pursuer Card composes Tally + Horizon + Frame, doesn't redraw them.</li>
+                <li><strong>Section 6</strong> is the customization surface map. The slots are named; each slot is a future workshop unto itself.</li>
+                <li><strong>Section 7</strong> is shared anti-pattern vocabulary for code review.</li>
+                <li><strong>Section 8</strong> is the rubric. Five tests, pass all five.</li>
+            </ul>
+        </div>
+    </main>
+</body>
+</html>
