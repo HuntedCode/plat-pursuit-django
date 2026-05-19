@@ -507,12 +507,23 @@ class GameAdmin(admin.ModelAdmin):
         if change and 'concept' in form.changed_data:
             old_concept_id = form.initial.get('concept')
             old_concept = Concept.objects.filter(pk=old_concept_id).first() if old_concept_id else None
+            # If staff cleared the concept entirely, mint a fresh PP_* stub so
+            # the game always has a concept and orphaned old-concept data has
+            # somewhere to be absorbed.
+            if obj.concept is None:
+                obj.concept = Concept.create_default_concept(obj)
+                messages.info(
+                    request,
+                    f"Concept was cleared; created stub concept "
+                    f"'{obj.concept.concept_id}' ({obj.concept.unified_title}) "
+                    "as the new destination."
+                )
             new_concept = obj.concept
             super().save_model(request, obj, form, change)
             # Invalidate game page caches
             from django.core.cache import cache
             cache.delete(f"game:imageurls:{obj.np_communication_id}")
-            # Absorb orphaned old concept
+            # Absorb orphaned old concept into the new one
             if old_concept and old_concept.games.count() == 0:
                 new_concept.absorb(old_concept)
                 old_concept.delete()
