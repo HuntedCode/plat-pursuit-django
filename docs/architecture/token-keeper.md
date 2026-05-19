@@ -343,17 +343,25 @@ The two-phase job assignment pattern (count first, set target, then assign) prev
 
 ### Concept Assignment Fallback Chain
 
-`_job_sync_title_id()` has a multi-layered fallback to ensure every game gets a concept:
+Every game must end up with a Concept by the end of sync, even when PSN can't tell us anything useful about it. There are five layered fallbacks, applied in order:
+
+**Entry-gate classification (during the slow-path walk in `_profile_refresh_slow_path`):**
+
+- **Legacy-only platform** (PS3/PSVITA/PSVR/PSVR2): a `PP_N` default concept is minted inline via `Concept.create_default_concept()` and best-effort IGDB-enriched. These games never enter `sync_title_stats` because there is no PSN endpoint that can map them back to a real concept.
+- **Modern platform** (PS4/PS5): the game is queued for `sync_title_stats` → `trophy_titles_for_title` → `sync_title_id`. The walk does NOT mint a stub inline, because `title_ids` gets populated downstream by that pipeline.
+
+**`_job_sync_title_id()` multi-layered fallback:**
+
 1. Normal path: resolve via PSN `game_title` API, create Concept from details
 2. Error code returned: detect Asian language from title, create default concept (`PP_N` format)
-3. `game_title` returns None: same language detection + default concept
+3. `game_title` returns None / sparse: same language detection + default concept
 4. Exception thrown: exception recovery block checks `game.concept is None` and creates default concept
 
-The health check in `sync_complete` is the entry gate that decides whether a concept-less game even reaches `sync_title_id`:
-- **Modern platform (PS4/PS5) AND `game.title_ids` non-empty**: queued through `sync_title_stats` → `trophy_titles_for_title` → `sync_title_id` for full concept resolution.
-- **Everything else** (legacy PS3/PSVITA/PSVR/PSVR2, OR modern games whose `title_ids` is empty): the health check creates a `PP_N` default concept inline via `Concept.create_default_concept()` and best-effort enriches via IGDB. These games skip the `sync_title_stats` path entirely because there is no PSN endpoint that can map them back to a real concept.
+**Final safety net (`_job_sync_complete` orphan reconciliation):**
 
-This defensive approach ensures no game is left without a concept, which would break downstream features (badges, Review Hub, etc.). The empty-`title_ids` carve-out also breaks a sync loop where modern games unreachable by `sync_title_stats` would re-trigger the full `sync_title_stats → sync_complete → health_check` cycle on every iteration.
+5. Before the IGDB drain runs, `sync_complete` queries for any `Game` on this profile with `concept IS NULL`. For each, it mints a `PP_N` stub and defers IGDB enrich. This catches the one path the above layers can leak: a modern game that appears in `trophy_titles` but is NOT returned by PSN's `title_stats` (never-played or hidden modern title), so `sync_title_id` was never queued and none of the in-flow fallbacks fired. Without this step the fingerprint-level concept-less recovery would force slow path on every sync without making progress.
+
+This defensive chain ensures no game is left without a concept, which would break downstream features (badges, Review Hub, dashboard rendering, etc.). The `manage.py backfill_default_concepts` command remains as a manual backstop for one-off cleanup, though in steady state it should find zero rows.
 
 ### Token Instance Selection and Locking
 

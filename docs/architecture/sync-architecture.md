@@ -105,14 +105,18 @@ _job_profile_refresh(profile_id):
 
 _job_sync_complete(profile_id, ...):
   Pure finalization (the health check is now upstream, in profile_refresh):
-  1. Drain deferred IGDB enrichments
-  2. Recompute total_hiddens from authoritative DB state
-  3. update_profile_games (with hide_hiddens fix)
-  4. update_profile_trophy_counts
-  5. Badge eval, milestones, challenges (unchanged)
-  6. Deferred notifications (unchanged)
-  7. Cache invalidation (unchanged)
-  8. set_sync_status('synced'), update last_synced
+  1. Orphan-concept reconciliation: mint stub Concepts for any Game on this
+     profile with concept=NULL (catches modern games omitted from PSN
+     title_stats, where sync_title_id never queued). Pure DB work, no PSN
+     calls. Runs before the IGDB drain so the new stubs ride along.
+  2. Drain deferred IGDB enrichments
+  3. Recompute total_hiddens from authoritative DB state
+  4. update_profile_games (with hide_hiddens fix)
+  5. update_profile_trophy_counts
+  6. Badge eval, milestones, challenges (unchanged)
+  7. Deferred notifications (unchanged)
+  8. Cache invalidation (unchanged)
+  9. set_sync_status('synced'), update last_synced
 ```
 
 Note: `sync_complete` retains its mismatch-retry capability for individual games. If `sync_trophies` for a game fails to converge, the existing `MAX_MISMATCH_RETRIES = 3` budget per game per 24h still applies. This is preserved by re-queueing through the same `pending_sync_complete` mechanism.
@@ -248,6 +252,7 @@ The work shipped across three phases. The two safety-net phases originally plann
 - **Symmetric swap is a known blind spot.** Hide A and unhide B in the same window where both have identical trophy counts and types: trophy totals stay equal, visible-game count stays equal, fingerprint matches, drift goes undetected. Rare in practice; the weekly cron originally planned to backstop this was dropped as not worth the cron clutter. Any normal trophy earning afterward heals it because the fingerprint will mismatch on the next sync.
 - **The `-10 days` outage backdate is intentional.** It exists so the next `refresh_profiles` cron picks the profile up regardless of its tier, even though `last_synced` is no longer load-bearing for sync internals.
 - **The concept-less safety net forces slow path when any of the profile's games has `concept IS NULL`.** This catches matching pipeline failures, IGDB outages, and manual concept cleanup. One indexed `EXISTS` query per sync; trips slow path only when actually needed.
+- **Orphan-concept reconciliation in `sync_complete` closes the safety-net loop.** The slow-path's inline fallbacks (legacy-platform inline stubs, sync_title_id fallbacks) only fire for games that actually reach them. A modern game in `trophy_titles` but missing from PSN's `title_stats` response (never-played or hidden modern title) never gets a sync_title_id queued, so without this reconciliation the fingerprint-level concept-less recovery would re-force slow path on every sync without progress. The reconciliation step at the top of `sync_complete` mints a stub for any such orphan, so the next sync's fingerprint check passes cleanly. Pure DB work plus a deferred IGDB enrich; bounded by the (typically tiny) orphan count per profile.
 
 ---
 

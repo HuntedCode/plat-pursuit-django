@@ -1241,18 +1241,52 @@ class TokenKeeper:
 
             # (job-worker bookend already logged START; narration line dropped)
 
-            # Drain any IGDB enrichments deferred by _job_sync_title_id.
-            # By this point every Game for every new concept has been attached,
-            # so the matching pipeline sees the full game set — critical for
-            # distinguishing single-game concepts from multi-game compilations.
+            # Orphan-concept reconciliation: any game that slipped past the
+            # slow-path's legacy-inline and sync_title_id fallbacks gets a
+            # stub here. This catches modern games PSN's title_stats endpoint
+            # omits (never-played or hidden), which sync_title_id never queues,
+            # so the fingerprint-level "concept-less recovery" path otherwise
+            # loops forever without progress. Pure DB work plus a deferred
+            # IGDB enrich, no PSN calls, safe to run unconditionally. Runs
+            # before the drain below so newly-deferred enrichments are picked
+            # up in the same pass.
             _set_phase('igdb_enrich')
+            orphan_games = list(
+                Game.objects.filter(
+                    played_by__profile=profile, concept__isnull=True,
+                ).distinct()
+            )
+            reconciled = 0
+            for game in orphan_games:
+                try:
+                    stub = Concept.create_default_concept(game)
+                    game.add_concept(stub)
+                    self._defer_igdb_enrich(profile_id, stub)
+                    reconciled += 1
+                except Exception:
+                    logger.exception(
+                        f"sync_complete orphan reconcile failed "
+                        f"game={game.np_communication_id}"
+                    )
+            if reconciled:
+                logger.warning(
+                    f"[profile {profile_id}] health check reconciled "
+                    f"{reconciled} concept-less game(s)"
+                )
+
+            # Drain any IGDB enrichments deferred by _job_sync_title_id or by
+            # the orphan reconciliation above. By this point every Game for
+            # every new concept has been attached, so the matching pipeline
+            # sees the full game set — critical for distinguishing single-game
+            # concepts from multi-game compilations.
             self._drain_deferred_igdb_enrich(profile_id)
 
             # Recompute total_hiddens from authoritative DB state. Visibility
             # reconciliation and trophy-count drift detection happen upstream
             # in _job_profile_refresh, so by the time we get here the DB is
-            # the source of truth. The trophy/group completeness check below
-            # is the only health-style work left in sync_complete.
+            # the source of truth. The orphan-concept reconcile above and the
+            # trophy/group completeness check below are the health-style work
+            # remaining in sync_complete.
             _set_phase('health_check')
             logger.info(f"[profile {profile_id}] sync_complete hiddens recomputed")
             PsnApiService.recompute_total_hiddens(profile)
