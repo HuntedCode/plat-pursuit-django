@@ -1,4 +1,4 @@
-{% load custom_filters %}
+{% load custom_filters trophy_tags %}
 {# Trophy nav marker — a non-checkable anchor that says "you'll earn this    #}
 {# trophy around this point in the playthrough". Visual identity is keyed   #}
 {# on the trophy's actual *type* color (bronze / silver / gold / platinum)  #}
@@ -59,9 +59,13 @@
     {# Header in the trophy color + cup glyph; name below in normal weight.  #}
     {# Color loop (stripe → label → bg) keeps the "this is a trophy" signal  #}
     {# tight in both color and meaning.                                      #}
+    {# Flag presence flags — pulled once so we can both stamp data-attrs   #}
+    {# on the row AND render inline pills next to the trophy name without #}
+    {# repeating the set-lookup three times.                               #}
+    {% with is_missable=marker.trophy_id|in_set:missable_trophy_ids is_online=marker.trophy_id|in_set:online_trophy_ids is_unobtainable=marker.trophy_id|in_set:unobtainable_trophy_ids %}
     <span class="flex-1 min-w-0 flex flex-col leading-tight gap-0.5">
         {# Label color matches the stripe; flips to success on earned. #}
-        <span class="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5"
+        <span class="text-[10px] uppercase tracking-wider font-bold flex items-center gap-1.5 flex-wrap"
               {% if earned_data.earned %}
               style="color: var(--color-success);"
               {% else %}
@@ -77,11 +81,41 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
                 Next up
             </span>
+            {# Flag pills — colored to match the trophy-mention-tooltip       #}
+            {# convention (missable=warning, online=info, unobtainable=error)#}
+            {# so the same flag signal reads consistently across surfaces.   #}
+            {# Missable carries a triangle warning glyph since "you can      #}
+            {# lose it forever" is the highest-urgency flag.                  #}
+            {% if is_missable %}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-warning/20 text-warning border border-warning/30" title="Missable — you can lose this trophy if you miss the window">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                Missable
+            </span>
+            {% endif %}
+            {% if is_online %}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-info/20 text-info border border-info/30" title="Online — requires an active internet connection / online service">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Online
+            </span>
+            {% endif %}
+            {% if is_unobtainable %}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-error/20 text-error border border-error/30" title="Unobtainable — currently impossible to earn (server shutdown, removed content, etc.)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                Unobtainable
+            </span>
+            {% endif %}
         </span>
         <span class="text-sm font-medium truncate">
             {% if trophy %}{{ trophy.trophy_name }}{% else %}<span class="text-error/70">Unknown trophy ({{ marker.trophy_id }})</span>{% endif %}
         </span>
+        {# PSN trophy description — small + italic + dimmer so it scans as #}
+        {# secondary metadata, not the primary text. Line-clamped to 2 so  #}
+        {# long descriptions don't balloon the row vertically.              #}
+        {% if trophy.trophy_detail %}
+        <span class="text-[11px] italic text-base-content/55 leading-snug line-clamp-2 pr-1">{{ trophy.trophy_detail }}</span>
+        {% endif %}
     </span>
+    {% endwith %}
     {# Jump arrow chevron — affirms this is a navigational link. Slides on   #}
     {# hover for tactile feedback.                                            #}
     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-base-content/35 group-hover:text-base-content group-hover:translate-x-0.5 transition-[color,transform] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>

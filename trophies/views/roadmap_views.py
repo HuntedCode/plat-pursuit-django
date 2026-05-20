@@ -359,6 +359,20 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             roadmap.trophy_guides.filter(is_missable=True)
             .values_list('trophy_id', flat=True)
         )
+        # Parallel sets for the other author-set TrophyGuide flags so the
+        # marker template can render attention-grabbing pills inline.
+        # Online and unobtainable trophies don't drive the existing filter
+        # toggles, but readers care about them mid-playthrough just as
+        # much as missables (online may need servers up; unobtainable
+        # may need a workaround or version-pinning).
+        context['online_trophy_ids'] = set(
+            roadmap.trophy_guides.filter(is_online=True)
+            .values_list('trophy_id', flat=True)
+        )
+        context['unobtainable_trophy_ids'] = set(
+            roadmap.trophy_guides.filter(is_unobtainable=True)
+            .values_list('trophy_id', flat=True)
+        )
         context['is_dlc_roadmap'] = trophy_group_id != 'default'
 
         # Profile earned data + progress computation.
