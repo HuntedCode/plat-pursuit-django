@@ -598,13 +598,23 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             # Bundle qualifiers: each renders as a single row showing aggregate
             # progress across all member concepts. The bundle is "complete" (and
             # synthesizes a platinum for tier evaluation) when every member has
-            # at least one game at progress=100.
+            # at least one game at progress=100. Members sort by release_date
+            # (nulls last, title tiebreaker) so episodic chapters appear in
+            # natural release order.
             bundles = []
             bundle_games_for_stage = stage_bundle_games_map.get(stage.id, {})
             for bundle in stage.concept_bundles.all():
                 member_games_by_concept = bundle_games_for_stage.get(bundle.id, {})
+                sorted_members = sorted(
+                    bundle.concepts.all(),
+                    key=lambda c: (
+                        c.release_date is None,
+                        c.release_date,
+                        (c.unified_title or '').lower(),
+                    ),
+                )
                 members = []
-                for concept in bundle.concepts.all():
+                for concept in sorted_members:
                     concept_games = member_games_by_concept.get(concept.id, [])
                     member_game_entries = [_build_game_entry(g, community_ratings) for g in concept_games]
                     is_fully_earned = any(
