@@ -282,7 +282,7 @@ Detects PSN infrastructure outages (502/503/504 errors) and prevents profiles fr
 **Behavior when open**:
 - `_execute_api_call()` short-circuits immediately with `PSNOutageError` (no API call made)
 - Job handlers catch `PSNOutageError` and apply outage recovery instead of setting error status
-- Outage recovery follows the deadlock pattern: backdate `last_synced` by 10 days, set `sync_status='synced'`, so the cron picks profiles up after recovery
+- Outage recovery flips `sync_status` back to `synced` and clears progress fields but does NOT touch `last_synced`, so the user-visible "last synced" value stays truthful. Profiles are picked up by the cron on their normal tier cadence (premium 6h, basic 12h, etc.) once they cross the threshold
 - `PSNManager.initial_sync()` and `profile_refresh()` skip queueing during outage
 - `refresh_profiles` cron exits early
 - Manual sync triggers return 503 with a friendly message

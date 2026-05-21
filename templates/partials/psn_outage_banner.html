@@ -1,0 +1,28 @@
+{% if psn_outage %}
+<div id="site-banner-psn-outage"
+     class="sticky top-0 z-[60] bg-error border-b-2 border-error text-white shadow-lg"
+     role="alert"
+     aria-live="assertive">
+    <div class="mx-auto px-4 py-2 min-h-[36px] lg:min-h-[40px] flex items-center justify-center gap-2">
+        <svg class="w-5 h-5 shrink-0 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+        <p class="text-xs lg:text-sm font-medium text-center">
+            <span class="font-bold">PlayStation Network is currently unavailable.</span>
+            Syncs are paused and will resume automatically when PSN recovers. Your data is safe!
+        </p>
+    </div>
+</div>
+{# When the banner is present, push the sticky navbar and sub-nav down so
+   they stack vertically beneath it instead of being overlapped. Uses CSS
+   :has() so the offset applies only while the banner is rendered. #}
+<style>
+    body:has(#site-banner-psn-outage) .navbar { top: 36px; }
+    body:has(#site-banner-psn-outage) .hub-subnav { top: calc(36px + 4rem); }
+    @media (min-width: 1024px) {
+        body:has(#site-banner-psn-outage) .navbar { top: 40px; }
+        body:has(#site-banner-psn-outage) .hub-subnav { top: calc(40px + 4rem); }
+    }
+</style>
+{% endif %}

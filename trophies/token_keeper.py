@@ -396,22 +396,22 @@ class TokenKeeper:
     def _handle_outage_recovery(self, profile):
         """Reset a profile that failed due to PSN outage.
 
-        Follows the deadlock recovery pattern: backdate last_synced and set
-        status to synced so the cron job picks the profile up for a normal
-        refresh when PSN recovers.
+        Flips sync_status back to 'synced' and clears progress fields so
+        the profile isn't stuck in 'syncing'. Crucially does NOT touch
+        last_synced: the previous successful sync's timestamp stays
+        accurate for user-facing display, and the cron will pick the
+        profile up on its normal tier cadence (premium: 6h, basic: 12h,
+        etc.) once it crosses the threshold. Users who want an immediate
+        retry can trigger a manual sync from the UI.
         """
         try:
             profile.refresh_from_db()
             if profile.sync_status == 'syncing':
-                profile.last_synced = (
-                    profile.last_synced - timedelta(days=10)
-                    if profile.last_synced else None
-                )
                 profile.sync_status = 'synced'
                 profile.sync_progress_value = 0
                 profile.sync_progress_target = 0
                 profile.save(update_fields=[
-                    'last_synced', 'sync_status',
+                    'sync_status',
                     'sync_progress_value', 'sync_progress_target',
                 ])
                 # Clean up sync-related Redis keys
@@ -419,8 +419,7 @@ class TokenKeeper:
                 redis_client.delete(f"sync_orchestrator_pending:{profile.id}")
                 redis_client.srem('active_profiles', str(profile.id))
                 logger.info(
-                    f"PSN outage recovery: profile {profile.id} reset to synced "
-                    f"with backdated last_synced"
+                    f"PSN outage recovery: profile {profile.id} reset to synced"
                 )
         except Profile.DoesNotExist:
             logger.warning(
