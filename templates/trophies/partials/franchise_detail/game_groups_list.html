@@ -69,9 +69,20 @@
                                         {% include 'trophies/partials/_game_flags.html' with game=game %}
                                     </div>
 
+                                    {% if game.defined_trophies %}
+                                        <div class="flex items-center gap-1.5 shrink-0 text-xs">
+                                            <span class="font-bold" style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</span>
+                                            <span class="font-bold" style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</span>
+                                            <span class="font-bold" style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</span>
+                                            {% if game.defined_trophies.platinum %}
+                                                <span class="font-bold" style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum }}</span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+
                                     {% if user_progress_stats %}
                                         {% if game.user_pg %}
-                                            <div class="flex items-center gap-1.5 shrink-0">
+                                            <div class="flex items-center gap-1.5 shrink-0 sm:border-l sm:border-base-content/10 sm:pl-3">
                                                 <div class="relative w-7 h-7 rounded-full shrink-0"
                                                      style="background: conic-gradient(var(--color-primary) {{ game.user_pg.progress }}%, var(--color-base-300) 0);"
                                                      title="{{ game.user_pg.progress }}% complete">
@@ -86,18 +97,7 @@
                                                 {% endif %}
                                             </div>
                                         {% else %}
-                                            <span class="text-[10px] uppercase tracking-wider text-base-content/30 font-semibold shrink-0">Unplayed</span>
-                                        {% endif %}
-                                    {% else %}
-                                        {% if game.defined_trophies %}
-                                            <div class="flex items-center gap-1.5 shrink-0 text-xs">
-                                                <span class="font-bold" style="color: var(--color-trophy-bronze)">{{ game.defined_trophies.bronze }}</span>
-                                                <span class="font-bold" style="color: var(--color-trophy-silver)">{{ game.defined_trophies.silver }}</span>
-                                                <span class="font-bold" style="color: var(--color-trophy-gold)">{{ game.defined_trophies.gold }}</span>
-                                                {% if game.defined_trophies.platinum %}
-                                                    <span class="font-bold" style="color: var(--color-trophy-platinum)">{{ game.defined_trophies.platinum }}</span>
-                                                {% endif %}
-                                            </div>
+                                            <span class="text-[10px] uppercase tracking-wider text-base-content/30 font-semibold shrink-0 sm:border-l sm:border-base-content/10 sm:pl-3">Unplayed</span>
                                         {% endif %}
                                     {% endif %}
                                 </a>
