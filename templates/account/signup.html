@@ -23,6 +23,13 @@
                 <form method="post" class="space-y-4">
                     {% csrf_token %}
 
+                    {# Honeypot: positioned off-screen so humans never see/tab to it. #}
+                    {# Bots that auto-fill every field trip the validator in CustomUserCreationForm.clean_website. #}
+                    <div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;">
+                        <label for="id_website">Website (leave blank)</label>
+                        <input type="text" name="website" id="id_website" tabindex="-1" autocomplete="off" value="">
+                    </div>
+
                     <div class="form-control">
                         <label class="text-xs font-semibold text-base-content/60 mb-1" for="id_email">Email</label>
                         <input type="email"

@@ -283,6 +283,9 @@ ACCOUNT_RATE_LIMITS = {
     'reset_password': '5/m',
     'confirm_email': '5/m',
     'login_failed': '10/m/ip,5/300s/key',  # 10/min per IP + 5 per 5min per email
+    # Tighter than allauth default (20/m/ip). Blunts botnet mass-signup that
+    # weaponizes the verification-email send as third-party email bombing.
+    'signup': '5/m/ip',
 }
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
@@ -488,6 +491,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "suppress_bot_magnet_405": {
+            "()": "plat_pursuit.logging_filters.SuppressBotMagnet405",
+        },
+    },
     "formatters": {
         "verbose": {
             "format": "{levelname} {asctime} {name} {message}",
@@ -500,6 +508,7 @@ LOGGING = {
             "level": "INFO",
             "formatter": "verbose",
             "stream": "ext://sys.stdout",
+            "filters": ["suppress_bot_magnet_405"],
         },
     },
     "loggers": {

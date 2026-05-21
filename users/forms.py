@@ -6,9 +6,30 @@ import pytz
 
 
 class CustomUserCreationForm(SignupForm):
+    # Honeypot. Real users never see this input (hidden off-screen in the
+    # template); scripted form-fillers populate every field they encounter
+    # and trip the validator. Pairs with ACCOUNT_RATE_LIMITS['signup'] to
+    # catch attackers below the per-IP throttle (e.g. residential proxies).
+    website = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'autocomplete': 'off',
+            'tabindex': '-1',
+            'aria-hidden': 'true',
+        }),
+        label='',
+    )
+
     class Meta:
         model = CustomUser
         fields = ("email", "password1", "password2")
+
+    def clean_website(self):
+        if self.cleaned_data.get('website'):
+            # Surface as a generic non-field-style error so the bot can't
+            # tell which input tripped it. Real users will never see this.
+            raise forms.ValidationError("Unable to process signup. Please try again later.")
+        return ''
 
     def clean_email(self):
         email = self.cleaned_data['email'].lower()
