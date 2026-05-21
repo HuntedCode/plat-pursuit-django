@@ -519,35 +519,47 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         # Whether selected tier requires platinum (tiers 1/3) or 100% (tiers 2/4)
         context['selected_tier_is_plat'] = selected_tier in [1, 3]
 
+        # Same Game queryset is reused for both the standalone concepts prefetch
+        # and the bundle members prefetch. raw_response is the full IGDB API blob
+        # (~30 KB per row); the badge detail page only reads cover-art fields, so
+        # loading raw_response inflates each game by ~30 KB for nothing —
+        # multiplied across all stages + concurrent requests, it was the trigger
+        # for the May 2026 web-server OOM.
+        _badge_game_qs = Game.objects.select_related('concept', 'concept__igdb_match').defer(
+            'concept__igdb_match__raw_response',
+        )
         stages = list(Stage.objects.filter(series_slug=badge.series_slug).order_by('stage_number').prefetch_related(
-            Prefetch(
-                'concepts__games',
-                queryset=Game.objects.select_related('concept', 'concept__igdb_match').defer(
-                    # raw_response is the full IGDB API blob (~30 KB per row).
-                    # The badge detail page needs the IGDBMatch row only for
-                    # cover art (igdb_cover_image_id + is_trusted), so loading
-                    # raw_response inflates each game by ~30 KB for nothing —
-                    # multiplied across all stages + concurrent requests, it
-                    # was the trigger for the May 2026 web-server OOM.
-                    'concept__igdb_match__raw_response',
-                ),
-            )
+            Prefetch('concepts__games', queryset=_badge_game_qs),
+            Prefetch('concept_bundles__concepts__games', queryset=_badge_game_qs),
+            'concept_bundles__concepts',
         ))
         context['stage_count'] = len(stages)
 
-        # Collect all games across all stages first (uses prefetched data).
+        # Collect all games across all stages (standalone + bundle members).
         # Sort by newest platform (PS5 > PS4 > VRs > PS3 > Vita), then alphabetical.
-        stage_games_map = {}
+        stage_games_map = {}  # stage.id -> sorted list of standalone-concept games
+        stage_bundle_games_map = {}  # stage.id -> {bundle.id: {concept.id: [games]}}
         all_games_set = set()
         for stage in stages:
-            games = set()
+            standalone_games = set()
             for concept in stage.concepts.all():
-                games.update(concept.games.all())
+                standalone_games.update(concept.games.all())
             stage_games_map[stage.id] = sorted(
-                games,
+                standalone_games,
                 key=lambda g: (platform_display_rank(g.title_platform), g.title_name.lower()),
             )
-            all_games_set.update(games)
+            all_games_set.update(standalone_games)
+
+            # Bundle games (separate from standalone so they render as their own row)
+            bundle_map = {}
+            for bundle in stage.concept_bundles.all():
+                member_map = {}
+                for concept in bundle.concepts.all():
+                    games_list = list(concept.games.all())
+                    member_map[concept.id] = games_list
+                    all_games_set.update(games_list)
+                bundle_map[bundle.id] = member_map
+            stage_bundle_games_map[stage.id] = bundle_map
 
         # Single bulk ProfileGame query instead of one per stage
         profile_games = {}
@@ -559,20 +571,23 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
         from trophies.services.rating_service import RatingService
 
+        def _build_game_entry(game, community_ratings_cache):
+            if game not in community_ratings_cache:
+                community_ratings_cache[game] = RatingService.get_cached_community_averages(game.concept)
+            return {
+                'game': game,
+                'profile_game': profile_games.get(game.id),
+                'community_ratings': community_ratings_cache[game],
+                'has_guide': bool(game.concept.guide_slug),
+            }
+
         structured_data = []
         for stage in stages:
             games = stage_games_map[stage.id]
 
             community_ratings = {}
-            for game in games:
-                community_ratings[game] = RatingService.get_cached_community_averages(game.concept)
 
-            all_game_entries = [{
-                'game': game,
-                'profile_game': profile_games.get(game.id),
-                'community_ratings': community_ratings.get(game),
-                'has_guide': bool(game.concept.guide_slug),
-            } for game in games]
+            all_game_entries = [_build_game_entry(game, community_ratings) for game in games]
 
             unobtainable = [g for g in all_game_entries if not g['game'].is_obtainable or g['game'].is_delisted]
             unobtainable_completed = sum(
@@ -580,12 +595,45 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 if g['profile_game'] and (g['profile_game'].progress == 100 or g['profile_game'].has_plat)
             )
 
+            # Bundle qualifiers: each renders as a single row showing aggregate
+            # progress across all member concepts. The bundle is "complete" (and
+            # synthesizes a platinum for tier evaluation) when every member has
+            # at least one game at progress=100.
+            bundles = []
+            bundle_games_for_stage = stage_bundle_games_map.get(stage.id, {})
+            for bundle in stage.concept_bundles.all():
+                member_games_by_concept = bundle_games_for_stage.get(bundle.id, {})
+                members = []
+                for concept in bundle.concepts.all():
+                    concept_games = member_games_by_concept.get(concept.id, [])
+                    member_game_entries = [_build_game_entry(g, community_ratings) for g in concept_games]
+                    is_fully_earned = any(
+                        e['profile_game'] and e['profile_game'].progress == 100
+                        for e in member_game_entries
+                    )
+                    members.append({
+                        'concept': concept,
+                        'games': member_game_entries,
+                        'is_fully_earned': is_fully_earned,
+                    })
+                completed_members = sum(1 for m in members if m['is_fully_earned'])
+                total_members = len(members)
+                bundles.append({
+                    'bundle': bundle,
+                    'label': bundle.label,
+                    'members': members,
+                    'is_complete': total_members > 0 and completed_members == total_members,
+                    'completed_members': completed_members,
+                    'total_members': total_members,
+                })
+
             structured_data.append({
                 'stage': stage,
                 'games': all_game_entries,
                 'obtainable_games': [g for g in all_game_entries if g['game'].is_obtainable and not g['game'].is_delisted],
                 'unobtainable_games': unobtainable,
                 'unobtainable_completed': unobtainable_completed,
+                'bundles': bundles,
             })
 
         all_badges = Badge.objects.by_series(badge.series_slug)
@@ -643,7 +691,15 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             # For stage progress: tiers 1/3 and megamix check has_plat, tiers 2/4 check 100%
             is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
             for data in structured_data:
-                stage_game_ids = {g['game'].id for g in data['games']}
+                standalone_game_ids = {g['game'].id for g in data['games']}
+                bundle_game_ids = {
+                    e['game'].id
+                    for bundle in data['bundles']
+                    for member in bundle['members']
+                    for e in member['games']
+                }
+                # All games on the stage (standalone + bundle members) for user-facing stats
+                stage_game_ids = standalone_game_ids | bundle_game_ids
                 stage_duration = timedelta()
                 stage_played = 0
                 stage_plats = 0
@@ -670,16 +726,20 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     'total': total_stage_games,
                     'percentage': round(stage_completed / total_stage_games * 100, 1) if total_stage_games else 0,
                 }
-                # 3-state completion indicator
+                # Standalone path: tier-aware "any game qualifies" check
                 has_any_100 = any(
                     profile_games.get(gid) and profile_games[gid].progress == 100
-                    for gid in stage_game_ids
+                    for gid in standalone_game_ids
                 )
-                has_any_plat = stage_plats > 0
-                # Tier-aware completion: plat tiers (1/3/megamix) require plat,
-                # 100% tiers (2/4) require full completion
-                stage_req_met = has_any_plat if is_plat_tier else has_any_100
-                if stage_req_met:
+                has_any_plat = any(
+                    profile_games.get(gid) and profile_games[gid].has_plat
+                    for gid in standalone_game_ids
+                )
+                standalone_req_met = has_any_plat if is_plat_tier else has_any_100
+                # Bundle path: any bundle whose every member is at progress=100
+                # synthesizes a platinum (counts for both plat-tier and 100%-tier).
+                bundle_req_met = any(b['is_complete'] for b in data['bundles'])
+                if standalone_req_met or bundle_req_met:
                     data['stage_completion_state'] = 'complete'
                 elif stage_played > 0:
                     data['stage_completion_state'] = 'partial'

@@ -1,13 +1,16 @@
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, F, IntegerField, Prefetch, Q, Value
 from django.db.models.functions import Cast, Coalesce
+from django.forms.models import BaseInlineFormSet
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -940,12 +943,97 @@ class BadgeAdmin(admin.ModelAdmin):
             kwargs['queryset'] = Badge.objects.filter(tier=1)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+class ConceptBundleInlineFormSet(BaseInlineFormSet):
+    """Validates that no Concept appears in multiple bundles on the same Stage,
+    that no bundle Concept is also a standalone qualifier on the parent Stage,
+    and that no bundle is empty."""
+
+    def clean(self):
+        super().clean()
+
+        # Collect concept ids per non-deleted bundle form. Reject empty bundles.
+        seen_by_concept = {}
+        for form in self.forms:
+            if not hasattr(form, 'cleaned_data'):
+                continue
+            if form.cleaned_data.get('DELETE'):
+                continue
+            if not form.cleaned_data:
+                # Skip blank extra forms the admin renders by default
+                continue
+            concepts = form.cleaned_data.get('concepts')
+            label = form.cleaned_data.get('label')
+            if not concepts:
+                # Only flag rows the user actually started filling in (has a label
+                # or otherwise has data) to avoid yelling about untouched extras.
+                if label:
+                    raise ValidationError(
+                        f"Bundle '{label}' has no Concepts. Add at least one Concept "
+                        f"or delete the bundle row."
+                    )
+                continue
+            for concept in concepts:
+                if concept.id in seen_by_concept:
+                    raise ValidationError(
+                        f"Concept '{concept}' appears in multiple bundles on this Stage. "
+                        f"A concept can belong to at most one bundle per Stage."
+                    )
+                seen_by_concept[concept.id] = form
+
+        # Reject overlap with the parent Stage's standalone concepts
+        stage = self.instance
+        if stage and stage.pk and seen_by_concept:
+            standalone_ids = set(stage.concepts.values_list('id', flat=True))
+            overlap = set(seen_by_concept.keys()) & standalone_ids
+            if overlap:
+                raise ValidationError(
+                    f"Concept id(s) {sorted(overlap)} are both standalone qualifiers on this Stage "
+                    f"and members of a bundle. Remove them from Stage.concepts first."
+                )
+
+
+class ConceptBundleInline(admin.TabularInline):
+    model = ConceptBundle
+    formset = ConceptBundleInlineFormSet
+    fields = ('label', 'concepts', 'sort_order')
+    autocomplete_fields = ['concepts']
+    extra = 0
+    verbose_name = "Concept Bundle"
+    verbose_name_plural = "Concept Bundles (episodic / grouped qualifiers)"
+
+
+class StageAdminForm(forms.ModelForm):
+    """Rejects standalone Stage.concepts that overlap with existing bundle members."""
+
+    class Meta:
+        model = Stage
+        fields = '__all__'
+
+    def clean_concepts(self):
+        concepts = self.cleaned_data.get('concepts') or []
+        if self.instance and self.instance.pk:
+            bundle_member_ids = set(
+                ConceptBundle.objects.filter(stage=self.instance)
+                .values_list('concepts__id', flat=True)
+            )
+            bundle_member_ids.discard(None)
+            overlap = {c.id for c in concepts} & bundle_member_ids
+            if overlap:
+                raise ValidationError(
+                    f"Concept id(s) {sorted(overlap)} are bundle members on this Stage. "
+                    f"Remove them from the bundle before adding as standalone qualifiers."
+                )
+        return concepts
+
+
 @admin.register(Stage)
 class StageAdmin(admin.ModelAdmin):
+    form = StageAdminForm
     list_display = ('__str__', 'series_slug', 'stage_number', 'title', 'required_tiers', 'has_online_trophies')
     list_filter = ('series_slug', 'stage_number', 'has_online_trophies')
     search_fields = ('title', 'series_slug')
     autocomplete_fields = ['concepts']
+    inlines = [ConceptBundleInline]
 
 @admin.register(UserBadge)
 class UserBadgeAdmin(admin.ModelAdmin):

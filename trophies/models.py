@@ -1020,6 +1020,12 @@ class Concept(models.Model):
             stage.concepts.add(self)
             stage.concepts.remove(other)
 
+        # ConceptBundle membership (per-bundle M2M)
+        for bundle in other.bundles.all():
+            if not bundle.concepts.filter(pk=self.pk).exists():
+                bundle.concepts.add(self)
+            bundle.concepts.remove(other)
+
         # GameFamilyProposal M2M removed — proposal model deleted in Phase 2.6.
 
         # Genre challenge slots
@@ -1636,7 +1642,7 @@ class Badge(models.Model):
         stages = Stage.objects.filter(
             Q(series_slug=self.series_slug)
             & (Q(required_tiers__len=0) | Q(required_tiers__contains=[self.tier]))
-        ).prefetch_related('concepts__games')
+        ).prefetch_related('concepts__games', 'concept_bundles__concepts')
 
         is_plat_check = False
         is_progress_check = False
@@ -1657,9 +1663,11 @@ class Badge(models.Model):
         else:
             return {}
 
-        # Build a mapping of stage_number -> set of game_ids for that stage
-        stage_games = {}  # {stage_number: set of game_ids}
+        # Build mappings: stage_number -> standalone game_ids, and stage_number -> list of bundle member-id sets
+        stage_games = {}
+        stage_bundles = {}
         all_game_ids = set()
+        bundle_concept_ids = set()
         for stage in stages:
             game_ids = set()
             for concept in stage.concepts.all():
@@ -1668,22 +1676,44 @@ class Badge(models.Model):
             stage_games[stage.stage_number] = game_ids
             all_game_ids.update(game_ids)
 
-        if not all_game_ids:
+            bundles = []
+            for bundle in stage.concept_bundles.all():
+                member_ids = frozenset(c.id for c in bundle.concepts.all())
+                if member_ids:
+                    bundles.append(member_ids)
+                    bundle_concept_ids.update(member_ids)
+            stage_bundles[stage.stage_number] = bundles
+
+        if not all_game_ids and not bundle_concept_ids:
             return {sn: False for sn in stage_games}
 
-        # Single query: fetch all completed game IDs for this profile
+        # Fetch completed game IDs for this profile (standalone concept satisfaction)
         completed_game_ids = set(
             ProfileGame.objects.filter(
                 profile=profile, game_id__in=all_game_ids
             ).filter(condition).values_list('game_id', flat=True)
-        )
+        ) if all_game_ids else set()
 
-        # Check per-stage completion in memory
+        # Fetch fully-earned concept ids (for bundle satisfaction). A bundle is
+        # satisfied when every member concept has at least one game at progress=100;
+        # that synthesized completion counts for both plat-check and progress-check.
+        fully_earned_concept_ids = set(
+            ProfileGame.objects
+            .filter(profile=profile, progress=100, game__concept_id__in=bundle_concept_ids)
+            .values_list('game__concept_id', flat=True)
+            .distinct()
+        ) if bundle_concept_ids else set()
+
         completion = {}
         for stage_number, game_ids in stage_games.items():
-            if not game_ids:
+            bundles = stage_bundles.get(stage_number, [])
+            if not game_ids and not bundles:
                 continue
-            completion[stage_number] = bool(completed_game_ids & game_ids)
+            standalone_satisfied = bool(completed_game_ids & game_ids) if game_ids else False
+            bundle_satisfied = any(
+                member_ids.issubset(fully_earned_concept_ids) for member_ids in bundles
+            ) if bundles else False
+            completion[stage_number] = standalone_satisfied or bundle_satisfied
         return completion
 
     def __str__(self):
@@ -1980,6 +2010,37 @@ class Stage(models.Model):
         
     def applies_to_tier(self, tier: int) -> bool:
         return not self.required_tiers or tier in self.required_tiers
+
+
+class ConceptBundle(models.Model):
+    """A grouped set of Concepts that act as a single qualifier on a Stage.
+
+    Models episodic releases where a game's trophies are split across multiple
+    Concepts with no real platinum (e.g. Telltale PS3 episodic releases). The
+    bundle is satisfied when every member Concept has at least one ProfileGame
+    at progress=100 for the profile. That synthesized completion counts as both
+    the platinum check (tiers 1/3) and the progress check (tiers 2/4), so a
+    fully cleared bundle behaves like a platinum for stage tier evaluation.
+
+    Membership rule: a Concept must not appear both in Stage.concepts and in a
+    ConceptBundle on the same Stage (enforced by StageAdmin/ConceptBundleForm).
+    The same Concept may be a bundle member on Stage A and a standalone on
+    Stage B; bundles only constrain membership within a single Stage.
+    """
+    stage = models.ForeignKey(Stage, on_delete=models.CASCADE, related_name='concept_bundles')
+    label = models.CharField(max_length=120, help_text="Display label, e.g. 'PS3 Episodic'")
+    concepts = models.ManyToManyField(Concept, related_name='bundles', help_text='Concepts grouped under this bundle.')
+    sort_order = models.PositiveSmallIntegerField(default=0, help_text='Display order within the Stage.')
+
+    class Meta:
+        ordering = ['sort_order', 'id']
+        indexes = [
+            models.Index(fields=['stage'], name='conceptbundle_stage_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.stage} - {self.label}"
+
 
 class TitleManager(models.Manager):
     """Fetch titles earned by a user, ordered alphabetically. Usage: Title.objects.earned_by_user(profile)"""

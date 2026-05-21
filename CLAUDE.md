@@ -100,6 +100,7 @@ Currently handled by `absorb()`:
 - Profile.selected_background
 - Badge.most_recent_concept
 - Stage.concepts (M2M)
+- ConceptBundle.concepts (M2M, per-bundle membership; skips duplicates so target's existing bundle membership isn't disturbed)
 - StageCompletionEvent.concept (FK, SET_NULL)
 - ConceptSplitEvent.parent_concept (FK) + .child_concepts (M2M)
 - Genre challenge slots + bonus slots

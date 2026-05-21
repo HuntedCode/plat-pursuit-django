@@ -54,7 +54,7 @@ XP is denormalized into `ProfileGamification` (one row per profile) with both a 
 
 | File | Purpose |
 |------|---------|
-| `trophies/models.py` | Badge, Stage, UserBadge, UserBadgeProgress, ProfileGamification, StatType, StageStatValue, Milestone, UserMilestone, UserMilestoneProgress, Title, UserTitle model definitions |
+| `trophies/models.py` | Badge, Stage, ConceptBundle, UserBadge, UserBadgeProgress, ProfileGamification, StatType, StageStatValue, Milestone, UserMilestone, UserMilestoneProgress, Title, UserTitle model definitions |
 | `trophies/managers.py` | BadgeManager, BadgeQuerySet, MilestoneManager, MilestoneQuerySet with custom filter methods |
 | `trophies/services/badge_service.py` | Core badge evaluation, awarding, revocation, Discord role management, and batch checking |
 | `trophies/services/xp_service.py` | XP calculation, ProfileGamification updates, and bulk update context manager |
@@ -91,9 +91,25 @@ The central model. Each row represents one tier of one badge series.
 
 - `series_slug`: Links to the badge series (not a FK; matched by slug).
 - `stage_number`: Position within the series. 0 = optional (skipped during evaluation).
-- `concepts`: M2M to Concept. A stage is "complete" when any Game under any linked Concept meets the tier's criterion.
-- `required_tiers`: PostgreSQL ArrayField. Empty = all tiers. `[1, 2]` = only Bronze and Silver.
+- `concepts`: M2M to Concept (standalone qualifiers). A stage is "complete" when any Game under any linked Concept meets the tier's criterion, OR when any attached ConceptBundle is fully cleared.
+- `required_tiers`: PostgreSQL ArrayField gating which tier evaluations even consider this stage. Empty = all tiers. `[3, 4]` = only Gold and Platinum tier passes see this stage (used for legacy-console-only stages so Bronze/Silver skip them).
+- `concept_bundles`: Reverse FK to ConceptBundle. Bundles act as additional qualifiers on the stage (see below).
 - `stage_icon`: Auto-populated from the first Concept's icon via the `auto_populate_stage_icon` signal.
+
+### ConceptBundle
+
+A grouped set of Concepts that act as a single qualifier on a Stage. Models episodic releases where a game's trophies are split across multiple Concepts with no real platinum (e.g. Telltale's PS3 episodic releases — five per-chapter trophy lists, none of which carry a platinum, but together represent one complete game).
+
+- `stage`: FK to the Stage this bundle qualifies on.
+- `label`: Display label, e.g. "PS3 Episodic".
+- `concepts`: M2M to Concept. Members of the bundle.
+- `sort_order`: Display order within the Stage.
+
+**Satisfaction rule:** the bundle is "complete" when every member Concept has at least one ProfileGame at `progress=100` for the profile. That synthesized completion counts as BOTH the plat-check (tiers 1/3) and the progress-check (tiers 2/4) — a fully cleared bundle behaves like a platinum for stage tier evaluation, which is the whole point of the abstraction.
+
+**Membership exclusivity:** a Concept must not appear both in `Stage.concepts` and in a `ConceptBundle.concepts` on the same Stage. Admin (`StageAdminForm.clean_concepts` and `ConceptBundleInlineFormSet.clean`) enforces this in both directions. A Concept may be a bundle member on Stage A and a standalone on Stage B — the constraint is per-Stage only.
+
+**StageCompletionEvent when satisfied by a bundle:** the event's `concept` is set to the bundle member with the latest `most_recent_trophy_date` among members at `progress=100` (the "tipper" that finished the bundle), and `completed_at` is that date (or `badge.created_at` if retroactive). See `_find_stage_completion_details`.
 
 ### UserBadge
 
@@ -144,9 +160,14 @@ Badge (series_slug, tier)
   |-- progress_for: UserBadgeProgress --> Profile
   |
   +-- series_slug links to Stage.series_slug
-        |-- concepts --> Concept (M2M)
-              |-- games --> Game
-                    |-- ProfileGame --> Profile (has_plat, progress)
+        |-- concepts --> Concept (M2M, standalone qualifiers)
+        |     |-- games --> Game
+        |           |-- ProfileGame --> Profile (has_plat, progress)
+        |
+        +-- concept_bundles --> ConceptBundle (grouped qualifiers)
+              |-- concepts --> Concept (M2M, members)
+                    |-- games --> Game
+                          |-- ProfileGame --> Profile (progress=100 on all members satisfies bundle)
 
 ProfileGamification (1:1 Profile)
   |-- total_badge_xp, series_badge_xp, total_badges_earned
@@ -172,8 +193,9 @@ The primary evaluation path runs during PSN sync completion:
 3. **Context pre-fetch** (`_build_badge_context`): A single batch query gathers:
    - All earned badge IDs for this profile (avoids per-badge existence checks).
    - A `badges_by_key` dict keyed by `(series_slug, tier)` for prerequisite lookups.
-   - All stage data: `series_slug -> [(stage_number, required_tiers, game_ids)]`.
-   - Sets of `plat_game_ids` and `complete_game_ids` for the profile.
+   - All stage data: `series_slug -> [(stage_number, required_tiers, game_ids, bundles)]` where `bundles` is a list of `(bundle_id, frozenset[member_concept_id])` tuples.
+   - Sets of `plat_game_ids` and `complete_game_ids` for the profile (for standalone qualifier checks).
+   - `fully_earned_concept_ids`: set of concept IDs where any of the concept's games is at `progress=100` for this profile, scoped to bundle members only (used to evaluate ConceptBundle satisfaction).
 
    This context turns what would be O(2B) queries (2 per badge for stage completion + profile game checks) into O(0) during iteration.
 
@@ -316,7 +338,13 @@ All 12 calendar month handlers plus `calendar_months_total` share a single `_cal
 `notify_bot_role_earned()` and `notify_bot_role_removed()` short-circuit when `settings.DEBUG` is True. This means local development never triggers Discord API calls, which is correct but can make debugging role-related issues difficult. Test in staging with DEBUG=False if investigating Discord integration.
 
 ### `Concept.absorb()` must handle badge-related relationships
-When a Concept is reassigned (and the old one orphaned), `absorb()` migrates data. Badge-related data flows through `Stage.concepts` (M2M) and `Badge.most_recent_concept` (FK). Both are handled in absorb(), but if new Concept relationships are added, absorb() must be updated or badge evaluation may reference stale data.
+When a Concept is reassigned (and the old one orphaned), `absorb()` migrates data. Badge-related data flows through `Stage.concepts` (M2M), `ConceptBundle.concepts` (M2M), and `Badge.most_recent_concept` (FK). All three are handled in absorb(), but if new Concept relationships are added, absorb() must be updated or badge evaluation may reference stale data.
+
+### ConceptBundle membership is scoped per-Stage, not global
+A Concept can be a bundle member on Stage A AND a standalone qualifier on Stage B without conflict — the exclusivity rule only applies within a single Stage. Admin validation in `StageAdminForm` and `ConceptBundleInlineFormSet` enforces the per-Stage rule. If you bypass admin (e.g. via shell or a data migration), nothing stops you from putting the same concept both in `Stage.concepts` and a bundle on the same Stage; the eval logic is still correct (satisfying either path satisfies the stage, both are idempotent), but it's confusing UX.
+
+### Bundle satisfaction always uses progress=100, regardless of tier
+The bundle's satisfaction check is fixed to `every member at progress=100`. It does NOT use `has_plat=True` for plat-check tiers, because bundle members typically have no platinum trophy at all (that's the whole reason bundles exist). A fully cleared bundle is treated as both a synthesized platinum (for tier 1/3 evaluation) and as 100% complete (for tier 2/4 evaluation). This is by design; do not "fix" the bundle path to follow `is_plat_check`.
 
 ### Series slug is a string match, not a FK
 Stages link to badges via `series_slug` string matching, not a foreign key. This means orphan stages (with a slug that no Badge uses) and orphan badges (with a slug that no Stage references) are possible. The `update_badge_requirements` command reconciles these but it must be run manually after structural changes.

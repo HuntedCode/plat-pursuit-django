@@ -7,6 +7,14 @@
             {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
             <div class="transition-[grid-template-rows] duration-300 ease-in-out grid" data-stage-games="{{ stage.stage_number }}" style="grid-template-rows: 1fr;">
                 <div class="overflow-hidden">
+                    {% comment %}
+                    Concept Bundle qualifiers (episodic / grouped). A fully cleared
+                    bundle synthesizes a platinum for the stage's tier eval.
+                    {% endcomment %}
+                    {% for bundle in data.bundles %}
+                        {% include 'trophies/partials/badge_detail/badge_detail_bundle.html' with bundle=bundle %}
+                    {% endfor %}
+
                     {% if data.obtainable_games %}
                         {# Unobtainable/delisted games: compact collapsible list (only when obtainable games exist) #}
                         {% with data.unobtainable_games as unobtainable %}
