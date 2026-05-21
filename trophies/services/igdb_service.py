@@ -1791,16 +1791,42 @@ class IGDBService:
 
     @classmethod
     def _create_concept_companies(cls, concept, involved_companies):
-        """Create Company and ConceptCompany records from IGDB involved_companies data."""
+        """Create Company and ConceptCompany records from IGDB involved_companies data.
+
+        IGDB sometimes splits a single company's roles across multiple
+        involved_companies rows (e.g. one row with developer=True, a second
+        row with publisher=True, both for the same studio). The naive
+        per-row update_or_create overwrites earlier flags with later ones
+        and silently loses roles. We OR-merge all four role flags per
+        IGDB company id before writing, so a studio that both develops
+        and publishes ends up with both flags True.
+        """
         if not involved_companies:
             return
 
+        merged: dict[int, dict] = {}
         for ic in involved_companies:
             company_data = ic.get('company')
             if not company_data or not isinstance(company_data, dict) or 'name' not in company_data:
                 continue
+            igdb_company_id = company_data.get('id')
+            if igdb_company_id is None:
+                continue
 
-            company = cls._get_or_create_company(company_data)
+            entry = merged.setdefault(igdb_company_id, {
+                'company_data': company_data,
+                'is_developer': False,
+                'is_publisher': False,
+                'is_porting': False,
+                'is_supporting': False,
+            })
+            entry['is_developer'] = entry['is_developer'] or bool(ic.get('developer'))
+            entry['is_publisher'] = entry['is_publisher'] or bool(ic.get('publisher'))
+            entry['is_porting'] = entry['is_porting'] or bool(ic.get('porting'))
+            entry['is_supporting'] = entry['is_supporting'] or bool(ic.get('supporting'))
+
+        for entry in merged.values():
+            company = cls._get_or_create_company(entry['company_data'])
             if not company:
                 continue
 
@@ -1809,10 +1835,10 @@ class IGDBService:
                     concept=concept,
                     company=company,
                     defaults={
-                        'is_developer': ic.get('developer', False),
-                        'is_publisher': ic.get('publisher', False),
-                        'is_porting': ic.get('porting', False),
-                        'is_supporting': ic.get('supporting', False),
+                        'is_developer': entry['is_developer'],
+                        'is_publisher': entry['is_publisher'],
+                        'is_porting': entry['is_porting'],
+                        'is_supporting': entry['is_supporting'],
                     },
                 )
             except IntegrityError:
