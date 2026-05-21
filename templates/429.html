@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}429 - Pursuit Cooldown{% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+{% block content %}
+<div class="container mx-auto p-4 max-w-2xl flex flex-col items-center justify-center mt-8 lg:mt-12">
+
+    {# Fake Share Card - mirrors the 404 pattern and PlatPursuit's real platinum share cards #}
+    <div style="width: 100%; max-width: 600px; background: linear-gradient(to bottom right, #2a2e34, #32363d, #2a2e34); padding: 12px; font-family: system-ui, -apple-system, sans-serif; box-sizing: border-box; border-radius: 12px;">
+        <div style="border: 3px solid #ffaa5c; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(255, 170, 92, 0.2); overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box;">
+
+            {# Main Content Area #}
+            <div style="display: flex; padding: 16px; gap: 16px; box-sizing: border-box;">
+
+                {# Left Column: Logo + Hourglass #}
+                <div style="display: flex; flex-direction: column; gap: 8px; width: 140px; flex-shrink: 0;">
+                    <div style="width: 140px; height: 140px; border: 4px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: #2a2e34; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box;">
+                        <img src="{% static 'images/logo.png' %}" style="width: 80%; height: 80%; object-fit: contain;" alt="PlatPursuit Logo" />
+                    </div>
+                    {# Hourglass icon box #}
+                    <div style="width: 140px; height: 140px; border: 4px solid #1a1b1f; border-radius: 8px; overflow: hidden; background: linear-gradient(to bottom right, #32363d, #2a2e34); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-sizing: border-box;">
+                        <svg style="height: 56px; width: 56px; opacity: 0.4;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffaa5c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 22h14"></path>
+                            <path d="M5 2h14"></path>
+                            <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+                            <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+                        </svg>
+                    </div>
+                </div>
+
+                {# Right Column: Info & Stats #}
+                <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+
+                    {# Banner #}
+                    <div style="margin-bottom: 12px; padding: 8px 14px; background: linear-gradient(to right, rgba(255, 170, 92, 0.15), rgba(255, 170, 92, 0.05)); border-left: 4px solid #ffaa5c; border-radius: 0 8px 8px 0; white-space: nowrap;">
+                        <svg style="display: inline-block; height: 20px; width: 20px; vertical-align: middle; margin-right: 8px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffaa5c"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 11h-2V7h2v6zm0 4h-2v-2h2v2z"></path></svg>
+                        <span style="font-size: 18px; font-weight: bold; color: #ffaa5c; text-transform: uppercase; letter-spacing: 0.1em; font-style: italic; vertical-align: middle;">Pursuit Cooldown</span>
+                    </div>
+
+                    {# Title & Subtitle #}
+                    <div style="margin-bottom: 8px;">
+                        <h1 style="font-size: 22px; font-weight: bold; color: #f5f7fc; line-height: 1.2; margin: 0 0 4px 0;">429: Too Many Pursuits</h1>
+                        <p style="font-size: 14px; color: rgba(245, 247, 252, 0.7); font-style: italic; margin: 0;">
+                            Throttled by <span style="color: #ffaa5c; font-weight: 600;">The Server</span>
+                        </p>
+                    </div>
+
+                    {# Stats Grid #}
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                        <div style="background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 10px 12px; min-width: 90px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                            <div style="font-size: 10px; color: #ffaa5c; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 2px;">Requests</div>
+                            <div style="font-size: 22px; font-weight: bold; color: #f5f7fc;">∞</div>
+                        </div>
+                        <div style="background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 10px 12px; min-width: 90px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                            <div style="font-size: 10px; color: #67d1f8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 2px;">Patience</div>
+                            <div style="font-size: 22px; font-weight: bold; color: #f5f7fc;">0%</div>
+                        </div>
+                        <div style="background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 10px 12px; min-width: 90px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                            <div style="font-size: 10px; color: #67f8c8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 2px;">Cooldown</div>
+                            <div style="font-size: 22px; font-weight: bold; color: #f5f7fc;">60s</div>
+                        </div>
+                        <div style="background: rgba(42, 46, 52, 0.8); border: 3px solid #1a1b1f; border-radius: 8px; padding: 10px 12px; min-width: 90px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+                            <div style="font-size: 10px; color: #9580ff; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold; font-style: italic; margin-bottom: 2px;">Trophies</div>
+                            <div style="font-size: 22px; font-weight: bold; color: #f5f7fc;">+0</div>
+                        </div>
+                    </div>
+
+                    {# Bottom Pills #}
+                    <div style="margin-top: auto; padding-top: 10px;">
+                        <span style="display: inline-block; background: rgba(255, 170, 92, 0.1); border: 2px solid #ffaa5c; color: #ffaa5c; padding: 6px 14px; border-radius: 9999px; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;">
+                            On Cooldown
+                        </span>
+                        <span style="display: inline-block; background: rgba(42, 46, 52, 0.8); border: 2px solid #1a1b1f; color: rgba(245, 247, 252, 0.7); padding: 6px 14px; border-radius: 9999px; font-size: 12px; font-weight: 600; margin-left: 8px;">
+                            Try Again Soon
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {# Footer #}
+            <div style="border-top: 2px solid #1a1b1f; background: rgba(42, 46, 52, 0.5); height: 44px; box-sizing: border-box; line-height: 44px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center;">
+                    <img src="{% static 'images/logo.png' %}" style="width: 24px; height: 24px; margin-right: 8px; border-radius: 50%;" alt="Platinum Pursuit" />
+                    <span style="font-size: 14px; color: #ffaa5c; font-weight: bold; font-style: italic;">platpursuit.com</span>
+                </div>
+                <span style="font-size: 11px; color: rgba(245, 247, 252, 0.5); font-style: italic;">Patience is a hunter's first virtue...</span>
+            </div>
+        </div>
+    </div>
+
+    {# Below the card: flavor + nav #}
+    <div class="text-center mt-6 max-w-md">
+        <p class="text-base-content/70 mb-6">
+            You've made too many requests in a short window. Give it a minute and try again. Trophies don't go anywhere.
+        </p>
+        <div class="flex flex-row gap-3 w-full">
+            <a href="{% url 'home' %}" class="btn btn-primary flex-1">Back to Home</a>
+            <a href="{% url 'account_login' %}" class="btn btn-ghost border-base-300 flex-1">Sign In</a>
+        </div>
+
+        {# Random fun fact #}
+        <div class="divider my-4"></div>
+        <p class="text-xs text-base-content/40 italic" id="fun-fact-429"></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block js_scripts %}
+<script>
+    (function() {
+        const facts = [
+            "Speedrunning the login form? The server appreciates the enthusiasm. Also: please don't.",
+            "Fun fact: even Platinum hunters take breaks. This one is yours.",
+            "Rate limits exist because some folks out there are not as polite as you. Sorry about that.",
+            "The server is fine. You're fine. We just need a moment.",
+            "A 60-second cooldown is roughly the time it takes to earn one trophy in a JRPG. Almost.",
+        ];
+        const el = document.getElementById('fun-fact-429');
+        if (el) {
+            el.textContent = facts[Math.floor(Math.random() * facts.length)];
+        }
+    })();
+</script>
+{% endblock %}
