@@ -4718,6 +4718,19 @@
                 `.collectible-areas-container[data-tab-id="${tabId}"]`
             );
             if (!container) return;
+
+            // Snapshot current area open/closed state before we wipe and
+            // re-render. Without this, any add/edit triggers renderAll →
+            // every card resets to open, which is jarring after a writer
+            // has deliberately collapsed several to focus on one. New
+            // areas (not in the snapshot) default to open via
+            // _buildAreaCard's existing behavior.
+            this._areaOpenState = {};
+            container.querySelectorAll('.collectible-area-card').forEach(card => {
+                const key = card.dataset.areaId;
+                if (key) this._areaOpenState[key] = card.open;
+            });
+
             container.innerHTML = '';
 
             const empty = container.parentElement.querySelector('.collectible-areas-empty');
@@ -4760,8 +4773,16 @@
             const areaId = isUnsorted ? null : area.id;
             el.dataset.areaId = isUnsorted ? 'null' : String(areaId);
             if (!isUnsorted) el.dataset.itemId = String(areaId);
-            // Open by default so authors can see items without an extra click.
-            el.open = true;
+            // Restore the writer's collapse choice across re-renders. The
+            // snapshot is captured in `_renderAreas` before innerHTML
+            // wipes the DOM. Areas not in the snapshot (brand new) fall
+            // back to open so the new card's name input is immediately
+            // visible / typeable.
+            const snapKey = el.dataset.areaId;
+            const remembered = this._areaOpenState
+                ? this._areaOpenState[snapKey]
+                : undefined;
+            el.open = remembered === undefined ? true : remembered;
 
             const nameInput = el.querySelector('.collectible-area-name-input');
             const deleteBtn = el.querySelector('.collectible-area-delete-btn');
