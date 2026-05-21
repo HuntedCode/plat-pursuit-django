@@ -14,10 +14,10 @@
         </p>
     </div>
 </div>
-{# When the banner is present, push the sticky navbar and sub-nav down so
-   they stack vertically beneath it instead of being overlapped. Uses CSS
-   :has() so the offset applies only while the banner is rendered. #}
 <style>
+    /* Push the sticky navbar + hub-subnav down by the banner's height so
+       they stack vertically below it instead of being overlapped. :has()
+       scopes this to the case where the banner is actually rendered. */
     body:has(#site-banner-psn-outage) .navbar { top: 36px; }
     body:has(#site-banner-psn-outage) .hub-subnav { top: calc(36px + 4rem); }
     @media (min-width: 1024px) {
