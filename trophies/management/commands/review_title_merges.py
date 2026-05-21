@@ -335,9 +335,12 @@ class Command(BaseCommand):
 
         Three resolution flavours, in priority order:
 
-          * EXACT: concept title + every game's title_name are byte-equal
-            to IGDB (or IGDB + legacy suffix for the concept). Lock + mark
-            reviewed without rewriting anything.
+          * EXACT: concept title is byte-equal to the canonical form
+            (IGDB name + legacy suffix when applicable, bare IGDB name
+            otherwise) AND every game's title_name is byte-equal to the
+            raw IGDB name. Lock + mark reviewed without rewriting anything.
+            A legacy concept whose title equals the bare IGDB name falls
+            into NORMALIZED instead so the suffix gets applied.
 
           * NORMALIZED: concept + every game match IGDB after
             `_normalize_for_merge`, but byte representations differ. The
@@ -390,8 +393,11 @@ class Command(BaseCommand):
 
             concept_title = concept.unified_title or ''
 
-            # Exact match first — cheapest check.
-            concept_exact = concept_title in (igdb_name, canonical_concept_title)
+            # Exact match first — cheapest check. Must equal the full
+            # canonical form (with legacy suffix when applicable); a
+            # legacy concept whose title equals the bare IGDB name falls
+            # through to the normalized branch so the suffix gets added.
+            concept_exact = concept_title == canonical_concept_title
             games_exact = all(g.title_name == igdb_name for g in games)
 
             # Normalized fallback. Casefold + whitespace collapse + " - " -> ":"
