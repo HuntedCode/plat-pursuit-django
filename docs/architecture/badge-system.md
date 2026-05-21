@@ -94,7 +94,7 @@ The central model. Each row represents one tier of one badge series.
 - `concepts`: M2M to Concept (standalone qualifiers). A stage is "complete" when any Game under any linked Concept meets the tier's criterion, OR when any attached ConceptBundle is fully cleared.
 - `required_tiers`: PostgreSQL ArrayField gating which tier evaluations even consider this stage. Empty = all tiers. `[3, 4]` = only Gold and Platinum tier passes see this stage (used for legacy-console-only stages so Bronze/Silver skip them).
 - `concept_bundles`: Reverse FK to ConceptBundle. Bundles act as additional qualifiers on the stage (see below).
-- `stage_icon`: Auto-populated from the first Concept's icon via the `auto_populate_stage_icon` signal.
+- `stage_icon`: Auto-populated by the `auto_populate_stage_icon` signal. Precedence: first standalone Concept's `concept_icon_url`, falling back to the first ConceptBundle's first member when no standalone is attached. A parallel signal on `ConceptBundle.concepts.through` keeps bundle-only stages in sync.
 
 ### ConceptBundle
 

@@ -2,7 +2,7 @@ import logging
 from django.db.models.signals import post_save, post_delete, m2m_changed, pre_save
 from django.dispatch import receiver
 from django.db.models import F
-from trophies.models import UserBadge, UserBadgeProgress, Stage, Profile, EarnedTrophy, ProfileGame
+from trophies.models import UserBadge, UserBadgeProgress, Stage, ConceptBundle, Profile, EarnedTrophy, ProfileGame
 
 logger = logging.getLogger(__name__)
 
@@ -374,43 +374,55 @@ def _update_earner_leaderboard_on_badge_change(profile, series_slug):
 
 # --- Stage Icon Auto-Population ---
 
+def _compute_stage_icon(stage):
+    """Resolve a Stage's icon source by precedence.
+
+    Standalone Stage.concepts win over ConceptBundle members so a stage with
+    both qualifier types keeps its original icon. Bundles provide the icon for
+    bundle-only stages (e.g. PS3-episodic-only games where no full-list concept
+    is attached). Returns the icon URL string or None.
+    """
+    first_standalone = stage.concepts.first()
+    if first_standalone:
+        return first_standalone.concept_icon_url or None
+    for bundle in stage.concept_bundles.order_by('sort_order', 'id'):
+        first_member = bundle.concepts.first()
+        if first_member:
+            return first_member.concept_icon_url or None
+    return None
+
+
+def _refresh_stage_icon(stage):
+    new_icon = _compute_stage_icon(stage)
+    if stage.stage_icon != new_icon:
+        stage.stage_icon = new_icon
+        stage.save(update_fields=['stage_icon'])
+
+
 @receiver(m2m_changed, sender=Stage.concepts.through, dispatch_uid="auto_populate_stage_icon")
 def auto_populate_stage_icon(sender, instance, action, **kwargs):
-    """
-    Auto-populate Stage.stage_icon from first Concept.concept_icon_url.
+    """Auto-populate Stage.stage_icon when Stage.concepts changes.
 
-    Triggers when:
-    - Concepts are added to a Stage (post_add) - syncs icon to first concept
-    - All concepts are cleared from a Stage (post_clear) - clears icon
-
-    Always updates stage_icon to match the first concept, overwriting any manual changes.
+    Falls back to ConceptBundle members when no standalone Concept is attached.
     """
+    if action not in ('post_add', 'post_clear'):
+        return
     try:
-        if action == 'post_add':
-            # Always sync to first concept's icon
-            first_concept = instance.concepts.first()
-            if first_concept and first_concept.concept_icon_url:
-                instance.stage_icon = first_concept.concept_icon_url
-                instance.save(update_fields=['stage_icon'])
-                logger.debug(
-                    f"Auto-populated stage_icon for {instance} from {first_concept}"
-                )
-            elif first_concept and not first_concept.concept_icon_url:
-                # First concept exists but has no icon - clear stage icon
-                instance.stage_icon = None
-                instance.save(update_fields=['stage_icon'])
-                logger.debug(
-                    f"Cleared stage_icon for {instance} (first concept has no icon)"
-                )
+        _refresh_stage_icon(instance)
+    except Exception:
+        logger.exception(f"Failed to refresh stage_icon for {instance}")
 
-        elif action == 'post_clear':
-            # Clear icon when all concepts removed
-            if instance.stage_icon:
-                instance.stage_icon = None
-                instance.save(update_fields=['stage_icon'])
-                logger.debug(f"Cleared stage_icon for {instance} (all concepts removed)")
 
-    except Exception as e:
-        logger.exception(
-            f"Failed to auto-populate stage_icon for {instance}: {e}"
-        )
+@receiver(m2m_changed, sender=ConceptBundle.concepts.through, dispatch_uid="auto_populate_stage_icon_bundle")
+def auto_populate_stage_icon_from_bundle(sender, instance, action, **kwargs):
+    """Auto-populate Stage.stage_icon when a bundle's members change.
+
+    Bundle changes only matter for the icon when the Stage has no standalone
+    Concept; _refresh_stage_icon enforces that precedence.
+    """
+    if action not in ('post_add', 'post_clear'):
+        return
+    try:
+        _refresh_stage_icon(instance.stage)
+    except Exception:
+        logger.exception(f"Failed to refresh stage_icon from bundle {instance}")
