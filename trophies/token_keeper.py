@@ -219,6 +219,12 @@ class TokenKeeper:
         # PSN outage circuit breaker
         self._psn_outage_active = False
         self._psn_outage_lock = threading.Lock()
+        # Half-open recovery state: count of consecutive successful probes
+        # while the breaker is open. Only touched by the health thread, so
+        # no lock needed. Banner stays up until this hits
+        # PSN_OUTAGE_RECOVERY_THRESHOLD, preventing flapping during partial
+        # PSN outages where a single lucky probe used to clear the flag.
+        self._psn_outage_probe_successes = 0
 
         running_key = f"token_keeper:running:{self.machine_id}"
         if redis_client.get(running_key):
@@ -844,43 +850,69 @@ class TokenKeeper:
     def _check_psn_outage(self):
         """Check and manage PSN outage state.
 
-        When outage is active: refresh TTL and probe PSN to detect recovery.
-        When outage is not active: sync in-memory flag from Redis (handles
-        cross-machine detection).
+        Uses a half-open recovery pattern. While the breaker is open we
+        probe PSN once per health tick (60s) and require
+        ``RECOVERY_THRESHOLD`` consecutive successes before clearing the
+        banner. A single failed probe resets the counter, snapping us back
+        to fully open. This prevents the flapping observed during partial
+        PSN outages where lucky single-probe successes used to clear the
+        flag while user-facing syncs kept failing.
+
+        When the outage is not active: sync in-memory flag and counter
+        from Redis (handles cross-machine detection).
         """
         REDIS_KEY = 'site:psn_outage'
         TTL = 600
+        RECOVERY_THRESHOLD = 3
 
         try:
             existing = redis_client.get(REDIS_KEY)
 
             if existing:
                 recovered = self._probe_psn_api()
+                redis_client.expire(REDIS_KEY, TTL)
 
                 if recovered:
-                    redis_client.delete(REDIS_KEY)
-                    redis_client.delete('psn:5xx_timestamps')
-                    with self._psn_outage_lock:
-                        self._psn_outage_active = False
-                    logger.info(
-                        "PSN OUTAGE CLEARED: API probe succeeded. Circuit breaker reset."
-                    )
+                    self._psn_outage_probe_successes += 1
+                    if self._psn_outage_probe_successes >= RECOVERY_THRESHOLD:
+                        redis_client.delete(REDIS_KEY)
+                        redis_client.delete('psn:5xx_timestamps')
+                        with self._psn_outage_lock:
+                            self._psn_outage_active = False
+                        self._psn_outage_probe_successes = 0
+                        logger.info(
+                            "PSN OUTAGE CLEARED: %d consecutive probe successes. "
+                            "Circuit breaker reset.",
+                            RECOVERY_THRESHOLD,
+                        )
+                    else:
+                        with self._psn_outage_lock:
+                            self._psn_outage_active = True
+                        logger.info(
+                            "PSN outage probe succeeded (%d/%d). Banner stays up.",
+                            self._psn_outage_probe_successes,
+                            RECOVERY_THRESHOLD,
+                        )
                 else:
-                    redis_client.expire(REDIS_KEY, TTL)
+                    self._psn_outage_probe_successes = 0
                     with self._psn_outage_lock:
                         self._psn_outage_active = True
                     logger.warning("PSN outage still active. Probe failed.")
             else:
                 with self._psn_outage_lock:
                     self._psn_outage_active = False
+                self._psn_outage_probe_successes = 0
         except Exception as e:
             logger.error(f"Error checking PSN outage state: {e}")
 
     def _probe_psn_api(self) -> bool:
-        """Make a lightweight PSN API call to check if the service has recovered.
+        """Probe PSN with two endpoints to check if the service has recovered.
 
-        Uses trophy_summary for a known synced profile. Returns True if the
-        call succeeds, False on any error.
+        Tests ``trophy_summary`` (lightweight) AND ``trophy_titles`` (heavier
+        title-list call) so partial outages where one service is healthy
+        but the other is degraded still register as a failed probe. The
+        title-list call uses ``limit=1`` to keep the probe cheap. Returns
+        True only if BOTH calls succeed.
         """
         try:
             test_profile = Profile.objects.filter(
@@ -921,6 +953,9 @@ class TokenKeeper:
                 }
             user = instance.user_cache[lookup_key]['user']
             user.trophy_summary()
+            # Second endpoint: catches partial outages where trophy_summary
+            # is healthy but the heavier title-list service is degraded.
+            list(user.trophy_titles(limit=1))
 
             logger.info(f"PSN probe succeeded for profile {test_profile.id}")
             return True

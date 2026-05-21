@@ -289,7 +289,9 @@ Detects PSN infrastructure outages (502/503/504 errors) and prevents profiles fr
 - Verification flows return 503 with PSN-down messages
 - A site-wide error banner is displayed via the `psn_outage` context processor
 
-**Recovery**: The health loop calls `_check_psn_outage()` every 60 seconds. While the outage flag is active, it probes PSN with a lightweight `trophy_summary` call for a known synced profile. If the probe succeeds, the circuit breaker resets: Redis flags are cleared, the in-memory flag is set to False, and the banner disappears. Profiles with backdated `last_synced` are picked up by the `refresh_profiles` cron on its next run.
+**Recovery (half-open debounce)**: The health loop calls `_check_psn_outage()` every 60 seconds. While the outage flag is active, it probes PSN by hitting two endpoints back-to-back: a lightweight `trophy_summary` AND a `trophy_titles(limit=1)` call against a known synced profile. Both must succeed for the probe to count. Recovery requires **3 consecutive successful probes** (~3 minutes of sustained recovery) before the breaker resets: Redis flags are cleared, the in-memory flag is set to False, the probe-success counter is reset to 0, and the banner disappears. A single failed probe resets the counter to 0 and we stay fully open. Profiles with backdated `last_synced` are picked up by the `refresh_profiles` cron on its next run after recovery.
+
+**Why two endpoints + debounce**: The original single-probe implementation cleared the banner the instant one `trophy_summary` call succeeded, which during partial PSN outages produced a flapping banner: the probe would win the coin flip within 60 seconds while user-facing syncs continued to fail. Probing the heavier `trophy_titles` service in addition catches degraded title-list endpoints that healthy `trophy_summary` calls would have hidden. Requiring 3 consecutive successes (with the counter resetting on any failure) ensures we only declare recovery when PSN is sustainably back, not just briefly available.
 
 **Manual override**: `python manage.py redis_admin --clear-psn-outage` clears the flag immediately.
 
