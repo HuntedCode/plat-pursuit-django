@@ -325,7 +325,12 @@ urlpatterns = [
     # for sites with tens of thousands of URLs. (Bots that hit /sitemap.xml
     # directly used to materialize every Game/Profile row at once for an
     # ~160 MB allocation per fetch — the May 2026 OOM contributor.)
-    path('sitemap.xml', sitemap_index, {'sitemaps': sitemaps}, name='sitemap'),
+    path(
+        'sitemap.xml',
+        sitemap_index,
+        {'sitemaps': sitemaps, 'sitemap_url_name': 'sitemap_section'},
+        name='sitemap',
+    ),
     path(
         'sitemap-<section>.xml',
         sitemap,
