@@ -300,13 +300,17 @@ def _make_roadmap_description(roadmap, game, group_name):
     Mirrors the meta description the page emits so search-result snippets
     and rich-snippet panels read consistently.
     """
-    step_count = 0
-    guide_count = 0
+    # Iterate the prefetched managers so the counts work even when the
+    # caller (e.g. ?preview=true) has overlaid the cache with branch
+    # objects. Calling .count() would clone the queryset and run a DB
+    # COUNT — accurate against live state, but misleading in preview and
+    # historically a 500 source while the overlay still held raw lists.
     try:
-        step_count = roadmap.steps.count()
-        guide_count = roadmap.trophy_guides.count()
-    except AttributeError:
-        pass
+        step_count = sum(1 for _ in roadmap.steps.all())
+        guide_count = sum(1 for _ in roadmap.trophy_guides.all())
+    except (AttributeError, TypeError):
+        step_count = 0
+        guide_count = 0
     parts = [f"Complete trophy guide for {game.title_name}"]
     if group_name and group_name.lower() != 'base game':
         parts[0] += f" ({group_name})"

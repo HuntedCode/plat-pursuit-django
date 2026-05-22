@@ -355,24 +355,26 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         # to stamp `data-missable` / `data-dlc` so the Missable / DLC
         # filter toggles in the reader can act on markers just like they
         # do on collectible items.
-        context['missable_trophy_ids'] = set(
-            roadmap.trophy_guides.filter(is_missable=True)
-            .values_list('trophy_id', flat=True)
-        )
+        # Iterate the already-prefetched guide list (which also reflects
+        # `apply_branch_overlay`'s in-memory edits during ?preview=true).
+        # `.filter()` would bypass the prefetch cache, and when overlay has
+        # replaced it with a list the manager call blows up entirely.
+        all_guides = list(roadmap.trophy_guides.all())
+        context['missable_trophy_ids'] = {
+            tg.trophy_id for tg in all_guides if tg.is_missable
+        }
         # Parallel sets for the other author-set TrophyGuide flags so the
         # marker template can render attention-grabbing pills inline.
         # Online and unobtainable trophies don't drive the existing filter
         # toggles, but readers care about them mid-playthrough just as
         # much as missables (online may need servers up; unobtainable
         # may need a workaround or version-pinning).
-        context['online_trophy_ids'] = set(
-            roadmap.trophy_guides.filter(is_online=True)
-            .values_list('trophy_id', flat=True)
-        )
-        context['unobtainable_trophy_ids'] = set(
-            roadmap.trophy_guides.filter(is_unobtainable=True)
-            .values_list('trophy_id', flat=True)
-        )
+        context['online_trophy_ids'] = {
+            tg.trophy_id for tg in all_guides if tg.is_online
+        }
+        context['unobtainable_trophy_ids'] = {
+            tg.trophy_id for tg in all_guides if tg.is_unobtainable
+        }
         context['is_dlc_roadmap'] = trophy_group_id != 'default'
 
         # Profile earned data + progress computation.

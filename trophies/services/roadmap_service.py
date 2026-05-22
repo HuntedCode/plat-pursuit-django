@@ -28,6 +28,28 @@ from django.db.models import Count, Prefetch
 logger = logging.getLogger('psn_api')
 
 
+def _cache_as_queryset(base_queryset, overlay_items):
+    """Wrap an in-memory overlay list as a Django prefetch-cache value.
+
+    Django stores prefetched results as a QuerySet whose `_result_cache`
+    is pre-populated, NOT as a raw list. `RelatedManager.get_queryset()`
+    returns that cache directly, so storing a list means `.all()` works
+    (lists iterate fine) but `.filter() / .count() / .exists()` crash:
+    they expect a QuerySet method and find a `list` instead.
+
+    Wrapping the overlay as a real QuerySet keeps `.all()` overlay-aware
+    (cache iteration yields the overlay items) AND keeps `.filter()` etc.
+    non-crashing — they clone the queryset, drop the cache, and run a
+    fresh DB query. The DB results won't reflect synthetic-id branch
+    objects, so any caller that genuinely needs overlay-aware filtering
+    must iterate `.all()` in Python; everywhere else just stops 500-ing.
+    """
+    qs = base_queryset._chain()
+    qs._result_cache = list(overlay_items)
+    qs._prefetch_done = True
+    return qs
+
+
 class RoadmapService:
     """Read-side helpers + lifecycle ops for the per-CTG Roadmap system."""
 
@@ -328,7 +350,12 @@ class RoadmapService:
                 ]
                 if not hasattr(step, '_prefetched_objects_cache'):
                     step._prefetched_objects_cache = {}
-                step._prefetched_objects_cache['step_trophies'] = transient_st
+                step._prefetched_objects_cache['step_trophies'] = (
+                    _cache_as_queryset(
+                        RoadmapStepTrophy.objects.filter(step=step),
+                        transient_st,
+                    )
+                )
             overlay_steps.append(step)
 
         # Trophy guides.
@@ -417,7 +444,10 @@ class RoadmapService:
             overlay_markers.sort(key=lambda x: (x.order, x.id))
             if not hasattr(area, '_prefetched_objects_cache'):
                 area._prefetched_objects_cache = {}
-            area._prefetched_objects_cache['markers'] = overlay_markers
+            area._prefetched_objects_cache['markers'] = _cache_as_queryset(
+                RoadmapAreaMarker.objects.filter(area=area),
+                overlay_markers,
+            )
 
             overlay_areas.append(area)
         overlay_areas.sort(key=lambda a: (a.order, a.id))
@@ -500,17 +530,36 @@ class RoadmapService:
             # the database for live items that don't reflect the branch.
             if not hasattr(ctype, '_prefetched_objects_cache'):
                 ctype._prefetched_objects_cache = {}
-            ctype._prefetched_objects_cache['items'] = overlay_items
+            ctype._prefetched_objects_cache['items'] = _cache_as_queryset(
+                RoadmapCollectibleItem.objects.filter(collectible_type=ctype),
+                overlay_items,
+            )
 
             overlay_types.append(ctype)
         overlay_types.sort(key=lambda t: (t.order, t.id))
 
         if not hasattr(roadmap, '_prefetched_objects_cache'):
             roadmap._prefetched_objects_cache = {}
-        roadmap._prefetched_objects_cache['collectible_areas'] = overlay_areas
-        roadmap._prefetched_objects_cache['collectible_types'] = overlay_types
-        roadmap._prefetched_objects_cache['steps'] = overlay_steps
-        roadmap._prefetched_objects_cache['trophy_guides'] = overlay_guides
+        roadmap._prefetched_objects_cache['collectible_areas'] = (
+            _cache_as_queryset(
+                RoadmapCollectibleArea.objects.filter(roadmap=roadmap),
+                overlay_areas,
+            )
+        )
+        roadmap._prefetched_objects_cache['collectible_types'] = (
+            _cache_as_queryset(
+                RoadmapCollectibleType.objects.filter(roadmap=roadmap),
+                overlay_types,
+            )
+        )
+        roadmap._prefetched_objects_cache['steps'] = _cache_as_queryset(
+            RoadmapStep.objects.filter(roadmap=roadmap),
+            overlay_steps,
+        )
+        roadmap._prefetched_objects_cache['trophy_guides'] = _cache_as_queryset(
+            TrophyGuide.objects.filter(roadmap=roadmap),
+            overlay_guides,
+        )
         return roadmap
 
     # ------------------------------------------------------------------ #
