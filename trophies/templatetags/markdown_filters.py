@@ -22,7 +22,7 @@ register = template.Library()
 _ROADMAP_REF_RE = re.compile(
     r'\[\['
     r'(?:'
-        r'(step|area|section):([a-z0-9](?:[a-z0-9-]{0,49}))'  # typed: kind:key
+        r'(step|area|subarea|section):([a-z0-9](?:[a-z0-9-]{0,49}))'  # typed: kind:key
     r'|'
         r'([a-z0-9](?:[a-z0-9-]{0,49}))'                       # bare: collectible slug
     r')'
@@ -190,6 +190,8 @@ def render_roadmap_refs(html, refs):
             return _render_step_pill(key, steps)
         if kind == 'area':
             return _render_area_pill(key, areas)
+        if kind == 'subarea':
+            return _render_subarea_pill(key, refs.get('subareas') or {})
         if kind == 'section':
             return _render_section_pill(key)
         # Unreachable given the regex, but defensive.
@@ -297,6 +299,46 @@ def _render_area_pill(area_slug, areas):
         f'd="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>'
         f'<path stroke-linecap="round" stroke-linejoin="round" '
         f'd="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>'
+        f'</svg>'
+        f'<span class="roadmap-ref-pill-name">{escape(name)}</span>'
+        f'</a>'
+    )
+
+
+def _render_subarea_pill(subarea_key, subareas):
+    """Inline pill for a `[[subarea:<slug-or-id>]]` token.
+
+    Same visual treatment as area pills (location-pin + secondary tint)
+    but a darker accent shade so the visual hierarchy reads area >
+    sub-area. Anchor href targets `#collectible-subarea-<slug>` which
+    the reader template renders directly on each sub-area section.
+
+    `subareas` is a `{key: {'name': ..., 'area_slug': ..., 'area_name': ...}}`
+    dict — area context surfaces in the hover title so writers know
+    which parent area the sub-area belongs to.
+    """
+    sa = subareas.get(subarea_key)
+    if sa is None:
+        return (
+            f'<span class="roadmap-ref-pill is-broken" '
+            f'title="No sub-area found for [[subarea:{escape(subarea_key)}]]">'
+            f'[[subarea:{escape(subarea_key)}]]</span>'
+        )
+    name = sa.get('name') or subarea_key
+    area_name = sa.get('area_name') or ''
+    hover = f'{name} ({area_name})' if area_name else name
+    return (
+        f'<a href="#collectible-subarea-{escape(subarea_key)}" '
+        f'class="roadmap-ref-pill" data-color="secondary" '
+        f'data-ref-kind="subarea" data-ref-slug="{escape(subarea_key)}" '
+        f'title="Jump to {escape(hover)}">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" class="roadmap-ref-pill-icon" '
+        f'fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">'
+        # Subdivision icon (a smaller pin inside a larger one) —
+        # heroicons doesn't ship one; using a folder-tree-ish shape
+        # to read as "nested location".
+        f'<path stroke-linecap="round" stroke-linejoin="round" '
+        f'd="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>'
         f'</svg>'
         f'<span class="roadmap-ref-pill-name">{escape(name)}</span>'
         f'</a>'

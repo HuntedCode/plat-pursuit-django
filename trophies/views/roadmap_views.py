@@ -163,15 +163,31 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         # path is purely a safety net for any pre-translation content
         # that might somehow still be in the database.
         areas_by_key = {}
+        # Same dual-keying (slug + stringified id) for sub-areas so
+        # `[[subarea:-N]]` resolves during preview and `[[subarea:slug]]`
+        # resolves post-merge. Each entry carries area context for the
+        # pill's hover title so writers know which parent area a sub-area
+        # belongs to.
+        subareas_by_key = {}
         for a in roadmap.collectible_areas.all():
             entry = {'name': a.name or a.slug or f'Area {a.id}'}
             if a.slug:
                 areas_by_key[a.slug] = entry
             areas_by_key[str(a.id)] = entry
+            for sa in a.subareas.all():
+                sa_entry = {
+                    'name': sa.name or sa.slug or f'Sub-area {sa.id}',
+                    'area_slug': a.slug,
+                    'area_name': a.name or a.slug or '',
+                }
+                if sa.slug:
+                    subareas_by_key[sa.slug] = sa_entry
+                subareas_by_key[str(sa.id)] = sa_entry
         context['roadmap_refs'] = {
             'collectibles': context['collectibles_by_slug'],
             'steps': steps_by_id,
             'areas': areas_by_key,
+            'subareas': subareas_by_key,
         }
 
         # Collectible Tracker context — only built when the roadmap has
@@ -200,8 +216,23 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
             # of type so the playthrough sequence is preserved (3 journals,
             # health upgrade, 2 journals, mana upgrade — not type-grouped).
             # An "Unsorted" pseudo-area collects area_id=None items.
+            #
+            # Sub-areas (opt-in second-level grouping) attach to areas; each
+            # area's bucket carries a `subareas` dict so items / markers can
+            # split between loose (in the area) and sub-area sections.
+            # Unsorted bucket has no sub-areas (no parent area to attach to).
             UNSORTED_KEY = '__unsorted__'
-            area_buckets = {a.id: {'area': a, 'items': []} for a in collectible_areas}
+            area_buckets = {
+                a.id: {
+                    'area': a,
+                    'items': [],
+                    'subareas': {
+                        sa.id: {'subarea': sa, 'items': [], 'markers': []}
+                        for sa in a.subareas.all()
+                    },
+                }
+                for a in collectible_areas
+            }
             unsorted_bucket = {'area': None, 'items': []}
 
             type_progress = {}
@@ -237,7 +268,16 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
                             # area_id refers to a deleted area (shouldn't happen
                             # post-merge; SET_NULL keeps refs clean — but safe).
                             bucket = unsorted_bucket
-                        bucket['items'].append(item)
+                        # Sub-area routing: if the item points at a sub-area
+                        # that still belongs to this bucket's area, drop it
+                        # into the sub-area's bucket; otherwise it's loose
+                        # at the area level (the existing behavior).
+                        sa_id = getattr(item, 'subarea_id', None)
+                        sub_buckets = bucket.get('subareas') or {}
+                        if sa_id and sa_id in sub_buckets:
+                            sub_buckets[sa_id]['items'].append(item)
+                        else:
+                            bucket['items'].append(item)
                     type_progress[ctype.id] = {
                         'found': found_for_type,
                         'total': ctype.total_count if ctype.total_count else len(items),
@@ -252,15 +292,27 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
                         'item_total': 0,
                     }
 
-            # Sort each bucket's items by `order` for playthrough sequence.
+            # Sort each bucket's items (loose + per-sub-area) by `order`
+            # for playthrough sequence.
             for bucket in list(area_buckets.values()) + [unsorted_bucket]:
                 bucket['items'].sort(key=lambda it: it.order)
+                for sub in (bucket.get('subareas') or {}).values():
+                    sub['items'].sort(key=lambda it: it.order)
 
             # Trophy nav markers per area — share the area's `order` space
             # with items so they interleave in the playthrough sequence.
-            # Unsorted bucket has no markers (markers anchor to a real area).
+            # Markers with subarea_id route into the sub-area's bucket;
+            # otherwise they stay loose at the area level. Unsorted bucket
+            # has no markers (markers anchor to a real area).
             for area_obj in collectible_areas:
-                area_buckets[area_obj.id]['markers'] = list(area_obj.markers.all())
+                bucket = area_buckets[area_obj.id]
+                bucket['markers'] = []
+                sub_buckets = bucket.get('subareas') or {}
+                for marker in area_obj.markers.all():
+                    if marker.subarea_id and marker.subarea_id in sub_buckets:
+                        sub_buckets[marker.subarea_id]['markers'].append(marker)
+                    else:
+                        bucket['markers'].append(marker)
 
             # Materialize ordered area list, dropping empty ones. Each
             # bucket gets `is_complete` so the template can render an
@@ -282,15 +334,56 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
                 tagged.sort(key=lambda x: (x[0], x[1]))
                 return [t[2] for t in tagged]
 
+            def _build_subarea_buckets(area_obj, bucket):
+                """Materialize the area's sub-area sections in `order`.
+
+                Each entry: {'key', 'subarea', 'entries', 'is_complete'}.
+                Empty sub-areas (no items, no markers) are dropped from
+                the render — sub-areas without any content add no value
+                to the reader and would waste vertical space.
+                """
+                sub_buckets = bucket.get('subareas') or {}
+                if not sub_buckets:
+                    return []
+                ordered = sorted(
+                    sub_buckets.values(),
+                    key=lambda b: (b['subarea'].order, b['subarea'].id),
+                )
+                out = []
+                for sb in ordered:
+                    items = sb['items']
+                    markers = sb['markers']
+                    if not items and not markers:
+                        continue
+                    out.append({
+                        'key': sb['subarea'].slug,
+                        'subarea': sb['subarea'],
+                        'entries': _build_entries(items, markers),
+                        'is_complete': bool(items) and all(it.is_found for it in items),
+                    })
+                return out
+
             tracker_areas = []
             for a in collectible_areas:
                 bucket = area_buckets[a.id]
-                if bucket['items']:
+                subarea_sections = _build_subarea_buckets(a, bucket)
+                # Render the area if it has loose items OR any populated
+                # sub-area. (An area can be "empty at the loose level"
+                # but still meaningful via its sub-areas.)
+                if bucket['items'] or subarea_sections:
+                    # Completion sums items across loose + every sub-area.
+                    all_items_in_area = list(bucket['items'])
+                    for sb in (bucket.get('subareas') or {}).values():
+                        all_items_in_area.extend(sb['items'])
                     tracker_areas.append({
                         'key': a.slug,
                         'area': a,
                         'entries': _build_entries(bucket['items'], bucket.get('markers') or []),
-                        'is_complete': all(it.is_found for it in bucket['items']),
+                        'subareas': subarea_sections,
+                        'is_complete': (
+                            bool(all_items_in_area)
+                            and all(it.is_found for it in all_items_in_area)
+                        ),
                     })
             if unsorted_bucket['items']:
                 tracker_areas.append({

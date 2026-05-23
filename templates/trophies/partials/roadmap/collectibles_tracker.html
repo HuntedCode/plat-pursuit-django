@@ -243,6 +243,9 @@
                             </button>
                         </div>
                         <div class="collectible-items-list space-y-2">
+                            {# Loose items + markers at the area level — render first  #}
+                            {# so they read as the "default flow" before any explicit  #}
+                            {# sub-area sub-sections.                                  #}
                             {% for entry in area_bucket.entries %}
                                 {% if entry.entry_kind == 'marker' %}
                                     {% include 'trophies/partials/roadmap/collectible_marker_row.html' with marker=entry %}
@@ -251,6 +254,44 @@
                                 {% endif %}
                             {% endfor %}
                         </div>
+                        {# Sub-areas — opt-in second-level grouping. Each section     #}
+                        {# carries its own header + items + markers. Anchored as     #}
+                        {# `collectible-subarea-<slug>` so [[subarea:slug]] tokens    #}
+                        {# and TOC links resolve directly to the section.             #}
+                        {% if area_bucket.subareas %}
+                        <div class="collectible-subarea-list mt-3 space-y-3">
+                            {% for sub_bucket in area_bucket.subareas %}
+                            <section id="collectible-subarea-{{ sub_bucket.key }}"
+                                     class="collectible-subarea-section rounded-md border border-base-content/5 bg-white/[0.015]"
+                                     data-subarea-key="{{ sub_bucket.key }}"
+                                     data-complete="{% if sub_bucket.is_complete %}1{% else %}0{% endif %}">
+                                <header class="flex items-center gap-2 px-3 py-2 border-b border-base-content/5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                                    </svg>
+                                    <h4 class="text-xs md:text-sm font-semibold flex-1 min-w-0 truncate">
+                                        {{ sub_bucket.subarea.name }}
+                                    </h4>
+                                    {% if sub_bucket.is_complete %}
+                                    <span class="badge badge-xs badge-success gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                        Done
+                                    </span>
+                                    {% endif %}
+                                </header>
+                                <div class="collectible-items-list p-3 space-y-2">
+                                    {% for entry in sub_bucket.entries %}
+                                        {% if entry.entry_kind == 'marker' %}
+                                            {% include 'trophies/partials/roadmap/collectible_marker_row.html' with marker=entry %}
+                                        {% else %}
+                                            {% include 'trophies/partials/roadmap/collectible_item_row.html' with item=entry area=area %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </section>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
                 </details>
                 {% endwith %}

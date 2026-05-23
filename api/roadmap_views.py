@@ -225,15 +225,26 @@ class RoadmapPreviewView(APIView):
         # preview behavior — author sees a broken pill until save +
         # translator runs.
         areas_by_key = {}
+        subareas_by_key = {}
         for a in roadmap.collectible_areas.all():
             entry = {'name': a.name or a.slug or f'Area {a.id}'}
             if a.slug:
                 areas_by_key[a.slug] = entry
             areas_by_key[str(a.id)] = entry
+            for sa in a.subareas.all():
+                sa_entry = {
+                    'name': sa.name or sa.slug or f'Sub-area {sa.id}',
+                    'area_slug': a.slug,
+                    'area_name': a.name or a.slug or '',
+                }
+                if sa.slug:
+                    subareas_by_key[sa.slug] = sa_entry
+                subareas_by_key[str(sa.id)] = sa_entry
         html = render_roadmap_refs(html, {
             'collectibles': types_by_slug,
             'steps': steps_by_id,
             'areas': areas_by_key,
+            'subareas': subareas_by_key,
         })
 
         # Stamp `data-trophy-type` on each `.trophy-mention` anchor so the
