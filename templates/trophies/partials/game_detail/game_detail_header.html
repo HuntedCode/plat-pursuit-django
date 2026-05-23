@@ -46,9 +46,11 @@
                                 <p class="line-clamp-1 pr-1">Publisher: <a href="{% url 'company_detail' slug=cc.company.slug %}" class="italic font-medium text-accent hover:underline">{{ cc.company.name }}</a></p>
                             {% endif %}
                         {% endfor %}
-                        {% if game.concept.release_date %}
-                            <p class="line-clamp-1 pr-1">Released: <time datetime="{{ game.concept.release_date|date:'Y-m-d' }}" class="italic font-medium text-primary/80">{{ game.concept.release_date|date }}</time></p>
-                        {% endif %}
+                        {% with release_date=game.platform_release_date %}
+                            {% if release_date %}
+                                <p class="line-clamp-1 pr-1">Released: <time datetime="{{ release_date|date:'Y-m-d' }}" class="italic font-medium text-primary/80">{{ release_date|date }}</time></p>
+                            {% endif %}
+                        {% endwith %}
                         {% with igdb=game.concept.igdb_match %}
                             {% if igdb.is_trusted and igdb.completion_time_display %}
                                 <p class="line-clamp-1 pr-1">Est. Completion: <span class="italic font-medium text-primary/80">{{ igdb.completion_time_display }}</span></p>

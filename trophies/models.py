@@ -12,7 +12,7 @@ from django.db.models.functions import Cast, Substr
 import logging
 
 logger = logging.getLogger("psn_api")
-from datetime import timedelta
+from datetime import date, timedelta
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from trophies.util_modules.language import count_unique_game_groups, calculate_trimmed_mean
 from trophies.util_modules.constants import (
@@ -713,6 +713,58 @@ class Game(models.Model):
         if not self.title_platform:
             return 'Unknown'
         return ', '.join(self.title_platform)
+
+    @property
+    def platform_release_date(self):
+        """Earliest IGDB release date among the platforms this Game shipped on.
+
+        Concept.release_date is the earliest PS release across ALL versions
+        of the concept (e.g. a PS3 date for a PS5-only re-release), which
+        is misleading on a per-Game detail page. This filters
+        IGDBMatch.igdb_ps_release_dates to entries whose platform matches
+        self.title_platform, prefers status=Released entries when present,
+        and returns the earliest as a date. Falls back to
+        concept.release_date when no platform-specific data is available.
+
+        Requires `concept__igdb_match` to be prefetched/select_related on
+        the caller's queryset, otherwise this triggers a query per Game.
+        """
+        fallback = self.concept.release_date if self.concept_id else None
+        if not self.concept_id or not self.title_platform:
+            return fallback
+
+        igdb_match = getattr(self.concept, 'igdb_match', None)
+        if igdb_match is None or not igdb_match.igdb_ps_release_dates:
+            return fallback
+
+        from trophies.services.igdb_service import (
+            IGDB_RELEASE_STATUS_RELEASE,
+            PLAT_TO_IGDB_ID,
+        )
+
+        wanted_ids = {
+            PLAT_TO_IGDB_ID[p] for p in self.title_platform
+            if p in PLAT_TO_IGDB_ID
+        }
+        if not wanted_ids:
+            return fallback
+
+        matches = [
+            entry for entry in igdb_match.igdb_ps_release_dates
+            if entry.get('platform') in wanted_ids and entry.get('date')
+        ]
+        if not matches:
+            return fallback
+
+        released = [
+            e for e in matches
+            if e.get('status') == IGDB_RELEASE_STATUS_RELEASE
+        ]
+        earliest = min(released or matches, key=lambda e: e['date'])
+        try:
+            return date.fromisoformat(earliest['date'])
+        except (ValueError, TypeError):
+            return fallback
 
     @property
     def controller_icon_set(self):
