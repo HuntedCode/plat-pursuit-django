@@ -31,6 +31,14 @@ class StaticViewSitemap(Sitemap):
 # pages via ?p=N as needed.
 
 
+# Django's default Sitemap.get_latest_lastmod() iterates the entire `items()`
+# queryset just to compute max(lastmod). On whale-scale tables (50K+ Games,
+# Profiles, Roadmaps) that materializes every row on every /sitemap.xml hit —
+# which was the trigger for the May 2026 sitemap-index OOM/500. Each subclass
+# overrides it with a single ORDER BY ... LIMIT 1 query against the lastmod
+# column instead.
+
+
 class GameSitemap(Sitemap):
     changefreq = 'weekly'
     priority = 0.6
@@ -40,7 +48,7 @@ class GameSitemap(Sitemap):
         return (
             Game.objects
             .filter(np_communication_id__isnull=False)
-            .only('np_communication_id', 'updated_at')
+            .only('np_communication_id', 'created_at')
             .order_by('-id')
         )
 
@@ -48,7 +56,15 @@ class GameSitemap(Sitemap):
         return reverse('game_detail', kwargs={'np_communication_id': obj.np_communication_id})
 
     def lastmod(self, obj):
-        return obj.updated_at if hasattr(obj, 'updated_at') else None
+        return obj.created_at
+
+    def get_latest_lastmod(self):
+        return (
+            Game.objects.filter(np_communication_id__isnull=False)
+            .order_by('-created_at')
+            .values_list('created_at', flat=True)
+            .first()
+        )
 
 
 class ProfileSitemap(Sitemap):
@@ -60,7 +76,7 @@ class ProfileSitemap(Sitemap):
         return (
             Profile.objects
             .filter(psn_username__isnull=False)
-            .only('psn_username', 'updated_at')
+            .only('psn_username', 'created_at')
             .order_by('-id')
         )
 
@@ -68,7 +84,15 @@ class ProfileSitemap(Sitemap):
         return reverse('profile_detail', kwargs={'psn_username': obj.psn_username})
 
     def lastmod(self, obj):
-        return obj.updated_at if hasattr(obj, 'updated_at') else None
+        return obj.created_at
+
+    def get_latest_lastmod(self):
+        return (
+            Profile.objects.filter(psn_username__isnull=False)
+            .order_by('-created_at')
+            .values_list('created_at', flat=True)
+            .first()
+        )
 
 
 class BadgeSitemap(Sitemap):
@@ -90,6 +114,14 @@ class BadgeSitemap(Sitemap):
     def lastmod(self, obj):
         return obj.created_at
 
+    def get_latest_lastmod(self):
+        return (
+            Badge.objects.filter(tier=1, is_live=True)
+            .order_by('-created_at')
+            .values_list('created_at', flat=True)
+            .first()
+        )
+
 
 class GuideSitemap(Sitemap):
     changefreq = 'weekly'
@@ -109,6 +141,14 @@ class GuideSitemap(Sitemap):
 
     def lastmod(self, obj):
         return obj.updated_at
+
+    def get_latest_lastmod(self):
+        return (
+            Checklist.objects.filter(status='published')
+            .order_by('-updated_at')
+            .values_list('updated_at', flat=True)
+            .first()
+        )
 
 
 class RoadmapSitemap(Sitemap):
@@ -160,6 +200,14 @@ class RoadmapSitemap(Sitemap):
     def lastmod(self, obj):
         return obj.updated_at
 
+    def get_latest_lastmod(self):
+        return (
+            Roadmap.objects.filter(status='published')
+            .order_by('-updated_at')
+            .values_list('updated_at', flat=True)
+            .first()
+        )
+
 
 class GameListSitemap(Sitemap):
     changefreq = 'weekly'
@@ -179,6 +227,14 @@ class GameListSitemap(Sitemap):
 
     def lastmod(self, obj):
         return obj.updated_at
+
+    def get_latest_lastmod(self):
+        return (
+            GameList.objects.filter(is_public=True, is_deleted=False)
+            .order_by('-updated_at')
+            .values_list('updated_at', flat=True)
+            .first()
+        )
 
 
 class ChallengeSitemap(Sitemap):
@@ -201,3 +257,11 @@ class ChallengeSitemap(Sitemap):
 
     def lastmod(self, obj):
         return obj.updated_at
+
+    def get_latest_lastmod(self):
+        return (
+            Challenge.objects.filter(is_deleted=False)
+            .order_by('-updated_at')
+            .values_list('updated_at', flat=True)
+            .first()
+        )
