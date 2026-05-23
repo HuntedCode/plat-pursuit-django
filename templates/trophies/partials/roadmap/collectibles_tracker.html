@@ -270,12 +270,19 @@
                         {% if area_bucket.subareas %}
                         <div class="collectible-subarea-list mt-4 space-y-3">
                             {% for sub_bucket in area_bucket.subareas %}
+                            {# `group/subarea` (named group) so the chevron rotation #}
+                            {# and summary-border modifiers only respond to THIS    #}
+                            {# sub-area's open state. Unnamed `group-open:` matches #}
+                            {# any ancestor with class `group`, which would         #}
+                            {# include the parent area — wrong: a closed sub-area   #}
+                            {# inside an open area would render with the chevron    #}
+                            {# rotated up (open) just because the area is open.     #}
                             <details {% if not sub_bucket.is_complete %}open{% endif %}
                                      id="collectible-subarea-{{ sub_bucket.key }}"
-                                     class="collectible-subarea-section group rounded-md border border-secondary/25 border-l-4 border-l-secondary/60 overflow-hidden transition-[border-color,background-color] duration-200"
+                                     class="collectible-subarea-section group/subarea rounded-md border border-secondary/25 border-l-4 border-l-secondary/60 overflow-hidden"
                                      data-subarea-key="{{ sub_bucket.key }}"
                                      data-complete="{% if sub_bucket.is_complete %}1{% else %}0{% endif %}">
-                                <summary class="flex items-center gap-2 px-3 py-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden border-b border-secondary/15 group-[:not([open])]:border-b-0 transition-[background-color] duration-200">
+                                <summary class="flex items-center gap-2 px-3 py-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden border-b border-secondary/15 group-[:not([open])]/subarea:border-b-0">
                                     <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-secondary bg-secondary/15 px-1.5 py-0.5 rounded shrink-0">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 21V11m4 10V7m4 14v-4m4 4V13"/>
@@ -292,7 +299,7 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                         <span>Complete</span>
                                     </span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-secondary/50 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-secondary/50 transition-transform duration-200 group-open/subarea:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
                                 </summary>
                                 <div class="collectible-items-list p-3 space-y-2">
                                     {% for entry in sub_bucket.entries %}
