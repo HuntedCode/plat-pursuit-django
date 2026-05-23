@@ -806,6 +806,26 @@ def _apply_collectible_subareas(
         live_subareas_by_area.setdefault(sa.area_id, {})[sa.id] = sa
 
     subarea_id_map: dict = {sa.id: sa.id for ag in live_subareas_by_area.values() for sa in ag.values()}
+    # Side-channel for the item / marker merge passes: a live subarea is
+    # only a valid FK target for an item / marker whose `area_id` matches
+    # the subarea's parent area. We materialize the lookup here so
+    # `_resolve_subarea` callers can cheaply enforce that invariant.
+    subarea_area_by_id: dict = {
+        sa.id: sa.area_id
+        for ag in live_subareas_by_area.values() for sa in ag.values()
+    }
+
+    # Slug dedup runs roadmap-wide (not per-area). The model's
+    # `unique_together = [area, slug]` would only catch DB-level collisions
+    # within one area, but everything downstream — the [[subarea:slug]]
+    # token, `subareas_by_key` lookup, and `#collectible-subarea-<slug>`
+    # anchor — assumes slugs are unique across the whole roadmap. Seed
+    # with every live sub-area's slug across all areas, then carry forward
+    # as we generate new ones so the "mansion / mansion-2" bumping works
+    # across area boundaries too.
+    payload_slugs_seen = {
+        sa.slug for ag in live_subareas_by_area.values() for sa in ag.values()
+    }
 
     for area_payload in areas_payload:
         subareas_payload = area_payload.get('subareas')
@@ -821,11 +841,6 @@ def _apply_collectible_subareas(
 
         live_subareas = live_subareas_by_area.get(live_area_id, {})
         explicit_payload_ids = set()
-        # Slug collision dedup scoped to THIS area (matches the model's
-        # unique_together = [area, slug]). Carry surviving live slugs in
-        # so brand-new sub-area names that collide with existing get
-        # bumped (mansion / mansion-2).
-        payload_slugs_seen = {sa.slug for sa in live_subareas.values()}
 
         for sa_payload in subareas_payload:
             sa_id = sa_payload.get('id')
@@ -852,6 +867,7 @@ def _apply_collectible_subareas(
                     last_edited_by_id=profile.id,
                 )
                 changes.collectible_subarea_creates += 1
+                subarea_area_by_id[new_sa.id] = live_area_id
                 if sa_id is not None:
                     subarea_id_map[sa_id] = new_sa.id
                 continue
@@ -892,9 +908,14 @@ def _apply_collectible_subareas(
             changes.collectible_subarea_deletes += len(actually_deleted)
             # Items + markers pointing at deleted sub-areas get SET_NULL,
             # so they orphan back to "loose" within the parent area
-            # rather than vanishing.
+            # rather than vanishing. Keep the resolver maps consistent:
+            # a stale id->id entry would otherwise leak the deleted FK
+            # back through `_resolve_subarea` in a concurrent payload.
+            for did in actually_deleted:
+                subarea_id_map.pop(did, None)
+                subarea_area_by_id.pop(did, None)
 
-    return subarea_id_map
+    return subarea_id_map, subarea_area_by_id
 
 
 def _translate_branch_refs(
@@ -1019,7 +1040,8 @@ def _translate_branch_refs(
 
 def _apply_area_markers(
     live_roadmap: Roadmap, areas_payload: list, area_id_map: dict,
-    subarea_id_map: dict, profile, is_editor: bool, changes: _ChangeCounts,
+    subarea_id_map: dict, subarea_area_by_id: dict,
+    profile, is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply trophy markers per area.
 
@@ -1033,11 +1055,22 @@ def _apply_area_markers(
     """
     set_owner_id = _collectibles_set_owner_id(live_roadmap)
 
-    def _resolve_subarea(payload_subarea_id):
+    def _resolve_subarea(payload_subarea_id, expected_area_id):
+        """Translate payload subarea id → live id, validating the FK
+        invariant (sub-area must belong to the marker's parent area)."""
         if payload_subarea_id is None:
             return None
         # Live (positive) or branch-translated (negative -> live) id.
-        return subarea_id_map.get(payload_subarea_id)
+        resolved = subarea_id_map.get(payload_subarea_id)
+        if resolved is None:
+            return None
+        # Cross-area: silently drop. Avoids a malicious or stale payload
+        # writing a dangling FK (subarea.area_id != marker.area_id) that
+        # the reader can't bucket-route and that breaks the UNIQUE
+        # constraint nobody else asserts.
+        if subarea_area_by_id.get(resolved) != expected_area_id:
+            return None
+        return resolved
 
     def _enforce_set_ownership():
         if is_editor:
@@ -1084,7 +1117,7 @@ def _apply_area_markers(
                 _enforce_set_ownership()
                 RoadmapAreaMarker.objects.create(
                     area_id=live_area_id,
-                    subarea_id=_resolve_subarea(marker_payload.get('subarea_id')),
+                    subarea_id=_resolve_subarea(marker_payload.get('subarea_id'), live_area_id),
                     trophy_id=int(trophy_id),
                     order=marker_payload.get('order', len(live_markers)),
                     created_by_id=profile.id,
@@ -1112,7 +1145,11 @@ def _apply_area_markers(
             if 'order' in marker_payload and marker_payload['order'] != live_marker.order:
                 dirty.append(('order', marker_payload['order']))
             if 'subarea_id' in marker_payload:
-                new_subarea_id = _resolve_subarea(marker_payload.get('subarea_id'))
+                # Markers don't support area-migration (see comment above),
+                # so the parent area is always `live_marker.area_id` here.
+                new_subarea_id = _resolve_subarea(
+                    marker_payload.get('subarea_id'), live_marker.area_id,
+                )
                 if new_subarea_id != live_marker.subarea_id:
                     dirty.append(('subarea_id', new_subarea_id))
             if not dirty:
@@ -1134,8 +1171,8 @@ def _apply_area_markers(
 
 def _apply_items_for_type(
     live_type: RoadmapCollectibleType, items_payload: list,
-    area_id_map: dict, subarea_id_map: dict, profile, set_owner_id,
-    is_editor: bool, changes: _ChangeCounts,
+    area_id_map: dict, subarea_id_map: dict, subarea_area_by_id: dict,
+    profile, set_owner_id, is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply the items array nested under a single collectible type.
 
@@ -1162,10 +1199,19 @@ def _apply_items_for_type(
             return None
         return area_id_map.get(payload_area_id)
 
-    def _resolve_subarea(payload_subarea_id):
+    def _resolve_subarea(payload_subarea_id, expected_area_id):
+        """Translate payload subarea id → live id, validating that the
+        sub-area belongs to the item's parent area. Cross-area FK is
+        silently dropped (None) — the reader bucket-routes by area, so
+        a dangling FK would otherwise show the item as loose anyway."""
         if payload_subarea_id is None:
             return None
-        return subarea_id_map.get(payload_subarea_id)
+        resolved = subarea_id_map.get(payload_subarea_id)
+        if resolved is None:
+            return None
+        if subarea_area_by_id.get(resolved) != expected_area_id:
+            return None
+        return resolved
 
     explicit_payload_ids = set()
 
@@ -1176,17 +1222,20 @@ def _apply_items_for_type(
             continue
 
         resolved_area_id = _resolve_area(item_payload.get('area_id'))
-        resolved_subarea_id = _resolve_subarea(item_payload.get('subarea_id'))
 
         # NEW item.
         if item_id is None or (isinstance(item_id, int) and item_id < 0):
             _enforce_set_ownership()
             new_youtube_url = (item_payload.get('youtube_url') or '').strip()
+            # Subarea validates against the item's incoming area.
+            new_subarea_id = _resolve_subarea(
+                item_payload.get('subarea_id'), resolved_area_id,
+            )
             RoadmapCollectibleItem.objects.create(
                 collectible_type=live_type,
                 name=raw_name[:200],
                 area_id=resolved_area_id,
-                subarea_id=resolved_subarea_id,
+                subarea_id=new_subarea_id,
                 body=item_payload.get('body') or '',
                 youtube_url=new_youtube_url,
                 gallery_images=_normalize_gallery(item_payload.get('gallery_images')),
@@ -1210,6 +1259,13 @@ def _apply_items_for_type(
 
         live_item = live_items[item_id]
 
+        # For the patch path, the effective area is the patched one if
+        # specified, else the existing one. The subarea must belong to
+        # *that* area for the validation to pass.
+        effective_area_id = (
+            resolved_area_id if 'area_id' in item_payload else live_item.area_id
+        )
+
         dirty_fields = []
         if 'name' in item_payload:
             new_name = (item_payload['name'] or '').strip()[:200]
@@ -1218,9 +1274,17 @@ def _apply_items_for_type(
         if 'area_id' in item_payload:
             if resolved_area_id != live_item.area_id:
                 dirty_fields.append(('area_id', resolved_area_id))
+                # Area changed and the payload didn't explicitly re-pin
+                # the sub-area — auto-clear it. Mirrors the BranchProxy
+                # client-side rule (sub-area FK is scoped to its area).
+                if 'subarea_id' not in item_payload and live_item.subarea_id is not None:
+                    dirty_fields.append(('subarea_id', None))
         if 'subarea_id' in item_payload:
-            if resolved_subarea_id != live_item.subarea_id:
-                dirty_fields.append(('subarea_id', resolved_subarea_id))
+            new_subarea_id = _resolve_subarea(
+                item_payload.get('subarea_id'), effective_area_id,
+            )
+            if new_subarea_id != live_item.subarea_id:
+                dirty_fields.append(('subarea_id', new_subarea_id))
         if 'body' in item_payload:
             new_body = item_payload['body'] or ''
             if new_body != live_item.body:
@@ -1271,7 +1335,8 @@ def _apply_items_for_type(
 
 def _apply_collectible_types(
     live_roadmap: Roadmap, types_payload: list, area_id_map: dict,
-    subarea_id_map: dict, profile, is_editor: bool, changes: _ChangeCounts,
+    subarea_id_map: dict, subarea_area_by_id: dict,
+    profile, is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply the collectible-types branch payload.
 
@@ -1460,7 +1525,7 @@ def _apply_collectible_types(
         # the same gate.
         _apply_items_for_type(
             live_type, items_payload, area_id_map, subarea_id_map,
-            profile, set_owner_id, is_editor, changes,
+            subarea_area_by_id, profile, set_owner_id, is_editor, changes,
         )
 
     # Anything in live but missing from the payload's existing-id set is
@@ -1528,19 +1593,21 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
             roadmap, payload.get('collectible_areas') or [],
             profile, is_editor, changes,
         )
-        subarea_id_map = _apply_collectible_subareas(
+        subarea_id_map, subarea_area_by_id = _apply_collectible_subareas(
             roadmap, payload.get('collectible_areas') or [],
             area_id_map, profile, is_editor, changes,
         )
         _apply_collectible_types(
             roadmap, payload.get('collectible_types') or [],
-            area_id_map, subarea_id_map, profile, is_editor, changes,
+            area_id_map, subarea_id_map, subarea_area_by_id,
+            profile, is_editor, changes,
         )
         # Markers anchor to areas (independent of types/items), so they
         # can apply alongside types — no ordering dependency between them.
         _apply_area_markers(
             roadmap, payload.get('collectible_areas') or [],
-            area_id_map, subarea_id_map, profile, is_editor, changes,
+            area_id_map, subarea_id_map, subarea_area_by_id,
+            profile, is_editor, changes,
         )
         # Post-pass: rewrite `[[step:-N]]`, `[[area:-N]]`, and
         # `[[subarea:-N]]` body references to use the freshly-created

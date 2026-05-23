@@ -5288,6 +5288,10 @@
             const subId = subarea.id;
             el.dataset.subareaId = String(subId);
             el.dataset.areaId = String(areaId);
+            // DragReorderManager identifies draggables by `data-item-id`
+            // (see utils.js:642); sub-area cards aren't items in the
+            // domain sense but they ARE draggable, so we set it to the
+            // sub-area id for the framework to read in onReorder.
             el.dataset.itemId = String(subId);
 
             // Restore the writer's collapse choice across re-renders.

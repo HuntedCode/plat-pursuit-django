@@ -17,12 +17,23 @@ register = template.Library()
 #   - bare:   [[journals]]   (legacy / collectible-type slug)
 # The bare form is preserved so existing content keeps working without
 # migration; new content can use either. Both shapes cap the key at 50
-# chars (SlugField max_length) and refuse leading hyphens to mirror
-# Django slugify's output.
+# chars (SlugField max_length).
+#
+# The typed key alternates between two shapes so brand-new (still in the
+# editor branch) entities resolve as "broken" pills instead of leaking
+# through as literal text:
+#   - `-?\d+`  matches branch tokens like `[[step:-3]]` or `[[area:-12]]`
+#              that the picker emits before the entity has a live slug.
+#              The merge service translates these back to live ids/slugs
+#              when the branch saves; until then the reader shows a
+#              `is-broken` pill rather than the raw literal `[[area:-12]]`.
+#   - `[a-z0-9]...` matches well-formed slugs (Django slugify's output).
+# The bare form keeps the slug-only alternative for backward compat with
+# legacy collectible-type pills.
 _ROADMAP_REF_RE = re.compile(
     r'\[\['
     r'(?:'
-        r'(step|area|subarea|section):([a-z0-9](?:[a-z0-9-]{0,49}))'  # typed: kind:key
+        r'(step|area|subarea|section):(-?\d+|[a-z0-9](?:[a-z0-9-]{0,49}))'  # typed: kind:key
     r'|'
         r'([a-z0-9](?:[a-z0-9-]{0,49}))'                       # bare: collectible slug
     r')'
