@@ -1231,14 +1231,21 @@
                 // "found" row in a list that's supposed to hide them.
                 this._applyFilters();
             }
-            // Auto-collapse the parent area if THIS toggle just made it
-            // 100% complete. Only fires on the marking event (not on
-            // every recompute) so a user who manually re-opens a fully
-            // complete area doesn't get fought every keystroke. Caller
-            // can pass `skipAutoCollapse` to suppress (used during anon
-            // localStorage restore at init, where the synchronous final
-            // pass handles collapse without an animation delay).
-            if (found && !opts.skipAutoCollapse) this._maybeCollapseCompletedArea(row);
+            // Auto-collapse the parent sub-area + area if THIS toggle
+            // just made either of them 100% complete. Only fires on the
+            // marking event (not on every recompute) so a user who
+            // manually re-opens a fully complete container doesn't get
+            // fought every keystroke. Caller can pass `skipAutoCollapse`
+            // to suppress (used during anon localStorage restore at
+            // init, where the synchronous final pass handles collapse
+            // without an animation delay). Order matters: the sub-area
+            // check skips itself when the whole area is also complete,
+            // so calling sub-area first gives the right "either /
+            // or" behavior without stacking two animations.
+            if (found && !opts.skipAutoCollapse) {
+                this._maybeCollapseCompletedSubarea(row);
+                this._maybeCollapseCompletedArea(row);
+            }
 
             // Persist. For logged-in users we POST/DELETE; for anonymous
             // viewers we stash the id in localStorage. The auth flag is
@@ -1278,6 +1285,34 @@
                 if (area.open && area.querySelectorAll('.collectible-item-row').length ===
                     area.querySelectorAll('.collectible-item-row[data-found="1"]').length) {
                     this._animateAreaClose(area);
+                }
+            }, 450);
+        },
+
+        // Same rule scoped to a sub-area: if THIS toggle just made the
+        // enclosing sub-area hit 100%, collapse it. Skip when the parent
+        // area is ALSO at 100% — _maybeCollapseCompletedArea will take
+        // over and collapsing both would stack two animations on top of
+        // each other (the sub-area shrinks just as its container does).
+        _maybeCollapseCompletedSubarea(row) {
+            const sub = row.closest('.collectible-subarea-section');
+            if (!sub || !sub.open) return;
+            const items = sub.querySelectorAll('.collectible-item-row');
+            const foundCount = sub.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+            if (items.length === 0 || foundCount !== items.length) return;
+            // Defer to the area collapse when the whole area is done too.
+            const area = sub.closest('.collectible-area-group');
+            if (area) {
+                const areaItems = area.querySelectorAll('.collectible-item-row');
+                const areaFound = area.querySelectorAll(
+                    '.collectible-item-row[data-found="1"]'
+                ).length;
+                if (areaItems.length > 0 && areaItems.length === areaFound) return;
+            }
+            setTimeout(() => {
+                if (sub.open && sub.querySelectorAll('.collectible-item-row').length ===
+                    sub.querySelectorAll('.collectible-item-row[data-found="1"]').length) {
+                    this._animateAreaClose(sub);
                 }
             }, 450);
         },
@@ -1371,21 +1406,29 @@
         // summary clicks, animate the `summary + div` content's
         // max-height + opacity, then flip `details.open`. Auto-collapse
         // on chapter completion uses _animateAreaClose directly.
+        // Sub-area sections share the exact same shape
+        // (<details><summary>...</summary><div>...</div></details>) so
+        // they reuse the same animate helpers.
         _wireAreaAnimation() {
-            this.rootEl.querySelectorAll('.collectible-area-group').forEach(area => {
-                const summary = area.querySelector('summary');
+            const wire = (detailsEl) => {
+                // :scope > summary so a nested sub-area's summary doesn't
+                // get returned when we ask the area's wrapper for "its"
+                // summary (and vice versa).
+                const summary = detailsEl.querySelector(':scope > summary');
                 if (!summary || summary.dataset.areaAnimWired === '1') return;
                 summary.dataset.areaAnimWired = '1';
                 summary.addEventListener('click', (e) => {
-                    if (area.dataset.animating === '1') {
+                    if (detailsEl.dataset.animating === '1') {
                         e.preventDefault();
                         return;
                     }
                     e.preventDefault();
-                    if (area.open) this._animateAreaClose(area);
-                    else this._animateAreaOpen(area);
+                    if (detailsEl.open) this._animateAreaClose(detailsEl);
+                    else this._animateAreaOpen(detailsEl);
                 });
-            });
+            };
+            this.rootEl.querySelectorAll('.collectible-area-group').forEach(wire);
+            this.rootEl.querySelectorAll('.collectible-subarea-section').forEach(wire);
         },
 
         _animateAreaClose(area) {
@@ -1476,7 +1519,14 @@
             // side; anon viewers' progress only just landed, so collapse
             // any newly-complete chapter here. Snap closed (no animation)
             // since this is initial load — no toggle event for the user
-            // to react to.
+            // to react to. Sub-areas first so a complete sub-area inside
+            // an incomplete area still gets collapsed.
+            this.rootEl.querySelectorAll('.collectible-subarea-section[open]').forEach(sub => {
+                const items = sub.querySelectorAll('.collectible-item-row');
+                if (items.length === 0) return;
+                const foundCount = sub.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+                if (foundCount === items.length) sub.open = false;
+            });
             this.rootEl.querySelectorAll('.collectible-area-group[open]').forEach(area => {
                 const items = area.querySelectorAll('.collectible-item-row');
                 if (items.length === 0) return;
@@ -1534,6 +1584,12 @@
                 if (!key) return;
                 const isComplete = total > 0 && found === total;
                 sec.dataset.complete = isComplete ? '1' : '0';
+                // Flip the Complete badge in the summary alongside the
+                // TOC entry so the in-place section header reflects the
+                // same state as everywhere else. Badge is `inline-flex`
+                // when visible; toggling `hidden` overrides display.
+                const badge = sec.querySelector(':scope > summary .collectible-subarea-complete-badge');
+                if (badge) badge.classList.toggle('hidden', !isComplete);
                 document.querySelectorAll(
                     `.collectible-toc-subarea-count[data-subarea-key="${key}"]`
                 ).forEach(el => {

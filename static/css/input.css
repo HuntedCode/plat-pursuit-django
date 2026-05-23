@@ -2559,6 +2559,33 @@ details[open]::details-content {
   display: inline-flex;
 }
 
+/* Sub-area sections — base secondary tint matches the visual identity
+   the editor card uses, so the section reads as "container, not item"
+   at a glance. The complete-state override swaps to success-tinted
+   border/bg + success left stripe so a finished sub-area gets the
+   same payoff treatment areas do (just a touch more subtle since
+   they're nested). */
+.collectible-subarea-section {
+  background-color: oklch(from var(--color-secondary) l c h / 0.04);
+}
+.collectible-subarea-section > summary {
+  background-color: oklch(from var(--color-secondary) l c h / 0.08);
+}
+.collectible-subarea-section > summary:hover {
+  background-color: oklch(from var(--color-secondary) l c h / 0.12);
+}
+.collectible-subarea-section[data-complete="1"] {
+  background-color: oklch(from var(--color-success) l c h / 0.05);
+  @apply border-success/40 border-l-success/70;
+}
+.collectible-subarea-section[data-complete="1"] > summary {
+  background-color: oklch(from var(--color-success) l c h / 0.10);
+  @apply border-success/20;
+}
+.collectible-subarea-section[data-complete="1"] > summary:hover {
+  background-color: oklch(from var(--color-success) l c h / 0.15);
+}
+
 /* Rich-content panel: subtle type-tinted bg + matching top border so
    the guide section reads as "more of this type" rather than a generic
    dark stripe. Lower opacity than the row tint so the prose / video
