@@ -30,6 +30,14 @@
     const tabsData = JSON.parse(document.getElementById('roadmap-tabs-data')?.textContent || '[]');
     const trophiesByGroup = JSON.parse(document.getElementById('roadmap-trophies-data')?.textContent || '{}');
     const profilesById = JSON.parse(document.getElementById('roadmap-profiles-data')?.textContent || '{}');
+    // Phase metadata keyed by phase.key for the summary-row phase pill.
+    // Each entry has {key, label, emoji, badge_class}; we build a lookup
+    // once at module load instead of querying the select option on every
+    // pill update.
+    const trophyPhasesList = JSON.parse(document.getElementById('roadmap-trophy-phases')?.textContent || '[]');
+    const trophyPhasesByKey = Object.fromEntries(
+        trophyPhasesList.map(p => [p.key, p])
+    );
     const authorRole = editorEl.dataset.authorRole || 'writer';
     const canDelete = editorEl.dataset.authorCanDelete === 'true';
     const canPublish = editorEl.dataset.authorCanPublish === 'true';
@@ -172,6 +180,60 @@
         }, true);
     }
     _installSummaryKeyToggleSuppression();
+
+    /**
+     * Renders the at-a-glance phase pill in a trophy guide row's summary.
+     *
+     * Three states:
+     *   - `pill === null` or platinum (caller passes `null`): hidden.
+     *   - phase set: emoji + label, tinted with the phase's badge color.
+     *   - phase blank: warning-tinted "No phase" so the writer can spot
+     *     un-phased rows at a glance without expanding each guide.
+     *
+     * The badge_class on each phase ('badge-info', 'badge-warning', etc.)
+     * is mapped onto background + text utility classes since the pill
+     * isn't a daisyUI `.badge` (we want a rounded-pill shape with our
+     * own padding/sizing).
+     */
+    function _updatePhasePill(pillEl, phaseKey) {
+        if (!pillEl) return;
+        // Wipe any prior color classes — phase swaps can change tint.
+        pillEl.className = 'trophy-guide-phase-pill items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 mt-1';
+        if (phaseKey === null || typeof phaseKey === 'undefined') {
+            // Platinum or other "not applicable" case — hide entirely.
+            pillEl.classList.add('hidden');
+            return;
+        }
+        if (!phaseKey) {
+            // No phase selected — surface as a warning so missing phases
+            // are visible at a glance.
+            pillEl.classList.add('inline-flex', 'bg-warning/15', 'text-warning', 'border', 'border-warning/30');
+            pillEl.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <span>No phase</span>
+            `;
+            return;
+        }
+        const meta = trophyPhasesByKey[phaseKey];
+        if (!meta) {
+            // Unknown key (e.g. a removed phase still saved on an older
+            // guide) — fall back to the warning treatment so it's
+            // visible and the writer knows to re-select.
+            pillEl.classList.add('inline-flex', 'bg-warning/15', 'text-warning', 'border', 'border-warning/30');
+            pillEl.textContent = phaseKey;
+            return;
+        }
+        // Map badge_class (e.g. 'badge-info') to bg/text/border utilities
+        // so the pill uses the phase's color story.
+        const color = (meta.badge_class || '').replace(/^badge-/, '') || 'neutral';
+        pillEl.classList.add('inline-flex');
+        pillEl.style.backgroundColor = `oklch(from var(--color-${color}) l c h / 0.15)`;
+        pillEl.style.color = `var(--color-${color})`;
+        pillEl.style.borderColor = `oklch(from var(--color-${color}) l c h / 0.3)`;
+        pillEl.style.borderWidth = '1px';
+        pillEl.style.borderStyle = 'solid';
+        pillEl.innerHTML = `<span aria-hidden="true">${meta.emoji || ''}</span><span>${meta.label || phaseKey}</span>`;
+    }
 
     // Defense-in-depth: also stop Space/Enter keydowns from bubbling out
     // of inputs nested inside summaries. Some browsers / future Chrome
@@ -2632,6 +2694,7 @@
             // pinned section at the top of the published view. Hide the phase
             // controls on platinum rows and surface the small inline note.
             const phaseSelect = el.querySelector('.trophy-guide-phase');
+            const phasePill = el.querySelector('.trophy-guide-phase-pill');
             const isPlatinumRow = t.type === 'platinum';
             if (isPlatinumRow) {
                 const phaseControls = el.querySelector('.phase-controls');
@@ -2644,6 +2707,9 @@
             } else if (phaseSelect && typeof guideData === 'object' && guideData.phase) {
                 phaseSelect.value = guideData.phase;
             }
+            // Render the at-a-glance phase pill in the summary row. Hidden
+            // for platinum rows (they have their own auto-earned note).
+            _updatePhasePill(phasePill, isPlatinumRow ? null : (phaseSelect ? phaseSelect.value : ''));
 
             const hasContent = !!(body || youtubeUrl);
             if (hasContent) {
@@ -2719,6 +2785,7 @@
             if (phaseSelect && !isPlatinumRow) {
                 phaseSelect.addEventListener('change', () => {
                     setSaveStatus('unsaved');
+                    _updatePhasePill(phasePill, phaseSelect.value);
                     debouncedSave();
                 });
             }
