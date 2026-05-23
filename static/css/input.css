@@ -1444,6 +1444,19 @@ details[open]::details-content {
   block-size: auto;
 }
 
+/* Collectible areas + sub-areas drive their own collapse animation
+   from JS (_animateAreaClose / _animateAreaOpen in roadmap-detail.js)
+   so the auto-collapse-on-complete + chevron-in-parallel choreography
+   works in older browsers too. The global ::details-content transition
+   above would otherwise fire a second 200ms collapse right after our
+   JS animation finishes — visible as a "double play" on small
+   sub-area cards. Suppress the native transition for these two
+   classes so only the JS animation runs. */
+.collectible-area-group::details-content,
+.collectible-subarea-section::details-content {
+  transition: none;
+}
+
 /* Unified Item Creator */
 [id^="item-creator-"] {
   @apply transition-all duration-200;
