@@ -196,6 +196,20 @@
     }
   }
 
+  /* Expanding-ring pulse for the navbar sync search button on first load.
+     Runs until the user clicks the button or dismisses the hint bubble. */
+  .navbar-search-pulse {
+    animation: navbar-search-pulse-anim 2s ease-in-out infinite;
+  }
+  @keyframes navbar-search-pulse-anim {
+    0%, 100% {
+      box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 45%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 6px color-mix(in oklch, var(--color-primary) 0%, transparent);
+    }
+  }
+
   /* Interactive card with standard hover effect */
   .card-interactive {
     @apply transition-all duration-300 cursor-pointer hover:scale-105;

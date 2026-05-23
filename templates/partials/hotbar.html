@@ -17,12 +17,14 @@
          class="hotbar-loading bg-base-200/95 backdrop-blur-md border-2 border-primary rounded-box shadow-lg shadow-primary/25 w-full overflow-hidden transition-all duration-300 ease-in-out"
          data-url-sync="{% url 'profile_sync_status' %}"
          data-url-trigger="{% url 'trigger_sync' %}"
-         data-url-add-sync="{% url 'add_sync_status' %}"
          data-csrf="{{ csrf_token }}"
          data-sync-status="{{ hotbar.sync_status }}"
          data-seconds="{{ hotbar.seconds_to_next_sync }}">
         <div class="px-2 py-1.5 md:px-3 md:py-2 xl:px-6 xl:py-2">
-            <div class="flex flex-row items-center justify-between gap-2 md:gap-3 xl:gap-4">
+            {# flex-wrap is a safety net: even after moving search to the navbar, a long  #}
+            {# countdown label + long PSN username + finalize-phase badge can still       #}
+            {# squeeze the row. Wrapping is preferred over Safari's overlap-on-overflow.  #}
+            <div class="flex flex-row flex-wrap items-center justify-between gap-x-2 gap-y-1 md:gap-x-3 xl:gap-x-4">
                 <!-- Left: Profile info -->
                 <div class="flex flex-row items-center gap-1.5 md:gap-2 xl:gap-3 min-w-0">
                     {% if hotbar.profile %}
@@ -61,37 +63,7 @@
                         <span class="text-trophy-bronze font-bold" title="Bronze">{{ hotbar.profile.total_bronzes }}</span>
                     </div>
                 {% endif %}
-                <!-- Right: Search form (desktop) -->
-                <div class="hidden md:flex items-center shrink-0">
-                    <form id="sync-form" method="post" action="{% url 'search_sync_profile' %}" class="flex items-center gap-2" data-form-type="other">
-                        {% csrf_token %}
-                        <input type="search" name="psn_username" placeholder="PSN Username" class="add-sync-input input input-accent input-xs md:input-sm w-32 md:w-36 xl:w-48" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
-                        <button type="submit" class="add-sync-btn btn btn-accent btn-xs border border-base-300" aria-label="Sync new profile">Sync</button>
-                        <a href="" class="add-sync-anchor btn btn-success btn-xs border border-base-300 hidden" aria-label="Visit synced profile">Visit</a>
-                        <span class="add-sync-load loading loading-spinner loading-sm hidden" role="status" aria-label="Syncing profile"></span>
-                    </form>
-                </div>
-                <!-- Mobile search toggle -->
-                <button id="mobile-search-toggle" class="btn btn-ghost btn-xs md:hidden shrink-0" aria-label="Search profiles">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                </button>
             </div>
-            <!-- Mobile search row (collapsible) -->
-            <div id="mobile-search-row" class="md:hidden overflow-hidden max-h-0 transition-all duration-300 ease-in-out">
-                <div class="pt-2 pb-1">
-                    <form id="sync-form-mobile" method="post" action="{% url 'search_sync_profile' %}" class="flex items-center gap-2" data-form-type="other">
-                        {% csrf_token %}
-                        <input type="search" name="psn_username" placeholder="PSN Username" class="add-sync-input input input-accent input-xs flex-1" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-form-type="other" data-lpignore="true" readonly onfocus="this.removeAttribute('readonly')" required />
-                        <button type="submit" class="add-sync-btn btn btn-accent btn-xs border border-base-300" aria-label="Sync new profile">Sync</button>
-                        <a href="" class="add-sync-anchor btn btn-success btn-xs border border-base-300 hidden" aria-label="Visit synced profile">Visit</a>
-                        <span class="add-sync-load loading loading-spinner loading-sm hidden" role="status" aria-label="Syncing profile"></span>
-                    </form>
-                </div>
-            </div>
-            <!-- Error text (shared) -->
-            <p id="add-sync-error-text" class="text-xs text-error font-bold italic hidden mt-1"></p>
         </div>
     </div>
     <!-- Toggle button: inside wrapper so it moves with the hotbar -->

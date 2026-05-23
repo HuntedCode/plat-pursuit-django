@@ -4,6 +4,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.generic import View
+from django_ratelimit.core import is_ratelimited
 from django_ratelimit.decorators import ratelimit
 
 from core.services.tracking import track_site_event
@@ -135,18 +136,37 @@ class TriggerSyncView(LoginRequiredMixin, View):
             return JsonResponse({'error': f'Cooldown active: {seconds_left} seconds left'}, status=429)
         return JsonResponse({'success': True, 'message': 'Sync started'})
 
-class SearchSyncProfileView(LoginRequiredMixin, View):
+class SearchSyncProfileView(View):
     """
     AJAX endpoint to search for and add PSN profiles to the database.
 
     Creates profile if it doesn't exist and initiates initial sync.
     If profile exists, triggers a sync update.
-    Available to all authenticated users via the navigation hotbar.
+    Available to everyone via the navbar search dropdown.
 
-    Rate limited to 5 requests per minute per user.
+    Rate limits differ by auth state to balance accessibility against the
+    PSN-token cost of a sync:
+      - Authenticated users: 15 requests/min, keyed by user.id.
+      - Anonymous users: 3 requests/min, keyed by IP.
+    A signed-in user behind a shared/NAT'd IP isn't penalized by the anon
+    cap because the user-keyed bucket fires first and skips the IP check.
     """
-    @method_decorator(ratelimit(key='user', rate='5/m', method='POST', block=True))
     def post(self, request):
+        if request.user.is_authenticated:
+            limited = is_ratelimited(
+                request, group='sync_search:user', key='user',
+                rate='15/m', method='POST', increment=True,
+            )
+        else:
+            limited = is_ratelimited(
+                request, group='sync_search:ip', key='ip',
+                rate='3/m', method='POST', increment=True,
+            )
+        if limited:
+            return JsonResponse({
+                'error': 'Too many searches. Please wait a minute and try again.'
+            }, status=429)
+
         if redis_client.get('site:psn_outage'):
             return JsonResponse({
                 'error': 'PlayStation Network is currently unavailable. '
@@ -182,12 +202,14 @@ class SearchSyncProfileView(LoginRequiredMixin, View):
             'psn_username': profile.psn_username,
         })
 
-class AddSyncStatusView(LoginRequiredMixin, View):
+class AddSyncStatusView(View):
     """
-    AJAX endpoint to poll sync status after adding a new profile.
+    AJAX endpoint to poll sync status after adding a new profile via the
+    navbar search dropdown.
 
-    Returns sync status, account ID, and profile URL.
-    Used by admin/moderator tools to track sync progress after adding profiles.
+    Returns sync status, account ID, and profile URL. Read-only DB lookup,
+    no PSN tokens consumed, so it's open to anonymous users to pair with
+    the open SearchSyncProfileView.
     """
     def get(self, request):
         psn_username = request.GET.get('psn_username')

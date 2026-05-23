@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Read URLs and initial state from data attributes
     const syncStatusUrl = container.dataset.urlSync;
     const triggerSyncUrl = container.dataset.urlTrigger;
-    const addSyncStatusUrl = container.dataset.urlAddSync;
     const initialStatus = container.dataset.syncStatus;
     const initialSeconds = parseInt(container.dataset.seconds) || 0;
 
@@ -23,26 +22,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncAnnouncement = document.getElementById('sync-status-announcement');
     const syncQueuePosition = document.getElementById('sync-queue-position');
 
-    // DOM elements - Add sync
-    // The per-form .add-sync-{btn,load,anchor,input} elements live inside
-    // each sync form (desktop #sync-form, mobile #sync-form-mobile) and are
-    // resolved per-submit so feedback shows up in the form the user actually
-    // used. The error text is shared between both forms.
-    const addSyncErrorText = document.getElementById('add-sync-error-text');
-
     // DOM elements - Toggle
     const wrapper = document.getElementById('hotbar-wrapper');
     const toggleBtn = document.getElementById('hotbar-toggle');
     const toggleIcon = document.getElementById('toggle-icon');
 
-    // DOM elements - Mobile search
-    const mobileSearchToggle = document.getElementById('mobile-search-toggle');
-    const mobileSearchRow = document.getElementById('mobile-search-row');
-
     // Polling state
     let pollingTimeout;
     let pollingStartTime;
-    let addSyncInterval;
     const INITIAL_POLL_INTERVAL = 2000;
     const EXTENDED_POLL_INTERVAL = 10000;
     const EXTENSION_THRESHOLD = 60000;
@@ -339,98 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
         startPolling();
     }
 
-    // --- Add Sync (Search) ---
-
-    /**
-     * Checks the status of a newly added sync. `refs` resolves to the
-     * .add-sync-{btn,load,anchor,input} elements of the form that submitted,
-     * so feedback updates the form the user actually interacted with.
-     */
-    function checkAddSync(data, refs) {
-        if (data.sync_status === 'error') {
-            hide(refs.load);
-            hide(refs.input);
-            if (addSyncErrorText) {
-                addSyncErrorText.textContent = 'Sync error: check spelling or account permissions, then refresh and try again.';
-                show(addSyncErrorText);
-            }
-            clearInterval(addSyncInterval);
-        } else if (data.account_id) {
-            hide(refs.load);
-            if (refs.anchor) {
-                refs.anchor.href = data.slug;
-                show(refs.anchor);
-            }
-            clearInterval(addSyncInterval);
-        }
-    }
-
-    /**
-     * Polls for add sync status
-     */
-    function pollAddSync(psn_username, refs) {
-        if (!psn_username || !addSyncStatusUrl) return;
-
-        const url = `${addSyncStatusUrl}?psn_username=${encodeURIComponent(psn_username)}`;
-        PlatPursuit.API.get(url)
-            .then(data => checkAddSync(data, refs))
-            .catch(error => console.error('Add sync polling error:', error));
-    }
-
-    /**
-     * Handles sync form submission (shared between desktop and mobile forms)
-     */
-    function handleSyncFormSubmit(e) {
-        e.preventDefault();
-        const form = e.target;
-        const refs = {
-            btn:    form.querySelector('.add-sync-btn'),
-            load:   form.querySelector('.add-sync-load'),
-            anchor: form.querySelector('.add-sync-anchor'),
-            input:  form.querySelector('.add-sync-input'),
-        };
-
-        const formData = new FormData(form);
-        PlatPursuit.API.postFormData(form.action, formData)
-            .then(data => {
-                if (data.success) {
-                    hide(refs.btn);
-                    show(refs.load);
-
-                    setTimeout(() => {
-                        addSyncInterval = setInterval(() => pollAddSync(data.psn_username, refs), 2500);
-                    }, 2500);
-                } else {
-                    PlatPursuit.ToastManager.error(data.error || 'Failed to sync profile. Check the username and try again.');
-                }
-            })
-            .catch(error => {
-                console.error('Sync form error:', error);
-                PlatPursuit.ToastManager.error('Failed to sync profile. Please try again.');
-            });
-    }
-
-    document.querySelectorAll('#sync-form, #sync-form-mobile').forEach(form => {
-        form.addEventListener('submit', handleSyncFormSubmit);
-    });
-
-    // --- Mobile Search Toggle ---
-
-    if (mobileSearchToggle && mobileSearchRow) {
-        mobileSearchToggle.addEventListener('click', () => {
-            const isCollapsed = mobileSearchRow.classList.contains('max-h-0');
-            if (isCollapsed) {
-                mobileSearchRow.classList.remove('max-h-0');
-                mobileSearchRow.classList.add('max-h-24');
-                const input = mobileSearchRow.querySelector('input');
-                if (input) setTimeout(() => input.focus(), 300);
-            } else {
-                mobileSearchRow.classList.add('max-h-0');
-                mobileSearchRow.classList.remove('max-h-24');
-            }
-        });
-    }
-
     // --- Hotbar Toggle ---
 
     function isHotbarHidden() {
@@ -524,6 +419,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('beforeunload', () => {
         stopPolling();
-        if (addSyncInterval) clearInterval(addSyncInterval);
     });
 });
