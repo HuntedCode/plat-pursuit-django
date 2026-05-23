@@ -3670,17 +3670,32 @@
                     </button>
                 `).join('');
 
+            // Areas with their sub-areas nested below. Each area row keeps
+            // the same look; sub-area rows are indented and use the
+            // [[subarea:...]] token (secondary color) so writers can
+            // tell at a glance which token kind they're inserting.
+            // Visibility rule: an area is visible if it OR any of its
+            // sub-areas matches the filter — so searching "north" still
+            // shows the parent area row to give context for the
+            // nested "North Wing" sub-area below it.
             const areasHtml = areas
-                .filter(a => matches(a.name) || matches(a.slug))
                 .map(a => {
+                    const subareas = (a.subareas || [])
+                        .slice()
+                        .sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
+                    const areaMatches = matches(a.name) || matches(a.slug);
+                    const matchedSubs = subareas.filter(
+                        s => areaMatches || matches(s.name) || matches(s.slug),
+                    );
+                    if (!areaMatches && matchedSubs.length === 0) return '';
                     // Slug is server-generated at merge — brand-new (still
                     // negative-id) areas don't have one yet. Fall back to
                     // the ID so the token is at least valid; the merge
                     // service rewrites ID-based tokens to slug-based at
                     // save time once the live slug is known.
-                    const key = a.slug || String(a.id);
-                    return `
-                    <button class="roadmap-ref-option flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-token="[[area:${HTMLUtils.escape(key)}]]">
+                    const areaKey = a.slug || String(a.id);
+                    const areaRow = `
+                    <button class="roadmap-ref-option flex items-center gap-2 w-full p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-token="[[area:${HTMLUtils.escape(areaKey)}]]">
                         <span class="w-7 h-7 rounded shrink-0 flex items-center justify-center bg-accent/15 text-accent">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                         </span>
@@ -3688,7 +3703,25 @@
                             <span class="block text-sm font-medium truncate">${HTMLUtils.escape(a.name || a.slug || `Area ${a.id}`)}</span>
                         </span>
                     </button>
-                `}).join('');
+                    `;
+                    const subRows = matchedSubs.map(s => {
+                        const subKey = s.slug || String(s.id);
+                        return `
+                        <button class="roadmap-ref-option flex items-center gap-2 w-full p-2 pl-6 rounded-lg hover:bg-white/[0.05] transition-colors text-left" data-token="[[subarea:${HTMLUtils.escape(subKey)}]]">
+                            <span class="w-6 h-6 rounded shrink-0 flex items-center justify-center bg-secondary/15 text-secondary">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 21V11m4 10V7m4 14v-4m4 4V13"/></svg>
+                            </span>
+                            <span class="flex-1 min-w-0">
+                                <span class="block text-sm font-medium truncate">${HTMLUtils.escape(s.name || s.slug || `Sub-area ${s.id}`)}</span>
+                                <span class="block text-[11px] text-base-content/45 truncate">in ${HTMLUtils.escape(a.name || a.slug || `Area ${a.id}`)}</span>
+                            </span>
+                        </button>
+                        `;
+                    }).join('');
+                    return areaRow + subRows;
+                })
+                .filter(Boolean)
+                .join('');
 
             const groupHeader = (label) => `
                 <div class="text-[10px] uppercase tracking-wider font-semibold text-base-content/45 px-2 pt-2 pb-0.5">${label}</div>

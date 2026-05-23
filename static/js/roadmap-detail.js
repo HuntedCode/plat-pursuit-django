@@ -1521,6 +1521,30 @@
                     `.collectible-toc-area-link[data-area-key="${key}"] .collectible-toc-area-check`
                 ).forEach(el => el.classList.toggle('hidden', !isComplete));
             });
+            // Per-sub-area totals — same pattern as per-area but scoped to
+            // each sub-area section's items. Sub-area sections live INSIDE
+            // their area group, so the per-area count above naturally
+            // includes them; this loop just adds the more granular
+            // sub-area readout for the TOC.
+            this.rootEl.querySelectorAll('.collectible-subarea-section').forEach(sec => {
+                const items = sec.querySelectorAll('.collectible-item-row');
+                const found = sec.querySelectorAll('.collectible-item-row[data-found="1"]').length;
+                const total = items.length;
+                const key = sec.dataset.subareaKey;
+                if (!key) return;
+                const isComplete = total > 0 && found === total;
+                sec.dataset.complete = isComplete ? '1' : '0';
+                document.querySelectorAll(
+                    `.collectible-toc-subarea-count[data-subarea-key="${key}"]`
+                ).forEach(el => {
+                    el.querySelector('.collectible-toc-subarea-found').textContent = String(found);
+                    el.querySelector('.collectible-toc-subarea-total').textContent = String(total);
+                    el.classList.toggle('hidden', isComplete);
+                });
+                document.querySelectorAll(
+                    `.collectible-toc-subarea-link[data-subarea-key="${key}"] .collectible-toc-subarea-check`
+                ).forEach(el => el.classList.toggle('hidden', !isComplete));
+            });
             // Per-type totals (chip + progress bar). Counts reflect the
             // underlying truth, not the current filter state.
             const typeStats = {};

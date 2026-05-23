@@ -117,6 +117,29 @@
                                 {# area's count == total, hides otherwise.           #}
                                 <svg xmlns="http://www.w3.org/2000/svg" class="collectible-toc-area-check w-3 h-3 text-success shrink-0 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                             </a>
+                            {% if area_bucket.subareas %}
+                            {# Sub-area entries indented under their area so the    #}
+                            {# parent/child relationship reads at a glance. Counts  #}
+                            {# get populated by the same recompute path as areas    #}
+                            {# (initial 0/0 is repainted on first render).          #}
+                            <ul class="space-y-0.5 mt-0.5 ml-2 pl-2 border-l border-base-content/5">
+                                {% for sub_bucket in area_bucket.subareas %}
+                                <li>
+                                    <a href="#collectible-subarea-{{ sub_bucket.key }}" data-toc-link
+                                       class="flex items-center gap-1 text-[11px] py-0.5 px-1.5 rounded text-base-content/45 hover:text-base-content hover:bg-white/[0.04] transition-colors collectible-toc-subarea-link"
+                                       data-subarea-key="{{ sub_bucket.key }}"
+                                       title="{{ sub_bucket.subarea.name }}">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 shrink-0 text-secondary/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 21V11m4 10V7m4 14v-4m4 4V13"/></svg>
+                                        <span class="truncate min-w-0 flex-1">{{ sub_bucket.subarea.name }}</span>
+                                        <span class="text-[10px] tabular-nums text-base-content/35 shrink-0 collectible-toc-subarea-count" data-subarea-key="{{ sub_bucket.key }}">
+                                            <span class="collectible-toc-subarea-found">0</span>/<span class="collectible-toc-subarea-total">0</span>
+                                        </span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="collectible-toc-subarea-check w-2.5 h-2.5 text-success shrink-0 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                    </a>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
                         </li>
                         {% endfor %}
                     </ul>
