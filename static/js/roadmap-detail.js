@@ -1432,9 +1432,22 @@
         },
 
         _animateAreaClose(area) {
+            // Re-entrance guard: a second call while still animating would
+            // re-set maxHeight to the current (already-shrinking) height
+            // and re-arm the timeout, producing a visible "stutter" on
+            // top of the in-flight animation.
+            if (area.dataset.animating === '1') return;
             const content = area.querySelector('summary + div');
             if (!content) { area.open = false; return; }
             area.dataset.animating = '1';
+            // Chevron rotates in parallel with the content collapse.
+            // Default behavior (without this inline override) would wait
+            // for `area.open = false` at +220ms, then start its own 200ms
+            // rotation — read by users as "the animation fired again,
+            // quickly". The chevron is always the last direct <svg>
+            // child of the summary (others live inside <span> wrappers).
+            const chevron = area.querySelector(':scope > summary > svg:last-child');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
             content.style.maxHeight = content.scrollHeight + 'px';
             content.style.overflow = 'hidden';
             requestAnimationFrame(() => {
@@ -1448,11 +1461,17 @@
                 content.style.overflow = '';
                 content.style.opacity = '';
                 content.style.transition = '';
+                // Clear the inline transform so the natural CSS state
+                // takes over (sub.open=false → no .group-open match →
+                // rotate-0 by default). They agree on the final value,
+                // so this is a no-op visually.
+                if (chevron) chevron.style.transform = '';
                 delete area.dataset.animating;
             }, 220);
         },
 
         _animateAreaOpen(area) {
+            if (area.dataset.animating === '1') return;
             const content = area.querySelector('summary + div');
             if (!content) { area.open = true; return; }
             area.dataset.animating = '1';
