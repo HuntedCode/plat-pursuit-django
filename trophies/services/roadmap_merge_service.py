@@ -163,6 +163,9 @@ class _ChangeCounts:
     area_marker_creates: int = 0
     area_marker_updates: int = 0
     area_marker_deletes: int = 0
+    collectible_subarea_creates: int = 0
+    collectible_subarea_updates: int = 0
+    collectible_subarea_deletes: int = 0
 
     def any(self) -> bool:
         return any((
@@ -186,6 +189,9 @@ class _ChangeCounts:
             self.area_marker_creates,
             self.area_marker_updates,
             self.area_marker_deletes,
+            self.collectible_subarea_creates,
+            self.collectible_subarea_updates,
+            self.collectible_subarea_deletes,
         ))
 
     def summary(self, ctg_label: str = '') -> str:
@@ -255,6 +261,18 @@ class _ChangeCounts:
         if self.area_marker_deletes:
             parts.append(
                 f"deleted {self.area_marker_deletes} trophy marker{'s' if self.area_marker_deletes != 1 else ''}"
+            )
+        if self.collectible_subarea_creates:
+            parts.append(
+                f"added {self.collectible_subarea_creates} sub-area{'s' if self.collectible_subarea_creates != 1 else ''}"
+            )
+        if self.collectible_subarea_updates:
+            parts.append(
+                f"edited {self.collectible_subarea_updates} sub-area{'s' if self.collectible_subarea_updates != 1 else ''}"
+            )
+        if self.collectible_subarea_deletes:
+            parts.append(
+                f"deleted {self.collectible_subarea_deletes} sub-area{'s' if self.collectible_subarea_deletes != 1 else ''}"
             )
         if self.content_updates:
             parts.append("updated tips/content")
@@ -754,34 +772,162 @@ def _apply_collectible_areas(
     return area_id_map
 
 
+def _apply_collectible_subareas(
+    live_roadmap: Roadmap, areas_payload: list, area_id_map: dict,
+    profile, is_editor: bool, changes: _ChangeCounts,
+) -> dict:
+    """Diff and apply sub-areas nested under each area in the payload.
+
+    Returns a `{payload_subarea_id: live_subarea_id}` map so the
+    subsequent item / marker passes can translate `subarea_id` FK
+    references that pointed at brand-new sub-areas.
+
+    Mirrors `_apply_collectible_areas`: per-area iteration, slug
+    derivation from the sub-area name with collision-bumping scoped
+    to the parent area. Set-level ownership matches the rest of the
+    collectibles surface.
+    """
+    from trophies.models import RoadmapCollectibleSubarea
+
+    set_owner_id = _collectibles_set_owner_id(live_roadmap)
+
+    def _enforce_set_ownership():
+        if is_editor:
+            return
+        if set_owner_id is not None and set_owner_id != profile.id:
+            raise MergeError(
+                "This roadmap's collectibles are owned by another writer. "
+                "Editors+ can override."
+            )
+
+    # Pre-fetch all live sub-areas grouped by parent area (one query).
+    live_subareas_by_area: dict[int, dict[int, RoadmapCollectibleSubarea]] = {}
+    for sa in RoadmapCollectibleSubarea.objects.filter(area__roadmap=live_roadmap):
+        live_subareas_by_area.setdefault(sa.area_id, {})[sa.id] = sa
+
+    subarea_id_map: dict = {sa.id: sa.id for ag in live_subareas_by_area.values() for sa in ag.values()}
+
+    for area_payload in areas_payload:
+        subareas_payload = area_payload.get('subareas')
+        if subareas_payload is None:
+            # Area didn't mention subareas — leave any live ones alone.
+            continue
+
+        payload_area_id = area_payload.get('id')
+        live_area_id = area_id_map.get(payload_area_id) if payload_area_id is not None else None
+        if live_area_id is None:
+            # Area was rejected upstream; orphaned subareas don't make sense.
+            continue
+
+        live_subareas = live_subareas_by_area.get(live_area_id, {})
+        explicit_payload_ids = set()
+        # Slug collision dedup scoped to THIS area (matches the model's
+        # unique_together = [area, slug]). Carry surviving live slugs in
+        # so brand-new sub-area names that collide with existing get
+        # bumped (mansion / mansion-2).
+        payload_slugs_seen = {sa.slug for sa in live_subareas.values()}
+
+        for sa_payload in subareas_payload:
+            sa_id = sa_payload.get('id')
+            raw_name = (sa_payload.get('name') or '').strip()
+            if not raw_name:
+                continue
+
+            # NEW sub-area.
+            if sa_id is None or (isinstance(sa_id, int) and sa_id < 0):
+                _enforce_set_ownership()
+                slug = slugify(raw_name)[:50] or f'subarea-{len(live_subareas) + 1}'
+                base = slug
+                n = 2
+                while slug in payload_slugs_seen:
+                    slug = f"{base}-{n}"[:50]
+                    n += 1
+                payload_slugs_seen.add(slug)
+                new_sa = RoadmapCollectibleSubarea.objects.create(
+                    area_id=live_area_id,
+                    name=raw_name[:100],
+                    slug=slug,
+                    order=sa_payload.get('order', len(live_subareas)),
+                    created_by_id=profile.id,
+                    last_edited_by_id=profile.id,
+                )
+                changes.collectible_subarea_creates += 1
+                if sa_id is not None:
+                    subarea_id_map[sa_id] = new_sa.id
+                continue
+
+            explicit_payload_ids.add(sa_id)
+            live_sa = live_subareas.get(sa_id)
+            if live_sa is None:
+                logger.warning(
+                    "Roadmap merge: payload referenced subarea id %s not in area %s; skipping.",
+                    sa_id, live_area_id,
+                )
+                continue
+            payload_slugs_seen.add(live_sa.slug)
+
+            # Diff: only name + order are mutable (slug is stable post-creation,
+            # mirroring areas).
+            dirty = []
+            if 'name' in sa_payload:
+                new_name = (sa_payload['name'] or '').strip()[:100]
+                if new_name and new_name != live_sa.name:
+                    dirty.append(('name', new_name))
+            if 'order' in sa_payload and sa_payload['order'] != live_sa.order:
+                dirty.append(('order', sa_payload['order']))
+            if not dirty:
+                continue
+            _enforce_set_ownership()
+            for fld, val in dirty:
+                setattr(live_sa, fld, val)
+            live_sa.last_edited_by_id = profile.id
+            live_sa.save()
+            changes.collectible_subarea_updates += 1
+
+        # Deletes scoped to THIS area's sub-areas.
+        actually_deleted = set(live_subareas.keys()) - explicit_payload_ids
+        if actually_deleted:
+            _enforce_set_ownership()
+            RoadmapCollectibleSubarea.objects.filter(id__in=actually_deleted).delete()
+            changes.collectible_subarea_deletes += len(actually_deleted)
+            # Items + markers pointing at deleted sub-areas get SET_NULL,
+            # so they orphan back to "loose" within the parent area
+            # rather than vanishing.
+
+    return subarea_id_map
+
+
 def _translate_branch_refs(
     live_roadmap: Roadmap, step_id_map: dict, area_id_map: dict,
+    subarea_id_map: dict,
 ) -> None:
-    """Rewrite `[[step:-N]]` and `[[area:-N]]` body refs to live ids/slugs.
+    """Rewrite `[[step|area|subarea:-N]]` body refs to live ids/slugs.
 
-    The editor lets writers reference newly-created (still-unsaved) steps
-    and areas via the `[[step:<id>]]` / `[[area:<id-or-slug>]]` tokens.
-    Brand-new entities have negative payload ids assigned by
-    `BranchProxy.nextId`; without translation those refs would break the
-    moment the entity is materialized with a live id.
+    The editor lets writers reference newly-created (still-unsaved) steps,
+    areas, and sub-areas via `[[step:<id>]]` / `[[area:<id-or-slug>]]` /
+    `[[subarea:<id-or-slug>]]` tokens. Brand-new entities have negative
+    payload ids assigned by `BranchProxy.nextId`; without translation
+    those refs would break the moment the entity is materialized with a
+    live id.
 
-    This pass runs AFTER all entity merges so both id maps are populated:
+    Runs AFTER all entity merges so the id maps are populated:
       * `step_id_map`: {payload_id: live_id}
       * `area_id_map`: {payload_id: live_id}
+      * `subarea_id_map`: {payload_id: live_id}
 
-    For areas we additionally resolve live_id -> live_slug here so the
-    rewritten token uses the human-readable slug form (which is what the
-    reader's anchor href expects).
+    For areas + sub-areas we additionally resolve live_id -> live_slug
+    here so the rewritten token uses the human-readable slug form (which
+    is what the reader's anchor href expects).
 
     Idempotent: tokens that already point at a positive live id are
     left untouched. Tokens that point at an unmappable id (deleted
     entity) are also left as-is so the reader's "broken pill" affordance
     surfaces them to the author.
     """
-    if not step_id_map and not area_id_map:
+    if not step_id_map and not area_id_map and not subarea_id_map:
         return
 
-    # Build slug lookup once so we don't refetch areas per body field.
+    # Build slug lookups once so we don't refetch per body field.
     area_slug_by_payload_id: dict[int, str] = {}
     if area_id_map:
         live_slugs = dict(
@@ -794,8 +940,22 @@ def _translate_branch_refs(
             if slug:
                 area_slug_by_payload_id[payload_id] = slug
 
+    subarea_slug_by_payload_id: dict[int, str] = {}
+    if subarea_id_map:
+        from trophies.models import RoadmapCollectibleSubarea
+        live_sub_slugs = dict(
+            RoadmapCollectibleSubarea.objects
+            .filter(id__in=set(subarea_id_map.values()))
+            .values_list('id', 'slug')
+        )
+        for payload_id, live_id in subarea_id_map.items():
+            slug = live_sub_slugs.get(live_id)
+            if slug:
+                subarea_slug_by_payload_id[payload_id] = slug
+
     _step_re = re.compile(r'\[\[step:(-?\d+)\]\]')
     _area_re = re.compile(r'\[\[area:(-?\d+)\]\]')
+    _subarea_re = re.compile(r'\[\[subarea:(-?\d+)\]\]')
 
     def _rewrite(text: str) -> str:
         if not text:
@@ -813,6 +973,12 @@ def _translate_branch_refs(
                 live_slug = area_slug_by_payload_id.get(old)
                 return f'[[area:{live_slug}]]' if live_slug else m.group(0)
             rewrote = _area_re.sub(_area_sub, rewrote)
+        if subarea_slug_by_payload_id:
+            def _subarea_sub(m):
+                old = int(m.group(1))
+                live_slug = subarea_slug_by_payload_id.get(old)
+                return f'[[subarea:{live_slug}]]' if live_slug else m.group(0)
+            rewrote = _subarea_re.sub(_subarea_sub, rewrote)
         return rewrote
 
     # Roadmap-level body fields.
@@ -853,18 +1019,25 @@ def _translate_branch_refs(
 
 def _apply_area_markers(
     live_roadmap: Roadmap, areas_payload: list, area_id_map: dict,
-    profile, is_editor: bool, changes: _ChangeCounts,
+    subarea_id_map: dict, profile, is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply trophy markers per area.
 
     Each entry in ``areas_payload`` may carry a ``markers`` list. We process
-    those after areas are reconciled so payload area_ids (possibly negative
-    for brand-new areas) can be translated to live ids via ``area_id_map``.
+    those after areas + sub-areas are reconciled so payload `area_id` and
+    optional `subarea_id` references (possibly negative for brand-new
+    entities) can be translated to live ids via the maps.
 
     Set-level ownership matches the rest of the collectibles surface — the
     set owner gates create / update / delete; editors+ bypass.
     """
     set_owner_id = _collectibles_set_owner_id(live_roadmap)
+
+    def _resolve_subarea(payload_subarea_id):
+        if payload_subarea_id is None:
+            return None
+        # Live (positive) or branch-translated (negative -> live) id.
+        return subarea_id_map.get(payload_subarea_id)
 
     def _enforce_set_ownership():
         if is_editor:
@@ -911,6 +1084,7 @@ def _apply_area_markers(
                 _enforce_set_ownership()
                 RoadmapAreaMarker.objects.create(
                     area_id=live_area_id,
+                    subarea_id=_resolve_subarea(marker_payload.get('subarea_id')),
                     trophy_id=int(trophy_id),
                     order=marker_payload.get('order', len(live_markers)),
                     created_by_id=profile.id,
@@ -928,14 +1102,19 @@ def _apply_area_markers(
                 )
                 continue
 
-            # Diff: trophy_id and order are the only mutable fields. (We
-            # don't support migrating a marker to a different area; deleting
-            # + re-creating is the natural path for that.)
+            # Diff: trophy_id / order / subarea_id are the mutable fields.
+            # (We don't support migrating a marker to a different area;
+            # deleting + re-creating is the natural path for that. Moving
+            # between sub-areas within the same parent area IS supported.)
             dirty = []
             if int(trophy_id) != live_marker.trophy_id:
                 dirty.append(('trophy_id', int(trophy_id)))
             if 'order' in marker_payload and marker_payload['order'] != live_marker.order:
                 dirty.append(('order', marker_payload['order']))
+            if 'subarea_id' in marker_payload:
+                new_subarea_id = _resolve_subarea(marker_payload.get('subarea_id'))
+                if new_subarea_id != live_marker.subarea_id:
+                    dirty.append(('subarea_id', new_subarea_id))
             if not dirty:
                 continue
             _enforce_set_ownership()
@@ -955,8 +1134,8 @@ def _apply_area_markers(
 
 def _apply_items_for_type(
     live_type: RoadmapCollectibleType, items_payload: list,
-    area_id_map: dict, profile, set_owner_id, is_editor: bool,
-    changes: _ChangeCounts,
+    area_id_map: dict, subarea_id_map: dict, profile, set_owner_id,
+    is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply the items array nested under a single collectible type.
 
@@ -983,6 +1162,11 @@ def _apply_items_for_type(
             return None
         return area_id_map.get(payload_area_id)
 
+    def _resolve_subarea(payload_subarea_id):
+        if payload_subarea_id is None:
+            return None
+        return subarea_id_map.get(payload_subarea_id)
+
     explicit_payload_ids = set()
 
     for item_payload in items_payload:
@@ -992,6 +1176,7 @@ def _apply_items_for_type(
             continue
 
         resolved_area_id = _resolve_area(item_payload.get('area_id'))
+        resolved_subarea_id = _resolve_subarea(item_payload.get('subarea_id'))
 
         # NEW item.
         if item_id is None or (isinstance(item_id, int) and item_id < 0):
@@ -1001,6 +1186,7 @@ def _apply_items_for_type(
                 collectible_type=live_type,
                 name=raw_name[:200],
                 area_id=resolved_area_id,
+                subarea_id=resolved_subarea_id,
                 body=item_payload.get('body') or '',
                 youtube_url=new_youtube_url,
                 gallery_images=_normalize_gallery(item_payload.get('gallery_images')),
@@ -1032,6 +1218,9 @@ def _apply_items_for_type(
         if 'area_id' in item_payload:
             if resolved_area_id != live_item.area_id:
                 dirty_fields.append(('area_id', resolved_area_id))
+        if 'subarea_id' in item_payload:
+            if resolved_subarea_id != live_item.subarea_id:
+                dirty_fields.append(('subarea_id', resolved_subarea_id))
         if 'body' in item_payload:
             new_body = item_payload['body'] or ''
             if new_body != live_item.body:
@@ -1082,7 +1271,7 @@ def _apply_items_for_type(
 
 def _apply_collectible_types(
     live_roadmap: Roadmap, types_payload: list, area_id_map: dict,
-    profile, is_editor: bool, changes: _ChangeCounts,
+    subarea_id_map: dict, profile, is_editor: bool, changes: _ChangeCounts,
 ) -> None:
     """Diff and apply the collectible-types branch payload.
 
@@ -1270,7 +1459,7 @@ def _apply_collectible_types(
         # set_owner_id by value at this point; the items helper enforces
         # the same gate.
         _apply_items_for_type(
-            live_type, items_payload, area_id_map,
+            live_type, items_payload, area_id_map, subarea_id_map,
             profile, set_owner_id, is_editor, changes,
         )
 
@@ -1331,29 +1520,35 @@ def merge_branch(lock: RoadmapEditLock, profile) -> RoadmapRevision:
             roadmap, payload.get('trophy_guides') or [],
             profile, is_editor, changes,
         )
-        # Areas first so types' nested items can resolve area_id FK
-        # references (negative branch ids translate to live ids via the
-        # returned map).
+        # Areas first so sub-areas, types' nested items, and markers can
+        # resolve area_id FK references (negative branch ids translate
+        # to live ids via the returned map). Sub-areas next so items +
+        # markers can resolve their optional subarea_id similarly.
         area_id_map = _apply_collectible_areas(
             roadmap, payload.get('collectible_areas') or [],
             profile, is_editor, changes,
         )
+        subarea_id_map = _apply_collectible_subareas(
+            roadmap, payload.get('collectible_areas') or [],
+            area_id_map, profile, is_editor, changes,
+        )
         _apply_collectible_types(
             roadmap, payload.get('collectible_types') or [],
-            area_id_map, profile, is_editor, changes,
+            area_id_map, subarea_id_map, profile, is_editor, changes,
         )
         # Markers anchor to areas (independent of types/items), so they
         # can apply alongside types — no ordering dependency between them.
         _apply_area_markers(
             roadmap, payload.get('collectible_areas') or [],
-            area_id_map, profile, is_editor, changes,
+            area_id_map, subarea_id_map, profile, is_editor, changes,
         )
-        # Post-pass: rewrite `[[step:-N]]` and `[[area:-N]]` body
-        # references to use the freshly-created live ids / slugs. Without
-        # this, references inserted before the entity's first save would
-        # break (the negative ids don't exist post-merge). Runs after all
-        # entity merges so both id maps are populated.
-        _translate_branch_refs(roadmap, step_id_map, area_id_map)
+        # Post-pass: rewrite `[[step:-N]]`, `[[area:-N]]`, and
+        # `[[subarea:-N]]` body references to use the freshly-created
+        # live ids / slugs. Without this, references inserted before
+        # the entity's first save would break (the negative ids don't
+        # exist post-merge). Runs after all entity merges so all id
+        # maps are populated.
+        _translate_branch_refs(roadmap, step_id_map, area_id_map, subarea_id_map)
 
         if changes.any():
             roadmap.save(update_fields=['updated_at'])

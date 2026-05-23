@@ -4431,6 +4431,57 @@ class RoadmapCollectibleArea(models.Model):
         return f"CollectibleArea: roadmap={self.roadmap_id}, slug={self.slug}"
 
 
+class RoadmapCollectibleSubarea(models.Model):
+    """A second-level grouping inside a `RoadmapCollectibleArea`.
+
+    Opt-in: authors can organize items / markers within an area into
+    sub-areas (e.g. Chapter 1 -> Mansion / Garden / Caves) when the area
+    is large or naturally sub-divided. Areas without sub-areas keep the
+    original "flat list of items + markers" layout — sub-areas are
+    additive, not required.
+
+    Items and markers belong to an area (required) and OPTIONALLY to a
+    sub-area within that area. Items with `subarea_id IS NULL` render
+    as "loose" inside the area, before / after the sub-area sections.
+
+    Slug is roadmap-scoped (not area-scoped) so `[[subarea:<slug>]]`
+    references stay short and unambiguous. Server bumps collisions
+    on first save the same way it does for areas (`mansion`,
+    `mansion-2`, ...).
+
+    Ownership follows the parent area's set ownership — sub-areas are
+    part of the same author-curated vocabulary, no separate gate.
+    """
+    area = models.ForeignKey(
+        RoadmapCollectibleArea,
+        on_delete=models.CASCADE,
+        related_name='subareas',
+    )
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=50)
+    order = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='authored_collectible_subareas',
+    )
+    last_edited_by = models.ForeignKey(
+        Profile, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='last_edited_collectible_subareas',
+    )
+
+    class Meta:
+        # Slug uniqueness scoped to the roadmap so [[subarea:slug]]
+        # tokens resolve unambiguously. We can't put a single index on
+        # roadmap_id (subarea doesn't carry the FK directly) — the
+        # merge service enforces uniqueness in app code via the
+        # roadmap-wide slug set passed into _apply_collectible_subareas.
+        unique_together = ['area', 'slug']
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"CollectibleSubarea: area={self.area_id}, slug={self.slug}"
+
+
 class RoadmapCollectibleItem(models.Model):
     """A single collectible within a type — the unit a player checks off.
 
@@ -4456,6 +4507,16 @@ class RoadmapCollectibleItem(models.Model):
     # Misc rather than nuking the items along with it.
     area = models.ForeignKey(
         RoadmapCollectibleArea,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='items',
+    )
+    # Optional sub-area FK within the parent area. Null means "loose"
+    # (the item renders directly in the area, not inside a sub-area
+    # section). SET_NULL on delete so removing a sub-area orphans
+    # its items back to loose rather than nuking them.
+    subarea = models.ForeignKey(
+        RoadmapCollectibleSubarea,
         on_delete=models.SET_NULL,
         null=True, blank=True,
         related_name='items',
@@ -4511,6 +4572,17 @@ class RoadmapAreaMarker(models.Model):
     area = models.ForeignKey(
         RoadmapCollectibleArea,
         on_delete=models.CASCADE,
+        related_name='markers',
+    )
+    # Optional sub-area FK within the parent area. Same pattern as
+    # `RoadmapCollectibleItem.subarea`: null means "loose" (the marker
+    # renders directly in the area), set means the marker belongs to
+    # a sub-area section. SET_NULL so deleting a sub-area orphans
+    # its markers back to loose rather than nuking them.
+    subarea = models.ForeignKey(
+        'RoadmapCollectibleSubarea',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
         related_name='markers',
     )
     # PSN trophy_id (matches Trophy.trophy_id, an integer scoped to the

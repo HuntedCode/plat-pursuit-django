@@ -66,7 +66,8 @@ class RoadmapService:
         """Shared prefetch chain for a single Roadmap's children."""
         from trophies.models import (
             RoadmapAreaMarker, RoadmapCollectibleArea, RoadmapCollectibleItem,
-            RoadmapCollectibleType, RoadmapStep, RoadmapStepTrophy, TrophyGuide,
+            RoadmapCollectibleSubarea, RoadmapCollectibleType, RoadmapStep,
+            RoadmapStepTrophy, TrophyGuide,
         )
 
         return [
@@ -83,16 +84,21 @@ class RoadmapService:
                 'trophy_guides',
                 queryset=TrophyGuide.objects.order_by('order', 'trophy_id'),
             ),
-            # Collectible vocabulary + items + area markers. The reader's
-            # Collectibles Tracker section iterates types -> items -> resolves
-            # area FK; markers attach directly to areas. Preload all three
-            # to avoid N+1 on the detail page.
+            # Collectible vocabulary + items + area markers + subareas.
+            # The reader's Collectibles Tracker section iterates
+            # types -> items -> resolves area FK; markers attach directly
+            # to areas; subareas attach to areas and items / markers can
+            # reference them. Preload all of it to avoid N+1.
             Prefetch(
                 'collectible_areas',
                 queryset=RoadmapCollectibleArea.objects.prefetch_related(
                     Prefetch(
                         'markers',
                         queryset=RoadmapAreaMarker.objects.order_by('order', 'id'),
+                    ),
+                    Prefetch(
+                        'subareas',
+                        queryset=RoadmapCollectibleSubarea.objects.order_by('order', 'id'),
                     ),
                 ).order_by('order', 'id'),
             ),
@@ -402,6 +408,7 @@ class RoadmapService:
         overlay_areas = []
         synthetic_area_id = -3_000_000
         synthetic_marker_id = -5_000_000
+        synthetic_subarea_id = -6_000_000
         for area_payload in branch_payload.get('collectible_areas') or []:
             aid = area_payload.get('id')
             if isinstance(aid, int) and aid in live_areas_by_id:
@@ -420,7 +427,7 @@ class RoadmapService:
             # Markers — stash as a prefetched cache on the area instance so
             # `area.markers.all()` returns the overlay during preview without
             # hitting the database (which won't reflect unsaved branch edits).
-            from trophies.models import RoadmapAreaMarker
+            from trophies.models import RoadmapAreaMarker, RoadmapCollectibleSubarea
             live_markers_by_id = (
                 {m.id: m for m in area.markers.all()}
                 if isinstance(area.id, int) and area.id > 0
@@ -436,6 +443,10 @@ class RoadmapService:
                     m = RoadmapAreaMarker(area=area, id=synthetic_marker_id)
                 if 'trophy_id' in marker_payload:
                     m.trophy_id = marker_payload['trophy_id']
+                if 'subarea_id' in marker_payload:
+                    # Allow synthetic (negative) ids — the reader's bucket
+                    # assembly resolves them via overlay_subareas below.
+                    m.subarea_id = marker_payload['subarea_id']
                 if 'order' in marker_payload:
                     m.order = marker_payload['order']
                 if 'created_by_id' in marker_payload:
@@ -447,6 +458,37 @@ class RoadmapService:
             area._prefetched_objects_cache['markers'] = _cache_as_queryset(
                 RoadmapAreaMarker.objects.filter(area=area),
                 overlay_markers,
+            )
+
+            # Sub-areas — same overlay pattern as markers. Reader needs
+            # area.subareas.all() to return the in-progress branch shape
+            # during preview, including any negative-id sub-areas the
+            # writer just added but hasn't merged.
+            live_subareas_by_id = (
+                {sa.id: sa for sa in area.subareas.all()}
+                if isinstance(area.id, int) and area.id > 0
+                else {}
+            )
+            overlay_subareas = []
+            for sa_payload in area_payload.get('subareas') or []:
+                sid = sa_payload.get('id')
+                if isinstance(sid, int) and sid in live_subareas_by_id:
+                    sa = live_subareas_by_id[sid]
+                else:
+                    synthetic_subarea_id -= 1
+                    sa = RoadmapCollectibleSubarea(area=area, id=synthetic_subarea_id)
+                for fld in ('name', 'slug'):
+                    if fld in sa_payload:
+                        setattr(sa, fld, sa_payload[fld] or '')
+                if 'order' in sa_payload:
+                    sa.order = sa_payload['order']
+                if 'created_by_id' in sa_payload:
+                    sa.created_by_id = sa_payload['created_by_id']
+                overlay_subareas.append(sa)
+            overlay_subareas.sort(key=lambda x: (x.order, x.id))
+            area._prefetched_objects_cache['subareas'] = _cache_as_queryset(
+                RoadmapCollectibleSubarea.objects.filter(area=area),
+                overlay_subareas,
             )
 
             overlay_areas.append(area)
@@ -523,6 +565,10 @@ class RoadmapService:
                     # the int — preview render code resolves it through
                     # overlay_areas, not the database.
                     item.area_id = item_payload['area_id']
+                if 'subarea_id' in item_payload:
+                    # Same rationale as area_id: live or synthetic int;
+                    # the reader's bucket assembly resolves it.
+                    item.subarea_id = item_payload['subarea_id']
                 overlay_items.append(item)
             overlay_items.sort(key=lambda i: (i.order, i.id))
             # Stash items as a prefetched cache on the type instance so
@@ -751,16 +797,34 @@ class RoadmapService:
                     'last_edited_by_id': area.last_edited_by_id,
                     # Trophy nav anchors. Share the area's `order` space with
                     # items — render-time interleave by `order` regardless of
-                    # kind preserves the playthrough sequence.
+                    # kind preserves the playthrough sequence. Each carries
+                    # an optional `subarea_id` so the marker can live inside
+                    # a sub-area section instead of loose at the area level.
                     'markers': [
                         {
                             'id': m.id,
                             'trophy_id': m.trophy_id,
+                            'subarea_id': m.subarea_id,
                             'order': m.order,
                             'created_by_id': m.created_by_id,
                             'last_edited_by_id': m.last_edited_by_id,
                         }
                         for m in area.markers.all()
+                    ],
+                    # Sub-areas — opt-in second-level grouping inside an
+                    # area. Items + markers reference these via subarea_id;
+                    # we serialize the sub-area metadata here so the editor
+                    # / preview / reader all see the same authoritative shape.
+                    'subareas': [
+                        {
+                            'id': sa.id,
+                            'name': sa.name,
+                            'slug': sa.slug,
+                            'order': sa.order,
+                            'created_by_id': sa.created_by_id,
+                            'last_edited_by_id': sa.last_edited_by_id,
+                        }
+                        for sa in area.subareas.all()
                     ],
                 }
                 for area in rm.collectible_areas.all()
@@ -783,6 +847,7 @@ class RoadmapService:
                             'id': item.id,
                             'name': item.name,
                             'area_id': item.area_id,
+                            'subarea_id': item.subarea_id,
                             'body': item.body,
                             'youtube_url': item.youtube_url,
                             'youtube_channel_name': item.youtube_channel_name,
