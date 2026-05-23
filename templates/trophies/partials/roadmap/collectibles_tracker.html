@@ -258,22 +258,31 @@
                         {# carries its own header + items + markers. Anchored as     #}
                         {# `collectible-subarea-<slug>` so [[subarea:slug]] tokens    #}
                         {# and TOC links resolve directly to the section.             #}
+                        {# Sub-area sections — visually distinct from item rows so the   #}
+                        {# parent/child hierarchy reads at a glance. The secondary tint  #}
+                        {# + left accent stripe + "Sub-area" eyebrow label mirror the    #}
+                        {# editor card so the same authoring identity carries over.      #}
                         {% if area_bucket.subareas %}
-                        <div class="collectible-subarea-list mt-3 space-y-3">
+                        <div class="collectible-subarea-list mt-4 space-y-3">
                             {% for sub_bucket in area_bucket.subareas %}
                             <section id="collectible-subarea-{{ sub_bucket.key }}"
-                                     class="collectible-subarea-section rounded-md border border-base-content/5 bg-white/[0.015]"
+                                     class="collectible-subarea-section rounded-md border border-secondary/25 border-l-4 border-l-secondary/60 overflow-hidden"
+                                     style="background-color: oklch(from var(--color-secondary) l c h / 0.04);"
                                      data-subarea-key="{{ sub_bucket.key }}"
                                      data-complete="{% if sub_bucket.is_complete %}1{% else %}0{% endif %}">
-                                <header class="flex items-center gap-2 px-3 py-2 border-b border-base-content/5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-secondary/70 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                                    </svg>
-                                    <h4 class="text-xs md:text-sm font-semibold flex-1 min-w-0 truncate">
+                                <header class="flex items-center gap-2 px-3 py-2.5 border-b border-secondary/15"
+                                        style="background-color: oklch(from var(--color-secondary) l c h / 0.08);">
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-secondary bg-secondary/15 px-1.5 py-0.5 rounded shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 21V11m4 10V7m4 14v-4m4 4V13"/>
+                                        </svg>
+                                        Sub-area
+                                    </span>
+                                    <h4 class="text-sm md:text-base font-semibold flex-1 min-w-0 truncate">
                                         {{ sub_bucket.subarea.name }}
                                     </h4>
                                     {% if sub_bucket.is_complete %}
-                                    <span class="badge badge-xs badge-success gap-1">
+                                    <span class="badge badge-xs badge-success gap-1 shrink-0">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                         Done
                                     </span>

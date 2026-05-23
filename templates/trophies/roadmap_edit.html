@@ -778,18 +778,28 @@
 {# reads at a glance. Slug is server-generated at merge so the name input #}
 {# is the only authoring field on the summary row.                        #}
 <template id="collectible-subarea-card-template">
-    <details class="collectible-subarea-card group rounded-md border border-base-content/10 bg-white/[0.02] overflow-hidden transition-opacity"
+    {# Sub-area cards live INSIDE the parent area's body, sharing space     #}
+    {# with item rows. The secondary tint + left accent stripe + explicit  #}
+    {# "Sub-area" badge are deliberate — without them, the card visually   #}
+    {# blended with the item rows and authors couldn't tell at a glance    #}
+    {# that they were looking at a container, not another item.            #}
+    <details class="collectible-subarea-card group rounded-md border border-secondary/25 border-l-4 border-l-secondary/60 overflow-hidden transition-opacity"
+             style="background-color: oklch(from var(--color-secondary) l c h / 0.04);"
              data-subarea-id="" data-area-id="" data-item-id="">
-        <summary class="flex items-start gap-2 px-2.5 py-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden bg-white/[0.025] border-b border-base-content/5 group-[:not([open])]:border-b-0">
+        <summary class="flex items-start gap-2 px-3 py-2.5 cursor-pointer list-none [&::-webkit-details-marker]:hidden border-b border-secondary/15 group-[:not([open])]:border-b-0"
+                 style="background-color: oklch(from var(--color-secondary) l c h / 0.08);">
             <div class="collectible-subarea-handle shrink-0 mt-1 cursor-grab text-base-content/30 hover:text-base-content/60" title="Drag to reorder sub-area" aria-label="Drag to reorder sub-area">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h16M4 16h16"/></svg>
             </div>
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 mt-1 text-secondary/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 21V11m4 10V7m4 14v-4m4 4V13"/>
-            </svg>
+            <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-secondary bg-secondary/15 px-1.5 py-0.5 rounded shrink-0 mt-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 21V11m4 10V7m4 14v-4m4 4V13"/>
+                </svg>
+                Sub-area
+            </span>
             <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                 <input type="text"
-                       class="collectible-subarea-name-input input input-bordered input-xs flex-1 min-w-0 font-medium"
+                       class="collectible-subarea-name-input input input-bordered input-xs flex-1 min-w-0 font-semibold"
                        placeholder="Sub-area name (e.g. North Wing)..."
                        maxlength="100">
                 <span class="collectible-subarea-item-count badge badge-xs badge-ghost shrink-0">0 items</span>
@@ -798,7 +808,7 @@
             <button type="button" class="collectible-subarea-delete-btn btn btn-ghost btn-xs text-error/60 hover:text-error shrink-0 mt-0.5" title="Delete sub-area (items/markers fall back to loose in this area)" aria-label="Delete sub-area">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 mt-1 text-base-content/30 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 mt-1 text-secondary/50 transition-transform duration-200 group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
         </summary>
         <div class="px-3 py-2.5">
             <div class="flex items-center justify-end gap-1 mb-1.5">
