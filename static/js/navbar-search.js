@@ -117,6 +117,14 @@ document.addEventListener('DOMContentLoaded', () => {
             searchBtn.classList.add('navbar-search-pulse');
         }, 800);
 
+        // The hint lives inside the daisyUI .dropdown container, which opens
+        // on :focus-within. A normal click on the X would focus the close
+        // button -> trigger :focus-within -> pop the search dropdown open
+        // before the click handler can dismiss the hint. Suppressing focus
+        // on mousedown stops that chain; the click handler then dismisses
+        // cleanly. Keyboard activation (Tab to X, then Enter) still works
+        // via the click handler.
+        hintClose?.addEventListener('mousedown', (e) => e.preventDefault());
         hintClose?.addEventListener('click', (e) => {
             e.stopPropagation();
             dismissHint();
