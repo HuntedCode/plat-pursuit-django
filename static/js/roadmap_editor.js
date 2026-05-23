@@ -150,6 +150,9 @@
     const LEGACY_C_AREA_SUBAREAS_DETAIL_PATTERN = new RegExp(
         `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/subareas/(-?\\d+)/?$`
     );
+    const LEGACY_C_AREA_SUBAREAS_REORDER_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/subareas/reorder/?$`
+    );
     const LEGACY_C_AREA_ENTRIES_REORDER_PATTERN = new RegExp(
         `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+|null)/entries/reorder/?$`
     );
@@ -1343,6 +1346,26 @@
                 sa.last_edited_by_id = viewerProfileId;
                 this.schedulePush();
                 return { ...sa };
+            }
+
+            // Reorder sub-areas: POST /tab/Y/collectible-areas/A/subareas/reorder/
+            // Body: { subarea_ids: [...] }. Rewrites the sub-area `order`
+            // field in lockstep so the parent area's sub-area list reflects
+            // the new visual order.
+            if ((match = url.match(LEGACY_C_AREA_SUBAREAS_REORDER_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const areaId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const area = (tab.collectible_areas || []).find(a => a.id === areaId);
+                if (!area) throw new Error(`Area ${areaId} not in branch.`);
+                const orderedIds = (body.subarea_ids || []).map(x => parseInt(x, 10));
+                const byId = {};
+                (area.subareas || []).forEach(sa => { byId[sa.id] = sa; });
+                area.subareas = orderedIds.map(id => byId[id]).filter(Boolean);
+                area.subareas.forEach((sa, i) => { sa.order = i; });
+                this.schedulePush();
+                return { status: 'ok' };
             }
 
             // Reorder a mixed sequence: POST /tab/Y/collectible-areas/A/entries/reorder/
@@ -4800,12 +4823,13 @@
             const tab = tabsData.find(t => t.id === tabId);
             const branchTab = (BranchProxy.state?.tabs || []).find(t => t.id === tabId);
             if (!tab || !branchTab) return;
-            // Areas carry their `markers` arrays — clone so the local
-            // tabsData mirror doesn't share references with the canonical
-            // BranchProxy state.
+            // Areas carry their `markers` + `subareas` arrays — clone so
+            // the local tabsData mirror doesn't share references with the
+            // canonical BranchProxy state.
             tab.collectible_areas = (branchTab.collectible_areas || []).map(a => ({
                 ...a,
                 markers: (a.markers || []).map(m => ({ ...m })),
+                subareas: (a.subareas || []).map(s => ({ ...s })),
             }));
             tab.collectible_types = (branchTab.collectible_types || []).map(ct => ({
                 ...ct,
@@ -4860,6 +4884,25 @@
             });
         },
 
+        // Same as `_entriesForArea` but filtered to a single sub-area bucket
+        // inside the area. subareaId === null returns the LOOSE bucket
+        // (items/markers not assigned to any sub-area). subareaId === <int>
+        // returns that sub-area's contents. Order fields can overlap across
+        // buckets because each bucket renders in its own container, sorted
+        // independently.
+        _entriesForAreaBucket(tab, areaId, subareaId) {
+            const items = this._itemsForArea(tab, areaId)
+                .filter(it => (it.subarea_id ?? null) === subareaId)
+                .map(it => ({ ...it, _kind: 'item' }));
+            const markers = this._markersForArea(tab, areaId)
+                .filter(mk => (mk.subarea_id ?? null) === subareaId);
+            return [...items, ...markers].sort((a, b) => {
+                const oa = a.order ?? 0, ob = b.order ?? 0;
+                if (oa !== ob) return oa - ob;
+                return a._kind === b._kind ? 0 : (a._kind === 'item' ? -1 : 1);
+            });
+        },
+
         // True iff any item across all types has area_id === null. Used to
         // decide whether to render the "Unsorted" pseudo-area card.
         _hasUnsortedItems(tab) {
@@ -4887,6 +4930,16 @@
             container.querySelectorAll('.collectible-area-card').forEach(card => {
                 const key = card.dataset.areaId;
                 if (key) this._areaOpenState[key] = card.open;
+            });
+            // Same snapshot pattern for sub-area cards. Keyed by
+            // `<areaId>:<subareaId>` so two sub-areas with the same id
+            // across different areas (negative ids never overlap in
+            // practice, but be defensive) don't collide.
+            this._subareaOpenState = {};
+            container.querySelectorAll('.collectible-subarea-card').forEach(card => {
+                const a = card.dataset.areaId;
+                const s = card.dataset.subareaId;
+                if (a && s) this._subareaOpenState[`${a}:${s}`] = card.open;
             });
 
             container.innerHTML = '';
@@ -4971,19 +5024,19 @@
                 });
             }
 
-            // Entries (items + trophy markers) inside the area, ordered by
-            // their shared per-area `order` so the playthrough sequence is
-            // preserved across kinds.
-            const entries = this._entriesForArea(tab, areaId);
+            // Loose entries (items + trophy markers not in any sub-area).
+            // Sub-area buckets render below in their own containers.
+            const entries = this._entriesForAreaBucket(tab, areaId, null);
             const items = entries.filter(e => e._kind === 'item');
             const itemsContainer = el.querySelector('.collectible-items-container');
             const itemsEmpty = el.querySelector('.collectible-items-empty');
             const noTypesHint = el.querySelector('.collectible-no-types-hint');
             const countBadge = el.querySelector('.collectible-area-item-count');
-            // Counter still shows item count (excluding markers — markers
-            // are nav anchors, not collectibles, so they shouldn't inflate
-            // the "N items" badge).
-            countBadge.textContent = `${items.length} item${items.length === 1 ? '' : 's'}`;
+            // Counter spans the whole area (loose + every sub-area), since
+            // sub-areas are a grouping detail not a separate scope. Markers
+            // still excluded — nav anchors, not collectibles.
+            const totalItems = this._itemsForArea(tab, areaId).length;
+            countBadge.textContent = `${totalItems} item${totalItems === 1 ? '' : 's'}`;
 
             const types = tab.collectible_types || [];
             const noTypes = types.length === 0;
@@ -5155,9 +5208,226 @@
                 });
             }
 
-            // Per-area drag reorder over the unified entries list (items +
-            // markers share the area's `order` space). Attached after the
-            // entries are populated so the manager can index initial state.
+            // Per-area drag reorder over the LOOSE entries list (items +
+            // markers in this area not assigned to a sub-area). Sub-areas
+            // get their own per-sub-area drag managers below.
+            this._initItemDragReorderForArea(tabId, areaId, itemsContainer);
+
+            // ── Sub-areas ─────────────────────────────────────────────
+            // Unsorted pseudo-area can't host sub-areas — there's no real
+            // RoadmapCollectibleArea row to FK the sub-areas to.
+            const addSubareaBtn = el.querySelector('.collectible-add-subarea-btn');
+            const subareasContainer = el.querySelector('.collectible-subareas-container');
+            if (addSubareaBtn) {
+                if (isUnsorted) {
+                    addSubareaBtn.disabled = true;
+                    addSubareaBtn.title = "Sub-areas need a real area — add one first";
+                } else {
+                    addSubareaBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this._addSubarea(tabId, areaId);
+                    });
+                }
+            }
+            if (subareasContainer && !isUnsorted) {
+                const subareas = (area.subareas || [])
+                    .slice()
+                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                subareas.forEach(sub => {
+                    const subEl = this._buildSubareaCard(tabId, tab, area, sub);
+                    subareasContainer.appendChild(subEl);
+                });
+                // Drag-reorder the sub-area cards within their container.
+                this._initSubareaDragReorder(tabId, areaId, subareasContainer);
+            }
+
+            return el;
+        },
+
+        // Sub-area card builder. Same authoring affordances as the parent
+        // area (add item / add marker / bulk paste) but scoped to the
+        // sub-area — every create call wires subarea_id through so items
+        // land in the right bucket on first save.
+        _buildSubareaCard(tabId, tab, area, subarea) {
+            const tpl = document.getElementById('collectible-subarea-card-template');
+            const el = tpl.content.firstElementChild.cloneNode(true);
+            const areaId = area.id;
+            const subId = subarea.id;
+            el.dataset.subareaId = String(subId);
+            el.dataset.areaId = String(areaId);
+            el.dataset.itemId = String(subId);
+
+            // Restore the writer's collapse choice across re-renders.
+            // Snapshotted in `_renderAreas` before innerHTML wipes the DOM.
+            const snapKey = `${areaId}:${subId}`;
+            const remembered = this._subareaOpenState
+                ? this._subareaOpenState[snapKey]
+                : undefined;
+            el.open = remembered === undefined ? true : remembered;
+
+            const nameInput = el.querySelector('.collectible-subarea-name-input');
+            const deleteBtn = el.querySelector('.collectible-subarea-delete-btn');
+            const slugPill = el.querySelector('.collectible-subarea-slug-pill');
+            const countBadge = el.querySelector('.collectible-subarea-item-count');
+            const itemsContainer = el.querySelector('.collectible-subarea-items-container');
+            const itemsEmpty = el.querySelector('.collectible-subarea-items-empty');
+
+            nameInput.value = subarea.name || '';
+            if (subarea.slug) {
+                slugPill.textContent = `[[subarea:${subarea.slug}]]`;
+                slugPill.classList.remove('hidden');
+            }
+            const debounced = debounce(
+                () => this._patchSubarea(tabId, areaId, subId, { name: nameInput.value }),
+                600,
+            );
+            nameInput.addEventListener('input', () => {
+                setSaveStatus('unsaved');
+                debounced();
+            });
+            nameInput.addEventListener('click', (e) => e.stopPropagation());
+            _stopSummaryToggleKeys(nameInput);
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._deleteSubarea(tabId, areaId, subId);
+            });
+
+            const entries = this._entriesForAreaBucket(tab, areaId, subId);
+            const itemCount = entries.filter(e => e._kind === 'item').length;
+            countBadge.textContent = `${itemCount} item${itemCount === 1 ? '' : 's'}`;
+
+            const types = tab.collectible_types || [];
+            const noTypes = types.length === 0;
+
+            if (entries.length === 0) {
+                itemsContainer.classList.add('hidden');
+                itemsEmpty.classList.remove('hidden');
+            } else {
+                itemsContainer.classList.remove('hidden');
+                itemsEmpty.classList.add('hidden');
+            }
+            entries.forEach(entry => {
+                const row = entry._kind === 'marker'
+                    ? this._buildMarkerElement(tabId, tab, entry, areaId)
+                    : this._buildItemElement(tabId, tab, entry, areaId);
+                itemsContainer.appendChild(row);
+            });
+
+            // Bulk paste — scoped to this sub-area.
+            const bulkBtn = el.querySelector('.collectible-subarea-bulk-toggle-btn');
+            const bulkWrap = el.querySelector('.collectible-subarea-bulk-paste-wrap');
+            const bulkInput = el.querySelector('.collectible-subarea-bulk-paste-input');
+            const bulkApply = el.querySelector('.collectible-subarea-bulk-apply-btn');
+            const bulkCancel = el.querySelector('.collectible-subarea-bulk-cancel-btn');
+            const bulkTypeSelect = el.querySelector('.collectible-subarea-bulk-type-select');
+            const bulkTypeLabel = el.querySelector('.collectible-subarea-bulk-type-label');
+            const bulkSummary = el.querySelector('.collectible-subarea-bulk-summary');
+            const bulkErrors = el.querySelector('.collectible-subarea-bulk-errors');
+            this._populateTypeSelect(bulkTypeSelect, types, types[0]?.id);
+            bulkBtn.disabled = noTypes;
+            bulkBtn.title = noTypes
+                ? 'Add a Collectible Type above first'
+                : 'Bulk-paste items into this sub-area';
+            bulkBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (noTypes) return;
+                bulkWrap.classList.toggle('hidden');
+                if (!bulkWrap.classList.contains('hidden')) bulkInput.focus();
+            });
+            bulkCancel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                bulkInput.value = '';
+                bulkSummary.classList.add('hidden');
+                bulkErrors.classList.add('hidden');
+                bulkWrap.classList.add('hidden');
+            });
+
+            const refreshBulkPreview = () => {
+                const fallback = parseInt(bulkTypeSelect.value, 10);
+                const parsed = _parseBulkPaste(bulkInput.value, types, fallback);
+                if (bulkTypeLabel) {
+                    bulkTypeLabel.textContent = parsed.mode === 'tsv'
+                        ? "Default type (used when 'type' column is blank)"
+                        : 'Type for these items';
+                }
+                if (parsed.errors.length > 0) {
+                    bulkErrors.innerHTML = parsed.errors
+                        .map(e => `<li>${HTMLUtils.escape(e)}</li>`)
+                        .join('');
+                    bulkErrors.classList.remove('hidden');
+                } else {
+                    bulkErrors.classList.add('hidden');
+                }
+                if (parsed.rows.length > 0) {
+                    const byType = new Map();
+                    parsed.rows.forEach(r => byType.set(r.type_id, (byType.get(r.type_id) || 0) + 1));
+                    const breakdown = Array.from(byType.entries())
+                        .map(([tid, n]) => {
+                            const t = types.find(x => x.id === tid);
+                            return `${n} ${t ? t.name : 'unknown'}`;
+                        })
+                        .join(', ');
+                    bulkSummary.textContent =
+                        `Will add ${parsed.rows.length} item${parsed.rows.length === 1 ? '' : 's'}: ${breakdown}`;
+                    bulkSummary.classList.remove('hidden');
+                } else {
+                    bulkSummary.classList.add('hidden');
+                }
+                bulkApply.disabled = parsed.rows.length === 0 || parsed.errors.length > 0;
+            };
+            bulkInput.addEventListener('input', refreshBulkPreview);
+            bulkTypeSelect.addEventListener('change', refreshBulkPreview);
+            refreshBulkPreview();
+
+            bulkApply.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const fallback = parseInt(bulkTypeSelect.value, 10);
+                const parsed = _parseBulkPaste(bulkInput.value, types, fallback);
+                if (parsed.rows.length === 0 || parsed.errors.length > 0) return;
+                bulkApply.disabled = true;
+                try {
+                    for (const row of parsed.rows) {
+                        // subarea_id wired through so items land grouped on
+                        // first save instead of going loose and needing a
+                        // follow-up patch.
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/items/`,
+                            { ...row, subarea_id: subId },
+                        );
+                    }
+                    bulkInput.value = '';
+                    bulkSummary.classList.add('hidden');
+                    bulkErrors.classList.add('hidden');
+                    bulkWrap.classList.add('hidden');
+                    Toast.show(`Added ${parsed.rows.length} item${parsed.rows.length === 1 ? '' : 's'}.`, 'success');
+                    this.renderAll(tabId);
+                } catch (err) {
+                    Toast.show('Failed to add items.', 'error');
+                } finally {
+                    bulkApply.disabled = false;
+                }
+            });
+
+            // Add item / add marker buttons.
+            const addItemBtn = el.querySelector('.collectible-subarea-add-item-btn');
+            const addMarkerBtn = el.querySelector('.collectible-subarea-add-marker-btn');
+            const addItemLabel = noTypes ? 'Add a Collectible Type above first' : 'Add an item to this sub-area';
+            addItemBtn.disabled = noTypes;
+            addItemBtn.title = addItemLabel;
+            addItemBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (noTypes) return;
+                this._addItemToArea(tabId, areaId, subId);
+            });
+            addMarkerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._addMarker(tabId, areaId, subId);
+            });
+
+            // Drag reorder scoped to this sub-area's container — items only
+            // move within the bucket they were dragged in. Cross-bucket
+            // moves go through the item PATCH path (subarea_id update).
             this._initItemDragReorderForArea(tabId, areaId, itemsContainer);
 
             return el;
@@ -5243,6 +5513,93 @@
             }
         },
 
+        // ── Sub-area CRUD ──────────────────────────────────────────
+        async _addSubarea(tabId, areaId) {
+            try {
+                const created = await apiCall(
+                    'post',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/subareas/`,
+                    { name: 'New Sub-area' },
+                );
+                this.renderAll(tabId);
+                requestAnimationFrame(() => {
+                    const subCard = document.querySelector(
+                        `.collectible-subarea-card[data-subarea-id="${created.id}"]`
+                    );
+                    if (!subCard) return;
+                    subCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const nameInput = subCard.querySelector('.collectible-subarea-name-input');
+                    if (nameInput) {
+                        nameInput.focus();
+                        nameInput.select();
+                    }
+                });
+            } catch (err) {
+                Toast.show('Failed to add sub-area.', 'error');
+            }
+        },
+
+        async _patchSubarea(tabId, areaId, subId, patch) {
+            try {
+                await apiCall(
+                    'patch',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/subareas/${subId}/`,
+                    patch,
+                );
+                // Local-mirror update without re-render, to preserve focus
+                // in the name input across debounced saves.
+                const tab = tabsData.find(t => t.id === tabId);
+                const area = (tab?.collectible_areas || []).find(a => a.id === areaId);
+                const sa = (area?.subareas || []).find(x => x.id === subId);
+                if (sa && 'name' in patch) sa.name = patch.name;
+            } catch (err) {
+                Toast.show('Failed to update sub-area.', 'error');
+            }
+        },
+
+        async _deleteSubarea(tabId, areaId, subId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            const area = (tab?.collectible_areas || []).find(a => a.id === areaId);
+            const sa = (area?.subareas || []).find(x => x.id === subId);
+            const itemsInSub = (tab?.collectible_types || []).reduce((acc, ct) => {
+                return acc + (ct.items || []).filter(i => i.subarea_id === subId).length;
+            }, 0);
+            const markersInSub = (area?.markers || []).filter(m => m.subarea_id === subId).length;
+            const totalInSub = itemsInSub + markersInSub;
+            if (totalInSub > 0) {
+                const parts = [];
+                if (itemsInSub > 0) parts.push(`${itemsInSub} item${itemsInSub === 1 ? '' : 's'}`);
+                if (markersInSub > 0) parts.push(`${markersInSub} marker${markersInSub === 1 ? '' : 's'}`);
+                if (!confirm(`Delete sub-area "${sa?.name || 'this sub-area'}"? ${parts.join(' + ')} will become loose in the parent area.`)) return;
+            }
+            try {
+                await apiCall(
+                    'delete',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/subareas/${subId}/`,
+                );
+                // Mirror the SET_NULL behavior on the local copy: orphan
+                // any items / markers that pointed at this sub-area back
+                // to loose in the same area.
+                if (tab) {
+                    const liveArea = (tab.collectible_areas || []).find(a => a.id === areaId);
+                    if (liveArea) {
+                        liveArea.subareas = (liveArea.subareas || []).filter(x => x.id !== subId);
+                        (liveArea.markers || []).forEach(m => {
+                            if (m.subarea_id === subId) m.subarea_id = null;
+                        });
+                    }
+                    (tab.collectible_types || []).forEach(ct => {
+                        (ct.items || []).forEach(it => {
+                            if (it.subarea_id === subId) it.subarea_id = null;
+                        });
+                    });
+                }
+                this.renderAll(tabId);
+            } catch (err) {
+                Toast.show('Failed to delete sub-area.', 'error');
+            }
+        },
+
         _initAreaDragReorder(tabId) {
             const container = document.querySelector(
                 `.collectible-areas-container[data-tab-id="${tabId}"]`
@@ -5272,6 +5629,38 @@
                         }
                     } catch (err) {
                         Toast.show('Failed to reorder areas.', 'error');
+                    }
+                },
+            });
+        },
+
+        // Drag-reorder sub-areas within a single parent area's container.
+        // Each area has its own sub-area container so we attach an
+        // independent DragReorderManager per area card.
+        _initSubareaDragReorder(tabId, areaId, container) {
+            if (!container) return;
+            new window.PlatPursuit.DragReorderManager({
+                container,
+                handleSelector: '.collectible-subarea-handle',
+                itemSelector: '.collectible-subarea-card',
+                onReorder: async (_itemId, _pos, allItemIds) => {
+                    const orderedIds = allItemIds.map(x => parseInt(x, 10));
+                    try {
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/subareas/reorder/`,
+                            { subarea_ids: orderedIds },
+                        );
+                        const tab = tabsData.find(t => t.id === tabId);
+                        const area = (tab?.collectible_areas || []).find(a => a.id === areaId);
+                        if (area) {
+                            const byId = {};
+                            (area.subareas || []).forEach(s => { byId[s.id] = s; });
+                            area.subareas = orderedIds.map(id => byId[id]).filter(Boolean);
+                            area.subareas.forEach((s, i) => { s.order = i; });
+                        }
+                    } catch (err) {
+                        Toast.show('Failed to reorder sub-areas.', 'error');
                     }
                 },
             });
@@ -5750,16 +6139,17 @@
             return el;
         },
 
-        async _addItemToArea(tabId, areaId) {
+        async _addItemToArea(tabId, areaId, subareaId = null) {
             const tab = tabsData.find(t => t.id === tabId);
             const types = tab?.collectible_types || [];
             if (types.length === 0) return;
-            // Default new items to the LAST-edited type (heuristic: the
-            // type whose most-recently-touched item lives in this area;
-            // fall back to first type). This makes consecutive "Add item"
-            // clicks within an area "sticky" to whatever type the author
-            // is currently working in.
-            const itemsHere = this._itemsForArea(tab, areaId);
+            // Default new items to the LAST-edited type. When adding to a
+            // sub-area, the sticky-type heuristic looks at that bucket's
+            // last item only (so each sub-area can stay sticky to its own
+            // working type); area-level adds look across the whole area.
+            const itemsHere = subareaId == null
+                ? this._itemsForArea(tab, areaId)
+                : this._itemsForArea(tab, areaId).filter(it => (it.subarea_id ?? null) === subareaId);
             const lastTypeId = itemsHere.length > 0
                 ? itemsHere[itemsHere.length - 1]._typeId
                 : types[0].id;
@@ -5773,26 +6163,28 @@
                 (ourType?.items || []).length,
             );
             const seg = areaId == null ? 'null' : String(areaId);
+            const body = { type_id: lastTypeId, name: defaultName };
+            if (subareaId != null) body.subarea_id = subareaId;
             try {
                 await apiCall(
                     'post',
                     `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${seg}/items/`,
-                    { type_id: lastTypeId, name: defaultName }
+                    body,
                 );
                 this.renderAll(tabId);
                 requestAnimationFrame(() => {
-                    // Target the last row in the destination area's items
-                    // container — new items always append, so the tail
-                    // row is the one we just created. More robust than
-                    // querying by id (which could clash with stale ids
-                    // across entity types or fail on type coercion).
+                    // Target the last row in the destination container —
+                    // either the sub-area's container or the loose items
+                    // container. New items always append.
                     const areaCard = document.querySelector(
                         `.collectible-area-card[data-area-id="${seg}"]`
                     );
-                    const itemsContainer = areaCard?.querySelector(
-                        '.collectible-items-container'
-                    );
-                    const rows = itemsContainer?.querySelectorAll(
+                    const targetContainer = subareaId == null
+                        ? areaCard?.querySelector('.collectible-items-container')
+                        : areaCard?.querySelector(
+                            `.collectible-subarea-card[data-subarea-id="${subareaId}"] .collectible-subarea-items-container`
+                        );
+                    const rows = targetContainer?.querySelectorAll(
                         '.collectible-item-row'
                     );
                     const lastRow = rows?.[rows.length - 1];
@@ -5840,16 +6232,18 @@
         // can drag it to its real spot. Scroll the new row into view + flash
         // a brief ring so the writer sees where it landed (parallel to the
         // _addItemToArea / _addArea focus pattern).
-        _addMarker(tabId, areaId) {
+        _addMarker(tabId, areaId, subareaId = null) {
             if (areaId == null) return;
             showTrophyPicker({
                 title: 'Pick a Trophy to Mark',
                 onPick: async (trophyId) => {
                     try {
+                        const body = { trophy_id: parseInt(trophyId, 10) };
+                        if (subareaId != null) body.subarea_id = subareaId;
                         const created = await apiCall(
                             'post',
                             `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${areaId}/markers/`,
-                            { trophy_id: parseInt(trophyId, 10) },
+                            body,
                         );
                         this.renderAll(tabId);
                         requestAnimationFrame(() => {
