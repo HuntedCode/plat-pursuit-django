@@ -141,6 +141,15 @@
     const LEGACY_C_AREA_MARKERS_DETAIL_PATTERN = new RegExp(
         `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/markers/(-?\\d+)/?$`
     );
+    // Sub-areas — second-level grouping inside an area. Items + markers
+    // can carry an optional `subarea_id` that routes them into the
+    // matching sub-area's section in the reader.
+    const LEGACY_C_AREA_SUBAREAS_LIST_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/subareas/?$`
+    );
+    const LEGACY_C_AREA_SUBAREAS_DETAIL_PATTERN = new RegExp(
+        `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+)/subareas/(-?\\d+)/?$`
+    );
     const LEGACY_C_AREA_ENTRIES_REORDER_PATTERN = new RegExp(
         `^/api/v1/roadmap/${roadmapId}/tab/(\\d+)/collectible-areas/(-?\\d+|null)/entries/reorder/?$`
     );
@@ -1083,6 +1092,10 @@
                     id: this.nextId(),
                     name: (body.name || '').trim() || 'New Item',
                     area_id: areaId,
+                    // Optional sub-area routing — bulk paste targets a
+                    // specific sub-area via this field; single-add from the
+                    // area-level button omits it (item lands loose).
+                    subarea_id: body.subarea_id != null ? parseInt(body.subarea_id, 10) : null,
                     // Bulk-paste callers may seed body / flags directly so we
                     // skip the per-item PATCH round-trip; single-add callers
                     // omit them and get the existing empty defaults.
@@ -1158,6 +1171,10 @@
                 const incomingArea = incomingAreaSpecified
                     ? (body.area_id == null || body.area_id === '' ? null : parseInt(body.area_id, 10))
                     : (item.area_id ?? null);
+                const incomingSubareaSpecified = 'subarea_id' in body;
+                const incomingSubarea = incomingSubareaSpecified
+                    ? (body.subarea_id == null || body.subarea_id === '' ? null : parseInt(body.subarea_id, 10))
+                    : (item.subarea_id ?? null);
                 const incomingTypeSpecified = 'type_id' in body && body.type_id != null;
                 const incomingTypeId = incomingTypeSpecified ? parseInt(body.type_id, 10) : typeId;
                 const oldArea = item.area_id ?? null;
@@ -1165,6 +1182,10 @@
 
                 if ('name' in body) item.name = (body.name || '').trim() || item.name;
                 if (incomingAreaSpecified) item.area_id = incomingArea;
+                // Area change clears sub-area unless caller explicitly set
+                // one — sub-area FK is scoped to its parent area.
+                if (areaChanged && !incomingSubareaSpecified) item.subarea_id = null;
+                if (incomingSubareaSpecified) item.subarea_id = incomingSubarea;
                 if ('body' in body) item.body = body.body || '';
                 if ('youtube_url' in body) item.youtube_url = (body.youtube_url || '').trim();
                 if ('is_missable' in body) item.is_missable = !!body.is_missable;
@@ -1221,6 +1242,9 @@
                 const newMarker = {
                     id: this.nextId(),
                     trophy_id: parseInt(body.trophy_id, 10),
+                    // Optional sub-area routing — caller passes null /
+                    // omits to leave the marker loose at the area level.
+                    subarea_id: body.subarea_id != null ? parseInt(body.subarea_id, 10) : null,
                     order: itemCount + area.markers.length,
                     created_by_id: viewerProfileId,
                     last_edited_by_id: viewerProfileId,
@@ -1249,9 +1273,76 @@
                 if (!marker) throw new Error(`Marker ${markerId} not in branch.`);
                 if ('trophy_id' in body) marker.trophy_id = parseInt(body.trophy_id, 10);
                 if ('order' in body) marker.order = body.order;
+                if ('subarea_id' in body) {
+                    marker.subarea_id = body.subarea_id == null
+                        ? null
+                        : parseInt(body.subarea_id, 10);
+                }
                 marker.last_edited_by_id = viewerProfileId;
                 this.schedulePush();
                 return { ...marker };
+            }
+
+            // ── Sub-areas ──────────────────────────────────────────────
+
+            // Create sub-area: POST /tab/Y/collectible-areas/A/subareas/
+            // Body: { name }. New sub-area appended at end of the area's
+            // subareas list; slug is server-generated at merge time.
+            if ((match = url.match(LEGACY_C_AREA_SUBAREAS_LIST_PATTERN)) && m === 'post') {
+                const tabId = parseInt(match[1], 10);
+                const areaId = parseInt(match[2], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const area = (tab.collectible_areas || []).find(a => a.id === areaId);
+                if (!area) throw new Error(`Area ${areaId} not in branch.`);
+                if (!area.subareas) area.subareas = [];
+                const newSub = {
+                    id: this.nextId(),
+                    name: (body.name || '').trim() || 'New Sub-area',
+                    slug: '',  // server fills on merge
+                    order: area.subareas.length,
+                    created_by_id: viewerProfileId,
+                    last_edited_by_id: viewerProfileId,
+                };
+                area.subareas.push(newSub);
+                this.schedulePush();
+                return { ...newSub };
+            }
+
+            // PATCH / DELETE sub-area: /tab/Y/collectible-areas/A/subareas/S/
+            // PATCH body: { name? order? }
+            if ((match = url.match(LEGACY_C_AREA_SUBAREAS_DETAIL_PATTERN)) && (m === 'patch' || m === 'delete')) {
+                const tabId = parseInt(match[1], 10);
+                const areaId = parseInt(match[2], 10);
+                const subId = parseInt(match[3], 10);
+                const tab = this.findTab(tabId);
+                if (!tab) throw new Error(`Tab ${tabId} not in branch.`);
+                const area = (tab.collectible_areas || []).find(a => a.id === areaId);
+                if (!area) throw new Error(`Area ${areaId} not in branch.`);
+                if (!area.subareas) area.subareas = [];
+                if (m === 'delete') {
+                    area.subareas = area.subareas.filter(sa => sa.id !== subId);
+                    // Orphan any items / markers that pointed at this
+                    // sub-area back to loose (mirrors the SET_NULL FK
+                    // on the model side).
+                    (tab.collectible_types || []).forEach(ct => {
+                        (ct.items || []).forEach(it => {
+                            if (it.subarea_id === subId) it.subarea_id = null;
+                        });
+                    });
+                    (area.markers || []).forEach(mk => {
+                        if (mk.subarea_id === subId) mk.subarea_id = null;
+                    });
+                    this.schedulePush();
+                    return null;
+                }
+                const sa = area.subareas.find(x => x.id === subId);
+                if (!sa) throw new Error(`Subarea ${subId} not in branch.`);
+                if ('name' in body) sa.name = (body.name || '').trim() || sa.name;
+                if ('order' in body) sa.order = body.order;
+                sa.last_edited_by_id = viewerProfileId;
+                this.schedulePush();
+                return { ...sa };
             }
 
             // Reorder a mixed sequence: POST /tab/Y/collectible-areas/A/entries/reorder/
