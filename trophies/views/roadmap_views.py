@@ -732,6 +732,31 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
                 'last_edited_by_id': tg.last_edited_by_id,
             }
 
+        # Track collectible authors so the editor JS can render owner
+        # badges for them. The collectibles payload itself comes from
+        # `branch_payload` (via RoadmapEditLock) not roadmap_data, but the
+        # badge lookup goes through `profilesById` built from
+        # `referenced_profile_ids`. Without these tracks, the set-owner
+        # badge falls into applyOwnership's `if (!profile)` branch and
+        # stays hidden — writers see the section locked but no
+        # attribution. Walk the same nested shape that
+        # roadmap_service.build_branch_payload serializes.
+        for ct in roadmap.collectible_types.all():
+            _track(ct.created_by_id)
+            _track(ct.last_edited_by_id)
+            for item in ct.items.all():
+                _track(item.created_by_id)
+                _track(item.last_edited_by_id)
+        for area in roadmap.collectible_areas.all():
+            _track(area.created_by_id)
+            _track(area.last_edited_by_id)
+            for marker in area.markers.all():
+                _track(marker.created_by_id)
+                _track(marker.last_edited_by_id)
+            for sa in area.subareas.all():
+                _track(sa.created_by_id)
+                _track(sa.last_edited_by_id)
+
         roadmap_data = {
             'id': roadmap.id,
             'concept_trophy_group_id': ctg.id,

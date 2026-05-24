@@ -2130,6 +2130,127 @@
     }
 
     // ------------------------------------------------------------------ //
+    //  Sub-Tab Switching (Guide / Collectibles within each CTG panel)
+    //
+    //  The Collectibles section is unmounted by default. Switching to it
+    //  the first time triggers CollectibleController.renderAll(tabId);
+    //  switching away calls CollectibleController.teardown(tabId) so the
+    //  DOM nodes + DragReorderManagers GC. The branch payload is untouched
+    //  by any of this — autosave/merge are unaffected.
+    // ------------------------------------------------------------------ //
+
+    const SubTabController = {
+        // Per-tab active sub-tab. Defaults to 'guide' for every CTG.
+        // (Only one CTG renders per session today, but keying by tab id
+        // keeps the controller honest if that ever changes.)
+        active: {},
+
+        init() {
+            document.querySelectorAll('.roadmap-sub-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const tabId = parseInt(btn.dataset.tabId, 10);
+                    const sub = btn.dataset.subTab;
+                    this.switch(tabId, sub);
+                });
+            });
+            // Cross-sub-tab jump links (e.g. the "Jump to Trophy Guides"
+            // button in the Collectibles header). Without this, clicking
+            // the anchor would update the URL hash but fail to scroll —
+            // the target lives in a hidden sub-panel.
+            document.addEventListener('click', (e) => {
+                const link = e.target.closest('a[data-cross-subtab-jump]');
+                if (!link) return;
+                const targetSub = link.dataset.crossSubtabJump;
+                const tabId = activeTabId;
+                if (!tabId || !targetSub) return;
+                if (this.active[tabId] === targetSub) return;  // already there
+                e.preventDefault();
+                this.switch(tabId, targetSub);
+                // Defer the scroll until after the target sub-panel is
+                // visible. Anchor's href still points at #section so we
+                // let the browser do the scroll via location.hash update.
+                requestAnimationFrame(() => {
+                    const targetId = (link.getAttribute('href') || '').replace(/^#/, '');
+                    const el = targetId && document.getElementById(targetId);
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+            });
+            // Seed active state from server-rendered aria-selected.
+            document.querySelectorAll('.roadmap-sub-tabs').forEach(group => {
+                const activeBtn = group.querySelector('.roadmap-sub-tab-btn[aria-selected="true"]');
+                if (!activeBtn) return;
+                const tabId = parseInt(activeBtn.dataset.tabId, 10);
+                this.active[tabId] = activeBtn.dataset.subTab;
+            });
+        },
+
+        switch(tabId, sub) {
+            if (this.active[tabId] === sub) return;
+            const prev = this.active[tabId];
+            this.active[tabId] = sub;
+
+            // Button states (only for this tab's group).
+            document.querySelectorAll(
+                `.roadmap-sub-tab-btn[data-tab-id="${tabId}"]`
+            ).forEach(btn => {
+                const isActive = btn.dataset.subTab === sub;
+                btn.classList.toggle('bg-primary', isActive);
+                btn.classList.toggle('text-primary-content', isActive);
+                btn.classList.toggle('shadow-sm', isActive);
+                btn.classList.toggle('text-base-content/60', !isActive);
+                btn.classList.toggle('hover:text-base-content', !isActive);
+                btn.classList.toggle('hover:bg-base-300/50', !isActive);
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+
+            // Panel visibility (both halves of the Guide sub-panel toggle
+            // together because they share data-sub-tab="guide").
+            document.querySelectorAll(
+                `.roadmap-sub-panel[data-tab-id="${tabId}"]`
+            ).forEach(panel => {
+                const isActive = panel.dataset.subTab === sub;
+                panel.classList.toggle('hidden', !isActive);
+            });
+
+            // Mount on first activation; tear down on leave.
+            if (sub === 'collectibles') {
+                this._mountCollectibles(tabId);
+            } else if (prev === 'collectibles') {
+                CollectibleController.teardown(tabId);
+                const panel = document.querySelector(
+                    `.roadmap-sub-panel[data-sub-tab="collectibles"][data-tab-id="${tabId}"]`
+                );
+                if (panel) panel.dataset.subTabMounted = 'false';
+            }
+        },
+
+        _mountCollectibles(tabId) {
+            const panel = document.querySelector(
+                `.roadmap-sub-panel[data-sub-tab="collectibles"][data-tab-id="${tabId}"]`
+            );
+            if (!panel) return;
+            // Always re-render on mount — teardown clears innerHTML on
+            // leave, so the inner containers are empty by the time we
+            // get back here. The `data-sub-tab-mounted` flag is mostly
+            // diagnostic (lets the audit eyeball "is this section live
+            // right now") but also lets us skip the renderAll call on
+            // back-to-back switches without an intervening teardown.
+            if (panel.dataset.subTabMounted === 'true') return;
+            CollectibleController.renderAll(tabId);
+            panel.dataset.subTabMounted = 'true';
+            // Read-only enforcement is a one-shot DOM op at boot, so
+            // freshly-mounted inputs miss it. Re-apply after mount when
+            // the lock has been lost so the disabled state matches the
+            // rest of the editor. (Data is safe regardless — BranchProxy
+            // guards mutations — this is purely about not lying to the
+            // writer about whether inputs are editable.)
+            if (BranchProxy.lockLost) {
+                enterReadOnlyMode('Editor is read-only.');
+            }
+        },
+    };
+
+    // ------------------------------------------------------------------ //
     //  Step Rendering
     // ------------------------------------------------------------------ //
 
@@ -4833,6 +4954,47 @@
      * same picker UI.
      */
     const CollectibleController = {
+        // Per-tab DragReorderManager storage so we can destroy the
+        // previous SortableJS instance before binding a new one to the
+        // same container. Without this, every renderAll left an orphaned
+        // Sortable on the freshly-rendered container alongside the new
+        // one — both fired on drop, multiplying the work and leaking
+        // listeners across mount/unmount cycles. Mirrors the per-tab
+        // `dragManagers[tabId]` pattern used for Steps reorder.
+        //
+        // Shape: { [tabId]: { areas, types, subsByArea: {areaId}, itemsByArea: {areaId} } }
+        _dragManagers: {},
+
+        _getDragSlot(tabId) {
+            if (!this._dragManagers[tabId]) {
+                this._dragManagers[tabId] = {
+                    areas: null,
+                    types: null,
+                    subsByArea: {},
+                    itemsByArea: {},
+                };
+            }
+            return this._dragManagers[tabId];
+        },
+
+        _disposeAreasDragManagers(tabId) {
+            const slot = this._dragManagers[tabId];
+            if (!slot) return;
+            slot.areas?.destroy?.();
+            slot.areas = null;
+            Object.values(slot.subsByArea).forEach(m => m?.destroy?.());
+            slot.subsByArea = {};
+            Object.values(slot.itemsByArea).forEach(m => m?.destroy?.());
+            slot.itemsByArea = {};
+        },
+
+        _disposeTypesDragManagers(tabId) {
+            const slot = this._dragManagers[tabId];
+            if (!slot) return;
+            slot.types?.destroy?.();
+            slot.types = null;
+        },
+
         // ── Public API ─────────────────────────────────────────────
         init() {
             this._wireAreaAddBtn();
@@ -4850,6 +5012,125 @@
             this._renderTypes(tabId);
             this._renderAreas(tabId);
             this._refreshFormattingToolbarVisibility(tabId);
+            // Post-render polish on freshly-mounted DOM:
+            //   - `autoResize` is wired as a listener (initAutoResize) but
+            //     its initial-pass rAF fired at boot, so newly-mounted
+            //     item-body textareas with existing content render at the
+            //     default row count until first focus. Re-run the pass for
+            //     anything inside the collectibles card.
+            //   - `InlineImageStrip.refreshAll()` populates the per-textarea
+            //     image-token pills; its boot-time run missed unmounted
+            //     collectible textareas too.
+            const card = document.querySelector(
+                `.collectibles-card[data-tab-id="${tabId}"]`
+            );
+            if (card) {
+                card.querySelectorAll('textarea.auto-resize').forEach(autoResize);
+            }
+            InlineImageStrip.refreshAll();
+            // Apply set-level ownership scoping last so it can disable
+            // every input/button the renders just put into the DOM.
+            this._applySetOwnership(tabId);
+        },
+
+        // The collectibles section is a single set per roadmap with one
+        // canonical owner (= the writer who created the first type, per
+        // `_collectibles_set_owner_id` in roadmap_merge_service.py). Until
+        // a type exists, the set is ownerless and any writer can claim it.
+        // Once owned, only the owner or editor+ can mutate types/areas/
+        // items — writers who try get rejected at merge time with a
+        // confusing error. This applies the same UI scoping pattern that
+        // applyOwnership uses for intro/tips/steps/trophy-guides so writers
+        // see the lock before they hit save.
+        _computeSetOwnerId(tabId) {
+            const tab = tabsData.find(t => t.id === tabId);
+            const types = (tab?.collectible_types || [])
+                .slice()
+                .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+            for (const t of types) {
+                if (t.created_by_id) return t.created_by_id;
+            }
+            return null;
+        },
+
+        _applySetOwnership(tabId) {
+            const card = document.querySelector(
+                `.collectibles-card[data-tab-id="${tabId}"]`
+            );
+            if (!card) return;
+            const ownerId = this._computeSetOwnerId(tabId);
+            // Reset transient state before re-applying — successive
+            // renderAll calls otherwise stack opacity-60 / leave disabled
+            // inputs disabled even when ownership flipped to viewer.
+            card.classList.remove('opacity-60');
+            card.querySelectorAll('input, textarea, button, select').forEach(el => {
+                if (el.closest('[data-readonly-exempt]')) return;
+                el.disabled = false;
+            });
+            // applyOwnership does the badge render + (if !canEdit) the
+            // disable pass. Reuses the prefix-based class convention the
+            // .collectibles-set-owner-* markup already mirrors.
+            const canEdit = applyOwnership(card, ownerId, 'collectibles-set-owner');
+            // If we're in editor-wide read-only mode (lock lost), keep
+            // everything disabled regardless of ownership.
+            if (BranchProxy.lockLost) {
+                card.querySelectorAll('input, textarea, button, select').forEach(el => {
+                    if (el.closest('[data-readonly-exempt]')) return;
+                    el.disabled = true;
+                });
+            }
+            return canEdit;
+        },
+
+        // Tear down the rendered DOM for a tab's collectibles section.
+        // Called by the sub-tab controller when the writer switches away
+        // from the Collectibles sub-tab. DragReorderManagers attached to
+        // the cleared containers are not stored externally, so wiping
+        // innerHTML detaches them from the DOM and lets GC reclaim the
+        // sortable instances along with the card nodes.
+        //
+        // Open-state snapshots are CAPTURED (not reset) before the wipe
+        // so a writer who collapsed several areas → switched to Guide →
+        // switched back doesn't see all their collapses thrown away.
+        // `_renderAreas` consumes these snapshots on re-mount via the
+        // same restore path it uses across in-place re-renders.
+        //
+        // The Add buttons, formatting-toolbar visibility, and the [[ slug ]]
+        // picker stay wired — they live outside the inner containers
+        // (or on `document`) and remain functional even while the section
+        // is unmounted.
+        teardown(tabId) {
+            // Destroy SortableJS instances first so their internal
+            // listeners on document/window detach cleanly. innerHTML wipe
+            // alone leaves orphaned Sortables that keep references to the
+            // (now-detached) container.
+            this._disposeAreasDragManagers(tabId);
+            this._disposeTypesDragManagers(tabId);
+
+            const areasContainer = document.querySelector(
+                `.collectible-areas-container[data-tab-id="${tabId}"]`
+            );
+            if (areasContainer) {
+                this._areaOpenState = this._areaOpenState || {};
+                areasContainer.querySelectorAll('.collectible-area-card').forEach(card => {
+                    const key = card.dataset.areaId;
+                    if (key) this._areaOpenState[key] = card.open;
+                });
+                this._subareaOpenState = this._subareaOpenState || {};
+                areasContainer.querySelectorAll('.collectible-subarea-card').forEach(card => {
+                    const a = card.dataset.areaId;
+                    const s = card.dataset.subareaId;
+                    if (a && s) this._subareaOpenState[`${a}:${s}`] = card.open;
+                });
+                areasContainer.innerHTML = '';
+            }
+            const typesContainer = document.querySelector(
+                `.collectible-types-container[data-tab-id="${tabId}"]`
+            );
+            if (typesContainer) typesContainer.innerHTML = '';
+            // Drop the slot entirely so a fresh mount starts with empty
+            // sub/items maps (no stale areaId keys from now-deleted areas).
+            delete this._dragManagers[tabId];
         },
 
         _syncTabsDataFromBranch(tabId) {
@@ -4952,6 +5233,13 @@
                 `.collectible-areas-container[data-tab-id="${tabId}"]`
             );
             if (!container) return;
+
+            // Destroy all per-tab area-tree SortableJS instances (areas +
+            // every per-area sub-area + items manager) before the wipe.
+            // Without this, every re-render piled a second Sortable on each
+            // freshly-rebuilt container that fired alongside the new one
+            // on drop and leaked listeners for every render cycle.
+            this._disposeAreasDragManagers(tabId);
 
             // Snapshot current area open/closed state before we wipe and
             // re-render. Without this, any add/edit triggers renderAll →
@@ -5465,7 +5753,9 @@
             // Drag reorder scoped to this sub-area's container — items only
             // move within the bucket they were dragged in. Cross-bucket
             // moves go through the item PATCH path (subarea_id update).
-            this._initItemDragReorderForArea(tabId, areaId, itemsContainer);
+            // `subId` is required for the slot key so the loose bucket and
+            // sibling sub-areas don't share an entry.
+            this._initItemDragReorderForArea(tabId, areaId, itemsContainer, subId);
 
             return el;
         },
@@ -5642,7 +5932,13 @@
                 `.collectible-areas-container[data-tab-id="${tabId}"]`
             );
             if (!container) return;
-            new window.PlatPursuit.DragReorderManager({
+            // Reorder caller flow guarantees the old container's innerHTML
+            // was wiped just above (see _renderAreas), so the old areas
+            // manager is detached from the DOM but its Sortable + listeners
+            // still live. Dispose first.
+            const slot = this._getDragSlot(tabId);
+            slot.areas?.destroy?.();
+            slot.areas = new window.PlatPursuit.DragReorderManager({
                 container,
                 handleSelector: '.collectible-area-handle',
                 itemSelector: '.collectible-area-card',
@@ -5676,7 +5972,15 @@
         // independent DragReorderManager per area card.
         _initSubareaDragReorder(tabId, areaId, container) {
             if (!container) return;
-            new window.PlatPursuit.DragReorderManager({
+            // Sub-area container is fresh inside a just-built area card —
+            // _disposeAreasDragManagers ran at the top of _renderAreas, so
+            // any prior sub-area manager for this areaId is already gone.
+            // The defensive destroy?.() here covers the rare path where
+            // someone re-inits a single area's sub-area drag without a
+            // full _renderAreas pass.
+            const slot = this._getDragSlot(tabId);
+            slot.subsByArea[areaId]?.destroy?.();
+            slot.subsByArea[areaId] = new window.PlatPursuit.DragReorderManager({
                 container,
                 handleSelector: '.collectible-subarea-handle',
                 itemSelector: '.collectible-subarea-card',
@@ -5711,6 +6015,9 @@
                 `.collectible-types-container[data-tab-id="${tabId}"]`
             );
             if (!container) return;
+            // Same dispose-before-wipe pattern as _renderAreas: avoid
+            // stacking Sortables on the same container across re-renders.
+            this._disposeTypesDragManagers(tabId);
             container.innerHTML = '';
 
             const empty = container.parentElement.querySelector('.collectible-types-empty');
@@ -5985,7 +6292,11 @@
                 `.collectible-types-container[data-tab-id="${tabId}"]`
             );
             if (!container) return;
-            new window.PlatPursuit.DragReorderManager({
+            // _renderTypes wiped innerHTML just above; dispose the old
+            // types Sortable before binding a new one on the fresh DOM.
+            const slot = this._getDragSlot(tabId);
+            slot.types?.destroy?.();
+            slot.types = new window.PlatPursuit.DragReorderManager({
                 container,
                 handleSelector: '.collectible-type-handle',
                 itemSelector: '.collectible-type-card',
@@ -6393,10 +6704,20 @@
             return row;
         },
 
-        _initItemDragReorderForArea(tabId, areaId, container) {
+        _initItemDragReorderForArea(tabId, areaId, container, subId = null) {
             if (!container) return;
             const seg = areaId == null ? 'null' : String(areaId);
-            new window.PlatPursuit.DragReorderManager({
+            // Each area can host MULTIPLE item containers — the loose
+            // bucket (subId=null) plus one per sub-area. Key by both so
+            // sub-area containers don't stomp the loose-bucket slot (or
+            // each other), which would leave orphaned Sortables firing
+            // alongside the most-recent one.
+            const slot = this._getDragSlot(tabId);
+            const areaKey = areaId == null ? 'null' : areaId;
+            const subKey = subId == null ? 'loose' : subId;
+            const key = `${areaKey}:${subKey}`;
+            slot.itemsByArea[key]?.destroy?.();
+            slot.itemsByArea[key] = new window.PlatPursuit.DragReorderManager({
                 container,
                 handleSelector: '.collectible-item-handle',
                 itemSelector: '.collectible-item-row',
@@ -6665,13 +6986,24 @@
         initAutoResize();
         initSaveCancelButtons();
         CollectibleController.init();
+        SubTabController.init();
 
-        // Render all tabs
+        // Render all tabs. CollectibleController.renderAll is intentionally
+        // deferred until the writer activates the Collectibles sub-tab —
+        // see SubTabController._mountCollectibles. The other render calls
+        // here populate sections inside the Guide sub-panel, which IS
+        // visible by default, so they run eagerly.
+        //
+        // _refreshFormattingToolbarVisibility() is the one piece of the
+        // collectibles render path we DO need to run at boot: it hides
+        // the `.fmt-collectible-btn` toolbar button when the roadmap has
+        // no types defined, and that button lives in every Guide-section
+        // formatting toolbar (intro, steps, trophy guides, tips).
         tabsData.forEach(tab => {
             renderSteps(tab.id);
             renderTrophyGuides(tab.id);
             updateTrophyGuideCounter(tab.id);
-            CollectibleController.renderAll(tab.id);
+            CollectibleController._refreshFormattingToolbarVisibility(tab.id);
         });
 
         // Now that step + trophy guide textareas exist, populate the inline

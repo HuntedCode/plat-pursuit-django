@@ -65,10 +65,26 @@ Roadmap migration is handled after CTG migration in `absorb()`. If the target co
 ### Editor (`/games/<np_communication_id>/roadmap/edit/`)
 - Staff-only (uses `@staff_member_required`)
 - Tab bar for base game / DLC groups
-- Per-tab: drag-reorderable steps, trophy picker, guide metadata (difficulty, hours, missable, online, playthroughs), general tips, YouTube URL, trophy guides
+- Per-tab: drag-reorderable steps, trophy picker, guide metadata (difficulty, hours, missable, online, playthroughs), general tips, YouTube URL, trophy guides, collectibles vocabulary (areas, sub-areas, types, items, markers)
 - Debounced autosave on text fields and metadata
 - Publish/unpublish toggle
 - Preview link opens the roadmap detail page with `?preview=true`
+
+#### Editor Sub-Tabs (Guide / Collectibles)
+
+Each CTG tab splits into two sub-tabs: **Guide** (introduction, metadata, steps, general tips, YouTube, trophy guides) and **Collectibles** (areas, sub-areas, types, items, markers). The split is purely a presentation concern — `BranchProxy.state` carries both sub-trees and autosave/merge are unaffected.
+
+**Why the split exists:** the Collectibles section is the heaviest piece of the editor by an order of magnitude. A collectibles-dense roadmap (e.g. 15+ areas × 30+ sub-areas × 100+ items, each with drag handles, owner badges, rich-content panels) multiplies DOM nodes, JS-state objects, and event listeners. On lower-spec machines this caused the editor to feel sluggish during normal Guide editing — none of which touches collectibles. Sequestering collectibles behind a sub-tab means the cost is only paid when the writer is actively editing collectibles.
+
+**Mount lifecycle:**
+- On initial load: Guide sub-tab is active. The Collectibles sub-panel exists in the DOM but is `hidden` and has `data-sub-tab-mounted="false"`. `CollectibleController.renderAll(tabId)` is NOT called during boot.
+- On switching to Collectibles: `SubTabController._mountCollectibles(tabId)` calls `CollectibleController.renderAll(tabId)` once and flips the panel's `data-sub-tab-mounted` to `"true"`. All areas, types, items, markers, and `DragReorderManager` instances mount.
+- On switching back to Guide: `CollectibleController.teardown(tabId)` wipes the inner containers via `innerHTML = ''`. DragReorderManagers attached to those containers detach and become GC-eligible (they aren't stored externally, so wiping the DOM is sufficient). The panel's mounted flag resets.
+- The `[[ slug ]]` autocomplete and toolbar picker continue to resolve collectible types from `tabsData` even while the Collectibles sub-tab is unmounted, so writers on the Guide sub-tab can still reference collectibles in step descriptions, trophy guides, etc.
+
+**Markup layout:** the Guide sub-panel is split into two halves around the Collectibles sub-panel so the source markup reads in the original top-down order (Intro → Metadata → Collectibles → Steps → Tips → YouTube → Trophy Guides). The `SubTabController` toggles both halves together since they share `data-sub-tab="guide"`.
+
+**Cross-sub-tab navigation:** the "Jump to Trophy Guides" anchor in the Collectibles header carries `data-cross-subtab-jump="guide"`. `SubTabController` intercepts the click, switches sub-tabs first, then defers the smooth-scroll to the next frame so the target is in layout when `scrollIntoView` fires.
 
 ### Markdown Features (Roadmap-Scoped)
 
@@ -162,5 +178,8 @@ All endpoints require staff authentication via SessionAuthentication + IsAdminUs
 - **oEmbed timeout is hard-set to 3s**: A slow YouTube response will cause attribution to be saved as empty rather than blocking the merge. The embed still renders correctly without it.
 - **Tab auto-creation**: The editor automatically creates RoadmapTab records for any ConceptTrophyGroups that don't have one.
 - **JSON data injection**: Editor template uses Django's `json_script` tag for safe JSON serialization.
+- **Collectibles sub-tab is unmounted by default**: Editing collectibles requires switching to the Collectibles sub-tab — the section is not in the DOM otherwise. This is intentional (see "Editor Sub-Tabs" above). If you write new editor code that needs to read or mutate collectible DOM (selectors like `.collectible-area-card`, `.collectible-type-card`, `.collectible-item-row`), guard against the elements being absent and either (a) trigger a mount via `SubTabController.switch(tabId, 'collectibles')` or (b) read from `BranchProxy.state` instead, which always carries the full payload.
+- **Collectibles ownership is set-level, not row-level**: The whole collectibles section has ONE owner — the writer who created the oldest type (see `_collectibles_set_owner_id` in `roadmap_merge_service.py`). Editor JS computes this client-side as `CollectibleController._computeSetOwnerId(tabId)` (lowest-id non-null `created_by_id`) and applies card-level read-only treatment via `_applySetOwnership(tabId)` at the end of every `renderAll`. Writers who don't own the set see the section dimmed with the owner's badge in the header; editor+ users bypass via `bypassOwnershipScope`. When adding new collectible-related controls inside `.collectibles-card`, the existing reset-then-disable pass will catch them automatically — no per-control wiring needed. Controls that should remain interactive (e.g. the owner badge itself) must carry `data-readonly-exempt`.
+- **Collectibles SortableJS instances are tracked**: `CollectibleController._dragManagers[tabId]` stores every Sortable (areas + types + one per area for sub-areas + one per area for items). `_renderAreas` / `_renderTypes` dispose the relevant slots before wiping innerHTML, and `teardown(tabId)` disposes the entire slot. Before adding a new collectible drag surface, follow the same pattern (store in the slot, dispose previous before re-create) — stacking Sortables on the same container without disposal causes both the old and new instance to fire on drop.
 - **DLC URL routing**: Base game uses `/roadmap/` (no trailing group ID). DLC uses `/roadmap/<group>/`. The `edit/` pattern is registered before these in urls.py, so no shadowing.
 - **Progress for anonymous users**: When not logged in, `profile_earned` is empty, progress shows 0/N, and earned indicators don't render. The guide is still fully usable.
