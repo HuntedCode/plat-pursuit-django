@@ -28,13 +28,17 @@ For every concept with an accepted IGDBMatch:
 
 The `_resolve_canonical_igdb_id` step collapses versions/releases of the
 same underlying game. IGDB models "same game, different release" via
-`parent_game` (set on Ports, Remakes, Remasters — game_type 11/8/9) and
+`parent_game` (set on Standalone Expansions, Remakes, Remasters, Expanded
+Games / Director's Cuts, and Ports — game_type 4/8/9/10/11) and
 `version_parent` (set on editions like Deluxe/GOTY/Anniversary). When
 either is present, the family keys on the parent id instead of the
 derivative's own id. Result: Jak and Daxter: The Precursor Legacy
 (IGDB #1528), its PS3 HD remaster (#302690), and its PS4 port (#325261)
 all collapse into one family keyed on 1528, while each release still has
 its own `IGDBMatch` with its own platform, release date, and companies.
+Death Stranding (#19564) and Death Stranding: Director's Cut (#152063,
+`parent_game=19564`, `game_type=Expanded Game`) collapse onto family 19564
+the same way.
 
 Two concepts with the same canonical IGDB id unambiguously belong
 together. Two concepts with different canonical ids are different games.

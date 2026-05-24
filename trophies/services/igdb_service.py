@@ -2413,12 +2413,13 @@ class IGDBService:
         return chosen
 
     # game_type ids that indicate a derivative release pointing at a canonical
-    # original via parent_game: 8=Remake, 9=Remaster, 11=Port. DLC (1) and
-    # Expansion (2) also populate parent_game but we don't want to collapse
-    # those into the base game's family — the matcher's main-game filter
-    # should already prevent DLC from reaching family linking, but we gate
-    # on this set anyway for belt-and-suspenders.
-    _CANONICAL_PARENT_GAME_TYPES = frozenset({8, 9, 11})
+    # original via parent_game: 4=Standalone Expansion, 8=Remake, 9=Remaster,
+    # 10=Expanded Game (Director's Cut / GOTY-style extended editions),
+    # 11=Port. DLC (1) and Expansion (2) also populate parent_game but we
+    # don't want to collapse those into the base game's family — the
+    # matcher's main-game filter should already prevent DLC from reaching
+    # family linking, but we gate on this set anyway for belt-and-suspenders.
+    _CANONICAL_PARENT_GAME_TYPES = frozenset({4, 8, 9, 10, 11})
 
     @classmethod
     def _resolve_canonical_igdb_id(cls, igdb_data, fallback_id):
@@ -2426,11 +2427,13 @@ class IGDBService:
 
         IGDB models "same game, different release" via two fields:
 
-          * `parent_game` — set on Ports (game_type 11), Remakes (8), and
-            Remasters (9), pointing at the original entry.
+          * `parent_game` — set on Standalone Expansions (game_type 4),
+            Remakes (8), Remasters (9), Expanded Games / Director's Cuts
+            (10), and Ports (11), pointing at the original entry.
           * `version_parent` — set on editions (Deluxe, GOTY, Anniversary
             etc.) that aren't a distinct release but a repackaging of
-            another entry.
+            another entry. Note: Director's Cuts use `parent_game` +
+            game_type=10, not `version_parent`.
 
         Using either of these as the family key means all versions/releases
         of the same title collapse into a single family, even when each
