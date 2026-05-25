@@ -28,13 +28,22 @@ flag. A Family is "done" when none of its Concepts are null on that field.
 
 Usage:
     python manage.py anchor_concepts [--family N] [--orphans] [--limit N]
-                                     [--dry-run] [--skip-preflight]
-                                     [--api-delay 0.5]
+                                     [--dry-run] [--api-delay 0.5]
+
+Note: there's no concept_id collision pre-flight pass. PSN concept_ids that
+happen to be bare integers exist throughout the DB and are typically far
+larger than any IGDB game id, so a "look for bare-integer concept_ids" scan
+would refuse to start on legitimate state. The mid-batch collision check
+inside `_get_or_create_target_concept` is the actual safety net: when the
+migration tries to create a target Concept at `str(canonical_id)` and finds
+an existing Concept already owning that PK, it verifies the existing one's
+IGDBMatch canonical-resolves to the same id. If not, the Game is flagged
+with `concept_id_collision` and the batch moves on.
 """
 import time
 from collections import defaultdict
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
@@ -72,10 +81,6 @@ class Command(BaseCommand):
             help='Run matching + decision logic but do not write to the database.',
         )
         parser.add_argument(
-            '--skip-preflight', action='store_true',
-            help='Skip the bare-integer concept_id collision pre-check.',
-        )
-        parser.add_argument(
             '--api-delay', type=float, default=0.5,
             help='Seconds to sleep after each IGDB canonical-data fetch.',
         )
@@ -101,9 +106,6 @@ class Command(BaseCommand):
         self.targets_reused = 0
         self.start_time = time.time()
 
-        if not options['skip_preflight']:
-            self._preflight_check()
-
         if options['family'] is not None:
             families = GameFamily.objects.filter(pk=options['family'])
             self._process_families(families, limit=None)
@@ -116,39 +118,6 @@ class Command(BaseCommand):
                 self._process_orphans(limit=None)
 
         self._print_summary()
-
-    # ------------------------------------------------------------------
-    # Pre-flight
-    # ------------------------------------------------------------------
-
-    def _preflight_check(self):
-        """Refuse to start if any existing Concept.concept_id looks like a bare integer.
-
-        An IGDB-anchored Concept's concept_id is a bare integer string
-        (e.g. '19564'); if an existing Concept happens to own that string
-        already, the migration's get_or_create would silently land on it
-        instead of creating a fresh target. Pre-flight surfaces them so
-        staff can resolve before the bulk run.
-        """
-        collisions = list(
-            Concept.objects.filter(concept_id__regex=r'^\d+$')
-            .values_list('concept_id', 'unified_title')[:50]
-        )
-        if not collisions:
-            return
-        self.stderr.write(self.style.ERROR(
-            f'Pre-flight collision check found {len(collisions)} '
-            f'Concept(s) with bare-integer concept_id values. These would '
-            f'collide with IGDB-anchored concept_ids during migration:'
-        ))
-        for cid, title in collisions:
-            self.stderr.write(f'  - {cid!r}: "{title}"')
-        self.stderr.write(self.style.ERROR(
-            '\nResolve manually (rename or delete in admin) before re-running, '
-            'or pass --skip-preflight to proceed regardless (mid-batch '
-            'collisions will be flagged to ConceptJoinReview).'
-        ))
-        raise CommandError('Pre-flight collision check failed')
 
     # ------------------------------------------------------------------
     # Top-level iteration
