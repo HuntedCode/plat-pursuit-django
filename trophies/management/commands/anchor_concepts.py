@@ -305,7 +305,12 @@ class Command(BaseCommand):
                 flagged_count += 1
             else:
                 if not self.dry_run:
-                    p['game'].add_concept(target)
+                    # force=True bypasses concept_lock. The migration is a
+                    # deliberate staff-initiated move; the lock was meant to
+                    # block automated sync, not migration. Without this, locked
+                    # Games silently stay in their source Concept and the
+                    # source never empties out for absorb-and-delete.
+                    p['game'].add_concept(target, force=True)
                 self.games_moved += 1
                 moved_count += 1
                 anchored_a_game = True

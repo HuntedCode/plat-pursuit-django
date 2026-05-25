@@ -3505,7 +3505,7 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                     target, canonical_data, confidence=1.0, method='manual',
                 )
 
-            review.game.add_concept(target)
+            review.game.add_concept(target, force=True)
 
             target.anchor_migration_completed_at = timezone.now()
             target.save(update_fields=['anchor_migration_completed_at'])
@@ -3646,7 +3646,7 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
             target.anchor_migration_completed_at = timezone.now()
             target.save(update_fields=['anchor_migration_completed_at'])
 
-            review.game.add_concept(target)
+            review.game.add_concept(target, force=True)
 
             review.status = 'approved'
             review.resolved_at = timezone.now()

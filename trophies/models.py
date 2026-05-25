@@ -548,8 +548,20 @@ class Game(models.Model):
             self.title_name = clean_game_title(self.title_name)
         super().save(*args, **kwargs)
 
-    def add_concept(self, concept):
-        if not concept or self.concept_lock:
+    def add_concept(self, concept, force=False):
+        """Assign this Game to a Concept (the migration-friendly version of
+        the FK assignment).
+
+        `concept_lock` is the admin's "don't let automated sync reassign this
+        Game's concept" override. Live sync respects it by passing the
+        default `force=False`. Staff-initiated paths (the `anchor_concepts`
+        migration command and the `ConceptJoinReview` admin actions) pass
+        `force=True` to override the lock, since the lock was meant to keep
+        automation out, not to block deliberate migration moves.
+        """
+        if not concept:
+            return
+        if self.concept_lock and not force:
             return
         if self.concept == concept:
             if self.concept_stale:
