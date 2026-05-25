@@ -705,13 +705,21 @@ class IGDBService:
         title = search_title_override or cls._pick_search_title(concept)
         if title:
             if search_title_override:
-                source = 'override (trophy-group title)'
+                # Game-level matching path (used by match_game and the anchor
+                # migration). At migration scale this fires once per Game and
+                # would dominate the log output, so it's DEBUG-level rather
+                # than INFO. The Concept-level path stays INFO because it's
+                # rare and useful for diagnosing one-off enrichment runs.
+                logger.debug(
+                    f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
+                    f'using override (trophy-group title): "{title}"'
+                )
             else:
                 source = 'concept title' if title == concept.unified_title else 'game title'
-            logger.info(
-                f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
-                f'using {source}: "{title}"'
-            )
+                logger.info(
+                    f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
+                    f'using {source}: "{title}"'
+                )
 
         # Build list of PSN IDs to try for external matching
         psn_ids = []

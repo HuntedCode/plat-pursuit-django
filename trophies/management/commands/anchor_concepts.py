@@ -288,6 +288,8 @@ class Command(BaseCommand):
         reference_game = existing_target_games[0] if existing_target_games else None
 
         anchored_a_game = False
+        moved_count = 0
+        flagged_count = 0
         for p in group:
             flag_reasons = list(p['cross_check']['flag_reasons']) if p['cross_check'] else []
             if reference_game:
@@ -300,10 +302,12 @@ class Command(BaseCommand):
                         flag_reasons.append(fr)
             if flag_reasons:
                 self._create_review_entry(p, target=target, extra_flags=flag_reasons)
+                flagged_count += 1
             else:
                 if not self.dry_run:
                     p['game'].add_concept(target)
                 self.games_moved += 1
+                moved_count += 1
                 anchored_a_game = True
                 # First clean join becomes the reference for subsequent ones.
                 if reference_game is None:
@@ -313,11 +317,30 @@ class Command(BaseCommand):
         # the source Concept has either auto-deleted (via absorb cascade) or
         # still has the flagged Games sitting on it. Either way, stamp the
         # target so it's not re-processed in a future batch.
+        target_concept_id = (
+            target.concept_id if target is not None else str(canonical_id)
+        )
         if anchored_a_game and target is not None:
             if not self.dry_run:
                 target.anchor_migration_completed_at = timezone.now()
                 target.save(update_fields=['anchor_migration_completed_at'])
             self.concepts_anchored += 1
+
+        # Per-Concept outcome summary, one line, post-action. Easier to scan
+        # batch results than parsing multiple IGDB matching debug lines.
+        prefix = '[DRY] Would anchor' if self.dry_run else 'Anchored'
+        if anchored_a_game:
+            self.stdout.write(
+                f'  {prefix} {source_concept.concept_id!r} -> '
+                f'{target_concept_id!r}: {moved_count} moved, '
+                f'{flagged_count} flagged for review'
+            )
+        elif flagged_count:
+            self.stdout.write(
+                f'  Concept {source_concept.concept_id!r}: all '
+                f'{flagged_count} game(s) flagged for review, target '
+                f'{target_concept_id!r} not anchored'
+            )
 
         # If NO_MATCH Games remain in source after the moves, source stays
         # un-timestamped — it'll be re-evaluated when those Games either get

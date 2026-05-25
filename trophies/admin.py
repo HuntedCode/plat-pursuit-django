@@ -756,14 +756,41 @@ class ConceptFranchiseInline(admin.TabularInline):
         return super().get_queryset(request).select_related('franchise')
 
 
+class ConceptAnchorStatusFilter(SimpleListFilter):
+    """Filter Concepts by IGDB-anchor migration status.
+
+    Anchored = anchor_migration_completed_at is set (the Concept has been
+    processed by the anchor_concepts migration and is at canonical IGDB
+    identity). Pending = still legacy PSN-grouped or untouched.
+    """
+
+    title = 'Anchor status'
+    parameter_name = 'anchor'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('anchored', 'Anchored (IGDB-canonical)'),
+            ('pending', 'Not yet anchored'),
+        )
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == 'anchored':
+            return queryset.filter(anchor_migration_completed_at__isnull=False)
+        if value == 'pending':
+            return queryset.filter(anchor_migration_completed_at__isnull=True)
+        return queryset
+
+
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'concept_id', 'unified_title', 'title_lock', 'title_reviewed_at',
+        'id', 'concept_id', 'unified_title', 'anchor_migration_completed_at',
+        'title_lock', 'title_reviewed_at',
         'family_display', 'release_date', 'developers_display', 'publisher_name', 'genres',
     )
     list_select_related = ('family',)
-    list_filter = ('family__is_verified', 'title_lock')
+    list_filter = ('family__is_verified', 'title_lock', ConceptAnchorStatusFilter)
     # Searching ``concept_companies__company__name`` matches ANY linked
     # company (developer, publisher, porter, supporter). Broader than just
     # developers, but more useful in practice — admins typing a studio name
