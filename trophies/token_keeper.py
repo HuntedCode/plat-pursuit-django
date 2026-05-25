@@ -32,6 +32,7 @@ from trophies.util_modules.region import detect_region_from_details
 from trophies.services.profile_stats_service import update_profile_games, update_profile_trophy_counts
 from trophies.services.badge_service import check_profile_badges
 from trophies.services.milestone_service import check_all_milestones_for_user
+from trophies.services.concept_anchor_service import try_anchor_new_game
 
 logger = logging.getLogger("psn_api")
 
@@ -1293,9 +1294,12 @@ class TokenKeeper:
             reconciled = 0
             for game in orphan_games:
                 try:
-                    stub = Concept.create_default_concept(game)
-                    game.add_concept(stub)
-                    self._defer_igdb_enrich(profile_id, stub)
+                    # Try canonical anchor first; if no clean IGDB match,
+                    # fall through to the historical PP_* stub path.
+                    if try_anchor_new_game(game) is None:
+                        stub = Concept.create_default_concept(game)
+                        game.add_concept(stub)
+                        self._defer_igdb_enrich(profile_id, stub)
                     reconciled += 1
                 except Exception:
                     logger.exception(
@@ -1800,31 +1804,53 @@ class TokenKeeper:
                     title_id.save(update_fields=['platform'])
                     logger.info(f"Corrected TitleID {title_id.title_id} platform: {old_platform} -> {api_platform}")
 
-                concept, concept_created = PsnApiService.create_concept_from_details(details)
+                # Try canonical IGDB anchor first when the Game has no Concept
+                # yet. A clean match skips PSN-storefront Concept creation
+                # entirely (we land at a canonical-anchored Concept whose
+                # IGDBMatch is refreshed inline). Region detection + title_id
+                # capture below still run against whichever Concept the Game
+                # ends up on.
+                anchored = try_anchor_new_game(game) if game.concept is None else None
 
-                # Gate: data from a non-default (Asian) storefront may only be used
-                # to initialize a NEW concept. It must never overwrite fields on an
-                # existing concept; a later US/en-US sync is allowed to refresh as
-                # usual via the concept_created=False, used_fallback_region=False path.
-                if concept_created or not used_fallback_region:
-                    # English-path refresh: if we're seeing an existing concept via a
-                    # US/en-US response, upgrade its English-facing fields so concepts
-                    # originally seeded from an Asian fallback get their canonical
-                    # English title once we finally see it.
-                    if not concept_created and not used_fallback_region:
-                        PsnApiService.update_concept_english_fields(concept, details)
-                    release_date = details.get('defaultProduct', {}).get('releaseDate', None)
-                    if release_date is None:
-                        release_date = details.get('releaseDate', {}).get('date', '')
-                    concept.update_release_date(release_date)
-                    media_data = self._extract_media(details)
-                    concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
+                if anchored is not None:
+                    concept = anchored
+                    # No PSN-derived enrichment to defer — process_match already
+                    # ran inside try_anchor_new_game.
                 else:
-                    logger.info(
-                        f"Concept {concept.concept_id} matched existing via Asian-region "
-                        f"fallback; skipping release_date/media overwrite"
-                    )
-                game.add_concept(concept)
+                    concept, concept_created = PsnApiService.create_concept_from_details(details)
+
+                    # Gate: data from a non-default (Asian) storefront may only be used
+                    # to initialize a NEW concept. It must never overwrite fields on an
+                    # existing concept; a later US/en-US sync is allowed to refresh as
+                    # usual via the concept_created=False, used_fallback_region=False path.
+                    if concept_created or not used_fallback_region:
+                        # English-path refresh: if we're seeing an existing concept via a
+                        # US/en-US response, upgrade its English-facing fields so concepts
+                        # originally seeded from an Asian fallback get their canonical
+                        # English title once we finally see it.
+                        if not concept_created and not used_fallback_region:
+                            PsnApiService.update_concept_english_fields(concept, details)
+                        release_date = details.get('defaultProduct', {}).get('releaseDate', None)
+                        if release_date is None:
+                            release_date = details.get('releaseDate', {}).get('date', '')
+                        concept.update_release_date(release_date)
+                        media_data = self._extract_media(details)
+                        concept.update_media(media_data['all_media'], media_data['icon_url'], media_data['bg_url'])
+                    else:
+                        logger.info(
+                            f"Concept {concept.concept_id} matched existing via Asian-region "
+                            f"fallback; skipping release_date/media overwrite"
+                        )
+                    game.add_concept(concept)
+
+                    # IGDB enrichment for newly created PSN concepts (best-effort).
+                    # Deferred to sync_complete so every Game for the concept is
+                    # attached before matching runs — _pick_search_title needs the
+                    # full game set to distinguish single-game concepts from
+                    # multi-game compilations.
+                    if concept_created:
+                        self._defer_igdb_enrich(profile_id, concept)
+
                 detected_region = detect_region_from_details(details)
                 if detected_region:
                     if title_id.region == 'IP':
@@ -1835,14 +1861,6 @@ class TokenKeeper:
                     game.add_region(title_id.region)
                 concept.add_title_id(title_id.title_id)
                 concept.check_and_mark_regional()
-
-                # IGDB enrichment for newly created concepts (best-effort).
-                # Deferred to sync_complete so every Game for the concept is
-                # attached before matching runs — _pick_search_title needs the
-                # full game set to distinguish single-game concepts from
-                # multi-game compilations.
-                if concept_created:
-                    self._defer_igdb_enrich(profile_id, concept)
 
                 profile.increment_sync_progress()
                 logger.info(f"sync_title_id resolved {title_id.title_id} -> \"{concept.unified_title}\"")
@@ -1863,12 +1881,18 @@ class TokenKeeper:
                             game.is_regional = True
                             game.save(update_fields=['is_regional'])
                             logger.info(f"Game {game.title_name} detected as Asian regional.")
-                        default_concept = Concept.create_default_concept(game)
-                        game.add_concept(default_concept)
-                        self._defer_igdb_enrich(profile_id, default_concept)
-                        logger.info(f"Created default concept for {game.title_name}")
+                        # PSN returned no usable details; try canonical IGDB
+                        # anchor before falling back to a PP_* stub. IGDB often
+                        # covers games PSN's storefront has gaps for.
+                        if try_anchor_new_game(game) is None:
+                            default_concept = Concept.create_default_concept(game)
+                            game.add_concept(default_concept)
+                            self._defer_igdb_enrich(profile_id, default_concept)
+                            logger.info(f"Created default concept for {game.title_name}")
+                        else:
+                            logger.info(f"Anchored {game.title_name} at canonical IGDB Concept")
                     except Exception:
-                        logger.exception(f"Failed to create default concept for {game.title_name} (Title ID {title_id.title_id})")
+                        logger.exception(f"Failed to place concept-less Game {game.title_name} (Title ID {title_id.title_id})")
         except PSNOutageError:
             raise  # Let the worker loop handle outage recovery
         except Exception as e:
@@ -2227,15 +2251,21 @@ class TokenKeeper:
                     games_needing_concepts.append(game)
                 else:
                     try:
-                        default_concept = Concept.create_default_concept(game)
-                        game.add_concept(default_concept)
-                        self._try_igdb_enrich(default_concept)
+                        # Try canonical anchor first; legacy/PS3/Vita games
+                        # often have an IGDB match even when they have no PSN
+                        # storefront concept. If the match is clean, land
+                        # the Game at the canonical Concept directly and
+                        # skip the PP_* stub.
+                        if try_anchor_new_game(game) is None:
+                            default_concept = Concept.create_default_concept(game)
+                            game.add_concept(default_concept)
+                            self._try_igdb_enrich(default_concept)
                         logger.debug(
-                            f"default concept legacy game={game.np_communication_id}"
+                            f"placed legacy game={game.np_communication_id}"
                         )
                     except Exception:
                         logger.exception(
-                            f"default concept failed game={game.np_communication_id}"
+                            f"legacy placement failed game={game.np_communication_id}"
                         )
 
             # Trophy-count drift detection: compare PSN's earned total for this

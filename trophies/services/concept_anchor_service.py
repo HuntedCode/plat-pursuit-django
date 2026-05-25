@@ -280,3 +280,171 @@ def identity_cross_check(
         'release_year_gap': release_year_gap,
         'flag_reasons': flag_reasons,
     }
+
+
+def try_anchor_new_game(game):
+    """Live-sync entry point: try to anchor a brand-new Game at its canonical Concept.
+
+    Three outcomes:
+
+      1. Clean canonical match — finds or creates the IGDB-anchored Concept
+         at `concept_id = str(canonical_igdb_id)`, refreshes its IGDBMatch
+         against canonical data (which captures media + Tier 1 fields via
+         `process_match`), and assigns it to the Game. Returns the target.
+
+      2. Match found but identity cross-check flagged it (low confidence,
+         title mismatch, platform overlap missing, release-year drift, or
+         a `concept_id_collision` where the bare-integer slot is already
+         taken by an unrelated Concept) — writes a `ConceptJoinReview` so
+         staff can resolve, then returns None for the caller to fall back
+         to its existing PSN/stub placement.
+
+      3. No IGDB match at all — returns None silently. No review created
+         because there's no actionable IGDB candidate to record.
+
+    Designed to be safe to call from live sync's placement paths: never
+    raises, swallows internal errors and returns None on any failure so
+    the caller's fallback always runs.
+
+    Args:
+        game: a Game instance that has no Concept FK assigned yet. (Already-
+            placed Games short-circuit immediately to None — the bulk
+            `anchor_concepts` command is the right tool for re-evaluating
+            those, not live sync.)
+
+    Returns:
+        Concept on clean anchor; None on any non-clean-anchor outcome.
+    """
+    from django.db import transaction
+    from django.utils import timezone
+
+    from trophies.models import Concept
+    from trophies.services.igdb_service import IGDBService
+
+    if not game.pk or game.concept_id:
+        return None
+
+    try:
+        match = IGDBService.match_game(game)
+    except Exception:
+        logger.exception(
+            f'try_anchor_new_game: match_game failed for game pk={game.pk}'
+        )
+        return None
+
+    if not match:
+        return None
+
+    cross = identity_cross_check(
+        game, match['igdb_data'],
+        confidence=match['confidence'],
+        trophy_group_title=match['trophy_group_title'],
+    )
+
+    if cross['flag_reasons']:
+        # Match found but identity check flagged it. Surface to staff via
+        # the review queue, then fall back so caller can place the Game
+        # the legacy way for now.
+        _write_sync_review(game, match, cross, extra_flags=())
+        return None
+
+    canonical_id = match['canonical_igdb_id']
+    concept_id_str = str(canonical_id)
+
+    try:
+        with transaction.atomic():
+            target = Concept.objects.filter(concept_id=concept_id_str).first()
+            canonical_data = None
+
+            if target:
+                # Existing Concept owns this PK. Verify it really anchors at
+                # the same canonical id; if not it's a collision and we bail
+                # to the review queue + caller fallback.
+                existing_match = getattr(target, 'igdb_match', None)
+                if existing_match and existing_match.igdb_id:
+                    existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                        existing_match.raw_response or {}, existing_match.igdb_id
+                    )
+                    if existing_canonical != canonical_id:
+                        _write_sync_review(
+                            game, match, cross,
+                            extra_flags=('concept_id_collision',),
+                        )
+                        return None
+            else:
+                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
+                if not canonical_data:
+                    return None
+                target = Concept.objects.create(
+                    concept_id=concept_id_str,
+                    unified_title=canonical_data.get('name', ''),
+                )
+
+            # Refresh target's IGDBMatch against canonical (captures media
+            # + Tier 1). Idempotent — process_match update_or_creates.
+            # Reuse fetch from above when present.
+            if canonical_data is None:
+                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
+            if canonical_data:
+                IGDBService.process_match(
+                    target, canonical_data, confidence=1.0, method='manual',
+                )
+
+            target.anchor_migration_completed_at = timezone.now()
+            target.save(update_fields=['anchor_migration_completed_at'])
+
+            game.add_concept(target)
+            return target
+    except Exception:
+        logger.exception(
+            f'try_anchor_new_game: anchoring failed for game pk={game.pk}'
+        )
+        return None
+
+
+def _write_sync_review(game, match, cross, extra_flags=()):
+    """Write a ConceptJoinReview entry from live sync's match-but-flagged path.
+
+    Preserves staff-resolved reviews (never overwrites a non-pending status).
+    Internal helper used only by `try_anchor_new_game`.
+    """
+    from trophies.models import ConceptJoinReview
+
+    flag_reasons = list(cross.get('flag_reasons', []))
+    for fr in extra_flags:
+        if fr not in flag_reasons:
+            flag_reasons.append(fr)
+    flag_reasons = [
+        fr for fr in flag_reasons
+        if fr in ConceptJoinReview.FLAG_REASON_CHOICES
+    ]
+
+    # Don't clobber a staff-resolved review (approved/rejected/deferred).
+    existing = ConceptJoinReview.objects.filter(game=game).first()
+    if existing and existing.status != 'pending':
+        return
+
+    identity_data = {k: v for k, v in cross.items() if k != 'flag_reasons'}
+    identity_data.update({
+        'match_confidence': match['confidence'],
+        'match_method': match['match_method'],
+        'raw_igdb_id': match['raw_igdb_id'],
+        'trophy_group_title': match['trophy_group_title'],
+        'source': 'live_sync',
+    })
+
+    try:
+        ConceptJoinReview.objects.update_or_create(
+            game=game,
+            defaults={
+                'proposed_canonical_igdb_id': match['canonical_igdb_id'] or 0,
+                'flag_reasons': flag_reasons,
+                'trophy_fingerprint': trophy_fingerprint(game),
+                'identity_check_data': identity_data,
+                'status': 'pending',
+            },
+        )
+    except Exception:
+        logger.exception(
+            f'_write_sync_review: failed to write review for game pk={game.pk}'
+        )
