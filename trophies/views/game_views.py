@@ -482,17 +482,26 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             content_rating_url = None
 
             if game.concept.media:
-                # Prefer screenshots
+                # Prefer PSN-side screenshots
                 for img in game.concept.media:
                     if img.get('type') == 'SCREENSHOT':
                         screenshot_urls.append(img.get('url'))
 
-                # Fallback to other image types if no screenshots
+                # Fallback to other PSN image types if no screenshots
                 if len(screenshot_urls) < 1:
                     for img in game.concept.media:
                         img_type = img.get('type')
                         if img_type in ['GAMEHUB_COVER_ART', 'LOGO', 'MASTER']:
                             screenshot_urls.append(img.get('url'))
+
+            # Final fallback: IGDB-side screenshots. For canonical-anchored
+            # Concepts (post-migration), PSN media isn't fetched, so the
+            # carousel needs IGDB to fill in. Also covers the case where
+            # legacy concepts have empty/sparse PSN media but IGDB has data.
+            if not screenshot_urls:
+                igdb_match = getattr(game.concept, 'igdb_match', None)
+                if igdb_match:
+                    screenshot_urls = igdb_match.screenshot_urls()
 
             if game.concept.content_rating:
                 content_rating_url = game.concept.content_rating.get('url')

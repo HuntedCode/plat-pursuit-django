@@ -787,9 +787,10 @@ class ConceptAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'concept_id', 'unified_title', 'anchor_migration_completed_at',
         'title_lock', 'title_reviewed_at',
-        'family_display', 'release_date', 'developers_display', 'publisher_name', 'genres',
+        'family_display', 'release_date_display', 'developers_display',
+        'publishers_display', 'genres_display',
     )
-    list_select_related = ('family',)
+    list_select_related = ('family', 'igdb_match')
     list_filter = ('family__is_verified', 'title_lock', ConceptAnchorStatusFilter)
     # Searching ``concept_companies__company__name`` matches ANY linked
     # company (developer, publisher, porter, supporter). Broader than just
@@ -810,14 +811,26 @@ class ConceptAdmin(admin.ModelAdmin):
     inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
 
     def get_queryset(self, request):
-        # Prefetch only the developer-flagged ConceptCompany rows so the
-        # changelist's "Developers" column doesn't N+1 across the page.
+        # Prefetches keep the IGDB-derived list_display columns from N+1ing.
+        # ConceptCompany is fetched twice with different filters (developers
+        # vs. publishers) and attached to separate attrs so each column's
+        # display method can read its slice without re-querying.
         return super().get_queryset(request).prefetch_related(
             Prefetch(
                 'concept_companies',
                 queryset=ConceptCompany.objects.filter(is_developer=True).select_related('company'),
                 to_attr='_developer_links',
-            )
+            ),
+            Prefetch(
+                'concept_companies',
+                queryset=ConceptCompany.objects.filter(is_publisher=True).select_related('company'),
+                to_attr='_publisher_links',
+            ),
+            Prefetch(
+                'concept_genres',
+                queryset=ConceptGenre.objects.select_related('genre'),
+                to_attr='_genre_links',
+            ),
         )
 
     def developers_display(self, obj):
@@ -826,6 +839,44 @@ class ConceptAdmin(admin.ModelAdmin):
             return '—'
         return ', '.join(cc.company.name for cc in devs)
     developers_display.short_description = 'Developers'
+
+    def publishers_display(self, obj):
+        """Publishers via ConceptCompany (IGDB-derived). Falls back to the
+        legacy PSN `Concept.publisher_name` for un-migrated concepts.
+        """
+        pubs = getattr(obj, '_publisher_links', None) or []
+        if pubs:
+            return ', '.join(cc.company.name for cc in pubs)
+        return obj.publisher_name or '—'
+    publishers_display.short_description = 'Publishers'
+
+    def genres_display(self, obj):
+        """Genres via ConceptGenre (IGDB-derived). Falls back to the legacy
+        PSN `Concept.genres` JSONField for un-migrated concepts.
+        """
+        links = getattr(obj, '_genre_links', None) or []
+        if links:
+            return ', '.join(cg.genre.name for cg in links)
+        legacy = obj.genres or []
+        if isinstance(legacy, list) and legacy:
+            return ', '.join(str(g) for g in legacy)
+        return '—'
+    genres_display.short_description = 'Genres'
+
+    def release_date_display(self, obj):
+        """Prefer IGDB's first PS release date (Tier 1 from IGDBMatch).
+        Falls back to the legacy PSN `Concept.release_date` for un-migrated
+        concepts.
+        """
+        match = getattr(obj, 'igdb_match', None)
+        igdb_date = getattr(match, 'igdb_first_release_date', None)
+        if igdb_date:
+            return igdb_date.strftime('%Y-%m-%d')
+        if obj.release_date:
+            return obj.release_date.strftime('%Y-%m-%d')
+        return '—'
+    release_date_display.short_description = 'Release date'
+    release_date_display.admin_order_field = 'igdb_match__igdb_first_release_date'
 
     def family_display(self, obj):
         if not obj.family_id:
