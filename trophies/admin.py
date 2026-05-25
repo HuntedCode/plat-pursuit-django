@@ -3690,16 +3690,26 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
         related flag, to avoid propagating a bad IGDB match via siblings.
         """
         approved = 0
+        bulk_resolved = 0
         errors = 0
         wrong_flags = 0
+        already_resolved_in_loop = set()
         for review in queryset.filter(status='pending'):
+            if review.pk in already_resolved_in_loop:
+                # This review was bulk-resolved by a sibling created earlier
+                # in this same action invocation (fingerprint-cluster merge).
+                continue
             flags = set(review.flag_reasons or [])
             if not (flags & self._SEPARATE_CONCEPT_TROPHY_FLAGS):
                 wrong_flags += 1
                 continue
             try:
-                self._apply_approval_as_separate(review, request.user)
+                cluster_resolved_pks = self._apply_approval_as_separate(
+                    review, request.user,
+                )
                 approved += 1
+                bulk_resolved += len(cluster_resolved_pks)
+                already_resolved_in_loop.update(cluster_resolved_pks)
             except Exception as exc:
                 errors += 1
                 messages.error(
@@ -3707,10 +3717,19 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                     f'Approve-as-separate failed for game pk={review.game_id}: {exc}',
                 )
         if approved:
-            messages.success(
-                request,
-                f'Created {approved} sibling Concept(s) and anchored the games.',
-            )
+            if bulk_resolved:
+                messages.success(
+                    request,
+                    f'Created {approved} sibling Concept(s); resolved '
+                    f'{approved + bulk_resolved} review(s) total '
+                    f'({approved} selected + {bulk_resolved} auto-merged by '
+                    f'matching trophy fingerprint).',
+                )
+            else:
+                messages.success(
+                    request,
+                    f'Created {approved} sibling Concept(s) and anchored the games.',
+                )
         if wrong_flags:
             messages.warning(
                 request,
@@ -3734,6 +3753,18 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
         simultaneously. Each create() runs in its own savepoint so an
         IntegrityError rolls back just that attempt rather than poisoning
         the outer transaction.
+
+        After moving the selected review's Game, scans for OTHER pending
+        reviews with the same canonical_id AND the same trophy_fingerprint
+        and bulk-resolves them: their Games join the same sibling, their
+        reviews are marked approved. This handles the
+        "migration flagged Vita-A AND Vita-B against PS4, both should be
+        ONE sibling" case in a single click.
+
+        Returns:
+            set[int]: pks of OTHER reviews that were bulk-resolved by this
+            call (the caller can use these to skip those rows on subsequent
+            iterations of the same action).
         """
         from django.db import IntegrityError
         from trophies.services.concept_anchor_service import (
@@ -3744,6 +3775,8 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
         canonical_id = review.proposed_canonical_igdb_id
         if not canonical_id:
             raise ValueError('Review has no proposed canonical IGDB id')
+
+        bulk_resolved_pks = set()
 
         with transaction.atomic():
             canonical_data = IGDBService.fetch_full_game_data(canonical_id)
@@ -3791,6 +3824,42 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
             review.save(update_fields=[
                 'status', 'resolved_at', 'resolved_by', 'proposed_concept',
             ])
+
+            # Fingerprint-cluster auto-resolve: find OTHER pending reviews
+            # with the same canonical_id and matching trophy_fingerprint,
+            # land their Games at the same new sibling, mark approved.
+            # Same fingerprint within the same canonical Family = same
+            # trophy-list variant (per the design we landed in d276712).
+            if review.trophy_fingerprint:
+                cluster_reviews = ConceptJoinReview.objects.filter(
+                    status='pending',
+                    proposed_canonical_igdb_id=canonical_id,
+                    trophy_fingerprint=review.trophy_fingerprint,
+                ).exclude(pk=review.pk).select_related('game')
+                for sibling_review in cluster_reviews:
+                    # Verify the clustered review's flag_reasons are also
+                    # trophy-fingerprint-class — don't auto-merge a review
+                    # that was flagged for identity/confidence reasons.
+                    sibling_flags = set(sibling_review.flag_reasons or [])
+                    if not (sibling_flags & self._SEPARATE_CONCEPT_TROPHY_FLAGS):
+                        continue
+                    sibling_review.game.add_concept(target, force=True)
+                    sibling_review.status = 'approved'
+                    sibling_review.resolved_at = timezone.now()
+                    sibling_review.resolved_by = user
+                    sibling_review.proposed_concept = target
+                    sibling_review.notes = (
+                        (sibling_review.notes or '')
+                        + f'\n[auto-merged into sibling via fingerprint cluster '
+                          f'when review pk={review.pk} was approved]'
+                    ).strip()
+                    sibling_review.save(update_fields=[
+                        'status', 'resolved_at', 'resolved_by',
+                        'proposed_concept', 'notes',
+                    ])
+                    bulk_resolved_pks.add(sibling_review.pk)
+
+        return bulk_resolved_pks
 
     @admin.action(description='Reject selected (Game stays in current Concept)')
     def reject_selected(self, request, queryset):
