@@ -511,6 +511,232 @@ def _write_sync_review(game, match, cross, extra_flags=()):
         )
 
 
+def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None) -> dict:
+    """Manually anchor a deferred source Concept's Games to a staff-provided
+    canonical IGDB id.
+
+    Bypasses `match_game` (the matcher couldn't find a hit on its own — that's
+    why this Concept is deferred). Everything downstream of matching runs as
+    normal: canonical resolution, target Concept find-or-create, IGDBMatch
+    refresh (captures media), trophy-fingerprint vetting per Game,
+    identity cross-check per Game. Clean Games move via `Game.add_concept`
+    (force=True bypasses concept_lock); flagged Games get a
+    `ConceptJoinReview` entry the same way the migration does.
+
+    Args:
+        source_concept: the deferred Concept whose Games should be anchored.
+        canonical_igdb_id: the IGDB id staff believes is correct. Will be run
+            through `_resolve_canonical_igdb_id` in case staff provided a
+            Director's Cut / Standalone Expansion id that should collapse to
+            its parent.
+        user: the staff user driving the action (for audit on any reviews).
+
+    Returns:
+        dict with keys:
+            * ok (bool): True if the work succeeded structurally
+            * error (str | None): error message if ok=False
+            * target_concept (Concept | None): the anchored target
+            * resolved_canonical_id (int | None): the actual canonical id used
+              (may differ from input if collapsed via parent_game)
+            * moved_count (int)
+            * flagged_count (int)
+            * flagged_games (list[(game, flag_reasons)]): for summary messaging
+            * collision (bool): True if existing Concept at str(canonical) had
+              a different anchor; flagged everything for review and bailed
+    """
+    from django.db import IntegrityError, transaction
+    from django.utils import timezone
+
+    from trophies.models import Concept, ConceptJoinReview
+    from trophies.services.igdb_service import IGDBService
+
+    result = {
+        'ok': False,
+        'error': None,
+        'target_concept': None,
+        'resolved_canonical_id': None,
+        'moved_count': 0,
+        'flagged_count': 0,
+        'flagged_games': [],
+        'collision': False,
+    }
+
+    if not source_concept or not source_concept.pk:
+        result['error'] = 'Source Concept missing or unsaved'
+        return result
+    try:
+        canonical_igdb_id = int(canonical_igdb_id)
+    except (TypeError, ValueError):
+        result['error'] = f'Invalid IGDB id: {canonical_igdb_id!r}'
+        return result
+
+    igdb_data = IGDBService.fetch_full_game_data(canonical_igdb_id)
+    if not igdb_data:
+        result['error'] = f'IGDB returned no data for id {canonical_igdb_id}'
+        return result
+
+    # Resolve canonical: staff may have entered a Director's Cut id; we
+    # collapse that to its parent so all editions land in one family.
+    resolved_canonical = IGDBService._resolve_canonical_igdb_id(
+        igdb_data, canonical_igdb_id
+    )
+    result['resolved_canonical_id'] = resolved_canonical
+    if resolved_canonical != canonical_igdb_id:
+        # Re-fetch canonical's IGDB data for the target since the input was
+        # a derivative entry.
+        igdb_data = IGDBService.fetch_full_game_data(resolved_canonical)
+        if not igdb_data:
+            result['error'] = (
+                f'IGDB returned no data for canonical-resolved id {resolved_canonical} '
+                f'(input was {canonical_igdb_id})'
+            )
+            return result
+
+    concept_id_str = str(resolved_canonical)
+
+    with transaction.atomic():
+        # Stamp last_attempt_at on source so the admin's "Attempted but not
+        # anchored" filter reflects this manual run.
+        Concept.objects.filter(pk=source_concept.pk).update(
+            anchor_migration_last_attempt_at=timezone.now()
+        )
+
+        # Find or create target Concept. Collision = existing Concept owns
+        # the bare-integer PK but its IGDBMatch resolves elsewhere.
+        #
+        # Race window: between this filter() and the create() below, another
+        # transaction could create the same concept_id. The nested savepoint
+        # around create() lets us catch IntegrityError without poisoning the
+        # outer atomic block, then re-read the now-existing row.
+        target = Concept.objects.filter(concept_id=concept_id_str).first()
+        if target:
+            existing_match = getattr(target, 'igdb_match', None)
+            # existing_match with igdb_id=None (status='no_match') is just a
+            # stale placeholder we're free to refresh against canonical. Only
+            # bail on collision when the existing match resolves to a
+            # *different* canonical id.
+            if existing_match and existing_match.igdb_id:
+                existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                    existing_match.raw_response or {}, existing_match.igdb_id
+                )
+                if existing_canonical != resolved_canonical:
+                    result['collision'] = True
+                    result['error'] = (
+                        f'Concept_id {concept_id_str!r} already exists and '
+                        f'resolves to canonical {existing_canonical}, not '
+                        f'{resolved_canonical}. Resolve manually.'
+                    )
+                    return result
+        else:
+            try:
+                with transaction.atomic():
+                    target = Concept.objects.create(
+                        concept_id=concept_id_str,
+                        unified_title=igdb_data.get('name', ''),
+                    )
+            except IntegrityError:
+                # Another transaction beat us to it. Re-read and use that row,
+                # subject to the same collision check above.
+                target = Concept.objects.filter(concept_id=concept_id_str).first()
+                if target is None:
+                    result['error'] = (
+                        f'Failed to create or fetch Concept at concept_id='
+                        f'{concept_id_str!r} after race.'
+                    )
+                    return result
+                existing_match = getattr(target, 'igdb_match', None)
+                if existing_match and existing_match.igdb_id:
+                    existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                        existing_match.raw_response or {}, existing_match.igdb_id
+                    )
+                    if existing_canonical != resolved_canonical:
+                        result['collision'] = True
+                        result['error'] = (
+                            f'Concept_id {concept_id_str!r} (created mid-race) '
+                            f'resolves to canonical {existing_canonical}, not '
+                            f'{resolved_canonical}. Resolve manually.'
+                        )
+                        return result
+
+        result['target_concept'] = target
+
+        # Refresh target's IGDBMatch against canonical (captures media,
+        # rebuilds ConceptCompany / ConceptGenre / etc. via process_match's
+        # auto_accepted path).
+        IGDBService.process_match(
+            target, igdb_data, confidence=1.0, method='manual',
+        )
+
+        # Vetting per Game. Same as anchor_concepts.
+        games = list(source_concept.games.all())
+        existing_target_games = list(
+            target.games.exclude(pk__in=[g.pk for g in games])
+        ) if target.pk else []
+        reference_game = existing_target_games[0] if existing_target_games else None
+
+        moved_count = 0
+        flagged_count = 0
+        anchored_a_game = False
+        for game in games:
+            trophy_title = IGDBService._extract_trophy_group_title(game)
+            cross = identity_cross_check(
+                game, igdb_data,
+                confidence=None,  # no matcher confidence on manual anchor
+                trophy_group_title=trophy_title,
+            )
+            flag_reasons = list(cross['flag_reasons'])
+            if reference_game:
+                metric = compare_trophy_metrics(game, reference_game)
+                for fr in metric['flag_reasons']:
+                    if fr not in flag_reasons:
+                        flag_reasons.append(fr)
+
+            if flag_reasons:
+                # Write a ConceptJoinReview entry; staff will resolve via the
+                # ConceptJoinReviewAdmin actions just like migration-flagged
+                # entries.
+                existing_review = ConceptJoinReview.objects.filter(game=game).first()
+                if existing_review and existing_review.status != 'pending':
+                    # Preserve resolved reviews; don't clobber.
+                    pass
+                else:
+                    identity_data = {k: v for k, v in cross.items() if k != 'flag_reasons'}
+                    identity_data['trophy_group_title'] = trophy_title
+                    identity_data['source'] = 'manual_anchor'
+                    ConceptJoinReview.objects.update_or_create(
+                        game=game,
+                        defaults={
+                            'proposed_canonical_igdb_id': resolved_canonical,
+                            'proposed_concept': target,
+                            'flag_reasons': [
+                                fr for fr in flag_reasons
+                                if fr in ConceptJoinReview.FLAG_REASON_CHOICES
+                            ],
+                            'trophy_fingerprint': trophy_fingerprint(game),
+                            'identity_check_data': identity_data,
+                            'status': 'pending',
+                        },
+                    )
+                flagged_count += 1
+                result['flagged_games'].append((game, flag_reasons))
+            else:
+                game.add_concept(target, force=True)
+                moved_count += 1
+                anchored_a_game = True
+                if reference_game is None:
+                    reference_game = game
+
+        # Stamp target as anchored if we moved any clean Game in.
+        if anchored_a_game:
+            target.anchor_migration_completed_at = timezone.now()
+            target.save(update_fields=['anchor_migration_completed_at'])
+
+        result['moved_count'] = moved_count
+        result['flagged_count'] = flagged_count
+        result['ok'] = True
+        return result
+
+
 def allocate_sibling_concept_id(canonical_id) -> str:
     """Return the next free `"{canonical_id}-N"` slot for a sibling Concept.
 

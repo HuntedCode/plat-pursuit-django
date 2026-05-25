@@ -1,0 +1,96 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}Manual anchor to IGDB id{% endblock %}
+
+{% block content %}
+<h1>Manual anchor to IGDB id</h1>
+
+<p>
+  For each Concept below, enter the IGDB game id you believe is the correct
+  canonical match. The system will fetch IGDB data for that id, resolve it to
+  its canonical form (Director's Cut / Standalone Expansion entries get
+  collapsed to their parent), find or create the target Concept at
+  <code>concept_id = str(canonical_id)</code>, refresh its IGDBMatch (capturing
+  media + Tier 1 fields), and then run the same vetting the
+  <code>anchor_concepts</code> migration uses on each Game: trophy-fingerprint
+  homogeneity vs. any existing Games in the target, plus identity cross-check
+  (title similarity, platform overlap, release-year gap).
+</p>
+<p>
+  Clean Games move into the target via <code>Game.add_concept</code>. Games
+  that flag any vetting check get a <code>ConceptJoinReview</code> entry the
+  same way the migration would, so you can resolve them later via the
+  IGDB &amp; Enrichment → Concept join reviews admin.
+</p>
+<p>
+  Leave the IGDB id blank for any row you don't want to anchor in this run.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  {% for pk in selected_pks %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="manual_anchor_selected">
+  <input type="hidden" name="post" value="yes">
+
+  {% for row in rows %}
+    <div style="border: 1px solid #ccc; padding: 12px; margin-bottom: 12px;">
+      <h3>
+        {{ row.concept.unified_title|default:"(no title)" }}
+        <small style="color:#888;">({{ row.concept.concept_id }})</small>
+      </h3>
+
+      <p>
+        <strong>Games:</strong> {{ row.games|length }}
+        {% if row.family %}
+          &mdash; <strong>Family:</strong> {{ row.family.canonical_name }}
+          {% if row.family.igdb_id %}(IGDB {{ row.family.igdb_id }}){% endif %}
+        {% endif %}
+      </p>
+
+      {% if row.games %}
+        <ul style="margin: 0 0 8px 16px; font-size: 0.9em;">
+          {% for g in row.games %}
+            <li>
+              pk={{ g.pk }}: {{ g.title_name|default:"(no title)" }}
+              <span style="color:#888;">
+                ({{ g.np_communication_id }},
+                {% if g.title_platform %}{{ g.title_platform|join:", " }}{% else %}no platform{% endif %})
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      {% if row.current_match and row.current_match.igdb_id %}
+        <p style="font-size: 0.9em; color: #555;">
+          <strong>Current IGDBMatch (concept-level):</strong>
+          IGDB {{ row.current_match.igdb_id }} &mdash;
+          {{ row.current_match.igdb_name|default:"(no name)" }}
+          <em>(status: {{ row.current_match.status }})</em>
+          {% if row.current_match.igdb_id %}
+            <br>
+            <a href="https://www.igdb.com/games/{{ row.current_match.igdb_slug|default:row.current_match.igdb_id }}" target="_blank" rel="noopener">View on IGDB &rarr;</a>
+          {% endif %}
+        </p>
+      {% else %}
+        <p style="font-size: 0.9em; color: #888;"><em>No existing IGDBMatch on this Concept.</em></p>
+      {% endif %}
+
+      <p>
+        <label>
+          <strong>Anchor to IGDB id:</strong>
+          <input type="number" name="igdb_id_{{ row.concept.pk }}" min="1" style="width: 12em;" placeholder="e.g. 11161">
+        </label>
+      </p>
+    </div>
+  {% endfor %}
+
+  <p>
+    <input type="submit" name="apply" value="Anchor {{ rows|length }} concept(s)" class="default">
+    <a href="javascript:history.back()" class="button cancel-link">Cancel</a>
+  </p>
+</form>
+{% endblock %}
