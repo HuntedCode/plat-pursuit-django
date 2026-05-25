@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -3244,6 +3244,229 @@ class RematchSuggestionAdmin(admin.ModelAdmin):
             messages.warning(
                 request,
                 f'Skipped {non_pending} already-reviewed suggestion(s).',
+            )
+
+
+class ConceptJoinReviewFlagFilter(SimpleListFilter):
+    """Filter ConceptJoinReview rows by a flag_reason present in the JSONField list."""
+
+    title = 'Flag reason'
+    parameter_name = 'flag'
+
+    def lookups(self, request, model_admin):
+        return tuple((fr, fr.replace('_', ' ').title()) for fr in ConceptJoinReview.FLAG_REASON_CHOICES)
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        return queryset.filter(flag_reasons__contains=[value])
+
+
+@admin.register(ConceptJoinReview)
+class ConceptJoinReviewAdmin(admin.ModelAdmin):
+    """Staff review queue for Games whose IGDB-anchored placement couldn't be auto-resolved.
+
+    Written by the anchor_concepts migration command (and steady-state sync once
+    that integration ships) when a Game's proposed canonical IGDB id can't be
+    auto-joined because trophy-metric homogeneity, identity cross-check, or
+    concept_id collision detection fired a flag.
+
+    Actions:
+      * Approve — moves the Game to the proposed canonical Concept (creating
+        and enriching the target if it doesn't exist).
+      * Reject — Game stays in its current Concept; resolved status set so the
+        migration command won't re-flag it on re-runs.
+      * Defer — resolved status set but no move; will be re-evaluated when
+        IGDB data improves or staff manually retries.
+    """
+
+    list_display = (
+        'game_display', 'current_concept_display', 'proposed_canonical_igdb_id',
+        'proposed_concept_display', 'flag_reasons_display', 'status', 'created_at',
+    )
+    list_filter = ('status', ConceptJoinReviewFlagFilter, 'created_at')
+    # proposed_canonical_igdb_id is an IntegerField; including it in
+    # search_fields would generate an invalid __icontains lookup and 500 on
+    # search. Use the list filter or the changelist URL params (e.g.
+    # ?proposed_canonical_igdb_id=19564) to find by id.
+    search_fields = ('game__title_name', 'game__np_communication_id')
+    raw_id_fields = ('game', 'proposed_concept', 'resolved_by')
+    readonly_fields = (
+        'game', 'proposed_canonical_igdb_id', 'trophy_fingerprint',
+        'identity_check_data', 'flag_reasons',
+        'created_at', 'resolved_at', 'resolved_by',
+    )
+    date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
+    actions = ('approve_selected', 'reject_selected', 'defer_selected')
+
+    fieldsets = (
+        (None, {'fields': (
+            'game', 'status', 'proposed_canonical_igdb_id', 'proposed_concept',
+        )}),
+        ('Diagnostic', {'fields': (
+            'flag_reasons', 'trophy_fingerprint', 'identity_check_data',
+        )}),
+        ('Review', {'fields': (
+            'notes', 'created_at', 'resolved_at', 'resolved_by',
+        )}),
+    )
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .select_related('game', 'game__concept', 'proposed_concept', 'resolved_by')
+        )
+
+    def game_display(self, obj):
+        title = obj.game.title_name or obj.game.np_communication_id
+        return f'{title} (game pk={obj.game.pk})'
+    game_display.short_description = 'Game'
+    game_display.admin_order_field = 'game__title_name'
+
+    def current_concept_display(self, obj):
+        c = obj.game.concept
+        if c is None:
+            return '-'
+        title = c.unified_title or '(no title)'
+        return f'{title} ({c.concept_id})'
+    current_concept_display.short_description = 'Currently in'
+
+    def proposed_concept_display(self, obj):
+        c = obj.proposed_concept
+        if c is None:
+            return '(would be created)'
+        title = c.unified_title or '(no title)'
+        return f'{title} ({c.concept_id})'
+    proposed_concept_display.short_description = 'Proposed target'
+
+    def flag_reasons_display(self, obj):
+        return ', '.join(obj.flag_reasons or [])
+    flag_reasons_display.short_description = 'Flags'
+
+    @admin.action(description='Approve selected (anchor Game at proposed canonical Concept)')
+    def approve_selected(self, request, queryset):
+        approved = 0
+        errors = 0
+        for review in queryset.filter(status='pending'):
+            try:
+                self._apply_approval(review, request.user)
+                approved += 1
+            except Exception as exc:
+                errors += 1
+                messages.error(
+                    request,
+                    f'Approve failed for game pk={review.game_id}: {exc}',
+                )
+        if approved:
+            messages.success(request, f'Approved {approved} review(s) and anchored the games.')
+        non_pending = queryset.exclude(status='pending').count()
+        if non_pending:
+            messages.warning(
+                request,
+                f'Skipped {non_pending} already-resolved review(s).',
+            )
+
+    def _apply_approval(self, review, user):
+        """Anchor the Game at its proposed canonical Concept.
+
+        Mirrors the clean-move path in the anchor_concepts management command:
+        find-or-create target Concept (with collision check), refresh its
+        IGDBMatch against canonical IGDB data, move the Game, mark resolved.
+        """
+        from trophies.services.igdb_service import IGDBService
+
+        canonical_id = review.proposed_canonical_igdb_id
+        if not canonical_id:
+            raise ValueError('Review has no proposed canonical IGDB id')
+
+        with transaction.atomic():
+            concept_id = str(canonical_id)
+            target = Concept.objects.filter(concept_id=concept_id).first()
+            canonical_data = None  # populated lazily; reused for the IGDBMatch refresh below
+
+            if target:
+                match = getattr(target, 'igdb_match', None)
+                if match and match.igdb_id:
+                    existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                        match.raw_response or {}, match.igdb_id
+                    )
+                    if existing_canonical != canonical_id:
+                        raise ValueError(
+                            f'Concept with concept_id={concept_id!r} exists but its '
+                            f'IGDBMatch resolves to canonical {existing_canonical}, '
+                            f'not {canonical_id}. Manual cleanup needed before this '
+                            f'review can be approved.'
+                        )
+                # else: existing Concept has no IGDBMatch yet (rare; usually means
+                # a partial prior migration). We refresh against canonical below,
+                # which creates the IGDBMatch.
+            else:
+                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
+                if not canonical_data:
+                    raise ValueError(
+                        f'IGDB returned no data for canonical id {canonical_id}; '
+                        f'cannot anchor this Game.'
+                    )
+                target = Concept.objects.create(
+                    concept_id=concept_id,
+                    unified_title=canonical_data.get('name', ''),
+                )
+
+            # Refresh target's IGDBMatch against canonical (captures media too).
+            # Idempotent — process_match update_or_creates. Reuse the fetch
+            # done above when target was newly created; otherwise fetch now.
+            if canonical_data is None:
+                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
+            if canonical_data:
+                IGDBService.process_match(
+                    target, canonical_data, confidence=1.0, method='manual',
+                )
+
+            review.game.add_concept(target)
+
+            target.anchor_migration_completed_at = timezone.now()
+            target.save(update_fields=['anchor_migration_completed_at'])
+
+            review.status = 'approved'
+            review.resolved_at = timezone.now()
+            review.resolved_by = user
+            review.proposed_concept = target
+            review.save(update_fields=[
+                'status', 'resolved_at', 'resolved_by', 'proposed_concept',
+            ])
+
+    @admin.action(description='Reject selected (Game stays in current Concept)')
+    def reject_selected(self, request, queryset):
+        count = queryset.filter(status='pending').update(
+            status='rejected',
+            resolved_at=timezone.now(),
+            resolved_by=request.user,
+        )
+        if count:
+            messages.success(request, f'Rejected {count} review(s).')
+        non_pending = queryset.exclude(status='pending').count()
+        if non_pending:
+            messages.warning(
+                request,
+                f'Skipped {non_pending} already-resolved review(s).',
+            )
+
+    @admin.action(description='Defer selected (re-evaluate on next migration run)')
+    def defer_selected(self, request, queryset):
+        count = queryset.filter(status='pending').update(
+            status='deferred',
+            resolved_at=timezone.now(),
+            resolved_by=request.user,
+        )
+        if count:
+            messages.success(request, f'Deferred {count} review(s).')
+        non_pending = queryset.exclude(status='pending').count()
+        if non_pending:
+            messages.warning(
+                request,
+                f'Skipped {non_pending} already-resolved review(s).',
             )
 
 
