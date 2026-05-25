@@ -2601,9 +2601,15 @@ class IGDBService:
     # family linking, but we gate on this set anyway for belt-and-suspenders.
     _CANONICAL_PARENT_GAME_TYPES = frozenset({4, 8, 9, 10, 11})
 
+    # Cap on recursive parent walks. IGDB ancestry chains observed in the
+    # wild rarely exceed 3 (e.g. PS5 Port -> PS3 Remake -> original), so
+    # 10 is comfortable headroom while still preventing pathological loops
+    # if the data is malformed.
+    _CANONICAL_RESOLUTION_MAX_DEPTH = 10
+
     @classmethod
-    def _resolve_canonical_igdb_id(cls, igdb_data, fallback_id):
-        """Resolve the "canonical" IGDB id for GameFamily keying.
+    def _resolve_canonical_igdb_id(cls, igdb_data, fallback_id, _depth=0, _seen=None):
+        """Recursively resolve the "canonical" IGDB id for GameFamily keying.
 
         IGDB models "same game, different release" via two fields:
 
@@ -2615,24 +2621,50 @@ class IGDBService:
             another entry. Note: Director's Cuts use `parent_game` +
             game_type=10, not `version_parent`.
 
-        Using either of these as the family key means all versions/releases
-        of the same title collapse into a single family, even when each
-        release has its own IGDBMatch row with its own platform, release
-        date, and companies.
+        Ancestry chains can be multi-tier. Example: Tomb Raider Anniversary
+        PS4/PS5 (Port, game_type 11) -> Tomb Raider Anniversary PS3 (Remake,
+        game_type 8) -> Tomb Raider I (original). To collapse the full
+        chain into one family, we walk parents recursively until we hit a
+        node with no qualifying parent. Each step fetches the parent's
+        IGDB data so we can read ITS game_type and parents.
 
-        `version_parent` always takes priority when present — editions of
-        a port still resolve up to the port's parent, if any. `parent_game`
-        is only honoured when game_type confirms it's a derivative release,
-        to avoid collapsing DLC / expansions (which also populate
-        parent_game) into their base game's family.
+        `version_parent` takes priority over `parent_game` at each step —
+        editions of a port still resolve up to the port's parent (and
+        onwards through the chain).
 
         Returns:
-            int: the canonical IGDB id to use as the family key.
+            int: the topmost canonical IGDB id to use as the family key.
                  Falls back to `fallback_id` (typically the match's own id)
-                 when no parent relationship is present.
+                 when no parent relationship is present, when fetching a
+                 parent fails, when the chain hits the depth cap, or when
+                 a cycle is detected.
         """
-        canonical = fallback_id
+        if _seen is None:
+            _seen = set()
+        if _depth >= cls._CANONICAL_RESOLUTION_MAX_DEPTH:
+            return fallback_id
+        if fallback_id in _seen:
+            return fallback_id
+        _seen.add(fallback_id)
 
+        # version_parent takes priority — editions wrap a specific release
+        # but still belong in that release's chain.
+        version_parent = igdb_data.get('version_parent')
+        vp_id = None
+        if isinstance(version_parent, dict):
+            vp_id = version_parent.get('id')
+        elif isinstance(version_parent, int):
+            vp_id = version_parent
+        if vp_id:
+            parent_data = cls.fetch_full_game_data(vp_id)
+            if parent_data:
+                return cls._resolve_canonical_igdb_id(
+                    parent_data, vp_id, _depth + 1, _seen
+                )
+            return vp_id
+
+        # parent_game when game_type confirms a derivative release. Walk
+        # the chain so Port -> Remake -> Original all resolve to Original.
         game_type_id = cls._extract_game_category(igdb_data)
         if game_type_id in cls._CANONICAL_PARENT_GAME_TYPES:
             parent = igdb_data.get('parent_game')
@@ -2642,18 +2674,14 @@ class IGDBService:
             elif isinstance(parent, int):
                 parent_id = parent
             if parent_id:
-                canonical = parent_id
+                parent_data = cls.fetch_full_game_data(parent_id)
+                if parent_data:
+                    return cls._resolve_canonical_igdb_id(
+                        parent_data, parent_id, _depth + 1, _seen
+                    )
+                return parent_id
 
-        version_parent = igdb_data.get('version_parent')
-        vp_id = None
-        if isinstance(version_parent, dict):
-            vp_id = version_parent.get('id')
-        elif isinstance(version_parent, int):
-            vp_id = version_parent
-        if vp_id:
-            canonical = vp_id
-
-        return canonical
+        return fallback_id
 
     @classmethod
     def _parse_game_data(cls, igdb_data):
