@@ -878,6 +878,16 @@ class Concept(models.Model):
     guide_slug = models.CharField(max_length=50, blank=True, null=True)
     guide_created_at = models.DateTimeField(null=True, blank=True)
     slug = models.SlugField(max_length=300, unique=True, blank=True, null=True)
+    anchor_migration_completed_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text=(
+            "Set when this Concept has been processed by the anchor_concepts "
+            "migration (its identity has been resolved against a canonical IGDB "
+            "id). Null means the Concept still needs migration. New Concepts "
+            "created during a migration batch are stamped immediately because "
+            "they are at canonical identity by construction."
+        ),
+    )
 
     class Meta:
         indexes = [
@@ -5360,6 +5370,21 @@ class IGDBMatch(models.Model):
         default=dict, blank=True, help_text='External links: {steam: url, wikipedia: url, ...}'
     )
 
+    # Media captured from IGDB. Lists of opaque IDs; URLs constructed on demand
+    # via the accessor methods below (mirrors the cover_url pattern).
+    igdb_screenshot_image_ids = models.JSONField(
+        default=list, blank=True,
+        help_text='IGDB screenshot image_ids. Render via screenshot_urls(size).',
+    )
+    igdb_artwork_image_ids = models.JSONField(
+        default=list, blank=True,
+        help_text='IGDB artwork image_ids. Render via artwork_urls(size).',
+    )
+    igdb_video_youtube_ids = models.JSONField(
+        default=list, blank=True,
+        help_text='IGDB video YouTube ids. Embed via video_embed_urls().',
+    )
+
     # Compilation detection: True when IGDB classifies this match as a bundle
     # (game_type.id in 3=Bundle, 13=Pack). Surfaces in admin as a triage list
     # for concepts that may need splitting into their component games.
@@ -5452,6 +5477,27 @@ class IGDBMatch(models.Model):
             return None
         return f'https://images.igdb.com/igdb/image/upload/t_{size}/{self.igdb_cover_image_id}.png'
 
+    def screenshot_urls(self, size='screenshot_big'):
+        return [
+            f'https://images.igdb.com/igdb/image/upload/t_{size}/{image_id}.jpg'
+            for image_id in (self.igdb_screenshot_image_ids or [])
+            if image_id
+        ]
+
+    def artwork_urls(self, size='1080p'):
+        return [
+            f'https://images.igdb.com/igdb/image/upload/t_{size}/{image_id}.jpg'
+            for image_id in (self.igdb_artwork_image_ids or [])
+            if image_id
+        ]
+
+    def video_embed_urls(self):
+        return [
+            f'https://www.youtube.com/embed/{video_id}'
+            for video_id in (self.igdb_video_youtube_ids or [])
+            if video_id
+        ]
+
     EXTERNAL_LINK_META = [
         ('official', 'Official Site'),
         ('wikipedia', 'Wikipedia'),
@@ -5481,6 +5527,98 @@ class IGDBMatch(models.Model):
         name = self.igdb_name or "(no match)"
         confidence = f", {self.match_confidence:.0%}" if self.match_confidence is not None else ""
         return f"{self.concept} -> {name} ({self.get_status_display()}{confidence})"
+
+
+class ConceptJoinReview(models.Model):
+    """Staff review queue for Games whose concept-join couldn't be auto-resolved.
+
+    Written by the anchor_concepts migration command (and steady-state live sync
+    once the migration completes) when a Game's proposed canonical IGDB id can't
+    be auto-joined to its target Concept because trophy-metric homogeneity or
+    identity cross-check fired a flag. Staff resolve each entry by approving the
+    proposed move, overriding the canonical id, marking no-match, or deferring.
+
+    One review per Game at a time (OneToOne). When a review is resolved, the
+    Game either moves to its proposed Concept (or a manually-overridden one) and
+    the review's status is set to 'approved'/'rejected'/'deferred'.
+    """
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('deferred', 'Deferred'),
+    ]
+
+    FLAG_REASON_CHOICES = [
+        'trophy_count_mismatch',
+        'platinum_status_diverged',
+        'trophy_group_count_diff',
+        'region_split_suspected_japan',
+        'low_match_confidence',
+        'platform_overlap_insufficient',
+        'identity_title_dissimilar',
+        'release_date_gap_excessive',
+        'concept_id_collision',
+    ]
+
+    game = models.OneToOneField(
+        Game, on_delete=models.CASCADE, related_name='join_review',
+        help_text='The Game whose concept placement needs review.',
+    )
+    proposed_canonical_igdb_id = models.IntegerField(
+        db_index=True,
+        help_text='Canonical IGDB id the matcher resolved for this Game.',
+    )
+    proposed_concept = models.ForeignKey(
+        Concept, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+        help_text=(
+            'Existing Concept this Game would join. Null when the proposal is '
+            'to create a new Concept, or when a collision was detected and the '
+            'existing concept_id is unrelated.'
+        ),
+    )
+    flag_reasons = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            'List of strings from FLAG_REASON_CHOICES indicating why this '
+            'Game needs review. Multiple reasons can fire at once.'
+        ),
+    )
+    trophy_fingerprint = models.CharField(
+        max_length=64, blank=True,
+        help_text='Short hash of the Game trophy metrics at proposal time.',
+    )
+    identity_check_data = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            'Identity cross-check results: title similarity score, platform '
+            'overlap, release-date proximity, etc. Populated for staff context.'
+        ),
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True,
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        'users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+',
+    )
+
+    class Meta:
+        verbose_name = 'concept join review'
+        verbose_name_plural = 'concept join reviews'
+        indexes = [
+            models.Index(fields=['status'], name='cjreview_status_idx'),
+            models.Index(fields=['proposed_canonical_igdb_id'], name='cjreview_igdb_idx'),
+            models.Index(fields=['created_at'], name='cjreview_created_idx'),
+        ]
+
+    def __str__(self):
+        return f"Review: {self.game} -> IGDB {self.proposed_canonical_igdb_id} ({self.status})"
 
 
 class ConceptSplitEvent(models.Model):

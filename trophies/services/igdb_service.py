@@ -145,7 +145,8 @@ GAME_FIELDS = (
     'bundles, '
     'parent_game.id, parent_game.name, parent_game.slug, '
     'version_parent.id, version_parent.name, version_parent.slug, '
-    'version_title'
+    'version_title, '
+    'screenshots.image_id, artworks.image_id, videos.video_id'
 )
 
 
@@ -658,13 +659,27 @@ class IGDBService:
     # -----------------------------------------------------------------------
 
     @classmethod
-    def match_concept(cls, concept):
+    def match_concept(cls, concept, search_title_override=None,
+                      skip_external_id=False, platforms_for_filter=None):
         """Try to match a Concept to an IGDB game entry.
 
         Accumulates candidates across all strategies and returns the
         highest-scored match. Short-circuits only when a strategy produces a
         candidate at or above the auto-accept threshold — otherwise every
         strategy runs so a later one can beat an earlier pending-review hit.
+
+        `search_title_override`: bypass `_pick_search_title` and use this
+        string instead. Used by `match_game` to feed trophy-group titles
+        into the matcher without changing concept-level matching.
+
+        `skip_external_id`: skip Strategy 1 (PSN SKU -> IGDB external_games).
+        Used by Game-level matching because SKUs tie to packaging, not
+        trophy lists, so an SKU hit can land on a packaging-variant IGDB id
+        that resolves differently per game.
+
+        `platforms_for_filter`: optional list of PSN platform strings to
+        constrain the platform-overlap filter. Forwarded to scoring helpers.
+        When None, the concept-wide platform union is used.
 
         Returns:
             tuple: (igdb_data, confidence, method) or None if no match found
@@ -687,9 +702,12 @@ class IGDBService:
         # the title was picked, and scoring elsewhere used concept.unified_title
         # directly, which produced misleading confidence values on PP_ stub
         # concepts whose unified_title has a platform suffix appended.
-        title = cls._pick_search_title(concept)
+        title = search_title_override or cls._pick_search_title(concept)
         if title:
-            source = 'concept title' if title == concept.unified_title else 'game title'
+            if search_title_override:
+                source = 'override (trophy-group title)'
+            else:
+                source = 'concept title' if title == concept.unified_title else 'game title'
             logger.info(
                 f'IGDB matching concept {concept.concept_id} "{concept.unified_title}" '
                 f'using {source}: "{title}"'
@@ -701,12 +719,16 @@ class IGDBService:
             psn_ids.append(concept.concept_id)
         psn_ids.extend(concept.title_ids or [])
 
-        # Strategy 1: External ID match
-        if psn_ids:
+        # Strategy 1: External ID match (skipped for Game-level matching)
+        if psn_ids and not skip_external_id:
             try:
                 results = cls.search_by_external_id(psn_ids)
                 if results:
-                    candidate = cls._pick_best_match(concept, results, 'external_id', search_title=title)
+                    candidate = cls._pick_best_match(
+                        concept, results, 'external_id',
+                        search_title=title,
+                        platforms_for_filter=platforms_for_filter,
+                    )
                     if consider(candidate):
                         return best
             except Exception:
@@ -721,7 +743,10 @@ class IGDBService:
             results = cls.search_game(title)
             if results:
                 cls._log_search_results(title, 'PS-filtered', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                candidate = cls._pick_best_non_dlc(
+                    concept, results, search_title=title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if consider(candidate):
                     return best
         except Exception:
@@ -732,7 +757,10 @@ class IGDBService:
             results = cls.search_by_exact_name(title)
             if results:
                 cls._log_search_results(title, 'exact-name-query', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                candidate = cls._pick_best_non_dlc(
+                    concept, results, search_title=title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if consider(candidate):
                     return best
             else:
@@ -746,7 +774,10 @@ class IGDBService:
             results = cls.search_game(title, platform_filter=False)
             if results:
                 cls._log_search_results(title, 'unfiltered', concept, results)
-                raw_candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                raw_candidate = cls._pick_best_non_dlc(
+                    concept, results, search_title=title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if raw_candidate:
                     igdb_data, confidence, method = raw_candidate
                     adjusted_conf = max(confidence - 0.05, settings.IGDB_REVIEW_THRESHOLD)
@@ -762,7 +793,10 @@ class IGDBService:
             results = cls.search_by_alternative_name(title)
             if results:
                 cls._log_search_results(title, 'alt-name', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                candidate = cls._pick_best_non_dlc(
+                    concept, results, search_title=title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if consider(candidate):
                     return best
             else:
@@ -780,7 +814,10 @@ class IGDBService:
             results = cls.search_by_localized_name(title)
             if results:
                 cls._log_search_results(title, 'localized-name', concept, results)
-                candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                candidate = cls._pick_best_non_dlc(
+                    concept, results, search_title=title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if consider(candidate):
                     return best
             else:
@@ -802,7 +839,10 @@ class IGDBService:
                     # Use the truncated string for scoring: scoring against the
                     # full title would under-rate matches where the truncation
                     # was the meaningful part (e.g. "Sly 3").
-                    raw_candidate = cls._pick_best_non_dlc(concept, results, search_title=truncated)
+                    raw_candidate = cls._pick_best_non_dlc(
+                        concept, results, search_title=truncated,
+                        platforms_for_filter=platforms_for_filter,
+                    )
                     if raw_candidate:
                         igdb_data, confidence, method = raw_candidate
                         capped = min(confidence, auto_accept - 0.01)
@@ -820,7 +860,10 @@ class IGDBService:
             results = cls.search_by_generic_search(title)
             if results:
                 cls._log_search_results(title, 'generic-search', concept, results)
-                raw_candidate = cls._pick_best_non_dlc(concept, results, search_title=title)
+                raw_candidate = cls._pick_best_non_dlc(
+                    concept, results, search_title=title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if raw_candidate:
                     igdb_data, confidence, method = raw_candidate
                     capped = min(confidence, auto_accept - 0.01)
@@ -914,7 +957,8 @@ class IGDBService:
                         continue
                     cls._log_search_results(variant, label, concept, r_results)
                     raw_candidate = cls._pick_best_non_dlc(
-                        concept, r_results, search_title=variant
+                        concept, r_results, search_title=variant,
+                        platforms_for_filter=platforms_for_filter,
                     )
                     if raw_candidate:
                         igdb_data, confidence, method = raw_candidate
@@ -923,6 +967,64 @@ class IGDBService:
                             return best
 
         return best
+
+    @classmethod
+    def match_game(cls, game):
+        """Match a single Game to an IGDB game using Game-level signals.
+
+        Uses the Game's trophy-group title (PSN-immutable, region-stable,
+        untouched by title cleanup workflows) as the title signal. Skips
+        Strategy 1 (PSN SKU -> IGDB external_games) because SKUs tie to
+        packaging variants, not trophy lists, so an SKU hit can land on a
+        packaging-variant IGDB id rather than the canonical entry. Strategies
+        2-9 are run in the usual order.
+
+        Platform overlap is constrained to the Game's own `title_platform`,
+        not the concept-wide union — siblings under a (possibly miscategorised)
+        Concept don't influence the match.
+
+        Returns:
+            dict or None: When matched, a dict with keys:
+                - igdb_data: full IGDB game response
+                - raw_igdb_id: the IGDB id the matcher returned
+                - canonical_igdb_id: id after `_resolve_canonical_igdb_id`
+                  (collapses Director's Cut / Standalone Expansion / port
+                  variants up to their base game's id)
+                - confidence: float 0..1
+                - match_method: string ('exact_name', 'fuzzy_name', etc.)
+                - trophy_group_title: the title we matched against
+            None when no match found, the Game has no Concept, or the trophy
+            group title is empty.
+        """
+        if not game.concept_id:
+            return None
+        trophy_group_title = cls._extract_trophy_group_title(game)
+        if not trophy_group_title:
+            logger.debug(
+                f'match_game: game {game.pk} has no trophy-group title; skipping'
+            )
+            return None
+
+        result = cls.match_concept(
+            game.concept,
+            search_title_override=trophy_group_title,
+            skip_external_id=True,
+            platforms_for_filter=list(game.title_platform or []),
+        )
+        if not result:
+            return None
+
+        igdb_data, confidence, method = result
+        raw_id = igdb_data.get('id')
+        canonical_id = cls._resolve_canonical_igdb_id(igdb_data, raw_id)
+        return {
+            'igdb_data': igdb_data,
+            'raw_igdb_id': raw_id,
+            'canonical_igdb_id': canonical_id,
+            'confidence': confidence,
+            'match_method': method,
+            'trophy_group_title': trophy_group_title,
+        }
 
     @classmethod
     def _log_search_results(cls, title, search_type, concept, results):
@@ -941,7 +1043,7 @@ class IGDBService:
         logger.debug('\n'.join(lines))
 
     @classmethod
-    def _pick_best_non_dlc(cls, concept, results, search_title=None):
+    def _pick_best_non_dlc(cls, concept, results, search_title=None, platforms_for_filter=None):
         """Try to pick the best match, preferring non-DLC results.
 
         Scoring pools, in preference order:
@@ -954,7 +1056,9 @@ class IGDBService:
              nothing. Same across-both-methods logic.
 
         `search_title` is forwarded through to scoring so title similarity
-        is computed against the string we searched with.
+        is computed against the string we searched with. `platforms_for_filter`
+        is forwarded to `_pick_best_match` so Game-level callers can override
+        the concept-wide platform overlap derivation.
         """
         non_dlc = [r for r in results if not _DLC_NAME_RE.search(r.get('name', ''))]
 
@@ -962,7 +1066,11 @@ class IGDBService:
             """Return best (igdb_data, confidence, method) across both methods."""
             best = None
             for method in ('exact_name', 'fuzzy_name'):
-                candidate = cls._pick_best_match(concept, pool, method, search_title=search_title)
+                candidate = cls._pick_best_match(
+                    concept, pool, method,
+                    search_title=search_title,
+                    platforms_for_filter=platforms_for_filter,
+                )
                 if candidate and (best is None or candidate[1] > best[1]):
                     best = candidate
             return best
@@ -976,7 +1084,7 @@ class IGDBService:
         return score_pool(results)
 
     @classmethod
-    def _pick_best_match(cls, concept, results, method, search_title=None):
+    def _pick_best_match(cls, concept, results, method, search_title=None, platforms_for_filter=None):
         """Score all results and return the best match with platform overlap.
 
         Requires at least one PlayStation platform in common between the
@@ -990,19 +1098,34 @@ class IGDBService:
         similarity is scored against the same string used for the IGDB
         search, not raw concept.unified_title.
 
+        `platforms_for_filter`: optional list of PSN platform strings (e.g.
+        ['PS4', 'PS5']). When provided, overrides the concept-wide platform
+        derivation. Used by Game-level matching during anchor migration so
+        the filter respects only the Game being matched, not unrelated
+        siblings that share its (possibly miscategorised) Concept.
+
         Returns:
             tuple: (igdb_data, confidence, method) or None
         """
-        # Get concept's platform IDs for filtering
+        # Get the platform IDs we require IGDB to overlap with. Game-level
+        # callers pass `platforms_for_filter` to constrain the set to a
+        # single Game's platforms; otherwise we union across the concept's
+        # games (the historical behaviour).
         concept_plat_ids = set()
-        try:
-            for game in concept.games.all():
-                for plat_str in (game.title_platform or []):
-                    igdb_id_for_plat = PLAT_TO_IGDB_ID.get(plat_str)
-                    if igdb_id_for_plat:
-                        concept_plat_ids.add(igdb_id_for_plat)
-        except Exception:
-            pass
+        if platforms_for_filter is not None:
+            for plat_str in platforms_for_filter:
+                igdb_id_for_plat = PLAT_TO_IGDB_ID.get(plat_str)
+                if igdb_id_for_plat:
+                    concept_plat_ids.add(igdb_id_for_plat)
+        else:
+            try:
+                for game in concept.games.all():
+                    for plat_str in (game.title_platform or []):
+                        igdb_id_for_plat = PLAT_TO_IGDB_ID.get(plat_str)
+                        if igdb_id_for_plat:
+                            concept_plat_ids.add(igdb_id_for_plat)
+            except Exception:
+                pass
 
         scored = []
         skipped_platform = 0
@@ -1402,6 +1525,40 @@ class IGDBService:
         picked = min(games, key=platform_rank)
         return picked.title_name or concept.unified_title or ''
 
+    @classmethod
+    def _extract_trophy_group_title(cls, game):
+        """Return the trophy-group title for a Game's base trophy group.
+
+        The base group's `trophy_group_id` is 'default' in PSN's trophy
+        endpoint. Falls back to the lowest trophy_group_id (sorted
+        lexicographically) when 'default' isn't present, and finally to
+        any group with a non-empty name.
+
+        This is the canonical Game name signal: it comes from PSN's trophy
+        endpoint, is not touched by our title cleanup workflows, and is
+        region-stable in a way `Game.title_name` and `Concept.unified_title`
+        are not. Used by `match_game` for IGDB matching during anchor
+        migration.
+
+        Returns:
+            str: The trophy-group name, or '' if no usable name exists.
+        """
+        if not game.pk:
+            return ''
+        default_group = game.trophy_groups.filter(
+            trophy_group_id='default'
+        ).first()
+        if default_group and default_group.trophy_group_name:
+            return default_group.trophy_group_name
+        fallback = (
+            game.trophy_groups.exclude(trophy_group_name='')
+            .order_by('trophy_group_id')
+            .first()
+        )
+        if fallback:
+            return fallback.trophy_group_name
+        return ''
+
     @staticmethod
     def _detect_cjk_script(text):
         """Return 'japanese', 'korean', 'chinese', or None based on script.
@@ -1569,6 +1726,9 @@ class IGDBService:
                 'franchise_names': parsed['franchise_names'],
                 'similar_game_igdb_ids': parsed['similar_game_igdb_ids'],
                 'external_urls': parsed['external_urls'],
+                'igdb_screenshot_image_ids': parsed['igdb_screenshot_image_ids'],
+                'igdb_artwork_image_ids': parsed['igdb_artwork_image_ids'],
+                'igdb_video_youtube_ids': parsed['igdb_video_youtube_ids'],
                 'is_likely_compilation': cls._is_compilation_response(igdb_data),
                 'last_synced_at': datetime.now(dt_timezone.utc),
             },
@@ -2545,6 +2705,21 @@ class IGDBService:
                 if key:
                     external_urls[key] = url
 
+        # Media: screenshots, artworks, videos. Stored as lists of opaque IDs;
+        # URLs are constructed on demand via IGDBMatch.screenshot_urls() etc.
+        screenshot_ids = [
+            s.get('image_id') for s in igdb_data.get('screenshots', [])
+            if isinstance(s, dict) and s.get('image_id')
+        ]
+        artwork_ids = [
+            a.get('image_id') for a in igdb_data.get('artworks', [])
+            if isinstance(a, dict) and a.get('image_id')
+        ]
+        video_ids = [
+            v.get('video_id') for v in igdb_data.get('videos', [])
+            if isinstance(v, dict) and v.get('video_id')
+        ]
+
         return {
             'game_category': cls._extract_game_category(igdb_data),
             'summary': igdb_data.get('summary', ''),
@@ -2560,6 +2735,9 @@ class IGDBService:
             'franchise_data': franchise_data,
             'similar_game_igdb_ids': similar_ids,
             'external_urls': external_urls,
+            'igdb_screenshot_image_ids': screenshot_ids,
+            'igdb_artwork_image_ids': artwork_ids,
+            'igdb_video_youtube_ids': video_ids,
         }
 
     # -----------------------------------------------------------------------
@@ -2624,6 +2802,9 @@ class IGDBService:
                 'franchise_names': [],
                 'similar_game_igdb_ids': [],
                 'external_urls': {},
+                'igdb_screenshot_image_ids': [],
+                'igdb_artwork_image_ids': [],
+                'igdb_video_youtube_ids': [],
                 'is_likely_compilation': False,
                 'last_synced_at': datetime.now(dt_timezone.utc),
             },
@@ -2691,6 +2872,9 @@ class IGDBService:
         igdb_match.franchise_names = parsed['franchise_names']
         igdb_match.similar_game_igdb_ids = parsed['similar_game_igdb_ids']
         igdb_match.external_urls = parsed['external_urls']
+        igdb_match.igdb_screenshot_image_ids = parsed['igdb_screenshot_image_ids']
+        igdb_match.igdb_artwork_image_ids = parsed['igdb_artwork_image_ids']
+        igdb_match.igdb_video_youtube_ids = parsed['igdb_video_youtube_ids']
         igdb_match.is_likely_compilation = cls._is_compilation_response(igdb_data)
         igdb_match.last_synced_at = datetime.now(dt_timezone.utc)
         igdb_match.save()
