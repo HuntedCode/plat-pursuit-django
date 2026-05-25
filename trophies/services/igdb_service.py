@@ -1432,11 +1432,17 @@ class IGDBService:
     )
 
     # Regex to strip edition/version suffixes that IGDB won't have
+    # IMPORTANT: only strip packaging-variant suffixes here (same IGDB entry,
+    # different SKU). Do NOT strip Remastered / HD Remaster / Director's Cut
+    # — those identify distinct IGDB entries (game_type Remaster=9 / Director's
+    # Cut Expanded Game=10) with their own metadata. Stripping them sends the
+    # IGDB search to the WRONG entry (e.g., "The Last of Us Part II Remastered"
+    # would strip to "The Last of Us Part II" and match the PS3/PS4 original
+    # instead of the PS5 remaster).
     _EDITION_SUFFIX_RE = re.compile(
         r'\s*[\-–—]?\s*\(?\s*(?:Digital\s+Edition|Deluxe\s+Edition|Gold\s+Edition|'
         r'Game\s+of\s+the\s+Year\s+Edition|GOTY\s+Edition|'
-        r'Platinum\s+Edition|Complete\s+Edition|Standard\s+Edition|'
-        r'Remastered|HD\s+Remaster|Director.s\s+Cut)\s*\)?\s*$',
+        r'Platinum\s+Edition|Complete\s+Edition|Standard\s+Edition)\s*\)?\s*$',
         re.IGNORECASE,
     )
 
