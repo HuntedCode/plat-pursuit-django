@@ -188,9 +188,10 @@ class Command(BaseCommand):
     def _process_concept(self, source_concept):
         self.concepts_processed += 1
         games = list(source_concept.games.all())
+        n_games = len(games)
         if not games:
             self.stdout.write(
-                f'  Concept {source_concept.concept_id!r}: empty, marking done'
+                f'  {source_concept.concept_id!r}: empty — marking done'
             )
             if not self.dry_run:
                 source_concept.anchor_migration_completed_at = timezone.now()
@@ -223,31 +224,33 @@ class Command(BaseCommand):
             by_canonical[cid].append(p)
 
         matched_groups = {k: v for k, v in by_canonical.items() if k is not None}
-        no_match_proposals = by_canonical.get(None, [])
+
+        ctx = f'{source_concept.concept_id!r} ({n_games} game(s))'
 
         # Case 1: source's Games split across multiple canonical ids → review.
         if len(matched_groups) > 1:
             self.stdout.write(
-                f'  Concept {source_concept.concept_id!r}: SPLIT '
-                f'({len(matched_groups)} canonical ids across {len(proposals)} '
-                f'games) — flagging for review, not auto-splitting'
+                f'  {ctx}: SPLIT across {len(matched_groups)} canonical ids '
+                f'— escalating to review'
             )
             for p in proposals:
                 if p['match']:
-                    self._create_review_entry(
-                        p, target=None,
-                        extra_flags=['region_split_suspected_japan']
-                        if self._looks_like_japan_split(matched_groups) else [],
+                    extra = (
+                        ['region_split_suspected_japan']
+                        if self._looks_like_japan_split(matched_groups) else []
                     )
+                    is_new = self._create_review_entry(
+                        p, target=None, extra_flags=extra,
+                    )
+                    flags = list(p['cross_check']['flag_reasons']) if p['cross_check'] else []
+                    flags.extend(f for f in extra if f not in flags)
+                    self._log_per_game_review(p, is_new, flags)
             self.concepts_deferred_split += 1
             return
 
         # Case 2: no Game matched IGDB at all → leave source as-is.
         if not matched_groups:
-            self.stdout.write(
-                f'  Concept {source_concept.concept_id!r}: NO_MATCH for all '
-                f'{len(proposals)} game(s) — deferred'
-            )
+            self.stdout.write(f'  {ctx}: NO_MATCH for all games — deferred')
             self.concepts_deferred_no_match += 1
             return
 
@@ -259,21 +262,24 @@ class Command(BaseCommand):
 
         if collision:
             self.stdout.write(self.style.WARNING(
-                f'  Concept {source_concept.concept_id!r}: COLLISION on '
-                f'concept_id={canonical_id!r} (existing Concept doesn\'t '
-                f'resolve to same canonical) — flagging'
+                f'  {ctx}: COLLISION on concept_id={canonical_id!r} '
+                f'(existing Concept resolves to different canonical) '
+                f'— escalating to review'
             ))
             for p in group:
-                self._create_review_entry(
+                is_new = self._create_review_entry(
                     p, target=target,
                     extra_flags=['concept_id_collision'],
                 )
+                flags = list(p['cross_check']['flag_reasons']) if p['cross_check'] else []
+                flags.append('concept_id_collision')
+                self._log_per_game_review(p, is_new, flags)
             self.concepts_deferred_collision += 1
             return
 
         # If target is brand new, refresh its IGDBMatch against the canonical
         # IGDB data (this also pulls in media). If reused, we still refresh —
-        # Jeffrey's call: clean slate per run.
+        # clean slate per run.
         if target is not None:
             self._refresh_target_match(target, canonical_id, hint_data=hint_data)
 
@@ -289,7 +295,9 @@ class Command(BaseCommand):
 
         anchored_a_game = False
         moved_count = 0
-        flagged_count = 0
+        new_review_count = 0       # freshly written ConceptJoinReview rows
+        preserved_review_count = 0  # already-resolved reviews we honored
+        per_game_lines = []
         for p in group:
             flag_reasons = list(p['cross_check']['flag_reasons']) if p['cross_check'] else []
             if reference_game:
@@ -301,8 +309,18 @@ class Command(BaseCommand):
                     if fr not in flag_reasons:
                         flag_reasons.append(fr)
             if flag_reasons:
-                self._create_review_entry(p, target=target, extra_flags=flag_reasons)
-                flagged_count += 1
+                is_new = self._create_review_entry(p, target=target, extra_flags=flag_reasons)
+                if is_new:
+                    new_review_count += 1
+                    per_game_lines.append(
+                        f'    pk={p["game"].pk}: review created '
+                        f'({", ".join(flag_reasons)})'
+                    )
+                else:
+                    preserved_review_count += 1
+                    per_game_lines.append(
+                        f'    pk={p["game"].pk}: review preserved (already resolved)'
+                    )
             else:
                 if not self.dry_run:
                     # force=True bypasses concept_lock. The migration is a
@@ -318,10 +336,9 @@ class Command(BaseCommand):
                 if reference_game is None:
                     reference_game = p['game']
 
-        # If at least one Game joined cleanly AND no NO_MATCH Games remain,
-        # the source Concept has either auto-deleted (via absorb cascade) or
-        # still has the flagged Games sitting on it. Either way, stamp the
-        # target so it's not re-processed in a future batch.
+        # If at least one Game joined cleanly, stamp the target so it's not
+        # re-processed in a future batch. Source Concepts that emptied out
+        # auto-delete via Game.add_concept's absorb cascade.
         target_concept_id = (
             target.concept_id if target is not None else str(canonical_id)
         )
@@ -331,20 +348,46 @@ class Command(BaseCommand):
                 target.save(update_fields=['anchor_migration_completed_at'])
             self.concepts_anchored += 1
 
-        # Per-Concept outcome summary, one line, post-action. Easier to scan
-        # batch results than parsing multiple IGDB matching debug lines.
+        # Per-Concept summary line, then per-Game detail lines indented under it.
+        summary_parts = []
+        if moved_count:
+            summary_parts.append(f'{moved_count} moved')
+        if new_review_count:
+            summary_parts.append(f'{new_review_count} new review(s)')
+        if preserved_review_count:
+            summary_parts.append(f'{preserved_review_count} preserved review(s)')
+        summary = ', '.join(summary_parts) or 'no changes'
+
         prefix = '[DRY] Would anchor' if self.dry_run else 'Anchored'
         if anchored_a_game:
             self.stdout.write(
-                f'  {prefix} {source_concept.concept_id!r} -> '
-                f'{target_concept_id!r}: {moved_count} moved, '
-                f'{flagged_count} flagged for review'
+                f'  {prefix} {ctx} → {target_concept_id!r}: {summary}'
             )
-        elif flagged_count:
+        elif new_review_count or preserved_review_count:
             self.stdout.write(
-                f'  Concept {source_concept.concept_id!r}: all '
-                f'{flagged_count} game(s) flagged for review, target '
-                f'{target_concept_id!r} not anchored'
+                f'  {ctx}: no clean anchor; {summary} '
+                f'(target {target_concept_id!r} not anchored)'
+            )
+        for line in per_game_lines:
+            self.stdout.write(line)
+
+    def _log_per_game_review(self, proposal, is_new, flag_reasons):
+        """Emit a one-line per-Game review attribution line.
+
+        Used by the split / collision branches to indent the per-Game work
+        under the Concept summary line. `is_new` is True when a fresh review
+        was created (or would be in dry-run), False when an existing resolved
+        review was preserved.
+        """
+        game = proposal['game']
+        if is_new:
+            flag_summary = ', '.join(flag_reasons) or 'no flags'
+            self.stdout.write(
+                f'    pk={game.pk}: review created ({flag_summary})'
+            )
+        else:
+            self.stdout.write(
+                f'    pk={game.pk}: review preserved (already resolved)'
             )
 
         # If NO_MATCH Games remain in source after the moves, source stays
@@ -463,24 +506,19 @@ class Command(BaseCommand):
         # Idempotency: if staff has already resolved a prior review for this
         # game (status approved/rejected/deferred), preserve their decision —
         # never clobber a non-pending review back to pending on re-run.
+        # Returns False to signal "preserved an existing resolution" so the
+        # caller can count preserved-vs-new reviews separately. Returns True
+        # when a new pending review was created (or would be in dry-run).
         existing = ConceptJoinReview.objects.filter(game=game).first()
         if existing and existing.status != 'pending':
-            self.stdout.write(
-                f'    Review: game pk={game.pk} already resolved '
-                f'({existing.status}), preserving'
-            )
-            return existing
+            return False
 
         self.games_flagged_for_review += 1
-        self.stdout.write(
-            f'    Review: game pk={game.pk} "{game.title_name}" '
-            f'-> IGDB {canonical_id} reasons={flag_reasons}'
-        )
 
         if self.dry_run:
-            return None
+            return True
 
-        review, _ = ConceptJoinReview.objects.update_or_create(
+        ConceptJoinReview.objects.update_or_create(
             game=game,
             defaults={
                 'proposed_canonical_igdb_id': canonical_id or 0,
@@ -491,7 +529,7 @@ class Command(BaseCommand):
                 'status': 'pending',
             },
         )
-        return review
+        return True
 
     # ------------------------------------------------------------------
     # Helpers
