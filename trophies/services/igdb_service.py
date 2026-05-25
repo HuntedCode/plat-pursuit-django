@@ -1474,6 +1474,12 @@ class IGDBService:
         Lowercases, strips platform/edition/year suffixes, normalizes unicode.
         Used for confidence scoring, not for IGDB API queries.
         """
+        # Strip trademark/copyright glyphs BEFORE unicode normalization —
+        # NFKD on Latin text compatibility-decomposes them into letters
+        # (™ → "TM", ® → "R", © → "C"), which corrupts similarity scoring
+        # because the IGDB-side names won't contain those letters.
+        for ch in ('™', '®', '©'):
+            text = text.replace(ch, '')
         # Normalize unicode (CJK-safe — see _unicode_normalize_for_matching).
         text = cls._unicode_normalize_for_matching(text)
         text = text.lower().strip()
@@ -1664,6 +1670,16 @@ class IGDBService:
         Strips platform suffixes, Apicalypse-breaking characters, and
         unicode noise. IGDB search is fuzzy so this improves match rates.
         """
+        # IMPORTANT: trademark/copyright glyphs (™ ® ©) MUST be stripped
+        # BEFORE unicode normalization. _unicode_normalize_for_matching uses
+        # NFKD on Latin text, which compatibility-decomposes ™ → "TM",
+        # ® → "R", © → "C". If we stripped ™ after that, the letters would
+        # remain and corrupt the search ("South Park™" → "south parktm",
+        # which IGDB has no record of). Apicalypse-breaking chars like
+        # `:` `(` `)` etc. also go in the same pre-normalize pass for
+        # consistency.
+        for ch in (':', ';', '"', '\\', '(', ')', '{', '}', '[', ']', '•', '™', '®', '©'):
+            text = text.replace(ch, '')
         # Normalize unicode (CJK-safe — see _unicode_normalize_for_matching).
         text = cls._unicode_normalize_for_matching(text)
         # Strip suffixes
@@ -1672,9 +1688,6 @@ class IGDBService:
         text = cls._YEAR_SUFFIX_RE.sub('', text)
         # Strip brand prefixes
         text = cls._BRAND_PREFIX_RE.sub('', text)
-        # Remove characters that break Apicalypse parsing
-        for ch in (':', ';', '"', '\\', '(', ')', '{', '}', '[', ']', '•', '™', '®', '©'):
-            text = text.replace(ch, '')
         # Lowercase: IGDB search handles all-caps poorly
         text = text.lower()
         # Collapse whitespace
