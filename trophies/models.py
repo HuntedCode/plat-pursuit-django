@@ -830,6 +830,32 @@ class GameFamily(models.Model):
                                   help_text='IGDB game id this family maps to. Nullable to '
                                             'support admin-created families for edge cases IGDB '
                                             'does not cover; Unique when set.')
+    # Denormalized "origin" fields — snapshot of the topmost canonical IGDB
+    # ancestor (the entry that `igdb_id` keys on). Populated alongside
+    # `canonical_name` in `_link_concept_to_family` whenever the recursive
+    # resolver returns the canonical payload. Self-syncs on every
+    # enrichment, so admin-edited `canonical_name` lives independently.
+    origin_first_release_date = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text='First release date of the origin (topmost canonical) IGDB '
+                  'entry. Used for the "Origin Release" sort on franchise / '
+                  'company detail pages.'
+    )
+    origin_name = models.CharField(
+        max_length=500, blank=True,
+        help_text='IGDB name of the origin entry. Distinct from '
+                  'canonical_name, which may be admin-edited.'
+    )
+    origin_cover_image_id = models.CharField(
+        max_length=100, blank=True,
+        help_text='IGDB cover image id for the origin entry. Used to '
+                  'render the origin cover on family/lineage UI.'
+    )
+    origin_summary = models.TextField(
+        blank=True,
+        help_text='IGDB summary of the origin entry. Optional context for '
+                  'family detail / lineage display.'
+    )
     admin_notes = models.TextField(blank=True)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

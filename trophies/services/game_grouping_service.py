@@ -72,6 +72,7 @@ def build_igdb_groups(
             display_name:         str   (IGDB name preferred over PSN title)
             cover_url:            str
             release_date:         datetime | None
+            origin_release_date:  datetime | None  (family.origin_first_release_date)
             games:                list[Game]
             total_trophies:       int
             has_platinum:         bool
@@ -95,6 +96,12 @@ def build_igdb_groups(
         igdb_match = getattr(game.concept, 'igdb_match', None) if game.concept else None
         extras = extra_per_group.get(game.concept_id, {}) if game.concept_id else {}
 
+        # The family's origin_first_release_date is shared by every version
+        # in the lineage (Port + Remake + Original all read the same value).
+        # Sorting by it clusters lineages together on franchise / company pages.
+        family = getattr(game.concept, 'family', None) if game.concept else None
+        origin_release_date = family.origin_first_release_date if family else None
+
         if igdb_match and igdb_match.igdb_id:
             igdb_id = igdb_match.igdb_id
             if igdb_id not in igdb_groups:
@@ -103,6 +110,7 @@ def build_igdb_groups(
                     'display_name': igdb_match.igdb_name or game.title_name,
                     'cover_url': game.display_image_url,
                     'release_date': igdb_match.igdb_first_release_date,
+                    'origin_release_date': origin_release_date,
                     'games': [],
                     **extras,
                 }
@@ -113,6 +121,7 @@ def build_igdb_groups(
                 'display_name': game.title_name,
                 'cover_url': game.display_image_url,
                 'release_date': None,
+                'origin_release_date': origin_release_date,
                 'games': [game],
                 **extras,
             })
@@ -155,6 +164,8 @@ def build_igdb_groups(
 SORT_CHOICES = [
     ('release', 'Release Date (Oldest First)'),
     ('release_desc', 'Release Date (Newest First)'),
+    ('origin_release', 'Origin Release (Oldest First)'),
+    ('origin_release_desc', 'Origin Release (Newest First)'),
     ('alpha', 'Alphabetical (A-Z)'),
     ('alpha_desc', 'Alphabetical (Z-A)'),
     ('versions', 'Most Versions'),
@@ -166,7 +177,9 @@ def sort_groups(groups, sort_val):
     """Sort a list of group dicts (from ``build_igdb_groups``) by the given key.
 
     Groups with no release_date sort to the end on ascending sorts and to the
-    start on descending, using signed infinity sentinels.
+    start on descending, using signed infinity sentinels. Origin-release
+    sorts always send nulls to the end (split-and-append) regardless of
+    direction so families lacking an origin date stay together at the bottom.
     """
     no_date_asc = float('inf')
     no_date_desc = float('-inf')
@@ -177,12 +190,26 @@ def sort_groups(groups, sort_val):
     def release_key_desc(g):
         return g['release_date'].timestamp() if g['release_date'] else no_date_desc
 
+    def origin_key_asc(g):
+        return g['origin_release_date'].timestamp() if g.get('origin_release_date') else no_date_asc
+
     if sort_val == 'release_desc':
         return sorted(
             groups,
             key=lambda g: (release_key_desc(g), g['display_name'].lower()),
             reverse=True,
         )
+    if sort_val == 'origin_release':
+        return sorted(groups, key=lambda g: (origin_key_asc(g), g['display_name'].lower()))
+    if sort_val == 'origin_release_desc':
+        # Nulls-last in both directions: split, sort dated by -timestamp,
+        # append undated alphabetically. Avoids the reverse=True trick used
+        # by release_desc so undated entries stay at the bottom even on desc.
+        dated = [g for g in groups if g.get('origin_release_date')]
+        undated = [g for g in groups if not g.get('origin_release_date')]
+        dated.sort(key=lambda g: (-g['origin_release_date'].timestamp(), g['display_name'].lower()))
+        undated.sort(key=lambda g: g['display_name'].lower())
+        return dated + undated
     if sort_val == 'alpha':
         return sorted(groups, key=lambda g: g['display_name'].lower())
     if sort_val == 'alpha_desc':

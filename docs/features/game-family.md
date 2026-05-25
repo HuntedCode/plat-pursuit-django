@@ -30,15 +30,26 @@ The `_resolve_canonical_igdb_id` step collapses versions/releases of the
 same underlying game. IGDB models "same game, different release" via
 `parent_game` (set on Standalone Expansions, Remakes, Remasters, Expanded
 Games / Director's Cuts, and Ports — game_type 4/8/9/10/11) and
-`version_parent` (set on editions like Deluxe/GOTY/Anniversary). When
-either is present, the family keys on the parent id instead of the
-derivative's own id. Result: Jak and Daxter: The Precursor Legacy
-(IGDB #1528), its PS3 HD remaster (#302690), and its PS4 port (#325261)
-all collapse into one family keyed on 1528, while each release still has
-its own `IGDBMatch` with its own platform, release date, and companies.
-Death Stranding (#19564) and Death Stranding: Director's Cut (#152063,
-`parent_game=19564`, `game_type=Expanded Game`) collapse onto family 19564
-the same way.
+`version_parent` (set on editions like Deluxe/GOTY/Anniversary). The
+resolver walks these references **recursively** so multi-tier chains
+collapse onto the topmost ancestor: Tomb Raider: Anniversary PS5 (Port,
+game_type=11) -> Tomb Raider: Anniversary PS3 (Remake, game_type=8) ->
+Tomb Raider I (original) all land on the Tomb Raider I family. Each
+recursion step fetches the parent's IGDB data so its own game_type and
+parents can be inspected. Depth-capped at 10, cycle-guarded. Result:
+Jak and Daxter: The Precursor Legacy (IGDB #1528), its PS3 HD remaster
+(#302690), and its PS4 port (#325261) all collapse into one family
+keyed on 1528, while each release still has its own `IGDBMatch` with
+its own platform, release date, and companies. Death Stranding (#19564)
+and Death Stranding: Director's Cut (#152063, `parent_game=19564`,
+`game_type=Expanded Game`) collapse onto family 19564 the same way.
+
+The internal twin `_resolve_canonical_igdb_data` returns
+`(canonical_id, canonical_data)` — the topmost ancestor's full IGDB
+payload alongside the id. `_link_concept_to_family` uses it to name and
+snapshot the family from the topmost ancestor's data; calling
+`parent_game.name` on the derivative's payload only names the first
+hop and was the bug that gave 3-tier chains the intermediate's name.
 
 Two concepts with the same canonical IGDB id unambiguously belong
 together. Two concepts with different canonical ids are different games.
@@ -103,14 +114,26 @@ better.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `canonical_name` | CharField (indexed) | IGDB canonical name. Cleaned via `clean_title_field()` on save |
+| `canonical_name` | CharField (indexed) | IGDB canonical name. Cleaned via `clean_title_field()` on save. Auto-syncs to `origin_name` unless `admin_notes` is non-empty |
 | `igdb_id` | IntegerField (unique, nullable, indexed) | IGDB game id this family maps to. Unique when set. Nullable for the rare admin-created family that doesn't correspond to an IGDB entry |
+| `origin_first_release_date` | DateTimeField (nullable, indexed) | Snapshot of the topmost canonical IGDB entry's `first_release_date`. Drives the "Origin Release" sort on franchise / company detail pages. Indexed because the sort orders on it |
+| `origin_name` | CharField (max=500, blank) | IGDB name of the topmost canonical entry. Distinct from `canonical_name` so admin edits to `canonical_name` survive re-enrichment |
+| `origin_cover_image_id` | CharField (max=100, blank) | IGDB cover image id for the origin entry (e.g. `co1abc`). Render with the standard IGDB image URL builder |
+| `origin_summary` | TextField (blank) | IGDB summary text for the origin entry. Optional context on family / lineage UI |
 | `admin_notes` | TextField (blank) | Staff notes. Presence locks `canonical_name` from auto-update during re-enrichment |
 | `is_verified` | BooleanField | Always True for IGDB-created families. Reserved for admin-created families where verification status matters |
 | `created_at` | DateTimeField | Auto |
 | `updated_at` | DateTimeField | Auto |
 
 Ordering: alphabetical by `canonical_name`.
+
+**Origin fields are a snapshot, not a foreign key.** When IGDB renames
+or revises the canonical entry, the snapshot updates on the next call
+to `_link_concept_to_family` for any concept in the family (the field
+sync uses the same compare-and-update pattern as `canonical_name`).
+Admin-edited `canonical_name` is preserved by the admin_notes gate;
+the four `origin_*` fields always self-sync because they're IGDB
+snapshots, not display fields.
 
 ## Key Flows
 
@@ -193,11 +216,26 @@ since the admin is explicitly going outside IGDB's model.
   id get moved to the surviving id's family on their next refresh. The
   old family, if empty, gets deleted.
 
+- **origin_* fields come from the TOPMOST ancestor, not the first hop**:
+  multi-tier IGDB chains (Port -> Remake -> Original) need the recursive
+  resolver's terminal payload, not the derivative's `parent_game.name`.
+  An older shortcut reading `igdb_data.get('parent_game').get('name')`
+  named 3-tier chains after the intermediate entry — never reintroduce
+  that pattern. Use `_resolve_canonical_igdb_data` (returns id + data)
+  whenever you need anything about the canonical beyond its id.
+
+- **Franchise / company "Origin Release" sort depends on the family
+  being prefetched**: both views `.select_related('concept__family')`
+  on their game querysets. If you add a new page that uses
+  `game_grouping_service.build_igdb_groups`, you must do the same or
+  the per-game `concept.family` access will N+1.
+
 ## Management Commands
 
 | Command | Purpose | Typical Usage |
 |---------|---------|---------------|
 | `backfill_game_families_from_igdb` | One-shot populate families from existing accepted IGDB matches | `python manage.py backfill_game_families_from_igdb --dry-run` then without `--dry-run` |
+| `backfill_anchored_family_origins` | Snapshot `origin_*` fields onto families that contain at least one anchored concept (`anchor_migration_completed_at IS NOT NULL`). Scoped to keep IGDB rate-limit budget low | `python manage.py backfill_anchored_family_origins --dry-run` then without. Supports `--force` (re-snapshot even when `origin_first_release_date` is already populated) and `--limit N` |
 
 ## Related Docs
 

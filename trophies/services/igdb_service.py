@@ -1945,16 +1945,35 @@ class IGDBService:
         if not canonical_name:
             canonical_name = igdb_data.get('name') or igdb_match.igdb_name or f'IGDB #{igdb_id}'
 
+        # Extract denormalized origin_* snapshot from the canonical payload.
+        # When canonical_data is None (depth/cycle guard tripped, or a parent
+        # fetch failed mid-walk), origin_fields is empty and we DON'T touch
+        # any pre-existing origin_* values on the family.
+        origin_fields = cls._origin_fields_from_canonical(canonical_data)
+
+        family_defaults = {
+            'canonical_name': canonical_name,
+            'is_verified': True,
+            **origin_fields,
+        }
         family, created = GameFamily.objects.get_or_create(
             igdb_id=igdb_id,
-            defaults={'canonical_name': canonical_name, 'is_verified': True},
+            defaults=family_defaults,
         )
-        # Keep canonical_name in sync with IGDB if the family pre-dates our
-        # first sight of the name (e.g. backfill ordering). Don't touch
-        # admin-edited names.
-        if not created and not family.admin_notes and family.canonical_name != canonical_name:
-            family.canonical_name = canonical_name
-            family.save(update_fields=['canonical_name'])
+        # Keep canonical_name + origin_* fields in sync with IGDB if the
+        # family pre-dates our first sight of the data (e.g. backfill
+        # ordering). Don't touch admin-edited canonical_name.
+        if not created:
+            update_fields = []
+            if not family.admin_notes and family.canonical_name != canonical_name:
+                family.canonical_name = canonical_name
+                update_fields.append('canonical_name')
+            for field_name, value in origin_fields.items():
+                if getattr(family, field_name) != value:
+                    setattr(family, field_name, value)
+                    update_fields.append(field_name)
+            if update_fields:
+                family.save(update_fields=update_fields)
 
         old_family = None
         if concept.family_id and concept.family_id != family.pk:
@@ -2706,6 +2725,47 @@ class IGDBService:
         # Terminal: this node IS the canonical. Return its data so callers
         # can name the family after it.
         return fallback_id, igdb_data
+
+    @classmethod
+    def _origin_fields_from_canonical(cls, canonical_data):
+        """Extract denormalized origin_* fields for GameFamily from an IGDB payload.
+
+        `canonical_data` is the topmost canonical entry's IGDB game dict,
+        as returned by `_resolve_canonical_igdb_data`. Returns a dict of
+        field-name -> value suitable for splatting into a GameFamily
+        get_or_create defaults / update. Returns `{}` when canonical_data
+        is None so callers can no-op the field sync (preserving any
+        pre-existing origin_* values on the family).
+
+        Uses IGDB's global `first_release_date` (not PS-platform-filtered)
+        because the origin entry's release date is meaningful regardless
+        of platform — sorting by "when did Tomb Raider first exist" should
+        use 1996 even if PlayStation got it later than other platforms.
+        """
+        if not canonical_data:
+            return {}
+
+        fields = {
+            'origin_name': canonical_data.get('name') or '',
+            'origin_summary': canonical_data.get('summary') or '',
+        }
+
+        cover = canonical_data.get('cover') or {}
+        if isinstance(cover, dict):
+            fields['origin_cover_image_id'] = cover.get('image_id') or ''
+        else:
+            fields['origin_cover_image_id'] = ''
+
+        first_release_ts = canonical_data.get('first_release_date')
+        origin_date = None
+        if first_release_ts:
+            try:
+                origin_date = datetime.fromtimestamp(first_release_ts, tz=dt_timezone.utc)
+            except (ValueError, OSError, TypeError):
+                origin_date = None
+        fields['origin_first_release_date'] = origin_date
+
+        return fields
 
     @classmethod
     def _parse_game_data(cls, igdb_data):
