@@ -187,6 +187,18 @@ class Command(BaseCommand):
 
     def _process_concept(self, source_concept):
         self.concepts_processed += 1
+
+        # Mark the source Concept as touched by the migration, regardless of
+        # outcome. Used by the admin's "Attempted but not anchored" filter to
+        # distinguish concepts the migration actually tried (and deferred for
+        # NO_MATCH / SPLIT / COLLISION / fingerprint-mismatch reasons) from
+        # ones it hasn't reached yet. `Concept.objects.filter().update()` is
+        # safe even if the source gets absorbed/deleted later in this call.
+        if not self.dry_run:
+            Concept.objects.filter(pk=source_concept.pk).update(
+                anchor_migration_last_attempt_at=timezone.now()
+            )
+
         games = list(source_concept.games.all())
         n_games = len(games)
         if not games:

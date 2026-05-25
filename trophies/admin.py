@@ -759,9 +759,16 @@ class ConceptFranchiseInline(admin.TabularInline):
 class ConceptAnchorStatusFilter(SimpleListFilter):
     """Filter Concepts by IGDB-anchor migration status.
 
-    Anchored = anchor_migration_completed_at is set (the Concept has been
-    processed by the anchor_concepts migration and is at canonical IGDB
-    identity). Pending = still legacy PSN-grouped or untouched.
+    Four buckets:
+      * Anchored: anchor_migration_completed_at set → at canonical identity.
+      * Not yet anchored: anchor_migration_completed_at null → covers both
+        the "never attempted" and "attempted but deferred" buckets below.
+      * Attempted but not anchored (deferred): the migration touched this
+        Concept (last_attempt_at set) but couldn't anchor — NO_MATCH,
+        SPLIT, COLLISION, or fingerprint mismatch. These are the ones
+        staff actually needs to investigate.
+      * Never attempted: neither timestamp set → migration hasn't reached
+        this Concept yet. Routine pending; no review needed.
     """
 
     title = 'Anchor status'
@@ -771,6 +778,8 @@ class ConceptAnchorStatusFilter(SimpleListFilter):
         return (
             ('anchored', 'Anchored (IGDB-canonical)'),
             ('pending', 'Not yet anchored'),
+            ('attempted_pending', 'Attempted but not anchored (deferred)'),
+            ('never_attempted', 'Never attempted'),
         )
 
     def queryset(self, request, queryset):
@@ -779,13 +788,24 @@ class ConceptAnchorStatusFilter(SimpleListFilter):
             return queryset.filter(anchor_migration_completed_at__isnull=False)
         if value == 'pending':
             return queryset.filter(anchor_migration_completed_at__isnull=True)
+        if value == 'attempted_pending':
+            return queryset.filter(
+                anchor_migration_completed_at__isnull=True,
+                anchor_migration_last_attempt_at__isnull=False,
+            )
+        if value == 'never_attempted':
+            return queryset.filter(
+                anchor_migration_completed_at__isnull=True,
+                anchor_migration_last_attempt_at__isnull=True,
+            )
         return queryset
 
 
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'concept_id', 'unified_title', 'anchor_migration_completed_at',
+        'id', 'concept_id', 'unified_title',
+        'anchor_migration_completed_at', 'anchor_migration_last_attempt_at',
         'title_lock', 'title_reviewed_at',
         'family_display', 'release_date_display', 'developers_display',
         'publishers_display', 'genres_display',

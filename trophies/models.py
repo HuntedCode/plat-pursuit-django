@@ -900,6 +900,17 @@ class Concept(models.Model):
             "they are at canonical identity by construction."
         ),
     )
+    anchor_migration_last_attempt_at = models.DateTimeField(
+        null=True, blank=True, db_index=True,
+        help_text=(
+            "Set every time the anchor_concepts migration touches this Concept "
+            "(whether it succeeds, defers due to NO_MATCH, splits, collides, "
+            "or hits any other terminal state). Combined with "
+            "anchor_migration_completed_at, lets the admin distinguish "
+            "'never attempted' from 'attempted but not anchored' — the latter "
+            "are the concepts staff actually need to look at."
+        ),
+    )
 
     class Meta:
         indexes = [
