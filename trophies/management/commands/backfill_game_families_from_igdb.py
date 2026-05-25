@@ -60,19 +60,27 @@ class Command(BaseCommand):
         by_igdb_id = defaultdict(list)
         canonical_names_from_parents = {}
         for match in qs.iterator(chunk_size=500):
-            canonical_id = IGDBService._resolve_canonical_igdb_id(
+            canonical_id, canonical_data = IGDBService._resolve_canonical_igdb_data(
                 match.raw_response or {}, match.igdb_id
             )
             by_igdb_id[canonical_id].append(match)
-            # Opportunistically collect a canonical name from a derivative's
-            # parent_game / version_parent dict — we may never have a direct
-            # match row for the canonical id itself if nobody on the site
-            # owns the original release.
+            # Opportunistically collect the canonical name. We prefer the
+            # topmost ancestor's data (returned by the recursive walk) so
+            # multi-tier chains (e.g. Port -> Remake -> Original) get the
+            # ORIGINAL's name, not the first hop's. If that's missing
+            # (parent fetch failed mid-walk), fall back to the immediate
+            # parent dict on the derivative.
             if canonical_id != match.igdb_id:
-                raw = match.raw_response or {}
-                parent = raw.get('version_parent') or raw.get('parent_game')
-                if isinstance(parent, dict) and parent.get('name'):
-                    canonical_names_from_parents.setdefault(canonical_id, parent['name'])
+                name_from_canonical = None
+                if canonical_data:
+                    name_from_canonical = canonical_data.get('name')
+                if not name_from_canonical:
+                    raw = match.raw_response or {}
+                    parent = raw.get('version_parent') or raw.get('parent_game')
+                    if isinstance(parent, dict):
+                        name_from_canonical = parent.get('name')
+                if name_from_canonical:
+                    canonical_names_from_parents.setdefault(canonical_id, name_from_canonical)
 
         start = time.time()
         families_created = 0

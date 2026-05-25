@@ -1922,21 +1922,28 @@ class IGDBService:
         if not igdb_match.igdb_id:
             return  # No match → no family
 
-        igdb_id = cls._resolve_canonical_igdb_id(igdb_data, igdb_match.igdb_id)
+        igdb_id, canonical_data = cls._resolve_canonical_igdb_data(
+            igdb_data, igdb_match.igdb_id
+        )
 
         from trophies.models import GameFamily
-        # Prefer the canonical entry's name over the derivative's name when
-        # we resolved upward. Fall back to the match's name if the raw data
-        # we have is for the derivative (canonical entry wasn't expanded).
-        canonical_name = igdb_data.get('name') or igdb_match.igdb_name or f'IGDB #{igdb_id}'
-        if igdb_id != igdb_match.igdb_id:
-            # We resolved to a parent — the raw_response we're looking at is
-            # the derivative's. Use the parent name from the parent_game or
-            # version_parent dict if present, since it's what the family
-            # should be titled after.
+        # When the canonical resolves upward, name the family after the
+        # TOPMOST ancestor's data (returned by the recursive walk). Falling
+        # back to the immediate parent_game / version_parent dict embedded
+        # in the derivative's payload only names the first hop, not the
+        # topmost — that bug previously gave 3-tier chains like
+        # PS5 Port -> PS3 Remake -> Original the Remake's name.
+        canonical_name = None
+        if canonical_data:
+            canonical_name = canonical_data.get('name')
+        if not canonical_name and igdb_id != igdb_match.igdb_id:
+            # Parent fetch failed mid-walk or hit a depth/cycle guard.
+            # Best effort: try the immediate parent dict on the derivative.
             parent_obj = igdb_data.get('version_parent') or igdb_data.get('parent_game')
             if isinstance(parent_obj, dict):
-                canonical_name = parent_obj.get('name') or canonical_name
+                canonical_name = parent_obj.get('name')
+        if not canonical_name:
+            canonical_name = igdb_data.get('name') or igdb_match.igdb_name or f'IGDB #{igdb_id}'
 
         family, created = GameFamily.objects.get_or_create(
             igdb_id=igdb_id,
@@ -2608,8 +2615,24 @@ class IGDBService:
     _CANONICAL_RESOLUTION_MAX_DEPTH = 10
 
     @classmethod
-    def _resolve_canonical_igdb_id(cls, igdb_data, fallback_id, _depth=0, _seen=None):
-        """Recursively resolve the "canonical" IGDB id for GameFamily keying.
+    def _resolve_canonical_igdb_id(cls, igdb_data, fallback_id):
+        """Resolve the topmost canonical IGDB id for GameFamily keying.
+
+        Thin wrapper around `_resolve_canonical_igdb_data` for callers that
+        only need the id. See that method for the full algorithm.
+        """
+        canonical_id, _ = cls._resolve_canonical_igdb_data(igdb_data, fallback_id)
+        return canonical_id
+
+    @classmethod
+    def _resolve_canonical_igdb_data(cls, igdb_data, fallback_id, _depth=0, _seen=None):
+        """Recursively resolve the topmost canonical IGDB entry.
+
+        Returns `(canonical_id, canonical_data)` where `canonical_data` is
+        the topmost ancestor's full IGDB payload (with `_time_to_beat`
+        injected by `fetch_full_game_data`), or None when the topmost id
+        was reached without expansion (e.g. the input itself is canonical,
+        or a parent fetch failed and we returned its id alone).
 
         IGDB models "same game, different release" via two fields:
 
@@ -2625,26 +2648,25 @@ class IGDBService:
         PS4/PS5 (Port, game_type 11) -> Tomb Raider Anniversary PS3 (Remake,
         game_type 8) -> Tomb Raider I (original). To collapse the full
         chain into one family, we walk parents recursively until we hit a
-        node with no qualifying parent. Each step fetches the parent's
-        IGDB data so we can read ITS game_type and parents.
+        node with no qualifying parent. The terminal node's data is what
+        callers want when naming the family — the immediate
+        `parent_game.name` embedded in a derivative's payload only names
+        the FIRST hop, not the topmost ancestor.
 
         `version_parent` takes priority over `parent_game` at each step —
         editions of a port still resolve up to the port's parent (and
         onwards through the chain).
 
-        Returns:
-            int: the topmost canonical IGDB id to use as the family key.
-                 Falls back to `fallback_id` (typically the match's own id)
-                 when no parent relationship is present, when fetching a
-                 parent fails, when the chain hits the depth cap, or when
-                 a cycle is detected.
+        Depth-capped at `_CANONICAL_RESOLUTION_MAX_DEPTH` and cycle-guarded
+        via a `_seen` set; either guard falls back to the current id with
+        `None` for the data (signalling "use what you already have").
         """
         if _seen is None:
             _seen = set()
         if _depth >= cls._CANONICAL_RESOLUTION_MAX_DEPTH:
-            return fallback_id
+            return fallback_id, None
         if fallback_id in _seen:
-            return fallback_id
+            return fallback_id, None
         _seen.add(fallback_id)
 
         # version_parent takes priority — editions wrap a specific release
@@ -2658,10 +2680,10 @@ class IGDBService:
         if vp_id:
             parent_data = cls.fetch_full_game_data(vp_id)
             if parent_data:
-                return cls._resolve_canonical_igdb_id(
+                return cls._resolve_canonical_igdb_data(
                     parent_data, vp_id, _depth + 1, _seen
                 )
-            return vp_id
+            return vp_id, None
 
         # parent_game when game_type confirms a derivative release. Walk
         # the chain so Port -> Remake -> Original all resolve to Original.
@@ -2676,12 +2698,14 @@ class IGDBService:
             if parent_id:
                 parent_data = cls.fetch_full_game_data(parent_id)
                 if parent_data:
-                    return cls._resolve_canonical_igdb_id(
+                    return cls._resolve_canonical_igdb_data(
                         parent_data, parent_id, _depth + 1, _seen
                     )
-                return parent_id
+                return parent_id, None
 
-        return fallback_id
+        # Terminal: this node IS the canonical. Return its data so callers
+        # can name the family after it.
+        return fallback_id, igdb_data
 
     @classmethod
     def _parse_game_data(cls, igdb_data):
