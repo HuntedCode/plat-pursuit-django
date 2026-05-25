@@ -731,6 +731,27 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
             target.anchor_migration_completed_at = timezone.now()
             target.save(update_fields=['anchor_migration_completed_at'])
 
+        # Defensive: Game.add_concept's absorb-cascade SHOULD have deleted
+        # the source when its last Game moved out, but a real-world report
+        # showed source surviving with 0 games after a clean-only manual
+        # anchor. Belt-and-suspenders cleanup here: if the source row still
+        # exists and is empty, run absorb + delete explicitly. Safe to run
+        # even when the cascade fired correctly (refresh_from_db raises
+        # DoesNotExist which we swallow).
+        try:
+            refreshed_source = Concept.objects.get(pk=source_concept.pk)
+        except Concept.DoesNotExist:
+            refreshed_source = None
+        if refreshed_source and refreshed_source.games.count() == 0:
+            logger.info(
+                f'anchor_concept_to_canonical: source Concept '
+                f'{refreshed_source.concept_id!r} (pk={refreshed_source.pk}) '
+                f'survived add_concept cascade with 0 games — running '
+                f'defensive absorb + delete.'
+            )
+            target.absorb(refreshed_source)
+            refreshed_source.delete()
+
         result['moved_count'] = moved_count
         result['flagged_count'] = flagged_count
         result['ok'] = True
