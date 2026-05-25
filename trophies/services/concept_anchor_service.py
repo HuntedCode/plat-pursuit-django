@@ -667,8 +667,21 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
             target, igdb_data, confidence=1.0, method='manual',
         )
 
-        # Vetting per Game. Same as anchor_concepts.
+        # Vetting per Game. Fingerprint-aware sibling routing: build a map
+        # of trophy_fingerprint → Concept across the whole canonical family
+        # (primary + existing siblings). If an incoming Game's fingerprint
+        # matches an existing sibling's, route it there directly instead of
+        # landing at the primary and flagging — that lands trophy-equivalent
+        # games at the right sibling automatically.
         games = list(source_concept.games.all())
+        # Exclude source from fp_map so the source's own Games can't self-route
+        # in the edge case where staff manually anchors an already-in-family
+        # Concept to a different canonical.
+        fp_map = build_family_fingerprint_map(
+            resolved_canonical, exclude_concept_pk=source_concept.pk,
+        )
+        # Reference game on the primary target for compare_trophy_metrics
+        # fallback when fp_map has no hit (e.g., first game ever in family).
         existing_target_games = list(
             target.games.exclude(pk__in=[g.pk for g in games])
         ) if target.pk else []
@@ -684,12 +697,33 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
                 confidence=None,  # no matcher confidence on manual anchor
                 trophy_group_title=trophy_title,
             )
-            flag_reasons = list(cross['flag_reasons'])
-            if reference_game:
-                metric = compare_trophy_metrics(game, reference_game)
-                for fr in metric['flag_reasons']:
-                    if fr not in flag_reasons:
-                        flag_reasons.append(fr)
+            cross_flags = list(cross['flag_reasons'])
+
+            game_fp = trophy_fingerprint(game)
+            fp_destination = fp_map.get(game_fp)
+
+            if fp_destination is not None:
+                # Fingerprint-aware sibling route. Trophy-metric divergence is
+                # by construction NOT a concern (matching fingerprint). Only
+                # identity cross-check flags still need to gate the move.
+                destination = fp_destination
+                fingerprint_flags = []
+            else:
+                # No fingerprint hit anywhere in the family. Default to the
+                # primary target and run the legacy compare_trophy_metrics
+                # against the primary's reference Game (if any). If the
+                # primary itself has no games yet, no fingerprint flags fire
+                # and this Game becomes the primary's reference.
+                destination = target
+                if reference_game:
+                    metric = compare_trophy_metrics(game, reference_game)
+                    fingerprint_flags = metric['flag_reasons']
+                else:
+                    fingerprint_flags = []
+
+            flag_reasons = cross_flags + [
+                fr for fr in fingerprint_flags if fr not in cross_flags
+            ]
 
             if flag_reasons:
                 # Write a ConceptJoinReview entry; staff will resolve via the
@@ -707,12 +741,12 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
                         game=game,
                         defaults={
                             'proposed_canonical_igdb_id': resolved_canonical,
-                            'proposed_concept': target,
+                            'proposed_concept': destination,
                             'flag_reasons': [
                                 fr for fr in flag_reasons
                                 if fr in ConceptJoinReview.FLAG_REASON_CHOICES
                             ],
-                            'trophy_fingerprint': trophy_fingerprint(game),
+                            'trophy_fingerprint': game_fp,
                             'identity_check_data': identity_data,
                             'status': 'pending',
                         },
@@ -720,10 +754,15 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
                 flagged_count += 1
                 result['flagged_games'].append((game, flag_reasons))
             else:
-                game.add_concept(target, force=True)
+                game.add_concept(destination, force=True)
                 moved_count += 1
                 anchored_a_game = True
-                if reference_game is None:
+                # Update fp_map so subsequent Games in the same source can
+                # also fingerprint-route to this destination, and update
+                # reference_game for the primary if we just landed there.
+                if game_fp not in fp_map:
+                    fp_map[game_fp] = destination
+                if destination.pk == target.pk and reference_game is None:
                     reference_game = game
 
         # Stamp target as anchored if we moved any clean Game in.
@@ -756,6 +795,56 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
         result['flagged_count'] = flagged_count
         result['ok'] = True
         return result
+
+
+def build_family_fingerprint_map(canonical_id, exclude_concept_pk=None) -> dict:
+    """Map `trophy_fingerprint(game) → Concept` for all Games in the canonical
+    IGDB family (primary `str(canonical_id)` + siblings `str(canonical_id)-N`).
+
+    Used by the migration and manual-anchor paths to route incoming Games to
+    the right sibling within the family instead of always landing them at the
+    primary and creating redundant siblings during review approval.
+
+    Example: a Family with primary 'X' (PS4, fingerprint A) and sibling 'X-2'
+    (Vita-A, fingerprint B). An incoming Vita-B game with fingerprint B gets
+    routed to 'X-2' (joining its trophy-equivalent sibling) instead of
+    landing at 'X' and getting flagged for a third sibling.
+
+    Args:
+        canonical_id: the canonical IGDB id of the family.
+        exclude_concept_pk: optional Concept pk to skip when building the map.
+            Used by manual-anchor when the source Concept itself is already in
+            the family (edge case where staff manually anchors an already-
+            anchored sibling to a different canonical) — without exclusion,
+            the source's Games would map to themselves and the routing would
+            silently no-op.
+
+    Returns:
+        dict[str, Concept]: first-seen-by-pk-order Concept wins per fingerprint.
+            Empty when the family has no Concepts or no Games yet.
+    """
+    from trophies.models import Concept
+    from django.db.models import Q
+
+    base = str(canonical_id)
+    family_concepts = Concept.objects.filter(
+        Q(concept_id=base) | Q(concept_id__regex=rf'^{re.escape(base)}-\d+$')
+    )
+    if exclude_concept_pk is not None:
+        family_concepts = family_concepts.exclude(pk=exclude_concept_pk)
+    # Deterministic order so first-seen-wins per fingerprint is stable across
+    # runs. Primary (concept_id=base) generally has lower pk than siblings
+    # created later, so this also tends to prefer primary over sibling when
+    # both happen to share a Game-fingerprint.
+    family_concepts = family_concepts.order_by('pk').prefetch_related('games')
+
+    fp_map = {}
+    for concept in family_concepts:
+        for game in concept.games.all():
+            fp = trophy_fingerprint(game)
+            if fp not in fp_map:
+                fp_map[fp] = concept
+    return fp_map
 
 
 def allocate_sibling_concept_id(canonical_id) -> str:

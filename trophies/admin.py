@@ -3565,11 +3565,13 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
             )
 
     def _apply_approval(self, review, user):
-        """Anchor the Game at its proposed canonical Concept.
+        """Anchor the Game at its proposed Concept.
 
-        Mirrors the clean-move path in the anchor_concepts management command:
-        find-or-create target Concept (with collision check), refresh its
-        IGDBMatch against canonical IGDB data, move the Game, mark resolved.
+        Honors `review.proposed_concept` when set — fingerprint-aware sibling
+        routing (concept_anchor_service.build_family_fingerprint_map) may have
+        populated this with a sibling Concept rather than the canonical-id
+        primary. The legacy fallback (find/create primary at str(canonical_id))
+        applies only when proposed_concept is null.
         """
         from trophies.services.igdb_service import IGDBService
 
@@ -3578,11 +3580,14 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
             raise ValueError('Review has no proposed canonical IGDB id')
 
         with transaction.atomic():
+            target = review.proposed_concept
+            canonical_data = None
             concept_id = str(canonical_id)
-            target = Concept.objects.filter(concept_id=concept_id).first()
-            canonical_data = None  # populated lazily; reused for the IGDBMatch refresh below
 
-            if target:
+            if target is not None:
+                # Verify the proposed Concept is still in the right family.
+                # A staff member or sync could have edited it since the review
+                # was written; refuse if its IGDBMatch resolves elsewhere now.
                 match = getattr(target, 'igdb_match', None)
                 if match and match.igdb_id:
                     existing_canonical = IGDBService._resolve_canonical_igdb_id(
@@ -3590,25 +3595,41 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                     )
                     if existing_canonical != canonical_id:
                         raise ValueError(
-                            f'Concept with concept_id={concept_id!r} exists but its '
-                            f'IGDBMatch resolves to canonical {existing_canonical}, '
-                            f'not {canonical_id}. Manual cleanup needed before this '
-                            f'review can be approved.'
+                            f'Proposed Concept {target.concept_id!r} no longer '
+                            f'resolves to canonical {canonical_id} '
+                            f'(resolves to {existing_canonical}). Resolve manually.'
                         )
-                # else: existing Concept has no IGDBMatch yet (rare; usually means
-                # a partial prior migration). We refresh against canonical below,
-                # which creates the IGDBMatch.
             else:
-                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
-                if not canonical_data:
-                    raise ValueError(
-                        f'IGDB returned no data for canonical id {canonical_id}; '
-                        f'cannot anchor this Game.'
+                # Legacy path: no proposed Concept on the review, so find or
+                # create the primary at str(canonical_id).
+                target = Concept.objects.filter(concept_id=concept_id).first()
+                if target:
+                    match = getattr(target, 'igdb_match', None)
+                    if match and match.igdb_id:
+                        existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                            match.raw_response or {}, match.igdb_id
+                        )
+                        if existing_canonical != canonical_id:
+                            raise ValueError(
+                                f'Concept with concept_id={concept_id!r} exists but its '
+                                f'IGDBMatch resolves to canonical {existing_canonical}, '
+                                f'not {canonical_id}. Manual cleanup needed before this '
+                                f'review can be approved.'
+                            )
+                    # else: existing Concept has no IGDBMatch yet (rare; usually
+                    # means a partial prior migration). We refresh against
+                    # canonical below, which creates the IGDBMatch.
+                else:
+                    canonical_data = IGDBService.fetch_full_game_data(canonical_id)
+                    if not canonical_data:
+                        raise ValueError(
+                            f'IGDB returned no data for canonical id {canonical_id}; '
+                            f'cannot anchor this Game.'
+                        )
+                    target = Concept.objects.create(
+                        concept_id=concept_id,
+                        unified_title=canonical_data.get('name', ''),
                     )
-                target = Concept.objects.create(
-                    concept_id=concept_id,
-                    unified_title=canonical_data.get('name', ''),
-                )
 
             # Refresh target's IGDBMatch against canonical (captures media too).
             # Idempotent — process_match update_or_creates. Reuse the fetch

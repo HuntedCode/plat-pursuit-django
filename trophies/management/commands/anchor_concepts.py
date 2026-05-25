@@ -51,7 +51,8 @@ from trophies.models import (
     Concept, ConceptJoinReview, GameFamily,
 )
 from trophies.services.concept_anchor_service import (
-    compare_trophy_metrics, identity_cross_check, trophy_fingerprint,
+    build_family_fingerprint_map, compare_trophy_metrics,
+    identity_cross_check, trophy_fingerprint,
 )
 from trophies.services.igdb_service import IGDBService
 
@@ -295,9 +296,21 @@ class Command(BaseCommand):
         if target is not None:
             self._refresh_target_match(target, canonical_id, hint_data=hint_data)
 
-        # Compare each candidate Game against the target's existing Games for
-        # trophy-fingerprint homogeneity. If target was newly-created, no
-        # reference Game exists yet — first candidate becomes the reference.
+        # Fingerprint-aware sibling routing: build a map of
+        # trophy_fingerprint → Concept across the canonical IGDB family
+        # (primary + existing siblings) BEFORE any moves. Games whose
+        # fingerprint matches an existing sibling get routed directly there
+        # instead of landing at the primary and tripping a redundant review
+        # → sibling-allocation cycle.
+        # Exclude source from fp_map so its own Games can't self-route in the
+        # rare case where the source happens to share concept_id pattern with
+        # the family (shouldn't normally apply to migration since sources are
+        # PSN-style ids, but cheap defense).
+        fp_map = build_family_fingerprint_map(
+            canonical_id, exclude_concept_pk=source_concept.pk,
+        )
+        # Fallback reference game on the primary target for the no-fingerprint-
+        # hit-in-family case (e.g., first Game in a brand-new family).
         existing_target_games = (
             list(target.games.exclude(pk__in=[p['game'].pk for p in group]))
             if target and target.pk
@@ -307,31 +320,56 @@ class Command(BaseCommand):
 
         anchored_a_game = False
         moved_count = 0
+        # Per-destination move counts so the summary line can show fingerprint-
+        # routed Games landing at siblings ("→ '31553' (3), '31553-2' (2)").
+        moves_by_destination = defaultdict(int)
         new_review_count = 0       # freshly written ConceptJoinReview rows
         preserved_review_count = 0  # already-resolved reviews we honored
         per_game_lines = []
         for p in group:
-            flag_reasons = list(p['cross_check']['flag_reasons']) if p['cross_check'] else []
-            if reference_game:
-                metric = compare_trophy_metrics(p['game'], reference_game)
-                # Avoid duplicate flags (compare_trophy_metrics can return both
-                # platinum_status_diverged AND trophy_count_mismatch for
-                # related conditions; union once, no double-counting).
-                for fr in metric['flag_reasons']:
-                    if fr not in flag_reasons:
-                        flag_reasons.append(fr)
+            game = p['game']
+            cross_flags = list(p['cross_check']['flag_reasons']) if p['cross_check'] else []
+
+            game_fp = trophy_fingerprint(game)
+            fp_destination = fp_map.get(game_fp)
+
+            if fp_destination is not None:
+                # Sibling (or primary) with matching fingerprint exists.
+                # Route there; skip the redundant compare_trophy_metrics
+                # since fingerprint match already proves homogeneity.
+                destination = fp_destination
+                fingerprint_flags = []
+            else:
+                # No fingerprint hit in family. Use primary as destination
+                # and run the legacy compare_trophy_metrics against the
+                # primary's reference Game (if any). New family: no
+                # reference yet → no fingerprint flags.
+                destination = target
+                if reference_game:
+                    metric = compare_trophy_metrics(game, reference_game)
+                    # Avoid duplicate flags (compare_trophy_metrics can return
+                    # both platinum_status_diverged AND trophy_count_mismatch
+                    # for related conditions; union once, no double-counting).
+                    fingerprint_flags = metric['flag_reasons']
+                else:
+                    fingerprint_flags = []
+
+            flag_reasons = cross_flags + [
+                fr for fr in fingerprint_flags if fr not in cross_flags
+            ]
+
             if flag_reasons:
-                is_new = self._create_review_entry(p, target=target, extra_flags=flag_reasons)
+                is_new = self._create_review_entry(p, target=destination, extra_flags=flag_reasons)
                 if is_new:
                     new_review_count += 1
                     per_game_lines.append(
-                        f'    pk={p["game"].pk}: review created '
+                        f'    pk={game.pk}: review created '
                         f'({", ".join(flag_reasons)})'
                     )
                 else:
                     preserved_review_count += 1
                     per_game_lines.append(
-                        f'    pk={p["game"].pk}: review preserved (already resolved)'
+                        f'    pk={game.pk}: review preserved (already resolved)'
                     )
             else:
                 if not self.dry_run:
@@ -340,13 +378,18 @@ class Command(BaseCommand):
                     # block automated sync, not migration. Without this, locked
                     # Games silently stay in their source Concept and the
                     # source never empties out for absorb-and-delete.
-                    p['game'].add_concept(target, force=True)
+                    game.add_concept(destination, force=True)
                 self.games_moved += 1
                 moved_count += 1
+                moves_by_destination[destination.concept_id] += 1
                 anchored_a_game = True
-                # First clean join becomes the reference for subsequent ones.
-                if reference_game is None:
-                    reference_game = p['game']
+                # Update fp_map so subsequent Games in the same source can
+                # fingerprint-route to this same destination.
+                if game_fp not in fp_map:
+                    fp_map[game_fp] = destination
+                # First clean join at primary becomes its reference Game.
+                if destination.pk == target.pk and reference_game is None:
+                    reference_game = game
 
         # If at least one Game joined cleanly, stamp the target so it's not
         # re-processed in a future batch. Source Concepts that emptied out
@@ -360,10 +403,19 @@ class Command(BaseCommand):
                 target.save(update_fields=['anchor_migration_completed_at'])
             self.concepts_anchored += 1
 
-        # Per-Concept summary line, then per-Game detail lines indented under it.
+        # Per-Concept summary line, then per-Game detail lines indented under
+        # it. The destination breakdown shows when fingerprint-aware sibling
+        # routing landed Games at non-primary Concepts in the same family.
         summary_parts = []
         if moved_count:
-            summary_parts.append(f'{moved_count} moved')
+            if len(moves_by_destination) > 1:
+                breakdown = ', '.join(
+                    f'{cid!r} ({n})'
+                    for cid, n in sorted(moves_by_destination.items())
+                )
+                summary_parts.append(f'{moved_count} moved [{breakdown}]')
+            else:
+                summary_parts.append(f'{moved_count} moved')
         if new_review_count:
             summary_parts.append(f'{new_review_count} new review(s)')
         if preserved_review_count:
