@@ -1431,20 +1431,15 @@ class IGDBService:
         re.IGNORECASE,
     )
 
-    # Regex to strip edition/version suffixes that IGDB won't have
-    # IMPORTANT: only strip packaging-variant suffixes here (same IGDB entry,
-    # different SKU). Do NOT strip Remastered / HD Remaster / Director's Cut
-    # — those identify distinct IGDB entries (game_type Remaster=9 / Director's
-    # Cut Expanded Game=10) with their own metadata. Stripping them sends the
-    # IGDB search to the WRONG entry (e.g., "The Last of Us Part II Remastered"
-    # would strip to "The Last of Us Part II" and match the PS3/PS4 original
-    # instead of the PS5 remaster).
-    _EDITION_SUFFIX_RE = re.compile(
-        r'\s*[\-–—]?\s*\(?\s*(?:Digital\s+Edition|Deluxe\s+Edition|Gold\s+Edition|'
-        r'Game\s+of\s+the\s+Year\s+Edition|GOTY\s+Edition|'
-        r'Platinum\s+Edition|Complete\s+Edition|Standard\s+Edition)\s*\)?\s*$',
-        re.IGNORECASE,
-    )
+    # Note: previously had _EDITION_SUFFIX_RE here that stripped "Deluxe
+    # Edition / Digital Edition / GOTY Edition / Remastered / Director's Cut
+    # / ..." from search titles. Removed: PSN trophy-group titles are literal,
+    # if the trophy group is named "Foo Deluxe Edition" PSN means it. Stripping
+    # risked matching the wrong IGDB entry (especially for Remastered and
+    # Director's Cut, which IGDB models as separate entries — id 5328 for The
+    # Last of Us Remastered is NOT the same entry as id 1009 for the original).
+    # IGDB's fuzzy search + our containment-based scoring handles edition-name
+    # searches that need to match a non-edition IGDB entry just fine.
 
     # Regex to strip trailing year in parentheses: "Alone in the Dark 2 (1996)"
     _YEAR_SUFFIX_RE = re.compile(r'\s*\(\d{4}\)\s*$')
@@ -1491,7 +1486,6 @@ class IGDBService:
         text = text.lower().strip()
         # Strip suffixes
         text = cls._PLATFORM_SUFFIX_RE.sub('', text)
-        text = cls._EDITION_SUFFIX_RE.sub('', text)
         text = cls._YEAR_SUFFIX_RE.sub('', text)
         # Strip brand prefixes
         text = cls._BRAND_PREFIX_RE.sub('', text)
@@ -1690,7 +1684,6 @@ class IGDBService:
         text = cls._unicode_normalize_for_matching(text)
         # Strip suffixes
         text = cls._PLATFORM_SUFFIX_RE.sub('', text)
-        text = cls._EDITION_SUFFIX_RE.sub('', text)
         text = cls._YEAR_SUFFIX_RE.sub('', text)
         # Strip brand prefixes
         text = cls._BRAND_PREFIX_RE.sub('', text)
