@@ -3377,7 +3377,10 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
     )
     date_hierarchy = 'created_at'
     ordering = ('-created_at',)
-    actions = ('approve_selected', 'reject_selected', 'defer_selected')
+    actions = (
+        'approve_selected', 'approve_as_separate_concept',
+        'reject_selected', 'defer_selected',
+    )
 
     fieldsets = (
         (None, {'fields': (
@@ -3506,6 +3509,144 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
 
             target.anchor_migration_completed_at = timezone.now()
             target.save(update_fields=['anchor_migration_completed_at'])
+
+            review.status = 'approved'
+            review.resolved_at = timezone.now()
+            review.resolved_by = user
+            review.proposed_concept = target
+            review.save(update_fields=[
+                'status', 'resolved_at', 'resolved_by', 'proposed_concept',
+            ])
+
+    # Flag reasons for which "approve as separate Concept" is the correct
+    # resolution. Other flag reasons (low_match_confidence, identity_title_-
+    # dissimilar, concept_id_collision, etc.) indicate the IGDB match itself
+    # is suspect, in which case creating a sibling would propagate the bad
+    # match. Staff should use the regular Approve / Reject paths there.
+    _SEPARATE_CONCEPT_TROPHY_FLAGS = frozenset({
+        'trophy_count_mismatch',
+        'platinum_status_diverged',
+        'trophy_group_count_diff',
+        'region_split_suspected_japan',
+    })
+
+    @admin.action(
+        description=(
+            'Approve as separate Concept in same family '
+            '(use when trophy lists differ but the game is the same)'
+        )
+    )
+    def approve_as_separate_concept(self, request, queryset):
+        """Resolve trophy-fingerprint-mismatch reviews by creating a sibling.
+
+        Use case: two trophy lists for what IGDB considers one game (e.g.,
+        Vita vs PS4 versions with different trophy counts). Both Concepts
+        end up in the same GameFamily because their IGDBMatches canonical-
+        resolve to the same id, but they stay as separate Concepts so
+        their ratings/comments/badges don't cross-contaminate.
+
+        The primary Concept (the one created first at concept_id =
+        str(canonical_id)) is untouched. This action creates a sibling at
+        concept_id = "{canonical_id}-N" (next free suffix), enriches it
+        against canonical IGDB data, and moves the Game in.
+
+        Gated to reviews whose flag_reasons include at least one trophy-
+        related flag, to avoid propagating a bad IGDB match via siblings.
+        """
+        approved = 0
+        errors = 0
+        wrong_flags = 0
+        for review in queryset.filter(status='pending'):
+            flags = set(review.flag_reasons or [])
+            if not (flags & self._SEPARATE_CONCEPT_TROPHY_FLAGS):
+                wrong_flags += 1
+                continue
+            try:
+                self._apply_approval_as_separate(review, request.user)
+                approved += 1
+            except Exception as exc:
+                errors += 1
+                messages.error(
+                    request,
+                    f'Approve-as-separate failed for game pk={review.game_id}: {exc}',
+                )
+        if approved:
+            messages.success(
+                request,
+                f'Created {approved} sibling Concept(s) and anchored the games.',
+            )
+        if wrong_flags:
+            messages.warning(
+                request,
+                f'Skipped {wrong_flags} review(s) without trophy-related '
+                f'flags. Approve-as-separate is for trophy-list-divergence '
+                f'cases only; use the regular Approve or Reject actions for '
+                f'identity / confidence / collision flags.',
+            )
+        non_pending = queryset.exclude(status='pending').count()
+        if non_pending:
+            messages.warning(
+                request,
+                f'Skipped {non_pending} already-resolved review(s).',
+            )
+
+    def _apply_approval_as_separate(self, review, user):
+        """Anchor the Game at a new sibling Concept in the same canonical Family.
+
+        Retries the sibling-Concept create() up to 3 times to absorb the
+        rare race where two admins approve siblings of the same canonical id
+        simultaneously. Each create() runs in its own savepoint so an
+        IntegrityError rolls back just that attempt rather than poisoning
+        the outer transaction.
+        """
+        from django.db import IntegrityError
+        from trophies.services.concept_anchor_service import (
+            allocate_sibling_concept_id,
+        )
+        from trophies.services.igdb_service import IGDBService
+
+        canonical_id = review.proposed_canonical_igdb_id
+        if not canonical_id:
+            raise ValueError('Review has no proposed canonical IGDB id')
+
+        with transaction.atomic():
+            canonical_data = IGDBService.fetch_full_game_data(canonical_id)
+            if not canonical_data:
+                raise ValueError(
+                    f'IGDB returned no data for canonical id {canonical_id}'
+                )
+
+            target = None
+            last_error = None
+            for _ in range(3):
+                sibling_id = allocate_sibling_concept_id(canonical_id)
+                try:
+                    # Nested atomic = savepoint. On IntegrityError, only this
+                    # savepoint rolls back; outer transaction stays clean so
+                    # the next loop iteration can run another ORM op.
+                    with transaction.atomic():
+                        target = Concept.objects.create(
+                            concept_id=sibling_id,
+                            unified_title=canonical_data.get('name', ''),
+                        )
+                    break
+                except IntegrityError as exc:
+                    last_error = exc
+                    continue
+            if target is None:
+                raise ValueError(
+                    f'Could not allocate sibling concept_id for {canonical_id} '
+                    f'after 3 attempts: {last_error}'
+                )
+
+            IGDBService.process_match(
+                target, canonical_data, confidence=1.0, method='manual',
+            )
+
+            target.anchor_migration_completed_at = timezone.now()
+            target.save(update_fields=['anchor_migration_completed_at'])
+
+            review.game.add_concept(target)
 
             review.status = 'approved'
             review.resolved_at = timezone.now()

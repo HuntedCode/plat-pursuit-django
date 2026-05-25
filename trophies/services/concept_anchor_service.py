@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from typing import Optional
 
 from trophies.services.igdb_service import IGDBService
@@ -448,3 +449,45 @@ def _write_sync_review(game, match, cross, extra_flags=()):
         logger.exception(
             f'_write_sync_review: failed to write review for game pk={game.pk}'
         )
+
+
+def allocate_sibling_concept_id(canonical_id) -> str:
+    """Return the next free `"{canonical_id}-N"` slot for a sibling Concept.
+
+    Sibling Concepts share a canonical IGDB id (and therefore a GameFamily)
+    but have materially different trophy contents — the case where two
+    trophy lists exist for what IGDB considers one game, and we've decided
+    to keep them in separate Concepts under the same Family.
+
+    Allocation rule:
+      * The primary Concept owns the bare-integer slot `"{canonical_id}"`.
+      * Siblings get `"{canonical_id}-2"`, `"{canonical_id}-3"`, etc.
+      * The lowest unused suffix (starting at 2) is returned.
+
+    Race window: between this query and the caller's `Concept.objects.create`,
+    another process could grab the same slot. The caller should wrap creation
+    in a retry loop that re-allocates on `IntegrityError`.
+
+    Args:
+        canonical_id: the canonical IGDB id this Family is anchored on.
+
+    Returns:
+        str: a concept_id string free at the time of this call.
+    """
+    from trophies.models import Concept
+
+    base = str(canonical_id)
+    pattern = rf'^{re.escape(base)}-\d+$'
+    used = set()
+    for cid in Concept.objects.filter(
+        concept_id__regex=pattern
+    ).values_list('concept_id', flat=True):
+        try:
+            n = int(cid.rsplit('-', 1)[-1])
+            used.add(n)
+        except (ValueError, IndexError):
+            pass
+    n = 2
+    while n in used:
+        n += 1
+    return f'{base}-{n}'
