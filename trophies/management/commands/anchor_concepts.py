@@ -454,14 +454,16 @@ class Command(BaseCommand):
 
         Returns (target_concept_or_None, collision_bool).
 
-        Concept_id allocation:
-          * If raw_igdb_id == canonical_id → primary slot `str(canonical_id)`.
-          * Otherwise → sibling slot `allocate_sibling_concept_id(canonical_id)`.
+        Concept_id naming: `concept_id = str(raw_igdb_id)` for the natural
+        slot (one Concept per IGDB version). Duplicates only when the same
+        raw needs multiple Concepts (e.g., Our World Is Ended-style: same
+        IGDB game, materially different trophy lists) — those go to
+        `allocate_sibling_concept_id(raw_igdb_id)` returning
+        `str(raw)-N` slots.
 
-        Reuses an existing Concept from `raw_map` (which already maps raw IGDB
-        ids to Concepts) when one exists for this version. Detects collisions
-        when the chosen slot is taken by a Concept in a DIFFERENT canonical
-        family — staff resolves manually.
+        Reuses existing Concept from `raw_map` when one anchors this raw.
+        Detects collisions when the slot is owned by a Concept in a
+        DIFFERENT canonical family — staff resolves manually.
 
         Returns target=None when dry-running a create.
         """
@@ -470,13 +472,9 @@ class Command(BaseCommand):
             self.targets_reused += 1
             return (raw_map[raw_igdb_id], False)
 
-        # Need to allocate. Primary slot for canonical version, sibling otherwise.
-        if raw_igdb_id == canonical_id:
-            target_concept_id = str(canonical_id)
-        else:
-            target_concept_id = allocate_sibling_concept_id(canonical_id)
+        # Natural slot for this version: concept_id directly = raw IGDB id.
+        target_concept_id = str(raw_igdb_id)
 
-        # Slot already taken?
         existing = Concept.objects.filter(concept_id=target_concept_id).first()
         if existing:
             existing_match = getattr(existing, 'igdb_match', None)
@@ -487,14 +485,11 @@ class Command(BaseCommand):
                 if existing_canonical != canonical_id:
                     # Different family owns this slot — true collision.
                     return (existing, True)
-                # Same family but different raw than we want — don't trample
-                # the existing Concept's version identity. Allocate a fresh
-                # sibling slot for our raw instead. (We'd be reachable here
-                # only if raw_map missed this raw despite the existing
-                # Concept being in the family, which means existing's match
-                # is the same family but different version — a legacy state.)
+                # Same family, but existing's raw doesn't match — would have
+                # been in raw_map otherwise. Possible legacy state. Allocate
+                # a same-raw suffix slot so we don't trample.
                 if existing_match.igdb_id != raw_igdb_id:
-                    target_concept_id = allocate_sibling_concept_id(canonical_id)
+                    target_concept_id = allocate_sibling_concept_id(raw_igdb_id)
                 else:
                     self.targets_reused += 1
                     return (existing, False)

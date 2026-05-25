@@ -3790,10 +3790,9 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                     f'IGDB returned no data for id {raw_id}'
                 )
 
-            # Check the family's raw_map first — if a sibling already exists
-            # for this raw_igdb_id (e.g., previous approve-as-separate
-            # already created one for this version), reuse it. Prevents
-            # duplicate siblings when multiple reviews share a raw id.
+            # Check the family's raw_map first — if a Concept already
+            # represents this raw_igdb_id, reuse it (prevents duplicate
+            # siblings when multiple reviews share a raw id).
             existing_target = None
             if review.proposed_raw_igdb_id:
                 raw_map = build_family_raw_igdb_map(canonical_id)
@@ -3802,10 +3801,18 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
             if existing_target is not None:
                 target = existing_target
             else:
+                # New Concept for this raw. Natural slot is str(raw_id).
+                # If the slot is taken (same family, different raw — legacy),
+                # allocate a same-raw suffix slot (str(raw)-N).
                 target = None
                 last_error = None
+                preferred_slot = str(raw_id)
+                slot_taken = Concept.objects.filter(concept_id=preferred_slot).exists()
                 for _ in range(3):
-                    sibling_id = allocate_sibling_concept_id(canonical_id)
+                    sibling_id = (
+                        allocate_sibling_concept_id(raw_id) if slot_taken
+                        else preferred_slot
+                    )
                     try:
                         with transaction.atomic():
                             target = Concept.objects.create(
@@ -3815,11 +3822,12 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                         break
                     except IntegrityError as exc:
                         last_error = exc
+                        slot_taken = True  # force suffix on retry
                         continue
                 if target is None:
                     raise ValueError(
-                        f'Could not allocate sibling concept_id for {canonical_id} '
-                        f'after 3 attempts: {last_error}'
+                        f'Could not allocate concept_id slot for raw IGDB '
+                        f'{raw_id} after 3 attempts: {last_error}'
                     )
 
             IGDBService.process_match(

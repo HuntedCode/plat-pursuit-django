@@ -177,26 +177,99 @@ class Command(BaseCommand):
         raw_id, group = next(iter(by_raw.items()))
         raw_data = group[0][1]['igdb_data']
 
-        current_match = getattr(concept, 'igdb_match', None)
-        current_id = current_match.igdb_id if current_match else None
-        if current_id == raw_id:
+        # Check if concept_id matches the intended raw_id. If not, rename
+        # by creating a Concept at the correct slot and absorbing the old.
+        # We can't simply update concept_id because it's part of the unique
+        # constraint and is FK'd by 20+ models — let Concept.absorb handle
+        # the data migration via the established pattern.
+        expected_concept_id = str(raw_id)
+        bare_concept_id = concept.concept_id
+        rename_needed = bare_concept_id != expected_concept_id
+
+        if rename_needed:
             self.stdout.write(
-                f'  {concept.concept_id!r}: already at raw IGDB '
-                f'{raw_id} — refreshing metadata anyway (clean slate)'
+                f'  {bare_concept_id!r}: RENAME → {expected_concept_id!r} '
+                f'(IGDBMatch.igdb_id should be {raw_id}, concept_id was using '
+                f'canonical-based naming)'
             )
         else:
-            self.stdout.write(
-                f'  {concept.concept_id!r}: refreshing '
-                f'IGDBMatch.igdb_id {current_id} → {raw_id}'
-            )
+            current_match = getattr(concept, 'igdb_match', None)
+            current_id = current_match.igdb_id if current_match else None
+            if current_id == raw_id:
+                self.stdout.write(
+                    f'  {bare_concept_id!r}: already at raw IGDB {raw_id} '
+                    f'— refreshing metadata anyway (clean slate)'
+                )
+            else:
+                self.stdout.write(
+                    f'  {bare_concept_id!r}: refreshing '
+                    f'IGDBMatch.igdb_id {current_id} → {raw_id}'
+                )
 
         if self.dry_run:
             return 'refreshed'
+
         with transaction.atomic():
-            IGDBService.process_match(
-                concept, raw_data, confidence=1.0, method='manual',
-            )
+            if rename_needed:
+                # Allocate Concept at correct slot. If the slot is taken by
+                # an unrelated Concept (collision), bail. If taken by a same-
+                # family Concept, use same-raw-suffix to avoid trampling.
+                target = self._rename_concept(
+                    concept, expected_concept_id, raw_data,
+                )
+                if target is None:
+                    self.stderr.write(self.style.ERROR(
+                        f'    Failed to rename {bare_concept_id!r}; left as-is'
+                    ))
+                    return 'noop'
+                # Refresh target with the raw data (process_match was called
+                # inside _rename_concept; this is the post-absorb refresh).
+                IGDBService.process_match(
+                    target, raw_data, confidence=1.0, method='manual',
+                )
+            else:
+                IGDBService.process_match(
+                    concept, raw_data, confidence=1.0, method='manual',
+                )
         return 'refreshed'
+
+    def _rename_concept(self, old_concept, new_concept_id, raw_data):
+        """Move all Games from old_concept to a Concept at new_concept_id.
+
+        Creates target if needed (with raw_data's metadata), moves games,
+        absorbs old_concept's social data via Game.add_concept's cascade,
+        which auto-deletes old_concept when its last Game leaves.
+
+        Returns the target Concept, or None on collision.
+        """
+        target = Concept.objects.filter(concept_id=new_concept_id).first()
+        if target is None:
+            target = Concept.objects.create(
+                concept_id=new_concept_id,
+                unified_title=raw_data.get('name', ''),
+            )
+            IGDBService.process_match(
+                target, raw_data, confidence=1.0, method='manual',
+            )
+            target.anchor_migration_completed_at = timezone.now()
+            target.save(update_fields=['anchor_migration_completed_at'])
+
+        # Move every Game from old → target. The last move triggers
+        # Concept.absorb + delete via add_concept's cascade.
+        for game in list(old_concept.games.all()):
+            game.add_concept(target, force=True)
+
+        # Defensive: if cascade didn't fire (we've seen this before), do it
+        # explicitly. Safe — refresh_from_db raises if old_concept is gone.
+        try:
+            stale = Concept.objects.get(pk=old_concept.pk)
+        except Concept.DoesNotExist:
+            stale = None
+        if stale and stale.games.count() == 0:
+            target.absorb(stale)
+            stale.delete()
+
+        return target
 
     def _split_multi_version(self, concept, by_raw):
         # Multiple raw IGDB ids in one Concept — needs split. Determine which
@@ -247,10 +320,13 @@ class Command(BaseCommand):
                     continue
                 target = raw_map.get(raw_id)
                 if target is None:
-                    if raw_id == canonical_id:
-                        target_concept_id = str(canonical_id)
+                    # Natural slot for this version: str(raw_id). Fall back
+                    # to same-raw-suffix if taken (rare).
+                    natural = str(raw_id)
+                    if Concept.objects.filter(concept_id=natural).exists():
+                        target_concept_id = allocate_sibling_concept_id(raw_id)
                     else:
-                        target_concept_id = allocate_sibling_concept_id(canonical_id)
+                        target_concept_id = natural
                     raw_data = group[0][1]['igdb_data']
                     target = Concept.objects.create(
                         concept_id=target_concept_id,

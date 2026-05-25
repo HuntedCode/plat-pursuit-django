@@ -604,15 +604,12 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
         target = raw_map.get(provided_igdb_id)
 
         if target is None:
-            # No Concept anchors this specific version yet. Allocate primary
-            # if it IS the canonical (raw==canonical), sibling otherwise.
-            if provided_igdb_id == resolved_canonical:
-                target_concept_id = str(resolved_canonical)
-            else:
-                target_concept_id = allocate_sibling_concept_id(resolved_canonical)
-
-            # Verify the chosen slot isn't already taken by an unrelated
-            # Concept (collision check).
+            # No Concept anchors this raw version yet. Default slot is
+            # str(provided_igdb_id) — concept_id directly maps to the IGDB
+            # version this Concept represents. Duplicates (same raw, different
+            # trophy lists — rare, e.g., Our World Is Ended) get
+            # str(provided_igdb_id)-N via allocate_sibling_concept_id.
+            target_concept_id = str(provided_igdb_id)
             existing = Concept.objects.filter(concept_id=target_concept_id).first()
             if existing:
                 existing_match = getattr(existing, 'igdb_match', None)
@@ -628,14 +625,17 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
                             f'{resolved_canonical}. Resolve manually.'
                         )
                         return result
-                # Existing concept in the right family but with mismatched raw
-                # — fall back to allocating a sibling so we don't trample the
-                # existing version's identity.
-                if existing_match and existing_match.igdb_id != provided_igdb_id:
-                    target_concept_id = allocate_sibling_concept_id(resolved_canonical)
-                    existing = None
+                    # Same family. If existing's match is for a DIFFERENT raw,
+                    # don't trample — allocate a same-raw-suffix slot for our
+                    # new Concept (the "Our World Is Ended" pattern).
+                    if existing_match.igdb_id != provided_igdb_id:
+                        target_concept_id = allocate_sibling_concept_id(provided_igdb_id)
+                        existing = None
+                    else:
+                        target = existing  # Same raw — reuse
                 else:
-                    target = existing  # Empty/match-less existing concept; reuse
+                    # Existing slot has no IGDBMatch — safe to reuse.
+                    target = existing
 
             if target is None:
                 try:
