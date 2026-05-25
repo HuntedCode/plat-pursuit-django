@@ -3755,7 +3755,7 @@ class EngineCompanyAdmin(admin.ModelAdmin):
 # real app internally — this is display-only.
 
 _IGDB_ADMIN_OBJECT_NAMES = frozenset({
-    'IGDBMatch', 'RematchSuggestion', 'ConceptSplitEvent',
+    'IGDBMatch', 'RematchSuggestion', 'ConceptSplitEvent', 'ConceptJoinReview',
     'GameFamily',
     'Company', 'ConceptCompany',
     'Franchise', 'ConceptFranchise',
