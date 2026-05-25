@@ -381,14 +381,20 @@ def _compute_stage_icon(stage):
     both qualifier types keeps its original icon. Bundles provide the icon for
     bundle-only stages (e.g. PS3-episodic-only games where no full-list concept
     is attached). Returns the icon URL string or None.
+
+    Uses `Concept.cover_url` (the shared IGDB-first chain: trusted IGDB
+    cover -> PSN MASTER, skipping `PP_*` stubs) rather than reading
+    `concept_icon_url` directly. The new IGDB-anchored concepts often have
+    no PSN MASTER URL because their identity comes from IGDB, not PSN; the
+    direct field read returned empty for them and broke this auto-fill.
     """
     first_standalone = stage.concepts.first()
     if first_standalone:
-        return first_standalone.concept_icon_url or None
+        return first_standalone.cover_url or None
     for bundle in stage.concept_bundles.order_by('sort_order', 'id'):
         first_member = bundle.concepts.first()
         if first_member:
-            return first_member.concept_icon_url or None
+            return first_member.cover_url or None
     return None
 
 
