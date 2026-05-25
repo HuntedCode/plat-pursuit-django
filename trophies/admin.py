@@ -3567,11 +3567,13 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
     def _apply_approval(self, review, user):
         """Anchor the Game at its proposed Concept.
 
-        Honors `review.proposed_concept` when set — fingerprint-aware sibling
-        routing (concept_anchor_service.build_family_fingerprint_map) may have
-        populated this with a sibling Concept rather than the canonical-id
-        primary. The legacy fallback (find/create primary at str(canonical_id))
-        applies only when proposed_concept is null.
+        Refreshes target's IGDBMatch with RAW (version-specific) IGDB data so
+        the Concept's metadata reflects the actual version it represents
+        (PS3 original Concept gets PS3 metadata, Remastered Concept gets
+        Remastered metadata). Raw IGDB id source priority:
+          1. review.proposed_raw_igdb_id (set by migration / manual-anchor)
+          2. target.igdb_match.igdb_id (already-anchored Concept)
+          3. review.proposed_canonical_igdb_id (legacy fallback)
         """
         from trophies.services.igdb_service import IGDBService
 
@@ -3581,13 +3583,9 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
 
         with transaction.atomic():
             target = review.proposed_concept
-            canonical_data = None
-            concept_id = str(canonical_id)
 
             if target is not None:
                 # Verify the proposed Concept is still in the right family.
-                # A staff member or sync could have edited it since the review
-                # was written; refuse if its IGDBMatch resolves elsewhere now.
                 match = getattr(target, 'igdb_match', None)
                 if match and match.igdb_id:
                     existing_canonical = IGDBService._resolve_canonical_igdb_id(
@@ -3600,8 +3598,8 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                             f'(resolves to {existing_canonical}). Resolve manually.'
                         )
             else:
-                # Legacy path: no proposed Concept on the review, so find or
-                # create the primary at str(canonical_id).
+                # Legacy path: derive target from canonical. Primary slot.
+                concept_id = str(canonical_id)
                 target = Concept.objects.filter(concept_id=concept_id).first()
                 if target:
                     match = getattr(target, 'igdb_match', None)
@@ -3616,29 +3614,32 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                                 f'not {canonical_id}. Manual cleanup needed before this '
                                 f'review can be approved.'
                             )
-                    # else: existing Concept has no IGDBMatch yet (rare; usually
-                    # means a partial prior migration). We refresh against
-                    # canonical below, which creates the IGDBMatch.
                 else:
-                    canonical_data = IGDBService.fetch_full_game_data(canonical_id)
-                    if not canonical_data:
+                    # Use raw if available, else canonical, for the initial create.
+                    raw_for_create = review.proposed_raw_igdb_id or canonical_id
+                    initial_data = IGDBService.fetch_full_game_data(raw_for_create)
+                    if not initial_data:
                         raise ValueError(
-                            f'IGDB returned no data for canonical id {canonical_id}; '
+                            f'IGDB returned no data for id {raw_for_create}; '
                             f'cannot anchor this Game.'
                         )
                     target = Concept.objects.create(
                         concept_id=concept_id,
-                        unified_title=canonical_data.get('name', ''),
+                        unified_title=initial_data.get('name', ''),
                     )
 
-            # Refresh target's IGDBMatch against canonical (captures media too).
-            # Idempotent — process_match update_or_creates. Reuse the fetch
-            # done above when target was newly created; otherwise fetch now.
-            if canonical_data is None:
-                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
-            if canonical_data:
+            # Determine raw IGDB id for the refresh — prefer the field, fall
+            # back to target's existing match, then to canonical.
+            target_match = getattr(target, 'igdb_match', None)
+            raw_id_for_refresh = (
+                review.proposed_raw_igdb_id
+                or (target_match.igdb_id if target_match and target_match.igdb_id else None)
+                or canonical_id
+            )
+            raw_data = IGDBService.fetch_full_game_data(raw_id_for_refresh)
+            if raw_data:
                 IGDBService.process_match(
-                    target, canonical_data, confidence=1.0, method='manual',
+                    target, raw_data, confidence=1.0, method='manual',
                 )
 
             review.game.add_concept(target, force=True)
@@ -3768,7 +3769,7 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
         """
         from django.db import IntegrityError
         from trophies.services.concept_anchor_service import (
-            allocate_sibling_concept_id,
+            allocate_sibling_concept_id, build_family_raw_igdb_map,
         )
         from trophies.services.igdb_service import IGDBService
 
@@ -3779,37 +3780,50 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
         bulk_resolved_pks = set()
 
         with transaction.atomic():
-            canonical_data = IGDBService.fetch_full_game_data(canonical_id)
-            if not canonical_data:
+            # Use RAW (version-specific) IGDB data so this sibling represents
+            # the actual version of the game. Fall back to canonical for
+            # legacy reviews that pre-date the proposed_raw_igdb_id field.
+            raw_id = review.proposed_raw_igdb_id or canonical_id
+            raw_data = IGDBService.fetch_full_game_data(raw_id)
+            if not raw_data:
                 raise ValueError(
-                    f'IGDB returned no data for canonical id {canonical_id}'
+                    f'IGDB returned no data for id {raw_id}'
                 )
 
-            target = None
-            last_error = None
-            for _ in range(3):
-                sibling_id = allocate_sibling_concept_id(canonical_id)
-                try:
-                    # Nested atomic = savepoint. On IntegrityError, only this
-                    # savepoint rolls back; outer transaction stays clean so
-                    # the next loop iteration can run another ORM op.
-                    with transaction.atomic():
-                        target = Concept.objects.create(
-                            concept_id=sibling_id,
-                            unified_title=canonical_data.get('name', ''),
-                        )
-                    break
-                except IntegrityError as exc:
-                    last_error = exc
-                    continue
-            if target is None:
-                raise ValueError(
-                    f'Could not allocate sibling concept_id for {canonical_id} '
-                    f'after 3 attempts: {last_error}'
-                )
+            # Check the family's raw_map first — if a sibling already exists
+            # for this raw_igdb_id (e.g., previous approve-as-separate
+            # already created one for this version), reuse it. Prevents
+            # duplicate siblings when multiple reviews share a raw id.
+            existing_target = None
+            if review.proposed_raw_igdb_id:
+                raw_map = build_family_raw_igdb_map(canonical_id)
+                existing_target = raw_map.get(review.proposed_raw_igdb_id)
+
+            if existing_target is not None:
+                target = existing_target
+            else:
+                target = None
+                last_error = None
+                for _ in range(3):
+                    sibling_id = allocate_sibling_concept_id(canonical_id)
+                    try:
+                        with transaction.atomic():
+                            target = Concept.objects.create(
+                                concept_id=sibling_id,
+                                unified_title=raw_data.get('name', ''),
+                            )
+                        break
+                    except IntegrityError as exc:
+                        last_error = exc
+                        continue
+                if target is None:
+                    raise ValueError(
+                        f'Could not allocate sibling concept_id for {canonical_id} '
+                        f'after 3 attempts: {last_error}'
+                    )
 
             IGDBService.process_match(
-                target, canonical_data, confidence=1.0, method='manual',
+                target, raw_data, confidence=1.0, method='manual',
             )
 
             target.anchor_migration_completed_at = timezone.now()

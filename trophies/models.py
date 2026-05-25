@@ -5591,7 +5591,24 @@ class ConceptJoinReview(models.Model):
     )
     proposed_canonical_igdb_id = models.IntegerField(
         db_index=True,
-        help_text='Canonical IGDB id the matcher resolved for this Game.',
+        help_text=(
+            'Canonical IGDB id of the GameFamily this Game would land in. '
+            'Different from `proposed_raw_igdb_id` — canonical is the FAMILY '
+            'anchor (one canonical per family); raw is the SPECIFIC IGDB '
+            'version (one per Concept within the family).'
+        ),
+    )
+    proposed_raw_igdb_id = models.IntegerField(
+        null=True, blank=True, db_index=True,
+        help_text=(
+            'Raw IGDB id of the specific version this Game represents (e.g. '
+            'PS3 original = 1009, Remastered PS4 = 5328, Part I PS5 = 220104, '
+            'all within the canonical=1009 family). Used by admin approve '
+            'actions to anchor the Game at the right per-version Concept '
+            'with version-specific metadata. Nullable for legacy reviews '
+            'created before this field was added — admin actions fall back '
+            'to proposed_canonical_igdb_id when null.'
+        ),
     )
     proposed_concept = models.ForeignKey(
         Concept, on_delete=models.SET_NULL, null=True, blank=True,
