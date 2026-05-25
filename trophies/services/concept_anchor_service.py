@@ -53,6 +53,13 @@ _PSN_PLATFORM_TO_IGDB = {
     'PSVR': IGDB_PSVR_PLATFORM_ID, 'PSVR2': IGDB_PSVR2_PLATFORM_ID,
 }
 
+# Modern-first priority for picking the Game's "representative" platform when
+# the title is on multiple. Used by the platform-aware release-date check so
+# we compare against IGDB's date for the actual platform PSN is reporting,
+# not IGDB's global earliest (which can be a 12-years-prior original release
+# on a different platform — Red Dead Revolver PS2 vs. PS4 re-release).
+_PLATFORM_PRIORITY = ('PS5', 'PS4', 'PS3', 'PSVITA', 'PSP', 'PS2', 'PS1')
+
 # Reverse map: IGDB id -> its VR-host implication when present.
 _VR_TO_HOST = {
     IGDB_PSVR_PLATFORM_ID: 48,    # PSVR implies PS4
@@ -172,6 +179,60 @@ def _psn_platforms_to_igdb(psn_platforms) -> set:
     }
 
 
+def _igdb_year_for_game_platforms(game, igdb_data) -> Optional[int]:
+    """Pick the IGDB release year that best represents the Game's PSN platform.
+
+    Walks the Game's `title_platform` list in modern-first priority order and
+    returns the IGDB release year for the first platform that has both:
+      * a PSN→IGDB mapping
+      * a matching `release_dates` entry in the IGDB payload
+
+    Returns None when there's no overlap — caller should treat that as "no
+    date signal" rather than flagging. This prevents false-positive
+    release_date_gap_excessive flags for re-releases on newer platforms
+    where IGDB has multi-platform release_dates and PSN reports the newer.
+
+    Multiple region/status entries for the same platform are collapsed to
+    the earliest date for that platform (release_dates can carry alpha,
+    beta, region-specific stages — we want the platform's "earliest known
+    actual release").
+    """
+    from datetime import datetime, timezone as dt_tz
+
+    game_platforms = set(game.title_platform or [])
+    if not game_platforms:
+        return None
+
+    # Build IGDB platform_id -> earliest_date_ts map from release_dates.
+    by_plat: dict = {}
+    for entry in igdb_data.get('release_dates', []) or []:
+        if not isinstance(entry, dict):
+            continue
+        plat = entry.get('platform')
+        date = entry.get('date')
+        if not plat or not date:
+            continue
+        if plat not in by_plat or date < by_plat[plat]:
+            by_plat[plat] = date
+
+    if not by_plat:
+        return None
+
+    for psn_p in _PLATFORM_PRIORITY:
+        if psn_p not in game_platforms:
+            continue
+        igdb_plat_id = _PSN_PLATFORM_TO_IGDB.get(psn_p)
+        if not igdb_plat_id:
+            continue
+        ts = by_plat.get(igdb_plat_id)
+        if ts:
+            try:
+                return datetime.fromtimestamp(ts, tz=dt_tz.utc).year
+            except (ValueError, OSError):
+                pass
+    return None
+
+
 def identity_cross_check(
     game,
     igdb_data: dict,
@@ -244,6 +305,12 @@ def identity_cross_check(
     # Release-year proximity. Concept-level signal because Game itself
     # doesn't carry a release date. The Concept may be wrong here (that's
     # why we're migrating) so this is a soft check, not a hard filter.
+    #
+    # Platform-aware: we look up IGDB's release date for the Game's most
+    # modern PSN platform, not IGDB's global earliest. Without this, a
+    # PS4 re-release of an old game (Red Dead Revolver: PS2 2004 / PS4
+    # 2016) flags excessively against IGDB's 2004 PS2 date when PSN's
+    # date is 2016.
     release_year_gap = None
     try:
         concept_year = (
@@ -253,14 +320,7 @@ def identity_cross_check(
         )
     except AttributeError:
         concept_year = None
-    igdb_ts = igdb_data.get('first_release_date')
-    igdb_year = None
-    if isinstance(igdb_ts, (int, float)) and igdb_ts:
-        try:
-            from datetime import datetime, timezone as dt_tz
-            igdb_year = datetime.fromtimestamp(igdb_ts, tz=dt_tz.utc).year
-        except (ValueError, OSError):
-            igdb_year = None
+    igdb_year = _igdb_year_for_game_platforms(game, igdb_data)
     if concept_year and igdb_year:
         release_year_gap = abs(concept_year - igdb_year)
         if release_year_gap > RELEASE_DATE_PROXIMITY_FLAG_YEARS:
