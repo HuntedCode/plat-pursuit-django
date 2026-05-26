@@ -89,6 +89,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
         self.api_delay = options['api_delay']
+        # Django's --verbosity (0..3). 1 is the default, 2+ unlocks per-game
+        # match tracing and decision rationale via self._vlog.
+        self.verbosity = int(options.get('verbosity', 1))
 
         # Counters
         self.batches_processed = 0
@@ -182,6 +185,15 @@ class Command(BaseCommand):
     # Per-Concept logic
     # ------------------------------------------------------------------
 
+    def _vlog(self, message, level=2):
+        """Write a verbose-only line, gated on --verbosity.
+
+        level=2 is the standard "diagnostic" tier. level=3 reserved for
+        chatty per-row data we don't want on by default at -v 2.
+        """
+        if self.verbosity >= level:
+            self.stdout.write(message)
+
     def _process_concept(self, source_concept):
         self.concepts_processed += 1
 
@@ -207,7 +219,13 @@ class Command(BaseCommand):
                 source_concept.save(update_fields=['anchor_migration_completed_at'])
             return
 
-        # Match every Game in the source concept.
+        ctx = f'{source_concept.concept_id!r} ({n_games} game(s))'
+
+        # Match every Game in the source concept. Decisions are strictly
+        # per-game — the source concept's existing IGDBMatch is NOT used as
+        # an input; it was the old PSN-concept-as-a-unit model. Each game
+        # determines its own destination concept based solely on its own
+        # IGDB match.
         proposals = []
         for game in games:
             match_result = self._safe_match_game(game)
@@ -218,8 +236,22 @@ class Command(BaseCommand):
                     confidence=match_result['confidence'],
                     trophy_group_title=match_result['trophy_group_title'],
                 )
+                igdb_name = match_result.get('igdb_data', {}).get('name', '')
+                self._vlog(
+                    f'    pk={game.pk} "{game.title_name}" -> '
+                    f'IGDB {match_result["raw_igdb_id"]} "{igdb_name}" '
+                    f'(canonical={match_result["canonical_igdb_id"]}, '
+                    f'conf={match_result["confidence"]:.2f})'
+                )
+                if cross and cross.get('flag_reasons'):
+                    self._vlog(
+                        f'      cross-check flags: {", ".join(cross["flag_reasons"])}'
+                    )
             else:
                 cross = None
+                self._vlog(
+                    f'    pk={game.pk} "{game.title_name}" -> NO_MATCH'
+                )
             proposals.append({
                 'game': game,
                 'match': match_result,
@@ -233,8 +265,6 @@ class Command(BaseCommand):
             by_canonical[cid].append(p)
 
         matched_groups = {k: v for k, v in by_canonical.items() if k is not None}
-
-        ctx = f'{source_concept.concept_id!r} ({n_games} game(s))'
 
         # Case 1: source's Games split across multiple canonical ids → review.
         if len(matched_groups) > 1:
