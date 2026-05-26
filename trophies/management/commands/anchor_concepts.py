@@ -89,9 +89,13 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
         self.api_delay = options['api_delay']
-        # Django's --verbosity (0..3). 1 is the default, 2+ unlocks per-game
-        # match tracing and decision rationale via self._vlog.
+        # Django's --verbosity (0..3). 1 is the default, 2 unlocks per-game
+        # match tracing via self._vlog, 3 also flips IGDBService._debug_scoring
+        # which dumps full per-candidate scoring breakdowns (platform skips,
+        # title ratios, modifiers) directly to stdout from inside the matcher.
         self.verbosity = int(options.get('verbosity', 1))
+        if self.verbosity >= 3:
+            IGDBService._debug_scoring = True
 
         # Counters
         self.batches_processed = 0
@@ -237,8 +241,10 @@ class Command(BaseCommand):
                     trophy_group_title=match_result['trophy_group_title'],
                 )
                 igdb_name = match_result.get('igdb_data', {}).get('name', '')
+                trophy_group_title = match_result.get('trophy_group_title') or ''
                 self._vlog(
-                    f'    pk={game.pk} "{game.title_name}" -> '
+                    f'    pk={game.pk} "{game.title_name}" '
+                    f'(trophy_group="{trophy_group_title}") -> '
                     f'IGDB {match_result["raw_igdb_id"]} "{igdb_name}" '
                     f'(canonical={match_result["canonical_igdb_id"]}, '
                     f'conf={match_result["confidence"]:.2f})'
@@ -249,8 +255,14 @@ class Command(BaseCommand):
                     )
             else:
                 cross = None
+                # For NO_MATCH, surface the trophy-group title that match_game
+                # would have used so we can see whether the search input is
+                # the real-game name (matcher problem) or some stylized
+                # PSN-only title that doesn't exist on IGDB (data problem).
+                trophy_group_title = IGDBService._extract_trophy_group_title(game)
                 self._vlog(
-                    f'    pk={game.pk} "{game.title_name}" -> NO_MATCH'
+                    f'    pk={game.pk} "{game.title_name}" '
+                    f'(trophy_group="{trophy_group_title}") -> NO_MATCH'
                 )
             proposals.append({
                 'game': game,
