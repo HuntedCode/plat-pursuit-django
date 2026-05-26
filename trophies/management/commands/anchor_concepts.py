@@ -331,6 +331,7 @@ class Command(BaseCommand):
         per_game_lines = []
         any_collision = False
         target_concept_id = None  # for summary line
+        target_name = ''  # for summary line (IGDB name of the destination)
 
         for raw_igdb_id, subgroup in by_raw.items():
             raw_data = subgroup[0]['match']['igdb_data']
@@ -417,13 +418,17 @@ class Command(BaseCommand):
                 target.anchor_migration_completed_at = timezone.now()
                 target.save(update_fields=['anchor_migration_completed_at'])
 
-            # Record a target_concept_id for the summary line. When multiple
-            # versions are anchored from one source, summary will show the
-            # breakdown in moves_by_destination anyway.
+            # Record a target_concept_id + name for the summary line. When
+            # multiple versions are anchored from one source, the summary
+            # shows the breakdown in moves_by_destination anyway. The name
+            # falls back to the IGDB raw_data when the target Concept hasn't
+            # been created yet (dry-run mode).
             if target is not None:
                 target_concept_id = target.concept_id
+                target_name = target.unified_title or (raw_data.get('name', '') if raw_data else '')
             elif target_concept_id is None:
                 target_concept_id = str(canonical_id)
+                target_name = raw_data.get('name', '') if raw_data else ''
 
         if any_collision:
             self.concepts_deferred_collision += 1
@@ -451,14 +456,15 @@ class Command(BaseCommand):
         summary = ', '.join(summary_parts) or 'no changes'
 
         prefix = '[DRY] Would anchor' if self.dry_run else 'Anchored'
+        name_suffix = f' "{target_name}"' if target_name else ''
         if anchored_a_game:
             self.stdout.write(
-                f'  {prefix} {ctx} → {target_concept_id!r}: {summary}'
+                f'  {prefix} {ctx} → {target_concept_id!r}{name_suffix}: {summary}'
             )
         elif new_review_count or preserved_review_count:
             self.stdout.write(
                 f'  {ctx}: no clean anchor; {summary} '
-                f'(target {target_concept_id!r} not anchored)'
+                f'(target {target_concept_id!r}{name_suffix} not anchored)'
             )
         for line in per_game_lines:
             self.stdout.write(line)
