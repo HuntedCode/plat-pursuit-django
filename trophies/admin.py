@@ -1237,14 +1237,19 @@ class StageAdmin(admin.ModelAdmin):
         'required_tiers', 'has_online_trophies',
     )
     list_filter = ('series_slug', 'stage_number', 'has_online_trophies')
-    search_fields = ('title', 'series_slug', 'concepts__concept_id', 'concept_bundles__concepts__concept_id')
+    search_fields = (
+        'title', 'series_slug',
+        'concepts__concept_id', 'concepts__unified_title',
+        'concept_bundles__concepts__concept_id',
+        'concept_bundles__concepts__unified_title',
+    )
     autocomplete_fields = ['concepts']
     inlines = [ConceptBundleInline]
 
-    # Cap how many concept_ids we list per column on the changelist; rows
+    # Cap how many concepts we list per column on the changelist; rows
     # with more than this many qualifiers show "+N more" to keep the cell
     # scannable. The full list is always visible on the Stage's detail page.
-    _LIST_CONCEPT_LIMIT = 8
+    _LIST_CONCEPT_LIMIT = 6
 
     def get_queryset(self, request):
         # Prefetch both qualifier paths so concepts_display / bundle_concepts_display
@@ -1255,14 +1260,20 @@ class StageAdmin(admin.ModelAdmin):
             'concept_bundles__concepts',
         )
 
+    @staticmethod
+    def _format_concept(concept):
+        """Render one Concept as "Title (concept_id)" for changelist columns."""
+        title = concept.unified_title or '(no title)'
+        return f'{title} ({concept.concept_id})'
+
     def _format_concept_list(self, concepts):
-        ids = [c.concept_id for c in concepts]
-        if not ids:
+        formatted = [self._format_concept(c) for c in concepts]
+        if not formatted:
             return '—'
-        if len(ids) <= self._LIST_CONCEPT_LIMIT:
-            return ', '.join(ids)
-        shown = ', '.join(ids[:self._LIST_CONCEPT_LIMIT])
-        return f'{shown}, +{len(ids) - self._LIST_CONCEPT_LIMIT} more'
+        if len(formatted) <= self._LIST_CONCEPT_LIMIT:
+            return ', '.join(formatted)
+        shown = ', '.join(formatted[:self._LIST_CONCEPT_LIMIT])
+        return f'{shown}, +{len(formatted) - self._LIST_CONCEPT_LIMIT} more'
 
     def concepts_display(self, obj):
         """Standalone qualifier Concepts (Stage.concepts M2M)."""
@@ -1273,7 +1284,7 @@ class StageAdmin(admin.ModelAdmin):
         """Concepts inside this Stage's ConceptBundles.
 
         Bundle members are grouped per-bundle so the qualifier shape stays
-        legible — e.g. "[Ep 1: 100, 101] [Ep 2: 200, 201]" rather than a
+        legible — e.g. "[Ep 1: Title (100), Title2 (101)]" rather than a
         flat undifferentiated list.
         """
         bundles = list(obj.concept_bundles.all())
@@ -1281,16 +1292,18 @@ class StageAdmin(admin.ModelAdmin):
             return '—'
         parts = []
         for bundle in bundles:
-            ids = [c.concept_id for c in bundle.concepts.all()]
+            formatted = [
+                self._format_concept(c) for c in bundle.concepts.all()
+            ]
             label = bundle.label or f'#{bundle.pk}'
-            if not ids:
+            if not formatted:
                 parts.append(f'[{label}: (empty)]')
-            elif len(ids) <= self._LIST_CONCEPT_LIMIT:
-                parts.append(f'[{label}: {", ".join(ids)}]')
+            elif len(formatted) <= self._LIST_CONCEPT_LIMIT:
+                parts.append(f'[{label}: {", ".join(formatted)}]')
             else:
-                shown = ', '.join(ids[:self._LIST_CONCEPT_LIMIT])
+                shown = ', '.join(formatted[:self._LIST_CONCEPT_LIMIT])
                 parts.append(
-                    f'[{label}: {shown}, +{len(ids) - self._LIST_CONCEPT_LIMIT} more]'
+                    f'[{label}: {shown}, +{len(formatted) - self._LIST_CONCEPT_LIMIT} more]'
                 )
         return ' '.join(parts)
     bundle_concepts_display.short_description = 'Bundle Concepts'
