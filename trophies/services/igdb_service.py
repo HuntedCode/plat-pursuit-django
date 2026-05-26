@@ -207,6 +207,31 @@ _DLC_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
+# PSN trophy-group titles often append noise to the actual game name. The
+# default group's `trophy_group_name` is the canonical IGDB search signal
+# (PSN-immutable, region-stable), but PSN's naming conventions add
+# patterns that DON'T appear on IGDB:
+#   "<Game> Trophies"         -> "<Game>"   (most common — verified live
+#                                            on Assassin's Creed Chronicles:
+#                                            Trilogy Pack 2026-05)
+#   "<Game> Trophy"           -> "<Game>"
+#   "<Game> Trophy List"      -> "<Game>"
+#   "<Game> Trophy Set"       -> "<Game>"
+#   "<Game> Trophy Collection"-> "<Game>"
+#   "Trophies for <Game>"     -> "<Game>"
+#   "Trophy for <Game>"       -> "<Game>"
+# Applied AFTER lowercase in `_clean_title_for_search` so the regexes
+# don't need re.IGNORECASE. The more-specific "trophy list/set/collection"
+# alternative is listed first so the leftmost-first regex engine doesn't
+# match just "trophy" and leave " list" dangling. The suffix and prefix
+# are mutually exclusive in practice but applied independently for safety.
+_TROPHY_GROUP_NOISE_SUFFIX_RE = re.compile(
+    r'\s+(?:trophy\s+(?:list|set|collection)|trophies|trophy)\s*$'
+)
+_TROPHY_GROUP_NOISE_PREFIX_RE = re.compile(
+    r'^(?:trophies|trophy)\s+for\s+'
+)
+
 
 class IGDBService:
     """Service for matching PlatPursuit Concepts to IGDB game entries
@@ -1306,14 +1331,15 @@ class IGDBService:
                         print(f'    [{igdb_name}] {" | ".join(steps)} | REJECTED fuzzy_name (ratio<0.80, not contained)')
                     return 0.0
 
-            # Boost main games over DLC/bundles/skins when names are similar
-            category = cls._extract_game_category(igdb_game) or 0
-            if category == 0 and is_contained:
-                base += 0.10
-                if debug:
-                    steps.append(f'+0.10 main-game boost (category=0, contained)')
-            elif debug:
-                steps.append(f'skip main-game boost (category={category}, contained={is_contained})')
+            # NOTE: a +0.10 main-game boost (category=0 AND is_contained) used
+            # to live here. Removed 2026-05 because per-game anchoring legitimately
+            # needs to land on Ports (11), Remakes (8), Remasters (9), Bundles
+            # (3), Packs (13), Standalone Expansions (4), and Expanded Games
+            # (10) — the boost biased every "Tomb Raider Anniversary PS5 Port"
+            # vs "Tomb Raider I" race toward the original main game when the
+            # caller actually wanted the port. DLC / addons (1,2,5,7,14) stay
+            # penalized via the addon penalty below, so DLC -vs- main races
+            # still resolve in favour of the main game.
 
         # Modifier: release year proximity. Boost when PSN's console
         # release year is within ±1 of ANY IGDB PS-platform release year.
@@ -1689,6 +1715,18 @@ class IGDBService:
         text = cls._BRAND_PREFIX_RE.sub('', text)
         # Lowercase: IGDB search handles all-caps poorly
         text = text.lower()
+        # Strip PSN trophy-group-title noise patterns that aren't part of
+        # the actual game name (e.g. PSN names the default group
+        # "<Game> Trophies" or "Trophies for <Game>" — neither variant
+        # appears on IGDB, so leaving them in tanks the search recall).
+        # Applied after lowercase so the regexes don't need IGNORECASE.
+        # Guarded against producing an empty string: if stripping would
+        # leave nothing useful, skip the strip (the original cleaned
+        # title is a better search input than empty).
+        stripped = cls._TROPHY_GROUP_NOISE_SUFFIX_RE.sub('', text)
+        stripped = cls._TROPHY_GROUP_NOISE_PREFIX_RE.sub('', stripped)
+        if stripped.strip():
+            text = stripped
         # Collapse whitespace
         text = re.sub(r'\s+', ' ', text).strip()
         return text
