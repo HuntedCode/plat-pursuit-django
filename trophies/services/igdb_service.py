@@ -1723,8 +1723,8 @@ class IGDBService:
         # Guarded against producing an empty string: if stripping would
         # leave nothing useful, skip the strip (the original cleaned
         # title is a better search input than empty).
-        stripped = cls._TROPHY_GROUP_NOISE_SUFFIX_RE.sub('', text)
-        stripped = cls._TROPHY_GROUP_NOISE_PREFIX_RE.sub('', stripped)
+        stripped = _TROPHY_GROUP_NOISE_SUFFIX_RE.sub('', text)
+        stripped = _TROPHY_GROUP_NOISE_PREFIX_RE.sub('', stripped)
         if stripped.strip():
             text = stripped
         # Collapse whitespace
