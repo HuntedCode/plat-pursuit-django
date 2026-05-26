@@ -561,6 +561,27 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 bundle_map[bundle.id] = member_map
             stage_bundle_games_map[stage.id] = bundle_map
 
+        # Static per-concept fact: does this bundle-member concept have a real
+        # platinum trophy available? Drives the "earn the platinum" wording on
+        # plat-tier badge views for ESO-style bundles. Bundles whose members
+        # have no platinum trophies (BttF-style) fall back to the synth-plat
+        # messaging.
+        bundle_member_concept_ids = {
+            cid
+            for bundles_for_stage in stage_bundle_games_map.values()
+            for member_map in bundles_for_stage.values()
+            for cid in member_map.keys()
+        }
+        concepts_with_real_plat = set()
+        if bundle_member_concept_ids:
+            from trophies.models import Trophy
+            concepts_with_real_plat = set(
+                Trophy.objects
+                .filter(trophy_type='platinum', game__concept_id__in=bundle_member_concept_ids)
+                .values_list('game__concept_id', flat=True)
+                .distinct()
+            )
+
         # Single bulk ProfileGame query instead of one per stage
         profile_games = {}
         if target_profile and all_games_set:
@@ -596,13 +617,16 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             )
 
             # Bundle qualifiers: each renders as a single row showing aggregate
-            # progress across all member concepts. The bundle is "complete" (and
-            # synthesizes a platinum for tier evaluation) when every member has
-            # at least one game at progress=100. Members sort by release_date
-            # (nulls last, title tiebreaker) so episodic chapters appear in
-            # natural release order.
+            # progress across all member concepts. Two satisfaction paths:
+            #   - Real platinum on any member (plat-check tiers 1/3 only): models
+            #     ESO-style bundles where one member carries the platinum trophy.
+            #   - Synthesized platinum (every member at progress=100): models
+            #     BttF-style bundles where no member has a platinum trophy.
+            # Members sort by release_date (nulls last, title tiebreaker) so
+            # episodic chapters appear in natural release order.
             bundles = []
             bundle_games_for_stage = stage_bundle_games_map.get(stage.id, {})
+            is_plat_tier = selected_tier in [1, 3] or badge.badge_type == 'megamix'
             for bundle in stage.concept_bundles.all():
                 member_games_by_concept = bundle_games_for_stage.get(bundle.id, {})
                 sorted_members = sorted(
@@ -614,6 +638,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     ),
                 )
                 members = []
+                any_member_platted = False
                 for concept in sorted_members:
                     concept_games = member_games_by_concept.get(concept.id, [])
                     member_game_entries = [_build_game_entry(g, community_ratings) for g in concept_games]
@@ -621,6 +646,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                         e['profile_game'] and e['profile_game'].progress == 100
                         for e in member_game_entries
                     )
+                    has_platted = any(
+                        e['profile_game'] and e['profile_game'].has_plat
+                        for e in member_game_entries
+                    )
+                    if has_platted:
+                        any_member_platted = True
                     members.append({
                         'concept': concept,
                         'games': member_game_entries,
@@ -628,11 +659,24 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                     })
                 completed_members = sum(1 for m in members if m['is_fully_earned'])
                 total_members = len(members)
+                all_members_100 = total_members > 0 and completed_members == total_members
+                has_real_plat = any(
+                    m['concept'].id in concepts_with_real_plat for m in members
+                )
+                # Tier-aware satisfaction: plat-check tiers accept either path,
+                # progress-check tiers only accept the synth path.
+                if is_plat_tier:
+                    is_satisfied = any_member_platted or all_members_100
+                else:
+                    is_satisfied = all_members_100
                 bundles.append({
                     'bundle': bundle,
                     'label': bundle.label,
                     'members': members,
-                    'is_complete': total_members > 0 and completed_members == total_members,
+                    'is_satisfied': is_satisfied,
+                    'all_members_100': all_members_100,
+                    'any_member_platted': any_member_platted,
+                    'has_real_plat': has_real_plat,
                     'completed_members': completed_members,
                     'total_members': total_members,
                 })
@@ -748,7 +792,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
                 standalone_req_met = has_any_plat if is_plat_tier else has_any_100
                 # Bundle path: any bundle whose every member is at progress=100
                 # synthesizes a platinum (counts for both plat-tier and 100%-tier).
-                bundle_req_met = any(b['is_complete'] for b in data['bundles'])
+                bundle_req_met = any(b['is_satisfied'] for b in data['bundles'])
                 if standalone_req_met or bundle_req_met:
                     data['stage_completion_state'] = 'complete'
                 elif stage_played > 0:

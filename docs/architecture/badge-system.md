@@ -105,7 +105,16 @@ A grouped set of Concepts that act as a single qualifier on a Stage. Models epis
 - `concepts`: M2M to Concept. Members of the bundle.
 - `sort_order`: Display order within the Stage.
 
-**Satisfaction rule:** the bundle is "complete" when every member Concept has at least one ProfileGame at `progress=100` for the profile. That synthesized completion counts as BOTH the plat-check (tiers 1/3) and the progress-check (tiers 2/4) — a fully cleared bundle behaves like a platinum for stage tier evaluation, which is the whole point of the abstraction.
+**Satisfaction rules.** Two paths, auto-detected from member trophy data:
+
+1. **Real platinum on any member** (plat-check tiers 1/3 + megamix only). Models the Elder Scrolls Online case: a bundle holds the PS4 base trophy list (which has a real platinum) plus an "additional trophies" list (no platinum). Earning the base platinum satisfies Bronze/Gold without requiring 100% on the additional list.
+
+2. **Synthesized platinum**: every member at `progress=100`. Always available; counts as both the plat-check (tiers 1/3) and the progress-check (tiers 2/4). Models the Telltale BttF case where no member has a real platinum trophy — clearing all chapters synthesizes a platinum.
+
+For plat-check tiers (1/3): bundle is satisfied if EITHER path holds.
+For progress-check tiers (2/4): bundle is satisfied only via the synthesized path (every member at 100%).
+
+Auto-detection works because the "real platinum" path keys off `ProfileGame.has_plat` for any member concept. BttF chapters have no platinum trophy in their data, so `has_plat=True` is never possible for them and the real-plat path simply doesn't trigger — no admin flag needed. ESO base concept has a platinum trophy, so platting it surfaces immediately.
 
 **Membership exclusivity:** a Concept must not appear both in `Stage.concepts` and in a `ConceptBundle.concepts` on the same Stage. Admin (`StageAdminForm.clean_concepts` and `ConceptBundleInlineFormSet.clean`) enforces this in both directions. A Concept may be a bundle member on Stage A and a standalone on Stage B — the constraint is per-Stage only.
 
@@ -195,7 +204,8 @@ The primary evaluation path runs during PSN sync completion:
    - A `badges_by_key` dict keyed by `(series_slug, tier)` for prerequisite lookups.
    - All stage data: `series_slug -> [(stage_number, required_tiers, game_ids, bundles)]` where `bundles` is a list of `(bundle_id, frozenset[member_concept_id])` tuples.
    - Sets of `plat_game_ids` and `complete_game_ids` for the profile (for standalone qualifier checks).
-   - `fully_earned_concept_ids`: set of concept IDs where any of the concept's games is at `progress=100` for this profile, scoped to bundle members only (used to evaluate ConceptBundle satisfaction).
+   - `fully_earned_concept_ids`: set of bundle-member concept IDs where any of the concept's games is at `progress=100` for this profile (synthesized-plat path).
+   - `platted_concept_ids`: set of bundle-member concept IDs where any of the concept's games has `has_plat=True` for this profile (real-plat path; plat-check tiers only).
 
    This context turns what would be O(2B) queries (2 per badge for stage completion + profile game checks) into O(0) during iteration.
 
@@ -343,8 +353,8 @@ When a Concept is reassigned (and the old one orphaned), `absorb()` migrates dat
 ### ConceptBundle membership is scoped per-Stage, not global
 A Concept can be a bundle member on Stage A AND a standalone qualifier on Stage B without conflict — the exclusivity rule only applies within a single Stage. Admin validation in `StageAdminForm` and `ConceptBundleInlineFormSet` enforces the per-Stage rule. If you bypass admin (e.g. via shell or a data migration), nothing stops you from putting the same concept both in `Stage.concepts` and a bundle on the same Stage; the eval logic is still correct (satisfying either path satisfies the stage, both are idempotent), but it's confusing UX.
 
-### Bundle satisfaction always uses progress=100, regardless of tier
-The bundle's satisfaction check is fixed to `every member at progress=100`. It does NOT use `has_plat=True` for plat-check tiers, because bundle members typically have no platinum trophy at all (that's the whole reason bundles exist). A fully cleared bundle is treated as both a synthesized platinum (for tier 1/3 evaluation) and as 100% complete (for tier 2/4 evaluation). This is by design; do not "fix" the bundle path to follow `is_plat_check`.
+### Bundle satisfaction has two paths and the tier matters
+Plat-check tiers (1/3, megamix) accept EITHER (a) any member at `has_plat=True` (real platinum earned), OR (b) every member at `progress=100` (synthesized platinum). Progress-check tiers (2/4) accept only the synthesized path. The two paths are evaluated independently; either one alone is enough to satisfy a plat-check tier. Do not collapse them or restrict the synthesized path to bundles where no member has a platinum trophy — both paths must remain available so a power user who 100%s every member of an ESO-style bundle gets credit even if for some reason they skipped the base list's platinum.
 
 ### Series slug is a string match, not a FK
 Stages link to badges via `series_slug` string matching, not a foreign key. This means orphan stages (with a slug that no Badge uses) and orphan badges (with a slug that no Stage references) are possible. The `update_badge_requirements` command reconciles these but it must be run manually after structural changes.

@@ -1805,9 +1805,8 @@ class Badge(models.Model):
             ).filter(condition).values_list('game_id', flat=True)
         ) if all_game_ids else set()
 
-        # Fetch fully-earned concept ids (for bundle satisfaction). A bundle is
-        # satisfied when every member concept has at least one game at progress=100;
-        # that synthesized completion counts for both plat-check and progress-check.
+        # Fetch fully-earned concept ids (synthesized-plat path). A bundle's
+        # synthesized completion counts for both plat-check and progress-check.
         fully_earned_concept_ids = set(
             ProfileGame.objects
             .filter(profile=profile, progress=100, game__concept_id__in=bundle_concept_ids)
@@ -1815,15 +1814,30 @@ class Badge(models.Model):
             .distinct()
         ) if bundle_concept_ids else set()
 
+        # Fetch platted concept ids (real-plat path, plat-check tiers only). A
+        # bundle whose member has a real platinum the user has earned satisfies
+        # plat-check tiers without requiring every member at 100%.
+        platted_concept_ids = set(
+            ProfileGame.objects
+            .filter(profile=profile, has_plat=True, game__concept_id__in=bundle_concept_ids)
+            .values_list('game__concept_id', flat=True)
+            .distinct()
+        ) if (bundle_concept_ids and is_plat_check) else set()
+
         completion = {}
         for stage_number, game_ids in stage_games.items():
             bundles = stage_bundles.get(stage_number, [])
             if not game_ids and not bundles:
                 continue
             standalone_satisfied = bool(completed_game_ids & game_ids) if game_ids else False
-            bundle_satisfied = any(
-                member_ids.issubset(fully_earned_concept_ids) for member_ids in bundles
-            ) if bundles else False
+            bundle_satisfied = False
+            for member_ids in bundles:
+                if is_plat_check and (member_ids & platted_concept_ids):
+                    bundle_satisfied = True
+                    break
+                if member_ids.issubset(fully_earned_concept_ids):
+                    bundle_satisfied = True
+                    break
             completion[stage_number] = standalone_satisfied or bundle_satisfied
         return completion
 

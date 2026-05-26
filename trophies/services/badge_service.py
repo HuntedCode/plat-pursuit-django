@@ -89,9 +89,14 @@ def _build_badge_context(profile, badges):
         ).values_list('game_id', flat=True)
     ) if all_game_ids else set()
 
-    # Bundle satisfaction is evaluated at the concept level (any game in a concept
-    # at progress=100 counts as that concept being fully earned). Scope the query
+    # Bundle satisfaction is evaluated at the concept level. Scope both queries
     # to bundle member concepts so we don't pull the user's entire library.
+    # - fully_earned_concept_ids: any game in the concept at progress=100. Used
+    #   for the "synthesized platinum" path (BttF-style bundles with no real plat).
+    # - platted_concept_ids: any game in the concept with has_plat=True. Used for
+    #   the "real platinum on any member" path (ESO-style bundles where one member
+    #   carries the platinum trophy). Plat-check tiers (1/3) accept either path;
+    #   progress-check tiers (2/4) only accept the fully-earned path.
     if bundle_concept_ids:
         fully_earned_concept_ids = set(
             ProfileGame.objects
@@ -99,8 +104,15 @@ def _build_badge_context(profile, badges):
             .values_list('game__concept_id', flat=True)
             .distinct()
         )
+        platted_concept_ids = set(
+            ProfileGame.objects
+            .filter(profile=profile, has_plat=True, game__concept_id__in=bundle_concept_ids)
+            .values_list('game__concept_id', flat=True)
+            .distinct()
+        )
     else:
         fully_earned_concept_ids = set()
+        platted_concept_ids = set()
 
     return {
         'earned_badge_ids': earned_badge_ids,
@@ -109,6 +121,7 @@ def _build_badge_context(profile, badges):
         'plat_game_ids': plat_game_ids,
         'complete_game_ids': complete_game_ids,
         'fully_earned_concept_ids': fully_earned_concept_ids,
+        'platted_concept_ids': platted_concept_ids,
     }
 
 
@@ -139,6 +152,7 @@ def _get_stage_completion_from_cache(badge, _context):
         return {}
 
     fully_earned_concept_ids = _context.get('fully_earned_concept_ids', set())
+    platted_concept_ids = _context.get('platted_concept_ids', set())
 
     completion = {}
     for stage_number, required_tiers, game_ids, bundles in stage_entries:
@@ -149,13 +163,23 @@ def _get_stage_completion_from_cache(badge, _context):
         # Standalone concept check: any qualifying game in this stage matches?
         standalone_satisfied = bool(completed_ids & game_ids) if game_ids else False
 
-        # Bundle check: a fully-cleared bundle satisfies both the plat-check and
-        # the progress-check (synthesized platinum). Any bundle with all members
-        # at progress=100 satisfies the stage.
-        bundle_satisfied = any(
-            member_ids.issubset(fully_earned_concept_ids)
-            for _bundle_id, member_ids in bundles
-        ) if bundles else False
+        # Bundle check. Two paths satisfy a bundle:
+        #   1. Real platinum on any member (plat-check tiers 1/3 + megamix only).
+        #      Models the ESO case: base list carries the platinum trophy, user
+        #      plats it, bundle is satisfied for Bronze/Gold without needing the
+        #      additional-trophies list.
+        #   2. Synthesized platinum: every member at progress=100. Models the
+        #      BttF case (no platinum trophy exists on any member). Counts for
+        #      both plat-check and progress-check tiers.
+        bundle_satisfied = False
+        if bundles:
+            for _bundle_id, member_ids in bundles:
+                if is_plat_check and (member_ids & platted_concept_ids):
+                    bundle_satisfied = True
+                    break
+                if member_ids.issubset(fully_earned_concept_ids):
+                    bundle_satisfied = True
+                    break
 
         if not game_ids and not bundles:
             completion[stage_number] = False
@@ -356,8 +380,12 @@ def _find_stage_completion_details(profile, stage, badge, _context=None):
                 earliest_date = effective_date
                 earliest_concept = concept
 
-    # Bundle candidates: a bundle is satisfied when every member has progress=100,
-    # independent of the stage's tier check (bundle clearance synthesizes a platinum).
+    # Bundle candidates. Two satisfaction paths:
+    #   1. Real platinum on any member (plat-check tiers only). Qualifying date
+    #      is the earliest platted member's plat date.
+    #   2. Synthesized platinum: every member at progress=100. Qualifying date
+    #      is the LAST-completed member's 100% date (the "tipper").
+    # If both paths satisfy a bundle, pick the earlier qualifying date.
     bundles = list(stage.concept_bundles.all().prefetch_related('concepts'))
     if bundles:
         member_ids_all = {c.id for b in bundles for c in b.concepts.all()}
@@ -370,27 +398,56 @@ def _find_stage_completion_details(profile, stage, badge, _context=None):
             .exclude(most_recent_trophy_date__isnull=True)
             .values('game__concept_id', 'most_recent_trophy_date')
         )
-        concept_earliest_date = {}
+        concept_earliest_100_date = {}
         for pg in member_pgs:
             cid = pg['game__concept_id']
             date = pg['most_recent_trophy_date']
-            existing = concept_earliest_date.get(cid)
+            existing = concept_earliest_100_date.get(cid)
             if existing is None or date < existing:
-                concept_earliest_date[cid] = date
+                concept_earliest_100_date[cid] = date
+
+        # Per-concept earliest has_plat=True date (only consulted for plat-check tiers)
+        concept_earliest_plat_date = {}
+        if is_plat_check:
+            plat_pgs = (
+                ProfileGame.objects
+                .filter(profile=profile, has_plat=True, game__concept_id__in=member_ids_all)
+                .exclude(most_recent_trophy_date__isnull=True)
+                .values('game__concept_id', 'most_recent_trophy_date')
+            )
+            for pg in plat_pgs:
+                cid = pg['game__concept_id']
+                date = pg['most_recent_trophy_date']
+                existing = concept_earliest_plat_date.get(cid)
+                if existing is None or date < existing:
+                    concept_earliest_plat_date[cid] = date
 
         for bundle in bundles:
             member_ids = [c.id for c in bundle.concepts.all()]
             if not member_ids:
                 continue
-            if not all(cid in concept_earliest_date for cid in member_ids):
-                continue
-            # Last member to be fully earned is the "tipper" that completed the bundle.
-            last_cid = max(member_ids, key=lambda c: concept_earliest_date[c])
-            bundle_complete_date = concept_earliest_date[last_cid]
-            effective_date = max(bundle_complete_date, badge.created_at)
-            if earliest_date is None or effective_date < earliest_date:
-                earliest_date = effective_date
-                earliest_concept = concept_by_id[last_cid]
+
+            # Real-plat path (plat-check tiers only)
+            if is_plat_check:
+                platted_members = [
+                    (concept_earliest_plat_date[cid], cid)
+                    for cid in member_ids if cid in concept_earliest_plat_date
+                ]
+                if platted_members:
+                    earliest_plat_date, plat_cid = min(platted_members)
+                    effective_date = max(earliest_plat_date, badge.created_at)
+                    if earliest_date is None or effective_date < earliest_date:
+                        earliest_date = effective_date
+                        earliest_concept = concept_by_id[plat_cid]
+
+            # Synth-plat path: requires all members at 100%
+            if all(cid in concept_earliest_100_date for cid in member_ids):
+                last_cid = max(member_ids, key=lambda c: concept_earliest_100_date[c])
+                bundle_complete_date = concept_earliest_100_date[last_cid]
+                effective_date = max(bundle_complete_date, badge.created_at)
+                if earliest_date is None or effective_date < earliest_date:
+                    earliest_date = effective_date
+                    earliest_concept = concept_by_id[last_cid]
 
     return earliest_concept, earliest_date or badge.created_at
 
