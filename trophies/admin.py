@@ -807,7 +807,8 @@ class ConceptAdmin(admin.ModelAdmin):
         'id', 'concept_id', 'unified_title',
         'anchor_migration_completed_at', 'anchor_migration_last_attempt_at',
         'title_lock', 'title_reviewed_at',
-        'family_display', 'release_date_display', 'developers_display',
+        'family_pk_display', 'family_display',
+        'release_date_display', 'developers_display',
         'publishers_display', 'genres_display',
     )
     list_select_related = ('family', 'igdb_match')
@@ -898,6 +899,14 @@ class ConceptAdmin(admin.ModelAdmin):
         return '—'
     release_date_display.short_description = 'Release date'
     release_date_display.admin_order_field = 'igdb_match__igdb_first_release_date'
+
+    def family_pk_display(self, obj):
+        """GameFamily primary key, exposed in the list view so staff can grab
+        it for commands like `anchor_concepts --family <id>` without having
+        to click into each concept."""
+        return obj.family_id or '—'
+    family_pk_display.short_description = 'Family ID'
+    family_pk_display.admin_order_field = 'family_id'
 
     def family_display(self, obj):
         if not obj.family_id:
