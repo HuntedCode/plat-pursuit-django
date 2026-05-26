@@ -3778,7 +3778,7 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
         """
         from django.db import IntegrityError
         from trophies.services.concept_anchor_service import (
-            allocate_sibling_concept_id, build_family_raw_igdb_map,
+            allocate_sibling_concept_id,
         )
         from trophies.services.igdb_service import IGDBService
 
@@ -3799,45 +3799,46 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                     f'IGDB returned no data for id {raw_id}'
                 )
 
-            # Check the family's raw_map first — if a Concept already
-            # represents this raw_igdb_id, reuse it (prevents duplicate
-            # siblings when multiple reviews share a raw id).
-            existing_target = None
-            if review.proposed_raw_igdb_id:
-                raw_map = build_family_raw_igdb_map(canonical_id)
-                existing_target = raw_map.get(review.proposed_raw_igdb_id)
-
-            if existing_target is not None:
-                target = existing_target
-            else:
-                # New Concept for this raw. Natural slot is str(raw_id).
-                # If the slot is taken (same family, different raw — legacy),
-                # allocate a same-raw suffix slot (str(raw)-N).
-                target = None
-                last_error = None
-                preferred_slot = str(raw_id)
-                slot_taken = Concept.objects.filter(concept_id=preferred_slot).exists()
-                for _ in range(3):
-                    sibling_id = (
-                        allocate_sibling_concept_id(raw_id) if slot_taken
-                        else preferred_slot
-                    )
-                    try:
-                        with transaction.atomic():
-                            target = Concept.objects.create(
-                                concept_id=sibling_id,
-                                unified_title=raw_data.get('name', ''),
-                            )
-                        break
-                    except IntegrityError as exc:
-                        last_error = exc
-                        slot_taken = True  # force suffix on retry
-                        continue
-                if target is None:
-                    raise ValueError(
-                        f'Could not allocate concept_id slot for raw IGDB '
-                        f'{raw_id} after 3 attempts: {last_error}'
-                    )
+            # ALWAYS create a new Concept for this approval — the action's
+            # whole point is "make a separate sibling because the existing
+            # version has a different trophy fingerprint." Earlier behavior
+            # peeked at build_family_raw_igdb_map and reused any Concept
+            # already anchored at this raw_id, which silently dropped the
+            # game into the existing variant's Concept (the bug Jeffrey
+            # hit on the same-raw-id-different-trophies case). Within-batch
+            # duplicate prevention is still handled by the cluster
+            # auto-resolve below, which lands peer reviews (same canonical
+            # AND same fingerprint) into the SAME new sibling.
+            #
+            # Slot allocation: natural slot is str(raw_id). If it's free,
+            # use it; if taken, allocate a str(raw)-N suffix. IntegrityError
+            # under race rolls back the inner savepoint and forces the
+            # next attempt onto a suffix slot.
+            target = None
+            last_error = None
+            preferred_slot = str(raw_id)
+            slot_taken = Concept.objects.filter(concept_id=preferred_slot).exists()
+            for _ in range(3):
+                sibling_id = (
+                    allocate_sibling_concept_id(raw_id) if slot_taken
+                    else preferred_slot
+                )
+                try:
+                    with transaction.atomic():
+                        target = Concept.objects.create(
+                            concept_id=sibling_id,
+                            unified_title=raw_data.get('name', ''),
+                        )
+                    break
+                except IntegrityError as exc:
+                    last_error = exc
+                    slot_taken = True  # force suffix on retry
+                    continue
+            if target is None:
+                raise ValueError(
+                    f'Could not allocate concept_id slot for raw IGDB '
+                    f'{raw_id} after 3 attempts: {last_error}'
+                )
 
             IGDBService.process_match(
                 target, raw_data, confidence=1.0, method='manual',
