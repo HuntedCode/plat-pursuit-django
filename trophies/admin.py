@@ -1231,11 +1231,69 @@ class StageAdminForm(forms.ModelForm):
 @admin.register(Stage)
 class StageAdmin(admin.ModelAdmin):
     form = StageAdminForm
-    list_display = ('__str__', 'series_slug', 'stage_number', 'title', 'required_tiers', 'has_online_trophies')
+    list_display = (
+        '__str__', 'series_slug', 'stage_number', 'title',
+        'concepts_display', 'bundle_concepts_display',
+        'required_tiers', 'has_online_trophies',
+    )
     list_filter = ('series_slug', 'stage_number', 'has_online_trophies')
-    search_fields = ('title', 'series_slug')
+    search_fields = ('title', 'series_slug', 'concepts__concept_id', 'concept_bundles__concepts__concept_id')
     autocomplete_fields = ['concepts']
     inlines = [ConceptBundleInline]
+
+    # Cap how many concept_ids we list per column on the changelist; rows
+    # with more than this many qualifiers show "+N more" to keep the cell
+    # scannable. The full list is always visible on the Stage's detail page.
+    _LIST_CONCEPT_LIMIT = 8
+
+    def get_queryset(self, request):
+        # Prefetch both qualifier paths so concepts_display / bundle_concepts_display
+        # don't N+1 across rows on the changelist. ConceptBundle members are
+        # nested two layers deep.
+        return super().get_queryset(request).prefetch_related(
+            'concepts',
+            'concept_bundles__concepts',
+        )
+
+    def _format_concept_list(self, concepts):
+        ids = [c.concept_id for c in concepts]
+        if not ids:
+            return '—'
+        if len(ids) <= self._LIST_CONCEPT_LIMIT:
+            return ', '.join(ids)
+        shown = ', '.join(ids[:self._LIST_CONCEPT_LIMIT])
+        return f'{shown}, +{len(ids) - self._LIST_CONCEPT_LIMIT} more'
+
+    def concepts_display(self, obj):
+        """Standalone qualifier Concepts (Stage.concepts M2M)."""
+        return self._format_concept_list(list(obj.concepts.all()))
+    concepts_display.short_description = 'Standalone Concepts'
+
+    def bundle_concepts_display(self, obj):
+        """Concepts inside this Stage's ConceptBundles.
+
+        Bundle members are grouped per-bundle so the qualifier shape stays
+        legible — e.g. "[Ep 1: 100, 101] [Ep 2: 200, 201]" rather than a
+        flat undifferentiated list.
+        """
+        bundles = list(obj.concept_bundles.all())
+        if not bundles:
+            return '—'
+        parts = []
+        for bundle in bundles:
+            ids = [c.concept_id for c in bundle.concepts.all()]
+            label = bundle.label or f'#{bundle.pk}'
+            if not ids:
+                parts.append(f'[{label}: (empty)]')
+            elif len(ids) <= self._LIST_CONCEPT_LIMIT:
+                parts.append(f'[{label}: {", ".join(ids)}]')
+            else:
+                shown = ', '.join(ids[:self._LIST_CONCEPT_LIMIT])
+                parts.append(
+                    f'[{label}: {shown}, +{len(ids) - self._LIST_CONCEPT_LIMIT} more]'
+                )
+        return ' '.join(parts)
+    bundle_concepts_display.short_description = 'Bundle Concepts'
 
 @admin.register(UserBadge)
 class UserBadgeAdmin(admin.ModelAdmin):
