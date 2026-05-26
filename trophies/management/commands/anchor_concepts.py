@@ -43,7 +43,7 @@ with `concept_id_collision` and the batch moves on.
 import time
 from collections import defaultdict
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -68,6 +68,17 @@ class Command(BaseCommand):
         parser.add_argument(
             '--family', type=int, default=None,
             help='Process just this GameFamily id (skips orphan-Concept pass).',
+        )
+        parser.add_argument(
+            '--concept', type=str, default=None,
+            help=(
+                'Process just this single Concept by concept_id (e.g. '
+                '"215266" or "152231-1"). Runs the per-game matcher on every '
+                'Game in the Concept and routes them to their IGDB-anchored '
+                'destination(s). Use for targeted re-runs after admin '
+                'cleanup or to retry a single stuck Concept without '
+                'reprocessing its entire family.'
+            ),
         )
         parser.add_argument(
             '--orphans', action='store_true',
@@ -110,7 +121,9 @@ class Command(BaseCommand):
         self.targets_reused = 0
         self.start_time = time.time()
 
-        if options['family'] is not None:
+        if options['concept'] is not None:
+            self._process_single_concept(options['concept'])
+        elif options['family'] is not None:
             families = GameFamily.objects.filter(pk=options['family'])
             self._process_families(families, limit=None)
         elif options['orphans']:
@@ -156,6 +169,39 @@ class Command(BaseCommand):
                 self._run_batch_logic(family.concepts.filter(
                     anchor_migration_completed_at__isnull=True
                 ))
+        self.batches_processed += 1
+
+    def _process_single_concept(self, concept_id):
+        """Run the per-game matcher on every Game in one Concept.
+
+        Mirrors `_process_family_batch`'s transaction wrapping so the
+        Concept's games either all migrate or none do, but skips the
+        family-level batching machinery (we already know which Concept
+        we're processing).
+
+        Resolves the input by `concept_id` (string), not by pk — that's
+        what staff see in admin output and verbose traces.
+        """
+        try:
+            concept = Concept.objects.get(concept_id=concept_id)
+        except Concept.DoesNotExist:
+            raise CommandError(
+                f'No Concept exists with concept_id={concept_id!r}'
+            )
+
+        family_label = (
+            f'Family #{concept.family_id} "{concept.family.canonical_name}"'
+            if concept.family_id else 'no family (orphan)'
+        )
+        self.stdout.write(self.style.HTTP_INFO(
+            f'\n=== Concept {concept.concept_id!r} '
+            f'"{concept.unified_title}" ({family_label}) ==='
+        ))
+        if self.dry_run:
+            self._process_concept(concept)
+        else:
+            with transaction.atomic():
+                self._process_concept(concept)
         self.batches_processed += 1
 
     def _process_orphans(self, limit):
