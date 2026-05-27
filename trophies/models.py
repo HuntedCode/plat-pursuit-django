@@ -4258,6 +4258,58 @@ class Roadmap(models.Model):
         self._active_lock_cache = None if lock.is_expired() else lock
         return self._active_lock_cache
 
+    def trophy_guides_for_display(self):
+        """Real TrophyGuide rows + an unsaved placeholder for the platinum
+        trophy if no real row exists for it.
+
+        Platinum is "always shown in the guide" by product policy —
+        readers want it surfaced even when the author hasn't written
+        anything about it yet (it's the headline trophy of the set).
+        Without this, a roadmap whose author skipped the platinum guide
+        entirely would render the trophy list with the platinum
+        missing, which reads as a content gap rather than a deliberate
+        "nothing to say" signal. The placeholder card uses the normal
+        template path; the card already handles `guide.body == ''` with
+        a "No guide details added yet." line, so no template changes
+        are needed beyond using this method as the source.
+
+        Cached per instance (per request). Returns a plain Python list —
+        callers that want to iterate twice are free to do so without
+        re-querying.
+        """
+        if hasattr(self, '_guides_for_display_cache'):
+            return self._guides_for_display_cache
+
+        guides = list(self.trophy_guides.all())
+        existing_trophy_ids = {g.trophy_id for g in guides}
+        # Find the platinum trophy for this roadmap's CTG via the
+        # concept's first game (multi-platform concepts have identical
+        # trophy sets per CTG, so first is fine for platinum identity).
+        concept = getattr(self.concept_trophy_group, 'concept', None)
+        game = concept.games.first() if concept else None
+        if game is None:
+            self._guides_for_display_cache = guides
+            return guides
+        platinum = game.trophies.filter(
+            trophy_group_id=self.concept_trophy_group.trophy_group_id,
+            trophy_type='platinum',
+        ).first()
+        if platinum and platinum.trophy_id not in existing_trophy_ids:
+            # Unsaved placeholder: surfaces as a card in the reader
+            # but doesn't hit the DB. order=999_999 pushes it to the
+            # end of the default-sorted list (authors typically use
+            # small order values for their real entries).
+            placeholder = TrophyGuide(
+                roadmap=self,
+                trophy_id=platinum.trophy_id,
+                body='',
+                youtube_url='',
+                order=999_999,
+            )
+            guides.append(placeholder)
+        self._guides_for_display_cache = guides
+        return guides
+
     def contributors(self):
         """Return distinct Profiles who created or last-edited any part of this roadmap.
 

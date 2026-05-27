@@ -106,7 +106,12 @@
         {# ── Main Content Column ── #}
         <div class="lg:w-3/4 min-w-0">
 
-            {% with steps=roadmap.steps.all guides=roadmap.trophy_guides.all %}
+            {# `trophy_guides_for_display` mirrors `.trophy_guides.all()`  #}
+            {# but injects an unsaved placeholder for the platinum trophy  #}
+            {# when no real TrophyGuide exists for it — surfaces the       #}
+            {# platinum in the reader's guide list even when the author    #}
+            {# hasn't written anything about it.                            #}
+            {% with steps=roadmap.steps.all guides=roadmap.trophy_guides_for_display %}
 
             {# ══ Introduction ══ #}
             {# Author's "what this guide covers" blurb. Reads ahead of      #}

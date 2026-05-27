@@ -128,7 +128,8 @@
             </li>
             {% endif %}
 
-            {% with guides=roadmap.trophy_guides.all %}
+            {# Mirrors the sidebar TOC + main display: platinum included. #}
+            {% with guides=roadmap.trophy_guides_for_display %}
             {% if guides %}
             <li class="toc-collapsible-section pt-1 border-t border-base-content/5 mt-1">
                 <button class="toc-section-toggle flex items-center justify-between w-full text-sm py-1.5 px-3 rounded text-base-content/60 hover:text-base-content hover:bg-white/[0.04] transition-colors text-left" data-toc-section-target="toc-mobile-trophy-guides">

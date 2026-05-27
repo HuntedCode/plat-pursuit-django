@@ -420,11 +420,16 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
 
         # Resolve trophy display data for trophies referenced in the
         # roadmap's steps + trophy guides + collectible-area trophy markers.
+        # Use `trophy_guides_for_display()` so the platinum's id is in
+        # the lookup set even if no real TrophyGuide row exists for it
+        # (the method injects an unsaved placeholder for the platinum).
+        # Without this, the platinum's placeholder card would fall
+        # through to the "Trophy #N" fallback in the template.
         roadmap_trophy_ids = set()
         for step in roadmap.steps.all():
             for st in step.step_trophies.all():
                 roadmap_trophy_ids.add(st.trophy_id)
-        for tg in roadmap.trophy_guides.all():
+        for tg in roadmap.trophy_guides_for_display():
             roadmap_trophy_ids.add(tg.trophy_id)
         for area_obj in roadmap.collectible_areas.all():
             for marker in area_obj.markers.all():
@@ -452,7 +457,10 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
         # `apply_branch_overlay`'s in-memory edits during ?preview=true).
         # `.filter()` would bypass the prefetch cache, and when overlay has
         # replaced it with a list the manager call blows up entirely.
-        all_guides = list(roadmap.trophy_guides.all())
+        # Uses `trophy_guides_for_display` for consistency with the
+        # template — the platinum placeholder it injects has all flags
+        # off so it doesn't pollute these sets.
+        all_guides = list(roadmap.trophy_guides_for_display())
         context['missable_trophy_ids'] = {
             tg.trophy_id for tg in all_guides if tg.is_missable
         }
