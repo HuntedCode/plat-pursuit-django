@@ -571,10 +571,15 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
 
         # Contributor display-names for the HowTo schema's `author`
         # field. Mirrors the visible attribution above the steps so
-        # the structured data matches what the reader sees.
+        # the structured data matches what the reader sees. NOTE:
+        # `contributors` is a *method* (not a property); calling it
+        # via `roadmap.contributors` returns the bound method (truthy),
+        # which the old broken `for c in roadmap.contributors` was
+        # silently swallowing via the try/except. Result was an empty
+        # `roadmap_contributors` for every roadmap.
         contributor_names = []
         try:
-            for c in (roadmap.contributors or []):
+            for c in (roadmap.contributors() or []):
                 name = getattr(c, 'display_psn_username', None) or getattr(c, 'psn_username', None)
                 if name:
                     contributor_names.append(name)

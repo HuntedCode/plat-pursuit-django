@@ -4287,14 +4287,16 @@ class Roadmap(models.Model):
             if not profile_ids:
                 self._contributors_cache = []
             else:
-                hidden_ids = set(
-                    self.hidden_authors.values_list('id', flat=True)
-                )
-                profile_ids -= hidden_ids
+                # Single SQL: filter by union, exclude hidden via
+                # subquery. Avoids the per-request second query that
+                # `hidden_authors.values_list(...)` would otherwise
+                # cost on pages listing many roadmaps.
                 self._contributors_cache = list(
-                    Profile.objects.filter(id__in=profile_ids)
+                    Profile.objects
+                    .filter(id__in=profile_ids)
+                    .exclude(id__in=self.hidden_authors.values('id'))
                     .order_by('psn_username')
-                ) if profile_ids else []
+                )
         return self._contributors_cache
 
 

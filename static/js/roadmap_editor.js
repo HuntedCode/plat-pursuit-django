@@ -2077,12 +2077,24 @@
      * (publisher-only, server creates a published/unpublished revision).
      */
     async function apiCall(method, url, body) {
-        if (url.includes(`/api/v1/roadmap/${roadmapId}/publish/`)) {
+        // Allowlist of URLs that hit the live API directly (bypassing the
+        // BranchProxy). These are out-of-band publisher actions — they
+        // don't go through the lock/branch/merge cycle because they're
+        // settings, not content edits:
+        //   - /publish/         publish/unpublish status toggle
+        //   - /hidden-authors/  per-roadmap author visibility list
+        // Anything else falls through to BranchProxy, which mutates the
+        // in-memory branch_payload and schedules the debounced push.
+        const directApiPatterns = [
+            `/api/v1/roadmap/${roadmapId}/publish/`,
+            `/api/v1/roadmap/${roadmapId}/hidden-authors/`,
+        ];
+        if (directApiPatterns.some(p => url.includes(p))) {
             try {
                 return await API[method](url, body);
             } catch (err) {
                 const errData = await err.response?.json().catch(() => null);
-                Toast.show(errData?.error || 'Publish action failed.', 'error');
+                Toast.show(errData?.error || 'Action failed.', 'error');
                 throw err;
             }
         }
@@ -3171,9 +3183,14 @@
                             'success',
                         );
                     } catch (err) {
-                        // Revert visual state and surface the error.
-                        toggle.checked = !nowHidden ? false : true;
-                        stateLabel.textContent = !nowHidden ? 'Hidden' : 'Shown';
+                        // Revert visual state. `nowHidden` is what the
+                        // user tried to set; reverting means restoring
+                        // the OPPOSITE, which happens to equal nowHidden
+                        // when read against the toggle's "checked =
+                        // visible" semantic (e.g. user tried to hide →
+                        // nowHidden=true → revert to checked=true=shown).
+                        toggle.checked = nowHidden;
+                        stateLabel.textContent = nowHidden ? 'Shown' : 'Hidden';
                         stateLabel.classList.toggle('text-success', nowHidden);
                         stateLabel.classList.toggle('text-base-content/40', !nowHidden);
                         const errMsg = await err.response?.json().catch(() => null);

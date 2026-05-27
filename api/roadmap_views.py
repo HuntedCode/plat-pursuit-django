@@ -23,7 +23,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.permissions import IsRoadmapAuthor
-from trophies.models import Roadmap
+from trophies.models import Profile, Roadmap
 from trophies.services.roadmap_service import RoadmapService
 
 logger = logging.getLogger('psn_api')
@@ -105,22 +105,17 @@ class RoadmapHiddenAuthorsView(APIView):
     permission_classes = [IsRoadmapAuthor]
     min_roadmap_role = 'writer'
 
-    def get(self, request, roadmap_id):
-        try:
-            roadmap = Roadmap.objects.get(pk=roadmap_id)
-        except Roadmap.DoesNotExist:
-            return Response(
-                {'error': 'Roadmap not found.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        contributors = roadmap.contributors  # excludes hidden by design
-        hidden_ids = set(
-            roadmap.hidden_authors.values_list('id', flat=True)
-        )
-        # Re-union: the editor UI needs to show ALL contributors
-        # (visible + hidden) with their current state, so we re-derive
-        # the full union here rather than calling `contributors` (which
-        # filters them out).
+    @staticmethod
+    def _all_contributor_ids(roadmap):
+        """Union of every Profile id that appears in a created_by /
+        last_edited_by FK on the roadmap, its steps, or its trophy
+        guides. Same data `Roadmap.contributors` derives from, but
+        returned as raw ids before the `hidden_authors` filter is
+        applied — the editor UI needs ALL contributors to render the
+        toggles, and the POST handler uses this set to validate that
+        an incoming `profile_id` is actually a contributor before
+        adding it to `hidden_authors`.
+        """
         profile_ids = set()
         if roadmap.created_by_id:
             profile_ids.add(roadmap.created_by_id)
@@ -136,7 +131,20 @@ class RoadmapHiddenAuthorsView(APIView):
                 profile_ids.add(guide.created_by_id)
             if guide.last_edited_by_id:
                 profile_ids.add(guide.last_edited_by_id)
-        from trophies.models import Profile
+        return profile_ids
+
+    def get(self, request, roadmap_id):
+        try:
+            roadmap = Roadmap.objects.get(pk=roadmap_id)
+        except Roadmap.DoesNotExist:
+            return Response(
+                {'error': 'Roadmap not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        hidden_ids = set(
+            roadmap.hidden_authors.values_list('id', flat=True)
+        )
+        profile_ids = self._all_contributor_ids(roadmap)
         all_profiles = (
             Profile.objects.filter(id__in=profile_ids)
             .order_by('psn_username')
@@ -181,6 +189,17 @@ class RoadmapHiddenAuthorsView(APIView):
         except (TypeError, ValueError):
             return Response(
                 {'error': 'profile_id must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Validate: profile must actually be a contributor on THIS
+        # roadmap. Without this gate `hidden_authors.add(arbitrary_id)`
+        # either 500s on IntegrityError (non-existent profile) or
+        # silently pollutes the M2M with profiles who'll never appear
+        # in the reader's contributor union anyway.
+        contributor_ids = self._all_contributor_ids(roadmap)
+        if profile_id not in contributor_ids:
+            return Response(
+                {'error': 'profile_id is not a contributor on this roadmap.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if hidden:
