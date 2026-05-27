@@ -1801,6 +1801,20 @@ class IGDBService:
             from trophies.services.shovelware_detection_service import ShovelwareDetectionService
             ShovelwareDetectionService.on_igdb_match_trusted(concept)
 
+            # Sync Concept.release_date from IGDB when the concept has none.
+            # PSN-storefront concepts get release_date set by live sync, but
+            # IGDB-anchored concepts (created via anchor_concepts ->
+            # `Concept.objects.create(concept_id=...)`) start with no
+            # release_date. Without this, Badge.update_most_recent_concept
+            # picks None for any badge whose stages are populated entirely
+            # by anchored concepts (Max(release_date) across all-None is
+            # None), and the badge list cover art disappears. Only fills
+            # when currently None so we don't overwrite a deliberately-set
+            # value on PSN-anchored concepts.
+            if concept.release_date is None and igdb_match.igdb_first_release_date:
+                concept.release_date = igdb_match.igdb_first_release_date
+                concept.save(update_fields=['release_date'])
+
         return igdb_match
 
     # IGDB platform ID -> PlatPursuit title_platform string
