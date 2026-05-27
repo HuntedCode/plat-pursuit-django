@@ -6721,6 +6721,25 @@
                 container,
                 handleSelector: '.collectible-item-handle',
                 itemSelector: '.collectible-item-row',
+                // Shared group across all item containers in this tab so
+                // SortableJS allows cross-bucket drag (loose ↔ sub-area,
+                // sub-area ↔ sub-area, area ↔ area). Per-tab scope keeps
+                // tabs isolated — items don't cross tab boundaries.
+                group: `roadmap-items-${tabId}`,
+                // Reject cross-area marker drops at hover time so the
+                // user sees the "no-drop" cursor rather than the row
+                // snapping back after release. The merge service doesn't
+                // support area migration for markers (the marker FK to
+                // area is treated as immutable post-creation), so we
+                // gate this at the UI before any state changes.
+                canAccept: (draggedEl, toContainer, fromContainer) => {
+                    const isMarker = draggedEl?.dataset?.entryKind === 'marker';
+                    if (!isMarker) return true;
+                    const fromArea = fromContainer?.closest('.collectible-area-card')?.dataset?.areaId;
+                    const toArea = toContainer?.closest('.collectible-area-card')?.dataset?.areaId;
+                    // Same-area moves OK (between loose ↔ this area's sub-areas).
+                    return fromArea === toArea;
+                },
                 onReorder: async () => {
                     // Both items and marker rows live in `container.children`
                     // and carry `data-entry-kind` + `data-item-id`. After the
@@ -6745,7 +6764,107 @@
                         Toast.show('Failed to reorder items.', 'error');
                     }
                 },
+                // Cross-container drop: re-parent the item to the
+                // destination bucket, then re-order the destination so
+                // the dropped item lands at the position the user
+                // released it. Source bucket keeps its remaining items'
+                // existing orders — gaps in the order field are fine
+                // since each bucket renders sorted independently.
+                onMove: async (itemId, evt) => {
+                    await this._handleItemCrossContainerDrop(tabId, parseInt(itemId, 10), evt);
+                },
             });
+        },
+
+        // Resolve a destination container (loose .collectible-items-container
+        // or a sub-area .collectible-subarea-items-container) to its
+        // (area_id, subarea_id) coordinates. Returns numbers / null.
+        // `null` for area means the Unsorted pseudo-area.
+        _resolveBucketCoords(container) {
+            const areaCard = container.closest('.collectible-area-card');
+            const subCard = container.closest('.collectible-subarea-card');
+            const rawArea = areaCard?.dataset?.areaId;
+            const areaId = rawArea === 'null' || rawArea == null ? null : parseInt(rawArea, 10);
+            const rawSub = subCard?.dataset?.subareaId;
+            const subareaId = rawSub == null ? null : parseInt(rawSub, 10);
+            return { areaId, subareaId };
+        },
+
+        async _handleItemCrossContainerDrop(tabId, itemId, evt) {
+            const { areaId: toArea, subareaId: toSub } = this._resolveBucketCoords(evt.to);
+            // PATCH item with new area_id + subarea_id. The BranchProxy
+            // handler clears subarea_id automatically when area changes
+            // and the caller doesn't specify a sub-area, but we're
+            // always specifying both here (subareaId is null for loose
+            // drops), so no surprise.
+            //
+            // We need the item's owning collectible_type to hit the
+            // detail URL (the editor's PATCH URL is type-scoped). Find
+            // it by id across the tab's types — the move doesn't change
+            // type ownership, so the current type lookup is authoritative.
+            const tab = tabsData.find(t => t.id === tabId);
+            let owningTypeId = null;
+            for (const ct of (tab?.collectible_types || [])) {
+                if ((ct.items || []).some(it => it.id === itemId)) {
+                    owningTypeId = ct.id;
+                    break;
+                }
+            }
+            // Markers route through a different URL (per-area). Detect
+            // the entry kind off the dragged row.
+            const isMarker = evt.item?.dataset?.entryKind === 'marker';
+            try {
+                if (isMarker) {
+                    // canAccept already gated cross-area marker drops;
+                    // this path is always same-area. Only subarea_id
+                    // changes. The marker's URL is /collectible-areas/A/markers/M/.
+                    await apiCall(
+                        'patch',
+                        `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${toArea}/markers/${itemId}/`,
+                        { subarea_id: toSub },
+                    );
+                } else {
+                    if (owningTypeId == null) {
+                        Toast.show('Could not locate item.', 'error');
+                        return;
+                    }
+                    await apiCall(
+                        'patch',
+                        `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-types/${owningTypeId}/items/${itemId}/`,
+                        { area_id: toArea, subarea_id: toSub },
+                    );
+                }
+                // Re-order the destination bucket so the dropped row
+                // takes its visual position. Uses the area-scoped
+                // entries endpoint; sub-area drops just send fewer
+                // entries (the sub-area's bucket only). Items in the
+                // SAME area but a different sub-area keep their orders
+                // since they're not in this payload — that's fine,
+                // each bucket renders sorted independently.
+                const toSeg = toArea == null ? 'null' : String(toArea);
+                const destEntries = Array.from(evt.to.children)
+                    .filter(row => row.dataset && row.dataset.itemId)
+                    .map(row => ({
+                        kind: row.dataset.entryKind || 'item',
+                        id: parseInt(row.dataset.itemId, 10),
+                    }));
+                await apiCall(
+                    'post',
+                    `/api/v1/roadmap/${roadmapId}/tab/${tabId}/collectible-areas/${toSeg}/entries/reorder/`,
+                    { entries: destEntries },
+                );
+                this._syncTabsDataFromBranch(tabId);
+                // Full re-render so per-area + per-sub-area counts,
+                // completion badges, and the source bucket's empty state
+                // reflect the move. (The BranchProxy state is correct;
+                // the rendered DOM just needs to catch up to it.)
+                this.renderAll(tabId);
+            } catch (err) {
+                Toast.show('Failed to move item.', 'error');
+                // Snap-back via re-render so the visual moves back to
+                // wherever the canonical state says it lives.
+                this.renderAll(tabId);
+            }
         },
 
         // ── Add buttons ────────────────────────────────────────────

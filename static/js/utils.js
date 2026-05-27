@@ -584,6 +584,9 @@ class DragReorderManager {
      * @param {boolean} [config.useXY] - Ignored (kept for backward compatibility; SortableJS handles 2D natively)
      * @param {Function} [config.onStart] - Optional callback when drag starts
      * @param {Function} [config.onEnd] - Optional callback when drag ends
+     * @param {string|object} [config.group] - SortableJS group (string or {name, put, pull}). When two managers share a group, items can be dragged between their containers.
+     * @param {Function} [config.onMove] - Callback when an item is dropped into THIS container from ANOTHER (cross-container drop). Signature: (itemId, evt) => Promise. evt.from/evt.to/evt.newIndex available. Replaces the onReorder call for that drop.
+     * @param {Function} [config.canAccept] - Predicate (draggedEl, toContainer, fromContainer) => bool. Return false to reject the drop. Mirrors SortableJS onMove.
      */
     constructor(config) {
         this.container = config.container;
@@ -593,6 +596,9 @@ class DragReorderManager {
         this.onPlaceholderCreate = config.onPlaceholderCreate || null;
         this._onStartCallback = config.onStart || null;
         this._onEndCallback = config.onEnd || null;
+        this.group = config.group || null;
+        this.onMove = config.onMove || null;
+        this.canAccept = config.canAccept || null;
         this.sortable = null;
 
         this._initSortable();
@@ -636,6 +642,19 @@ class DragReorderManager {
             onEnd: (evt) => {
                 if (this._onEndCallback) this._onEndCallback(evt);
 
+                // Cross-container drop: fire onMove instead of onReorder.
+                // The destination manager owns the post-drop sync (it
+                // knows the new bucket's identity); the source manager
+                // doesn't see this event (SortableJS routes onEnd to the
+                // manager whose container the drop landed in).
+                if (evt.from !== evt.to) {
+                    if (this.onMove) {
+                        const itemId = evt.item.dataset.itemId;
+                        this.onMove(itemId, evt);
+                    }
+                    return;
+                }
+
                 if (evt.oldIndex === evt.newIndex) return;
 
                 const items = [...this.container.querySelectorAll(this.itemSelector)];
@@ -650,6 +669,18 @@ class DragReorderManager {
 
         if (this.handleSelector) {
             sortableConfig.handle = this.handleSelector;
+        }
+        if (this.group) {
+            sortableConfig.group = this.group;
+        }
+        // SortableJS onMove fires during the drag; returning false rejects
+        // the drop. canAccept is the manager's hook for that, used e.g. to
+        // refuse cross-area marker moves where the merge service doesn't
+        // support area migration.
+        if (this.canAccept) {
+            sortableConfig.onMove = (evt) => {
+                return this.canAccept(evt.dragged, evt.to, evt.from);
+            };
         }
 
         this.sortable = Sortable.create(this.container, sortableConfig);
