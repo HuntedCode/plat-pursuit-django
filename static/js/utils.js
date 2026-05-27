@@ -626,6 +626,11 @@ class DragReorderManager {
             // in a CSS Grid layout (grid reflow moves items under the cursor).
             swapThreshold: 0.65,
             invertSwap: true,
+            // Generous empty-container hit area so cross-bucket drops
+            // into an empty sub-area / area don't require pixel-perfect
+            // targeting. SortableJS default is 5px; bump to 20 so a
+            // ~32px min-height empty bucket is comfortably hittable.
+            emptyInsertThreshold: 20,
 
             onStart: (evt) => {
                 if (this.onPlaceholderCreate) {

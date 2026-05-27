@@ -5362,8 +5362,13 @@
             const types = tab.collectible_types || [];
             const noTypes = types.length === 0;
 
+            // Don't hide the container when empty — SortableJS needs a
+            // visible, hit-testable element to accept cross-bucket drops.
+            // The min-h-8 gives ~32px of drop zone so the user has
+            // something to target visually; the empty / no-types hints
+            // render below the (small, empty) container as before.
             if (entries.length === 0) {
-                itemsContainer.classList.add('hidden');
+                itemsContainer.classList.add('min-h-8');
                 if (noTypes) {
                     itemsEmpty.classList.add('hidden');
                     noTypesHint.classList.remove('hidden');
@@ -5372,7 +5377,7 @@
                     noTypesHint.classList.add('hidden');
                 }
             } else {
-                itemsContainer.classList.remove('hidden');
+                itemsContainer.classList.remove('min-h-8');
                 itemsEmpty.classList.add('hidden');
                 noTypesHint.classList.add('hidden');
             }
@@ -5624,11 +5629,13 @@
             const types = tab.collectible_types || [];
             const noTypes = types.length === 0;
 
+            // Same reason as _buildAreaCard: keep the container visible
+            // so SortableJS can accept drops into an empty sub-area.
             if (entries.length === 0) {
-                itemsContainer.classList.add('hidden');
+                itemsContainer.classList.add('min-h-8');
                 itemsEmpty.classList.remove('hidden');
             } else {
-                itemsContainer.classList.remove('hidden');
+                itemsContainer.classList.remove('min-h-8');
                 itemsEmpty.classList.add('hidden');
             }
             entries.forEach(entry => {
