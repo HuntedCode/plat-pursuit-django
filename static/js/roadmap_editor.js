@@ -3095,6 +3095,100 @@
         }
     }
 
+    // Author Visibility card (publisher-only). Card is server-rendered
+    // only when `author_can_publish` is true, so this whole init is
+    // a no-op for editors/writers (the element isn't on the page).
+    async function initHiddenAuthors() {
+        const card = document.getElementById('hidden-authors-card');
+        if (!card) return;
+        const listEl = card.querySelector('.hidden-authors-list');
+        const emptyEl = card.querySelector('.hidden-authors-empty');
+        if (!listEl || !emptyEl) return;
+
+        async function load() {
+            try {
+                const data = await apiCall(
+                    'get',
+                    `/api/v1/roadmap/${roadmapId}/hidden-authors/`,
+                );
+                render(data.contributors || []);
+            } catch (err) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                emptyEl.textContent = 'Failed to load contributors.';
+            }
+        }
+
+        function render(items) {
+            listEl.innerHTML = '';
+            if (items.length === 0) {
+                emptyEl.classList.remove('hidden');
+                emptyEl.textContent = 'No contributors recorded yet.';
+                return;
+            }
+            emptyEl.classList.add('hidden');
+            items.forEach(item => {
+                const row = document.createElement('label');
+                row.className = 'flex items-center justify-between gap-2 p-2 rounded hover:bg-white/[0.04] cursor-pointer transition-colors';
+                row.dataset.profileId = String(item.id);
+                // Visible-when-checked semantic — easier to reason about
+                // than hidden-when-checked, especially with the label
+                // text below the toggle.
+                const isVisible = !item.hidden;
+                const avatarHtml = item.avatar_url
+                    ? `<img src="${HTMLUtils.escape(item.avatar_url)}" alt="" class="w-7 h-7 rounded-full shrink-0 object-cover border border-base-content/10">`
+                    : `<span class="w-7 h-7 rounded-full shrink-0 bg-base-300/60 border border-base-content/10 flex items-center justify-center text-[10px] text-base-content/45">?</span>`;
+                row.innerHTML = `
+                    <span class="flex items-center gap-2 min-w-0 flex-1">
+                        ${avatarHtml}
+                        <span class="text-sm truncate">${HTMLUtils.escape(item.display_psn_username || item.psn_username || `Profile ${item.id}`)}</span>
+                    </span>
+                    <span class="hidden-authors-state text-[10px] uppercase tracking-wider font-semibold ${isVisible ? 'text-success' : 'text-base-content/40'} shrink-0 w-12 text-right">
+                        ${isVisible ? 'Shown' : 'Hidden'}
+                    </span>
+                    <input type="checkbox" class="hidden-authors-toggle toggle toggle-sm toggle-success shrink-0" ${isVisible ? 'checked' : ''}>
+                `;
+                const toggle = row.querySelector('.hidden-authors-toggle');
+                const stateLabel = row.querySelector('.hidden-authors-state');
+                toggle.addEventListener('change', async () => {
+                    const nowHidden = !toggle.checked;
+                    // Optimistic flip: update label first so the writer
+                    // sees immediate feedback. Revert on error.
+                    stateLabel.textContent = nowHidden ? 'Hidden' : 'Shown';
+                    stateLabel.classList.toggle('text-success', !nowHidden);
+                    stateLabel.classList.toggle('text-base-content/40', nowHidden);
+                    toggle.disabled = true;
+                    try {
+                        await apiCall(
+                            'post',
+                            `/api/v1/roadmap/${roadmapId}/hidden-authors/`,
+                            { profile_id: item.id, hidden: nowHidden },
+                        );
+                        Toast.show(
+                            nowHidden
+                                ? `Hid ${item.display_psn_username || item.psn_username} from the author list.`
+                                : `Restored ${item.display_psn_username || item.psn_username} to the author list.`,
+                            'success',
+                        );
+                    } catch (err) {
+                        // Revert visual state and surface the error.
+                        toggle.checked = !nowHidden ? false : true;
+                        stateLabel.textContent = !nowHidden ? 'Hidden' : 'Shown';
+                        stateLabel.classList.toggle('text-success', nowHidden);
+                        stateLabel.classList.toggle('text-base-content/40', !nowHidden);
+                        const errMsg = await err.response?.json().catch(() => null);
+                        Toast.show(errMsg?.error || 'Failed to update visibility.', 'error');
+                    } finally {
+                        toggle.disabled = false;
+                    }
+                });
+                listEl.appendChild(row);
+            });
+        }
+
+        await load();
+    }
+
     // Save tooltip wording depends on publish state — published roadmaps push
     // changes live to readers immediately, draft roadmaps stay invisible until
     // a publisher publishes them. Kept here so it stays in sync with the
@@ -7103,6 +7197,7 @@
         initTabFields();
         initMetadataFields();
         initPublishButtons();
+        initHiddenAuthors();
         initFormattingToolbars();
         ImageUploadModal.init();
         GalleryController.init();

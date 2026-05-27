@@ -539,6 +539,37 @@
             </div>
         </div>
 
+        {# ─── Author Visibility (publisher-only) ─── #}
+        {# Lets a publisher hide specific contributors from the reader's   #}
+        {# author block / contributor list. Useful for the "I made a      #}
+        {# typo fix and don't want to be credited" case. Gated to         #}
+        {# publishers because credit curation is a content decision, not  #}
+        {# a writer-level edit. The DB still keeps every created_by /    #}
+        {# last_edited_by FK — only the public display is affected.       #}
+        {% if author_can_publish %}
+        <div id="hidden-authors-card"
+             class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3"
+             data-roadmap-id="{{ roadmap.id }}"
+             data-readonly-exempt>
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1 flex-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                    Author Visibility
+                    <span class="badge badge-xs badge-info font-normal">Publisher only</span>
+                </h2>
+                <p class="text-xs text-base-content/40 mb-3">Hide specific contributors from the public author list. Useful for a one-off fix where you don't want to be credited. Edit history in the DB is preserved either way.</p>
+                <div class="hidden-authors-empty hidden text-xs italic text-base-content/40 py-2">
+                    No contributors recorded yet.
+                </div>
+                <div class="hidden-authors-list space-y-1">
+                    {# JS-rendered: one row per contributor with a toggle. #}
+                    {# Initial render happens on editor init via a fetch   #}
+                    {# to the hidden-authors GET endpoint.                  #}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         {# ─── Trophy Guides ─── #}
         {# `id` is the jump-target for the "Jump to Trophy Guides" button   #}
         {# in the Collectibles card header (long collectibles lists make    #}

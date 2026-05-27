@@ -84,6 +84,112 @@ class RoadmapPublishView(APIView):
         })
 
 
+class RoadmapHiddenAuthorsView(APIView):
+    """GET + POST: manage the per-roadmap "hide me from credits" list.
+
+    Use case: a publisher makes a one-off typo fix on someone else's
+    guide and doesn't want to be credited as an author. They (or any
+    other publisher) can flip themselves into `hidden_authors`; the
+    reader's contributor display + author block honor the suppression.
+
+    Publisher role required for mutations (matches the existing
+    publisher-only YouTube Guide / publish-status surfaces). GET is
+    open to any roadmap author since the editor needs the current
+    state to render the toggles.
+
+    POST body:
+        profile_id   Required. The Profile to toggle.
+        hidden       Required bool. True to hide, False to show.
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsRoadmapAuthor]
+    min_roadmap_role = 'writer'
+
+    def get(self, request, roadmap_id):
+        try:
+            roadmap = Roadmap.objects.get(pk=roadmap_id)
+        except Roadmap.DoesNotExist:
+            return Response(
+                {'error': 'Roadmap not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        contributors = roadmap.contributors  # excludes hidden by design
+        hidden_ids = set(
+            roadmap.hidden_authors.values_list('id', flat=True)
+        )
+        # Re-union: the editor UI needs to show ALL contributors
+        # (visible + hidden) with their current state, so we re-derive
+        # the full union here rather than calling `contributors` (which
+        # filters them out).
+        profile_ids = set()
+        if roadmap.created_by_id:
+            profile_ids.add(roadmap.created_by_id)
+        if roadmap.last_edited_by_id:
+            profile_ids.add(roadmap.last_edited_by_id)
+        for step in roadmap.steps.all().only('created_by_id', 'last_edited_by_id'):
+            if step.created_by_id:
+                profile_ids.add(step.created_by_id)
+            if step.last_edited_by_id:
+                profile_ids.add(step.last_edited_by_id)
+        for guide in roadmap.trophy_guides.all().only('created_by_id', 'last_edited_by_id'):
+            if guide.created_by_id:
+                profile_ids.add(guide.created_by_id)
+            if guide.last_edited_by_id:
+                profile_ids.add(guide.last_edited_by_id)
+        from trophies.models import Profile
+        all_profiles = (
+            Profile.objects.filter(id__in=profile_ids)
+            .order_by('psn_username')
+            .values('id', 'psn_username', 'display_psn_username', 'avatar_url')
+        ) if profile_ids else []
+        items = [
+            {
+                'id': p['id'],
+                'psn_username': p['psn_username'] or '',
+                'display_psn_username': p['display_psn_username'] or p['psn_username'] or '',
+                'avatar_url': p['avatar_url'] or '',
+                'hidden': p['id'] in hidden_ids,
+            }
+            for p in all_profiles
+        ]
+        return Response({'contributors': items})
+
+    def post(self, request, roadmap_id):
+        # Publisher gate for mutations — re-check here since the view's
+        # min_roadmap_role is 'writer' (to allow GET for the editor UI).
+        if not request.user.profile.has_roadmap_role('publisher'):
+            return Response(
+                {'error': 'Publisher role required to change author visibility.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            roadmap = Roadmap.objects.get(pk=roadmap_id)
+        except Roadmap.DoesNotExist:
+            return Response(
+                {'error': 'Roadmap not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        profile_id = request.data.get('profile_id')
+        hidden = request.data.get('hidden')
+        if profile_id is None or hidden is None:
+            return Response(
+                {'error': 'profile_id and hidden are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            profile_id = int(profile_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'profile_id must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if hidden:
+            roadmap.hidden_authors.add(profile_id)
+        else:
+            roadmap.hidden_authors.remove(profile_id)
+        return Response({'profile_id': profile_id, 'hidden': bool(hidden)})
+
+
 class RoadmapImageUploadView(APIView):
     """POST: Upload an image for use in roadmap markdown content.
 

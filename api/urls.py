@@ -82,6 +82,7 @@ from .review_views import (
 )
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
+    RoadmapHiddenAuthorsView,
 )
 from .roadmap_lock_views import (
     RoadmapLockAcquireView, RoadmapLockHeartbeatView, RoadmapLockBranchView,
@@ -333,6 +334,7 @@ urlpatterns = [
     # mutations as separate URLs.
     path('roadmap/<int:roadmap_id>/publish/', RoadmapPublishView.as_view(), name='roadmap-publish'),
     path('roadmap/<int:roadmap_id>/preview/', RoadmapPreviewView.as_view(), name='roadmap-preview'),
+    path('roadmap/<int:roadmap_id>/hidden-authors/', RoadmapHiddenAuthorsView.as_view(), name='roadmap-hidden-authors'),
     path('roadmap/upload-image/', RoadmapImageUploadView.as_view(), name='roadmap-image-upload'),
     # Lock + branch-and-merge endpoints
     path('roadmap/<int:roadmap_id>/lock/acquire/', RoadmapLockAcquireView.as_view(), name='roadmap-lock-acquire'),

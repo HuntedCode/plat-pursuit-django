@@ -4177,6 +4177,18 @@ class Roadmap(models.Model):
         default=1,
         help_text='Minimum playthroughs required for all trophies.',
     )
+    # Publisher-curated suppression list: profiles in here are excluded
+    # from the reader's author / contributor display even though their
+    # created_by / last_edited_by FKs still point at this roadmap. Use
+    # case: a publisher makes a one-off typo fix and doesn't want to
+    # be credited as an author on someone else's guide. Per-roadmap so
+    # the same publisher can stay credited on roadmaps they actually
+    # contributed to. Publisher role required to mutate (see API).
+    hidden_authors = models.ManyToManyField(
+        Profile, related_name='hidden_from_roadmaps', blank=True,
+        help_text='Profiles to hide from the public author/contributor '
+                  'display for this roadmap.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -4251,7 +4263,10 @@ class Roadmap(models.Model):
 
         Unions: roadmap.created_by, roadmap.last_edited_by, and the
         created_by/last_edited_by of every Step and TrophyGuide on this
-        roadmap. Cached on the instance per request.
+        roadmap. Profiles in `hidden_authors` are excluded — the FK
+        history still exists in the DB (useful for moderation /
+        attribution audits) but they don't appear on the reader's
+        author display. Cached on the instance per request.
         """
         if not hasattr(self, '_contributors_cache'):
             profile_ids = set()
@@ -4272,10 +4287,14 @@ class Roadmap(models.Model):
             if not profile_ids:
                 self._contributors_cache = []
             else:
+                hidden_ids = set(
+                    self.hidden_authors.values_list('id', flat=True)
+                )
+                profile_ids -= hidden_ids
                 self._contributors_cache = list(
                     Profile.objects.filter(id__in=profile_ids)
                     .order_by('psn_username')
-                )
+                ) if profile_ids else []
         return self._contributors_cache
 
 
