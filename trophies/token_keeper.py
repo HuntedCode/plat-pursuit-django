@@ -1810,12 +1810,27 @@ class TokenKeeper:
                 # IGDBMatch is refreshed inline). Region detection + title_id
                 # capture below still run against whichever Concept the Game
                 # ends up on.
+                #
+                # When the Game already lives on an IGDB-anchored Concept
+                # (anchor_migration_completed_at is set), the PSN-storefront
+                # is no longer the source of truth — we MUST NOT re-create
+                # the old PSN concept and reassign the game back to it on
+                # every sync. That bug used to silently undo the anchoring
+                # work because `game.add_concept(psn_concept)` happily
+                # overwrites the FK whenever `concept_lock=False`.
                 anchored = try_anchor_new_game(game) if game.concept is None else None
 
                 if anchored is not None:
                     concept = anchored
                     # No PSN-derived enrichment to defer — process_match already
                     # ran inside try_anchor_new_game.
+                elif (
+                    game.concept_id
+                    and game.concept.anchor_migration_completed_at is not None
+                ):
+                    # Existing game on an IGDB-anchored Concept: preserve it.
+                    # Region detection + title_id capture below still run.
+                    concept = game.concept
                 else:
                     concept, concept_created = PsnApiService.create_concept_from_details(details)
 
