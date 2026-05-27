@@ -1715,6 +1715,12 @@ class IGDBService:
         text = cls._BRAND_PREFIX_RE.sub('', text)
         # Lowercase: IGDB search handles all-caps poorly
         text = text.lower()
+        # Split compound brand names that PSN smushes together but IGDB
+        # writes as two words. SNK's "NEOGEO" / "Neogeo" is the verified
+        # case; IGDB consistently uses "Neo Geo" (two words). The fuzzy-
+        # match ratio between "neogeo" and "neo geo" is borderline and
+        # tanks recall when the smushed variant is searched.
+        text = re.sub(r'\bneogeo\b', 'neo geo', text)
         # Strip PSN trophy-group-title noise patterns that aren't part of
         # the actual game name (e.g. PSN names the default group
         # "<Game> Trophies" or "Trophies for <Game>" — neither variant
