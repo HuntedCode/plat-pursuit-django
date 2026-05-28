@@ -73,12 +73,6 @@ from .mobile_badge_views import (
     MobileUserBadgesView, MobileProfileBadgesView,
 )
 from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
-from .review_views import (
-    RecentReviewsView, ConceptReviewSearchView,
-    ReviewListView, ReviewCreateView, ReviewDetailView,
-    ReviewVoteView, ReviewReportView,
-    ReviewReplyListView, ReviewReplyDetailView,
-)
 from .rating_views import GroupRatingView, WizardQueueView, TrophyListView
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
@@ -319,16 +313,9 @@ urlpatterns = [
     path('ratings/<int:concept_id>/group/<str:group_id>/rate/', GroupRatingView.as_view(), name='rating-group-rate'),
     path('ratings/<int:concept_id>/group/<str:group_id>/trophies/', TrophyListView.as_view(), name='rating-group-trophies'),
 
-    # Review Hub endpoints
-    path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),
-    path('reviews/search/', ConceptReviewSearchView.as_view(), name='review-search'),
-    path('reviews/<int:concept_id>/group/<str:group_id>/', ReviewListView.as_view(), name='review-list'),
-    path('reviews/<int:concept_id>/group/<str:group_id>/create/', ReviewCreateView.as_view(), name='review-create'),
-    path('reviews/<int:review_id>/', ReviewDetailView.as_view(), name='review-detail'),
-    path('reviews/<int:review_id>/vote/', ReviewVoteView.as_view(), name='review-vote'),
-    path('reviews/<int:review_id>/report/', ReviewReportView.as_view(), name='review-report'),
-    path('reviews/<int:review_id>/replies/', ReviewReplyListView.as_view(), name='review-reply-list'),
-    path('reviews/replies/<int:reply_id>/', ReviewReplyDetailView.as_view(), name='review-reply-detail'),
+    # Review API endpoints ARCHIVED (2026-05) — unregistered so they 404.
+    # The view classes remain dormant in api/review_views.py for a
+    # possible future rebuild.
 
     # Roadmap endpoints (staff-only). Per-tab/step/guide CRUD lives entirely
     # in the editor's BranchProxy now — every edit flows through the

@@ -25,8 +25,36 @@ from trophies.forms import UserConceptRatingForm
 logger = logging.getLogger('psn_api')
 
 
+class ReviewsArchivedView(ProfileHotbarMixin, TemplateView):
+    """Notice page shown where the Review Hub used to live.
+
+    The text-review system was retired in 2026-05 after a data-handling
+    bug during the IGDB-anchoring migration caused some reviews to be
+    lost. Rather than continue on a compromised system we archived
+    reviews (kept dormant for a possible future rebuild) and kept the
+    simpler ratings. This page is served at the former review-hub URLs
+    so bookmarks / links land on an honest explanation instead of a 404.
+    """
+
+    template_name = 'trophies/reviews_archived.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['breadcrumb'] = [
+            {'text': 'Home', 'url': reverse('home')},
+            {'text': 'Community', 'url': reverse('community_hub')},
+            {'text': 'Reviews'},
+        ]
+        context['seo_description'] = (
+            "PlatPursuit's community reviews are temporarily retired. "
+            "Game ratings remain available."
+        )
+        return context
+
+
 class ReviewHubLandingView(ProfileHotbarMixin, TemplateView):
-    """Review Hub landing page with discovery content."""
+    """DORMANT (reviews archived 2026-05). Kept for a possible future
+    rebuild; no longer routed. ReviewsArchivedView serves the URL."""
 
     template_name = 'trophies/review_hub.html'
 
@@ -69,7 +97,7 @@ class RateMyGamesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse('home')},
-            {'text': 'Review Hub', 'url': reverse('reviews_landing')},
+            {'text': 'Community', 'url': reverse('community_hub')},
             {'text': 'Rate My Games'},
         ]
 

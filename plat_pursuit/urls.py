@@ -37,7 +37,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView
+from trophies.views import GamesListView, GameDetailView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -182,10 +182,18 @@ urlpatterns = [
     path('community/challenges/genre/<int:challenge_id>/edit/', GenreChallengeEditView.as_view(), name='genre_challenge_edit'),
     path('my-challenges/', MyChallengesView.as_view(), name='my_challenges'),
 
-    # Review Hub (canonical paths under /community/reviews/)
-    path('community/reviews/', ReviewHubLandingView.as_view(), name='reviews_landing'),
-    path('community/reviews/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
-    path('community/reviews/<slug:slug>/', ReviewHubDetailView.as_view(), name='review_hub'),
+    # Rate My Games wizard (ratings-only; lives outside the archived
+    # /community/reviews/ subtree).
+    path('community/rate-my-games/', RateMyGamesView.as_view(), name='rate_my_games'),
+
+    # Reviews ARCHIVED (2026-05). The former Review Hub URLs now serve a
+    # notice page; the detail route redirects to it. URL names are kept so
+    # the many lingering `{% url 'reviews_landing'/'review_hub' %}` refs
+    # resolve to the notice instead of 500ing. The old hub views remain in
+    # the tree, dormant, for a possible future rebuild.
+    path('community/reviews/', ReviewsArchivedView.as_view(), name='reviews_landing'),
+    path('community/reviews/rate-my-games/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True)),
+    path('community/reviews/<slug:slug>/', RedirectView.as_view(pattern_name='reviews_landing', permanent=False), name='review_hub'),
 
     # Monthly Recap URLs (canonical paths under /dashboard/recap/)
     # Recap is a Dashboard hub citizen — see docs/architecture/ia-and-subnav.md.
