@@ -1050,24 +1050,18 @@ class Concept(models.Model):
         if other == self:
             return
 
-        # Comments (concept-level, trophy-level, checklist-level)
+        # Comments (concept-level, trophy-level, checklist-level). Comments
+        # FK Concept directly (trophy_id/checklist_id are plain ints, not a
+        # CTG FK) so a bulk concept re-point is safe.
         other.comments.update(concept=self)
 
-        # Ratings: re-point non-duplicate (keyed by profile + concept_trophy_group)
-        existing_rating_keys = set(
-            self.user_ratings.values_list('profile_id', 'concept_trophy_group_id')
-        )
-        for rating in other.user_ratings.all():
-            key = (rating.profile_id, rating.concept_trophy_group_id)
-            if key not in existing_rating_keys:
-                rating.concept = self
-                rating.save(update_fields=['concept'])
-
         # ConceptTrophyGroups: merge by trophy_group_id, re-point unique ones.
-        # Ordering matters: CTGs must be merged BEFORE reviews so that
-        # re-pointed reviews can reference the surviving CTG on self.
-        # Duplicate CTGs left on 'other' cascade-delete with it, but their
-        # reviews are already re-pointed or intentionally skipped (deduped).
+        # MUST run before ratings, roadmaps, and reviews so all three can
+        # re-point onto the surviving CTG. Duplicate CTGs (a trophy_group_id
+        # self already has) are LEFT on 'other' and cascade-delete when
+        # 'other' is removed — so anything still FK'd to them (ratings,
+        # reviews; both on_delete=CASCADE) MUST be moved onto self's
+        # equivalent CTG first, or it gets silently cascade-deleted.
         existing_ctg_ids = set(
             self.concept_trophy_groups.values_list('trophy_group_id', flat=True)
         )
@@ -1075,6 +1069,49 @@ class Concept(models.Model):
             if ctg.trophy_group_id not in existing_ctg_ids:
                 ctg.concept = self
                 ctg.save(update_fields=['concept'])
+
+        # Surviving CTG per trophy_group_id on self (post-merge). Ratings and
+        # reviews re-point their concept_trophy_group onto these. Without this
+        # they keep pointing at other's doomed duplicate CTG and ride its
+        # cascade-delete into oblivion (the historical review/rating loss
+        # bug). Also note: dedup below keys on trophy_group_id, NOT the CTG
+        # primary key — self and other each have their own CTG row per
+        # trophy_group_id, so a PK-based key never matched across concepts
+        # and every cross-concept duplicate slipped through (then died on
+        # the cascade anyway).
+        surviving_ctg_by_group_id = {
+            ctg.trophy_group_id: ctg
+            for ctg in self.concept_trophy_groups.all()
+        }
+
+        # Ratings: re-point onto the surviving concept + equivalent CTG,
+        # deduped by (profile, trophy_group_id). concept_trophy_group is
+        # nullable here (null = base-game rating); null-CTG rows move safely
+        # with a concept-only re-point since no CTG cascade touches them.
+        existing_rating_keys = set(
+            self.user_ratings.values_list(
+                'profile_id', 'concept_trophy_group__trophy_group_id'
+            )
+        )
+        for rating in other.user_ratings.select_related('concept_trophy_group').all():
+            group_id = (
+                rating.concept_trophy_group.trophy_group_id
+                if rating.concept_trophy_group_id else None
+            )
+            key = (rating.profile_id, group_id)
+            if key in existing_rating_keys:
+                continue  # self already has this user's rating for this group
+            if group_id is None:
+                rating.concept = self
+                rating.save(update_fields=['concept'])
+            else:
+                target_ctg = surviving_ctg_by_group_id.get(group_id)
+                if target_ctg is None:
+                    continue
+                rating.concept = self
+                rating.concept_trophy_group = target_ctg
+                rating.save(update_fields=['concept', 'concept_trophy_group'])
+            existing_rating_keys.add(key)
 
         # Roadmaps: per-CTG. For each source roadmap, re-point its CTG to the
         # equivalent surviving CTG on self (matched by trophy_group_id) and
@@ -1104,15 +1141,27 @@ class Concept(models.Model):
             source_roadmap.save(update_fields=['concept', 'concept_trophy_group'])
             existing_roadmap_ctg_ids.add(target_ctg.id)
 
-        # Reviews: re-point non-duplicate (keyed by profile + concept_trophy_group)
+        # Reviews: re-point onto the surviving concept + equivalent CTG,
+        # deduped by (profile, trophy_group_id). concept_trophy_group is
+        # non-null and on_delete=CASCADE, so it MUST be moved off other's
+        # doomed duplicate CTG or the review cascade-deletes with 'other'.
         existing_review_keys = set(
-            self.reviews.values_list('profile_id', 'concept_trophy_group_id')
+            self.reviews.values_list(
+                'profile_id', 'concept_trophy_group__trophy_group_id'
+            )
         )
-        for review in other.reviews.all():
-            key = (review.profile_id, review.concept_trophy_group_id)
-            if key not in existing_review_keys:
-                review.concept = self
-                review.save(update_fields=['concept'])
+        for review in other.reviews.select_related('concept_trophy_group').all():
+            group_id = review.concept_trophy_group.trophy_group_id
+            key = (review.profile_id, group_id)
+            if key in existing_review_keys:
+                continue  # self already has this user's review for this group
+            target_ctg = surviving_ctg_by_group_id.get(group_id)
+            if target_ctg is None:
+                continue
+            review.concept = self
+            review.concept_trophy_group = target_ctg
+            review.save(update_fields=['concept', 'concept_trophy_group'])
+            existing_review_keys.add(key)
 
         # Checklists
         other.checklists.update(concept=self)

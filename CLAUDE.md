@@ -92,9 +92,9 @@ The `Concept.absorb(other)` method in `trophies/models.py` migrates ALL related 
 
 Currently handled by `absorb()`:
 - Comments (all types, including historical concept/trophy-level) + votes + reports
-- UserConceptRating (skip duplicates by profile + concept_trophy_group)
-- ConceptTrophyGroups (merge by trophy_group_id, orphans cascade-delete)
-- Reviews (skip duplicates by profile + concept_trophy_group)
+- ConceptTrophyGroups (merged FIRST, by trophy_group_id; orphans cascade-delete). This ordering is load-bearing: ratings/reviews below re-point onto the surviving CTG, so the merge must precede them.
+- UserConceptRating (re-point concept AND concept_trophy_group to the surviving CTG; dedup by profile + trophy_group_id, NOT the CTG primary key. Both FKs are CASCADE, so leaving concept_trophy_group on `other`'s doomed duplicate CTG silently cascade-deletes the rating — the historical loss bug. Null-CTG base-game ratings re-point concept only)
+- Reviews (same as UserConceptRating: re-point concept AND concept_trophy_group to the surviving CTG, dedup by profile + trophy_group_id; concept_trophy_group is non-null + CASCADE so it MUST move off the doomed CTG)
 - Checklists + sections, items, votes, reports, user progress
 - FeaturedGuide entries
 - Profile.selected_background
