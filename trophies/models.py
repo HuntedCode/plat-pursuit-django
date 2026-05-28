@@ -1966,7 +1966,8 @@ class ProfileShowcase(models.Model):
     SHOWCASE_BADGE = 'badge_showcase'
     SHOWCASE_RAREST = 'rarest_trophies'
     SHOWCASE_RECENT_PLATS = 'recent_platinums'
-    SHOWCASE_REVIEW = 'review_showcase'
+    # SHOWCASE_REVIEW removed 2026-05 (text reviews archived). Existing
+    # 'review_showcase' rows are deleted by migration 0237.
     SHOWCASE_CHALLENGE = 'challenge_showcase'
     SHOWCASE_TITLE = 'title_showcase'
 
@@ -1976,7 +1977,6 @@ class ProfileShowcase(models.Model):
         (SHOWCASE_BADGE, 'Badge Showcase'),
         (SHOWCASE_RAREST, 'Rarest Trophies'),
         (SHOWCASE_RECENT_PLATS, 'Recent Platinums'),
-        (SHOWCASE_REVIEW, 'Review Showcase'),
         (SHOWCASE_CHALLENGE, 'Challenge Showcase'),
         (SHOWCASE_TITLE, 'Title Showcase'),
     ]

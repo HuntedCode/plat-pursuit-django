@@ -274,32 +274,8 @@ def provide_recent_platinums(profile, config):
     }
 
 
-def provide_review_showcase(profile, config):
-    """Review Showcase: up to 2 user-selected reviews.
-
-    Config schema: {"review_ids": [id1, id2]} - order preserved from JSON list.
-    """
-    from trophies.models import Review
-
-    max_items = 2
-    review_ids = (config or {}).get('review_ids', [])[:max_items]
-    if not review_ids:
-        return {'items': [], 'has_items': False, 'max_items': max_items}
-
-    reviews_map = {
-        r.id: r for r in Review.objects.filter(
-            id__in=review_ids, profile=profile, is_deleted=False,
-        ).select_related('concept', 'concept__igdb_match', 'concept_trophy_group').defer(
-            # Defer the IGDB raw_response blob — unused by review-card rendering.
-            'concept__igdb_match__raw_response',
-        )
-    }
-    ordered = [reviews_map[rid] for rid in review_ids if rid in reviews_map]
-    return {
-        'items': ordered,
-        'has_items': bool(ordered),
-        'max_items': max_items,
-    }
+# provide_review_showcase removed 2026-05 (Review Showcase type retired
+# when text reviews were archived).
 
 
 def provide_title_showcase(profile, config):
@@ -339,28 +315,7 @@ def _validate_rarest_trophies_config(profile, config):
     return {'one_per_game': one_per_game}
 
 
-def _validate_review_showcase_config(profile, config):
-    """Ensure review_ids belong to the profile and respect max_items (2)."""
-    from trophies.models import Review
-
-    review_ids = config.get('review_ids', [])
-    if not isinstance(review_ids, list):
-        raise ShowcaseInvalidConfig("review_ids must be a list.")
-    if len(review_ids) > 2:
-        raise ShowcaseInvalidConfig("Maximum 2 reviews allowed.")
-
-    if review_ids:
-        owned = set(
-            Review.objects.filter(
-                id__in=review_ids, profile=profile, is_deleted=False,
-            ).values_list('id', flat=True)
-        )
-        missing = [rid for rid in review_ids if rid not in owned]
-        if missing:
-            raise ShowcaseInvalidConfig(
-                f"Review IDs not found: {missing}"
-            )
-    return {'review_ids': review_ids}
+# _validate_review_showcase_config removed 2026-05 (Review Showcase retired).
 
 
 def _validate_title_showcase_config(profile, config):
@@ -477,18 +432,8 @@ SHOWCASE_REGISTRY = {
         'is_automatic': True,
         'max_items': 6,
     },
-    ProfileShowcase.SHOWCASE_REVIEW: {
-        'slug': ProfileShowcase.SHOWCASE_REVIEW,
-        'name': 'Review Showcase',
-        'description': 'Feature 2 of your written game reviews.',
-        'template': 'trophies/partials/profile_showcases/showcase_reviews.html',
-        'editor_template': 'trophies/partials/profile_editor/picker_reviews.html',
-        'provider': provide_review_showcase,
-        'validator': _validate_review_showcase_config,
-        'requires_premium': True,
-        'is_automatic': False,
-        'max_items': 2,
-    },
+    # SHOWCASE_REVIEW registry entry removed 2026-05 (text reviews archived).
+    # showcase_reviews.html / picker_reviews.html remain dormant in the tree.
     ProfileShowcase.SHOWCASE_TITLE: {
         'slug': ProfileShowcase.SHOWCASE_TITLE,
         'name': 'Title Showcase',
