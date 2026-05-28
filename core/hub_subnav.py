@@ -135,7 +135,6 @@ COMMUNITY_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('hub', 'Hub', 'community_hub', 'home'),
         HubSubnavItem('profiles', 'Profiles', 'profiles_list', 'user'),
-        HubSubnavItem('reviews', 'Reviews', 'reviews_landing', 'message-square'),
         HubSubnavItem('challenges', 'Challenges', 'challenges_browse', 'target'),
         HubSubnavItem('lists', 'Lists', 'lists_browse', 'list'),
         HubSubnavItem('leaderboards', 'Leaderboards', 'overall_badge_leaderboards', 'bar-chart'),
@@ -190,8 +189,12 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     # Community
     'profile_detail': ('community', 'profiles'),
     'trophy_case': ('community', 'profiles'),
-    'review_hub': ('community', 'reviews'),
-    'rate_my_games': ('community', 'reviews'),
+    # Reviews archived 2026-05; the notice page highlights the Community hub
+    # root. Rate My Games (ratings tool) also maps to the hub root now that
+    # it lives at /community/rate-my-games/.
+    'reviews_landing': ('community', 'hub'),
+    'review_hub': ('community', 'hub'),
+    'rate_my_games': ('community', 'hub'),
     'list_detail': ('community', 'lists'),
     'list_create': ('community', 'lists'),
     'list_edit': ('community', 'lists'),
