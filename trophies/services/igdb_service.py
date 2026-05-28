@@ -1874,6 +1874,23 @@ class IGDBService:
                 concept.release_date = igdb_match.igdb_first_release_date
                 concept.save(update_fields=['release_date'])
 
+            # Sync Concept.bg_url (landscape background art) from IGDB when
+            # the concept has none. PSN sets bg_url from GAMEHUB art, but
+            # IGDB-anchored concepts never go through that path, so their
+            # bg_url stays empty — which broke the profile banner picker
+            # (filters concepts to bg_url non-empty) and blanked banners
+            # whose selected_background migrated to an anchored concept.
+            # Prefer a 1080p artwork (16:9 landscape), fall back to a
+            # screenshot. Only fills when empty; never overwrites PSN art.
+            if not concept.bg_url:
+                igdb_bg = (
+                    igdb_match.artwork_urls(size='1080p')
+                    or igdb_match.screenshot_urls()
+                )
+                if igdb_bg:
+                    concept.bg_url = igdb_bg[0]
+                    concept.save(update_fields=['bg_url'])
+
         return igdb_match
 
     # IGDB platform ID -> PlatPursuit title_platform string
