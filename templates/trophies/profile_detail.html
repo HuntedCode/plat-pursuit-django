@@ -60,13 +60,6 @@
                 </svg>
                 <span class="text-xs md:text-sm">Challenges{% if profile_challenge_count %} <span class="badge badge-xs badge-ghost">{{ profile_challenge_count }}</span>{% endif %}</span>
             </a>
-            <a href="?tab=reviews" hx-get="{% url 'profile_detail' psn_username=profile_url %}?tab=reviews" hx-target="#tab-content" hx-push-url="true" hx-swap="innerHTML"
-               id="reviews-tab" class="tab {% if current_tab == 'reviews' %}tab-active{% endif %}" role="tab" data-tab="reviews">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5 mr-1 md:mr-2" fill="none" viewBox="0 0 24 24" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
-                <span class="text-xs md:text-sm">Reviews{% if profile_review_count %} <span class="badge badge-xs badge-ghost">{{ profile_review_count }}</span>{% endif %}</span>
-            </a>
         </div>
         {% endwith %}
 
