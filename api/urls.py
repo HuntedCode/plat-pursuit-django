@@ -74,12 +74,12 @@ from .mobile_badge_views import (
 )
 from .mobile_game_views import MobileProfileGamesView, MobileGameTrophiesView
 from .review_views import (
-    RecentReviewsView, ConceptReviewSearchView, TrophyListView,
+    RecentReviewsView, ConceptReviewSearchView,
     ReviewListView, ReviewCreateView, ReviewDetailView,
     ReviewVoteView, ReviewReportView,
     ReviewReplyListView, ReviewReplyDetailView,
 )
-from .rating_views import GroupRatingView, WizardQueueView
+from .rating_views import GroupRatingView, WizardQueueView, TrophyListView
 from .roadmap_views import (
     RoadmapPublishView, RoadmapImageUploadView, RoadmapPreviewView,
     RoadmapHiddenAuthorsView,
@@ -317,13 +317,13 @@ urlpatterns = [
     # Rating endpoints (standalone — independent of the archived review system)
     path('ratings/wizard/queue/', WizardQueueView.as_view(), name='rating-wizard-queue'),
     path('ratings/<int:concept_id>/group/<str:group_id>/rate/', GroupRatingView.as_view(), name='rating-group-rate'),
+    path('ratings/<int:concept_id>/group/<str:group_id>/trophies/', TrophyListView.as_view(), name='rating-group-trophies'),
 
     # Review Hub endpoints
     path('reviews/recent/', RecentReviewsView.as_view(), name='review-recent'),
     path('reviews/search/', ConceptReviewSearchView.as_view(), name='review-search'),
     path('reviews/<int:concept_id>/group/<str:group_id>/', ReviewListView.as_view(), name='review-list'),
     path('reviews/<int:concept_id>/group/<str:group_id>/create/', ReviewCreateView.as_view(), name='review-create'),
-    path('reviews/<int:concept_id>/group/<str:group_id>/trophies/', TrophyListView.as_view(), name='review-group-trophies'),
     path('reviews/<int:review_id>/', ReviewDetailView.as_view(), name='review-detail'),
     path('reviews/<int:review_id>/vote/', ReviewVoteView.as_view(), name='review-vote'),
     path('reviews/<int:review_id>/report/', ReviewReportView.as_view(), name='review-report'),
