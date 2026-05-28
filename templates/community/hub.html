@@ -10,7 +10,7 @@ Community Hub: Feature Spotlight design.
 Composition (top to bottom):
   1. Hero — site heartbeat ribbon (built_for_hunters partial, lifted as-is)
   2. Active fundraiser banner (conditional)
-  3. 2x2 Feature Grid — Reviews / Challenges / Lists / Leaderboards
+  3. 2x2 Feature Grid — Rate My Games / Challenges / Lists / Leaderboards
   4. Discord callout — permanent fixture
 
 The page uses the full site container width (no max-w-4xl wrapper) to
@@ -47,11 +47,9 @@ See docs/features/community-hub.md for the design rationale.
                         Your front door to everything PlatPursuit's community has to offer.
                     </p>
                 </div>
-                <a href="{% url 'reviews_landing' %}" class="btn btn-primary btn-sm md:btn-md gap-2 shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    <span class="hidden md:inline">Browse Reviews</span>
+                <a href="{% url 'rate_my_games' %}" class="btn btn-primary btn-sm md:btn-md gap-2 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    <span class="hidden md:inline">Rate My Games</span>
                 </a>
             </div>
         </div>
@@ -91,7 +89,7 @@ See docs/features/community-hub.md for the design rationale.
     {# ─────────────────────────────────────────────────────────────────── #}
     <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
 
-        {# ── Reviews feature card ── #}
+        {# ── Rate My Games feature card ── #}
         {# Anatomy (shared by all 4 cards):                                    #}
         {#   Header (icon + title + tagline)                                   #}
         {#   Top half: 5 padded community rows (placeholder if no live data)   #}
@@ -100,27 +98,26 @@ See docs/features/community-hub.md for the design rationale.
         {#   Hero CTA button                                                    #}
         {# The padded-row pattern (from _pad_to_limit in the service) keeps    #}
         {# every card the same height regardless of how much real data exists. #}
+        {# Replaced the Reviews card when reviews were archived (2026-05).      #}
         <section>
-            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-success/40 shadow-lg shadow-neutral hover:shadow-success/10 transition-all h-full">
+            <div class="card bg-base-200/90 border-2 border-base-300 hover:border-warning/40 shadow-lg shadow-neutral hover:shadow-warning/10 transition-all h-full">
                 <div class="card-body p-3 md:p-5 lg:p-7 flex flex-col">
                     {# Header: icon + title + tagline #}
                     <div class="flex items-start gap-3 mb-3">
-                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-success/15 ring-2 ring-success/30 flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                            </svg>
+                        <div class="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-lg bg-warning/15 ring-2 ring-warning/30 flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                         </div>
                         <div class="flex-1 min-w-0">
-                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Reviews</h2>
-                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">See what hunters are saying about your next platinum.</p>
+                            <h2 class="text-base md:text-lg font-bold text-base-content line-clamp-1 pr-1">Rate My Games</h2>
+                            <p class="text-xs md:text-sm text-base-content/60 italic pr-1">Rate your platinums and help hunters pick their next one.</p>
                         </div>
                     </div>
 
-                    {# ── Top half: 5 most-recently-reviewed titles ── #}
+                    {# ── Top half: 5 most-rated games ── #}
                     <div class="space-y-1 mb-3">
-                        {% for title in recently_reviewed_titles %}
+                        {% for title in most_rated_games %}
                             {% if title %}
-                                <a href="{% url 'review_hub' title.slug %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-success/30 transition-colors">
+                                <a href="{% url 'game_detail' title.np_communication_id %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-warning/30 transition-colors">
                                     <div class="w-6 h-6 rounded overflow-hidden shrink-0 ring-1 ring-base-300">
                                         {% if title.concept_icon_url %}
                                             <img src="{{ title.concept_icon_url }}" alt="{{ title.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
@@ -130,21 +127,14 @@ See docs/features/community-hub.md for the design rationale.
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="text-sm font-semibold line-clamp-1 pr-1">{{ title.unified_title }}</div>
-                                        <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ title.review_count }} review{{ title.review_count|pluralize }}</div>
+                                        <div class="text-xs text-base-content/50 line-clamp-1 pr-1">{{ title.rating_count }} rating{{ title.rating_count|pluralize }}</div>
                                     </div>
+                                    {% if title.avg_rating %}
                                     <div class="flex items-center gap-1 shrink-0">
-                                        {% if title.recommendation_pct >= 50 %}
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
-                                            </svg>
-                                            <span class="text-xs font-bold text-success">{{ title.recommendation_pct }}%</span>
-                                        {% else %}
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
-                                            </svg>
-                                            <span class="text-xs font-bold text-error">{{ title.recommendation_pct }}%</span>
-                                        {% endif %}
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-warning" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                        <span class="text-xs font-bold text-warning">{{ title.avg_rating }}</span>
                                     </div>
+                                    {% endif %}
                                 </a>
                             {% else %}
                                 {# Placeholder row — keeps the card the same height as a fully-populated one #}
@@ -161,33 +151,29 @@ See docs/features/community-hub.md for the design rationale.
                     </div>
 
                     {# ── Divider ── #}
-                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-success/15 after:bg-success/15">Your reviews</div>
+                    <div class="divider my-1 text-xs uppercase tracking-wide text-base-content/40 font-semibold before:bg-warning/15 after:bg-warning/15">Your ratings</div>
 
-                    {# ── Bottom half: personal review stats ── #}
+                    {# ── Bottom half: personal rating stats ── #}
                     <div class="mb-3">
-                        {% if personal_review_stats %}
-                            <div class="grid grid-cols-3 gap-2">
+                        {% if personal_rating_stats %}
+                            <div class="grid grid-cols-2 gap-2">
                                 <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
-                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.review_count|intcomma }}</div>
-                                    <div class="text-xs text-base-content/50 leading-tight">Written</div>
+                                    <div class="text-base md:text-lg font-bold text-warning">{{ personal_rating_stats.rated_count|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Rated</div>
                                 </div>
                                 <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
-                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.helpful_received|intcomma }}</div>
-                                    <div class="text-xs text-base-content/50 leading-tight">Helpful</div>
-                                </div>
-                                <div class="rounded-lg bg-white/[0.03] border border-base-content/5 p-2 text-center">
-                                    <div class="text-base md:text-lg font-bold text-success">{{ personal_review_stats.recommend_pct }}%</div>
-                                    <div class="text-xs text-base-content/50 leading-tight">Recommend</div>
+                                    <div class="text-base md:text-lg font-bold text-warning">{{ personal_rating_stats.unrated_count|intcomma }}</div>
+                                    <div class="text-xs text-base-content/50 leading-tight">Waiting</div>
                                 </div>
                             </div>
                         {% else %}
-                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-success' accent_border_class='border-success/30' prompt_text='See how your reviews stack up against the community.' %}
+                            {% include 'community/partials/personal_half_empty.html' with accent_color_class='text-warning' accent_border_class='border-warning/30' prompt_text='Rate your platinums and track how many are left.' %}
                         {% endif %}
                     </div>
 
                     {# Hero CTA — pinned to the bottom via flex-col + mt-auto so cards stay aligned #}
-                    <a href="{% url 'reviews_landing' %}" class="btn btn-success btn-sm gap-2 w-full mt-auto">
-                        Visit Review Hub
+                    <a href="{% url 'rate_my_games' %}" class="btn btn-warning btn-sm gap-2 w-full mt-auto">
+                        Rate My Games
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                     </a>
                 </div>

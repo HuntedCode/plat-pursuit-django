@@ -73,60 +73,50 @@ def _pad_to_limit(items, limit=SPOTLIGHT_LIMIT):
 # Feature Grid card data — top halves (community pulse)
 # ---------------------------------------------------------------------------
 
-def _get_recently_reviewed_titles_spotlight(limit=SPOTLIGHT_LIMIT):
-    """Most recently reviewed titles (deduped by concept) — Reviews card top.
+def _get_most_rated_games_spotlight(limit=SPOTLIGHT_LIMIT):
+    """Most-rated games by community rating count — Rate My Games card top.
 
-    Surfaces the N concepts that received the most recent review activity,
-    one row per concept, with the recommendation percentage as the at-a-
-    glance score. Title-grouped output dedupes reviews by concept so three
-    different people reviewing Elden Ring don't take all 5 slots.
+    Surfaces the N most-rated concepts with their community average overall
+    rating as the at-a-glance score. Replaced the reviews spotlight when the
+    review system was archived (2026-05).
 
     Returns a list of dicts: unified_title, slug, concept_icon_url,
-    review_count, recommended_count, recommendation_pct, latest_review_at.
+    rating_count, avg_rating.
     """
-    from django.db.models import Count, Max, Q
-    from trophies.models import Concept
+    from django.db.models import Avg, Count, OuterRef, Subquery
+    from trophies.models import Concept, Game
+
+    # Representative game per concept for the game-detail link (game_detail
+    # is keyed by np_communication_id, not concept slug).
+    rep_game = (
+        Game.objects.filter(concept=OuterRef('pk'))
+        .order_by('pk')
+        .values('np_communication_id')[:1]
+    )
 
     concepts = list(
         Concept.objects
         .annotate(
-            latest_review_at=Max(
-                'reviews__created_at',
-                filter=Q(reviews__is_deleted=False),
-            ),
-            review_count=Count(
-                'reviews',
-                filter=Q(reviews__is_deleted=False),
-            ),
-            recommended_count=Count(
-                'reviews',
-                filter=Q(
-                    reviews__is_deleted=False,
-                    reviews__recommended=True,
-                ),
-            ),
+            rating_count=Count('user_ratings'),
+            avg_rating=Avg('user_ratings__overall_rating'),
+            rep_npid=Subquery(rep_game),
         )
-        .filter(latest_review_at__isnull=False)
-        .order_by('-latest_review_at')[:limit]
+        .filter(rating_count__gt=0, rep_npid__isnull=False)
+        .order_by('-rating_count')[:limit]
         .values(
-            'unified_title', 'slug', 'concept_icon_url',
-            'review_count', 'recommended_count', 'latest_review_at',
+            'unified_title', 'concept_icon_url',
+            'rating_count', 'avg_rating', 'rep_npid',
         )
     )
 
-    # Reuse the same percentage math ReviewHubService.get_most_reviewed_games
-    # uses so the score on the card matches the score on the Review Hub.
     result = []
     for c in concepts:
-        total = c['review_count']
-        pct = round(c['recommended_count'] / total * 100) if total else 0
         result.append({
             'unified_title': c['unified_title'],
-            'slug': c['slug'],
+            'np_communication_id': c['rep_npid'],
             'concept_icon_url': c['concept_icon_url'] or '',
-            'review_count': total,
-            'recommendation_pct': pct,
-            'latest_review_at': c['latest_review_at'],
+            'rating_count': c['rating_count'],
+            'avg_rating': round(c['avg_rating'], 1) if c['avg_rating'] else None,
         })
     return _pad_to_limit(result, limit)
 
@@ -233,38 +223,32 @@ def _get_xp_leaderboard_spotlight(viewer_profile=None, top_n=SPOTLIGHT_LIMIT):
 # "sign in / link PSN" CTA. Returning None instead of an empty dict makes
 # the template's branching unambiguous.
 
-def _get_personal_review_stats(viewer_profile):
-    """Personal review stats for the Reviews card bottom half.
+def _get_personal_rating_stats(viewer_profile):
+    """Personal rating stats for the Rate My Games card bottom half.
 
-    Returns a dict with: review_count, helpful_received, recommend_pct.
+    Returns a dict with: rated_count (games this user has rated) and
+    unrated_count (platinumed/100% games still waiting for a rating).
     Returns None for anonymous viewers / no-profile viewers.
     """
     if viewer_profile is None:
         return None
 
-    from django.db.models import Count, Q, Sum
-    from trophies.models import Review
+    from trophies.models import UserConceptRating
+    from trophies.services.review_hub_service import ReviewHubService
 
-    agg = Review.objects.filter(
+    rated_count = UserConceptRating.objects.filter(
         profile=viewer_profile,
-        is_deleted=False,
-    ).aggregate(
-        review_count=Count('id'),
-        helpful_received=Sum('helpful_count'),
-        recommended_count=Count('id', filter=Q(recommended=True)),
-    )
+    ).count()
 
-    review_count = agg['review_count'] or 0
-    helpful_received = agg['helpful_received'] or 0
-    recommended_count = agg['recommended_count'] or 0
-    recommend_pct = (
-        round(recommended_count / review_count * 100) if review_count else 0
-    )
+    try:
+        unrated_count = ReviewHubService.get_unrated_platinum_count(viewer_profile)
+    except Exception:
+        logger.exception("Failed to compute unrated platinum count for rating stats")
+        unrated_count = 0
 
     return {
-        'review_count': review_count,
-        'helpful_received': helpful_received,
-        'recommend_pct': recommend_pct,
+        'rated_count': rated_count,
+        'unrated_count': unrated_count,
     }
 
 
@@ -425,12 +409,12 @@ def build_community_hub_context(viewer_profile=None):
     the page-wide pieces):
 
         Top halves:
-            - recently_reviewed_titles
+            - most_rated_games
             - recent_lists
             - active_challenges
             - xp_leaderboard
         Personal halves (None when viewer_profile is None):
-            - personal_review_stats
+            - personal_rating_stats
             - personal_list_stats
             - personal_challenge_slots
             - personal_xp_neighborhood
@@ -447,10 +431,10 @@ def build_community_hub_context(viewer_profile=None):
     # ----- Top halves -----
 
     try:
-        context['recently_reviewed_titles'] = _get_recently_reviewed_titles_spotlight()
+        context['most_rated_games'] = _get_most_rated_games_spotlight()
     except Exception:
-        logger.exception("Failed to load community hub recently_reviewed_titles")
-        context['recently_reviewed_titles'] = []
+        logger.exception("Failed to load community hub most_rated_games")
+        context['most_rated_games'] = []
 
     try:
         context['recent_lists'] = _get_recent_lists_spotlight()
@@ -475,10 +459,10 @@ def build_community_hub_context(viewer_profile=None):
     # template branches on the None to render the sign-in / link-PSN CTA.
 
     try:
-        context['personal_review_stats'] = _get_personal_review_stats(viewer_profile)
+        context['personal_rating_stats'] = _get_personal_rating_stats(viewer_profile)
     except Exception:
-        logger.exception("Failed to load community hub personal_review_stats")
-        context['personal_review_stats'] = None
+        logger.exception("Failed to load community hub personal_rating_stats")
+        context['personal_rating_stats'] = None
 
     try:
         context['personal_list_stats'] = _get_personal_list_stats(viewer_profile)
