@@ -1845,6 +1845,15 @@ def provide_rate_my_games(profile):
         )
         unrated_ids = [cid for cid in plat_concept_ids if cid and cid not in rated_ids][:12]
         if unrated_ids:
+            from django.db.models import OuterRef, Subquery
+            from trophies.models import Game
+            # Representative game npid per concept — thumbnails link to game
+            # detail (keyed by np_communication_id), not the archived review hub.
+            rep_game = (
+                Game.objects.filter(concept=OuterRef('pk'))
+                .order_by('pk')
+                .values('np_communication_id')[:1]
+            )
             concepts = (
                 Concept.objects
                 .filter(id__in=unrated_ids)
@@ -1852,12 +1861,15 @@ def provide_rate_my_games(profile):
                 .exclude(slug__isnull=True)
                 .select_related('igdb_match')
                 .defer('igdb_match__raw_response')
+                .annotate(rep_npid=Subquery(rep_game))
             )
             for c in concepts:
+                if not c.rep_npid:
+                    continue
                 preview_games.append({
                     'name': c.unified_title,
                     'icon_url': c.cover_url or '',
-                    'slug': c.slug,
+                    'np_communication_id': c.rep_npid,
                 })
 
     rated_count = max(0, total_plats - unrated_count)
@@ -4959,25 +4971,10 @@ DASHBOARD_MODULES = [
         'default_size': 'medium',
         'allowed_sizes': ['small', 'medium', 'large'],
     },
-    {
-        'slug': 'my_reviews',
-        'name': 'My Reviews',
-        'description': 'Your reviews at a glance. Helpful votes, replies, and recent posts.',
-        'category': 'highlights',
-        'template': 'trophies/partials/dashboard/my_reviews.html',
-        'provider': provide_my_reviews,
-        'requires_premium': False,
-        'load_strategy': 'lazy',
-        'default_order': 6,  # highlights #6
-        'default_settings': {'limit': 6},
-        'configurable_settings': [
-            {'key': 'limit', 'label': 'Reviews to show', 'type': 'select', 'default': 6,
-             'options': [{'value': 3, 'label': '3'}, {'value': 6, 'label': '6'}, {'value': 9, 'label': '9'}]},
-        ],
-        'cache_ttl': 600,
-        'default_size': 'medium',
-        'allowed_sizes': ['small', 'medium', 'large'],
-    },
+    # 'my_reviews' module removed from the registry (reviews archived
+    # 2026-05). provide_my_reviews + my_reviews.html remain dormant in the
+    # tree. Module consumers guard on get_module_by_slug() returning None,
+    # so any layout that still pins 'my_reviews' simply skips it.
     {
         'slug': 'rarity_showcase',
         'name': 'Rarity Showcase',

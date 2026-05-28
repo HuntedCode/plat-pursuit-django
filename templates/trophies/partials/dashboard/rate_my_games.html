@@ -25,8 +25,8 @@
                         <div class="flex gap-3 w-max" data-rate-track>
                             {# Duplicate the icons so the loop is seamless #}
                             {% for game in data.preview_games %}
-                                {% if game.slug %}
-                                <a href="{% url 'review_hub' game.slug %}" class="w-16 lg:w-20 aspect-[3/4] rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20 block" title="{{ game.name }}">
+                                {% if game.np_communication_id %}
+                                <a href="{% url 'game_detail' game.np_communication_id %}" class="w-16 lg:w-20 aspect-[3/4] rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20 block" title="{{ game.name }}">
                                 {% else %}
                                 <div class="w-16 lg:w-20 aspect-[3/4] rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20" title="{{ game.name }}">
                                 {% endif %}
@@ -37,12 +37,12 @@
                                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
                                         </div>
                                     {% endif %}
-                                {% if game.slug %}</a>{% else %}</div>{% endif %}
+                                {% if game.np_communication_id %}</a>{% else %}</div>{% endif %}
                             {% endfor %}
                             {# Second copy for seamless loop #}
                             {% for game in data.preview_games %}
-                                {% if game.slug %}
-                                <a href="{% url 'review_hub' game.slug %}" class="w-16 lg:w-20 aspect-[3/4] rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20 block" title="{{ game.name }}" tabindex="-1">
+                                {% if game.np_communication_id %}
+                                <a href="{% url 'game_detail' game.np_communication_id %}" class="w-16 lg:w-20 aspect-[3/4] rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20 block" title="{{ game.name }}" tabindex="-1">
                                 {% else %}
                                 <div class="w-16 lg:w-20 aspect-[3/4] rounded-xl overflow-hidden ring-1 ring-base-300 shrink-0 shadow-md transition-all duration-150 hover:ring-warning hover:shadow-lg hover:shadow-warning/30 hover:z-20" title="{{ game.name }}">
                                 {% endif %}
@@ -53,7 +53,7 @@
                                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-base-content/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"></rect></svg>
                                         </div>
                                     {% endif %}
-                                {% if game.slug %}</a>{% else %}</div>{% endif %}
+                                {% if game.np_communication_id %}</a>{% else %}</div>{% endif %}
                             {% endfor %}
                         </div>
                     </div>
