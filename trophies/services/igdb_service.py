@@ -232,6 +232,15 @@ _TROPHY_GROUP_NOISE_PREFIX_RE = re.compile(
     r'^(?:trophies|trophy)\s+for\s+'
 )
 
+# Confidence floor for the platform-blind last-resort match strategy
+# (Strategy 10). Since that strategy abandons the platform-overlap gate,
+# the name is our ONLY signal, so we demand a strong match: 0.70 roughly
+# corresponds to a fuzzy-name title ratio >= 0.90 (base 0.70 before
+# modifiers). Lower this if too many real shovelware matches are slipping
+# through to NO_MATCH; raise it if the review queue fills with
+# same-name-different-game noise.
+_PLATFORM_BLIND_NAME_FLOOR = 0.70
+
 
 class IGDBService:
     """Service for matching PlatPursuit Concepts to IGDB game entries
@@ -998,6 +1007,50 @@ class IGDBService:
                         capped = min(confidence, auto_accept - 0.01)
                         if consider((igdb_data, capped, method)):
                             return best
+
+        # Strategy 10: platform-blind last resort. Only fires when EVERY
+        # platform-aware strategy above produced nothing. IGDB's metadata for
+        # shovelware / obscure titles is frequently missing the PlayStation
+        # platform entirely, so the hard platform-overlap gate in
+        # _pick_best_match drops an otherwise-correct name match and the
+        # concept lands in NO_MATCH (forcing a manual anchor). Here we re-run
+        # the unfiltered /games search with the scoring-side platform gate
+        # DISABLED (platforms_for_filter=[]), but require a strong name match
+        # (_PLATFORM_BLIND_NAME_FLOOR) since name is now the only signal, and
+        # cap the confidence below auto-accept so the result ALWAYS lands in
+        # pending_review for a human to confirm the platform gap is just an
+        # IGDB data hole, not a wrong same-named game. The distinct
+        # 'name_no_platform' method makes these identifiable in the admin
+        # review queue.
+        if best is None:
+            try:
+                results = cls.search_game(title, platform_filter=False)
+                if results:
+                    cls._log_search_results(title, 'platform-blind', concept, results)
+                    raw_candidate = cls._pick_best_non_dlc(
+                        concept, results, search_title=title,
+                        platforms_for_filter=[],  # disable platform gate
+                    )
+                    if raw_candidate:
+                        igdb_data, confidence, _method = raw_candidate
+                        if confidence >= _PLATFORM_BLIND_NAME_FLOOR:
+                            # Store at the review threshold (not the real
+                            # name-match confidence) so the result ALWAYS
+                            # lands in pending_review (live path, < 0.85) AND
+                            # trips low_match_confidence in anchor_concepts'
+                            # cross-check (< 0.60). Platform was bypassed, so
+                            # a human must confirm. The name strength that
+                            # cleared the floor is implicit in the
+                            # 'name_no_platform' method label.
+                            consider((
+                                igdb_data,
+                                settings.IGDB_REVIEW_THRESHOLD,
+                                'name_no_platform',
+                            ))
+                else:
+                    logger.debug(f'IGDB platform-blind search for "{title}": 0 results')
+            except Exception:
+                logger.exception(f'IGDB platform-blind search failed for "{title}"')
 
         return best
 

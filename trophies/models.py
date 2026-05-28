@@ -5424,6 +5424,7 @@ class IGDBMatch(models.Model):
         ('exact_name', 'Exact Name'),
         ('fuzzy_name', 'Fuzzy Name'),
         ('manual', 'Manual'),
+        ('name_no_platform', 'Name match (platform ignored)'),
     ]
 
     STATUS_CHOICES = [
