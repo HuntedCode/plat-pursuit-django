@@ -33,13 +33,6 @@
 
             {# ══ Ratings Grid ══ #}
             {% include 'trophies/partials/game_detail/ratings_grid.html' with averages=ct.averages can_rate=ct.can_rate user_rating=ct.user_rating concept_id=game.concept.id group_id=ct.ctg.trophy_group_id ctg_id=ct.ctg.id hours_label=ct.hours_label hours_label_long=ct.hours_label_long %}
-
-            {# ══ Reviews ══ #}
-            {% if game.concept and game.concept.slug %}
-            <div class="border-t border-base-content/5 pt-3 mt-3">
-                {% include 'trophies/partials/game_detail/reviews_section.html' with recommendation_stats=ct.recommendation_stats review_count=ct.review_count user_review=ct.user_review can_review=ct.can_review review_hub_group=ct.ctg.trophy_group_id top_reviews=ct.top_reviews %}
-            </div>
-            {% endif %}
         </div>
         {% endfor %}
 
