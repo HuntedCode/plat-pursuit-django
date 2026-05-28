@@ -17,6 +17,7 @@ class CalendarChallengeShareManager extends ShareImageManager {
         this.showUSHolidays = localStorage.getItem('calendarShowUSHolidays') === 'true';
         this.selectedGameBgConceptId = null;
         this.selectedGameBgUrl = null;
+        this.selectedGameBgImageUrl = null;
         this.gameBgPicker = null;
     }
 
@@ -140,9 +141,11 @@ class CalendarChallengeShareManager extends ShareImageManager {
         // Game Background Picker
         if (typeof GameBackgroundPicker !== 'undefined') {
             this.gameBgPicker = new GameBackgroundPicker('share-game-bg-picker', {
+                imagePicker: true,
                 onSelect: (concept) => {
                     this.selectedGameBgConceptId = concept.concept_id;
-                    this.selectedGameBgUrl = concept.bg_url;
+                    this.selectedGameBgImageUrl = concept.image_url || null;
+                    this.selectedGameBgUrl = concept.image_url || concept.bg_url || null;
 
                     // Force background to Game Art (Wide) and disable gradient controls
                     this.currentBackground = 'gameArtConceptBg';
@@ -167,6 +170,7 @@ class CalendarChallengeShareManager extends ShareImageManager {
                 onClear: () => {
                     this.selectedGameBgConceptId = null;
                     this.selectedGameBgUrl = null;
+                    this.selectedGameBgImageUrl = null;
 
                     // Re-enable gradient controls
                     const sel = document.getElementById('background-select');
@@ -243,6 +247,9 @@ class CalendarChallengeShareManager extends ShareImageManager {
         }
         if (this.selectedGameBgConceptId) {
             url += `&game_bg_concept_id=${this.selectedGameBgConceptId}`;
+            if (this.selectedGameBgImageUrl) {
+                url += `&game_bg_image_url=${encodeURIComponent(this.selectedGameBgImageUrl)}`;
+            }
         }
         return url;
     }

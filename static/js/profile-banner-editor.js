@@ -37,6 +37,7 @@ class ProfileBannerEditor {
         if (!this.picker) {
             this.picker = new GameBackgroundPicker('banner-bg-picker-container', {
                 initialValue: this.initialData,
+                imagePicker: true,
                 onSelect: (concept) => this.onGameSelected(concept),
                 onClear: () => this.onGameCleared()
             });
@@ -60,7 +61,10 @@ class ProfileBannerEditor {
 
         if (section && previewImg && this.selectedConcept) {
             section.classList.remove('hidden');
-            const bgUrl = this.selectedConcept.bg_url || this.selectedConcept.icon_url || '';
+            const bgUrl = this.selectedConcept.image_url
+                || this.selectedConcept.bg_url
+                || this.selectedConcept.icon_url
+                || '';
             previewImg.style.backgroundImage = `url('${bgUrl}')`;
             previewImg.style.backgroundSize = '100% auto';
             previewImg.style.backgroundRepeat = 'no-repeat';
@@ -89,15 +93,38 @@ class ProfileBannerEditor {
         }
 
         try {
-            // Always save background (clear if deselected)
-            await PlatPursuit.API.request('/api/v1/user/quick-settings/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    setting: 'selected_background',
-                    value: this.selectedConcept?.concept_id || ''
-                })
-            });
+            // Persist the banner source. New picks carry an exact image_url
+            // (banner_image). Legacy banners selected before the image picker
+            // only have a concept + bg_url; preserve those via selected_background
+            // so a position-only edit doesn't wipe them.
+            const sc = this.selectedConcept;
+            let settingBody = null;
+            if (sc && sc.image_url && sc.concept_id) {
+                // New pick: exact image + its source game.
+                settingBody = {
+                    setting: 'banner_image',
+                    value: { concept_id: sc.concept_id, image_url: sc.image_url },
+                };
+            } else if (sc && sc.concept_id) {
+                // Legacy banner (concept + bg_url, no exact image): preserve it
+                // via selected_background so a position-only edit doesn't wipe it.
+                settingBody = { setting: 'selected_background', value: sc.concept_id };
+            } else if (sc && sc.image_url) {
+                // Image persists but its source concept was removed (e.g. absorbed
+                // during sync, SET_NULL on selected_background). The image URL is
+                // still saved server-side, so leave it untouched and only reposition.
+                settingBody = null;
+            } else {
+                // Nothing selected: clear the banner.
+                settingBody = { setting: 'banner_image', value: '' };
+            }
+            if (settingBody) {
+                await PlatPursuit.API.request('/api/v1/user/quick-settings/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settingBody)
+                });
+            }
 
             // Save position
             await PlatPursuit.API.request('/api/v1/user/quick-settings/', {
@@ -132,7 +159,7 @@ class ProfileBannerEditor {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    setting: 'selected_background',
+                    setting: 'banner_image',
                     value: ''
                 })
             });

@@ -13,8 +13,12 @@ class GameBackgroundPicker {
      * @param {Object} options
      * @param {Function} options.onSelect - Called with concept object when user picks a game
      * @param {Function} options.onClear - Called when user clears the selection
-     * @param {Object|null} options.initialValue - Pre-selected value: { concept_id, title_name, icon_url }
+     * @param {Object|null} options.initialValue - Pre-selected value: { concept_id, title_name, icon_url, image_url? }
      * @param {boolean} options.disabled - Whether the picker is disabled (non-premium)
+     * @param {boolean} options.imagePicker - Two-step mode: after choosing a game,
+     *        show a grid of that game's landscape images (artwork/screenshot/cover)
+     *        and resolve onSelect with the chosen image as `image_url`. Also lists
+     *        every platted/100% game (not just ones with PSN background art).
      */
     constructor(containerId, options = {}) {
         this.container = document.getElementById(containerId);
@@ -24,8 +28,11 @@ class GameBackgroundPicker {
         this.onClear = options.onClear || (() => {});
         this.initialValue = options.initialValue || null;
         this.disabled = options.disabled || false;
+        this.imagePicker = options.imagePicker || false;
         this.selectedConcept = null;
+        this._pendingConcept = null;
         this._abortController = null;
+        this._imagesAbortController = null;
         this._onDocumentClick = null;
 
         this._render();
@@ -72,6 +79,26 @@ class GameBackgroundPicker {
                         <div class="gbp-empty hidden text-center text-sm text-base-content/50 py-3">
                             No games found
                         </div>
+                    </div>
+                </div>
+
+                <!-- Image grid state (two-step image picker, hidden by default) -->
+                <div class="gbp-images-state hidden">
+                    <div class="flex items-center gap-2 mb-2">
+                        <button type="button" class="gbp-images-back btn btn-ghost btn-xs gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                            Back
+                        </button>
+                        <span class="gbp-images-title text-sm font-medium truncate flex-1"></span>
+                    </div>
+                    <div class="gbp-images-loading flex items-center justify-center py-6">
+                        <span class="loading loading-spinner loading-sm"></span>
+                    </div>
+                    <div class="gbp-images-grid grid grid-cols-2 md:grid-cols-3 gap-2 max-h-72 overflow-y-auto"></div>
+                    <div class="gbp-images-empty hidden text-center text-sm text-base-content/50 py-4">
+                        No images available for this game
                     </div>
                 </div>
 
@@ -159,10 +186,17 @@ class GameBackgroundPicker {
                 icon_url: row.dataset.iconUrl,
             };
 
+            this._hideDropdown();
+
+            if (this.imagePicker) {
+                // Two-step: choose the exact image before finalizing.
+                this._openImagePicker(concept);
+                return;
+            }
+
             this._showSelected(concept);
             this.selectedConcept = concept;
             this.onSelect(concept);
-            this._hideDropdown();
         };
 
         // Delegate clicks on dropdown result rows
@@ -172,6 +206,19 @@ class GameBackgroundPicker {
         // Delegate clicks on browse grid items
         const browseItems = this.container.querySelector('.gbp-browse-items');
         if (browseItems) browseItems.addEventListener('click', handleRowClick);
+
+        // Image-picker step: back button + image cell clicks
+        const backBtn = this.container.querySelector('.gbp-images-back');
+        if (backBtn) backBtn.addEventListener('click', () => this._closeImagePicker());
+
+        const imagesGrid = this.container.querySelector('.gbp-images-grid');
+        if (imagesGrid) {
+            imagesGrid.addEventListener('click', (e) => {
+                const cell = e.target.closest('.gbp-image-cell');
+                if (!cell || !this._pendingConcept) return;
+                this._selectImage(cell.dataset.imageUrl);
+            });
+        }
 
         // Load initial browse grid
         this._loadInitialGames();
@@ -198,8 +245,9 @@ class GameBackgroundPicker {
         results.innerHTML = '';
 
         try {
+            const reqBg = this.imagePicker ? '&require_bg=0' : '';
             const data = await PlatPursuit.API.get(
-                `/api/v1/game-backgrounds/?q=${encodeURIComponent(query)}`,
+                `/api/v1/game-backgrounds/?q=${encodeURIComponent(query)}${reqBg}`,
                 { signal: this._abortController.signal }
             );
 
@@ -259,6 +307,7 @@ class GameBackgroundPicker {
 
     _showSelected(concept) {
         const searchState = this.container.querySelector('.gbp-search-state');
+        const imagesState = this.container.querySelector('.gbp-images-state');
         const selectedState = this.container.querySelector('.gbp-selected-state');
         const icon = this.container.querySelector('.gbp-selected-icon');
         const name = this.container.querySelector('.gbp-selected-name');
@@ -268,27 +317,110 @@ class GameBackgroundPicker {
         this.selectedConcept = concept;
 
         if (icon) {
-            icon.src = concept.icon_url || '';
-            icon.style.display = concept.icon_url ? '' : 'none';
+            // Prefer the exact picked image as the thumbnail, else the game icon.
+            const thumb = concept.image_url || concept.icon_url || '';
+            icon.src = thumb;
+            icon.style.display = thumb ? '' : 'none';
         }
         if (name) {
             name.textContent = concept.title_name || 'Unknown';
         }
 
         searchState.classList.add('hidden');
+        if (imagesState) imagesState.classList.add('hidden');
         selectedState.classList.remove('hidden');
+    }
+
+    _openImagePicker(concept) {
+        const searchState = this.container.querySelector('.gbp-search-state');
+        const imagesState = this.container.querySelector('.gbp-images-state');
+        const title = this.container.querySelector('.gbp-images-title');
+        if (!searchState || !imagesState) return;
+
+        this._pendingConcept = concept;
+        if (title) title.textContent = concept.title_name || 'Choose an image';
+
+        searchState.classList.add('hidden');
+        imagesState.classList.remove('hidden');
+        this._loadConceptImages(concept.concept_id);
+    }
+
+    _closeImagePicker() {
+        const searchState = this.container.querySelector('.gbp-search-state');
+        const imagesState = this.container.querySelector('.gbp-images-state');
+        this._pendingConcept = null;
+        if (imagesState) imagesState.classList.add('hidden');
+        if (searchState) searchState.classList.remove('hidden');
+    }
+
+    async _loadConceptImages(conceptId) {
+        const loading = this.container.querySelector('.gbp-images-loading');
+        const grid = this.container.querySelector('.gbp-images-grid');
+        const empty = this.container.querySelector('.gbp-images-empty');
+        if (!grid) return;
+
+        if (this._imagesAbortController) this._imagesAbortController.abort();
+        this._imagesAbortController = new AbortController();
+
+        grid.innerHTML = '';
+        empty.classList.add('hidden');
+        if (loading) loading.classList.remove('hidden');
+
+        try {
+            const data = await PlatPursuit.API.get(
+                `/api/v1/game-backgrounds/${conceptId}/images/`,
+                { signal: this._imagesAbortController.signal }
+            );
+            if (loading) loading.classList.add('hidden');
+
+            const images = (data && data.images) || [];
+            if (images.length === 0) {
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            const e = PlatPursuit.HTMLUtils.escape;
+            let html = '';
+            for (const url of images) {
+                const safeUrl = e(url);
+                html += `
+                    <button type="button" class="gbp-image-cell aspect-video rounded-md overflow-hidden border border-base-content/10 hover:border-primary focus:border-primary transition-colors"
+                            data-image-url="${safeUrl}">
+                        <img src="${safeUrl}" alt="" class="w-full h-full object-cover object-top" loading="lazy" />
+                    </button>
+                `;
+            }
+            grid.innerHTML = html;
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            if (loading) loading.classList.add('hidden');
+            empty.textContent = 'Could not load images';
+            empty.classList.remove('hidden');
+        }
+    }
+
+    _selectImage(imageUrl) {
+        if (!this._pendingConcept || !imageUrl) return;
+        const concept = { ...this._pendingConcept, image_url: imageUrl };
+        this._pendingConcept = null;
+        this._showSelected(concept);
+        this.selectedConcept = concept;
+        this.onSelect(concept);
     }
 
     _clearSelection() {
         const searchState = this.container.querySelector('.gbp-search-state');
+        const imagesState = this.container.querySelector('.gbp-images-state');
         const selectedState = this.container.querySelector('.gbp-selected-state');
         const input = this.container.querySelector(`#gbp-search-${this.container.id}`);
 
         if (!searchState || !selectedState) return;
 
         this.selectedConcept = null;
+        this._pendingConcept = null;
 
         selectedState.classList.add('hidden');
+        if (imagesState) imagesState.classList.add('hidden');
         searchState.classList.remove('hidden');
 
         if (input) {
@@ -310,7 +442,10 @@ class GameBackgroundPicker {
         if (!browseItems) return;
 
         try {
-            const data = await PlatPursuit.API.get('/api/v1/game-backgrounds/');
+            const browseUrl = this.imagePicker
+                ? '/api/v1/game-backgrounds/?require_bg=0'
+                : '/api/v1/game-backgrounds/';
+            const data = await PlatPursuit.API.get(browseUrl);
             if (browseLoading) browseLoading.classList.add('hidden');
 
             if (!data || !data.results || data.results.length === 0) {
@@ -367,6 +502,10 @@ class GameBackgroundPicker {
         if (this._abortController) {
             this._abortController.abort();
             this._abortController = null;
+        }
+        if (this._imagesAbortController) {
+            this._imagesAbortController.abort();
+            this._imagesAbortController = null;
         }
     }
 }

@@ -192,7 +192,8 @@ class UpdateQuickSettingsAPIView(APIView):
                 return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
             if value is None or value == '':
                 profile.selected_background = None
-                profile.save(update_fields=['selected_background'])
+                profile.banner_image_url = None
+                profile.save(update_fields=['selected_background', 'banner_image_url'])
             else:
                 try:
                     concept_id = int(value)
@@ -206,7 +207,47 @@ class UpdateQuickSettingsAPIView(APIView):
                 if not concept.bg_url:
                     return Response({'error': 'This game has no background art.'}, status=http_status.HTTP_400_BAD_REQUEST)
                 profile.selected_background = concept
-                profile.save(update_fields=['selected_background'])
+                # Switching the source game invalidates any exact picked image.
+                profile.banner_image_url = None
+                profile.save(update_fields=['selected_background', 'banner_image_url'])
+
+        # Premium banner image (exact picked image + its source concept, or null to clear)
+        elif setting == 'banner_image':
+            profile = getattr(request.user, 'profile', None)
+            if not profile:
+                return Response({'error': 'Profile not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            if not profile.user_is_premium:
+                return Response({'error': 'Premium required.'}, status=http_status.HTTP_403_FORBIDDEN)
+
+            if value is None or value == '':
+                profile.banner_image_url = None
+                profile.selected_background = None
+                profile.save(update_fields=['banner_image_url', 'selected_background'])
+                return Response({'success': True, 'setting': setting, 'value': None})
+
+            if not isinstance(value, dict):
+                return Response({'error': 'Value must be an object with concept_id and image_url.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            try:
+                concept_id = int(value.get('concept_id'))
+            except (ValueError, TypeError):
+                return Response({'error': 'Invalid concept ID.'}, status=http_status.HTTP_400_BAD_REQUEST)
+            image_url = (value.get('image_url') or '').strip()
+            if not image_url:
+                return Response({'error': 'image_url is required.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+            from trophies.models import Concept
+            from api.calendar_challenge_share_views import _concept_landscape_images
+            concept = Concept.objects.select_related('igdb_match').filter(id=concept_id).first()
+            if concept is None:
+                return Response({'error': 'Concept not found.'}, status=http_status.HTTP_404_NOT_FOUND)
+            # Guard against arbitrary URL injection: the image must be one this concept actually offers.
+            if image_url not in _concept_landscape_images(concept):
+                return Response({'error': 'That image is not available for this game.'}, status=http_status.HTTP_400_BAD_REQUEST)
+
+            profile.banner_image_url = image_url
+            profile.selected_background = concept
+            profile.save(update_fields=['banner_image_url', 'selected_background'])
+            return Response({'success': True, 'setting': setting, 'value': {'concept_id': concept_id, 'image_url': image_url}})
 
         # Banner vertical position (0-100)
         elif setting == 'banner_position':

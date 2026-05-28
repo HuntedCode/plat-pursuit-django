@@ -926,16 +926,20 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                     context['profile_theme_accent'] = theme['accent_color']
                     context['profile_theme_gradient'] = get_theme_css(profile.selected_theme)
 
-            # Profile banner image from selected background concept
-            if profile.selected_background and profile.selected_background.bg_url:
-                context['profile_banner_url'] = profile.selected_background.bg_url
+            # Profile banner image: prefer the exact user-picked image, fall
+            # back to the selected background concept's PSN landscape art.
+            bg = profile.selected_background
+            banner_url = profile.banner_image_url or (bg.bg_url if bg else None)
+            if banner_url:
+                context['profile_banner_url'] = banner_url
                 context['profile_banner_position'] = profile.banner_position
                 import json
                 context['profile_banner_data_json'] = json.dumps({
-                    'concept_id': profile.selected_background.id,
-                    'title_name': profile.selected_background.unified_title or '',
-                    'icon_url': profile.selected_background.concept_icon_url or '',
-                    'bg_url': profile.selected_background.bg_url or '',
+                    'concept_id': bg.id if bg else None,
+                    'title_name': (bg.unified_title or '') if bg else '',
+                    'icon_url': (bg.concept_icon_url or '') if bg else '',
+                    'bg_url': (bg.bg_url or '') if bg else '',
+                    'image_url': profile.banner_image_url or '',
                 })
 
         # Own profile check (for edit controls)

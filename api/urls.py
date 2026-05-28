@@ -40,7 +40,7 @@ from .calendar_challenge_views import (
 )
 from .calendar_challenge_share_views import (
     CalendarChallengeShareHTMLView, CalendarChallengeSharePNGView,
-    GameBackgroundSearchView,
+    GameBackgroundSearchView, ConceptBannerImagesView,
 )
 from .genre_challenge_views import (
     GenreChallengeCreateAPIView, GenreChallengeDetailAPIView,
@@ -227,8 +227,9 @@ urlpatterns = [
     path('challenges/az/<int:challenge_id>/share/html/', AZChallengeShareHTMLView.as_view(), name='az-challenge-share-html'),
     path('challenges/az/<int:challenge_id>/share/png/', AZChallengeSharePNGView.as_view(), name='az-challenge-share-png'),
 
-    # Game background search (shared by share card + settings)
+    # Game background search (shared by share card + banner picker)
     path('game-backgrounds/', GameBackgroundSearchView.as_view(), name='game-background-search'),
+    path('game-backgrounds/<int:concept_id>/images/', ConceptBannerImagesView.as_view(), name='concept-banner-images'),
 
     # Platinum Calendar Challenge endpoints
     path('challenges/calendar/', CalendarChallengeCreateAPIView.as_view(), name='calendar-challenge-create'),

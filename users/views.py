@@ -156,7 +156,10 @@ class SettingsView(LoginRequiredMixin, View):
                         profile.selected_background = None
                 else:
                     profile.selected_background = None
-                profile.save(update_fields=['selected_background'])
+                # Changing the game here invalidates any exact image picked on
+                # the profile banner, which would otherwise still override it.
+                profile.banner_image_url = None
+                profile.save(update_fields=['selected_background', 'banner_image_url'])
 
                 messages.success(request, 'Premium settings updated successfully!')
             else:

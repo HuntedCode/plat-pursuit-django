@@ -172,13 +172,19 @@ class CalendarChallengeSharePNGView(APIView):
 
         # Game background support
         game_bg_concept_id = request.query_params.get('game_bg_concept_id', '')
+        game_bg_image_url = request.query_params.get('game_bg_image_url', '').strip()
         concept_bg_path = None
         concept = None
+        chosen_bg_url = None
 
         if game_bg_concept_id:
             try:
                 concept_id = int(game_bg_concept_id)
-                concept = Concept.objects.get(id=concept_id, bg_url__isnull=False, bg_url__gt='')
+                if game_bg_image_url:
+                    # Image picker: concept may have no PSN bg_url (IGDB-only art).
+                    concept = Concept.objects.select_related('igdb_match').get(id=concept_id)
+                else:
+                    concept = Concept.objects.get(id=concept_id, bg_url__isnull=False, bg_url__gt='')
 
                 # Validate user has platted or 100% a game with this concept
                 has_access = ProfileGame.objects.filter(
@@ -191,6 +197,17 @@ class CalendarChallengeSharePNGView(APIView):
                         {'error': 'You do not have access to this game background'},
                         status=http_status.HTTP_403_FORBIDDEN,
                     )
+
+                if game_bg_image_url:
+                    # Guard against arbitrary URL injection.
+                    if game_bg_image_url not in _concept_landscape_images(concept):
+                        return Response(
+                            {'error': 'That image is not available for this game'},
+                            status=http_status.HTTP_400_BAD_REQUEST,
+                        )
+                    chosen_bg_url = game_bg_image_url
+                else:
+                    chosen_bg_url = concept.bg_url
 
                 # Force the game art theme
                 theme_key = 'gameArtConceptBg'
@@ -205,9 +222,9 @@ class CalendarChallengeSharePNGView(APIView):
         html = render_to_string(TEMPLATE, context)
 
         # Download game background image to temp file if needed
-        if game_bg_concept_id and concept:
+        if concept and chosen_bg_url:
             try:
-                concept_bg_path = _fetch_bg_to_tempfile(concept.bg_url)
+                concept_bg_path = _fetch_bg_to_tempfile(chosen_bg_url)
             except Exception:
                 logger.exception(
                     f"[CALENDAR-SHARE-PNG] Failed to download game bg for concept {concept.id}"
@@ -250,12 +267,46 @@ class CalendarChallengeSharePNGView(APIView):
         return response
 
 
+def _concept_landscape_images(concept):
+    """Ordered, de-duplicated landscape image URLs for a concept's picker.
+
+    PSN GAMEHUB art first (real key art when present), then IGDB artworks,
+    then IGDB screenshots, with the portrait cover as a last resort so every
+    game offers at least one option even when no landscape art exists.
+    """
+    urls = []
+    seen = set()
+
+    def _add(url):
+        if url and url not in seen:
+            seen.add(url)
+            urls.append(url)
+
+    _add(concept.bg_url)
+
+    match = getattr(concept, 'igdb_match', None)
+    if match and match.is_trusted:
+        for url in match.artwork_urls('1080p'):
+            _add(url)
+        for url in match.screenshot_urls('screenshot_big'):
+            _add(url)
+
+    _add(concept.cover_url)
+
+    return urls
+
+
 class GameBackgroundSearchView(APIView):
     """
-    GET /api/v1/game-backgrounds/?q=<search_term>
+    GET /api/v1/game-backgrounds/?q=<search_term>&require_bg=<0|1>
 
-    Search the current user's platted/completed games that have a background image.
-    Used by the game background picker widget on both the share card and settings page.
+    Search the current user's platted/completed games. Used by the game
+    picker widget shared by the share card and the profile banner picker.
+
+    `require_bg` (default true) keeps only games that already have a PSN
+    landscape image (`concept.bg_url`). Callers using the two-step image
+    picker pass `require_bg=0` to surface every platted/100% game, since
+    images are then sourced per-concept from IGDB as well.
     """
     permission_classes = [IsAuthenticated]
     authentication_classes = [SessionAuthentication, TokenAuthentication]
@@ -275,15 +326,20 @@ class GameBackgroundSearchView(APIView):
             )
 
         query = request.query_params.get('q', '').strip()
+        require_bg = request.query_params.get('require_bg', '1').lower() not in ('0', 'false', 'no')
 
         qs = ProfileGame.objects.filter(
             profile=profile,
-            game__concept__bg_url__isnull=False,
         ).filter(
             Q(has_plat=True) | Q(progress=100)
-        ).exclude(
-            game__concept__bg_url=''
         ).select_related('game__concept')
+
+        if require_bg:
+            qs = qs.filter(
+                game__concept__bg_url__isnull=False,
+            ).exclude(
+                game__concept__bg_url=''
+            )
 
         if query:
             qs = qs.filter(
@@ -316,3 +372,59 @@ class GameBackgroundSearchView(APIView):
         } for c in concepts]
 
         return Response({'results': results})
+
+
+class ConceptBannerImagesView(APIView):
+    """
+    GET /api/v1/game-backgrounds/<concept_id>/images/
+
+    Return the landscape image options for a single concept the user has
+    platted/100% completed. Powers the second step of the image picker
+    (game -> pick exact image) for both the profile banner and share cards.
+    """
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [SessionAuthentication, TokenAuthentication]
+
+    @method_decorator(ratelimit(key='user', rate='60/m', method='GET', block=True))
+    def get(self, request, concept_id):
+        if not hasattr(request.user, 'profile'):
+            return Response(
+                {'error': 'No linked PSN profile'},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        profile = request.user.profile
+        if not profile.user_is_premium:
+            return Response(
+                {'error': 'Premium required'},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+
+        owns_concept = ProfileGame.objects.filter(
+            profile=profile,
+            game__concept_id=concept_id,
+        ).filter(
+            Q(has_plat=True) | Q(progress=100)
+        ).exists()
+        if not owns_concept:
+            return Response(
+                {'error': 'Game not found in your platinum/completed library'},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        concept = (
+            Concept.objects.select_related('igdb_match')
+            .filter(id=concept_id)
+            .first()
+        )
+        if concept is None:
+            return Response(
+                {'error': 'Concept not found'},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        images = _concept_landscape_images(concept)
+        return Response({
+            'concept_id': concept.id,
+            'title_name': concept.unified_title,
+            'images': images,
+        })

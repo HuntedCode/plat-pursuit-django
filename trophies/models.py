@@ -126,6 +126,12 @@ class Profile(models.Model):
     recent_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='recent_for_profiles', help_text='Most recent earned platinum.')
     rarest_plat = models.ForeignKey('EarnedTrophy', on_delete=models.SET_NULL, null=True, blank=True, related_name='rarest_for_profiles', help_text='Rarest earned platinum by earn_rate.')
     selected_background = models.ForeignKey('Concept', on_delete=models.SET_NULL, null=True, blank=True, related_name='selected_by_profiles', help_text='Selected background concept for premium profiles.')
+    banner_image_url = models.URLField(
+        max_length=500, blank=True, null=True,
+        help_text='Exact banner image the user picked from the selected '
+                  "concept's landscape images (IGDB artwork/screenshot/cover). "
+                  'When set, takes precedence over selected_background.bg_url.',
+    )
     banner_position = models.PositiveSmallIntegerField(default=50, help_text='Banner vertical position (0=top, 50=center, 100=bottom).')
     selected_theme = models.CharField(max_length=50, blank=True, null=True, help_text='Selected gradient theme key for premium site-wide background.')
     hide_hiddens = models.BooleanField(default=False, help_text="If true, hide hidden/deleted games from list and totals.")
