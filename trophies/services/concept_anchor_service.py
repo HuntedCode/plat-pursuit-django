@@ -296,11 +296,22 @@ def identity_cross_check(
     # Platform overlap: compare game.title_platform against IGDB platforms
     # with VR-host expansion. A VR-only IGDB entry overlaps with the
     # PS4/PS5-only Game it implies.
+    #
+    # Two distinct failure modes, two distinct flags:
+    #   * IGDB lists platforms but none overlap PSN's → the match is
+    #     probably the wrong game (or a wrong-platform sibling).
+    #   * IGDB lists NO platforms at all → we couldn't verify overlap.
+    #     Common for shovelware / obscure titles whose IGDB pages are
+    #     thin. The platform-blind match strategy (`name_no_platform`)
+    #     surfaces these on name alone, so staff need to know the platform
+    #     was never confirmed — distinct from a contradiction.
     game_plat_ids = _psn_platforms_to_igdb(game.title_platform or [])
     igdb_plat_ids = _extract_igdb_platform_ids(igdb_data)
     overlap = game_plat_ids & igdb_plat_ids
     if game_plat_ids and igdb_plat_ids and not overlap:
         flag_reasons.append('platform_overlap_insufficient')
+    elif game_plat_ids and not igdb_plat_ids:
+        flag_reasons.append('platform_overlap_unverified')
 
     # Release-year proximity. Concept-level signal because Game itself
     # doesn't carry a release date. The Concept may be wrong here (that's

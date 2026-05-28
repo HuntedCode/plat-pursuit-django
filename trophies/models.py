@@ -5694,6 +5694,7 @@ class ConceptJoinReview(models.Model):
         'region_split_suspected_japan',
         'low_match_confidence',
         'platform_overlap_insufficient',
+        'platform_overlap_unverified',
         'identity_title_dissimilar',
         'release_date_gap_excessive',
         'concept_id_collision',
