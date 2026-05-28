@@ -1824,6 +1824,23 @@ class TokenKeeper:
                     concept = anchored
                     # No PSN-derived enrichment to defer — process_match already
                     # ran inside try_anchor_new_game.
+                    #
+                    # ...but process_match only captured IGDB media. PSN GAMEHUB
+                    # art is the preferred banner background and we already have
+                    # the PSN `details` in hand, so apply PSN bg_url over the
+                    # IGDB-artwork fallback when PSN supplies it. (Without this,
+                    # IGDB-anchored concepts never get PSN landscape art — the
+                    # profile-banner gap.)
+                    try:
+                        psn_bg = self._extract_media(details).get('bg_url')
+                        if psn_bg and concept.bg_url != psn_bg:
+                            concept.bg_url = psn_bg
+                            concept.save(update_fields=['bg_url'])
+                    except Exception:
+                        logger.exception(
+                            f"Failed to apply PSN bg_url to anchored concept "
+                            f"{concept.concept_id}"
+                        )
                 elif (
                     game.concept_id
                     and game.concept.anchor_migration_completed_at is not None
