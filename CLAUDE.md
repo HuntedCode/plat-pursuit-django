@@ -102,6 +102,7 @@ Currently handled by `absorb()`:
 - Stage.concepts (M2M)
 - ConceptBundle.concepts (M2M, per-bundle membership; skips duplicates so target's existing bundle membership isn't disturbed)
 - StageCompletionEvent.concept (FK, SET_NULL)
+- ConceptJoinReview.proposed_concept (FK, SET_NULL — re-pointed to the survivor. The `game` OneToOne needs no branch: games move out before absorb runs and each `join_review` travels with its Game)
 - ConceptSplitEvent.parent_concept (FK) + .child_concepts (M2M)
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)

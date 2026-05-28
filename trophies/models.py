@@ -1153,6 +1153,16 @@ class Concept(models.Model):
         # StageCompletionEvent concept references
         StageCompletionEvent.objects.filter(concept=other).update(concept=self)
 
+        # ConceptJoinReview.proposed_concept: re-point pending reviews that
+        # targeted the absorbed concept to the survivor. The `game` OneToOne
+        # is already safe (games move out before absorb runs, and each
+        # join_review travels with its Game), but proposed_concept is
+        # on_delete=SET_NULL and would silently null on other.delete().
+        # Admin approve actions fall back to the IGDB ids, but the pointer
+        # is useful context and shouldn't vanish. related_name='+' so we
+        # query the model directly rather than via a reverse accessor.
+        ConceptJoinReview.objects.filter(proposed_concept=other).update(proposed_concept=self)
+
         # ConceptSplitEvent: move parent/child references to the surviving concept.
         # The audit event's semantic meaning is preserved; whichever concept
         # ultimately represents the data carries the history.
