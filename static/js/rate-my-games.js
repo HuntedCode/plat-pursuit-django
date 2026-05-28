@@ -205,7 +205,7 @@ PlatPursuit.RateMyGames = {
 
         try {
             const filter = this.getFilterParam();
-            const url = `/api/v1/reviews/wizard/queue/?filter=${filter}&queue_type=${this.queueType}&limit=${this.limit}&offset=${this.offset}`;
+            const url = `/api/v1/ratings/wizard/queue/?filter=${filter}&queue_type=${this.queueType}&limit=${this.limit}&offset=${this.offset}`;
             const data = await PlatPursuit.API.get(url);
 
             if (this.queueType === 'dlc') {
@@ -469,7 +469,7 @@ PlatPursuit.RateMyGames = {
     async prefetch() {
         try {
             const filter = this.getFilterParam();
-            const url = `/api/v1/reviews/wizard/queue/?filter=${filter}&queue_type=${this.queueType}&limit=${this.limit}&offset=${this.offset}`;
+            const url = `/api/v1/ratings/wizard/queue/?filter=${filter}&queue_type=${this.queueType}&limit=${this.limit}&offset=${this.offset}`;
             const data = await PlatPursuit.API.get(url);
 
             if (this.queueType === 'dlc') {
@@ -1009,7 +1009,7 @@ PlatPursuit.RateMyGames = {
                 const payload = this.getRatingPayload();
                 if (payload) {
                     await PlatPursuit.API.post(
-                        `/api/v1/reviews/${game.concept_id}/group/${game.trophy_group_id}/rate/`,
+                        `/api/v1/ratings/${game.concept_id}/group/${game.trophy_group_id}/rate/`,
                         payload,
                     );
                     didRate = true;

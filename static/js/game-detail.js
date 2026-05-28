@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 var data = await PlatPursuit.API.post(
-                    '/api/v1/reviews/' + _qrConceptId + '/group/' + _qrGroupId + '/rate/',
+                    '/api/v1/ratings/' + _qrConceptId + '/group/' + _qrGroupId + '/rate/',
                     {
                         difficulty: parseInt(quickRateForm.querySelector('[name="difficulty"]').value, 10),
                         grindiness: parseInt(quickRateForm.querySelector('[name="grindiness"]').value, 10),

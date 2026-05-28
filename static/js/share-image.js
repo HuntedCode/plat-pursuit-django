@@ -628,7 +628,7 @@ class ShareImageManager {
             }
 
             const data = await PlatPursuit.API.post(
-                `/api/v1/reviews/${this.ratingData.conceptId}/group/default/rate/`,
+                `/api/v1/ratings/${this.ratingData.conceptId}/group/default/rate/`,
                 payload
             );
 

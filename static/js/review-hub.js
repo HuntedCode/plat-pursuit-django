@@ -968,7 +968,7 @@ PlatPursuit.ReviewHub = {
 
             try {
                 const data = await PlatPursuit.API.post(
-                    `/api/v1/reviews/${this.config.conceptId}/group/${this.config.activeGroup}/rate/`,
+                    `/api/v1/ratings/${this.config.conceptId}/group/${this.config.activeGroup}/rate/`,
                     payload
                 );
                 PlatPursuit.ToastManager.success(data.message || 'Rating submitted!');

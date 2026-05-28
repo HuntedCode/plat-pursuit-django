@@ -1973,7 +1973,7 @@
                     freshS.disabled = true;
                     try {
                         await PlatPursuit.API.post(
-                            '/api/v1/reviews/' + conceptId + '/group/default/rate/',
+                            '/api/v1/ratings/' + conceptId + '/group/default/rate/',
                             {
                                 difficulty: parseInt(fd.get('difficulty')),
                                 grindiness: parseInt(fd.get('grindiness')),
