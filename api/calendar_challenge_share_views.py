@@ -357,18 +357,22 @@ class GameBackgroundSearchView(APIView):
             .distinct()[:limit]
         )
 
+        # select_related igdb_match (deferring the heavy raw_response blob) so
+        # the IGDB-first c.cover_url below doesn't N+1; anchored concepts have
+        # an empty concept_icon_url and rely on the trusted IGDB cover.
+        base = Concept.objects.select_related('igdb_match').defer('igdb_match__raw_response')
         if query:
-            concepts = Concept.objects.filter(id__in=concept_ids).order_by(Lower('unified_title'))
+            concepts = base.filter(id__in=concept_ids).order_by(Lower('unified_title'))
         else:
             # Preserve the recency order from ProfileGame
-            concepts_map = {c.id: c for c in Concept.objects.filter(id__in=concept_ids)}
+            concepts_map = {c.id: c for c in base.filter(id__in=concept_ids)}
             concepts = [concepts_map[cid] for cid in concept_ids if cid in concepts_map]
 
         results = [{
             'concept_id': c.id,
             'title_name': c.unified_title,
             'bg_url': c.bg_url,
-            'icon_url': c.concept_icon_url or '',
+            'icon_url': c.cover_url or '',
         } for c in concepts]
 
         return Response({'results': results})
