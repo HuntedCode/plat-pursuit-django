@@ -33,7 +33,7 @@ class GameBackgroundPicker {
         this._pendingConcept = null;
         this._abortController = null;
         this._imagesAbortController = null;
-        this._onDocumentClick = null;
+        this._recentItemsHtml = null;
 
         this._render();
         this._bind();
@@ -63,22 +63,17 @@ class GameBackgroundPicker {
                             <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                         </svg>
                     </div>
-                    <!-- Browse grid (visible before search) -->
-                    <div class="gbp-browse-grid mt-2">
-                        <div class="gbp-browse-loading flex items-center justify-center py-4">
-                            <span class="loading loading-spinner loading-sm"></span>
-                        </div>
-                        <div class="gbp-browse-items"></div>
-                    </div>
-                    <!-- Dropdown results -->
-                    <div class="gbp-dropdown hidden absolute z-50 w-full mt-1 bg-base-200 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        <div class="gbp-results"></div>
-                        <div class="gbp-loading hidden flex items-center justify-center py-3">
+                    <!-- Results / recent games. Single in-flow list (no inner
+                         scroll) so the modal or page provides the only scroll. -->
+                    <div class="gbp-list mt-2">
+                        <p class="gbp-list-label text-[0.65rem] text-base-content/40 uppercase font-medium tracking-wider mb-1.5">Recent Games</p>
+                        <div class="gbp-loading hidden flex items-center justify-center py-4">
                             <span class="loading loading-spinner loading-sm"></span>
                         </div>
                         <div class="gbp-empty hidden text-center text-sm text-base-content/50 py-3">
                             No games found
                         </div>
+                        <div class="gbp-items grid grid-cols-3 md:grid-cols-4 gap-2"></div>
                     </div>
                 </div>
 
@@ -96,7 +91,7 @@ class GameBackgroundPicker {
                     <div class="gbp-images-loading flex items-center justify-center py-6">
                         <span class="loading loading-spinner loading-sm"></span>
                     </div>
-                    <div class="gbp-images-grid grid grid-cols-2 md:grid-cols-3 gap-2 max-h-72 overflow-y-auto"></div>
+                    <div class="gbp-images-grid grid grid-cols-2 md:grid-cols-3 gap-2"></div>
                     <div class="gbp-images-empty hidden text-center text-sm text-base-content/50 py-4">
                         No images available for this game
                     </div>
@@ -124,8 +119,6 @@ class GameBackgroundPicker {
         if (this.disabled) return;
 
         const input = this.container.querySelector(`#gbp-search-${this.container.id}`);
-        const dropdown = this.container.querySelector('.gbp-dropdown');
-        const browseGrid = this.container.querySelector('.gbp-browse-grid');
         const clearBtn = this.container.querySelector('.gbp-clear-btn');
 
         if (!input) return;
@@ -138,34 +131,12 @@ class GameBackgroundPicker {
         input.addEventListener('input', () => {
             const q = input.value.trim();
             if (q.length < 2) {
-                this._hideDropdown();
-                // Show browse grid when input is cleared
-                if (browseGrid) browseGrid.classList.remove('hidden');
+                // Restore the recent-games list when the query is cleared/short.
+                this._showRecentGames();
                 return;
             }
-            // Hide browse grid while searching
-            if (browseGrid) browseGrid.classList.add('hidden');
             debouncedSearch(q);
         });
-
-        // Show dropdown on focus if there's text
-        input.addEventListener('focus', () => {
-            const q = input.value.trim();
-            if (q.length > 0) {
-                const results = this.container.querySelector('.gbp-results');
-                if (results && results.children.length > 0) {
-                    dropdown.classList.remove('hidden');
-                }
-            }
-        });
-
-        // Click outside to close (stored for cleanup in destroy())
-        this._onDocumentClick = (e) => {
-            if (!this.container.contains(e.target)) {
-                this._hideDropdown();
-            }
-        };
-        document.addEventListener('click', this._onDocumentClick);
 
         // Clear button
         if (clearBtn) {
@@ -174,7 +145,7 @@ class GameBackgroundPicker {
             });
         }
 
-        // Shared click handler for result rows (dropdown + browse grid)
+        // Click handler for result/recent cards
         const handleRowClick = (e) => {
             const row = e.target.closest('.gbp-result-row');
             if (!row) return;
@@ -185,8 +156,6 @@ class GameBackgroundPicker {
                 bg_url: row.dataset.bgUrl,
                 icon_url: row.dataset.iconUrl,
             };
-
-            this._hideDropdown();
 
             if (this.imagePicker) {
                 // Two-step: choose the exact image before finalizing.
@@ -199,13 +168,9 @@ class GameBackgroundPicker {
             this.onSelect(concept);
         };
 
-        // Delegate clicks on dropdown result rows
-        const resultsContainer = this.container.querySelector('.gbp-results');
-        if (resultsContainer) resultsContainer.addEventListener('click', handleRowClick);
-
-        // Delegate clicks on browse grid items
-        const browseItems = this.container.querySelector('.gbp-browse-items');
-        if (browseItems) browseItems.addEventListener('click', handleRowClick);
+        // Delegate clicks on the unified items grid
+        const items = this.container.querySelector('.gbp-items');
+        if (items) items.addEventListener('click', handleRowClick);
 
         // Image-picker step: back button + image cell clicks
         const backBtn = this.container.querySelector('.gbp-images-back');
@@ -224,13 +189,48 @@ class GameBackgroundPicker {
         this._loadInitialGames();
     }
 
+    /** Build the cards HTML for an array of game results. */
+    _itemCardsHtml(results) {
+        const e = PlatPursuit.HTMLUtils.escape;
+        let html = '';
+        for (const item of results) {
+            const icon = e(item.icon_url || '');
+            const name = e(item.title_name || 'Unknown');
+            html += `
+                <div class="gbp-result-row cursor-pointer group"
+                     data-concept-id="${item.concept_id}"
+                     data-title-name="${e(item.title_name || '')}"
+                     data-bg-url="${e(item.bg_url || '')}"
+                     data-icon-url="${e(item.icon_url || '')}">
+                    <div class="aspect-[3/4] rounded-md overflow-hidden border border-base-content/5 bg-base-300 group-hover:border-primary transition-colors">
+                        ${icon
+                            ? `<img src="${icon}" alt="${name}" class="w-full h-full object-cover object-top" loading="lazy" />`
+                            : '<div class="w-full h-full bg-base-300"></div>'
+                        }
+                    </div>
+                    <p class="text-[0.65rem] text-center line-clamp-2 mt-1 px-0.5 text-base-content/70 group-hover:text-base-content transition-colors">${name}</p>
+                </div>
+            `;
+        }
+        return html;
+    }
+
+    _setListLabel(text) {
+        const label = this.container.querySelector('.gbp-list-label');
+        if (!label) return;
+        if (text) {
+            label.textContent = text;
+            label.classList.remove('hidden');
+        } else {
+            label.classList.add('hidden');
+        }
+    }
+
     async _search(query) {
-        const dropdown = this.container.querySelector('.gbp-dropdown');
-        const results = this.container.querySelector('.gbp-results');
+        const items = this.container.querySelector('.gbp-items');
         const loading = this.container.querySelector('.gbp-loading');
         const empty = this.container.querySelector('.gbp-empty');
-
-        if (!dropdown || !results) return;
+        if (!items) return;
 
         // Cancel previous request
         if (this._abortController) {
@@ -238,11 +238,11 @@ class GameBackgroundPicker {
         }
         this._abortController = new AbortController();
 
-        dropdown.classList.remove('hidden');
+        this._setListLabel('');
         loading.classList.remove('hidden');
         empty.textContent = 'No games found';
         empty.classList.add('hidden');
-        results.innerHTML = '';
+        items.innerHTML = '';
 
         try {
             const reqBg = this.imagePicker ? '&require_bg=0' : '';
@@ -264,28 +264,7 @@ class GameBackgroundPicker {
                 return;
             }
 
-            const e = PlatPursuit.HTMLUtils.escape;
-            let html = '';
-            for (const item of data.results) {
-                const icon = e(item.icon_url || '');
-                const name = e(item.title_name || 'Unknown');
-                html += `
-                    <div class="gbp-result-row flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-base-300 transition-colors"
-                         data-concept-id="${item.concept_id}"
-                         data-title-name="${e(item.title_name || '')}"
-                         data-bg-url="${e(item.bg_url || '')}"
-                         data-icon-url="${e(item.icon_url || '')}">
-                        <div class="w-8 h-8 rounded overflow-hidden flex-shrink-0 border border-base-300">
-                            ${icon
-                                ? `<img src="${icon}" alt="" class="w-full h-full object-cover" loading="lazy" />`
-                                : '<div class="w-full h-full bg-base-300"></div>'
-                            }
-                        </div>
-                        <span class="text-sm truncate">${name}</span>
-                    </div>
-                `;
-            }
-            results.innerHTML = html;
+            items.innerHTML = this._itemCardsHtml(data.results);
 
         } catch (error) {
             // Ignore abort errors
@@ -427,59 +406,55 @@ class GameBackgroundPicker {
             input.value = '';
             input.focus();
         }
+        // Back to the recent-games list now that the query is empty.
+        this._showRecentGames();
 
         this.onClear();
     }
 
-    _hideDropdown() {
-        const dropdown = this.container.querySelector('.gbp-dropdown');
-        if (dropdown) dropdown.classList.add('hidden');
+    /** Restore the cached recent-games list (re-fetches if not yet loaded). */
+    _showRecentGames() {
+        const items = this.container.querySelector('.gbp-items');
+        const empty = this.container.querySelector('.gbp-empty');
+        if (this._recentItemsHtml != null && items) {
+            empty.classList.add('hidden');
+            this._setListLabel('Recent Games');
+            items.innerHTML = this._recentItemsHtml;
+        } else {
+            this._loadInitialGames();
+        }
     }
 
     async _loadInitialGames() {
-        const browseItems = this.container.querySelector('.gbp-browse-items');
-        const browseLoading = this.container.querySelector('.gbp-browse-loading');
-        if (!browseItems) return;
+        const items = this.container.querySelector('.gbp-items');
+        const loading = this.container.querySelector('.gbp-loading');
+        const empty = this.container.querySelector('.gbp-empty');
+        if (!items) return;
+
+        this._setListLabel('Recent Games');
+        empty.classList.add('hidden');
+        loading.classList.remove('hidden');
+        items.innerHTML = '';
 
         try {
             const browseUrl = this.imagePicker
                 ? '/api/v1/game-backgrounds/?require_bg=0'
                 : '/api/v1/game-backgrounds/';
             const data = await PlatPursuit.API.get(browseUrl);
-            if (browseLoading) browseLoading.classList.add('hidden');
+            loading.classList.add('hidden');
 
             if (!data || !data.results || data.results.length === 0) {
-                browseItems.innerHTML = '<p class="text-xs text-base-content/40 text-center py-2">No eligible games found</p>';
+                empty.textContent = 'No eligible games found';
+                empty.classList.remove('hidden');
                 return;
             }
 
-            const e = PlatPursuit.HTMLUtils.escape;
-            let html = '<p class="text-[0.65rem] text-base-content/40 uppercase font-medium tracking-wider mb-1.5">Recent Games</p>';
-            html += '<div class="grid grid-cols-4 md:grid-cols-6 gap-1.5">';
-            for (const item of data.results) {
-                const icon = e(item.icon_url || '');
-                const name = e(item.title_name || 'Unknown');
-                html += `
-                    <div class="gbp-result-row cursor-pointer group"
-                         data-concept-id="${item.concept_id}"
-                         data-title-name="${e(item.title_name || '')}"
-                         data-bg-url="${e(item.bg_url || '')}"
-                         data-icon-url="${e(item.icon_url || '')}">
-                        <div class="aspect-square rounded-md overflow-hidden border border-base-content/5 group-hover:border-primary transition-colors">
-                            ${icon
-                                ? '<img src="' + icon + '" alt="' + name + '" class="w-full h-full object-cover object-top" loading="lazy" />'
-                                : '<div class="w-full h-full bg-base-300"></div>'
-                            }
-                        </div>
-                        <p class="text-[0.6rem] text-center line-clamp-1 mt-0.5 px-0.5 text-base-content/60 group-hover:text-base-content transition-colors">${name}</p>
-                    </div>
-                `;
-            }
-            html += '</div>';
-            browseItems.innerHTML = html;
+            this._recentItemsHtml = this._itemCardsHtml(data.results);
+            items.innerHTML = this._recentItemsHtml;
         } catch (error) {
-            if (browseLoading) browseLoading.classList.add('hidden');
-            browseItems.innerHTML = '<p class="text-xs text-base-content/40 text-center py-2">Could not load games</p>';
+            loading.classList.add('hidden');
+            empty.textContent = 'Could not load games';
+            empty.classList.remove('hidden');
         }
     }
 
@@ -493,12 +468,8 @@ class GameBackgroundPicker {
         this._clearSelection();
     }
 
-    /** Remove document-level listeners to prevent leaks when re-creating the picker */
+    /** Abort any in-flight requests when re-creating the picker. */
     destroy() {
-        if (this._onDocumentClick) {
-            document.removeEventListener('click', this._onDocumentClick);
-            this._onDocumentClick = null;
-        }
         if (this._abortController) {
             this._abortController.abort();
             this._abortController = null;

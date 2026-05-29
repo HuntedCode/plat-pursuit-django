@@ -284,14 +284,18 @@ def _concept_landscape_images(concept):
 
     _add(concept.bg_url)
 
+    # Request IGDB's largest size (t_1080p, 1920x1080) for both artworks and
+    # screenshots so banners/share cards aren't pixelated. screenshot_big
+    # (889x500) was the source of the blur when stretched across a wide banner.
     match = getattr(concept, 'igdb_match', None)
     if match and match.is_trusted:
         for url in match.artwork_urls('1080p'):
             _add(url)
-        for url in match.screenshot_urls('screenshot_big'):
+        for url in match.screenshot_urls('1080p'):
             _add(url)
 
-    _add(concept.cover_url)
+    # Cover is a last resort (portrait, crops oddly); request a larger render.
+    _add(concept.get_cover_url('1080p'))
 
     return urls
 
