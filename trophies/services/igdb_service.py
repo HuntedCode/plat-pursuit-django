@@ -1097,10 +1097,47 @@ class IGDBService:
             skip_external_id=True,
             platforms_for_filter=list(game.title_platform or []),
         )
+
+        used_title_name_fallback = False
+        if not result:
+            # Last resort: re-run the whole pipeline against the Game's own
+            # title_name. title_name is NOT a trusted signal (older
+            # title-cleanup workflows poisoned some values so they don't
+            # roundtrip to real game identity), so this only fires when the
+            # trophy-group title found nothing even platform-blind
+            # (Strategy 10). ANY hit here is force-capped to the review
+            # threshold and labeled 'title_name_fallback' so it ALWAYS lands
+            # in pending_review for a human to confirm. It never auto-accepts,
+            # which contains the poisoned-title risk to a queue entry.
+            fallback_title = (game.title_name or '').strip()
+            if fallback_title:
+                cleaned_tg = cls._clean_title_for_search(trophy_group_title)
+                cleaned_tn = cls._clean_title_for_search(fallback_title)
+                if cleaned_tn and cleaned_tn != cleaned_tg:
+                    result = cls.match_concept(
+                        game.concept,
+                        search_title_override=fallback_title,
+                        skip_external_id=True,
+                        platforms_for_filter=list(game.title_platform or []),
+                    )
+                    if result:
+                        used_title_name_fallback = True
+                        logger.info(
+                            'match_game: game %s matched via title_name fallback '
+                            '("%s") after trophy-group title "%s" found nothing; '
+                            'flagged for review',
+                            game.pk, fallback_title, trophy_group_title,
+                        )
+
         if not result:
             return None
 
         igdb_data, confidence, method = result
+        if used_title_name_fallback:
+            # Untrusted signal: force into the review queue regardless of the
+            # raw name-match strength (mirrors Strategy 10's safety contract).
+            confidence = settings.IGDB_REVIEW_THRESHOLD
+            method = 'title_name_fallback'
         raw_id = igdb_data.get('id')
         canonical_id = cls._resolve_canonical_igdb_id(igdb_data, raw_id)
         return {

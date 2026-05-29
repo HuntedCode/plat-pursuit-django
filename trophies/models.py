@@ -5490,6 +5490,7 @@ class IGDBMatch(models.Model):
         ('fuzzy_name', 'Fuzzy Name'),
         ('manual', 'Manual'),
         ('name_no_platform', 'Name match (platform ignored)'),
+        ('title_name_fallback', 'Title-name fallback (review only)'),
     ]
 
     STATUS_CHOICES = [
