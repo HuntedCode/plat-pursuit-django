@@ -3536,6 +3536,17 @@ class ConceptJoinReviewFlagFilter(SimpleListFilter):
         return queryset.filter(flag_reasons__contains=[value])
 
 
+class _TrophyMismatchSkip(Exception):
+    """Raised inside _apply_approval to abort a join when the game's trophy
+    structure diverges from the target Concept's existing game(s). Carries the
+    divergence flags so approve_selected can re-flag the review for resolution
+    via "Approve as separate Concept" instead of silently mis-grouping."""
+
+    def __init__(self, flags):
+        self.flags = list(flags)
+        super().__init__('trophy structure mismatch: ' + ', '.join(self.flags))
+
+
 @admin.register(ConceptJoinReview)
 class ConceptJoinReviewAdmin(admin.ModelAdmin):
     """Staff review queue for Games whose IGDB-anchored placement couldn't be auto-resolved.
@@ -3625,10 +3636,35 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
     def approve_selected(self, request, queryset):
         approved = 0
         errors = 0
+        mismatched = 0
         for review in queryset.filter(status='pending'):
             try:
                 self._apply_approval(review, request.user)
                 approved += 1
+            except _TrophyMismatchSkip as skip:
+                # Re-flag (this write is outside the rolled-back approval txn)
+                # and force the review back to pending so it resurfaces in the
+                # queue for "Approve as separate Concept". Resetting status +
+                # clearing the resolved_* fields makes this a true re-open even
+                # if the row had somehow been marked resolved — otherwise a
+                # re-flagged review could stay 'approved' and hide the mismatch.
+                review.flag_reasons = sorted(
+                    set(review.flag_reasons or []) | set(skip.flags)
+                )
+                review.status = 'pending'
+                review.resolved_at = None
+                review.resolved_by = None
+                review.save(update_fields=[
+                    'flag_reasons', 'status', 'resolved_at', 'resolved_by',
+                ])
+                mismatched += 1
+                messages.warning(
+                    request,
+                    f'Skipped game pk={review.game_id}: trophy structure differs '
+                    f'from the target Concept ({", ".join(skip.flags)}). Use '
+                    f'"Approve as separate Concept" if it is the same game with a '
+                    f'different trophy list.',
+                )
             except Exception as exc:
                 errors += 1
                 messages.error(
@@ -3637,6 +3673,12 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                 )
         if approved:
             messages.success(request, f'Approved {approved} review(s) and anchored the games.')
+        if mismatched:
+            messages.warning(
+                request,
+                f'{mismatched} review(s) skipped due to trophy-structure mismatch '
+                f'and re-flagged for separate-Concept resolution.',
+            )
         non_pending = queryset.exclude(status='pending').count()
         if non_pending:
             messages.warning(
@@ -3654,8 +3696,13 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
           1. review.proposed_raw_igdb_id (set by migration / manual-anchor)
           2. target.igdb_match.igdb_id (already-anchored Concept)
           3. review.proposed_canonical_igdb_id (legacy fallback)
+
+        Raises _TrophyMismatchSkip (caught by approve_selected) when the game's
+        trophy structure diverges from a game already in the target Concept, so
+        a bulk-approve can't silently mis-group different games.
         """
         from trophies.services.igdb_service import IGDBService
+        from trophies.services.concept_anchor_service import compare_trophy_metrics
 
         canonical_id = review.proposed_canonical_igdb_id
         if not canonical_id:
@@ -3721,6 +3768,24 @@ class ConceptJoinReviewAdmin(admin.ModelAdmin):
                 IGDBService.process_match(
                     target, raw_data, confidence=1.0, method='manual',
                 )
+
+            # Trophy-consistency guard. A Concept groups one game's trophy list
+            # across regions/platforms, so games joining it should share the
+            # same trophy structure. When the target already holds a game
+            # (including one anchored earlier in this same bulk-approve, since
+            # each approval commits in its own transaction), compare against it;
+            # a divergence means these are likely NOT the same game. Abort the
+            # silent join so approve_selected re-flags it for "Approve as
+            # separate Concept". The first game into an empty target has nothing
+            # to compare against and passes — it becomes the reference for the
+            # rest of the batch.
+            reference_game = target.games.exclude(pk=review.game_id).first()
+            if reference_game is not None:
+                trophy_flags = compare_trophy_metrics(
+                    review.game, reference_game
+                )['flag_reasons']
+                if trophy_flags:
+                    raise _TrophyMismatchSkip(trophy_flags)
 
             review.game.add_concept(target, force=True)
 

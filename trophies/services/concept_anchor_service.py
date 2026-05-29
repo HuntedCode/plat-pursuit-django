@@ -474,27 +474,55 @@ def try_anchor_new_game(game):
         return None
 
 
-def _write_sync_review(game, match, cross, extra_flags=()):
-    """Write a ConceptJoinReview entry from live sync's match-but-flagged path.
+def _upsert_or_reopen_join_review(game, fresh_flags, defaults) -> bool:
+    """Create/update a ConceptJoinReview for `game`, re-opening a staff-resolved
+    review ONLY when a genuinely new flag appears.
 
-    Preserves staff-resolved reviews (never overwrites a non-pending status).
-    Internal helper used only by `try_anchor_new_game`.
+    Steady state: a resolved review (approved/rejected/deferred) whose fresh
+    evaluation surfaces no flag it doesn't already carry is left untouched, so
+    routine re-syncs don't re-litigate staff decisions. When a NEW divergence
+    appears, the review is re-opened (status -> pending, resolved_* cleared)
+    with the new flags merged into the existing ones, so it resurfaces in the
+    queue instead of staying silently approved.
+
+    `defaults` is the update_or_create payload for the create / pending path;
+    this fn always forces status='pending', clears resolved_*, and sets the
+    (possibly merged) flag_reasons. Returns True if a pending review now exists
+    (created or re-opened), False if a resolved review was preserved.
     """
     from trophies.models import ConceptJoinReview
 
+    valid = [
+        fr for fr in fresh_flags
+        if fr in ConceptJoinReview.FLAG_REASON_CHOICES
+    ]
+    existing = ConceptJoinReview.objects.filter(game=game).first()
+    if existing and existing.status != 'pending':
+        new_flags = [fr for fr in valid if fr not in (existing.flag_reasons or [])]
+        if not new_flags:
+            return False
+        valid = sorted(set(existing.flag_reasons or []) | set(valid))
+
+    payload = dict(defaults)
+    payload['flag_reasons'] = valid
+    payload['status'] = 'pending'
+    payload['resolved_at'] = None
+    payload['resolved_by'] = None
+    ConceptJoinReview.objects.update_or_create(game=game, defaults=payload)
+    return True
+
+
+def _write_sync_review(game, match, cross, extra_flags=()):
+    """Write a ConceptJoinReview entry from live sync's match-but-flagged path.
+
+    Preserves staff-resolved reviews unless a genuinely new divergence appears,
+    in which case it re-opens them (see `_upsert_or_reopen_join_review`).
+    Internal helper used only by `try_anchor_new_game`.
+    """
     flag_reasons = list(cross.get('flag_reasons', []))
     for fr in extra_flags:
         if fr not in flag_reasons:
             flag_reasons.append(fr)
-    flag_reasons = [
-        fr for fr in flag_reasons
-        if fr in ConceptJoinReview.FLAG_REASON_CHOICES
-    ]
-
-    # Don't clobber a staff-resolved review (approved/rejected/deferred).
-    existing = ConceptJoinReview.objects.filter(game=game).first()
-    if existing and existing.status != 'pending':
-        return
 
     identity_data = {k: v for k, v in cross.items() if k != 'flag_reasons'}
     identity_data.update({
@@ -506,15 +534,14 @@ def _write_sync_review(game, match, cross, extra_flags=()):
     })
 
     try:
-        ConceptJoinReview.objects.update_or_create(
-            game=game,
-            defaults={
+        _upsert_or_reopen_join_review(
+            game,
+            flag_reasons,
+            {
                 'proposed_canonical_igdb_id': match['canonical_igdb_id'] or 0,
                 'proposed_raw_igdb_id': match['raw_igdb_id'],
-                'flag_reasons': flag_reasons,
                 'trophy_fingerprint': trophy_fingerprint(game),
                 'identity_check_data': identity_data,
-                'status': 'pending',
             },
         )
     except Exception:
@@ -559,7 +586,7 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
     from django.db import IntegrityError, transaction
     from django.utils import timezone
 
-    from trophies.models import Concept, ConceptJoinReview
+    from trophies.models import Concept
     from trophies.services.igdb_service import IGDBService
 
     result = {
@@ -707,29 +734,23 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
             game_fp = trophy_fingerprint(game)
 
             if flag_reasons:
-                existing_review = ConceptJoinReview.objects.filter(game=game).first()
-                if existing_review and existing_review.status != 'pending':
-                    pass  # Preserve resolved reviews; don't clobber.
-                else:
-                    identity_data = {k: v for k, v in cross.items() if k != 'flag_reasons'}
-                    identity_data['trophy_group_title'] = trophy_title
-                    identity_data['source'] = 'manual_anchor'
-                    ConceptJoinReview.objects.update_or_create(
-                        game=game,
-                        defaults={
-                            'proposed_canonical_igdb_id': resolved_canonical,
-                            # In manual anchor, staff-provided id IS the raw.
-                            'proposed_raw_igdb_id': provided_igdb_id,
-                            'proposed_concept': target,
-                            'flag_reasons': [
-                                fr for fr in flag_reasons
-                                if fr in ConceptJoinReview.FLAG_REASON_CHOICES
-                            ],
-                            'trophy_fingerprint': game_fp,
-                            'identity_check_data': identity_data,
-                            'status': 'pending',
-                        },
-                    )
+                # Preserves a staff-resolved review unless a new divergence
+                # appears, in which case it re-opens (status -> pending).
+                identity_data = {k: v for k, v in cross.items() if k != 'flag_reasons'}
+                identity_data['trophy_group_title'] = trophy_title
+                identity_data['source'] = 'manual_anchor'
+                _upsert_or_reopen_join_review(
+                    game,
+                    flag_reasons,
+                    {
+                        'proposed_canonical_igdb_id': resolved_canonical,
+                        # In manual anchor, staff-provided id IS the raw.
+                        'proposed_raw_igdb_id': provided_igdb_id,
+                        'proposed_concept': target,
+                        'trophy_fingerprint': game_fp,
+                        'identity_check_data': identity_data,
+                    },
+                )
                 flagged_count += 1
                 result['flagged_games'].append((game, flag_reasons))
             else:
