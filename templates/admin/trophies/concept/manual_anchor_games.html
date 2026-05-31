@@ -1,0 +1,108 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block title %}Manual anchor PER GAME to IGDB id{% endblock %}
+
+{% block content %}
+<h1>Manual anchor PER GAME to IGDB id</h1>
+
+<p>
+  Per-Game variant of the bulk anchor action. Use this when one or more Games
+  inside a Concept actually belong to a different IGDB version than the Concept
+  is anchored at (for example, a Remaster's trophy list living inside the
+  original game's Concept that should split out). Enter an IGDB id per Game;
+  each Game is routed independently to the per-version target Concept for the
+  id you provide, find-or-creating the target as needed.
+</p>
+<p>
+  The same vetting the bulk anchor uses runs per Game: trophy-fingerprint check
+  against the target's existing Games, plus the identity cross-check (title
+  similarity, platform overlap, release-year gap). Clean Games move via
+  <code>Game.add_concept</code>. Flagged Games get a <code>ConceptJoinReview</code>
+  entry the same way the bulk path would.
+</p>
+<p>
+  Leave any row's IGDB id blank to skip that Game in this run.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  {% for pk in selected_pks %}
+    <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+  {% endfor %}
+  <input type="hidden" name="action" value="manual_anchor_games_selected">
+  <input type="hidden" name="post" value="yes">
+
+  {% for row in rows %}
+    <div style="border: 1px solid #ccc; padding: 12px; margin-bottom: 16px;">
+      <h3>
+        {{ row.concept.unified_title|default:"(no title)" }}
+        <small style="color:#888;">({{ row.concept.concept_id }})</small>
+      </h3>
+
+      <p style="font-size: 0.9em; color: #555;">
+        <strong>Games in concept:</strong> {{ row.games|length }}
+        {% if row.family %}
+          &mdash; <strong>Family:</strong> {{ row.family.canonical_name }}
+          {% if row.family.igdb_id %}(IGDB {{ row.family.igdb_id }}){% endif %}
+        {% endif %}
+        {% if row.current_match and row.current_match.igdb_id %}
+          <br>
+          <strong>Concept's current IGDBMatch:</strong>
+          IGDB {{ row.current_match.igdb_id }} &mdash;
+          {{ row.current_match.igdb_name|default:"(no name)" }}
+          <em>(status: {{ row.current_match.status }})</em>
+          &mdash;
+          <a href="https://www.igdb.com/games/{{ row.current_match.igdb_slug|default:row.current_match.igdb_id }}" target="_blank" rel="noopener">View on IGDB &rarr;</a>
+        {% else %}
+          <br><em>No existing IGDBMatch on this Concept.</em>
+        {% endif %}
+      </p>
+
+      {% if row.games %}
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+          <thead>
+            <tr style="background: #f4f4f4;">
+              <th style="text-align: left; padding: 6px;">Game</th>
+              <th style="text-align: left; padding: 6px;">np_communication_id</th>
+              <th style="text-align: left; padding: 6px;">Platforms</th>
+              <th style="text-align: left; padding: 6px;">Trophies (B/S/G/P)</th>
+              <th style="text-align: left; padding: 6px;">Anchor to IGDB id</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in row.games %}
+              <tr style="border-top: 1px solid #eee;">
+                <td style="padding: 6px;">
+                  pk={{ entry.game.pk }}<br>
+                  {{ entry.game.title_name|default:"(no title)" }}
+                </td>
+                <td style="padding: 6px; color: #555;">{{ entry.game.np_communication_id }}</td>
+                <td style="padding: 6px; color: #555;">
+                  {% if entry.game.title_platform %}{{ entry.game.title_platform|join:", " }}{% else %}<em>none</em>{% endif %}
+                </td>
+                <td style="padding: 6px; color: #555;">
+                  {{ entry.defined_trophies.bronze|default:0 }} /
+                  {{ entry.defined_trophies.silver|default:0 }} /
+                  {{ entry.defined_trophies.gold|default:0 }} /
+                  {{ entry.defined_trophies.platinum|default:0 }}
+                </td>
+                <td style="padding: 6px;">
+                  <input type="number" name="igdb_id_game_{{ entry.game.pk }}" min="1" style="width: 10em;" placeholder="e.g. 11161">
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p style="color: #888;"><em>No games in this concept.</em></p>
+      {% endif %}
+    </div>
+  {% endfor %}
+
+  <p>
+    <input type="submit" name="apply" value="Anchor games" class="default">
+    <a href="javascript:history.back()" class="button cancel-link">Cancel</a>
+  </p>
+</form>
+{% endblock %}

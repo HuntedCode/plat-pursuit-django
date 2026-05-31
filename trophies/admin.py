@@ -825,6 +825,7 @@ class ConceptAdmin(admin.ModelAdmin):
     readonly_fields = ('title_reviewed_at',)
     actions = [
         'manual_anchor_selected',
+        'manual_anchor_games_selected',
         'duplicate_concept',
         'lock_games', 'unlock_games',
         'lock_titles', 'unlock_titles',
@@ -1011,6 +1012,113 @@ class ConceptAdmin(admin.ModelAdmin):
             'title': 'Manual anchor to IGDB id',
         }
         return render(request, 'admin/trophies/concept/manual_anchor.html', context)
+
+    @admin.action(description='Manual anchor PER GAME to IGDB id (split a concept)')
+    def manual_anchor_games_selected(self, request, queryset):
+        """Per-Game analogue of `manual_anchor_selected`.
+
+        Use case: a Concept lumps Games that actually belong to different IGDB
+        versions (e.g. a Remaster trophy list living inside the original-game
+        Concept). Enter an IGDB id per Game; each Game is routed independently
+        via `anchor_game_to_canonical`. Clean Games move; flagged Games get a
+        ConceptJoinReview. Per-game vetting handles the trophy-fingerprint and
+        identity cross-checks the same way the bulk anchor does.
+        """
+        from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+        from django.shortcuts import render
+        from trophies.services.concept_anchor_service import (
+            anchor_game_to_canonical,
+        )
+
+        concepts = list(queryset.select_related('family').prefetch_related('games'))
+
+        if request.POST.get('apply', '').startswith('Anchor'):
+            total_moved = 0
+            total_flagged = 0
+            total_already = 0
+            errors = 0
+            for c in concepts:
+                for g in c.games.all():
+                    raw_id = request.POST.get(f'igdb_id_game_{g.pk}', '').strip()
+                    if not raw_id:
+                        continue  # blank → skip this game
+                    try:
+                        result = anchor_game_to_canonical(
+                            g, raw_id, user=request.user,
+                        )
+                    except Exception as exc:
+                        errors += 1
+                        messages.error(
+                            request,
+                            f'Game pk={g.pk}: anchor failed — {exc}',
+                        )
+                        continue
+                    if not result['ok']:
+                        errors += 1
+                        messages.error(
+                            request,
+                            f'Game pk={g.pk}: {result["error"]}',
+                        )
+                        continue
+                    if result['already_anchored']:
+                        total_already += 1
+                        messages.info(
+                            request,
+                            f'Game pk={g.pk}: already on '
+                            f'{result["target_concept"].concept_id!r}, no-op.',
+                        )
+                        continue
+                    if result['flagged']:
+                        total_flagged += 1
+                        messages.warning(
+                            request,
+                            f'Game pk={g.pk} → '
+                            f'{result["target_concept"].concept_id!r}: flagged '
+                            f'({", ".join(result["flag_reasons"])})',
+                        )
+                    elif result['moved']:
+                        total_moved += 1
+                        messages.success(
+                            request,
+                            f'Game pk={g.pk} → '
+                            f'{result["target_concept"].concept_id!r}: moved cleanly',
+                        )
+            if total_moved or total_flagged or total_already:
+                messages.info(
+                    request,
+                    f'Total: {total_moved} game(s) anchored, '
+                    f'{total_flagged} flagged, {total_already} already-anchored.',
+                )
+            return None  # fall through to the default changelist response
+
+        # Step 1: render the form.
+        rows = []
+        for c in concepts:
+            match = getattr(c, 'igdb_match', None)
+            games_info = []
+            for g in c.games.all():
+                games_info.append({
+                    'game': g,
+                    'defined_trophies': g.defined_trophies or {},
+                })
+            rows.append({
+                'concept': c,
+                'games': games_info,
+                'current_match': match,
+                'family': c.family,
+            })
+        context = {
+            **self.admin_site.each_context(request),
+            'rows': rows,
+            'selected_pks': [c.pk for c in concepts],
+            'action_checkbox_name': ACTION_CHECKBOX_NAME,
+            'title': 'Manual anchor PER GAME to IGDB id',
+        }
+        return render(
+            request,
+            'admin/trophies/concept/manual_anchor_games.html',
+            context,
+        )
 
     @admin.action(description="Lock concept on all games using selected concepts")
     def lock_games(self, request, queryset):

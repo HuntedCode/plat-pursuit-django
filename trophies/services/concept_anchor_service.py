@@ -787,6 +787,209 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
         return result
 
 
+def anchor_game_to_canonical(game, canonical_igdb_id, *, user=None) -> dict:
+    """Manually anchor a single Game to a staff-provided IGDB id.
+
+    Per-game analogue of `anchor_concept_to_canonical`. Use when one Game inside
+    a Concept actually belongs to a different IGDB version than the Concept is
+    anchored at (e.g. the Concept lumped a Remaster in with the original, and
+    that one Game should split out). The same vetting pipeline runs (identity
+    cross-check, trophy-fingerprint vs target's existing Games); a clean Game
+    moves via `Game.add_concept(force=True)`, a flagged Game gets a
+    `ConceptJoinReview` via `_upsert_or_reopen_join_review`.
+
+    Args:
+        game: the Game to re-anchor.
+        canonical_igdb_id: the IGDB id staff believes is correct for THIS Game.
+        user: the staff user driving the action (audit info on any review).
+
+    Returns:
+        dict with keys:
+            * ok (bool)
+            * error (str | None)
+            * target_concept (Concept | None): the anchored target
+            * resolved_canonical_id (int | None)
+            * moved (bool): True iff the Game was anchored cleanly into target
+            * flagged (bool): True iff a ConceptJoinReview was written/re-opened
+            * flag_reasons (list[str]): present when flagged
+            * collision (bool): True if existing Concept at str(canonical)
+              belongs to a different canonical family
+            * already_anchored (bool): True if Game was already on target
+    """
+    from django.db import IntegrityError, transaction
+    from django.utils import timezone
+
+    from trophies.models import Concept
+    from trophies.services.igdb_service import IGDBService
+
+    result = {
+        'ok': False,
+        'error': None,
+        'target_concept': None,
+        'resolved_canonical_id': None,
+        'moved': False,
+        'flagged': False,
+        'flag_reasons': [],
+        'collision': False,
+        'already_anchored': False,
+    }
+
+    if not game or not game.pk:
+        result['error'] = 'Game missing or unsaved'
+        return result
+    try:
+        provided_igdb_id = int(canonical_igdb_id)
+    except (TypeError, ValueError):
+        result['error'] = f'Invalid IGDB id: {canonical_igdb_id!r}'
+        return result
+
+    raw_data = IGDBService.fetch_full_game_data(provided_igdb_id)
+    if not raw_data:
+        result['error'] = f'IGDB returned no data for id {provided_igdb_id}'
+        return result
+
+    resolved_canonical = IGDBService._resolve_canonical_igdb_id(
+        raw_data, provided_igdb_id
+    )
+    result['resolved_canonical_id'] = resolved_canonical
+
+    source_concept = game.concept  # may be None for an unplaced Game
+
+    with transaction.atomic():
+        # Find or create the per-version target Concept. Same target-resolution
+        # shape as `anchor_concept_to_canonical`; exclude the source from the
+        # family map so we don't accidentally pick it back as the target.
+        raw_map = build_family_raw_igdb_map(
+            resolved_canonical,
+            exclude_concept_pk=source_concept.pk if source_concept else None,
+        )
+        target = raw_map.get(provided_igdb_id)
+
+        if target is None:
+            target_concept_id = str(provided_igdb_id)
+            existing = Concept.objects.filter(concept_id=target_concept_id).first()
+            if existing:
+                existing_match = getattr(existing, 'igdb_match', None)
+                if existing_match and existing_match.igdb_id:
+                    existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                        existing_match.raw_response or {}, existing_match.igdb_id
+                    )
+                    if existing_canonical != resolved_canonical:
+                        result['collision'] = True
+                        result['error'] = (
+                            f'Concept_id {target_concept_id!r} already exists '
+                            f'and resolves to canonical {existing_canonical}, '
+                            f'not {resolved_canonical}. Resolve manually.'
+                        )
+                        return result
+                    if existing_match.igdb_id != provided_igdb_id:
+                        # Same family but different raw — allocate a sibling
+                        # rather than trample (the "Our World Is Ended" case).
+                        target_concept_id = allocate_sibling_concept_id(provided_igdb_id)
+                        existing = None
+                    else:
+                        target = existing
+                else:
+                    target = existing
+
+            if target is None:
+                try:
+                    with transaction.atomic():
+                        target = Concept.objects.create(
+                            concept_id=target_concept_id,
+                            unified_title=raw_data.get('name', ''),
+                        )
+                except IntegrityError:
+                    target = Concept.objects.filter(
+                        concept_id=target_concept_id
+                    ).first()
+                    if target is None:
+                        result['error'] = (
+                            f'Failed to create or fetch Concept at concept_id='
+                            f'{target_concept_id!r} after race.'
+                        )
+                        return result
+
+        result['target_concept'] = target
+
+        # No-op if the Game is already on this target.
+        if source_concept and source_concept.pk == target.pk:
+            result['ok'] = True
+            result['already_anchored'] = True
+            return result
+
+        # Refresh target's IGDBMatch with the RAW (version-specific) data.
+        IGDBService.process_match(
+            target, raw_data, confidence=1.0, method='manual',
+        )
+
+        # Vet this Game against the target's existing Games (excluding itself,
+        # though it isn't on the target yet — defensive).
+        existing_target_games = list(target.games.exclude(pk=game.pk))
+        reference_game = existing_target_games[0] if existing_target_games else None
+
+        trophy_title = IGDBService._extract_trophy_group_title(game)
+        cross = identity_cross_check(
+            game, raw_data,
+            confidence=None,  # no matcher confidence on manual anchor
+            trophy_group_title=trophy_title,
+        )
+        cross_flags = list(cross['flag_reasons'])
+
+        fingerprint_flags = []
+        if reference_game:
+            metric = compare_trophy_metrics(game, reference_game)
+            fingerprint_flags = metric['flag_reasons']
+
+        flag_reasons = cross_flags + [
+            fr for fr in fingerprint_flags if fr not in cross_flags
+        ]
+
+        if flag_reasons:
+            identity_data = {k: v for k, v in cross.items() if k != 'flag_reasons'}
+            identity_data['trophy_group_title'] = trophy_title
+            identity_data['source'] = 'manual_anchor_game'
+            _upsert_or_reopen_join_review(
+                game,
+                flag_reasons,
+                {
+                    'proposed_canonical_igdb_id': resolved_canonical,
+                    'proposed_raw_igdb_id': provided_igdb_id,
+                    'proposed_concept': target,
+                    'trophy_fingerprint': trophy_fingerprint(game),
+                    'identity_check_data': identity_data,
+                },
+            )
+            result['flagged'] = True
+            result['flag_reasons'] = flag_reasons
+        else:
+            game.add_concept(target, force=True)
+            target.anchor_migration_completed_at = timezone.now()
+            target.save(update_fields=['anchor_migration_completed_at'])
+            result['moved'] = True
+
+        # If this Game was the last one in its source Concept, defensively
+        # absorb + delete (mirrors anchor_concept_to_canonical's belt-and-
+        # suspenders cleanup for the rare case add_concept's cascade doesn't).
+        if source_concept and source_concept.pk != target.pk:
+            try:
+                refreshed_source = Concept.objects.get(pk=source_concept.pk)
+            except Concept.DoesNotExist:
+                refreshed_source = None
+            if refreshed_source and refreshed_source.games.count() == 0:
+                logger.info(
+                    f'anchor_game_to_canonical: source Concept '
+                    f'{refreshed_source.concept_id!r} (pk={refreshed_source.pk}) '
+                    f'survived per-game move with 0 games — running defensive '
+                    f'absorb + delete.'
+                )
+                target.absorb(refreshed_source)
+                refreshed_source.delete()
+
+        result['ok'] = True
+        return result
+
+
 def build_family_raw_igdb_map(canonical_id, exclude_concept_pk=None) -> dict:
     """Map `raw_igdb_id (IGDBMatch.igdb_id) → Concept` for the canonical family.
 
