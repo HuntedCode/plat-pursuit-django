@@ -60,15 +60,24 @@ def has_roadmap_role(profile, min_role: str, roadmap=None) -> bool:
         return True
     # Trial-on-assigned-roadmap escalation. We check the M2M only when
     # the cheap global comparison would otherwise reject the request,
-    # so the extra query is paid only for actual trial users (and only
+    # so the extra work is paid only for actual trial users (and only
     # when callers pass a roadmap, which is the cheap-to-load opt-in).
+    #
+    # The set of trial-assigned roadmap ids is lazily computed and
+    # cached on the profile instance for the duration of the request
+    # — a multi-DLC game-detail render that fires this gate per CTG
+    # (edit button + preview button × N) collapses to a single
+    # `values_list` query instead of N per-roadmap `exists()` calls.
     if (
         roadmap is not None
         and actual == ROADMAP_ROLE_HIERARCHY['trial']
         and required == ROADMAP_ROLE_HIERARCHY['writer']
-        and roadmap.trial_writers.filter(id=profile.id).exists()
     ):
-        return True
+        if not hasattr(profile, '_trial_assigned_roadmap_ids'):
+            profile._trial_assigned_roadmap_ids = set(
+                profile.trial_assigned_roadmaps.values_list('id', flat=True)
+            )
+        return roadmap.id in profile._trial_assigned_roadmap_ids
     return False
 
 

@@ -646,17 +646,23 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
     def get_roadmap_for_permission(self):
         """Hook for RoadmapAuthorRequiredMixin's trial-writer escalation.
 
-        Resolves the roadmap the same way `get()` does, but only fires
-        on the slow path (user failed the global writer check). Caches
-        both the game and the roadmap on the instance so the later
-        `get()` doesn't re-query. Returns None if the game / concept /
-        roadmap can't be resolved — the mixin will fall through to
-        the redirect.
+        Resolves the roadmap WITHOUT creating it. If no roadmap exists
+        yet for this CTG, returns None and the mixin denies access —
+        we don't want a trial user URL-spamming `/edit/` to silently
+        create empty Roadmap rows for CTGs they aren't assigned to.
+
+        Regular writers / editors / publishers pass the global-role
+        check upstream, so this hook never fires for them; their
+        get() path still does the get-or-create as designed (a writer
+        opening the editor for a fresh CTG seeds a new draft).
+
+        Caches both the game and the roadmap on the instance so the
+        later `get()` doesn't re-query.
         """
         game = self.get_object()
         if not game.concept:
             return None
-        roadmap = RoadmapService.get_roadmap_for_editor(
+        roadmap = RoadmapService.get_roadmap_for_preview(
             game.concept, self._trophy_group_id(),
         )
         if roadmap is None:

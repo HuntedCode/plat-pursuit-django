@@ -984,12 +984,20 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                         rm, game, viewer_profile=viewer_profile,
                     )
             elif is_trial_viewer:
+                # Bulk-fetch the set of assigned roadmap ids once
+                # (same cache `has_roadmap_role` would populate) so
+                # multi-DLC games don't pay one query per CTG.
+                if not hasattr(viewer_profile, '_trial_assigned_roadmap_ids'):
+                    viewer_profile._trial_assigned_roadmap_ids = set(
+                        viewer_profile.trial_assigned_roadmaps.values_list('id', flat=True)
+                    )
+                assigned_ids = viewer_profile._trial_assigned_roadmap_ids
                 for ctg_id, rm in roadmaps_by_ctg_id.items():
                     # Only build the workshop summary for the roadmaps
                     # the trial user is assigned to — published-only
                     # roadmaps the viewer happens to see don't get the
                     # workshop UI (they have no edit authority there).
-                    if rm.trial_writers.filter(id=viewer_profile.id).exists():
+                    if rm.id in assigned_ids:
                         workshop_by_ctg_id[ctg_id] = RoadmapService.get_workshop_summary(
                             rm, game, viewer_profile=viewer_profile,
                         )
