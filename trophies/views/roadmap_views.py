@@ -97,15 +97,30 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
 
     def _is_preview_mode(self, request):
         user = request.user
-        # Pass the roadmap so trial-role users assigned to it pass the
-        # writer check (per-roadmap escalation in has_roadmap_role).
-        # _cached_roadmap is populated in get() before this method runs.
-        return (
-            request.GET.get('preview') == 'true'
-            and user.is_authenticated
-            and getattr(user, 'profile', None) is not None
-            and user.profile.has_roadmap_role('writer', self._cached_roadmap)
-        )
+        if request.GET.get('preview') != 'true':
+            return False
+        if not user.is_authenticated:
+            return False
+        profile = getattr(user, 'profile', None)
+        if profile is None:
+            return False
+        # Fast path: a global writer+ doesn't need a roadmap lookup.
+        # Covers every existing author (writer / editor / publisher).
+        if profile.has_roadmap_role('writer'):
+            return True
+        # Slow path: trial users need the specific roadmap they're
+        # requesting to check their assignment via the per-roadmap
+        # escalation in `has_roadmap_role`. This runs BEFORE `get()`
+        # populates `_cached_roadmap`, so we resolve from URL kwargs
+        # here. `self.object` is already set by `get()` line 59 so
+        # we can read its concept.
+        roadmap = getattr(self, '_cached_roadmap', None)
+        if roadmap is None:
+            requested_group_id = self.kwargs.get('trophy_group_id', 'default')
+            roadmap = RoadmapService.get_roadmap_for_preview(
+                self.object.concept, requested_group_id,
+            )
+        return profile.has_roadmap_role('writer', roadmap)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
