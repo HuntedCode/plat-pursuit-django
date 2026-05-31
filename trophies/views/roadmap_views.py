@@ -643,16 +643,44 @@ class RoadmapEditorView(RoadmapAuthorRequiredMixin, DetailView):
     def _trophy_group_id(self):
         return self.kwargs.get('trophy_group_id', 'default')
 
+    def get_roadmap_for_permission(self):
+        """Hook for RoadmapAuthorRequiredMixin's trial-writer escalation.
+
+        Resolves the roadmap the same way `get()` does, but only fires
+        on the slow path (user failed the global writer check). Caches
+        both the game and the roadmap on the instance so the later
+        `get()` doesn't re-query. Returns None if the game / concept /
+        roadmap can't be resolved — the mixin will fall through to
+        the redirect.
+        """
+        game = self.get_object()
+        if not game.concept:
+            return None
+        roadmap = RoadmapService.get_roadmap_for_editor(
+            game.concept, self._trophy_group_id(),
+        )
+        if roadmap is None:
+            return None
+        # Cache so get() can skip re-fetching.
+        self.object = game
+        self._cached_roadmap = roadmap
+        return roadmap
+
     def get(self, request, *args, **kwargs):
         # Defense in depth: even though templates hide the Edit button on
         # published roadmaps for non-publishers, anyone with the URL can
         # hit this view. Block at the top of GET before rendering.
-        self.object = self.get_object()
-        roadmap = RoadmapService.get_roadmap_for_editor(
-            self.object.concept, self._trophy_group_id(),
-        )
-        if roadmap is None:
-            raise Http404("Trophy group not found.")
+        # `_cached_roadmap` may already be set by the permission hook
+        # (trial-writer slow path) — skip the re-fetch when it is.
+        if getattr(self, '_cached_roadmap', None) is None:
+            self.object = self.get_object()
+            roadmap = RoadmapService.get_roadmap_for_editor(
+                self.object.concept, self._trophy_group_id(),
+            )
+            if roadmap is None:
+                raise Http404("Trophy group not found.")
+        else:
+            roadmap = self._cached_roadmap
         if not can_view_editor(request.user.profile, roadmap):
             messages.warning(
                 request,

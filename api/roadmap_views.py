@@ -278,6 +278,15 @@ class RoadmapTrialWritersView(APIView):
             q = (request.data.get('q') or '').strip()
             if len(q) < 2:
                 return Response({'results': []})
+            # Cap at PSN's 16-char max + slack. The template input has
+            # maxlength=50, but a direct API caller can send arbitrary
+            # length; bound it here so a 1 MB query string can't blow
+            # the Postgres planner on an istartswith comparison.
+            if len(q) > 64:
+                return Response(
+                    {'error': 'Search query too long.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             # Trial-role only, top 10 by psn_username prefix match.
             # Anything broader risks ambiguity — multiple writers may
             # share a partial username.

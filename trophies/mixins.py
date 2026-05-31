@@ -70,15 +70,51 @@ class RoadmapAuthorRequiredMixin(LoginRequiredMixin):
     Mixin that requires the user to have at least the writer roadmap role.
     Independent of Django staff status. Unauthenticated users hit login;
     authenticated users without a sufficient role redirect to home.
+
+    Trial-writer support: a subclass can override
+    `get_roadmap_for_permission()` to return the Roadmap the request
+    targets. When the cheap global-role check fails, we call the hook
+    and re-check with the roadmap so trial-role users assigned to it
+    (via Roadmap.trial_writers) pass. Subclasses that don't override
+    the hook get the legacy behavior (global check only).
     """
     min_roadmap_role = 'writer'
+
+    def get_roadmap_for_permission(self):
+        """Return the Roadmap this request targets, or None.
+
+        Override on roadmap-scoped subclasses (e.g. the editor view)
+        to enable per-roadmap trial-writer escalation. The hook is
+        only invoked on the slow path — users who pass the global
+        role check never trigger it.
+        """
+        return None
 
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
             return self.handle_no_permission()
 
         profile = getattr(request.user, 'profile', None)
-        if profile and profile.has_roadmap_role(self.min_roadmap_role):
+        if not profile:
+            return redirect('home')
+        # Fast path: global role check covers writers / editors /
+        # publishers without paying for a roadmap lookup.
+        if profile.has_roadmap_role(self.min_roadmap_role):
+            return super().dispatch(request, *args, **kwargs)
+        # Slow path: maybe a trial-role user with a per-roadmap
+        # assignment. Subclasses opt in by implementing the hook.
+        roadmap = None
+        try:
+            roadmap = self.get_roadmap_for_permission()
+        except Exception:
+            # Hook failures (e.g. missing object, lookup errors)
+            # fall through to the redirect so a bug in the hook
+            # can't accidentally grant access.
+            roadmap = None
+        if (
+            roadmap is not None
+            and profile.has_roadmap_role(self.min_roadmap_role, roadmap)
+        ):
             return super().dispatch(request, *args, **kwargs)
 
         return redirect('home')

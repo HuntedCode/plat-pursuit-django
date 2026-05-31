@@ -931,13 +931,22 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             viewer_profile is not None
             and viewer_profile.has_roadmap_role('writer')
         )
+        # Trial-role viewers don't pass the global check above, but they
+        # may be assigned to one of this concept's draft roadmaps via
+        # Roadmap.trial_writers. Detect that here so the queryset below
+        # can include the specific drafts they're allowed to see.
+        is_trial_viewer = (
+            viewer_profile is not None
+            and viewer_profile.roadmap_role == 'trial'
+        )
         context['is_roadmap_author'] = is_roadmap_author
         if game.concept:
-            from django.db.models import Count
+            from django.db.models import Count, Q
             from trophies.models import Roadmap
             from trophies.services.roadmap_service import RoadmapService
-            # Authors see drafts; non-authors see only published.
-            include_drafts = roadmap_preview or is_roadmap_author
+            # Authors see all drafts; trial users see drafts they're
+            # assigned to; non-authors see only published.
+            include_all_drafts = roadmap_preview or is_roadmap_author
             roadmap_qs = (
                 Roadmap.objects
                 .filter(concept=game.concept)
@@ -949,8 +958,13 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 # whether this roadmap has a collectibles-tracker pillar.
                 .annotate(collectibles_count=Count('collectible_types__items'))
             )
-            if not include_drafts:
-                roadmap_qs = roadmap_qs.filter(status='published')
+            if not include_all_drafts:
+                if is_trial_viewer:
+                    roadmap_qs = roadmap_qs.filter(
+                        Q(status='published') | Q(trial_writers=viewer_profile)
+                    )
+                else:
+                    roadmap_qs = roadmap_qs.filter(status='published')
             roadmaps_by_ctg_id = {
                 r.concept_trophy_group_id: r for r in roadmap_qs
             }
@@ -959,6 +973,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
             # Workshop summary per CTG for the staff CTA. Built for every
             # CTG (even ones without a roadmap yet) so the placeholder can
             # render "We haven't started this one yet" with a Create button.
+            # Trial viewers get summaries only for the specific roadmaps
+            # they're assigned to (other CTGs render as published-only).
             workshop_by_ctg_id = {}
             if is_roadmap_author:
                 ctgs = list(game.concept.concept_trophy_groups.all())
@@ -967,6 +983,16 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                     workshop_by_ctg_id[ctg.id] = RoadmapService.get_workshop_summary(
                         rm, game, viewer_profile=viewer_profile,
                     )
+            elif is_trial_viewer:
+                for ctg_id, rm in roadmaps_by_ctg_id.items():
+                    # Only build the workshop summary for the roadmaps
+                    # the trial user is assigned to — published-only
+                    # roadmaps the viewer happens to see don't get the
+                    # workshop UI (they have no edit authority there).
+                    if rm.trial_writers.filter(id=viewer_profile.id).exists():
+                        workshop_by_ctg_id[ctg_id] = RoadmapService.get_workshop_summary(
+                            rm, game, viewer_profile=viewer_profile,
+                        )
             context['workshops_by_ctg'] = workshop_by_ctg_id
         else:
             context['roadmaps_by_ctg'] = {}
