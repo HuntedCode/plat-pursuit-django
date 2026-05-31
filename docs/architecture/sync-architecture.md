@@ -115,9 +115,13 @@ _job_sync_complete(profile_id, ...):
       6h Redis cooldown): re-queue per-game sync jobs for games that are
       missing all Trophy records, missing all TrophyGroup records, OR whose
       Trophy rows reference a trophy_group_id with no matching TrophyGroup row
-      (orphaned/missing DLC groups while the trophies survive). Finding work
-      resets the profile to 'syncing' and re-enters per-game jobs via
-      pending_sync_complete.
+      (orphaned/missing DLC groups while the trophies survive). When a group
+      gap is found, the sync_trophy_groups re-queue is expanded to ALL games
+      sharing the detected game's concept (stacked/regional siblings tend to
+      gain the same DLC, and an unpopular sibling may have no active syncer to
+      catch it). Finding work resets the profile to 'syncing' and re-enters
+      per-game jobs via pending_sync_complete. For a catalog-wide refresh
+      outside the sync path, see the `resync_trophy_groups` command.
   4. update_profile_games (with hide_hiddens fix)
   5. update_profile_trophy_counts
   6. Badge eval, milestones, challenges (unchanged)

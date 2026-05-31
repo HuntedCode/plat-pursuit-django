@@ -1436,8 +1436,32 @@ class TokenKeeper:
                     # checks is only queued once.
                     group_resync_games = {g.id: g for g in incomplete_group_games}
                     group_resync_games.update({g.id: g for g in orphan_group_games})
+
+                    # Concept-sibling expansion: if one stacked version is missing
+                    # a group, the other versions in the same concept likely gained
+                    # the same DLC too (PSN adds it per-np_communication_id, and an
+                    # unpopular sibling may have no active syncer to catch it). So
+                    # proactively refresh every game sharing a detected game's
+                    # concept. Bounded by the per-concept game count (a handful for
+                    # regional/cross-gen stacks).
+                    detected_concept_ids = {
+                        g.concept_id for g in group_resync_games.values() if g.concept_id
+                    }
+                    if detected_concept_ids:
+                        for sibling in Game.objects.filter(concept_id__in=detected_concept_ids):
+                            group_resync_games.setdefault(sibling.id, sibling)
+
                     for game in group_resync_games.values():
-                        platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
+                        # Guard malformed title_platform (empty / 'PSPC'-only):
+                        # the sibling set can include legacy games we don't own.
+                        platforms = game.title_platform or []
+                        if not platforms:
+                            continue
+                        platform = platforms[0] if platforms[0] != 'PSPC' else (
+                            platforms[1] if len(platforms) > 1 else None
+                        )
+                        if platform is None:
+                            continue
                         args = [game.np_communication_id, platform]
                         PSNManager.assign_job('sync_trophy_groups', args, profile.id)
                         queued_count += 1  # group sync = 1 progress tick
