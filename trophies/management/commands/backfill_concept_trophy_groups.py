@@ -27,6 +27,14 @@ class Command(BaseCommand):
             '--audit-missing-groups', action='store_true',
             help='Find games with defined_trophies data but no TrophyGroup records (sync_trophy_groups failed). Outputs np_communication_id for re-sync.',
         )
+        parser.add_argument(
+            '--audit-orphaned-groups', action='store_true',
+            help='Find games whose Trophy rows reference a trophy_group_id with no matching TrophyGroup record (corrupted/missing DLC groups while trophies are intact). Reports the missing group ids and whether the concept is anchored.',
+        )
+        parser.add_argument(
+            '--fix', action='store_true',
+            help='With --audit-orphaned-groups: re-queue a sync_trophy_groups job for each affected game to rebuild the missing groups. Requires the TokenKeeper worker to be running to drain the queue.',
+        )
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
@@ -38,6 +46,10 @@ class Command(BaseCommand):
 
         if options['audit_missing_groups']:
             self._handle_audit_missing_groups()
+            return
+
+        if options['audit_orphaned_groups']:
+            self._handle_audit_orphaned_groups(fix=options['fix'])
             return
 
         if check_mismatches:
@@ -243,6 +255,127 @@ class Command(BaseCommand):
             self.stdout.write(
                 "Use the np_communication_id values above to trigger re-syncs "
                 "for these games."
+            )
+
+    def _handle_audit_orphaned_groups(self, fix=False):
+        """Find games whose Trophy rows reference a trophy_group_id that has no
+        matching TrophyGroup record.
+
+        This catches the corruption where a game keeps all its Trophy rows but
+        loses one or more TrophyGroup rows (typically DLC groups). The game-level
+        defined_trophies total still matches PSN and at least the base group
+        survives, so neither the slow-path drift check nor the zero-group
+        completeness backstop in sync ever flags it.
+
+        With fix=True, re-queues a sync_trophy_groups job per affected game to
+        rebuild the missing groups (idempotent get_or_create; never touches
+        Trophy/EarnedTrophy rows).
+        """
+        from collections import defaultdict
+        from django.db.models import OuterRef, Exists
+        from trophies.models import Game, Trophy, TrophyGroup
+        from trophies.psn_manager import PSNManager
+
+        self.stdout.write("Auditing games for orphaned trophy groups...\n")
+
+        # Distinct (game_id, trophy_group_id) pairs on Trophy rows that have no
+        # matching TrophyGroup row. Catalog-level (not per-user), so the distinct
+        # set is bounded by the number of trophy groups across the whole catalog.
+        group_exists = TrophyGroup.objects.filter(
+            game_id=OuterRef('game_id'),
+            trophy_group_id=OuterRef('trophy_group_id'),
+        )
+        orphan_rows = (
+            Trophy.objects
+            .annotate(_has_group=Exists(group_exists))
+            .filter(_has_group=False)
+            .values_list('game_id', 'trophy_group_id')
+            .distinct()
+        )
+
+        missing_by_game = defaultdict(list)
+        for game_id, group_id in orphan_rows:
+            missing_by_game[game_id].append(group_id)
+
+        if not missing_by_game:
+            self.stdout.write(self.style.SUCCESS(
+                "No orphaned trophy groups found. Every trophy_group_id on a "
+                "Trophy row has a matching TrophyGroup record."
+            ))
+            return
+
+        # Fetch games (with concept for title + anchored flag) in one query.
+        games = (
+            Game.objects
+            .filter(id__in=missing_by_game.keys())
+            .select_related('concept')
+            .order_by('title_name')
+        )
+
+        total_groups = 0
+        queued = 0
+        skipped = 0
+        for game in games:
+            group_ids = sorted(missing_by_game[game.id])
+            total_groups += len(group_ids)
+
+            anchored = bool(
+                game.concept and game.concept.anchor_migration_completed_at is not None
+            )
+            anchor_tag = self.style.HTTP_INFO("  [ANCHORED]") if anchored else ""
+
+            self.stdout.write(self.style.WARNING(
+                f"\n  {game.title_name} (np_communication_id={game.np_communication_id}){anchor_tag}"
+            ))
+            self.stdout.write(
+                f"    missing TrophyGroup rows: {', '.join(group_ids)}"
+            )
+
+            if fix:
+                driver_profile_id = (
+                    game.played_by.values_list('profile_id', flat=True).first()
+                )
+                if driver_profile_id is None:
+                    skipped += 1
+                    self.stdout.write(self.style.ERROR(
+                        "    SKIP: no profile has played this game, cannot drive a PSN re-sync"
+                    ))
+                    continue
+
+                # Resolve platform exactly as the in-sync re-queue loops do:
+                # PSPC titles report platform[0]='PSPC', so fall back to [1].
+                platform = (
+                    game.title_platform[0]
+                    if game.title_platform[0] != 'PSPC'
+                    else game.title_platform[1]
+                )
+                # high_priority is intentionally NOT a counted queue, so this
+                # repair never touches the driver profile's sync job counter or
+                # trips a spurious sync_complete (medium_priority would).
+                PSNManager.assign_job(
+                    'sync_trophy_groups',
+                    [game.np_communication_id, platform],
+                    driver_profile_id,
+                    priority_override='high_priority',
+                )
+                queued += 1
+                self.stdout.write(self.style.SUCCESS(
+                    f"    queued sync_trophy_groups (driver profile {driver_profile_id})"
+                ))
+
+        self.stdout.write("")
+        self.stdout.write(self.style.WARNING(
+            f"Found {total_groups} orphaned trophy group(s) across {len(missing_by_game)} game(s)."
+        ))
+        if fix:
+            self.stdout.write(self.style.SUCCESS(
+                f"Queued {queued} re-sync job(s)" + (f", skipped {skipped}" if skipped else "")
+                + ". Ensure the TokenKeeper worker is running to drain the queue."
+            ))
+        else:
+            self.stdout.write(
+                "Re-run with --fix to re-queue sync_trophy_groups for these games, "
+                "or use the np_communication_id values above to trigger re-syncs manually."
             )
 
     def _handle_audit_missing_groups(self):

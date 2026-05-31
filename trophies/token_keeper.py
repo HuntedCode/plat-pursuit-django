@@ -1336,14 +1336,17 @@ class TokenKeeper:
             # per check type so one failure doesn't block the other from retrying.
             trophy_cooldown_key = f"trophy_completeness_check:{profile_id}"
             group_cooldown_key = f"group_completeness_check:{profile_id}"
+            orphan_cooldown_key = f"orphan_group_check:{profile_id}"
             check_trophies = not redis_client.exists(trophy_cooldown_key)
             check_groups = not redis_client.exists(group_cooldown_key)
+            check_orphans = not redis_client.exists(orphan_cooldown_key)
 
-            if check_trophies or check_groups:
+            if check_trophies or check_groups or check_orphans:
                 from django.db.models import Count as _Count
 
                 incomplete_trophy_games = []
                 incomplete_group_games = []
+                orphan_group_games = []
 
                 if check_trophies:
                     # Games with 0 Trophy records (sync_trophies failed)
@@ -1371,7 +1374,33 @@ class TokenKeeper:
                         )
                     )
 
-                if incomplete_trophy_games or incomplete_group_games:
+                if check_orphans:
+                    # Games whose Trophy rows reference a trophy_group_id that has
+                    # no matching TrophyGroup row (corrupted/missing DLC groups
+                    # while the trophies themselves survive). The zero-group check
+                    # above can't see these (group_count > 0); the slow-path drift
+                    # check can't either (game-level defined_trophies total still
+                    # matches PSN). DB-side Exists + distinct keeps this bounded
+                    # for whales instead of materializing every Trophy row.
+                    from django.db.models import OuterRef as _OuterRef, Exists as _Exists
+                    from trophies.models import Trophy
+                    _group_exists = TrophyGroup.objects.filter(
+                        game_id=_OuterRef('game_id'),
+                        trophy_group_id=_OuterRef('trophy_group_id'),
+                    )
+                    orphan_game_ids = list(
+                        Trophy.objects.filter(game__played_by__profile=profile)
+                        .annotate(_has_group=_Exists(_group_exists))
+                        .filter(_has_group=False)
+                        .values_list('game_id', flat=True)
+                        .distinct()
+                    )
+                    if orphan_game_ids:
+                        orphan_group_games = list(
+                            Game.objects.filter(id__in=orphan_game_ids)
+                        )
+
+                if incomplete_trophy_games or incomplete_group_games or orphan_group_games:
                     if incomplete_trophy_games:
                         logger.warning(
                             f"Trophy record completeness: profile {profile_id} has "
@@ -1384,6 +1413,13 @@ class TokenKeeper:
                             f"{len(incomplete_group_games)} game(s) with 0 TrophyGroup records."
                         )
                         redis_client.set(group_cooldown_key, "1", ex=21600)
+                    if orphan_group_games:
+                        logger.warning(
+                            f"TrophyGroup orphans: profile {profile_id} has "
+                            f"{len(orphan_group_games)} game(s) whose trophies reference "
+                            f"missing TrophyGroup records."
+                        )
+                        redis_client.set(orphan_cooldown_key, "1", ex=21600)
 
                     profile.reset_sync_progress()
                     profile.set_sync_status('syncing')
@@ -1395,8 +1431,12 @@ class TokenKeeper:
                     redis_client.set(pending_key, pending_data, ex=21600)
 
                     queued_count = 0
-                    # Re-queue sync_trophy_groups for games missing groups
-                    for game in incomplete_group_games:
+                    # Re-queue sync_trophy_groups for games missing all groups OR
+                    # with orphaned groups. Dedup by id so a game flagged by both
+                    # checks is only queued once.
+                    group_resync_games = {g.id: g for g in incomplete_group_games}
+                    group_resync_games.update({g.id: g for g in orphan_group_games})
+                    for game in group_resync_games.values():
                         platform = game.title_platform[0] if not game.title_platform[0] == 'PSPC' else game.title_platform[1]
                         args = [game.np_communication_id, platform]
                         PSNManager.assign_job('sync_trophy_groups', args, profile.id)
