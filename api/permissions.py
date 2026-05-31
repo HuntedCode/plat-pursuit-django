@@ -28,6 +28,12 @@ class IsRoadmapAuthor(BasePermission):
     can require a stronger role (e.g. publisher for status toggle). Per-action
     fine-grained checks (writer-can-edit-only-own-section) live in the merge
     service, not here; this gate is a coarse "is this user an author at all".
+
+    Roadmap-scoped endpoints have a `roadmap_id` URL kwarg; when present
+    we load the roadmap and pass it to `has_roadmap_role` so trial users
+    assigned to that roadmap (via Roadmap.trial_writers) pass the writer
+    check. Without the roadmap context, trial users look like `none` to
+    this gate — which is the right default for non-roadmap-scoped surfaces.
     """
     message = "Roadmap author access required."
 
@@ -39,4 +45,11 @@ class IsRoadmapAuthor(BasePermission):
         if profile is None:
             return False
         min_role = getattr(view, 'min_roadmap_role', 'writer')
-        return profile.has_roadmap_role(min_role)
+        roadmap = None
+        roadmap_id = (view.kwargs or {}).get('roadmap_id')
+        if roadmap_id is not None:
+            from trophies.models import Roadmap
+            roadmap = Roadmap.objects.filter(pk=roadmap_id).first()
+            # Roadmap not found is fine — the view will 404 anyway;
+            # let the global-role check decide the permission outcome.
+        return profile.has_roadmap_role(min_role, roadmap)

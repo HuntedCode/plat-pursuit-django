@@ -568,6 +568,47 @@
                 </div>
             </div>
         </div>
+
+        {# ─── Trial Writers (publisher-only) ─── #}
+        {# Publisher assigns trial-role profiles to write on this specific #}
+        {# roadmap. Assigned trials get writer powers on this roadmap only #}
+        {# (own-section edits, no delete, no metadata). Vetting layer       #}
+        {# before granting the global writer role.                         #}
+        <div id="trial-writers-card"
+             class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3"
+             data-roadmap-id="{{ roadmap.id }}"
+             data-readonly-exempt>
+            <div class="card-body p-3 md:p-5 lg:p-7">
+                <h2 class="text-base lg:text-lg font-bold flex items-center gap-2 mb-1 flex-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    Trial Writers
+                    <span class="badge badge-xs badge-info font-normal">Publisher only</span>
+                </h2>
+                <p class="text-xs text-base-content/40 mb-3">Assign a trial-role writer to this roadmap. They'll get the same powers as a regular writer here (and only here) — edit their own sections, no delete, no metadata access. Useful for vetting new authors before granting the full writer role.</p>
+                <div class="trial-writers-assigned-empty hidden text-xs italic text-base-content/40 py-2">
+                    No trial writers assigned to this roadmap yet.
+                </div>
+                <div class="trial-writers-assigned-list space-y-1 mb-3">
+                    {# JS-rendered: one row per assigned trial writer with #}
+                    {# an Unassign button. Populated by initTrialWriters() #}
+                    {# via the trial-writers GET endpoint.                 #}
+                </div>
+                <div class="trial-writers-search-wrap relative">
+                    <label class="text-[10px] uppercase tracking-wider font-semibold text-base-content/50 mb-1 block">Find a trial-role profile to assign</label>
+                    <input type="text"
+                           class="trial-writers-search-input input input-bordered input-sm w-full"
+                           placeholder="Search PSN username..."
+                           maxlength="50"
+                           autocomplete="off">
+                    {# Results dropdown — absolute-positioned over the next #}
+                    {# card so a long list doesn't push other content.      #}
+                    <div class="trial-writers-search-results hidden absolute z-30 mt-1 w-full bg-base-200 border-2 border-base-300 rounded-lg shadow-xl max-h-64 overflow-y-auto">
+                        {# JS appends result rows here. #}
+                    </div>
+                    <p class="trial-writers-search-empty hidden text-[11px] italic text-base-content/40 mt-1">No trial-role profiles match that search.</p>
+                </div>
+            </div>
+        </div>
         {% endif %}
 
         {# ─── Trophy Guides ─── #}

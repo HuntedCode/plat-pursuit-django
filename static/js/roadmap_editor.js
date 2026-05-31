@@ -2088,6 +2088,7 @@
         const directApiPatterns = [
             `/api/v1/roadmap/${roadmapId}/publish/`,
             `/api/v1/roadmap/${roadmapId}/hidden-authors/`,
+            `/api/v1/roadmap/${roadmapId}/trial-writers/`,
         ];
         if (directApiPatterns.some(p => url.includes(p))) {
             try {
@@ -3202,6 +3203,181 @@
                 listEl.appendChild(row);
             });
         }
+
+        await load();
+    }
+
+    // Trial Writers card (publisher-only). Card is server-rendered only
+    // when `author_can_publish` is true (same gate as the hidden-authors
+    // card), so this whole init is a no-op for editors / writers.
+    async function initTrialWriters() {
+        const card = document.getElementById('trial-writers-card');
+        if (!card) return;
+        const listEl = card.querySelector('.trial-writers-assigned-list');
+        const emptyEl = card.querySelector('.trial-writers-assigned-empty');
+        const searchInput = card.querySelector('.trial-writers-search-input');
+        const resultsEl = card.querySelector('.trial-writers-search-results');
+        const searchEmptyEl = card.querySelector('.trial-writers-search-empty');
+        if (!listEl || !emptyEl || !searchInput || !resultsEl) return;
+
+        function renderAssigned(items) {
+            listEl.innerHTML = '';
+            if (items.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+            items.forEach(item => {
+                listEl.appendChild(buildAssignedRow(item));
+            });
+        }
+
+        function buildAssignedRow(item) {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between gap-2 p-2 rounded border border-base-content/5 bg-white/[0.02]';
+            row.dataset.profileId = String(item.id);
+            const avatarHtml = item.avatar_url
+                ? `<img src="${HTMLUtils.escape(item.avatar_url)}" alt="" class="w-7 h-7 rounded-full shrink-0 object-cover border border-base-content/10">`
+                : `<span class="w-7 h-7 rounded-full shrink-0 bg-base-300/60 border border-base-content/10 flex items-center justify-center text-[10px] text-base-content/45">?</span>`;
+            row.innerHTML = `
+                <span class="flex items-center gap-2 min-w-0 flex-1">
+                    ${avatarHtml}
+                    <span class="text-sm truncate">${HTMLUtils.escape(item.display_psn_username || item.psn_username || `Profile ${item.id}`)}</span>
+                    <span class="badge badge-xs badge-warning shrink-0">Trial</span>
+                </span>
+                <button type="button" class="trial-writers-unassign-btn btn btn-ghost btn-xs text-error/60 hover:text-error" title="Unassign from this roadmap">
+                    Unassign
+                </button>
+            `;
+            const unassignBtn = row.querySelector('.trial-writers-unassign-btn');
+            unassignBtn.addEventListener('click', async () => {
+                unassignBtn.disabled = true;
+                try {
+                    await apiCall(
+                        'post',
+                        `/api/v1/roadmap/${roadmapId}/trial-writers/`,
+                        { profile_id: item.id, assigned: false },
+                    );
+                    Toast.show(
+                        `Unassigned ${item.display_psn_username || item.psn_username} from this roadmap.`,
+                        'success',
+                    );
+                    await load();
+                } catch (err) {
+                    const errMsg = await err.response?.json().catch(() => null);
+                    Toast.show(errMsg?.error || 'Failed to unassign.', 'error');
+                    unassignBtn.disabled = false;
+                }
+            });
+            return row;
+        }
+
+        async function load() {
+            try {
+                const data = await apiCall(
+                    'get',
+                    `/api/v1/roadmap/${roadmapId}/trial-writers/`,
+                );
+                renderAssigned(data.assigned || []);
+            } catch (err) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                emptyEl.textContent = 'Failed to load trial writers.';
+            }
+        }
+
+        // Debounced search — fires 250ms after the last keystroke so we
+        // don't spam the API for every character of "JeffreyLowe123".
+        let searchTimer = null;
+        async function runSearch(query) {
+            if (query.length < 2) {
+                resultsEl.classList.add('hidden');
+                searchEmptyEl.classList.add('hidden');
+                return;
+            }
+            try {
+                const data = await apiCall(
+                    'post',
+                    `/api/v1/roadmap/${roadmapId}/trial-writers/`,
+                    { action: 'search', q: query },
+                );
+                renderSearchResults(data.results || []);
+            } catch (err) {
+                resultsEl.classList.add('hidden');
+                searchEmptyEl.classList.add('hidden');
+                const errMsg = await err.response?.json().catch(() => null);
+                Toast.show(errMsg?.error || 'Search failed.', 'error');
+            }
+        }
+
+        function renderSearchResults(results) {
+            resultsEl.innerHTML = '';
+            if (results.length === 0) {
+                resultsEl.classList.add('hidden');
+                searchEmptyEl.classList.remove('hidden');
+                return;
+            }
+            searchEmptyEl.classList.add('hidden');
+            results.forEach(item => {
+                const row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'trial-writers-result-row flex items-center justify-between gap-2 w-full p-2 rounded hover:bg-white/[0.05] transition-colors text-left';
+                row.dataset.profileId = String(item.id);
+                const avatarHtml = item.avatar_url
+                    ? `<img src="${HTMLUtils.escape(item.avatar_url)}" alt="" class="w-7 h-7 rounded-full shrink-0 object-cover border border-base-content/10">`
+                    : `<span class="w-7 h-7 rounded-full shrink-0 bg-base-300/60 border border-base-content/10 flex items-center justify-center text-[10px] text-base-content/45">?</span>`;
+                row.innerHTML = `
+                    <span class="flex items-center gap-2 min-w-0 flex-1">
+                        ${avatarHtml}
+                        <span class="text-sm truncate">${HTMLUtils.escape(item.display_psn_username || item.psn_username || `Profile ${item.id}`)}</span>
+                    </span>
+                    <span class="text-[11px] font-medium shrink-0 ${item.already_assigned ? 'text-base-content/45' : 'text-primary'}">
+                        ${item.already_assigned ? 'Already assigned' : 'Click to assign'}
+                    </span>
+                `;
+                if (item.already_assigned) {
+                    row.disabled = true;
+                    row.classList.add('opacity-60', 'cursor-not-allowed');
+                } else {
+                    row.addEventListener('click', async () => {
+                        row.disabled = true;
+                        try {
+                            await apiCall(
+                                'post',
+                                `/api/v1/roadmap/${roadmapId}/trial-writers/`,
+                                { profile_id: item.id, assigned: true },
+                            );
+                            Toast.show(
+                                `Assigned ${item.display_psn_username || item.psn_username} to this roadmap.`,
+                                'success',
+                            );
+                            searchInput.value = '';
+                            resultsEl.classList.add('hidden');
+                            await load();
+                        } catch (err) {
+                            const errMsg = await err.response?.json().catch(() => null);
+                            Toast.show(errMsg?.error || 'Failed to assign.', 'error');
+                            row.disabled = false;
+                        }
+                    });
+                }
+                resultsEl.appendChild(row);
+            });
+            resultsEl.classList.remove('hidden');
+        }
+
+        searchInput.addEventListener('input', () => {
+            const q = searchInput.value.trim();
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => runSearch(q), 250);
+        });
+        // Close results when clicking outside the search wrap.
+        document.addEventListener('click', (e) => {
+            if (!card.contains(e.target)) {
+                resultsEl.classList.add('hidden');
+                searchEmptyEl.classList.add('hidden');
+            }
+        });
 
         await load();
     }
@@ -7215,6 +7391,7 @@
         initMetadataFields();
         initPublishButtons();
         initHiddenAuthors();
+        initTrialWriters();
         initFormattingToolbars();
         ImageUploadModal.init();
         GalleryController.init();

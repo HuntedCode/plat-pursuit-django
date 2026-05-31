@@ -94,7 +94,11 @@ def roadmap_preview_button(user, roadmap, game, size='xs', ctg=None):
     if roadmap.status == 'published':
         return {'show': False}
     profile = getattr(user, 'profile', None)
-    if profile is None or not profile.has_roadmap_role('writer'):
+    # Pass the roadmap so trial-role users assigned to it (via
+    # Roadmap.trial_writers) pass the writer check on that specific
+    # roadmap. Without it, trial users wouldn't see the Edit button
+    # even on roadmaps they've been granted access to.
+    if profile is None or not profile.has_roadmap_role('writer', roadmap):
         return {'show': False}
     return {
         'show': True,

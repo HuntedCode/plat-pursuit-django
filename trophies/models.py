@@ -146,6 +146,7 @@ class Profile(models.Model):
         max_length=20,
         choices=[
             ('none', 'None'),
+            ('trial', 'Trial'),
             ('writer', 'Writer'),
             ('editor', 'Editor'),
             ('publisher', 'Publisher'),
@@ -153,6 +154,9 @@ class Profile(models.Model):
         default='none',
         help_text=(
             "Roadmap authoring role. Independent of is_staff. "
+            "trial: no global authoring power; publishers assign trials "
+            "to specific roadmaps via Roadmap.trial_writers and the "
+            "assignee acts as a writer on that roadmap only. "
             "writer: edit own sections on unpublished guides. "
             "editor: edit any field on unpublished guides. "
             "publisher: editor power plus toggle visibility and force-break locks."
@@ -188,10 +192,16 @@ class Profile(models.Model):
     def __str__(self):
         return self.psn_username
 
-    def has_roadmap_role(self, min_role):
-        """Return True if this profile's roadmap_role meets or exceeds min_role."""
+    def has_roadmap_role(self, min_role, roadmap=None):
+        """Return True if this profile's roadmap_role meets or exceeds min_role.
+
+        Pass `roadmap` to enable per-roadmap trial escalation — a trial
+        user assigned to that roadmap (via Roadmap.trial_writers) is
+        treated as a writer on it. Without `roadmap`, the trial role
+        evaluates as below-writer and most gates reject it.
+        """
         from trophies.permissions.roadmap_permissions import has_roadmap_role
-        return has_roadmap_role(self, min_role)
+        return has_roadmap_role(self, min_role, roadmap)
 
     @property
     def is_roadmap_author(self):
@@ -4253,6 +4263,19 @@ class Roadmap(models.Model):
         Profile, related_name='hidden_from_roadmaps', blank=True,
         help_text='Profiles to hide from the public author/contributor '
                   'display for this roadmap.',
+    )
+    # Trial-writer assignment list: profiles with the global `trial`
+    # role who have been granted writer powers on THIS roadmap by a
+    # publisher. Lets the team vet new writers on a per-guide basis
+    # before granting the global writer role. The escalation lives in
+    # `roadmap_permissions.has_roadmap_role` — a trial user in this
+    # set passes any `min_role='writer'` gate on this roadmap; trial
+    # users not in this set look indistinguishable from `none`.
+    # Publisher role required to mutate (see API).
+    trial_writers = models.ManyToManyField(
+        Profile, related_name='trial_assigned_roadmaps', blank=True,
+        help_text='Trial-role profiles granted writer powers on this '
+                  'roadmap. Has no effect on non-trial profiles.',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

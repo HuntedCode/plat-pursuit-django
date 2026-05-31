@@ -209,6 +209,139 @@ class RoadmapHiddenAuthorsView(APIView):
         return Response({'profile_id': profile_id, 'hidden': bool(hidden)})
 
 
+class RoadmapTrialWritersView(APIView):
+    """GET + POST: manage the per-roadmap trial-writer assignment list.
+
+    Publishers vet new authors by assigning them to specific roadmaps
+    before granting the global writer role. A profile with `roadmap_role
+    == 'trial'` and an entry in `trial_writers` for a given roadmap acts
+    as a writer on that roadmap only — same edit-own-section rules, no
+    delete or metadata access (those are editor+).
+
+    GET returns the current assignment list.
+    POST { profile_id, assigned: bool } adds / removes a trial writer.
+    POST { action: 'search', q: '<query>' } searches profiles by PSN
+    username; returns trial-role profiles only so the publisher can't
+    accidentally assign a writer/editor (it'd be a no-op anyway, but
+    the UX is clearer when the list is scoped).
+
+    GET allowed for any roadmap author (the editor card needs to render
+    the current state). POST publisher-only.
+    """
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsRoadmapAuthor]
+    min_roadmap_role = 'writer'
+
+    def get(self, request, roadmap_id):
+        try:
+            roadmap = Roadmap.objects.get(pk=roadmap_id)
+        except Roadmap.DoesNotExist:
+            return Response(
+                {'error': 'Roadmap not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        assigned = list(
+            roadmap.trial_writers
+            .order_by('psn_username')
+            .values('id', 'psn_username', 'display_psn_username', 'avatar_url')
+        )
+        return Response({
+            'assigned': [
+                {
+                    'id': p['id'],
+                    'psn_username': p['psn_username'] or '',
+                    'display_psn_username': p['display_psn_username'] or p['psn_username'] or '',
+                    'avatar_url': p['avatar_url'] or '',
+                }
+                for p in assigned
+            ],
+        })
+
+    def post(self, request, roadmap_id):
+        # Publisher gate re-checked here since min_roadmap_role='writer'
+        # for GET; mutations + search are publisher-only.
+        if not request.user.profile.has_roadmap_role('publisher'):
+            return Response(
+                {'error': 'Publisher role required to manage trial writers.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            roadmap = Roadmap.objects.get(pk=roadmap_id)
+        except Roadmap.DoesNotExist:
+            return Response(
+                {'error': 'Roadmap not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        action = request.data.get('action', 'assign')
+        if action == 'search':
+            q = (request.data.get('q') or '').strip()
+            if len(q) < 2:
+                return Response({'results': []})
+            # Trial-role only, top 10 by psn_username prefix match.
+            # Anything broader risks ambiguity — multiple writers may
+            # share a partial username.
+            matches = (
+                Profile.objects
+                .filter(roadmap_role='trial', psn_username__istartswith=q)
+                .order_by('psn_username')
+                .values('id', 'psn_username', 'display_psn_username', 'avatar_url')
+                [:10]
+            )
+            assigned_ids = set(roadmap.trial_writers.values_list('id', flat=True))
+            return Response({
+                'results': [
+                    {
+                        'id': p['id'],
+                        'psn_username': p['psn_username'] or '',
+                        'display_psn_username': p['display_psn_username'] or p['psn_username'] or '',
+                        'avatar_url': p['avatar_url'] or '',
+                        'already_assigned': p['id'] in assigned_ids,
+                    }
+                    for p in matches
+                ],
+            })
+
+        # Assign / unassign path.
+        profile_id = request.data.get('profile_id')
+        assigned = request.data.get('assigned')
+        if profile_id is None or assigned is None:
+            return Response(
+                {'error': 'profile_id and assigned are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            profile_id = int(profile_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'profile_id must be an integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Validate: target must currently be a trial-role profile.
+        # Assigning a non-trial profile is a UX bug (the assignment
+        # wouldn't change their effective role), and validating early
+        # surfaces it as a clear 400 rather than a silent no-op.
+        target = Profile.objects.filter(pk=profile_id).first()
+        if target is None:
+            return Response(
+                {'error': 'Profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if target.roadmap_role != 'trial':
+            return Response(
+                {'error': 'Profile is not a trial-role user.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if assigned:
+            roadmap.trial_writers.add(target)
+        else:
+            roadmap.trial_writers.remove(target)
+        return Response({
+            'profile_id': profile_id,
+            'assigned': bool(assigned),
+        })
+
+
 class RoadmapImageUploadView(APIView):
     """POST: Upload an image for use in roadmap markdown content.
 

@@ -97,11 +97,14 @@ class RoadmapDetailView(ProfileHotbarMixin, DetailView):
 
     def _is_preview_mode(self, request):
         user = request.user
+        # Pass the roadmap so trial-role users assigned to it pass the
+        # writer check (per-roadmap escalation in has_roadmap_role).
+        # _cached_roadmap is populated in get() before this method runs.
         return (
             request.GET.get('preview') == 'true'
             and user.is_authenticated
             and getattr(user, 'profile', None) is not None
-            and user.profile.has_roadmap_role('writer')
+            and user.profile.has_roadmap_role('writer', self._cached_roadmap)
         )
 
     def get_context_data(self, **kwargs):
