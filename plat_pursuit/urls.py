@@ -193,7 +193,10 @@ urlpatterns = [
     # the tree, dormant, for a possible future rebuild.
     path('community/reviews/', ReviewsArchivedView.as_view(), name='reviews_landing'),
     path('community/reviews/rate-my-games/', RedirectView.as_view(pattern_name='rate_my_games', permanent=True, query_string=True)),
-    path('community/reviews/<slug:slug>/', RedirectView.as_view(pattern_name='reviews_landing', permanent=False), name='review_hub'),
+    # Use a literal `url` (not `pattern_name`) so the captured <slug> is
+    # dropped. RedirectView forwards URL kwargs into reverse(), and
+    # `reviews_landing` takes no slug → NoReverseMatch → 500 (the archival bug).
+    path('community/reviews/<slug:slug>/', RedirectView.as_view(url='/community/reviews/', permanent=False, query_string=True), name='review_hub'),
 
     # Monthly Recap URLs (canonical paths under /dashboard/recap/)
     # Recap is a Dashboard hub citizen — see docs/architecture/ia-and-subnav.md.
