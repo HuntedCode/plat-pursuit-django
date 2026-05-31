@@ -173,7 +173,7 @@ class SearchSyncProfileView(View):
                          'Please try again later.'
             }, status=503)
 
-        psn_username = request.POST.get('psn_username')
+        psn_username = request.POST.get('psn_username', '').strip()
         if not psn_username:
             return JsonResponse({'error': 'Username required'}, status=400)
 
@@ -212,7 +212,7 @@ class AddSyncStatusView(View):
     the open SearchSyncProfileView.
     """
     def get(self, request):
-        psn_username = request.GET.get('psn_username')
+        psn_username = request.GET.get('psn_username', '').strip()
         if not psn_username:
             return JsonResponse({'error': 'Username required'}, status=400)
 

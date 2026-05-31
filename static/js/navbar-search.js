@@ -37,12 +37,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkAddSync(data, refs) {
         if (data.sync_status === 'error') {
+            // Restore the Sync button and keep the input visible so the user can
+            // fix the username and retry in place. Hiding the focused input would
+            // drop focus to <body> and collapse the daisyUI dropdown
+            // (:focus-within), so the error text inside it would never be seen.
             hide(refs.load);
-            hide(refs.input);
+            show(refs.btn);
             if (errorText) {
-                errorText.textContent = 'Sync error: check spelling or account permissions, then refresh and try again.';
+                errorText.textContent = 'Sync error: check the spelling and account permissions, then try again.';
                 show(errorText);
             }
+            refs.input?.focus();
             clearInterval(pollInterval);
         } else if (data.account_id) {
             hide(refs.load);
@@ -73,6 +78,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.success) {
                     hide(refs.btn);
                     show(refs.load);
+                    // Pressing Enter activates the (now-hidden) submit button, so
+                    // focus would fall to <body> and break the daisyUI dropdown's
+                    // :focus-within open state. Refocus the still-visible input to
+                    // keep the dropdown open while the sync runs.
+                    refs.input?.focus();
                     setTimeout(() => {
                         pollInterval = setInterval(() => pollAddSync(data.psn_username, refs), 2500);
                     }, 2500);
