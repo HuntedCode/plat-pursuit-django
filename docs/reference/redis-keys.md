@@ -62,6 +62,7 @@ Workers consume from all 5 queues via priority-ordered `brpop`.
 |-------------|------|-----|---------|
 | `trophy_completeness_check:{profile_id}` | String | 21600s (6h) | Prevents repeated re-queuing when games have 0 Trophy records |
 | `group_completeness_check:{profile_id}` | String | 21600s (6h) | Prevents repeated re-queuing when games have 0 TrophyGroup records |
+| `orphan_group_check:{profile_id}` | String | 21600s (6h) | Prevents repeated re-queuing when a game's trophies reference a `trophy_group_id` with no matching TrophyGroup row (orphaned/missing DLC groups) |
 
 **Files**: `trophies/token_keeper.py`
 

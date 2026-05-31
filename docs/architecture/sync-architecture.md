@@ -111,6 +111,13 @@ _job_sync_complete(profile_id, ...):
      calls. Runs before the IGDB drain so the new stubs ride along.
   2. Drain deferred IGDB enrichments
   3. Recompute total_hiddens from authoritative DB state
+  3b. TrophyGroup/Trophy completeness + orphan self-heal (each gated by its own
+      6h Redis cooldown): re-queue per-game sync jobs for games that are
+      missing all Trophy records, missing all TrophyGroup records, OR whose
+      Trophy rows reference a trophy_group_id with no matching TrophyGroup row
+      (orphaned/missing DLC groups while the trophies survive). Finding work
+      resets the profile to 'syncing' and re-enters per-game jobs via
+      pending_sync_complete.
   4. update_profile_games (with hide_hiddens fix)
   5. update_profile_trophy_counts
   6. Badge eval, milestones, challenges (unchanged)
@@ -253,6 +260,7 @@ The work shipped across three phases. The two safety-net phases originally plann
 - **The `-10 days` outage backdate is intentional.** It exists so the next `refresh_profiles` cron picks the profile up regardless of its tier, even though `last_synced` is no longer load-bearing for sync internals.
 - **The concept-less safety net forces slow path when any of the profile's games has `concept IS NULL`.** This catches matching pipeline failures, IGDB outages, and manual concept cleanup. One indexed `EXISTS` query per sync; trips slow path only when actually needed.
 - **Orphan-concept reconciliation in `sync_complete` closes the safety-net loop.** The slow-path's inline fallbacks (legacy-platform inline stubs, sync_title_id fallbacks) only fire for games that actually reach them. A modern game in `trophy_titles` but missing from PSN's `title_stats` response (never-played or hidden modern title) never gets a sync_title_id queued, so without this reconciliation the fingerprint-level concept-less recovery would re-force slow path on every sync without progress. The reconciliation step at the top of `sync_complete` mints a stub for any such orphan, so the next sync's fingerprint check passes cleanly. Pure DB work plus a deferred IGDB enrich; bounded by the (typically tiny) orphan count per profile.
+- **Orphaned TrophyGroup rows are a blind spot for both fingerprint and zero-group checks.** A game can keep every `Trophy` row but lose one or more `TrophyGroup` rows (typically DLC groups), from old data-cleanup or migration issues. The slow-path drift check can't see it (the game-level `defined_trophies` total still matches PSN), and the zero-group completeness check can't either (`group_count > 0` because the base group survives). `Trophy.trophy_group_id` is a plain CharField, not an FK to `TrophyGroup`, so the corruption is detectable as a `(game, trophy_group_id)` pair present on `Trophy` rows but absent from `TrophyGroup`. The `orphan_group_check` step in `sync_complete` finds these via a DB-side `Exists`/`distinct` query (bounded for whales) and re-queues `sync_trophy_groups`, which idempotently `get_or_create`s the missing rows. For backfilling the existing catalog outside the sync path, use `backfill_concept_trophy_groups --audit-orphaned-groups [--fix]`.
 
 ---
 
