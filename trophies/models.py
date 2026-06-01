@@ -1236,65 +1236,76 @@ class Concept(models.Model):
             event.child_concepts.add(self)
             event.child_concepts.remove(other)
 
-        # ConceptCompany: move to target, merge roles on duplicates
-        existing_ccs = {
-            cc.company_id: cc for cc in self.concept_companies.all()
-        }
-        for cc in other.concept_companies.all():
-            if cc.company_id in existing_ccs:
-                existing = existing_ccs[cc.company_id]
-                existing.is_developer = existing.is_developer or cc.is_developer
-                existing.is_publisher = existing.is_publisher or cc.is_publisher
-                existing.is_porting = existing.is_porting or cc.is_porting
-                existing.is_supporting = existing.is_supporting or cc.is_supporting
-                existing.save(update_fields=[
-                    'is_developer', 'is_publisher', 'is_porting', 'is_supporting',
-                ])
-            else:
-                cc.concept = self
-                cc.save(update_fields=['concept'])
+        # IGDB-derived enrichment (companies, genres, themes, engines,
+        # franchises) is a deterministic projection of a concept's IGDBMatch,
+        # NOT independent data — it must travel WITH the match. `self` keeps
+        # its own match when it has one (discarding `other`'s), so in that
+        # case `other`'s enrichment describes a DIFFERENT IGDB game and must
+        # be dropped (it cascade-deletes with `other`). Carrying it across
+        # was the re-anchor bug: re-pointing an erroneously-matched concept
+        # left the survivor showing both matches' developers/genres/etc.
+        # Only when `self` has no match of its own (and therefore inherits
+        # `other`'s below) do we move `other`'s enrichment rows along with it.
+        inherit_match = hasattr(other, 'igdb_match') and not hasattr(self, 'igdb_match')
 
-        # ConceptGenre: move to target, skip duplicates
-        existing_genre_ids = set(
-            self.concept_genres.values_list('genre_id', flat=True)
-        )
-        for cg in other.concept_genres.all():
-            if cg.genre_id not in existing_genre_ids:
-                cg.concept = self
-                cg.save(update_fields=['concept'])
+        if inherit_match:
+            # ConceptCompany: move to target, merge roles on duplicates
+            existing_ccs = {
+                cc.company_id: cc for cc in self.concept_companies.all()
+            }
+            for cc in other.concept_companies.all():
+                if cc.company_id in existing_ccs:
+                    existing = existing_ccs[cc.company_id]
+                    existing.is_developer = existing.is_developer or cc.is_developer
+                    existing.is_publisher = existing.is_publisher or cc.is_publisher
+                    existing.is_porting = existing.is_porting or cc.is_porting
+                    existing.is_supporting = existing.is_supporting or cc.is_supporting
+                    existing.save(update_fields=[
+                        'is_developer', 'is_publisher', 'is_porting', 'is_supporting',
+                    ])
+                else:
+                    cc.concept = self
+                    cc.save(update_fields=['concept'])
 
-        # ConceptTheme: move to target, skip duplicates
-        existing_theme_ids = set(
-            self.concept_themes.values_list('theme_id', flat=True)
-        )
-        for ct in other.concept_themes.all():
-            if ct.theme_id not in existing_theme_ids:
-                ct.concept = self
-                ct.save(update_fields=['concept'])
+            # ConceptGenre: move to target, skip duplicates
+            existing_genre_ids = set(
+                self.concept_genres.values_list('genre_id', flat=True)
+            )
+            for cg in other.concept_genres.all():
+                if cg.genre_id not in existing_genre_ids:
+                    cg.concept = self
+                    cg.save(update_fields=['concept'])
 
-        # ConceptEngine: move to target, skip duplicates
-        existing_engine_ids = set(
-            self.concept_engines.values_list('engine_id', flat=True)
-        )
-        for ce in other.concept_engines.all():
-            if ce.engine_id not in existing_engine_ids:
-                ce.concept = self
-                ce.save(update_fields=['concept'])
+            # ConceptTheme: move to target, skip duplicates
+            existing_theme_ids = set(
+                self.concept_themes.values_list('theme_id', flat=True)
+            )
+            for ct in other.concept_themes.all():
+                if ct.theme_id not in existing_theme_ids:
+                    ct.concept = self
+                    ct.save(update_fields=['concept'])
 
-        # ConceptFranchise: move to target, skip duplicates
-        existing_franchise_ids = set(
-            self.concept_franchises.values_list('franchise_id', flat=True)
-        )
-        for cf in other.concept_franchises.all():
-            if cf.franchise_id not in existing_franchise_ids:
-                cf.concept = self
-                cf.save(update_fields=['concept'])
+            # ConceptEngine: move to target, skip duplicates
+            existing_engine_ids = set(
+                self.concept_engines.values_list('engine_id', flat=True)
+            )
+            for ce in other.concept_engines.all():
+                if ce.engine_id not in existing_engine_ids:
+                    ce.concept = self
+                    ce.save(update_fields=['concept'])
 
-        # IGDBMatch: move to target if target lacks one, otherwise discard source's
-        if hasattr(other, 'igdb_match'):
-            if not hasattr(self, 'igdb_match'):
-                other.igdb_match.concept = self
-                other.igdb_match.save(update_fields=['concept'])
+            # ConceptFranchise: move to target, skip duplicates
+            existing_franchise_ids = set(
+                self.concept_franchises.values_list('franchise_id', flat=True)
+            )
+            for cf in other.concept_franchises.all():
+                if cf.franchise_id not in existing_franchise_ids:
+                    cf.concept = self
+                    cf.save(update_fields=['concept'])
+
+            # IGDBMatch: target lacks one, so inherit source's.
+            other.igdb_match.concept = self
+            other.igdb_match.save(update_fields=['concept'])
 
         # Merge title_ids
         for tid in other.title_ids:

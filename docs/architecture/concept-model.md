@@ -146,7 +146,9 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 
 13. **GameFamily inheritance**: If `other.family` is set and `self.family` is not, `self` inherits the family FK.
 
-14. **title_ids merge**: Appends any title IDs from `other.title_ids` that are not already in `self.title_ids`. Deduplicates during merge.
+14. **IGDB enrichment + IGDBMatch (gated on `inherit_match`)**: The enrichment through-rows (`ConceptCompany`, `ConceptGenre`, `ConceptTheme`, `ConceptEngine`, `ConceptFranchise`) plus the `IGDBMatch` itself are a deterministic projection of one IGDB game, so they migrate together and ONLY when `self` has no `IGDBMatch` of its own (`inherit_match = hasattr(other, 'igdb_match') and not hasattr(self, 'igdb_match')`). When `self` keeps its own match, `other`'s enrichment belongs to a different IGDB game and is dropped (it cascade-deletes with `other`), not merged. On the inherit path companies merge roles (OR of the developer/publisher/porting/supporting flags) and genres/themes/engines/franchises dedup by their respective id. Migrating these unconditionally was the re-anchor bug — re-pointing an erroneously-matched concept stacked both matches' developers/genres/franchises onto the survivor.
+
+15. **title_ids merge**: Appends any title IDs from `other.title_ids` that are not already in `self.title_ids`. Deduplicates during merge.
 
 ### Default Concept Creation (`Concept.create_default_concept`)
 

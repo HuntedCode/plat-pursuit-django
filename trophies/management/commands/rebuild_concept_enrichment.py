@@ -250,16 +250,8 @@ class Command(BaseCommand):
                 stats['json_cleared'] = 1
 
             if not dry_run:
-                IGDBService._wipe_enrichment_through_rows(concept)
-                update_fields = []
-                if concept.igdb_genres:
-                    concept.igdb_genres = []
-                    update_fields.append('igdb_genres')
-                if concept.igdb_themes:
-                    concept.igdb_themes = []
-                    update_fields.append('igdb_themes')
-                if update_fields:
-                    concept.save(update_fields=update_fields)
+                # Wipes through-rows + JSON denorms in one call.
+                IGDBService._wipe_concept_enrichment(concept)
             return
 
         pre = self._count_existing(concept)

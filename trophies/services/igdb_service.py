@@ -1937,17 +1937,23 @@ class IGDBService:
     }
 
     @classmethod
-    def _wipe_enrichment_through_rows(cls, concept):
-        """Delete a concept's through-table enrichment rows.
+    def _wipe_concept_enrichment(cls, concept):
+        """Reset a concept's IGDB-derived enrichment to an empty baseline.
 
-        Target set: ConceptCompany, ConceptGenre, ConceptTheme,
-        ConceptEngine, ConceptFranchise. The underlying Company / Genre /
-        Theme / GameEngine / Franchise records are shared site-wide and
-        stay put — we only remove the concept-scoped links so that a
-        fresh `_apply_enrichment` run can rebuild them from the current
-        IGDB data without duplicating entries from a prior match.
+        Deletes the concept-scoped through-rows (ConceptCompany,
+        ConceptGenre, ConceptTheme, ConceptEngine, ConceptFranchise) AND
+        clears the Concept.igdb_genres / igdb_themes JSON denorms so the two
+        representations stay consistent. The underlying Company / Genre /
+        Theme / GameEngine / Franchise records are shared site-wide and stay
+        put — we only remove this concept's links.
 
-        Returns a dict of {model_name: deleted_count} for reporting.
+        Used in two situations: as the pre-wipe inside `_apply_enrichment`
+        (so a rebuild can't duplicate a prior match's rows), and when a
+        concept transitions to unmatched (so it doesn't keep displaying the
+        developers/genres/etc. of a match it no longer has).
+
+        Returns a dict of {model_name: deleted_count} for reporting (the JSON
+        denorm reset is not counted).
         """
         from trophies.models import (
             ConceptCompany, ConceptGenre, ConceptTheme,
@@ -1963,6 +1969,22 @@ class IGDBService:
         ]:
             count, _ = model.objects.filter(concept=concept).delete()
             deleted[key] = count
+
+        # Clear the JSON denorms to match the now-empty normalized tables.
+        # Only write when there's something to clear (avoids a needless
+        # UPDATE on concepts that never populated them). On the
+        # `_apply_enrichment` rebuild path `_update_concept_fields` re-sets
+        # these from the new match immediately after.
+        update_fields = []
+        if concept.igdb_genres:
+            concept.igdb_genres = []
+            update_fields.append('igdb_genres')
+        if concept.igdb_themes:
+            concept.igdb_themes = []
+            update_fields.append('igdb_themes')
+        if update_fields:
+            concept.save(update_fields=update_fields)
+
         return deleted
 
     @classmethod
@@ -1989,7 +2011,7 @@ class IGDBService:
         # that moves from IGDB #A to #B would carry A's developers, genres
         # and franchises forward alongside B's, doubling everything up.
         if not skip_wipe:
-            cls._wipe_enrichment_through_rows(concept)
+            cls._wipe_concept_enrichment(concept)
 
         # Create/update Company records and ConceptCompany entries
         cls._create_concept_companies(concept, igdb_data.get('involved_companies', []))
@@ -2297,8 +2319,9 @@ class IGDBService:
 
         Unconditional overwrite: if the new match has no genres/themes we
         write an empty list rather than leaving stale data from a prior
-        match. Paired with the through-row wipe in _apply_enrichment so
-        the JSON denorm stays consistent with the normalized tables.
+        match. Runs right after `_wipe_concept_enrichment` in
+        `_apply_enrichment` (which also zeroes these denorms), repopulating
+        them so the JSON stays consistent with the normalized tables.
         """
         genres = [g.get('name', '') for g in igdb_data.get('genres', []) if g.get('name')]
         themes = [t.get('name', '') for t in igdb_data.get('themes', []) if t.get('name')]
@@ -3205,14 +3228,21 @@ class IGDBService:
 
     @classmethod
     def rematch_concept(cls, concept):
-        """Delete existing match and re-run matching for a concept.
+        """Delete the existing match and re-run matching for a concept.
 
-        ConceptCompany records are preserved; _apply_enrichment will
-        update_or_create them from the new IGDB response.
+        On a successful re-match, `process_match` -> `_apply_enrichment`
+        wipes the concept's stale through-rows (companies, genres, themes,
+        engines, franchises) + JSON denorms and rebuilds them from the new
+        IGDB response. When the re-match finds nothing, no enrichment runs,
+        so we wipe here too — otherwise the now-unmatched concept would keep
+        displaying the developers/genres/etc. of its deleted prior match.
 
         Returns:
             IGDBMatch or None
         """
         IGDBMatch.objects.filter(concept=concept).delete()
-        return cls.enrich_concept(concept)
+        match = cls.enrich_concept(concept)
+        if match is None:
+            cls._wipe_concept_enrichment(concept)
+        return match
 
