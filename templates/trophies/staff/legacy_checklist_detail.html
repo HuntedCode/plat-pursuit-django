@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static humanize %}
 
-{% block title %}{{ checklist.title }} (Legacy Checklist){% endblock %}
+{% block title %}{{ checklist.title }} - Legacy Checklist{% endblock %}
 {% block robots %}noindex, nofollow{% endblock %}
 
 {% block content %}
@@ -11,7 +11,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
             Back to all checklists
         </a>
-        <span class="badge badge-warning badge-sm">Staff &middot; Read-only</span>
+        <span class="badge badge-warning badge-sm">Read-only archive</span>
     </div>
 
     {% if checklist.is_deleted %}

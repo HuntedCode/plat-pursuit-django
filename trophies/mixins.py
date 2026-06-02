@@ -65,6 +65,32 @@ class StaffRequiredAPIMixin(LoginRequiredAPIMixin):
         return super().dispatch(request, *args, **kwargs)
 
 
+class StaffOrRoadmapAuthorRequiredMixin(LoginRequiredMixin):
+    """
+    Mixin that grants access to staff OR roadmap authors (writer / editor /
+    publisher). Trial-role users are rejected because the global
+    `has_roadmap_role('writer')` check tops out below `writer` for them
+    when no per-roadmap escalation target is supplied (this gate is global,
+    not roadmap-scoped, so it never escalates).
+
+    Used by surfaces that are primarily authoring tools but also need
+    staff oversight access (e.g. the legacy-checklist viewer used to mine
+    historical prose for new Roadmaps).
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+
+        if request.user.is_staff:
+            return super().dispatch(request, *args, **kwargs)
+
+        profile = getattr(request.user, 'profile', None)
+        if profile is not None and profile.has_roadmap_role('writer'):
+            return super().dispatch(request, *args, **kwargs)
+
+        return redirect('home')
+
+
 class RoadmapAuthorRequiredMixin(LoginRequiredMixin):
     """
     Mixin that requires the user to have at least the writer roadmap role.

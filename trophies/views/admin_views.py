@@ -14,7 +14,9 @@ from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import FormView
 
-from trophies.mixins import HtmxListMixin, StaffRequiredMixin
+from trophies.mixins import (
+    HtmxListMixin, StaffOrRoadmapAuthorRequiredMixin, StaffRequiredMixin,
+)
 from trophies.services.psn_api_service import PsnApiService
 from ..models import (
     Checklist, ChecklistItem, ChecklistSection,
@@ -647,13 +649,14 @@ class GameFamilyManagementView(StaffRequiredMixin, TemplateView):
         return context
 
 
-class LegacyChecklistListView(StaffRequiredMixin, HtmxListMixin, ListView):
-    """Staff-only read-only browser for the deprecated Checklist system.
+class LegacyChecklistListView(StaffOrRoadmapAuthorRequiredMixin, HtmxListMixin, ListView):
+    """Read-only browser for the deprecated Checklist system.
 
     The Checklist UI was retired when Roadmaps replaced it but the DB tables
     were retained. This view exposes published, draft, and soft-deleted
-    checklists so staff can still mine the original authored prose without
-    fighting the Django admin.
+    checklists so staff AND roadmap authors (writer / editor / publisher,
+    not trial) can mine the original authored prose for reuse in Roadmaps
+    without fighting the Django admin.
     """
     model = Checklist
     template_name = 'trophies/staff/legacy_checklist_list.html'
@@ -743,13 +746,13 @@ class LegacyChecklistListView(StaffRequiredMixin, HtmxListMixin, ListView):
         return context
 
 
-class LegacyChecklistDetailView(StaffRequiredMixin, DetailView):
-    """Staff-only read-only detail view for a single legacy Checklist.
+class LegacyChecklistDetailView(StaffOrRoadmapAuthorRequiredMixin, DetailView):
+    """Read-only detail view for a single legacy Checklist.
 
     Renders the full checklist (title + description + thumbnail), every
     section, and every item including text_area prose blocks. Soft-deleted
     checklists are rendered with a visible banner so they can never be
-    mistaken for live content.
+    mistaken for live content. Access: staff OR writer+ roadmap role.
     """
     model = Checklist
     template_name = 'trophies/staff/legacy_checklist_detail.html'
