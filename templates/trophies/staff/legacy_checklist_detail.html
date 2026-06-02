@@ -1,0 +1,396 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}{{ checklist.title }} (Legacy Checklist){% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+    {# ── Back link + soft-delete banner ── #}
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+        <a href="{% url 'legacy_checklist_list' %}" class="btn btn-xs md:btn-sm btn-ghost border border-base-content/10 gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            Back to all checklists
+        </a>
+        <span class="badge badge-warning badge-sm">Staff &middot; Read-only</span>
+    </div>
+
+    {% if checklist.is_deleted %}
+        <div class="alert alert-error mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div>
+                <div class="font-bold">This checklist is soft-deleted.</div>
+                <div class="text-xs opacity-80">Deleted at {{ checklist.deleted_at|date:'Y-m-d H:i' }}. Content preserved for staff reference only.</div>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_18rem] gap-3 md:gap-4">
+        {# ── Main column ── #}
+        <div data-checklist-root>
+            {# ── Header card ── #}
+            <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+                <div class="card-body p-4 md:p-5 lg:p-6">
+                    <div class="flex flex-col md:flex-row gap-4">
+                        {% if checklist.thumbnail %}
+                            <div class="shrink-0 w-full md:w-32 h-32 rounded-md bg-base-300/50 border border-base-content/10 overflow-hidden">
+                                <img src="{{ checklist.thumbnail.url }}" alt="" class="w-full h-full object-cover object-top" />
+                            </div>
+                        {% endif %}
+
+                        <div class="flex-1 min-w-0">
+                            <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                                {% if checklist.is_deleted %}
+                                    <span class="badge badge-sm badge-error font-bold">Deleted</span>
+                                {% elif checklist.status == 'draft' %}
+                                    <span class="badge badge-sm badge-info">Draft</span>
+                                {% else %}
+                                    <span class="badge badge-sm badge-success">Published</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="flex items-start gap-2 flex-wrap">
+                                <h1 class="text-xl md:text-2xl lg:text-3xl font-bold pr-1 flex-1 min-w-0 break-words"
+                                    data-copy-source>{{ checklist.title }}</h1>
+                                <button type="button" class="btn btn-xs btn-ghost border border-base-content/10 gap-1"
+                                        data-copy-trigger title="Copy title">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    Copy
+                                </button>
+                            </div>
+
+                            {% if checklist.description %}
+                                <div class="flex items-start gap-2 mt-2">
+                                    <p class="text-sm md:text-base text-base-content/70 whitespace-pre-wrap break-words flex-1 min-w-0"
+                                       data-copy-source>{{ checklist.description }}</p>
+                                    <button type="button" class="btn btn-xs btn-ghost border border-base-content/10 gap-1 shrink-0"
+                                            data-copy-trigger title="Copy description">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        Copy
+                                    </button>
+                                </div>
+                            {% endif %}
+
+                            <div class="mt-3">
+                                <button type="button" data-copy-all class="btn btn-sm btn-primary gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    Copy full checklist as Markdown
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Sections ── #}
+            {% for section in sections %}
+                <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+                    <div class="card-body p-3 md:p-4 lg:p-5">
+                        <div class="flex flex-col md:flex-row md:items-start gap-3">
+                            {% if section.thumbnail %}
+                                <div class="shrink-0 w-full md:w-20 h-20 rounded-md bg-base-300/50 border border-base-content/10 overflow-hidden">
+                                    <img src="{{ section.thumbnail.url }}" alt="" class="w-full h-full object-cover object-top" />
+                                </div>
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-start gap-2 flex-wrap">
+                                    <h2 class="text-base md:text-lg font-bold pr-1 flex-1 min-w-0 break-words"
+                                        data-copy-source>{{ section.subtitle }}</h2>
+                                    <button type="button" class="btn btn-xs btn-ghost border border-base-content/10 gap-1"
+                                            data-copy-trigger title="Copy section title">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        Copy
+                                    </button>
+                                </div>
+                                {% if section.description %}
+                                    <div class="flex items-start gap-2 mt-1.5">
+                                        <p class="text-xs md:text-sm text-base-content/70 whitespace-pre-wrap break-words flex-1 min-w-0"
+                                           data-copy-source>{{ section.description }}</p>
+                                        <button type="button" class="btn btn-xs btn-ghost border border-base-content/10 gap-1 shrink-0"
+                                                data-copy-trigger title="Copy section description">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            Copy
+                                        </button>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {# Items #}
+                        {% if section.items.all %}
+                            <ul class="mt-3 space-y-1.5">
+                                {% for item in section.items.all %}
+                                    <li class="flex items-start gap-2 p-2 rounded-md bg-base-100/40 border border-base-content/5
+                                               {% if item.item_type == 'sub_header' %}bg-primary/5 border-primary/20{% endif %}">
+                                        {# Type badge #}
+                                        <span class="badge badge-xs shrink-0 mt-0.5
+                                                     {% if item.item_type == 'item' %}badge-ghost
+                                                     {% elif item.item_type == 'sub_header' %}badge-primary
+                                                     {% elif item.item_type == 'text_area' %}badge-info
+                                                     {% elif item.item_type == 'image' %}badge-warning
+                                                     {% elif item.item_type == 'trophy' %}badge-success
+                                                     {% else %}badge-ghost{% endif %}">
+                                            {{ item.get_item_type_display }}
+                                        </span>
+
+                                        <div class="flex-1 min-w-0">
+                                            {% if item.item_type == 'image' %}
+                                                {% if item.image %}
+                                                    <a href="{{ item.image.url }}" target="_blank" rel="noopener" class="inline-block">
+                                                        <img src="{{ item.image.url }}" alt="" loading="lazy"
+                                                             class="max-w-full md:max-w-xs rounded border border-base-content/10" />
+                                                    </a>
+                                                {% endif %}
+                                                {% if item.text %}
+                                                    <p class="text-xs text-base-content/60 italic mt-1 whitespace-pre-wrap break-words pr-1"
+                                                       data-copy-source>{{ item.text }}</p>
+                                                {% endif %}
+                                            {% elif item.item_type == 'trophy' %}
+                                                <div class="flex items-center gap-2">
+                                                    {% if item.resolved_trophy %}
+                                                        {% if item.resolved_trophy.trophy_icon_url %}
+                                                            <img src="{{ item.resolved_trophy.trophy_icon_url }}" alt=""
+                                                                 class="w-8 h-8 object-cover rounded shrink-0" loading="lazy" />
+                                                        {% endif %}
+                                                        <div class="min-w-0">
+                                                            <div class="text-sm font-semibold truncate">{{ item.resolved_trophy.trophy_name }}</div>
+                                                            {% if item.resolved_trophy.trophy_detail %}
+                                                                <div class="text-xs text-base-content/60 truncate">{{ item.resolved_trophy.trophy_detail }}</div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% else %}
+                                                        <span class="text-xs text-base-content/50 italic">Trophy id {{ item.trophy_id }} (could not resolve)</span>
+                                                    {% endif %}
+                                                </div>
+                                                {% if item.text %}
+                                                    <p class="text-xs text-base-content/70 whitespace-pre-wrap break-words mt-1 pr-1"
+                                                       data-copy-source>{{ item.text }}</p>
+                                                {% endif %}
+                                            {% elif item.item_type == 'sub_header' %}
+                                                <h3 class="text-sm md:text-base font-bold pr-1 break-words"
+                                                    data-copy-source>{{ item.text }}</h3>
+                                            {% else %}
+                                                <p class="text-xs md:text-sm whitespace-pre-wrap break-words pr-1"
+                                                   data-copy-source>{{ item.text }}</p>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if item.text or item.item_type == 'sub_header' %}
+                                            <button type="button" class="btn btn-xs btn-ghost border border-base-content/10 shrink-0"
+                                                    data-copy-trigger title="Copy text">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                            </button>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-xs text-base-content/40 italic mt-2">(no items)</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% empty %}
+                <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                    <div class="card-body p-6 md:p-8 text-center">
+                        <p class="text-sm text-base-content/50 italic">This checklist has no sections.</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        {# ── Sidebar ── #}
+        <aside class="space-y-3">
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                <div class="card-body p-3 md:p-4">
+                    <h3 class="text-xs uppercase tracking-wide text-base-content/40 font-bold mb-2">Metadata</h3>
+                    <dl class="space-y-2 text-xs md:text-sm">
+                        <div>
+                            <dt class="text-base-content/40">Author</dt>
+                            <dd class="font-semibold">
+                                {% if checklist.profile_id %}
+                                    <a href="{% url 'profile_detail' checklist.profile.psn_username %}" class="link link-hover">
+                                        {{ checklist.profile.psn_username }}
+                                    </a>
+                                {% else %}
+                                    <span class="italic text-base-content/50">(deleted)</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-base-content/40">Game / concept</dt>
+                            <dd class="font-semibold break-words">
+                                {% if checklist.concept_id %}
+                                    {{ checklist.concept.unified_title }}
+                                    {% if checklist.concept.slug %}
+                                        <a href="{% url 'game_detail' checklist.concept.slug %}" class="link link-hover text-xs text-base-content/40 block">
+                                            view game page &rsaquo;
+                                        </a>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="italic text-base-content/50">(no concept)</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                        {% if checklist.selected_game_id %}
+                            <div>
+                                <dt class="text-base-content/40">Selected game (for trophies)</dt>
+                                <dd class="font-semibold break-words">{{ checklist.selected_game.title_name }}</dd>
+                            </div>
+                        {% endif %}
+                        <div>
+                            <dt class="text-base-content/40">Created</dt>
+                            <dd>{{ checklist.created_at|date:'Y-m-d H:i' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-base-content/40">Updated</dt>
+                            <dd>{{ checklist.updated_at|date:'Y-m-d H:i' }}</dd>
+                        </div>
+                        {% if checklist.published_at %}
+                            <div>
+                                <dt class="text-base-content/40">Published</dt>
+                                <dd>{{ checklist.published_at|date:'Y-m-d H:i' }}</dd>
+                            </div>
+                        {% endif %}
+                        {% if checklist.is_deleted %}
+                            <div>
+                                <dt class="text-base-content/40">Deleted</dt>
+                                <dd class="text-error">{{ checklist.deleted_at|date:'Y-m-d H:i' }}</dd>
+                            </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+                <div class="card-body p-3 md:p-4">
+                    <h3 class="text-xs uppercase tracking-wide text-base-content/40 font-bold mb-2">Stats</h3>
+                    <dl class="grid grid-cols-2 gap-2 text-xs md:text-sm">
+                        <div>
+                            <dt class="text-base-content/40">Sections</dt>
+                            <dd class="font-bold text-base md:text-lg">{{ section_count|intcomma }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-base-content/40">Items</dt>
+                            <dd class="font-bold text-base md:text-lg">{{ item_count|intcomma }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-base-content/40">Upvotes</dt>
+                            <dd class="font-bold text-base md:text-lg">{{ checklist.upvote_count|intcomma }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-base-content/40">Saves</dt>
+                            <dd class="font-bold text-base md:text-lg">{{ checklist.progress_save_count|intcomma }}</dd>
+                        </div>
+                        <div class="col-span-2">
+                            <dt class="text-base-content/40">Views</dt>
+                            <dd class="font-bold text-base md:text-lg">{{ checklist.view_count|intcomma }}</dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    {{ export_payload|json_script:"legacy-checklist-payload" }}
+{% endblock %}
+
+{% block js_scripts %}
+    <script>
+    (function () {
+        'use strict';
+        const root = document.querySelector('[data-checklist-root]');
+        if (!root) return;
+
+        const toast = (window.PlatPursuit && window.PlatPursuit.ToastManager) || null;
+        const notify = (msg, type) => {
+            if (toast && typeof toast.show === 'function') {
+                toast.show(msg, type || 'success');
+            }
+        };
+
+        async function copyText(text, label) {
+            try {
+                await navigator.clipboard.writeText(text);
+                notify(label ? (label + ' copied') : 'Copied', 'success');
+            } catch (err) {
+                notify('Copy failed (browser blocked clipboard access)', 'error');
+            }
+        }
+
+        // Delegated handler for per-chunk copy buttons. The button is rendered
+        // next to the [data-copy-source] element it should copy.
+        root.addEventListener('click', function (e) {
+            const trigger = e.target.closest('[data-copy-trigger]');
+            if (!trigger) return;
+            const wrapper = trigger.parentElement;
+            const source = wrapper && wrapper.querySelector('[data-copy-source]');
+            if (!source) return;
+            copyText(source.innerText.trim(), 'Text');
+        });
+
+        // Full-checklist markdown builder.
+        const payloadEl = document.getElementById('legacy-checklist-payload');
+        const copyAllBtn = root.querySelector('[data-copy-all]');
+        if (!payloadEl || !copyAllBtn) return;
+
+        let payload;
+        try {
+            payload = JSON.parse(payloadEl.textContent);
+        } catch (err) {
+            copyAllBtn.disabled = true;
+            return;
+        }
+
+        function buildMarkdown(p) {
+            const lines = [];
+            lines.push('# ' + (p.title || '(untitled)'));
+            lines.push('');
+            const metaBits = [];
+            if (p.concept) metaBits.push('**Game:** ' + p.concept);
+            if (p.author) metaBits.push('**Author:** ' + p.author);
+            if (metaBits.length) {
+                lines.push(metaBits.join(' · '));
+                lines.push('');
+            }
+            if (p.description) {
+                lines.push(p.description);
+                lines.push('');
+            }
+            (p.sections || []).forEach(function (s) {
+                lines.push('## ' + (s.subtitle || '(untitled section)'));
+                lines.push('');
+                if (s.description) {
+                    lines.push(s.description);
+                    lines.push('');
+                }
+                (s.items || []).forEach(function (item) {
+                    const text = (item.text || '').trim();
+                    if (item.type === 'sub_header') {
+                        lines.push('### ' + text);
+                        lines.push('');
+                    } else if (item.type === 'text_area') {
+                        if (text) {
+                            lines.push(text);
+                            lines.push('');
+                        }
+                    } else if (item.type === 'image') {
+                        const label = item.image_name ? ('image: ' + item.image_name) : 'image';
+                        lines.push('[' + label + ']' + (text ? ' ' + text : ''));
+                    } else if (item.type === 'trophy') {
+                        const name = item.trophy_name || ('trophy id ' + (item.trophy_id || '?'));
+                        const suffix = text ? (' - ' + text) : '';
+                        lines.push('- [Trophy] ' + name + suffix);
+                    } else {
+                        lines.push('- ' + (text || ''));
+                    }
+                });
+                lines.push('');
+            });
+            return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+        }
+
+        copyAllBtn.addEventListener('click', function () {
+            copyText(buildMarkdown(payload), 'Markdown');
+        });
+    })();
+    </script>
+{% endblock %}

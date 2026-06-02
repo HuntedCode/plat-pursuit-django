@@ -1,0 +1,84 @@
+{% load humanize %}
+{# Legacy checklist results partial. Returned on HTMX requests and included on full page renders. #}
+{% include 'partials/htmx_pagination.html' with position='top' show_page_jump=True %}
+
+{% if checklists %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 md:gap-2.5">
+        {% for cl in checklists %}
+            <a href="{% url 'legacy_checklist_detail' cl.pk %}"
+               class="card bg-base-200/90 border-2 border-base-300 hover:border-primary/60 hover:shadow-glow shadow-md shadow-neutral transition-all overflow-hidden group">
+                <div class="flex gap-3 p-3">
+                    {# Thumbnail #}
+                    <div class="shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-md bg-base-300/50 border border-base-content/10 overflow-hidden flex items-center justify-center">
+                        {% if cl.thumbnail %}
+                            <img src="{{ cl.thumbnail.url }}" alt="" loading="lazy"
+                                 class="w-full h-full object-cover object-top" />
+                        {% else %}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path d="M9 11l3 3L22 4"></path>
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                            </svg>
+                        {% endif %}
+                    </div>
+
+                    <div class="flex-1 min-w-0">
+                        {# Status badges #}
+                        <div class="flex flex-wrap items-center gap-1 mb-1">
+                            {% if cl.is_deleted %}
+                                <span class="badge badge-xs md:badge-sm badge-error font-bold">Deleted</span>
+                            {% elif cl.status == 'draft' %}
+                                <span class="badge badge-xs md:badge-sm badge-info">Draft</span>
+                            {% else %}
+                                <span class="badge badge-xs md:badge-sm badge-success">Published</span>
+                            {% endif %}
+                        </div>
+
+                        {# Title + truncated description #}
+                        <h2 class="text-sm md:text-base font-bold line-clamp-1 group-hover:text-primary transition-colors pr-1">
+                            {{ cl.title }}
+                        </h2>
+                        {% if cl.description %}
+                            <p class="text-xs text-base-content/60 line-clamp-2 mt-0.5 pr-1">
+                                {{ cl.description }}
+                            </p>
+                        {% endif %}
+
+                        {# Meta row: concept + author #}
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-base-content/50">
+                            <span class="truncate max-w-[60%]" title="{{ cl.concept.unified_title }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="inline w-3 h-3 mr-0.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M6 2a2 2 0 0 0-2 2v16l8-4 8 4V4a2 2 0 0 0-2-2z"></path></svg>
+                                {{ cl.concept.unified_title|default:"(no concept)" }}
+                            </span>
+                            <span class="truncate" title="{{ cl.profile.psn_username }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="inline w-3 h-3 mr-0.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"></path></svg>
+                                {{ cl.profile.psn_username|default:"(deleted profile)" }}
+                            </span>
+                        </div>
+
+                        {# Stats row #}
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-base-content/40">
+                            <span title="Sections / items">{{ cl.section_count }} sec &middot; {{ cl.item_count }} items</span>
+                            <span title="Upvotes">&uarr; {{ cl.upvote_count|intcomma }}</span>
+                            <span title="Saved by users">&hearts; {{ cl.progress_save_count|intcomma }}</span>
+                            <span title="Page views">&#128065; {{ cl.view_count|intcomma }}</span>
+                            <span class="ml-auto" title="{{ cl.created_at|date:'Y-m-d H:i' }}">{{ cl.created_at|naturaltime }}</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral my-6">
+        <div class="card-body p-6 md:p-8 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto text-base-content/30 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <h2 class="text-base md:text-lg font-bold">No checklists match those filters.</h2>
+            <p class="text-xs md:text-sm text-base-content/50 italic mt-1">Try widening the status filter or clearing the search terms.</p>
+        </div>
+    </div>
+{% endif %}
+
+{% include 'partials/htmx_pagination.html' with position='bottom' show_page_jump=False %}

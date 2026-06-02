@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% load static humanize %}
+
+{% block title %}Legacy Checklists (Staff){% endblock %}
+{% block robots %}noindex, nofollow{% endblock %}
+
+{% block content %}
+    {# ── Header Card ── #}
+    <div class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-warning shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-3 md:p-4 lg:p-5">
+            <div class="flex items-center gap-2 flex-wrap">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-warning shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 11l3 3L22 4"></path>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Legacy Checklists</h1>
+                <span class="badge badge-warning badge-sm">Staff &middot; Read-only</span>
+            </div>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                The deprecated Checklist system that pre-dated Roadmaps. Tables retained, UI removed.
+                Browse historical writing here when you want to mine prose for new Roadmaps.
+            </p>
+        </div>
+    </div>
+
+    {# ── Status Tiles ── #}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 mb-3">
+        <div class="stat bg-base-200/90 border-2 border-base-300 rounded-box p-3 md:p-4">
+            <div class="stat-title text-xs md:text-sm">Total</div>
+            <div class="stat-value text-xl md:text-3xl">{{ count_total|intcomma }}</div>
+        </div>
+        <div class="stat bg-base-200/90 border-2 border-base-300 rounded-box p-3 md:p-4">
+            <div class="stat-title text-xs md:text-sm">Published</div>
+            <div class="stat-value text-xl md:text-3xl text-success">{{ count_published|intcomma }}</div>
+        </div>
+        <div class="stat bg-base-200/90 border-2 border-base-300 rounded-box p-3 md:p-4">
+            <div class="stat-title text-xs md:text-sm">Drafts</div>
+            <div class="stat-value text-xl md:text-3xl text-info">{{ count_draft|intcomma }}</div>
+        </div>
+        <div class="stat bg-base-200/90 border-2 border-base-300 rounded-box p-3 md:p-4">
+            <div class="stat-title text-xs md:text-sm">Soft-deleted</div>
+            <div class="stat-value text-xl md:text-3xl text-error">{{ count_deleted|intcomma }}</div>
+        </div>
+    </div>
+
+    {# ── Filter Toolbar ── #}
+    <form data-browse-form
+          hx-get="{% url 'legacy_checklist_list' %}"
+          hx-target="#browse-results"
+          hx-push-url="true"
+          hx-swap="innerHTML"
+          hx-trigger="submit">
+        <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+            <div class="card-body p-3 md:p-4">
+                <div class="flex flex-col md:flex-row gap-2 md:gap-3">
+                    <div class="relative flex-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/60 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" name="search" value="{{ search_query }}"
+                               class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
+                               placeholder="Search title or description..." />
+                    </div>
+
+                    <input type="text" name="author" value="{{ author_query }}"
+                           class="input input-bordered input-sm md:input-md w-full md:w-48"
+                           placeholder="Author PSN..." />
+
+                    <input type="text" name="concept" value="{{ concept_query }}"
+                           class="input input-bordered input-sm md:input-md w-full md:w-56"
+                           placeholder="Game / concept name..." />
+
+                    <button type="button" data-submit-btn
+                            class="btn btn-sm md:btn-md btn-primary w-full md:w-auto gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <span class="hidden md:inline">Search</span>
+                    </button>
+                </div>
+
+                {# Status filter chips (mutually exclusive) #}
+                <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span class="text-xs text-base-content/40 self-center mr-0.5">Status:</span>
+                    {% for value, display in status_choices %}
+                        <label class="cursor-pointer">
+                            <input type="radio" name="status" value="{{ value }}"
+                                   class="sr-only peer" {% if current_status == value %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                {{ display }}
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                    <label for="legacy-checklist-sort" class="text-xs text-base-content/40 self-center">Sort:</label>
+                    <select id="legacy-checklist-sort" name="sort"
+                            class="select select-bordered select-xs md:select-sm w-full md:w-56">
+                        {% for value, display in sort_choices %}
+                            <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        <input type="hidden" name="page" value="{{ page_obj.number|default:'1' }}" />
+    </form>
+
+    <div id="browse-results">
+        {% include 'trophies/staff/_legacy_checklist_list_results.html' %}
+    </div>
+
+{% endblock %}
+
+{% block js_scripts %}
+    <script src="{% static 'js/browse-filters.js' %}"></script>
+{% endblock %}

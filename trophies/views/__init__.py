@@ -14,6 +14,7 @@ from .admin_views import (
     TokenMonitoringView, BadgeCreationView, CommentModerationView, ModerationActionView,
     ModerationLogView, ReviewModerationView, ReviewModerationActionView,
     ReviewModerationLogView, GameFamilyManagementView,
+    LegacyChecklistListView, LegacyChecklistDetailView,
 )
 from .misc_views import SearchView
 from .list_views import BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView
@@ -51,6 +52,7 @@ __all__ = [
     # Admin views
     'TokenMonitoringView', 'BadgeCreationView', 'CommentModerationView', 'ModerationActionView', 'ModerationLogView',
     'ReviewModerationView', 'ReviewModerationActionView', 'ReviewModerationLogView', 'GameFamilyManagementView',
+    'LegacyChecklistListView', 'LegacyChecklistDetailView',
     # Misc views
     'SearchView',
     # List views

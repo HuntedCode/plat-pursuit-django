@@ -11,12 +11,13 @@ from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views import View
-from django.views.generic import ListView, TemplateView
+from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import FormView
 
-from trophies.mixins import StaffRequiredMixin
+from trophies.mixins import HtmxListMixin, StaffRequiredMixin
 from trophies.services.psn_api_service import PsnApiService
 from ..models import (
+    Checklist, ChecklistItem, ChecklistSection,
     CommentReport, GameFamily, ModerationLog,
     ReviewModerationLog, ReviewReport, Trophy,
 )
@@ -643,4 +644,197 @@ class GameFamilyManagementView(StaffRequiredMixin, TemplateView):
         context['verified_count'] = sum(1 for f in families if f.is_verified)
         context['unverified_count'] = context['family_count'] - context['verified_count']
 
+        return context
+
+
+class LegacyChecklistListView(StaffRequiredMixin, HtmxListMixin, ListView):
+    """Staff-only read-only browser for the deprecated Checklist system.
+
+    The Checklist UI was retired when Roadmaps replaced it but the DB tables
+    were retained. This view exposes published, draft, and soft-deleted
+    checklists so staff can still mine the original authored prose without
+    fighting the Django admin.
+    """
+    model = Checklist
+    template_name = 'trophies/staff/legacy_checklist_list.html'
+    partial_template_name = 'trophies/staff/_legacy_checklist_list_results.html'
+    context_object_name = 'checklists'
+    paginate_by = 25
+
+    SORT_CHOICES = [
+        ('newest', 'Newest first'),
+        ('oldest', 'Oldest first'),
+        ('most_upvoted', 'Most upvoted'),
+        ('most_saved', 'Most saved'),
+        ('most_viewed', 'Most viewed'),
+        ('most_sections', 'Most sections'),
+    ]
+
+    STATUS_CHOICES = [
+        ('all', 'All'),
+        ('published', 'Published'),
+        ('draft', 'Drafts'),
+        ('deleted', 'Soft-deleted'),
+    ]
+
+    def get_queryset(self):
+        # Default manager exposes everything including soft-deleted (the
+        # `.active()` helper is opt-in), which is exactly what we want here.
+        qs = Checklist.objects.select_related('concept', 'profile').annotate(
+            section_count=Count('sections', distinct=True),
+            item_count=Count('sections__items', distinct=True),
+        )
+
+        status = self.request.GET.get('status', 'all')
+        if status == 'published':
+            qs = qs.filter(status='published', is_deleted=False)
+        elif status == 'draft':
+            qs = qs.filter(status='draft', is_deleted=False)
+        elif status == 'deleted':
+            qs = qs.filter(is_deleted=True)
+
+        search = (self.request.GET.get('search') or '').strip()
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search) | Q(description__icontains=search)
+            )
+
+        author = (self.request.GET.get('author') or '').strip()
+        if author:
+            qs = qs.filter(profile__psn_username__icontains=author)
+
+        concept = (self.request.GET.get('concept') or '').strip()
+        if concept:
+            qs = qs.filter(concept__unified_title__icontains=concept)
+
+        sort = self.request.GET.get('sort', 'newest')
+        if sort == 'oldest':
+            qs = qs.order_by('created_at', 'id')
+        elif sort == 'most_upvoted':
+            qs = qs.order_by('-upvote_count', '-created_at')
+        elif sort == 'most_saved':
+            qs = qs.order_by('-progress_save_count', '-created_at')
+        elif sort == 'most_viewed':
+            qs = qs.order_by('-view_count', '-created_at')
+        elif sort == 'most_sections':
+            qs = qs.order_by('-section_count', '-created_at')
+        else:
+            qs = qs.order_by('-created_at', '-id')
+
+        return qs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Single aggregation pass for the four status tiles.
+        counts = Checklist.objects.aggregate(
+            count_total=Count('id'),
+            count_published=Count('id', filter=Q(status='published', is_deleted=False)),
+            count_draft=Count('id', filter=Q(status='draft', is_deleted=False)),
+            count_deleted=Count('id', filter=Q(is_deleted=True)),
+        )
+        context.update(counts)
+        context['current_status'] = self.request.GET.get('status', 'all')
+        context['current_sort'] = self.request.GET.get('sort', 'newest')
+        context['search_query'] = self.request.GET.get('search', '')
+        context['author_query'] = self.request.GET.get('author', '')
+        context['concept_query'] = self.request.GET.get('concept', '')
+        context['status_choices'] = self.STATUS_CHOICES
+        context['sort_choices'] = self.SORT_CHOICES
+        return context
+
+
+class LegacyChecklistDetailView(StaffRequiredMixin, DetailView):
+    """Staff-only read-only detail view for a single legacy Checklist.
+
+    Renders the full checklist (title + description + thumbnail), every
+    section, and every item including text_area prose blocks. Soft-deleted
+    checklists are rendered with a visible banner so they can never be
+    mistaken for live content.
+    """
+    model = Checklist
+    template_name = 'trophies/staff/legacy_checklist_detail.html'
+    context_object_name = 'checklist'
+
+    def get_queryset(self):
+        return Checklist.objects.select_related(
+            'concept', 'profile', 'selected_game'
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        checklist = self.object
+
+        sections = list(
+            ChecklistSection.objects.filter(checklist=checklist)
+            .prefetch_related('items')
+            .order_by('order', 'id')
+        )
+
+        # Build a trophy lookup map for any items that reference a specific
+        # trophy. Trophies are scoped to the checklist's selected_game so we
+        # can resolve them all in one query and avoid N+1 on the detail page.
+        trophy_map = {}
+        if checklist.selected_game_id:
+            referenced_ids = {
+                item.trophy_id
+                for section in sections
+                for item in section.items.all()
+                if item.item_type == 'trophy' and item.trophy_id
+            }
+            if referenced_ids:
+                trophy_map = {
+                    t.trophy_id: t
+                    for t in Trophy.objects.filter(
+                        game_id=checklist.selected_game_id,
+                        trophy_id__in=referenced_ids,
+                    )
+                }
+
+        # Attach the resolved trophy directly to each item so the template
+        # doesn't need a custom templatetag to do the lookup.
+        for section in sections:
+            for item in section.items.all():
+                if item.item_type == 'trophy' and item.trophy_id:
+                    item.resolved_trophy = trophy_map.get(item.trophy_id)
+                else:
+                    item.resolved_trophy = None
+
+        # Serializable structure powering the "Copy as Markdown" button in
+        # the template. Kept lean — just what the markdown builder needs.
+        export_payload = {
+            'title': checklist.title,
+            'description': checklist.description,
+            'concept': checklist.concept.unified_title if checklist.concept_id else '',
+            'author': checklist.profile.psn_username if checklist.profile_id else '',
+            'sections': [
+                {
+                    'subtitle': s.subtitle,
+                    'description': s.description,
+                    'items': [
+                        {
+                            'type': item.item_type,
+                            'text': item.text or '',
+                            'trophy_name': (
+                                item.resolved_trophy.trophy_name
+                                if item.resolved_trophy else ''
+                            ),
+                            'image_name': (
+                                item.image.name.rsplit('/', 1)[-1]
+                                if item.image else ''
+                            ),
+                        }
+                        for item in s.items.all()
+                    ],
+                }
+                for s in sections
+            ],
+        }
+
+        context['sections'] = sections
+        context['section_count'] = len(sections)
+        # Use the prefetched cache (`len(s.items.all())`) rather than the
+        # `total_entry_count` property, which calls `.count()` and fires a
+        # fresh COUNT(*) per section.
+        context['item_count'] = sum(len(s.items.all()) for s in sections)
+        context['export_payload'] = export_payload
         return context
