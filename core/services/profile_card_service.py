@@ -44,9 +44,11 @@ class ProfileCardDataService:
         }
 
         # ---- Trophy counts ----
-        total_earned = (
-            profile.total_trophies - profile.total_unearned
-        )
+        # NOTE: profile.total_trophies already stores the EARNED count
+        # (see profile_stats_service.update_profile_trophy_counts), NOT the
+        # grand total. The grand total is earned + unearned.
+        total_earned = profile.total_trophies
+        total_all = total_earned + profile.total_unearned
         # Trophy breakdown percentages (for visual proportion bar)
         # Use sum of type counts as denominator (avoids mismatch with total_earned
         # which may include hidden trophies differently)
@@ -60,7 +62,7 @@ class ProfileCardDataService:
         pct_bronzes = round(profile.total_bronzes / type_total * 100, 1) if type_total else 0
 
         data.update({
-            'total_trophies': profile.total_trophies,
+            'total_trophies': total_all,
             'total_earned': total_earned,
             'total_unearned': profile.total_unearned,
             'total_bronzes': profile.total_bronzes,
@@ -74,7 +76,7 @@ class ProfileCardDataService:
             'total_games': profile.total_games,
             'total_completes': profile.total_completes,
             'avg_progress': round(profile.avg_progress, 1),
-            'earn_rate': round(total_earned / profile.total_trophies * 100, 1) if profile.total_trophies else 0,
+            'earn_rate': round(total_earned / total_all * 100, 1) if total_all else 0,
         })
 
         # ---- Displayed title ----
