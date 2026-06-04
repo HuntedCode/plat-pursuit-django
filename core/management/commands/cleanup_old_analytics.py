@@ -9,6 +9,7 @@ Does NOT delete:
 - PageView records themselves (view counts preserved forever)
 """
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 from core.models import AnalyticsSession, PageView
@@ -34,11 +35,19 @@ class Command(BaseCommand):
             action='store_true',
             help='Skip confirmation prompt (for cron/unattended use)',
         )
+        parser.add_argument(
+            '--batch-size',
+            type=int,
+            default=5000,
+            help='Rows per DELETE/UPDATE batch (default: 5000). Keeps each '
+                 'statement under the Postgres statement_timeout.',
+        )
 
     def handle(self, *args, **options):
         cutoff_days = options['days']
         cutoff_date = timezone.now() - timedelta(days=cutoff_days)
         dry_run = options['dry_run']
+        batch_size = options['batch_size']
 
         self.stdout.write(f"Cleaning up analytics data older than {cutoff_days} days (before {cutoff_date.date()})")
 
@@ -68,14 +77,42 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR("Cleanup cancelled"))
                 return
 
+        # Both operations run in bounded batches so each individual statement
+        # stays well under the Postgres statement_timeout. A single sweep over
+        # the full backlog (1M+ rows) exceeds the timeout and aborts the run,
+        # which previously left IPs un-anonymized while sessions kept deleting,
+        # so the un-scrubbed backlog only grew.
+
         # Delete old AnalyticsSession records
         self.stdout.write("\nDeleting old AnalyticsSession records...")
-        deleted_sessions, _ = old_sessions.delete()
+        deleted_sessions = 0
+        while True:
+            batch_ids = list(
+                old_sessions.values_list('pk', flat=True)[:batch_size]
+            )
+            if not batch_ids:
+                break
+            with transaction.atomic():
+                AnalyticsSession.objects.filter(pk__in=batch_ids).delete()
+            deleted_sessions += len(batch_ids)
+            self.stdout.write(f"  deleted {deleted_sessions:,}/{session_count:,} sessions")
         self.stdout.write(self.style.SUCCESS(f"✓ Deleted {deleted_sessions} old sessions"))
 
-        # Anonymize old IP addresses (keep PageView records)
+        # Anonymize old IP addresses (keep PageView records). Each batch leaves
+        # the filter once ip_address is NULL, so the queryset shrinks naturally.
         self.stdout.write("\nAnonymizing old PageView IP addresses...")
-        anonymized = old_ips.update(ip_address=None)
+        anonymized = 0
+        while True:
+            batch_ids = list(
+                old_ips.values_list('pk', flat=True)[:batch_size]
+            )
+            if not batch_ids:
+                break
+            with transaction.atomic():
+                anonymized += PageView.objects.filter(
+                    pk__in=batch_ids
+                ).update(ip_address=None)
+            self.stdout.write(f"  anonymized {anonymized:,}/{ip_count:,} IPs")
         self.stdout.write(self.style.SUCCESS(f"✓ Anonymized {anonymized} old IP addresses"))
 
         self.stdout.write(self.style.SUCCESS(f"\n✓ Cleanup complete!"))

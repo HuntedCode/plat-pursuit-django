@@ -161,8 +161,9 @@ historical pass after Phase 3's rematch run.
 - **Schedule**: Weekly (recommended)
 - **Command**: `python manage.py cleanup_old_analytics --force`
 - **What it does**: Deletes `AnalyticsSession` records older than 90 days and anonymizes IP addresses in `PageView` records older than 90 days (sets `ip_address` to NULL). The `--force` flag skips the interactive confirmation prompt required for unattended cron execution. PageView records themselves are preserved (view counts remain intact).
+- **Batching**: Both the session delete and the IP-anonymization update run in batches of `--batch-size` rows (default 5000) so each individual statement stays under the Postgres `statement_timeout`. A single sweep over a large backlog (1M+ rows) exceeds the timeout and aborts. Because the delete ran before the update, a timeout there previously left IPs un-anonymized while sessions kept deleting, so the un-scrubbed PageView backlog only grew run over run. Raise `--batch-size` for a faster drain on a quiet DB, lower it if batches still approach the timeout.
 - **Dependencies**: None.
-- **Idempotency**: Fully safe to re-run. Deleting already-deleted records and nullifying already-null IPs are both no-ops.
+- **Idempotency**: Fully safe to re-run. Deleting already-deleted records and nullifying already-null IPs are both no-ops. A partial run (some batches committed before an interruption) simply resumes where it left off on the next run, since each batch commits independently.
 - **Failure impact**: Old analytics data accumulates in the database. No user-facing impact, but storage grows and GDPR compliance may be affected if sessions/IPs are retained beyond the 90-day window.
 
 ### generate_monthly_recaps
