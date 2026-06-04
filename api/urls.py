@@ -326,7 +326,7 @@ urlpatterns = [
     path('roadmap/<int:roadmap_id>/preview/', RoadmapPreviewView.as_view(), name='roadmap-preview'),
     path('roadmap/<int:roadmap_id>/hidden-authors/', RoadmapHiddenAuthorsView.as_view(), name='roadmap-hidden-authors'),
     path('roadmap/<int:roadmap_id>/trial-writers/', RoadmapTrialWritersView.as_view(), name='roadmap-trial-writers'),
-    path('roadmap/upload-image/', RoadmapImageUploadView.as_view(), name='roadmap-image-upload'),
+    path('roadmap/<int:roadmap_id>/upload-image/', RoadmapImageUploadView.as_view(), name='roadmap-image-upload'),
     # Lock + branch-and-merge endpoints
     path('roadmap/<int:roadmap_id>/lock/acquire/', RoadmapLockAcquireView.as_view(), name='roadmap-lock-acquire'),
     path('roadmap/<int:roadmap_id>/lock/heartbeat/', RoadmapLockHeartbeatView.as_view(), name='roadmap-lock-heartbeat'),

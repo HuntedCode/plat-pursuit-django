@@ -52,7 +52,7 @@ Staff-authored platinum guides on game detail pages. Replaces the old Checklists
 | POST | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/steps/<step_id>/trophies/` | Staff | Attach trophies to a step |
 | PUT | `/api/v1/roadmap/<roadmap_id>/tab/<tab_id>/trophy-guides/<trophy_id>/` | Staff | Edit per-trophy guide text |
 | POST | `/api/v1/roadmap/<roadmap_id>/publish/` | Staff | Publish or unpublish a roadmap |
-| POST | `/api/v1/roadmap/upload-image/` | Staff | Upload an inline image for the editor |
+| POST | `/api/v1/roadmap/<roadmap_id>/upload-image/` | Writer+ on that roadmap | Upload an inline image for the editor (scoped per-roadmap so trial-writer escalation works) |
 | GET | `/api/v1/youtube/attribution-lookup/?url=<youtube_url>` | Login | Resolve a YouTube URL to its channel name + URL via oEmbed (used by the editor's live attribution preview). Rate-limited 30/min/user. Returns `{"channel_name": str, "channel_url": str}` (empty strings on miss). |
 
 ### Notifications

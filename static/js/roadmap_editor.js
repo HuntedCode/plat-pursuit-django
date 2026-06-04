@@ -4590,7 +4590,7 @@
             const formData = new FormData();
             formData.append('image', this.state.selectedFile);
             formData.append('watermark', this._watermark().checked ? 'true' : 'false');
-            const result = await API.postFormData('/api/v1/roadmap/upload-image/', formData);
+            const result = await API.postFormData(`/api/v1/roadmap/${roadmapId}/upload-image/`, formData);
             if (!result?.url) throw new Error('Upload returned no URL.');
             return result.url;
         },

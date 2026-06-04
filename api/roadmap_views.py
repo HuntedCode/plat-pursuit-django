@@ -354,6 +354,14 @@ class RoadmapTrialWritersView(APIView):
 class RoadmapImageUploadView(APIView):
     """POST: Upload an image for use in roadmap markdown content.
 
+    URL: `/api/v1/roadmap/<roadmap_id>/upload-image/`. The roadmap id
+    in the path is scoping-only — the file is stored under a UUID
+    prefix and isn't tied to the roadmap row. The id is required so
+    `IsRoadmapAuthor` can load the roadmap and apply the per-roadmap
+    trial-writer escalation. Without it, trial users assigned to
+    that roadmap couldn't upload images at all (global writer check
+    fails, no roadmap to escalate against).
+
     Form fields:
         image       Required. The file to upload.
         watermark   Optional. 'true' (default) to bake the
@@ -364,7 +372,7 @@ class RoadmapImageUploadView(APIView):
     permission_classes = [IsRoadmapAuthor]
     parser_classes = [MultiPartParser, FormParser]
 
-    def post(self, request):
+    def post(self, request, roadmap_id):
         image = request.FILES.get('image')
         if not image:
             return Response(

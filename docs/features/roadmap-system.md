@@ -132,7 +132,7 @@ The plain `render_markdown` filter (used by reviews, etc.) does NOT enable spoil
 | PUT | `/api/v1/roadmap/<id>/tab/<id>/steps/<id>/trophies/` | Set step trophy associations |
 | PUT/DELETE | `/api/v1/roadmap/<id>/tab/<id>/trophy-guides/<trophy_id>/` | Create/update/delete trophy guide |
 | POST | `/api/v1/roadmap/<id>/publish/` | Publish or unpublish |
-| POST | `/api/v1/roadmap/upload-image/` | Upload image for markdown embedding |
+| POST | `/api/v1/roadmap/<id>/upload-image/` | Upload image for markdown embedding |
 
 All endpoints require staff authentication via SessionAuthentication + IsAdminUser.
 
