@@ -385,11 +385,44 @@ class RoadmapImageUploadView(APIView):
         watermark_raw = (request.data.get('watermark') or 'true').strip().lower()
         watermark = watermark_raw not in ('false', '0', 'no', 'off')
 
-        processed = process_roadmap_image(image, watermark=watermark)
-
-        filename = f"roadmaps/images/{uuid.uuid4().hex[:12]}_{processed.name}"
-        saved_path = default_storage.save(filename, processed)
-        url = default_storage.url(saved_path)
+        # Wrap the processing + storage pipeline so an exception inside
+        # Pillow / default_storage doesn't bubble up as an HTML 500
+        # (which the editor's JS can't parse, leaving the author with
+        # a generic "Image save failed." toast and no detail to share).
+        # process_roadmap_image has its own fallback to the raw file on
+        # Pillow errors; this catch covers the storage backend (S3
+        # timeout, disk full, permissions, etc.) and any leak through
+        # the fallback.
+        try:
+            processed = process_roadmap_image(image, watermark=watermark)
+            filename = f"roadmaps/images/{uuid.uuid4().hex[:12]}_{processed.name}"
+            saved_path = default_storage.save(filename, processed)
+            url = default_storage.url(saved_path)
+        except Exception as e:
+            # Full traceback + the file metadata that's most useful for
+            # reproducing: filename, byte size, declared content-type,
+            # and the uploading user. `logger.exception` captures the
+            # stack and exception type for the centralized error logs.
+            logger.exception(
+                "Roadmap image upload failed for user=%s file=%s size=%s type=%s watermark=%s",
+                getattr(request.user, 'id', None),
+                getattr(image, 'name', '?'),
+                getattr(image, 'size', '?'),
+                getattr(image, 'content_type', '?'),
+                watermark,
+            )
+            # Return the exception class + a truncated message so the
+            # author can paste it to support; truncating bounds the
+            # response size if Pillow / boto3 returns a verbose error.
+            return Response(
+                {
+                    'error': (
+                        f'Image processing or storage failed: '
+                        f'{type(e).__name__}: {str(e)[:200]}'
+                    ),
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         # Encode the watermark state into the returned URL as a query param
         # so the editor can read it back when opening the image in edit

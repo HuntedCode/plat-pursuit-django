@@ -4631,8 +4631,46 @@
                 Toast.show(s.mode.endsWith('-edit') ? 'Image updated.' : 'Image added.', 'success');
             } catch (err) {
                 setSaveStatus('error');
-                const errData = await err.response?.json().catch(() => null);
-                Toast.show(errData?.error || 'Image save failed.', 'error');
+                // Build the most informative message we can. Three
+                // tiers from best to worst:
+                //   1. Server returned {error: '...'} JSON — use it
+                //   2. Server returned an HTTP error with non-JSON body
+                //      (HTML 500 page, plain text, etc.) — surface the
+                //      status code so the author can quote it
+                //   3. Network error / unknown — generic + console
+                let userMessage = 'Image save failed.';
+                let consoleDetail = err.message || 'unknown error';
+                if (err.response) {
+                    const httpStatus = err.response.status;
+                    // Clone before .json() so we can fall back to .text()
+                    // on the same response if JSON parse fails.
+                    const errData = await err.response.clone().json().catch(() => null);
+                    if (errData?.error) {
+                        userMessage = errData.error;
+                        consoleDetail = `HTTP ${httpStatus}: ${errData.error}`;
+                    } else {
+                        const text = await err.response.text().catch(() => '');
+                        userMessage = `Image save failed (HTTP ${httpStatus}).`;
+                        consoleDetail = `HTTP ${httpStatus}: ${text.slice(0, 500)}`;
+                    }
+                }
+                Toast.show(userMessage, 'error');
+                // Structured console log so an author hitting F12 can
+                // copy the full diagnostic context (server error,
+                // file metadata) and paste it into a support request.
+                // The user-facing toast stays short; the console has
+                // the depth.
+                const f = s.selectedFile;
+                console.error('[Roadmap image upload]', {
+                    message: userMessage,
+                    detail: consoleDetail,
+                    file: f ? {
+                        name: f.name,
+                        size: f.size,
+                        type: f.type,
+                    } : null,
+                    mode: s.mode,
+                });
                 this._statusEl().textContent = '';
                 this._submitBtn().disabled = false;
                 this._cancelBtn().disabled = false;
