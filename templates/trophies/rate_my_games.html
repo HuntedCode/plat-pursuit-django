@@ -43,6 +43,13 @@
             <button class="btn btn-sm btn-ghost border border-base-300 wizard-queue-tab transition-colors" data-queue="dlc">DLC</button>
         </div>
     </div>
+
+    {# Shovelware opt-in: off by default so the queue stays junk-free. #}
+    <label class="label cursor-pointer gap-2 py-0"
+           title="Include platinums earned on games flagged as shovelware in the rating queue.">
+        <input type="checkbox" id="wizard-include-shovelware" class="checkbox checkbox-sm checkbox-warning">
+        <span class="label-text text-xs text-base-content/60">Include shovelware</span>
+    </label>
 </div>
 
 {# ─── Progress Bar ────────────────────────────────────────────────────── #}
@@ -75,6 +82,7 @@
                         <div class="flex items-center gap-2">
                             <h2 id="wizard-game-title" class="text-lg md:text-xl lg:text-2xl font-bold line-clamp-2 pr-1"></h2>
                             <span id="wizard-dlc-badge" class="hidden badge badge-sm badge-secondary font-bold shrink-0">DLC</span>
+                            <span id="wizard-shovelware-badge" class="hidden badge badge-sm badge-warning font-bold shrink-0" title="Flagged as shovelware">Shovelware</span>
                         </div>
                         <p id="wizard-group-name" class="text-sm text-base-content/50 hidden"></p>
                         <div class="flex items-center gap-2 mt-1">

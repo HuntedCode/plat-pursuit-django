@@ -1728,7 +1728,6 @@
                             if (data.concept_id) {
                                 preview.dataset.conceptId = data.concept_id;
                                 preview.dataset.hasRating = data.has_rating ? 'true' : 'false';
-                                preview.dataset.isShovelware = data.is_shovelware ? 'true' : 'false';
                                 preview.dataset.playtime = data.playtime || '';
                             }
                             requestAnimationFrame(() => {
@@ -1868,13 +1867,14 @@
                     const downloadUrl = nearestPreview ? buildDownloadUrl(nearestPreview) : basePngUrl;
                     if (!downloadUrl) return;
 
-                    // Check if this card has rating data and should prompt
+                    // Check if this card has rating data and should prompt.
+                    // Shovelware platinums are prompted too (rating them is
+                    // allowed; only the Rate My Games wizard hides shovelware).
                     const conceptId = nearestPreview?.dataset.conceptId;
                     const hasRating = nearestPreview?.dataset.hasRating === 'true';
-                    const isShovelware = nearestPreview?.dataset.isShovelware === 'true';
                     const playtime = nearestPreview?.dataset.playtime || '';
 
-                    if (conceptId && !hasRating && !isShovelware && !promptedIds.has(conceptId)) {
+                    if (conceptId && !hasRating && !promptedIds.has(conceptId)) {
                         promptedIds.add(conceptId);
                         this._showRatingPrompt(conceptId, playtime, downloadUrl, nearestPreview);
                         return;

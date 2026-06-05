@@ -5,7 +5,7 @@
  * Depends on: ShareImageManager (share-image.js), PlatPursuit.API
  */
 class ShareableManager extends ShareImageManager {
-    constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId, isShovelware) {
+    constructor(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId) {
         super({ game_name: gameName, game_image: gameImage, concept_bg_url: conceptBgUrl });
         this.earnedTrophyId = earnedTrophyId;
         this.gameName = gameName;
@@ -13,11 +13,6 @@ class ShareableManager extends ShareImageManager {
         // Pre-set concept ID from data attribute (API response will also set it)
         if (conceptId) {
             this.ratingData.conceptId = parseInt(conceptId);
-        }
-
-        // Pre-set shovelware flag from DOM (API response will also confirm it)
-        if (isShovelware) {
-            this.ratingData.isShovelware = true;
         }
     }
 
@@ -39,9 +34,6 @@ class ShareableManager extends ShareImageManager {
             }
             if (response.playtime) {
                 this.ratingData.playtime = response.playtime;
-            }
-            if (response.is_shovelware !== undefined) {
-                this.ratingData.isShovelware = response.is_shovelware;
             }
             return response.html;
         }
@@ -73,7 +65,6 @@ function openShareModal(cardElement) {
     const gameImage = cardElement.dataset.gameImage;
     const conceptBgUrl = cardElement.dataset.conceptBgUrl || '';
     const conceptId = cardElement.dataset.conceptId || '';
-    const isShovelware = cardElement.dataset.isShovelware === 'true';
 
     if (!earnedTrophyId || !gameName) {
         console.error('Missing earned trophy data');
@@ -103,7 +94,7 @@ function openShareModal(cardElement) {
     modal.showModal();
 
     // Create manager and render share section
-    const manager = new ShareableManager(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId, isShovelware);
+    const manager = new ShareableManager(earnedTrophyId, gameName, gameImage, conceptBgUrl, conceptId);
 
     // Render the share section UI
     modalContent.innerHTML = manager.renderShareSection();

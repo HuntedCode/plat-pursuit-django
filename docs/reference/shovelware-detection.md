@@ -114,7 +114,8 @@ Deriving evidence live means concept mergers, deletions, and IGDB company rewrit
 
 When a game is marked shovelware:
 - **Challenges**: Excluded from A-Z, Calendar, and Genre challenge game search
-- **Review Hub**: Concepts where ALL games are shovelware are excluded (404)
+- **Review Hub (dormant)**: The `/reviews/` detail view 404s when ALL games in a concept are shovelware
+- **Ratings**: NOT gated. Shovelware platinums can be rated (rate POST + share/dashboard/game-detail prompts). The Rate My Games wizard hides shovelware from its queue by default, opt-in via `?include_shovelware=1`
 - **Leaderboards**: Shovelware platinums may be filtered from certain views
 - **Badges**: Shovelware games in badge stages still count (badges evaluate at concept level)
 

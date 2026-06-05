@@ -21,7 +21,7 @@ class ShareImageManager {
         this.generatedImages = {};
 
         // Rating metadata (populated from HTML API response during preview)
-        this.ratingData = { hasRating: false, conceptId: null, isShovelware: false };
+        this.ratingData = { hasRating: false, conceptId: null };
 
         // Guard against concurrent download requests
         this.isDownloading = false;
@@ -471,9 +471,11 @@ class ShareImageManager {
      */
     _proceedAfterThemeCheck(format) {
         const promptId = this.getTrackingId();
+        // Shovelware platinums are prompted too: a shovelware platinum is
+        // still a real platinum, and rating it is allowed (the gate was
+        // removed; only the Rate My Games wizard hides shovelware by default).
         const shouldPrompt = !this.ratingData.hasRating
             && this.ratingData.conceptId
-            && !this.ratingData.isShovelware
             && !ShareImageManager._promptedIds.has(promptId);
 
         if (shouldPrompt) {

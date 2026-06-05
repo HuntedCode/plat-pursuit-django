@@ -24,7 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from trophies.models import Concept, ConceptTrophyGroup
-from api.utils import safe_int
+from api.utils import safe_bool, safe_int
 
 logger = logging.getLogger('psn_api')
 
@@ -43,7 +43,13 @@ def _get_profile_or_error(request):
 def _get_concept_and_group(concept_id, group_id_str):
     """Resolve Concept + ConceptTrophyGroup from URL params.
 
-    Shovelware gate: if ALL games in the concept are shovelware, returns 403.
+    Shovelware is intentionally NOT gated here: a shovelware platinum is
+    still a real platinum, and a "yes this is shovelware, here's how grindy
+    it was" rating is useful signal. The Rate My Games wizard hides
+    shovelware from its queue by default (opt-in via a toggle), but any
+    surface that already knows which game/group to rate (share card prompt,
+    game-detail Quick Rate) may submit a shovelware rating freely.
+
     The base ('default') group is auto-created when missing (a freshly
     synced concept may not have it yet); other groups must already exist.
 
@@ -57,17 +63,6 @@ def _get_concept_and_group(concept_id, group_id_str):
         return None, None, Response(
             {'error': 'Concept not found.'},
             status=status.HTTP_404_NOT_FOUND,
-        )
-
-    # Shovelware gate: reject if every game in the concept is flagged.
-    # Concepts with zero games are allowed through (not-yet-synced state).
-    games = concept.games.all()
-    if games.exists() and not games.exclude(
-        shovelware_status__in=['auto_flagged', 'manually_flagged'],
-    ).exists():
-        return None, None, Response(
-            {'error': 'Ratings are not available for this game.'},
-            status=status.HTTP_403_FORBIDDEN,
         )
 
     if group_id_str == 'default':
@@ -193,9 +188,13 @@ class WizardQueueView(APIView):
                 queue_type = 'base'
             limit = min(safe_int(request.query_params.get('limit', 20), 20), 50)
             offset = max(safe_int(request.query_params.get('offset', 0), 0), 0)
+            include_shovelware = safe_bool(request.query_params.get('include_shovelware'))
 
-            # All ratable concept IDs (platinumed + 100% non-plat).
-            ratable_concept_ids = ReviewHubService.get_ratable_concept_ids(profile)
+            # All ratable concept IDs (platinumed + 100% non-plat). Shovelware
+            # is excluded unless the user opts in via the wizard toggle.
+            ratable_concept_ids = ReviewHubService.get_ratable_concept_ids(
+                profile, include_shovelware=include_shovelware,
+            )
 
             if not ratable_concept_ids:
                 if queue_type == 'dlc':
@@ -205,6 +204,7 @@ class WizardQueueView(APIView):
             if queue_type == 'dlc':
                 return self._get_dlc_queue(
                     profile, ratable_concept_ids, limit, offset,
+                    include_shovelware=include_shovelware,
                 )
 
             # ── Base game queue ──────────────────────────────────────── #
@@ -267,13 +267,26 @@ class WizardQueueView(APIView):
                 if dt and (cid not in plat_dates or dt > plat_dates[cid]):
                     plat_dates[cid] = dt
 
-            from trophies.models import Trophy
+            from trophies.models import Trophy, Game
             concepts_with_plat = set(
                 Trophy.objects.filter(
                     game__concept_id__in=paginated_ids,
                     trophy_type='platinum',
                 ).values_list('game__concept_id', flat=True).distinct()
             )
+
+            # Concepts that have at least one non-shovelware game. When the
+            # user opted into shovelware, anything NOT in this set only shows
+            # because of that opt-in, so we badge it. (Skip the query when the
+            # opt-in is off: nothing in the queue can be shovelware then.)
+            shovelware_concept_ids = set()
+            if include_shovelware:
+                clean_concept_ids = set(
+                    Game.objects.filter(concept_id__in=paginated_ids)
+                    .exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+                    .values_list('concept_id', flat=True).distinct()
+                )
+                shovelware_concept_ids = set(paginated_ids) - clean_concept_ids
 
             queue = []
             for c in paginated:
@@ -288,6 +301,7 @@ class WizardQueueView(APIView):
                     'trophy_group_id': 'default',
                     'trophy_group_name': 'Base Game',
                     'hours_label': 'Hours to Platinum' if has_plat else 'Hours to Complete',
+                    'is_shovelware': cid in shovelware_concept_ids,
                 }
                 if cid in game_stats:
                     item['stats'] = game_stats[cid]
@@ -309,11 +323,12 @@ class WizardQueueView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    def _get_dlc_queue(self, profile, ratable_concept_ids, limit, offset):
+    def _get_dlc_queue(self, profile, ratable_concept_ids, limit, offset,
+                       include_shovelware=False):
         """Build the DLC rating queue grouped by parent concept (ratings-only)."""
         from collections import OrderedDict
         from django.db.models import Count
-        from trophies.models import Trophy, EarnedTrophy, UserConceptRating
+        from trophies.models import Trophy, EarnedTrophy, UserConceptRating, Game
 
         all_dlc_groups = list(
             ConceptTrophyGroup.objects.filter(
@@ -372,6 +387,17 @@ class WizardQueueView(APIView):
             ).values_list('concept_trophy_group_id', flat=True)
         )
 
+        # Concepts that surface only because of the shovelware opt-in (no
+        # non-shovelware game). Skip the query when the opt-in is off.
+        shovelware_concept_ids = set()
+        if include_shovelware:
+            clean_concept_ids = set(
+                Game.objects.filter(concept_id__in=dlc_concept_ids)
+                .exclude(shovelware_status__in=['auto_flagged', 'manually_flagged'])
+                .values_list('concept_id', flat=True).distinct()
+            )
+            shovelware_concept_ids = set(dlc_concept_ids) - clean_concept_ids
+
         groups_dict = OrderedDict()
         total_items = 0
 
@@ -387,6 +413,7 @@ class WizardQueueView(APIView):
                     'unified_title': g.concept.unified_title,
                     'concept_icon_url': g.concept.concept_icon_url or '',
                     'slug': g.concept.slug,
+                    'is_shovelware': cid in shovelware_concept_ids,
                     'items': [],
                 }
 

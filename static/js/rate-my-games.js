@@ -17,6 +17,7 @@ PlatPursuit.RateMyGames = {
     isLoading: false,
     offset: 0,
     limit: 20,
+    includeShovelware: false,
 
     // DLC queue: grouped response from API
     dlcGroups: [],
@@ -33,6 +34,7 @@ PlatPursuit.RateMyGames = {
         }
 
         this.initQueueTabs();
+        this.initShovelwareToggle();
         this.initRatingValidation();
         this.initActionButtons();
         this.initTrophyToggle();
@@ -74,6 +76,24 @@ PlatPursuit.RateMyGames = {
         });
     },
 
+    initShovelwareToggle() {
+        const checkbox = document.getElementById('wizard-include-shovelware');
+        if (!checkbox) return;
+        this.includeShovelware = checkbox.checked;
+        checkbox.addEventListener('change', () => {
+            this.includeShovelware = checkbox.checked;
+            this.resetQueue();
+        });
+    },
+
+    /** Build the wizard queue endpoint URL for the current state. */
+    _queueUrl() {
+        let url = `/api/v1/ratings/wizard/queue/?queue_type=${this.queueType}`
+            + `&limit=${this.limit}&offset=${this.offset}`;
+        if (this.includeShovelware) url += '&include_shovelware=1';
+        return url;
+    },
+
     resetQueue() {
         this.queue = [];
         this.dlcGroups = [];
@@ -103,8 +123,7 @@ PlatPursuit.RateMyGames = {
         if (empty) empty.classList.add('hidden');
 
         try {
-            const url = `/api/v1/ratings/wizard/queue/?queue_type=${this.queueType}&limit=${this.limit}&offset=${this.offset}`;
-            const data = await PlatPursuit.API.get(url);
+            const data = await PlatPursuit.API.get(this._queueUrl());
 
             if (this.queueType === 'dlc') {
                 this.loadDlcQueue(data);
@@ -171,6 +190,7 @@ PlatPursuit.RateMyGames = {
                     unified_title: group.unified_title,
                     concept_icon_url: group.concept_icon_url,
                     slug: group.slug,
+                    is_shovelware: !!group.is_shovelware,
                     trophy_group_id: item.trophy_group_id,
                     trophy_group_name: item.trophy_group_name,
                     has_rating: item.has_rating,
@@ -236,6 +256,11 @@ PlatPursuit.RateMyGames = {
         }
         if (dlcBadge) {
             dlcBadge.classList.toggle('hidden', !isDlc);
+        }
+
+        const shovelwareBadge = document.getElementById('wizard-shovelware-badge');
+        if (shovelwareBadge) {
+            shovelwareBadge.classList.toggle('hidden', !game.is_shovelware);
         }
 
         // Dynamic hours label
@@ -316,8 +341,7 @@ PlatPursuit.RateMyGames = {
 
     async prefetch() {
         try {
-            const url = `/api/v1/ratings/wizard/queue/?queue_type=${this.queueType}&limit=${this.limit}&offset=${this.offset}`;
-            const data = await PlatPursuit.API.get(url);
+            const data = await PlatPursuit.API.get(this._queueUrl());
 
             if (this.queueType === 'dlc') {
                 this.hasMore = data.has_more || false;
