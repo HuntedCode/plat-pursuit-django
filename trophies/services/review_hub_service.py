@@ -222,38 +222,51 @@ class ReviewHubService:
         return result
 
     @staticmethod
-    def get_ratable_concept_ids(profile):
+    def get_ratable_concept_ids(profile, include_shovelware=False):
         """Concept IDs where user is eligible to rate the base game.
 
         Includes:
-        - Concepts where user has earned a platinum (non-shovelware)
+        - Concepts where user has earned a platinum
         - Concepts where user has 100% progress but no platinum trophy exists
+
+        Shovelware is excluded by default so the Rate My Games queue and the
+        unrated-count badges don't fill up with junk. Pass
+        `include_shovelware=True` (the wizard's opt-in toggle) to keep
+        platinums/completions earned on shovelware games in the result.
 
         Returns a list of distinct concept IDs (evaluated, not a queryset).
         """
         from trophies.models import EarnedTrophy, ProfileGame, Trophy
 
-        # 1. Platinumed concepts (non-shovelware)
+        SHOVELWARE_STATUSES = ['auto_flagged', 'manually_flagged']
+
+        # 1. Platinumed concepts
+        plat_qs = EarnedTrophy.objects.filter(
+            profile=profile,
+            earned=True,
+            trophy__trophy_type='platinum',
+        )
+        if not include_shovelware:
+            plat_qs = plat_qs.exclude(
+                trophy__game__shovelware_status__in=SHOVELWARE_STATUSES,
+            )
         plat_concept_ids = set(
-            EarnedTrophy.objects.filter(
-                profile=profile,
-                earned=True,
-                trophy__trophy_type='platinum',
-            ).exclude(
-                trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            ).values_list('trophy__game__concept_id', flat=True).distinct()
+            plat_qs.values_list('trophy__game__concept_id', flat=True).distinct()
         )
 
         # 2. Non-plat 100% concepts: games at 100% progress where the concept
-        #    has NO platinum trophy at all (non-shovelware)
+        #    has NO platinum trophy at all
+        completion_qs = ProfileGame.objects.filter(
+            profile=profile,
+            progress=100,
+            has_plat=False,
+        )
+        if not include_shovelware:
+            completion_qs = completion_qs.exclude(
+                game__shovelware_status__in=SHOVELWARE_STATUSES,
+            )
         full_completion_concept_ids = set(
-            ProfileGame.objects.filter(
-                profile=profile,
-                progress=100,
-                has_plat=False,
-            ).exclude(
-                game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-            ).values_list('game__concept_id', flat=True).distinct()
+            completion_qs.values_list('game__concept_id', flat=True).distinct()
         )
         if full_completion_concept_ids:
             # Exclude any concept that actually has a platinum trophy

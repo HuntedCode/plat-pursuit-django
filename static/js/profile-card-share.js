@@ -17,7 +17,7 @@ class ProfileCardShareManager extends ShareImageManager {
     constructor() {
         super({});
         // No rating prompt for profile cards
-        this.ratingData = { hasRating: true, conceptId: null, isShovelware: false };
+        this.ratingData = { hasRating: true, conceptId: null };
 
         // Landscape only: no portrait format
         this.currentFormat = 'landscape';

@@ -173,9 +173,9 @@ When a user clicks "Download Image" on a platinum share card, the system checks 
 5. Prompted IDs are tracked in `ShareImageManager._promptedIds` (class-level `Set`) to avoid nagging
 
 **Dashboard** (DashboardManager):
-1. When the platinum card HTML is fetched, `concept_id`, `has_rating`, `is_shovelware`, and `playtime` are captured from the API response and stored on the preview element's dataset
+1. When the platinum card HTML is fetched, `concept_id`, `has_rating`, and `playtime` are captured from the API response and stored on the preview element's dataset
 2. Download button click checks these data attributes before proceeding
-3. If unrated and not shovelware: `_showRatingPrompt()` opens the same `#rate-before-download-modal`
+3. If unrated: `_showRatingPrompt()` opens the same `#rate-before-download-modal`. Shovelware platinums are prompted too (rating shovelware is allowed; only the Rate My Games wizard hides shovelware by default)
 4. After rating submission (or skip), the PNG download URL is triggered via `window.location.href`
 5. Prompted IDs tracked in a local `Set` per `_initShareCards` call, scoped to the session
 
@@ -187,14 +187,14 @@ When a user clicks "Download Image" on a platinum share card, the system checks 
 | `static/js/share-image.js` | Interception logic in base `ShareImageManager` class |
 | `static/js/shareable-manager.js` | Passes `conceptId` from data attributes to manager |
 | `static/js/dashboard.js` | `_showRatingPrompt()` method for dashboard platinum card downloads |
-| `api/shareable_views.py` | Returns `has_rating`, `concept_id`, `playtime`, `is_shovelware` in HTML API response |
+| `api/shareable_views.py` | Returns `has_rating`, `concept_id`, `playtime` in HTML API response |
 | `api/notification_views.py` | Same metadata in notification HTML API response |
 
 ### Data Flow
 
 Rating metadata flows through two paths depending on the page:
 - **My Shareables / Notifications**: `data-concept-id` on share card elements provides `conceptId` at construction time. `has_rating` returned in HTML API response during `fetchCardHTML()`.
-- **Dashboard**: The platinum card HTML API response includes `has_rating`, `concept_id`, `is_shovelware`, and `playtime`. These are stored as `data-*` attributes on the preview element after fetch, then read by the download button handler.
+- **Dashboard**: The platinum card HTML API response includes `has_rating`, `concept_id`, and `playtime`. These are stored as `data-*` attributes on the preview element after fetch, then read by the download button handler.
 
 In both cases, the JS knows the rating status before the user clicks download, with no extra API call.
 
