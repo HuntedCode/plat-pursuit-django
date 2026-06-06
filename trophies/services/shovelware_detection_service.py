@@ -1,4 +1,5 @@
 import logging
+import statistics
 import time
 
 from django.utils import timezone
@@ -11,11 +12,19 @@ logger = logging.getLogger("psn_api")
 class ShovelwareDetectionService:
     """Rule-based shovelware detection.
 
+    A concept's shovelware standing keys off its REPRESENTATIVE earn rate: the
+    MEDIAN platinum earn rate across its non-admin-locked versions. Using the
+    median (not the max of any single version) makes detection robust to a
+    low-population regional/legacy version with an inflated earn rate, which
+    would otherwise flag a concept whose typical version is a legitimately
+    challenging platinum. For a single-version concept the median is just that
+    version's rate, so behavior is unchanged for the common case.
+
     Flagging rules (evaluated per concept):
-      1. Earn-rate rule: any non-admin-locked game in the concept has a
-         platinum earn rate >= ``FLAG_THRESHOLD`` (80%). The whole concept
-         is flagged. If the concept has a trusted IGDB match, its primary
-         developer is then evaluated for the developer blacklist (rule 2).
+      1. Earn-rate rule: the concept's median platinum earn rate is
+         >= ``FLAG_THRESHOLD`` (80%). The whole concept is flagged. If the
+         concept has a trusted IGDB match, its primary developer is then
+         evaluated for the developer blacklist (rule 2).
       2. Developer-blacklist rule: the concept's primary developer is on
          ``DeveloperReputation`` with ``is_blacklisted=True``. The concept is
          flagged unless shielded.
@@ -24,26 +33,27 @@ class ShovelwareDetectionService:
       A developer is blacklisted when MORE THAN ``BLACKLIST_PROPORTION`` (50%)
       of their platinum-bearing, primary-developed concepts are independently
       shovelware, provided they have at least ``BLACKLIST_MIN_CONCEPTS`` (3)
-      such concepts. "Independently shovelware" means the concept has a
-      non-locked game at or above a rate threshold ON ITS OWN MERIT, never
-      because of the developer-blacklist cascade (this avoids a feedback loop
-      where cascade-flagging inflates the proportion and pins the developer on
-      the blacklist forever).
+      such concepts. "Independently shovelware" means the concept's median
+      platinum earn rate is at or above a rate threshold ON ITS OWN MERIT,
+      never because of the developer-blacklist cascade (this avoids a feedback
+      loop where cascade-flagging inflates the proportion and pins the
+      developer on the blacklist forever).
 
       Hysteresis lives in the rate threshold of the numerator:
-        - ENTER  when proportion at >= FLAG_THRESHOLD (80%) is > 50%.
-        - STAY   while proportion at >= EVIDENCE_THRESHOLD (70%) is > 50%.
+        - ENTER  when proportion at median >= FLAG_THRESHOLD (80%) is > 50%.
+        - STAY   while proportion at median >= EVIDENCE_THRESHOLD (70%) is > 50%.
         - RELEASE when the 70% proportion drops to <= 50%.
       Since 70% admits at least as many concepts as 80%, a developer must earn
       a strong majority to enter but only leaves once even the looser bar
       fails. On release, every cascade-only flag clears immediately.
 
     Shield (blocks rule 2 only, never rule 1):
-      If a game in the concept has platinum earn rate < ``UNFLAG_THRESHOLD``
-      (30%) AND no game in the concept has rate >= ``FLAG_THRESHOLD``, we
-      treat the concept as legitimate and do NOT flag it even when the
-      primary developer is blacklisted. An 80%+ game is direct evidence
-      and always wins.
+      If the concept's median platinum earn rate is < ``SHIELD_THRESHOLD``
+      (40%), we treat the concept as legitimate and do NOT flag it even when
+      the primary developer is blacklisted. A median >= ``FLAG_THRESHOLD`` is
+      direct evidence and always wins. The band between the shield and flag
+      thresholds (40%-80%) is the "gray zone" where a blacklisted developer's
+      reputation decides the outcome.
 
     Developer whitelist (full exemption):
       A whitelisted primary developer's concepts are NEVER auto-flagged
@@ -57,14 +67,13 @@ class ShovelwareDetectionService:
       ordered by ``id``. Requires a trusted ``IGDBMatch`` on the concept.
 
     Admin-locked games (``shovelware_lock=True``) are invisible to all
-    rate-based calculations. Their earn rates do not contribute to rule 1
-    on siblings, do not contribute to the shield, and do not contribute to
-    the blacklist proportion (numerator or denominator). Admin has the final
-    say.
+    rate-based calculations. Their earn rates do not contribute to the median
+    on siblings, to the shield, or to the blacklist proportion (numerator or
+    denominator). Admin has the final say.
     """
 
-    FLAG_THRESHOLD = 80.0       # Earn rate >= this triggers rule 1 (and the enter-numerator)
-    UNFLAG_THRESHOLD = 30.0     # Earn rate < this enables the shield
+    FLAG_THRESHOLD = 80.0       # Median earn rate >= this triggers rule 1 (and the enter-numerator)
+    SHIELD_THRESHOLD = 40.0     # Median earn rate < this shields a concept from rule 2
     EVIDENCE_THRESHOLD = 70.0   # Stay-numerator rate; 10% deadband below FLAG_THRESHOLD
     BLACKLIST_PROPORTION = 0.50  # Blacklist when > this fraction of concepts are independently shovelware
     BLACKLIST_MIN_CONCEPTS = 3   # Floor: proportional rule applies only at or above this many concepts
@@ -114,9 +123,9 @@ class ShovelwareDetectionService:
             cls._unflag_concept(concept, now)
             return
 
-        rates = cls._concept_plat_rates(concept)
-        has_high = any(r >= cls.FLAG_THRESHOLD for r in rates)
-        has_low = any(r < cls.UNFLAG_THRESHOLD for r in rates)
+        median_rate = cls._concept_median_rate(concept)
+        has_high = median_rate is not None and median_rate >= cls.FLAG_THRESHOLD
+        shielded = median_rate is not None and median_rate < cls.SHIELD_THRESHOLD
 
         if has_high:
             cls._flag_concept(concept, now)  # rule 1: always flags on direct evidence
@@ -130,7 +139,7 @@ class ShovelwareDetectionService:
                 # Stay gate: does the developer still clear the proportional
                 # threshold at the looser evidence rate (70%)?
                 if cls._dev_meets_blacklist_threshold(primary_dev, cls.EVIDENCE_THRESHOLD):
-                    if has_low:
+                    if shielded:
                         cls._unflag_concept(concept, now)  # shielded
                     else:
                         cls._flag_concept(concept, now)
@@ -182,10 +191,12 @@ class ShovelwareDetectionService:
         """Handle the rare case of a game with no concept.
 
         The developer blacklist requires a concept (for IGDBMatch + ConceptCompany),
-        so the only rule available is the earn-rate threshold on this game alone.
+        and there are no sibling versions, so the only signal is this game's own
+        platinum earn rate. With no studio there is no gray zone: the game is
+        shovelware iff its rate is >= FLAG_THRESHOLD, and clean otherwise.
         """
         plat = game.trophies.filter(trophy_type='platinum').only('trophy_earn_rate').first()
-        if not plat:
+        if not plat or plat.trophy_earn_rate is None:
             return
 
         rate = plat.trophy_earn_rate
@@ -196,17 +207,17 @@ class ShovelwareDetectionService:
                 game.shovelware_status = 'auto_flagged'
                 game.shovelware_updated_at = now
                 game.save(update_fields=['shovelware_status', 'shovelware_updated_at'])
-        elif rate < cls.UNFLAG_THRESHOLD and game.shovelware_status == 'auto_flagged':
+        elif game.shovelware_status == 'auto_flagged':
             game.shovelware_status = 'clean'
             game.shovelware_updated_at = now
             game.save(update_fields=['shovelware_status', 'shovelware_updated_at'])
 
     @classmethod
     def _concept_plat_rates(cls, concept):
-        """Return platinum earn rates for every non-admin-locked game in the concept.
+        """Return non-null platinum earn rates for every non-admin-locked game in the concept.
 
         Admin-locked games (``shovelware_lock=True``) are excluded so their
-        rate never contributes to rule 1 or the shield. Admin has the final
+        rate never contributes to the median or the shield. Admin has the final
         say on whether a specific game is shovelware.
         """
         from trophies.models import Trophy
@@ -216,8 +227,24 @@ class ShovelwareDetectionService:
                 game__concept=concept,
                 game__shovelware_lock=False,
                 trophy_type='platinum',
+                trophy_earn_rate__isnull=False,
             ).values_list('trophy_earn_rate', flat=True)
         )
+
+    @classmethod
+    def _concept_median_rate(cls, concept):
+        """Return the MEDIAN platinum earn rate across the concept's non-locked
+        versions, or None when the concept has no platinum-bearing version.
+
+        ``statistics.median`` averages the two middle values for an even count,
+        matching Postgres ``percentile_cont(0.5)`` used by
+        ``DeveloperReputation.qualifying_concepts_for`` so the Python path
+        (rule 1 / shield) and the DB path (blacklist proportion) always agree.
+        """
+        rates = cls._concept_plat_rates(concept)
+        if not rates:
+            return None
+        return statistics.median(rates)
 
     @classmethod
     def _get_primary_developer(cls, concept):
@@ -342,11 +369,10 @@ class ShovelwareDetectionService:
                 continue  # The triggering concept is already flagged
             if cls._get_primary_developer(concept) != company:
                 continue  # Not primary developer here; skip
-            rates = cls._concept_plat_rates(concept)
-            if any(r >= cls.FLAG_THRESHOLD for r in rates):
+            median_rate = cls._concept_median_rate(concept)
+            if median_rate is not None and median_rate >= cls.FLAG_THRESHOLD:
                 continue  # Already handled by its own earn-rate rule on next eval
-            has_low = any(r < cls.UNFLAG_THRESHOLD for r in rates)
-            if has_low:
+            if median_rate is not None and median_rate < cls.SHIELD_THRESHOLD:
                 continue  # Shielded
             cls._flag_concept(concept, now)
 
@@ -356,15 +382,15 @@ class ShovelwareDetectionService:
         on every concept primary-developed by ``company`` that is NOT
         independently shovelware.
 
-        Concepts with a game at or above ``FLAG_THRESHOLD`` stay flagged by
+        Concepts with a median at or above ``FLAG_THRESHOLD`` stay flagged by
         rule 1 on their own merit. Manual statuses survive via
         ``_unflag_concept``.
         """
         for concept in cls._primary_developed_candidates(company):
             if cls._get_primary_developer(concept) != company:
                 continue  # Not primary developer here; skip
-            rates = cls._concept_plat_rates(concept)
-            if any(r >= cls.FLAG_THRESHOLD for r in rates):
+            median_rate = cls._concept_median_rate(concept)
+            if median_rate is not None and median_rate >= cls.FLAG_THRESHOLD:
                 continue  # Independently shovelware (rule 1); leave flagged
             cls._unflag_concept(concept, now)
 

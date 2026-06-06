@@ -1,20 +1,28 @@
 # Shovelware Detection
 
-Shovelware games (cheap, mass-produced platinum trophy farms) are automatically detected and flagged to protect the integrity of challenges, leaderboards, and community features. Detection uses platinum earn-rate thresholds with concept-level grouping, plus a **proportional** IGDB-developer blacklist for catalog-wide cascade flagging and an admin-curated developer **whitelist** for full exemption.
+Shovelware games (cheap, mass-produced platinum trophy farms) are automatically detected and flagged to protect the integrity of challenges, leaderboards, and community features. Detection keys off a concept's **median** platinum earn rate across its versions, plus a **proportional** IGDB-developer blacklist for catalog-wide cascade flagging and an admin-curated developer **whitelist** for full exemption.
 
 ## Detection Algorithm
 
 Location: [trophies/services/shovelware_detection_service.py](../../trophies/services/shovelware_detection_service.py)
 
+### Representative earn rate: the median
+
+A concept usually has several versions (regional + PS4/PS5), each with its own platinum earn rate. Detection uses the **median** of those rates (over non-admin-locked versions), not the maximum of any single version. The median is robust to a low-population regional or legacy version with an inflated earn rate, which under a max-based rule would flag a concept whose typical version is a legitimately challenging platinum. For a single-version concept the median is just that version's rate, so behavior is unchanged for the common case.
+
+The same median drives all three judgments (rule 1, the shield, and the blacklist proportion), so the "one weird version" problem cannot resurface at any level.
+
 ### Thresholds
 
 | Constant | Value | Purpose |
 |----------|-------|---------|
-| `FLAG_THRESHOLD` | 80.0% | Any platinum at >= 80% earn rate flags the whole concept (rule 1). Also the enter-numerator rate for the blacklist proportion. |
-| `UNFLAG_THRESHOLD` | 30.0% | A platinum at strict `< 30%` enables the shield |
+| `FLAG_THRESHOLD` | 80.0% | Median platinum earn rate >= 80% flags the whole concept (rule 1). Also the enter-numerator rate for the blacklist proportion. |
+| `SHIELD_THRESHOLD` | 40.0% | Median platinum earn rate `< 40%` shields a concept from rule 2 |
 | `EVIDENCE_THRESHOLD` | 70.0% | The stay-numerator rate for the blacklist proportion |
 | `BLACKLIST_PROPORTION` | 0.50 | A developer is blacklisted when **more than** 50% of their platinum-bearing concepts are independently shovelware |
 | `BLACKLIST_MIN_CONCEPTS` | 3 | Floor: the proportional rule applies only when a developer has at least 3 platinum-bearing primary-developed concepts |
+
+The band between `SHIELD_THRESHOLD` (40%) and `FLAG_THRESHOLD` (80%) is the **gray zone**: a concept whose typical version sits there is flagged only if its primary developer is blacklisted. Below 40% the concept is shielded; at or above 80% rule 1 flags it outright.
 
 The 10% gap between `FLAG_THRESHOLD` (80%) and `EVIDENCE_THRESHOLD` (70%) is deliberate hysteresis on the numerator rate: a developer is measured at the strict 80% bar to **enter** the blacklist and only **leaves** when the proportion falls below 50% even at the looser 70% bar. This prevents oscillation when individual earn rates jitter around the flag threshold.
 
@@ -32,18 +40,18 @@ The blacklist measures a **proportion**, not a single concept:
 proportion = independently_shovelware_concepts / platinum_bearing_primary_developed_concepts
 ```
 
-- **Numerator** (`DeveloperReputation.qualifying_concepts_for(company, threshold)`): concepts primary-developed by the company with at least one non-locked game at or above a rate threshold (80% to enter, 70% to stay).
-- **Denominator** (`DeveloperReputation.primary_developed_concepts(company)`): concepts primary-developed by the company that have at least one non-locked, platinum-bearing game (any earn rate). The numerator query is a strict subset of this, so the ratio is always apples-to-apples.
+- **Numerator** (`DeveloperReputation.qualifying_concepts_for(company, threshold)`): concepts primary-developed by the company whose **median** platinum earn rate is at or above a rate threshold (80% to enter, 70% to stay). Computed in Postgres via `percentile_cont(0.5)` so it agrees with the in-Python median used by rule 1.
+- **Denominator** (`DeveloperReputation.primary_developed_concepts(company)`): concepts primary-developed by the company that have at least one non-locked, platinum-bearing game (any earn rate). Every concept in the numerator is also in the denominator, so the ratio is always apples-to-apples.
 
 **Critical:** the numerator is derived from live earn-rate evidence, **never** from `shovelware_status`. Counting cascade-flagged concepts would create a feedback loop (the cascade inflates the proportion, which pins the developer on the blacklist forever). Because evidence is a deterministic projection of earn rates, the order of concept evaluation never affects the final blacklist set.
 
 ### Rules
 
-**Rule 1 (earn-rate, always wins):** If any non-admin-locked game in the concept has platinum earn rate `>= 80.0%`, flag every non-locked game in the concept. If the concept has a trusted IGDB match, evaluate its primary developer for the proportional blacklist (`_maybe_blacklist_developer`); on a fresh activation the cascade flags every other non-shielded concept the developer is primary on.
+**Rule 1 (earn-rate, always wins):** If the concept's median platinum earn rate is `>= 80.0%`, flag every non-locked game in the concept. If the concept has a trusted IGDB match, evaluate its primary developer for the proportional blacklist (`_maybe_blacklist_developer`); on a fresh activation the cascade flags every other non-shielded concept the developer is primary on.
 
 **Rule 2 (developer blacklist):** If the concept's primary developer is on an active `DeveloperReputation` entry (`is_blacklisted=True`), flag the concept **unless shielded**. Before flagging, the service re-checks the proportion at the 70% stay threshold; if it has dropped to <= 50%, the developer is released (which fires an immediate unflag cascade) and the concept falls through to the default unflag path.
 
-**Shield (rule 2 only, never rule 1):** A concept is shielded when at least one non-locked game in it has platinum earn rate `< 30.0%` AND no non-locked game is `>= 80.0%`. The shield represents positive evidence of legitimacy (a challenging platinum) that overrides a reputation-based flag. Direct evidence (an 80%+ game) always wins.
+**Shield (rule 2 only, never rule 1):** A concept is shielded when its median platinum earn rate is `< 40.0%`. The shield represents positive evidence of legitimacy (a typically challenging platinum) that overrides a reputation-based flag. A median `>= 80.0%` is direct evidence and always wins (rule 1 fires before the shield is ever consulted).
 
 **Developer whitelist (full exemption, wins over everything):** If the concept's primary developer is on a `DeveloperReputation` entry with `is_whitelisted=True`, **no concept they are primary developer on is ever auto-flagged** (rule 1 included). This is the escape hatch for studios that ship legitimately high-earn-rate games (visual novels, narrative titles). The whitelist is admin-set only. Per-concept `manually_flagged` locks still win, so an admin can force-flag a single bad title even for a whitelisted developer.
 
@@ -70,16 +78,16 @@ evaluate_concept(concept):
         unflag concept   # full exemption; never auto-flag a whitelisted dev
         return
 
-    rates = plat earn rates for non-admin-locked games in concept
+    median = median platinum earn rate over non-admin-locked games (None if no platinum)
 
-    if any(r >= 80%):
+    if median >= 80%:
         flag concept
         if primary_dev: maybe_blacklist_developer(primary_dev)  # proportional enter check; cascades on new activation
         return
 
     if primary_dev and DeveloperReputation.is_blacklisted(primary_dev):
         if dev_meets_blacklist_threshold(primary_dev, 70%):    # proportion at stay bar still > 50%
-            if any(r < 30%):   unflag concept  # shielded
+            if median < 40%:   unflag concept  # shielded
             else:              flag concept
             return
         else:
@@ -101,7 +109,7 @@ The proportion is **derived** from live queries, not cached. This means:
 
 ### Cascade on New Blacklist Entry
 
-When `_maybe_blacklist_developer` promotes a developer to `is_blacklisted=True` for the first time, `_flag_developer_concepts(company)` iterates every other concept whose primary developer is that company and flags the non-shielded ones. This is how a developer crossing the proportional threshold propagates to their back-catalog without waiting for the daily rebuild. The symmetric `_unflag_developer_concepts` runs on release and clears every cascade-only flag (concepts with a game >= 80% stay flagged by rule 1 on their own merit).
+When `_maybe_blacklist_developer` promotes a developer to `is_blacklisted=True` for the first time, `_flag_developer_concepts(company)` iterates every other concept whose primary developer is that company and flags the non-shielded ones. This is how a developer crossing the proportional threshold propagates to their back-catalog without waiting for the daily rebuild. The symmetric `_unflag_developer_concepts` runs on release and clears every cascade-only flag (concepts with a median >= 80% stay flagged by rule 1 on their own merit).
 
 ## Game Model Fields
 
@@ -168,7 +176,7 @@ Use once after schema migrations or when state diverges significantly from what 
 
 1. Resets every `auto_flagged` game to `clean` (respects `shovelware_lock` and manual statuses).
 2. Resets `is_blacklisted=False` on every `DeveloperReputation` entry (does **not** delete entries: that would wipe admin-curated whitelists and notes).
-3. **Pass 1**: evaluates every concept with a platinum at `>= 80%` earn rate, re-seeding the blacklist as developers cross the proportional threshold (cascade fires). Whitelisted developers self-skip.
+3. **Pass 1**: evaluates every concept with *any* version at `>= 80%` earn rate (an intentional superset of "median >= 80%", since a high median implies a high max), re-seeding the blacklist as developers cross the proportional threshold (cascade fires). `evaluate_concept` is authoritative, so concepts that only had a single high outlier are correctly left clean. Whitelisted developers self-skip.
 4. **Pass 2**: evaluates remaining concepts whose primary developer ended up on the new blacklist.
 
 ### `update_shovelware`
@@ -176,7 +184,7 @@ Use once after schema migrations or when state diverges significantly from what 
 The recommended cron target (daily cadence is fine thanks to idempotence). Walks a targeted candidate set rather than wiping state:
 
 - Concepts with any currently `auto_flagged` game (catches spurious flags + new shield opportunities)
-- Concepts containing a platinum at `>= 80%` earn rate (catches missed rule-1 flags)
+- Concepts containing *any* version at `>= 80%` earn rate (a superset of median >= 80%; catches missed rule-1 flags, and `evaluate_concept` correctly leaves single-outlier concepts clean)
 - Concepts whose developers are on an active `DeveloperReputation` blacklist (catches missed rule-2 cascades and proportion drops)
 
 Each candidate is re-evaluated via `evaluate_concept`. Because evaluation is idempotent, concepts already in the correct state produce zero DB writes, preserving `shovelware_updated_at`. Safe to run on demand at any time.
@@ -185,14 +193,16 @@ Each candidate is re-evaluated via `evaluate_concept`. Because evaluation is ide
 
 ## Gotchas and Pitfalls
 
+- **Median, not max.** A concept is judged by the median earn rate of its versions, so a single low-population version with an inflated rate (e.g. an old regional copy at 85% amid versions at 20-30%) no longer flags the whole concept. The flip side: a genuinely-shovelware concept needs its *typical* version to be easy, not just one. For single-version concepts (the majority) the median is that one rate, so nothing changed.
+- **Even-version-count medians interpolate.** `statistics.median` (Python, rule 1 / shield) and Postgres `percentile_cont(0.5)` (the proportion queries) both average the two middle values for an even count. They are kept in sync deliberately; if you ever swap one for a discrete percentile, the Python and DB paths will disagree.
 - **The proportion is computed from earn-rate evidence, not flag status.** Counting `auto_flagged` concepts would let the cascade inflate the numerator and pin developers on the blacklist permanently. Always measure via `qualifying_concepts_for` / `primary_developed_concepts`.
 - **3-concept floor.** A developer with only 1-2 platinum-bearing concepts is never blacklisted, even at 100% shovelware. Rule 1 still flags those concepts individually; there is just no catalog to cascade to, so blacklisting would be noise.
-- **Shield is asymmetric.** A sub-30% game can override a developer-reputation flag, but **never** overrides a direct 80%+ game. If the concept has both, rule 1 wins and the concept is flagged.
-- **Whitelist beats rule 1.** A whitelisted developer's 95%-earn-rate game is NOT auto-flagged. This is intentional (high-effort VNs). Use a per-game `manually_flagged` lock to override for a specific title.
-- **No IGDB match = no cascade, no whitelist.** Concepts without a trusted IGDB match can still be flagged individually by the 80% rule, but we have no way to attribute the flag (or exemption) to a developer.
+- **Shield is gray-zone only.** A median below 40% shields a concept from a developer-reputation (rule 2) flag, but the shield is never consulted for rule 1: a median >= 80% flags outright. The two thresholds can't both apply to one median.
+- **Whitelist beats rule 1.** A whitelisted developer's 95%-median game is NOT auto-flagged. This is intentional (high-effort VNs). Use a per-game `manually_flagged` lock to override for a specific title.
+- **No IGDB match = no cascade, no whitelist.** Concepts without a trusted IGDB match can still be flagged individually by the median-80 rule, but we have no way to attribute the flag (or exemption) to a developer.
 - **Primary developer = first by id.** When IGDB lists multiple co-developers, only the first-ordered `ConceptCompany` row (with `is_developer=True`) participates in the blacklist/whitelist. A whitelisted studio that merely co-developed a mill's title (the mill is primary) does not shield that title. Co-dev attribution is intentionally simplified.
-- **Hysteresis is a rate deadband on a single proportion boundary.** Enter when the 80%-proportion exceeds 50%; release when the 70%-proportion drops to <= 50%. A new game at 82% that pushes a developer over 50% blacklists; one concept drifting to 79% does not release them (still counts at the 70% bar).
-- **Locked games are untouchable AND invisible.** `shovelware_lock=True` + any status is immutable by auto-detection, AND the locked game's earn rate is filtered out of every rate-based calculation (rule 1, shield, and the blacklist proportion). An admin-cleared game's 95% rate will not flag its siblings or count toward its developer's proportion.
+- **Hysteresis is a rate deadband on a single proportion boundary.** Enter when the 80%-median proportion exceeds 50%; release when the 70%-median proportion drops to <= 50%. A concept whose median crosses 80% and pushes a developer over half their catalog blacklists; a concept drifting to a 79% median does not release them (still counts at the 70% bar).
+- **Locked games are untouchable AND invisible.** `shovelware_lock=True` + any status is immutable by auto-detection, AND the locked game's earn rate is filtered out of the median and the blacklist proportion. An admin-cleared game's 95% rate will not pull up its concept's median or count toward its developer's proportion.
 - **Earn-rate source.** Platinum earn rate comes from PSN API data synced during trophy sync. It reflects the global PSN population, not PlatPursuit users. Early-lifecycle games with few players can have unstable earn rates, but reconciliation + hysteresis ensure any false-positive damage is transient.
 
 ## Related Docs
