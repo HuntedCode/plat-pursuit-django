@@ -198,14 +198,31 @@
         </div>
     </div>
 
-    {# -- Role Anchor Nav -- #}
+    {# -- Role Tabs -- #}
+    {% comment %}
+        One tab per populated role (Developed / Published / Ported /
+        Supporting Development). Each tab carries the current ?sort= so
+        switching roles preserves the sort selection. HTMX attrs swap only
+        the tab body; the inline script below flips .tab-active on click so
+        the bar reflects the active tab during the HTMX round-trip. href
+        stays as a no-JS fallback. The bar only renders when more than one
+        role has games — a single-role company shows its games directly.
+    {% endcomment %}
     {% if sections|length > 1 %}
-        <div class="flex flex-wrap gap-2 mb-3">
+        <div class="tabs tabs-boxed bg-base-300/60 mb-3" role="tablist" aria-label="Company roles"
+             data-company-tabs>
             {% for section in sections %}
-                <a href="#role-{{ section.slug }}"
-                   class="btn btn-xs md:btn-sm btn-ghost border border-base-300 hover:border-primary/50 hover:bg-primary/10">
-                    {{ section.label }}
-                    <span class="badge badge-xs badge-ghost ml-1">{{ section.count }}</span>
+                <a href="?tab={{ section.slug }}&sort={{ current_sort }}"
+                   hx-get="{% url 'company_detail' slug=object.slug %}?tab={{ section.slug }}&sort={{ current_sort }}"
+                   hx-target="#company-tab-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="true"
+                   hx-indicator="#company-tab-content"
+                   data-company-tab
+                   role="tab"
+                   class="tab {% if current_tab == section.slug %}tab-active{% endif %}"
+                   aria-selected="{% if current_tab == section.slug %}true{% else %}false{% endif %}">
+                    <span class="text-xs md:text-sm">{{ section.label }} <span class="opacity-50">({{ section.count|intcomma }})</span></span>
                 </a>
             {% endfor %}
         </div>
@@ -213,36 +230,31 @@
 
     {% include 'partials/ad_unit.html' with ad_slot="9209595625" %}
 
-    {# -- Sort Toolbar (HTMX-swaps the #company-sections list; no full page reload) -- #}
-    {% if sections %}
-        <form method="get"
-              hx-get="{% url 'company_detail' slug=object.slug %}"
-              hx-target="#company-sections"
-              hx-swap="innerHTML"
-              hx-push-url="true"
-              hx-indicator="#company-sections"
-              class="card bg-base-200/90 border-2 border-base-300 shadow-md mb-3">
-            <div class="card-body p-2.5 md:p-3">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <label for="company-sort" class="text-xs md:text-sm text-base-content/60 font-medium shrink-0">Sort by:</label>
-                    <select name="sort" id="company-sort"
-                            class="select select-bordered select-sm md:select-md flex-1 md:flex-none md:min-w-[220px]"
-                            onchange="htmx.trigger(this.form, 'submit')">
-                        {% for value, display in sort_choices %}
-                            <option value="{{ value }}" {% if current_sort == value %}selected{% endif %}>{{ display }}</option>
-                        {% endfor %}
-                    </select>
-                    <noscript>
-                        <button type="submit" class="btn btn-sm md:btn-md btn-primary">Apply</button>
-                    </noscript>
-                </div>
-            </div>
-        </form>
-    {% endif %}
-
-    {# -- Games by Role (swap target) -- #}
-    <div id="company-sections" class="transition-opacity duration-150">
-        {% include 'trophies/partials/company_detail/sections_list.html' %}
+    {# -- Tab body (swap target for HTMX-driven tab + sort changes) -- #}
+    <div id="company-tab-content" class="transition-opacity duration-150">
+        {% include 'trophies/partials/company_detail/tab_content.html' %}
     </div>
+
+    {% comment %}
+        Instant active-state feedback on tab click: HTMX swaps the body but
+        the tab bar lives outside the swap target, so the class flip has to
+        happen client-side. The tab bar DOM is preserved across swaps, so the
+        handlers stay bound without re-init.
+    {% endcomment %}
+    <script>
+        (function () {
+            var tabs = document.querySelectorAll('[data-company-tabs] [data-company-tab]');
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    tabs.forEach(function (t) {
+                        t.classList.remove('tab-active');
+                        t.setAttribute('aria-selected', 'false');
+                    });
+                    tab.classList.add('tab-active');
+                    tab.setAttribute('aria-selected', 'true');
+                });
+            });
+        })();
+    </script>
 
 {% endblock %}

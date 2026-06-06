@@ -217,15 +217,15 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
     """
     model = Company
     template_name = 'trophies/company_detail.html'
-    partial_template_name = 'trophies/partials/company_detail/sections_list.html'
+    partial_template_name = 'trophies/partials/company_detail/tab_content.html'
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
 
     def get_template_names(self):
-        # On HTMX requests (sort dropdown), return only the role-sections
-        # partial so the rest of the page (header, anchor nav, sort toolbar)
-        # stays in place. Non-HTMX requests render the full page so deep
-        # links to ?sort=... still work for bookmarks / first paint.
+        # On HTMX requests (tab switch or sort change), return only the active
+        # tab's body partial so the rest of the page (header, tab bar, ad slot)
+        # stays in place. Non-HTMX requests render the full page so deep links
+        # to ?tab=...&sort=... still work for bookmarks / first paint.
         if getattr(self.request, 'htmx', False):
             return [self.partial_template_name]
         return [self.template_name]
@@ -334,6 +334,17 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             if role_groups[slug]
         ]
 
+        # Active role tab. Defaults to the first populated role; a stale ?tab=
+        # pointing at a role with no games falls back to the first section so
+        # users never land on a blank tab.
+        section_slugs = [s['slug'] for s in sections]
+        current_tab = self.request.GET.get('tab')
+        if current_tab not in section_slugs:
+            current_tab = section_slugs[0] if section_slugs else None
+        active_section = next(
+            (s for s in sections if s['slug'] == current_tab), None
+        )
+
         # Merger chain (surfaced in the detail header as "Subsidiary of X" /
         # "Now operating as Y").
         if company.changed_company_id:
@@ -374,6 +385,8 @@ class CompanyDetailView(ProfileHotbarMixin, DetailView):
             context['company_total_players'] = game_agg.get('total_players')
 
         context['sections'] = sections
+        context['current_tab'] = current_tab
+        context['active_section'] = active_section
         context['sort_choices'] = grouping.SORT_CHOICES
         context['current_sort'] = sort_val
         context['hero_cover'] = hero_cover

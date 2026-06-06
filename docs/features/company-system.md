@@ -8,7 +8,7 @@ The company pages closely mirror the franchise pages both visually and architect
 
 Three notable departures from the franchise pattern, each driven by what companies actually are:
 
-1. **Four roles (Developed / Published / Ported / Supporting Development) stay as vertical sections rather than tabs.** Most companies only populate 1-2 roles, and scrolling through sections preserves the "see everything they've worked on" feel that tabs would hide behind clicks. A compact anchor-link strip at the top lets power users jump.
+1. **Four roles (Developed / Published / Ported / Supporting Development) are split across tabs**, mirroring the franchise detail tab pattern. The original design stacked them as vertical sections with an anchor-link strip, but the role boundary was hard to perceive when scrolling quickly through a long catalog (you'd lose track of which role you were looking at). Tabs make the active role unambiguous. Only populated roles get a tab, and a single-role company skips the bar entirely and shows its games directly. The tab bar is rendered in `company_detail.html`; the active role's body (sort toolbar + grouped game list) lives in `partials/company_detail/tab_content.html` and is the HTMX swap target for both tab switches and sort changes.
 2. **Community Stats are preserved as a second header strip.** Franchise pages dropped company-wide community ratings (they don't apply). Companies do — "these devs make hard games" is real signal. When a logged-in user views a company page, they see "Your Progress" cells AND "Community Stats" cells stacked in the hero, both always visible.
 3. **Country display uses flag emojis + name.** IGDB stores country as ISO 3166-1 numeric codes (840, 392, 826). The browse card and detail header render these as "🇺🇸 United States" via the `Company.country_display` property, which delegates to `trophies/util_modules/countries.py`. Unknown codes render as empty (falls back gracefully).
 
@@ -18,9 +18,9 @@ Three notable departures from the franchise pattern, each driven by what compani
 |------|---------|
 | `trophies/views/company_views.py` | `CompanyListView` (browse) + `CompanyDetailView` (roles + user progress + community stats) |
 | `templates/trophies/company_list.html` | Browse page with search + sort + all filters (role, country, platform, genres, badge series) |
-| `templates/trophies/company_detail.html` | Detail page with poster hero, dual stat strips, anchor-link nav, role sections |
+| `templates/trophies/company_detail.html` | Detail page with poster hero, dual stat strips, role tab bar, active-state script |
 | `templates/trophies/partials/company_list/company_cards.html` | Browse card with cover art + logo overlay + country + games·versions badge |
-| `templates/trophies/partials/company_detail/role_section.html` | Role header wrapper that delegates to the shared game-groups-list partial |
+| `templates/trophies/partials/company_detail/tab_content.html` | Active role tab body: sort toolbar + the active role's shared game-groups-list (HTMX swap target) |
 | `trophies/services/game_grouping_service.py` | Shared IGDB-ID grouping + user progress stats + cover-art subquery factories (also used by franchise pages) |
 | `trophies/util_modules/countries.py` | ISO 3166-1 numeric → flag + name mapping |
 | `trophies/models.py` (Company, ConceptCompany) | Data models — see [IGDB Integration](../architecture/igdb-integration.md#data-model) |
