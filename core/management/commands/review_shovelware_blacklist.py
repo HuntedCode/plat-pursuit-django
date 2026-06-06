@@ -31,10 +31,16 @@ class Command(BaseCommand):
             '--include-whitelisted', action='store_true',
             help='Also include developers already whitelisted (normally excluded).',
         )
+        parser.add_argument(
+            '--compact', action='store_true',
+            help='One line per developer (name, proportion, flagged count, top genres). '
+                 'Easy to copy-paste for staff review.',
+        )
 
     def handle(self, *args, **options):
         sample_count = options['samples']
         limit = options['limit']
+        compact = options['compact']
         include_whitelisted = options['include_whitelisted']
 
         flag_t = ShovelwareDetectionService.FLAG_THRESHOLD       # 80 (enter)
@@ -108,6 +114,10 @@ class Command(BaseCommand):
             f"(flagging {total_flagged} game(s) across their catalogs)\n"
         )
 
+        if compact:
+            self._render_compact(rows)
+            return
+
         for r in rows:
             company = r['company']
             denom = r['denom'] or 1  # guard against divide-by-zero in display only
@@ -138,4 +148,26 @@ class Command(BaseCommand):
         self.stdout.write(
             "\nTo exempt a legitimate studio, set is_whitelisted=True on its "
             "DeveloperReputation entry in admin (this clears its flags immediately)."
+        )
+
+    def _render_compact(self, rows):
+        """One line per developer: name (id), evidence proportion, flagged
+        count, and top genres. Built for copy-pasting into a staff review."""
+        name_w = 34
+        header = f"{'DEVELOPER (id)':<{name_w}} {'EVIDENCE':>11}  {'FLAG':>4}  TOP GENRES"
+        self.stdout.write(header)
+        self.stdout.write("-" * max(len(header), 60))
+        for r in rows:
+            company = r['company']
+            denom = r['denom'] or 1  # display-only divide-by-zero guard
+            evidence_pct = round(100 * r['num_evidence'] / denom)
+            label = f"{company.name} ({company.id})"
+            if len(label) > name_w:
+                label = label[:name_w - 3] + "..."
+            ev = f"{r['num_evidence']}/{r['denom']} ({evidence_pct}%)"
+            genres = ", ".join(n for n, _ in r['genres'][:2]) or "-"
+            wl = " [WL]" if r['whitelisted'] else ""
+            self.stdout.write(f"{label:<{name_w}} {ev:>11}  {r['flagged_games']:>4}  {genres}{wl}")
+        self.stdout.write(
+            "\nWhitelist legit studios (is_whitelisted=True) via the DeveloperReputation admin."
         )
