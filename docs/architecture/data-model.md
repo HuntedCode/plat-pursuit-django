@@ -354,8 +354,8 @@ Key relationships:
 ### GameListLike
 Like on a public GameList. One per profile per list.
 
-### DeveloperBlacklist
-Tracks IGDB developers whose games have been flagged as shovelware. Keyed by `Company` (OneToOne). When a concept's primary developer is on the list, the whole concept is auto-flagged unless shielded by a low-earn sibling. Evidence is **derived live** via `qualifying_concepts_for(company)` (no stored concept list). Hysteresis: enter at 80% plat earn rate, leave only when no primary-developed concept has a non-locked game at >= 70%. See [docs/reference/shovelware-detection.md](../reference/shovelware-detection.md).
+### DeveloperReputation
+Tracks the shovelware reputation of IGDB developers. Keyed by `Company` (OneToOne). `is_blacklisted` is True when **more than 50%** of the company's platinum-bearing, primary-developed concepts are independently shovelware (3-concept floor); when a concept's primary developer is blacklisted, the whole concept is auto-flagged unless shielded by a low-earn sibling. `is_whitelisted` is an admin full exemption (wins over blacklist): a whitelisted developer's primary-developed concepts are never auto-flagged. The blacklist proportion is **derived live** via `qualifying_concepts_for(company)` (numerator) and `primary_developed_concepts(company)` (denominator); only `is_whitelisted` is stored. Hysteresis lives in the numerator rate: enter at the 80% bar, leave when the proportion drops to <= 50% at the 70% bar. See [docs/reference/shovelware-detection.md](../reference/shovelware-detection.md).
 
 ### APIAuditLog
 Logs PSN API calls for token monitoring: endpoint, status code, response time, remaining quota.

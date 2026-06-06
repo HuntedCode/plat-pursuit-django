@@ -2404,32 +2404,43 @@ class UserMilestoneProgress(models.Model):
     def __str__(self):
         return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
-class DeveloperBlacklist(models.Model):
-    """Tracks IGDB developers whose games are flagged as shovelware.
+class DeveloperReputation(models.Model):
+    """Tracks the shovelware reputation of an IGDB developer.
 
-    ``is_blacklisted`` is set True when a concept primary-developed by this
-    company crosses the rule-1 earn-rate threshold (see
-    ``ShovelwareDetectionService.FLAG_THRESHOLD``). It flips back to False
-    via reconciliation when no concept primary-developed by the company has
-    any non-locked game with platinum earn rate >= ``EVIDENCE_THRESHOLD``.
+    ``is_blacklisted`` is set True when MORE THAN ``BLACKLIST_PROPORTION`` of
+    a company's platinum-bearing, primary-developed concepts are independently
+    shovelware (see ``ShovelwareDetectionService`` for the proportional rule
+    and the 3-concept floor). It flips back to False via reconciliation when
+    that proportion drops to or below 50% measured at ``EVIDENCE_THRESHOLD``.
     The 10% deadband between the flag threshold (80%) and the evidence
     threshold (70%) provides hysteresis and prevents boundary oscillation.
 
-    Evidence is always derived from live data (``qualifying_concepts_for``),
-    never from stored state, so concept mergers and IGDB company rewiring
-    never leave stale entries behind.
+    ``is_whitelisted`` is an admin-curated full exemption: a whitelisted
+    company's primary-developed concepts are never auto-flagged (rule 1
+    included) and the company is never evaluated for blacklisting. Whitelist
+    wins over blacklist. Per-concept ``manually_flagged`` locks remain the
+    escape hatch for an individual bad title.
+
+    Blacklist evidence is always derived from live data
+    (``qualifying_concepts_for`` / ``primary_developed_concepts``), never from
+    stored state, so concept mergers and IGDB company rewiring never leave
+    stale entries behind. ``is_whitelisted`` is the only stored decision.
     """
     EVIDENCE_THRESHOLD = 70.0
 
     company = models.OneToOneField(
         'Company',
         on_delete=models.CASCADE,
-        related_name='developer_blacklist_entry',
+        related_name='developer_reputation_entry',
     )
     date_added = models.DateTimeField(auto_now_add=True)
     is_blacklisted = models.BooleanField(
         default=False,
-        help_text="True while the company has a non-locked, primary-developed game at >= EVIDENCE_THRESHOLD plat earn rate."
+        help_text="True while >50% of the company's platinum-bearing primary-developed concepts are independently shovelware."
+    )
+    is_whitelisted = models.BooleanField(
+        default=False,
+        help_text="Admin full exemption: the company's primary-developed concepts are never auto-flagged. Wins over is_blacklisted."
     )
     notes = models.TextField(blank=True)
 
@@ -2439,10 +2450,42 @@ class DeveloperBlacklist(models.Model):
         ]
 
     @classmethod
+    def primary_developed_concepts(cls, company):
+        """QuerySet of Concepts primary-developed by ``company`` that have at
+        least one non-admin-locked, platinum-bearing game (any earn rate).
+
+        This is the DENOMINATOR for the proportional blacklist rule. It is a
+        superset of ``qualifying_concepts_for`` (which adds an earn-rate
+        floor), so the resulting ratio is always apples-to-apples.
+
+        "Primary developer" = first ``ConceptCompany`` row with
+        ``is_developer=True`` on the concept, ordered by id.
+        """
+        from django.db.models import OuterRef, Subquery
+        from trophies.models import Concept, ConceptCompany
+
+        primary_dev_id = ConceptCompany.objects.filter(
+            concept=OuterRef('pk'),
+            is_developer=True,
+        ).order_by('id').values('company_id')[:1]
+
+        return Concept.objects.annotate(
+            _primary_dev_id=Subquery(primary_dev_id),
+        ).filter(
+            _primary_dev_id=company.id,
+            games__shovelware_lock=False,
+            games__trophies__trophy_type='platinum',
+        ).distinct()
+
+    @classmethod
     def qualifying_concepts_for(cls, company, threshold=None):
         """QuerySet of Concepts primary-developed by ``company`` with at
         least one non-admin-locked game whose platinum earn rate is at or
         above ``threshold`` (default: ``EVIDENCE_THRESHOLD``).
+
+        This is the NUMERATOR for the proportional blacklist rule. Pass
+        ``FLAG_THRESHOLD`` (80) for the enter check and ``EVIDENCE_THRESHOLD``
+        (70) for the stay check.
 
         "Primary developer" = first ``ConceptCompany`` row with
         ``is_developer=True`` on the concept, ordered by id.
@@ -2473,7 +2516,12 @@ class DeveloperBlacklist(models.Model):
         return self.qualifying_concepts_for(self.company).count()
 
     def __str__(self):
-        status = "BLACKLISTED" if self.is_blacklisted else "inactive"
+        if self.is_whitelisted:
+            status = "WHITELISTED"
+        elif self.is_blacklisted:
+            status = "BLACKLISTED"
+        else:
+            status = "inactive"
         return f"{self.company.name} ({status})"
 
 

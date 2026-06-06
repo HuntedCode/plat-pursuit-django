@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperBlacklist, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
 
 
 # Register your models here.
@@ -1493,19 +1493,41 @@ class FeaturedGuideAdmin(admin.ModelAdmin):
             kwargs['queryset'] = Concept.objects.exclude(Q(guide_slug__isnull=True) | Q(guide_slug=''))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-@admin.register(DeveloperBlacklist)
-class DeveloperBlacklistAdmin(admin.ModelAdmin):
-    list_display = ['company', 'is_blacklisted', 'concept_count', 'date_added']
-    list_filter = ['is_blacklisted']
+@admin.register(DeveloperReputation)
+class DeveloperReputationAdmin(admin.ModelAdmin):
+    list_display = ['company', 'is_blacklisted', 'is_whitelisted', 'shovelware_proportion', 'date_added']
+    list_filter = ['is_blacklisted', 'is_whitelisted']
     search_fields = ['company__name']
     raw_id_fields = ('company',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('company')
 
-    def concept_count(self, obj):
-        return obj.flagged_concept_count
-    concept_count.short_description = "Flagged Concepts"
+    def shovelware_proportion(self, obj):
+        """Live numerator/denominator of the proportional blacklist rule."""
+        numerator = obj.flagged_concept_count
+        denominator = DeveloperReputation.primary_developed_concepts(obj.company).count()
+        if not denominator:
+            return "0 / 0"
+        pct = round(100 * numerator / denominator)
+        return f"{numerator} / {denominator} ({pct}%)"
+    shovelware_proportion.short_description = "Shovelware Concepts"
+
+    def save_model(self, request, obj, form, change):
+        """Apply whitelist transitions immediately so toggling the flag in
+        admin clears or restores auto-flags across the developer's catalog."""
+        from trophies.services.shovelware_detection_service import ShovelwareDetectionService
+
+        whitelist_changed = (not change) or ('is_whitelisted' in form.changed_data)
+        super().save_model(request, obj, form, change)
+        if not whitelist_changed:
+            return
+        if obj.is_whitelisted:
+            ShovelwareDetectionService.on_developer_whitelisted(obj.company)
+        elif change:
+            # Only re-evaluate on a genuine whitelist -> not-whitelisted
+            # transition; a fresh, non-whitelisted entry has nothing to undo.
+            ShovelwareDetectionService.on_developer_unwhitelisted(obj.company)
 
 @admin.register(Title)
 class TitleAdmin(admin.ModelAdmin):
