@@ -2404,6 +2404,20 @@ class UserMilestoneProgress(models.Model):
     def __str__(self):
         return f"{self.profile.psn_username} - {self.milestone.name} Progress"
 
+
+class Median(models.Aggregate):
+    """Postgres median (continuous percentile) ordered-set aggregate.
+
+    ``percentile_cont(0.5)`` interpolates between the two middle values for an
+    even count, matching Python's ``statistics.median`` so the DB-side
+    shovelware proportion agrees with the in-Python rule-1 / shield check.
+    """
+    function = 'PERCENTILE_CONT'
+    name = 'median'
+    output_field = models.FloatField()
+    template = "%(function)s(0.5) WITHIN GROUP (ORDER BY %(expressions)s)"
+
+
 class DeveloperReputation(models.Model):
     """Tracks the shovelware reputation of an IGDB developer.
 
@@ -2452,11 +2466,12 @@ class DeveloperReputation(models.Model):
     @classmethod
     def primary_developed_concepts(cls, company):
         """QuerySet of Concepts primary-developed by ``company`` that have at
-        least one non-admin-locked, platinum-bearing game (any earn rate).
+        least one non-admin-locked platinum with a known (non-null) earn rate.
 
-        This is the DENOMINATOR for the proportional blacklist rule. It is a
-        superset of ``qualifying_concepts_for`` (which adds an earn-rate
-        floor), so the resulting ratio is always apples-to-apples.
+        This is the DENOMINATOR for the proportional blacklist rule. Requiring
+        a non-null earn rate (matching ``qualifying_concepts_for``) keeps the
+        ratio apples-to-apples: a concept whose only platinum lacks an earn
+        rate can never be in the numerator, so it must not pad the denominator.
 
         "Primary developer" = first ``ConceptCompany`` row with
         ``is_developer=True`` on the concept, ordered by id.
@@ -2475,23 +2490,26 @@ class DeveloperReputation(models.Model):
             _primary_dev_id=company.id,
             games__shovelware_lock=False,
             games__trophies__trophy_type='platinum',
+            games__trophies__trophy_earn_rate__isnull=False,
         ).distinct()
 
     @classmethod
     def qualifying_concepts_for(cls, company, threshold=None):
-        """QuerySet of Concepts primary-developed by ``company`` with at
-        least one non-admin-locked game whose platinum earn rate is at or
-        above ``threshold`` (default: ``EVIDENCE_THRESHOLD``).
+        """QuerySet of Concepts primary-developed by ``company`` whose MEDIAN
+        platinum earn rate (across non-admin-locked versions) is at or above
+        ``threshold`` (default: ``EVIDENCE_THRESHOLD``).
 
         This is the NUMERATOR for the proportional blacklist rule. Pass
         ``FLAG_THRESHOLD`` (80) for the enter check and ``EVIDENCE_THRESHOLD``
-        (70) for the stay check.
+        (70) for the stay check. The median (not the max of any single version)
+        mirrors rule 1, so a low-population version with an inflated earn rate
+        cannot make a concept count as shovelware evidence here.
 
         "Primary developer" = first ``ConceptCompany`` row with
         ``is_developer=True`` on the concept, ordered by id.
         """
-        from django.db.models import OuterRef, Subquery
-        from trophies.models import Concept, ConceptCompany
+        from django.db.models import FloatField, OuterRef, Subquery
+        from trophies.models import Concept, ConceptCompany, Trophy
 
         if threshold is None:
             threshold = cls.EVIDENCE_THRESHOLD
@@ -2501,14 +2519,27 @@ class DeveloperReputation(models.Model):
             is_developer=True,
         ).order_by('id').values('company_id')[:1]
 
+        # Per-concept median platinum earn rate over non-locked versions.
+        median_rate = (
+            Trophy.objects.filter(
+                game__concept=OuterRef('pk'),
+                game__shovelware_lock=False,
+                trophy_type='platinum',
+                trophy_earn_rate__isnull=False,
+            )
+            .order_by()
+            .values('game__concept')
+            .annotate(m=Median('trophy_earn_rate'))
+            .values('m')[:1]
+        )
+
         return Concept.objects.annotate(
             _primary_dev_id=Subquery(primary_dev_id),
+            _median_rate=Subquery(median_rate, output_field=FloatField()),
         ).filter(
             _primary_dev_id=company.id,
-            games__shovelware_lock=False,
-            games__trophies__trophy_type='platinum',
-            games__trophies__trophy_earn_rate__gte=threshold,
-        ).distinct()
+            _median_rate__gte=threshold,
+        )
 
     @property
     def flagged_concept_count(self):
