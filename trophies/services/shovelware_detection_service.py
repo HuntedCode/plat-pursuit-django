@@ -14,11 +14,29 @@ class ShovelwareDetectionService:
     Flagging rules (evaluated per concept):
       1. Earn-rate rule: any non-admin-locked game in the concept has a
          platinum earn rate >= ``FLAG_THRESHOLD`` (80%). The whole concept
-         is flagged and, if the concept has a trusted IGDB match, its
-         primary developer is blacklisted. Other concepts whose primary
-         developer matches cascade-flag unless shielded.
+         is flagged. If the concept has a trusted IGDB match, its primary
+         developer is then evaluated for the developer blacklist (rule 2).
       2. Developer-blacklist rule: the concept's primary developer is on
-         ``DeveloperBlacklist``. The concept is flagged unless shielded.
+         ``DeveloperReputation`` with ``is_blacklisted=True``. The concept is
+         flagged unless shielded.
+
+    Proportional blacklisting:
+      A developer is blacklisted when MORE THAN ``BLACKLIST_PROPORTION`` (50%)
+      of their platinum-bearing, primary-developed concepts are independently
+      shovelware, provided they have at least ``BLACKLIST_MIN_CONCEPTS`` (3)
+      such concepts. "Independently shovelware" means the concept has a
+      non-locked game at or above a rate threshold ON ITS OWN MERIT, never
+      because of the developer-blacklist cascade (this avoids a feedback loop
+      where cascade-flagging inflates the proportion and pins the developer on
+      the blacklist forever).
+
+      Hysteresis lives in the rate threshold of the numerator:
+        - ENTER  when proportion at >= FLAG_THRESHOLD (80%) is > 50%.
+        - STAY   while proportion at >= EVIDENCE_THRESHOLD (70%) is > 50%.
+        - RELEASE when the 70% proportion drops to <= 50%.
+      Since 70% admits at least as many concepts as 80%, a developer must earn
+      a strong majority to enter but only leaves once even the looser bar
+      fails. On release, every cascade-only flag clears immediately.
 
     Shield (blocks rule 2 only, never rule 1):
       If a game in the concept has platinum earn rate < ``UNFLAG_THRESHOLD``
@@ -27,13 +45,12 @@ class ShovelwareDetectionService:
       primary developer is blacklisted. An 80%+ game is direct evidence
       and always wins.
 
-    Developer blacklist hysteresis:
-      A developer is blacklisted when rule 1 fires on one of their
-      primary-developed concepts (>=80%). They stay blacklisted until no
-      concept primary-developed by them has any non-locked game with
-      platinum earn rate at or above ``EVIDENCE_THRESHOLD`` (70%). The 10%
-      deadband between 80% (flag) and 70% (release) prevents boundary
-      oscillation.
+    Developer whitelist (full exemption):
+      A whitelisted primary developer's concepts are NEVER auto-flagged
+      (rule 1 included), and the developer is never evaluated for
+      blacklisting. Whitelist wins over blacklist. Per-concept
+      ``manually_flagged`` locks remain the escape hatch for an individual
+      bad title.
 
     Primary developer (required for developer-blacklist participation):
       First ``ConceptCompany`` row on the concept with ``is_developer=True``,
@@ -42,12 +59,15 @@ class ShovelwareDetectionService:
     Admin-locked games (``shovelware_lock=True``) are invisible to all
     rate-based calculations. Their earn rates do not contribute to rule 1
     on siblings, do not contribute to the shield, and do not contribute to
-    developer blacklist evidence. Admin has the final say.
+    the blacklist proportion (numerator or denominator). Admin has the final
+    say.
     """
 
-    FLAG_THRESHOLD = 80.0     # Earn rate >= this triggers rule 1
-    UNFLAG_THRESHOLD = 30.0   # Earn rate < this enables the shield
-    EVIDENCE_THRESHOLD = 70.0  # Dev stays blacklisted while a primary-developed concept has a game at or above this
+    FLAG_THRESHOLD = 80.0       # Earn rate >= this triggers rule 1 (and the enter-numerator)
+    UNFLAG_THRESHOLD = 30.0     # Earn rate < this enables the shield
+    EVIDENCE_THRESHOLD = 70.0   # Stay-numerator rate; 10% deadband below FLAG_THRESHOLD
+    BLACKLIST_PROPORTION = 0.50  # Blacklist when > this fraction of concepts are independently shovelware
+    BLACKLIST_MIN_CONCEPTS = 3   # Floor: proportional rule applies only at or above this many concepts
 
     @classmethod
     def evaluate_game(cls, game):
@@ -68,7 +88,7 @@ class ShovelwareDetectionService:
         status (``auto_accepted``) or approved (``pending_review`` -> ``accepted``).
         Before this moment the concept had no accessible primary developer, so
         any rule-1 flag that fired during earlier platinum sync could not
-        propagate to ``DeveloperBlacklist``. This hook closes that gap.
+        contribute to the developer blacklist. This hook closes that gap.
 
         Defensive: never raises. Shovelware evaluation must not break the
         IGDB ingest / approval flow.
@@ -84,35 +104,78 @@ class ShovelwareDetectionService:
     @classmethod
     def evaluate_concept(cls, concept):
         """Apply the full flagging algorithm to every game in the concept."""
+        now = timezone.now()
+        primary_dev = cls._get_primary_developer(concept)
+
+        # Whitelist short-circuit (full exemption): a whitelisted primary
+        # developer's concepts are never auto-flagged. Manual statuses still
+        # win via _unflag_concept's exclude list.
+        if primary_dev is not None and cls._is_whitelisted(primary_dev):
+            cls._unflag_concept(concept, now)
+            return
+
         rates = cls._concept_plat_rates(concept)
         has_high = any(r >= cls.FLAG_THRESHOLD for r in rates)
         has_low = any(r < cls.UNFLAG_THRESHOLD for r in rates)
-        primary_dev = cls._get_primary_developer(concept)
-        now = timezone.now()
 
         if has_high:
-            cls._flag_concept(concept, now)
+            cls._flag_concept(concept, now)  # rule 1: always flags on direct evidence
             if primary_dev is not None:
-                cls._register_developer_flag(primary_dev, concept, now)
+                cls._maybe_blacklist_developer(primary_dev, concept, now)
             return
 
         if primary_dev is not None:
-            entry = cls._get_blacklist_entry(primary_dev)
+            entry = cls._get_reputation_entry(primary_dev)
             if entry is not None and entry.is_blacklisted:
-                # Hysteresis gate: does this developer still qualify for the blacklist?
-                if cls._dev_has_qualifying_evidence(primary_dev):
+                # Stay gate: does the developer still clear the proportional
+                # threshold at the looser evidence rate (70%)?
+                if cls._dev_meets_blacklist_threshold(primary_dev, cls.EVIDENCE_THRESHOLD):
                     if has_low:
                         cls._unflag_concept(concept, now)  # shielded
                     else:
                         cls._flag_concept(concept, now)
                     return
                 else:
-                    # Evidence has dried up; release the developer and fall
-                    # through to the default unflag path.
-                    entry.is_blacklisted = False
-                    entry.save(update_fields=['is_blacklisted'])
+                    # Proportion has dropped; release the developer (which
+                    # cascades an immediate unflag) and fall through to the
+                    # default unflag for this concept.
+                    cls._release_developer(primary_dev, now)
 
         cls._unflag_concept(concept, now)
+
+    @classmethod
+    def on_developer_whitelisted(cls, company, now=None):
+        """Admin set a developer to whitelisted: clear all auto-flags on their
+        primary-developed concepts and drop any blacklist status.
+
+        Full exemption (Option B): every auto-flagged game in the developer's
+        primary-developed concepts goes clean regardless of earn rate.
+        Per-concept ``manually_flagged`` / ``manually_cleared`` locks survive
+        via ``_unflag_concept``'s exclude list.
+        """
+        now = now or timezone.now()
+
+        entry = cls._get_reputation_entry(company)
+        if entry is not None and entry.is_blacklisted:
+            entry.is_blacklisted = False
+            entry.save(update_fields=['is_blacklisted'])
+
+        # Unflag across ALL primary-developed concepts (not just the
+        # platinum-bearing ones), since the cascade can flag no-platinum
+        # concepts too. Full exemption means every auto-flag clears.
+        for concept in cls._primary_developed_candidates(company):
+            if cls._get_primary_developer(concept) != company:
+                continue
+            cls._unflag_concept(concept, now)
+
+    @classmethod
+    def on_developer_unwhitelisted(cls, company):
+        """Admin cleared a developer's whitelist: re-evaluate their concepts so
+        flags reappear per the normal rules."""
+        for concept in cls._primary_developed_candidates(company):
+            if cls._get_primary_developer(concept) != company:
+                continue
+            cls.evaluate_concept(concept)
 
     @classmethod
     def _evaluate_standalone_game(cls, game):
@@ -181,52 +244,102 @@ class ShovelwareDetectionService:
         return cc.company if cc else None
 
     @classmethod
-    def _get_blacklist_entry(cls, company):
-        from trophies.models import DeveloperBlacklist
+    def _get_reputation_entry(cls, company):
+        from trophies.models import DeveloperReputation
 
-        return DeveloperBlacklist.objects.filter(company=company).first()
+        return DeveloperReputation.objects.filter(company=company).first()
 
     @classmethod
-    def _dev_has_qualifying_evidence(cls, company):
-        """True if any concept primary-developed by ``company`` has a
-        non-admin-locked game with platinum earn rate >= EVIDENCE_THRESHOLD (70%).
+    def _is_whitelisted(cls, company):
+        """True if the company has a reputation entry flagged is_whitelisted."""
+        entry = cls._get_reputation_entry(company)
+        return entry is not None and entry.is_whitelisted
+
+    @classmethod
+    def _dev_meets_blacklist_threshold(cls, company, rate_threshold):
+        """True if MORE THAN BLACKLIST_PROPORTION of the company's
+        platinum-bearing primary-developed concepts have a non-locked game at
+        or above ``rate_threshold`` plat earn rate.
+
+        Numerator and denominator are both DB-aggregated counts (no Python
+        iteration), and the numerator query is a strict subset of the
+        denominator query, so the ratio is always well-defined. Returns False
+        below the ``BLACKLIST_MIN_CONCEPTS`` floor.
         """
-        from trophies.models import DeveloperBlacklist
+        from trophies.models import DeveloperReputation
 
-        return DeveloperBlacklist.qualifying_concepts_for(company).exists()
+        denom = DeveloperReputation.primary_developed_concepts(company).count()
+        if denom < cls.BLACKLIST_MIN_CONCEPTS:
+            return False
+        num = DeveloperReputation.qualifying_concepts_for(company, threshold=rate_threshold).count()
+        return (num / denom) > cls.BLACKLIST_PROPORTION
 
     @classmethod
-    def _register_developer_flag(cls, company, concept, now):
-        """Set developer blacklist to active; cascade-flag other concepts if newly activated."""
-        from trophies.models import DeveloperBlacklist
+    def _maybe_blacklist_developer(cls, company, concept, now):
+        """Blacklist the developer if the enter threshold (80% proportion) is
+        met; cascade-flag their other concepts on a fresh activation.
 
-        entry, created = DeveloperBlacklist.objects.get_or_create(company=company)
-        newly_active = created or not entry.is_blacklisted
-        if not entry.is_blacklisted:
-            entry.is_blacklisted = True
+        Only creates a ``DeveloperReputation`` row when the threshold is met,
+        so developers who merely have one easy-platinum concept don't litter
+        the table with inactive entries. Whitelisted developers are never
+        blacklisted.
+        """
+        from trophies.models import DeveloperReputation
+
+        # Cheap pre-check: a developer already blacklisted or whitelisted needs
+        # no work, so we skip the two proportion count-queries on the hot path.
+        entry = cls._get_reputation_entry(company)
+        if entry is not None and (entry.is_whitelisted or entry.is_blacklisted):
+            return
+
+        if not cls._dev_meets_blacklist_threshold(company, cls.FLAG_THRESHOLD):
+            return
+
+        entry, _ = DeveloperReputation.objects.get_or_create(company=company)
+        if entry.is_whitelisted or entry.is_blacklisted:
+            return
+
+        entry.is_blacklisted = True
+        entry.save(update_fields=['is_blacklisted'])
+        cls._flag_developer_concepts(company, exclude_concept_id=concept.concept_id, now=now)
+
+    @classmethod
+    def _release_developer(cls, company, now):
+        """Drop a developer's blacklist status and immediately clear every
+        cascade-only flag across their primary-developed concepts."""
+        entry = cls._get_reputation_entry(company)
+        if entry is not None and entry.is_blacklisted:
+            entry.is_blacklisted = False
             entry.save(update_fields=['is_blacklisted'])
-        if newly_active:
-            cls._flag_developer_concepts(company, exclude_concept_id=concept.concept_id, now=now)
+        cls._unflag_developer_concepts(company, now)
 
     @classmethod
-    def _flag_developer_concepts(cls, company, exclude_concept_id, now):
-        """Cascade: flag every OTHER concept whose primary developer is ``company`` (respecting shield).
+    def _primary_developed_candidates(cls, company):
+        """Iterator of every concept where ``company`` appears as a developer.
 
-        Streams the candidate queryset with ``.iterator()`` so a prolific
-        developer with hundreds of concepts doesn't materialize them all
-        into memory at once.
+        The caller MUST still confirm primary-developer status per concept via
+        ``_get_primary_developer`` (this query matches any developer credit;
+        the guard narrows it to the lead studio). ``igdb_match`` is
+        select_related so the per-concept primary-developer check doesn't
+        re-query for it. Streams with ``.iterator()`` so a prolific
+        developer's catalog never materializes all at once.
         """
         from trophies.models import Concept
 
-        candidate_qs = (
+        return (
             Concept.objects
             .filter(concept_companies__company=company, concept_companies__is_developer=True)
-            .exclude(concept_id=exclude_concept_id)
-            .only('id', 'concept_id')
+            .select_related('igdb_match')
             .distinct()
+            .iterator(chunk_size=200)
         )
 
-        for concept in candidate_qs.iterator(chunk_size=200):
+    @classmethod
+    def _flag_developer_concepts(cls, company, exclude_concept_id, now):
+        """Cascade: flag every OTHER concept whose primary developer is ``company`` (respecting shield)."""
+        for concept in cls._primary_developed_candidates(company):
+            if concept.concept_id == exclude_concept_id:
+                continue  # The triggering concept is already flagged
             if cls._get_primary_developer(concept) != company:
                 continue  # Not primary developer here; skip
             rates = cls._concept_plat_rates(concept)
@@ -236,6 +349,24 @@ class ShovelwareDetectionService:
             if has_low:
                 continue  # Shielded
             cls._flag_concept(concept, now)
+
+    @classmethod
+    def _unflag_developer_concepts(cls, company, now):
+        """Cascade unflag (mirror of ``_flag_developer_concepts``): clear flags
+        on every concept primary-developed by ``company`` that is NOT
+        independently shovelware.
+
+        Concepts with a game at or above ``FLAG_THRESHOLD`` stay flagged by
+        rule 1 on their own merit. Manual statuses survive via
+        ``_unflag_concept``.
+        """
+        for concept in cls._primary_developed_candidates(company):
+            if cls._get_primary_developer(concept) != company:
+                continue  # Not primary developer here; skip
+            rates = cls._concept_plat_rates(concept)
+            if any(r >= cls.FLAG_THRESHOLD for r in rates):
+                continue  # Independently shovelware (rule 1); leave flagged
+            cls._unflag_concept(concept, now)
 
     @classmethod
     def _flag_concept(cls, concept, now):

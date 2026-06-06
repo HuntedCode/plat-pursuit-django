@@ -3,7 +3,7 @@ import logging
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from trophies.models import Concept, DeveloperBlacklist, Game
+from trophies.models import Concept, DeveloperReputation, Game
 from trophies.services.shovelware_detection_service import ShovelwareDetectionService
 
 logger = logging.getLogger("psn_api")
@@ -11,8 +11,9 @@ logger = logging.getLogger("psn_api")
 
 class Command(BaseCommand):
     help = (
-        "One-shot backfill: wipe all auto-flagged shovelware state and the "
-        "DeveloperBlacklist, then rebuild from scratch. Use after schema "
+        "One-shot backfill: wipe all auto-flagged shovelware state and reset "
+        "every developer's blacklist status, then rebuild from scratch. "
+        "Admin-curated whitelists and notes are preserved. Use after schema "
         "migrations or major data corrections. For routine drift correction "
         "use 'update_shovelware' instead."
     )
@@ -45,12 +46,15 @@ class Command(BaseCommand):
             reset_qs.update(shovelware_status='clean', shovelware_updated_at=None)
         self.stdout.write(f"  {reset_count} game(s) reset to clean.")
 
-        # Step 2: Wipe DeveloperBlacklist so it rebuilds from current evidence.
-        self.stdout.write("\nStep 2: Wiping DeveloperBlacklist...")
-        dev_count = DeveloperBlacklist.objects.count()
+        # Step 2: Reset blacklist status so it rebuilds from current evidence.
+        # We do NOT delete entries: that would wipe admin-curated whitelists
+        # and notes. Whitelisted developers stay exempt; the rebuild passes
+        # skip them via evaluate_concept's short-circuit.
+        self.stdout.write("\nStep 2: Resetting developer blacklist status...")
+        dev_count = DeveloperReputation.objects.filter(is_blacklisted=True).count()
         if not dry_run:
-            DeveloperBlacklist.objects.all().delete()
-        self.stdout.write(f"  {dev_count} developer blacklist entr(ies) cleared.")
+            DeveloperReputation.objects.filter(is_blacklisted=True).update(is_blacklisted=False)
+        self.stdout.write(f"  {dev_count} developer blacklist status(es) cleared (whitelists preserved).")
 
         if dry_run:
             self.stdout.write(self.style.WARNING(
@@ -61,9 +65,11 @@ class Command(BaseCommand):
         now = timezone.now()
 
         # Step 3 (pass 1): Rule-1 sweep. Evaluate every concept that contains an
-        # 80%+ platinum. This flags the concept AND seeds DeveloperBlacklist
-        # entries for primary developers (with the in-built cascade, which is
-        # harmless at this stage since every other concept will be visited).
+        # 80%+ platinum. This flags the concept and, once a primary developer
+        # crosses the proportional enter threshold, blacklists them (with the
+        # in-built cascade, harmless here since every concept gets visited).
+        # The proportion is derived from live earn-rate evidence, so the order
+        # of evaluation does not affect the final blacklist set.
         threshold = ShovelwareDetectionService.FLAG_THRESHOLD
         self.stdout.write(
             f"\nStep 3: Flagging concepts with any game at >= {threshold:.1f}% plat rate..."
@@ -88,7 +94,7 @@ class Command(BaseCommand):
         # so the developer-blacklist rule (and shield) applies.
         self.stdout.write("\nStep 4: Applying developer-blacklist rule to remaining concepts...")
         blacklisted_company_ids = list(
-            DeveloperBlacklist.objects.filter(is_blacklisted=True).values_list('company_id', flat=True)
+            DeveloperReputation.objects.filter(is_blacklisted=True).values_list('company_id', flat=True)
         )
         if not blacklisted_company_ids:
             self.stdout.write("  No active developer blacklist entries; nothing to do.")
@@ -115,7 +121,7 @@ class Command(BaseCommand):
         ).count()
         total_clean = Game.objects.filter(shovelware_status='clean').count()
         total_locked = Game.objects.filter(shovelware_lock=True).count()
-        total_blacklisted = DeveloperBlacklist.objects.filter(is_blacklisted=True).count()
+        total_blacklisted = DeveloperReputation.objects.filter(is_blacklisted=True).count()
 
         self.stdout.write(self.style.SUCCESS(
             f"\nRebuild complete!"

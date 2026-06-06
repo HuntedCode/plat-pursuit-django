@@ -1,8 +1,9 @@
 import logging
 
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
-from trophies.models import Concept, DeveloperBlacklist, Game
+from trophies.models import Concept, DeveloperReputation, Game
 from trophies.services.shovelware_detection_service import ShovelwareDetectionService
 
 logger = logging.getLogger("psn_api")
@@ -55,7 +56,7 @@ class Command(BaseCommand):
             .distinct()
         )
         blacklisted_company_ids = list(
-            DeveloperBlacklist.objects
+            DeveloperReputation.objects
             .filter(is_blacklisted=True)
             .values_list('company_id', flat=True)
         )
@@ -90,27 +91,30 @@ class Command(BaseCommand):
             if verbose:
                 self.stdout.write(f"  [EVAL] {concept.concept_id} ({concept.unified_title})")
 
-        # Final sweep: release any currently-blacklisted developer whose
-        # evidence has evaporated. Handles the corner case where a dev was
-        # blacklisted historically but has since lost its "primary developer"
-        # status on every concept (admin edits, IGDB data changes), so the
-        # per-concept evaluation loop never touches them.
+        # Final sweep: release any currently-blacklisted developer who no
+        # longer clears the proportional threshold. Handles the corner case
+        # where a dev was blacklisted historically but has since dropped below
+        # 50% (concept mergers/deletions, admin edits, IGDB data changes), so
+        # the per-concept evaluation loop never touched them. _release_developer
+        # also fires the immediate unflag cascade.
         released = 0
-        blacklisted_entries = DeveloperBlacklist.objects.filter(
+        blacklisted_entries = DeveloperReputation.objects.filter(
             is_blacklisted=True,
         ).select_related('company')
+        evidence_threshold = ShovelwareDetectionService.EVIDENCE_THRESHOLD
         for entry in blacklisted_entries.iterator(chunk_size=200):
-            if not ShovelwareDetectionService._dev_has_qualifying_evidence(entry.company):
-                entry.is_blacklisted = False
-                entry.save(update_fields=['is_blacklisted'])
+            if not ShovelwareDetectionService._dev_meets_blacklist_threshold(
+                entry.company, evidence_threshold,
+            ):
+                ShovelwareDetectionService._release_developer(entry.company, timezone.now())
                 released += 1
                 if verbose:
                     self.stdout.write(f"  [RELEASE] {entry.company.name}")
         if released:
-            self.stdout.write(f"Released {released} developer(s) without qualifying evidence.")
+            self.stdout.write(f"Released {released} developer(s) below the blacklist threshold.")
 
         after_counts = self._status_counts()
-        blacklisted_devs = DeveloperBlacklist.objects.filter(is_blacklisted=True).count()
+        blacklisted_devs = DeveloperReputation.objects.filter(is_blacklisted=True).count()
 
         delta_flagged = after_counts['flagged'] - before_counts['flagged']
         delta_clean = after_counts['clean'] - before_counts['clean']
