@@ -218,17 +218,20 @@ class WizardQueueView(APIView):
 
             wanted_ids = [cid for cid in ratable_concept_ids if cid not in rated_concept_ids]
 
+            # Fetch instances (not .values()) so cover_url's IGDB-first chain
+            # works for anchored concepts (empty concept_icon_url).
             concepts = list(
                 Concept.objects.filter(id__in=wanted_ids)
+                .select_related('igdb_match')
+                .defer('igdb_match__raw_response')
                 .order_by(Lower('unified_title'))
-                .values('id', 'unified_title', 'concept_icon_url', 'slug')
             )
 
             total_count = len(concepts)
             paginated = concepts[offset:offset + limit]
             has_more = (offset + limit) < total_count
 
-            paginated_ids = [c['id'] for c in paginated]
+            paginated_ids = [c.id for c in paginated]
 
             # Pre-fetch user's gameplay stats for these concepts
             from trophies.models import ProfileGame
@@ -290,13 +293,13 @@ class WizardQueueView(APIView):
 
             queue = []
             for c in paginated:
-                cid = c['id']
+                cid = c.id
                 has_plat = cid in concepts_with_plat
                 item = {
                     'concept_id': cid,
-                    'unified_title': c['unified_title'],
-                    'concept_icon_url': c['concept_icon_url'] or '',
-                    'slug': c['slug'],
+                    'unified_title': c.unified_title,
+                    'concept_icon_url': c.cover_url or '',
+                    'slug': c.slug,
                     'has_rating': cid in rated_concept_ids,
                     'trophy_group_id': 'default',
                     'trophy_group_name': 'Base Game',
@@ -335,7 +338,7 @@ class WizardQueueView(APIView):
                 concept_id__in=ratable_concept_ids,
             ).exclude(
                 trophy_group_id='default',
-            ).select_related('concept')
+            ).select_related('concept', 'concept__igdb_match')
             .order_by(Lower('concept__unified_title'), 'sort_order')
         )
 
@@ -411,7 +414,7 @@ class WizardQueueView(APIView):
                 groups_dict[cid] = {
                     'concept_id': cid,
                     'unified_title': g.concept.unified_title,
-                    'concept_icon_url': g.concept.concept_icon_url or '',
+                    'concept_icon_url': g.concept.cover_url or '',
                     'slug': g.concept.slug,
                     'is_shovelware': cid in shovelware_concept_ids,
                     'items': [],

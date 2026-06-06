@@ -445,8 +445,8 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
 
             # Use game icon from the badge's most recent concept, fall back to badge layers
             icon_url = ''
-            if concept and concept.concept_icon_url:
-                icon_url = concept.concept_icon_url
+            if concept and concept.cover_url:
+                icon_url = concept.cover_url
             elif badge:
                 layers = badge.get_badge_layers()
                 icon_url = layers.get('main', '')

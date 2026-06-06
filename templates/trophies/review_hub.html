@@ -140,8 +140,8 @@
                     <li>
                         <a href="{% url 'review_hub' game.slug %}" class="flex items-center gap-2 md:gap-3 p-2 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] transition-colors group">
                             <div class="shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-lg overflow-hidden border border-base-content/5">
-                                {% if game.concept_icon_url %}
-                                    <img src="{{ game.concept_icon_url }}" alt="{{ game.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
+                                {% if game.cover_url %}
+                                    <img src="{{ game.cover_url }}" alt="{{ game.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
                                 {% else %}
                                     <div class="w-full h-full bg-base-300 flex items-center justify-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -183,8 +183,8 @@
                     <li class="bg-white/[0.03] border border-base-content/5 rounded-lg p-2 md:p-3">
                         <div class="flex items-center gap-2 mb-1.5">
                             <a href="{% url 'review_hub' review.concept.slug %}" class="flex items-center gap-1.5 min-w-0">
-                                {% if review.concept.concept_icon_url %}
-                                    <img src="{{ review.concept.concept_icon_url }}" alt="{{ review.concept.unified_title }}" class="w-5 h-5 rounded object-cover shrink-0" loading="lazy" />
+                                {% if review.concept.cover_url %}
+                                    <img src="{{ review.concept.cover_url }}" alt="{{ review.concept.unified_title }}" class="w-5 h-5 rounded object-cover shrink-0" loading="lazy" />
                                 {% endif %}
                                 <span class="text-xs font-bold text-primary line-clamp-1 pr-1 hover:underline">{{ review.concept.unified_title }}</span>
                             </a>

@@ -82,7 +82,7 @@ def provide_recent_platinums(profile, settings=None):
     plats = (
         EarnedTrophy.objects
         .filter(profile=profile, trophy__trophy_type='platinum', earned=True)
-        .select_related('trophy__game__concept')
+        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
         .order_by('-earned_date_time')[:limit]
     )
 
@@ -92,7 +92,7 @@ def provide_recent_platinums(profile, settings=None):
         concept = getattr(game, 'concept', None) if game else None
         platinums.append({
             'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
-            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+            'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
             'earned_date': et.earned_date_time,
             'earn_rate': et.trophy.trophy_earn_rate,
             'np_communication_id': game.np_communication_id if game else None,
@@ -122,7 +122,7 @@ def provide_recent_activity(profile, settings=None):
     trophy_qs = (
         EarnedTrophy.objects
         .filter(profile=profile, earned=True, earned_date_time__isnull=False)
-        .select_related('trophy__game__concept')
+        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
         .order_by('-earned_date_time')[:fetch_limit]
     )
 
@@ -149,7 +149,7 @@ def provide_recent_activity(profile, settings=None):
             events.append({
                 'type': 'platinum',
                 'name': concept.unified_title if concept else game.title_name if game else 'Unknown',
-                'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+                'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
                 'np_communication_id': np_id,
                 'date': et.earned_date_time,
                 'earn_rate': et.trophy.trophy_earn_rate,
@@ -171,7 +171,7 @@ def provide_recent_activity(profile, settings=None):
             'type': 'trophy_group',
             'count': len(trophy_list),
             'game_name': concept.unified_title if concept else game.title_name if game else 'Unknown',
-            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+            'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
             'np_communication_id': np_id,
             'type_counts': dict(type_counts),
             'date': max(et.earned_date_time for et in trophy_list),
@@ -690,7 +690,7 @@ def provide_az_challenge(profile, challenge=None):
             state = 'empty'
 
         game_name = concept.unified_title if concept else (game.title_name if game else None)
-        icon_url = concept.concept_icon_url if concept else (game.title_image if game else None)
+        icon_url = concept.cover_url if concept else (game.title_image if game else None)
 
         slots.append({
             'letter': s.letter,
@@ -744,7 +744,7 @@ def provide_genre_challenge(profile, challenge=None):
         return {'has_challenge': False}
 
     # Genre slots
-    slots_qs = challenge.genre_slots.all().select_related('concept').order_by('genre')
+    slots_qs = challenge.genre_slots.all().select_related('concept', 'concept__igdb_match').order_by('genre')
     slots = []
     most_recent_plat = None
     most_recent_plat_at = None
@@ -761,7 +761,7 @@ def provide_genre_challenge(profile, challenge=None):
 
         genre_name = s.genre_display or s.genre
         concept_title = concept.unified_title if concept else None
-        icon_url = concept.concept_icon_url if concept else None
+        icon_url = concept.cover_url if concept else None
 
         slots.append({
             'genre': genre_name,
@@ -786,13 +786,13 @@ def provide_genre_challenge(profile, challenge=None):
             next_target = {'genre': genre_name, 'concept_title': concept_title}
 
     # Bonus slots
-    bonus_qs = challenge.bonus_slots.all().select_related('concept')
+    bonus_qs = challenge.bonus_slots.all().select_related('concept', 'concept__igdb_match')
     bonus_slots = []
     for b in bonus_qs:
         concept = b.concept
         bonus_slots.append({
             'concept_title': concept.unified_title if concept else None,
-            'icon_url': concept.concept_icon_url if concept else None,
+            'icon_url': concept.cover_url if concept else None,
             'is_completed': b.is_completed,
         })
 
@@ -894,7 +894,7 @@ def provide_completion_milestones(profile, settings=None):
             progress__lt=100,
             user_hidden=False,
         )
-        .select_related('game', 'game__concept')
+        .select_related('game', 'game__concept', 'game__concept__igdb_match')
         .order_by('-progress')
     )
 
@@ -908,7 +908,7 @@ def provide_completion_milestones(profile, settings=None):
         remaining = pg.unearned_trophies_count
         games.append({
             'game_name': concept.unified_title if concept else game.title_name,
-            'icon_url': concept.concept_icon_url if concept else game.title_image,
+            'icon_url': concept.cover_url if concept else game.title_image,
             'np_communication_id': game.np_communication_id,
             'progress': pg.progress,
             'remaining_trophies': remaining,
@@ -946,7 +946,7 @@ def provide_library_health_alerts(profile, settings=None):
             earned_trophies_count__gt=0,
         )
         .filter(flag_filter)
-        .select_related('game', 'game__concept')
+        .select_related('game', 'game__concept', 'game__concept__igdb_match')
     )
     if profile.hide_hiddens:
         qs = qs.exclude(hidden_flag=True)
@@ -1000,7 +1000,7 @@ def provide_library_health_alerts(profile, settings=None):
         concept = getattr(game, 'concept', None)
         games.append({
             'game_name': concept.unified_title if concept else game.title_name,
-            'icon_url': concept.concept_icon_url if concept else game.title_image,
+            'icon_url': concept.cover_url if concept else game.title_image,
             'np_communication_id': game.np_communication_id,
             'progress': pg.progress,
             'flags': flags,
@@ -1072,7 +1072,7 @@ def provide_vr_trophy_hunter(profile):
             profile=profile, user_hidden=False,
         )
         .filter(Q(game__title_platform__contains='PSVR') | Q(game__title_platform__contains='PSVR2'))
-        .select_related('game__concept')
+        .select_related('game__concept', 'game__concept__igdb_match')
     )
     if profile.hide_hiddens:
         qs = qs.exclude(hidden_flag=True)
@@ -1100,7 +1100,7 @@ def provide_vr_trophy_hunter(profile):
         concept = getattr(game, 'concept', None)
         in_progress_list.append({
             'game_name': concept.unified_title if concept else game.title_name,
-            'icon_url': concept.concept_icon_url if concept else game.title_image,
+            'icon_url': concept.cover_url if concept else game.title_image,
             'np_communication_id': game.np_communication_id,
             'progress': pg.progress,
             'earned_count': pg.earned_trophies_count,
@@ -1223,7 +1223,7 @@ def provide_time_to_beat_insights(profile):
             shortest = {
                 'seconds': secs,
                 'name': concept.unified_title,
-                'icon_url': concept.concept_icon_url or '',
+                'icon_url': concept.cover_url or '',
                 'np_communication_id': pg.game.np_communication_id,
                 'display': _fmt_hours(secs),
             }
@@ -1231,7 +1231,7 @@ def provide_time_to_beat_insights(profile):
             longest = {
                 'seconds': secs,
                 'name': concept.unified_title,
-                'icon_url': concept.concept_icon_url or '',
+                'icon_url': concept.cover_url or '',
                 'np_communication_id': pg.game.np_communication_id,
                 'display': _fmt_hours(secs),
             }
@@ -1271,7 +1271,7 @@ def provide_time_to_beat_insights(profile):
         remaining_secs = int(secs * (100 - pg.progress) / 100)
         grinding.append({
             'name': concept.unified_title,
-            'icon_url': concept.concept_icon_url or '',
+            'icon_url': concept.cover_url or '',
             'np_communication_id': pg.game.np_communication_id,
             'progress': pg.progress,
             'total_display': _fmt_hours(secs),
@@ -1417,7 +1417,7 @@ def provide_roadmap_recommendations(profile, settings=None):
     qs = (
         Roadmap.objects
         .filter(status='published', concept_id__in=unplatted_concept_ids)
-        .select_related('concept')
+        .select_related('concept', 'concept__igdb_match')
         .prefetch_related('steps')
         .order_by('-updated_at')[:limit * 4]  # over-fetch since we dedupe by concept
     )
@@ -1454,7 +1454,7 @@ def provide_roadmap_recommendations(profile, settings=None):
 
         roadmaps.append({
             'game_name': concept.unified_title,
-            'icon_url': concept.concept_icon_url or '',
+            'icon_url': concept.cover_url or '',
             'np_communication_id': np_id,
             'updated_at': rm.updated_at,
             'tab_count': sibling_count,
@@ -1744,7 +1744,7 @@ def provide_my_reviews(profile, settings=None):
             created_at__gte=week_ago,
         )
         .exclude(profile=profile)  # exclude self-votes
-        .select_related('review__concept_trophy_group__concept')
+        .select_related('review__concept_trophy_group__concept', 'review__concept_trophy_group__concept__igdb_match')
         .order_by('-created_at')[:limit]
     )
 
@@ -1755,7 +1755,7 @@ def provide_my_reviews(profile, settings=None):
         concept = ctg.concept if ctg else None
         engagement.append({
             'game_name': concept.unified_title if concept else 'Unknown',
-            'icon_url': concept.concept_icon_url if concept else '',
+            'icon_url': concept.cover_url if concept else '',
             'vote_type': vote.vote_type,
             'voted_at': vote.created_at,
             'concept_slug': concept.slug if concept else '',
@@ -1793,7 +1793,7 @@ def provide_rarity_showcase(profile, settings=None):
     rarest_qs = (
         EarnedTrophy.objects
         .filter(profile=profile, earned=True, trophy__trophy_earn_rate__gt=0)
-        .select_related('trophy__game__concept')
+        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
         .order_by('trophy__trophy_earn_rate')[:limit]
     )
 
@@ -1809,7 +1809,7 @@ def provide_rarity_showcase(profile, settings=None):
             'trophy_icon_url': trophy.trophy_icon_url or '',
             'earn_rate': trophy.trophy_earn_rate,
             'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
-            'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+            'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
             'np_communication_id': game.np_communication_id if game else None,
             'earned_date': et.earned_date_time,
         })
@@ -1926,7 +1926,7 @@ def provide_recent_platinum_card(profile):
     et = (
         EarnedTrophy.objects
         .filter(profile=profile, earned=True, trophy__trophy_type='platinum')
-        .select_related('trophy__game__concept')
+        .select_related('trophy__game__concept', 'trophy__game__concept__igdb_match')
         .order_by('-earned_date_time')
         .first()
     )
@@ -1942,7 +1942,7 @@ def provide_recent_platinum_card(profile):
         'has_platinum': True,
         'earned_trophy_id': et.id,
         'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
-        'icon_url': concept.concept_icon_url if concept else (game.title_image if game else ''),
+        'icon_url': concept.cover_url if concept else (game.title_image if game else ''),
         'trophy_name': trophy.trophy_name,
         'earn_rate': trophy.trophy_earn_rate,
         'earned_date': et.earned_date_time,

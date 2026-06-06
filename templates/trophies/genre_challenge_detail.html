@@ -198,8 +198,8 @@
                 {# Assigned concept #}
                 <div class="px-3 pb-3">
                     <div class="flex items-center gap-2 mt-1">
-                        {% if slot.concept.concept_icon_url %}
-                        <img src="{{ slot.concept.concept_icon_url }}" alt="{{ slot.concept.unified_title }}"
+                        {% if slot.concept.cover_url %}
+                        <img src="{{ slot.concept.cover_url }}" alt="{{ slot.concept.unified_title }}"
                              class="w-10 h-10 rounded object-cover flex-shrink-0" loading="lazy" />
                         {% else %}
                         <div class="w-10 h-10 rounded bg-base-200 flex items-center justify-center flex-shrink-0">
@@ -277,8 +277,8 @@
                         {% if slot.concept %}
                         <div class="px-3 pb-3">
                             <div class="flex items-center gap-2 mt-1">
-                                {% if slot.concept.concept_icon_url %}
-                                <img src="{{ slot.concept.concept_icon_url }}" alt="{{ slot.concept.unified_title }}"
+                                {% if slot.concept.cover_url %}
+                                <img src="{{ slot.concept.cover_url }}" alt="{{ slot.concept.unified_title }}"
                                      class="w-10 h-10 rounded object-cover flex-shrink-0" loading="lazy" />
                                 {% else %}
                                 <div class="w-10 h-10 rounded bg-base-200 flex items-center justify-center flex-shrink-0">

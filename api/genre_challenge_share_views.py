@@ -79,7 +79,12 @@ def _build_template_context(challenge, format_type):
     Uses concurrent image fetching to cache all concept icons + avatar
     in parallel rather than sequentially.
     """
-    slots = list(challenge.genre_slots.select_related('concept').order_by('genre'))
+    slots = list(
+        challenge.genre_slots
+        .select_related('concept', 'concept__igdb_match')
+        .defer('concept__igdb_match__raw_response')
+        .order_by('genre')
+    )
 
     # Batch-fetch trophy progress for assigned concepts (via their games)
     concept_ids = [s.concept_id for s in slots if s.concept_id]
@@ -116,8 +121,8 @@ def _build_template_context(challenge, format_type):
     # Collect all image URLs to fetch concurrently
     urls_to_cache = {}
     for slot in slots:
-        if slot.concept and slot.concept.concept_icon_url:
-            urls_to_cache[f'slot_{slot.genre}'] = slot.concept.concept_icon_url
+        if slot.concept and slot.concept.cover_url:
+            urls_to_cache[f'slot_{slot.genre}'] = slot.concept.cover_url
     if challenge.profile.avatar_url:
         urls_to_cache['avatar'] = challenge.profile.avatar_url
 

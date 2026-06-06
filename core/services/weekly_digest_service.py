@@ -309,7 +309,7 @@ class WeeklyDigestService:
                     or top_review_obj.profile.psn_username
                 ),
                 'game_name': top_review_obj.concept.unified_title,
-                'game_image': top_review_obj.concept.concept_icon_url or '',
+                'game_image': top_review_obj.concept.cover_url or '',
                 'game_slug': top_review_obj.concept.slug,
                 'body_snippet': snippet,
                 'helpful_count': top_review_obj.helpful_count,

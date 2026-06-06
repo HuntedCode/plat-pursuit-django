@@ -119,8 +119,8 @@ See docs/features/community-hub.md for the design rationale.
                             {% if title %}
                                 <a href="{% url 'game_detail' title.np_communication_id %}" class="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06] hover:border-warning/30 transition-colors">
                                     <div class="w-6 h-6 rounded overflow-hidden shrink-0 ring-1 ring-base-300">
-                                        {% if title.concept_icon_url %}
-                                            <img src="{{ title.concept_icon_url }}" alt="{{ title.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
+                                        {% if title.cover_url %}
+                                            <img src="{{ title.cover_url }}" alt="{{ title.unified_title }}" class="w-full h-full object-cover" loading="lazy" />
                                         {% else %}
                                             <div class="w-full h-full bg-base-300"></div>
                                         {% endif %}

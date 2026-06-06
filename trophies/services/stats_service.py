@@ -1744,10 +1744,18 @@ def _compute_library_community_ratings(concept_ids):
                     sorted_by = sorted(per_concept, key=lambda x: x[f'avg_{key}'] or 0)
                     extreme_ids.add(sorted_by[0]['concept_id'])
                     extreme_ids.add(sorted_by[-1]['concept_id'])
-            concepts = Concept.objects.filter(id__in=extreme_ids).values('id', 'unified_title', 'concept_icon_url')
-            concept_lookup = {c['id']: c for c in concepts}
-        c = concept_lookup.get(concept_id, {})
-        return c.get('unified_title', 'Unknown'), c.get('concept_icon_url')
+            # Instances + select_related igdb_match so cover_url's IGDB-first
+            # chain works for anchored concepts (empty concept_icon_url).
+            concepts = (
+                Concept.objects.filter(id__in=extreme_ids)
+                .select_related('igdb_match')
+                .defer('igdb_match__raw_response')
+            )
+            concept_lookup = {c.id: c for c in concepts}
+        c = concept_lookup.get(concept_id)
+        if not c:
+            return 'Unknown', None
+        return c.unified_title, c.cover_url
 
     def _find_extreme(field, highest=True):
         valid = [c for c in per_concept if c[field] is not None]
@@ -2293,7 +2301,7 @@ def _game_context(game):
         return 'Unknown Game', None
     concept = getattr(game, 'concept', None)
     name = (concept.unified_title if concept and concept.unified_title else None) or game.title_name or 'Unknown Game'
-    icon = (concept.concept_icon_url if concept and concept.concept_icon_url else None) or game.title_image
+    icon = (concept.cover_url if concept and concept.cover_url else None) or game.title_image
     return name, icon
 
 

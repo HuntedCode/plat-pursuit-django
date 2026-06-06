@@ -94,8 +94,13 @@ def _get_most_rated_games_spotlight(limit=SPOTLIGHT_LIMIT):
         .values('np_communication_id')[:1]
     )
 
+    # Fetch Concept instances (not .values()) so we can read the IGDB-first
+    # cover_url property; anchored concepts have empty concept_icon_url and
+    # need the trusted IGDB cover from the prefetched igdb_match.
     concepts = list(
         Concept.objects
+        .select_related('igdb_match')
+        .defer('igdb_match__raw_response')
         .annotate(
             rating_count=Count('user_ratings'),
             avg_rating=Avg('user_ratings__overall_rating'),
@@ -103,20 +108,16 @@ def _get_most_rated_games_spotlight(limit=SPOTLIGHT_LIMIT):
         )
         .filter(rating_count__gt=0, rep_npid__isnull=False)
         .order_by('-rating_count')[:limit]
-        .values(
-            'unified_title', 'concept_icon_url',
-            'rating_count', 'avg_rating', 'rep_npid',
-        )
     )
 
     result = []
     for c in concepts:
         result.append({
-            'unified_title': c['unified_title'],
-            'np_communication_id': c['rep_npid'],
-            'concept_icon_url': c['concept_icon_url'] or '',
-            'rating_count': c['rating_count'],
-            'avg_rating': round(c['avg_rating'], 1) if c['avg_rating'] else None,
+            'unified_title': c.unified_title,
+            'np_communication_id': c.rep_npid,
+            'cover_url': c.cover_url or '',
+            'rating_count': c.rating_count,
+            'avg_rating': round(c.avg_rating, 1) if c.avg_rating else None,
         })
     return _pad_to_limit(result, limit)
 

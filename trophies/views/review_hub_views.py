@@ -407,8 +407,8 @@ class ReviewHubDetailView(ProfileHotbarMixin, BackgroundContextMixin, DetailView
 
     def _get_concept_icon(self, concept):
         """Get the best icon URL for a concept."""
-        if concept.concept_icon_url:
-            return concept.concept_icon_url
+        if concept.cover_url:
+            return concept.cover_url
         if self._concept_games:
             return self._concept_games[0].get_icon_url()
         return None

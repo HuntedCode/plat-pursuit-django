@@ -85,7 +85,7 @@ def _serialize_slot(slot):
             'id': slot.concept.id,
             'concept_id': slot.concept.concept_id,
             'unified_title': slot.concept.unified_title,
-            'concept_icon_url': slot.concept.concept_icon_url or '',
+            'concept_icon_url': slot.concept.cover_url or '',
             'genres': slot.concept.genres or [],
             'subgenres': slot.concept.subgenres or [],
             'resolved_subgenres': [
@@ -106,12 +106,12 @@ def _resolve_cover_image(challenge):
     if hasattr(challenge, '_prefetched_objects_cache') and 'genre_slots' in challenge._prefetched_objects_cache:
         for slot in challenge.genre_slots.all():
             if slot.genre == challenge.cover_genre and slot.concept:
-                return slot.concept.concept_icon_url or ''
+                return slot.concept.cover_url or ''
         return ''
     slot = challenge.genre_slots.filter(
         genre=challenge.cover_genre, concept__isnull=False,
-    ).select_related('concept').first()
-    return slot.concept.concept_icon_url or '' if slot else ''
+    ).select_related('concept', 'concept__igdb_match').first()
+    return slot.concept.cover_url or '' if slot else ''
 
 
 def _serialize_challenge(challenge, include_slots=False):
@@ -199,7 +199,8 @@ class GenreChallengeDetailAPIView(APIView):
         try:
             try:
                 challenge = Challenge.objects.select_related('profile').prefetch_related(
-                    'genre_slots__concept', 'bonus_slots__concept',
+                    'genre_slots__concept__igdb_match',
+                    'bonus_slots__concept__igdb_match',
                 ).get(
                     id=challenge_id, is_deleted=False, challenge_type='genre',
                 )
@@ -609,8 +610,14 @@ class GenreConceptSearchAPIView(APIView):
             my_backlog = request.query_params.get('my_backlog', '') == '1'
             new_subgenres_only = request.query_params.get('new_subgenres_only', '') == '1'
 
-            # Base query: exclude PP_ stubs
-            concepts = Concept.objects.exclude(concept_id__startswith='PP_')
+            # Base query: exclude PP_ stubs. select_related igdb_match (raw_response
+            # deferred) so the IGDB-first c.cover_url below doesn't N+1 across results.
+            concepts = (
+                Concept.objects
+                .select_related('igdb_match')
+                .defer('igdb_match__raw_response')
+                .exclude(concept_id__startswith='PP_')
+            )
 
             # Genre filter (skip for bonus mode: any genre is fine)
             if mode == 'genre' and genre:
@@ -815,7 +822,7 @@ class GenreConceptSearchAPIView(APIView):
                     'id': c.id,
                     'concept_id': c.concept_id,
                     'unified_title': c.unified_title,
-                    'concept_icon_url': c.concept_icon_url or '',
+                    'concept_icon_url': c.cover_url or '',
                     'genres': c.genres or [],
                     'subgenres': subgenres_data,
                     'platforms': sorted(platforms_set),
@@ -853,7 +860,7 @@ def _serialize_bonus_slot(slot):
             'id': slot.concept.id,
             'concept_id': slot.concept.concept_id,
             'unified_title': slot.concept.unified_title,
-            'concept_icon_url': slot.concept.concept_icon_url or '',
+            'concept_icon_url': slot.concept.cover_url or '',
             'genres': slot.concept.genres or [],
             'subgenres': slot.concept.subgenres or [],
             'resolved_subgenres': [
@@ -1076,7 +1083,7 @@ class GenreMoveAPIView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 try:
-                    source_slot = challenge.genre_slots.select_related('concept').get(genre=source_genre)
+                    source_slot = challenge.genre_slots.select_related('concept', 'concept__igdb_match').get(genre=source_genre)
                 except GenreChallengeSlot.DoesNotExist:
                     return Response({'error': 'Source slot not found.'}, status=status.HTTP_404_NOT_FOUND)
                 if source_slot.is_completed:
@@ -1089,7 +1096,7 @@ class GenreMoveAPIView(APIView):
                 if not bonus_id:
                     return Response({'error': 'Invalid bonus slot ID.'}, status=status.HTTP_400_BAD_REQUEST)
                 try:
-                    source_bonus = challenge.bonus_slots.select_related('concept').get(id=bonus_id)
+                    source_bonus = challenge.bonus_slots.select_related('concept', 'concept__igdb_match').get(id=bonus_id)
                 except GenreBonusSlot.DoesNotExist:
                     return Response({'error': 'Source bonus slot not found.'}, status=status.HTTP_404_NOT_FOUND)
                 if not source_bonus.concept:
@@ -1172,12 +1179,12 @@ class GenreMoveAPIView(APIView):
 
             # Include updated slot data so JS can refresh the cards
             slots_data = {}
-            for slot in challenge.genre_slots.select_related('concept').all():
+            for slot in challenge.genre_slots.select_related('concept', 'concept__igdb_match').all():
                 slots_data[slot.genre] = _serialize_slot(slot)
             response_data['slots'] = slots_data
             response_data['bonus_slots'] = [
                 _serialize_bonus_slot(bs)
-                for bs in challenge.bonus_slots.select_related('concept').all()
+                for bs in challenge.bonus_slots.select_related('concept', 'concept__igdb_match').all()
             ]
 
             return Response(response_data)
@@ -1212,7 +1219,7 @@ class GenreSwapTargetsAPIView(APIView):
             if source_type == 'genre':
                 source_genre = str(source_id).upper()
                 try:
-                    slot = challenge.genre_slots.select_related('concept').get(genre=source_genre)
+                    slot = challenge.genre_slots.select_related('concept', 'concept__igdb_match').get(genre=source_genre)
                 except GenreChallengeSlot.DoesNotExist:
                     return Response({'error': 'Slot not found.'}, status=status.HTTP_404_NOT_FOUND)
                 if not slot.concept:
@@ -1224,7 +1231,7 @@ class GenreSwapTargetsAPIView(APIView):
                 if not bonus_id:
                     return Response({'error': 'Invalid bonus slot ID.'}, status=status.HTTP_400_BAD_REQUEST)
                 try:
-                    bonus_slot = challenge.bonus_slots.select_related('concept').get(id=bonus_id)
+                    bonus_slot = challenge.bonus_slots.select_related('concept', 'concept__igdb_match').get(id=bonus_id)
                 except GenreBonusSlot.DoesNotExist:
                     return Response({'error': 'Bonus slot not found.'}, status=status.HTTP_404_NOT_FOUND)
                 if not bonus_slot.concept:

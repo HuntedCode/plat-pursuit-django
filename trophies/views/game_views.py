@@ -479,7 +479,6 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 return {}
 
             screenshot_urls = []
-            content_rating_url = None
 
             if game.concept.media:
                 # Prefer PSN-side screenshots
@@ -503,14 +502,10 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 if igdb_match:
                     screenshot_urls = igdb_match.screenshot_urls()
 
-            if game.concept.content_rating:
-                content_rating_url = game.concept.content_rating.get('url')
-
             image_urls = {
                 'bg_url': None,  # Disabled on body during redesign
                 'header_bg_url': game.concept.get_cover_url(),  # Used for frosted glass header only
                 'screenshot_urls': screenshot_urls,
-                'content_rating_url': content_rating_url
             }
             cache.set(images_cache_key, json.dumps(image_urls), timeout=images_timeout)
             return image_urls

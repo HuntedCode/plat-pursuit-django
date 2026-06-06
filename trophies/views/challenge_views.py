@@ -231,7 +231,7 @@ class MyChallengesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         # Genre: active challenge
         context['active_genre'] = Challenge.objects.filter(
             profile=profile, challenge_type='genre', is_deleted=False, is_complete=False,
-        ).prefetch_related('genre_slots__concept').first()
+        ).prefetch_related('genre_slots__concept__igdb_match').first()
         context['can_create_genre'] = context['active_genre'] is None
 
         # History: all types, completed and soft-deleted
@@ -241,7 +241,7 @@ class MyChallengesView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             ).filter(
                 Q(is_complete=True) | Q(is_deleted=True)
             ).select_related('profile').prefetch_related(
-                'az_slots__game', 'genre_slots__concept'
+                'az_slots__game', 'genre_slots__concept__igdb_match'
             ).order_by('-created_at')[:20]
         )
 
@@ -761,7 +761,7 @@ class GenreChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         challenge = self.object
-        slots = list(challenge.genre_slots.select_related('concept').all())
+        slots = list(challenge.genre_slots.select_related('concept', 'concept__igdb_match').all())
 
         # Serialize slots for JS initialization
         slots_data = []
@@ -777,7 +777,7 @@ class GenreChallengeSetupView(LoginRequiredMixin, ProfileHotbarMixin, DetailView
                     'id': slot.concept.id,
                     'concept_id': slot.concept.concept_id,
                     'unified_title': slot.concept.unified_title,
-                    'concept_icon_url': slot.concept.concept_icon_url or '',
+                    'concept_icon_url': slot.concept.cover_url or '',
                     'genres': slot.concept.genres or [],
                     'subgenres': slot.concept.subgenres or [],
                 }
@@ -848,7 +848,7 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
         profile = getattr(self.request.user, 'profile', None) if self.request.user.is_authenticated else None
 
         context['is_owner'] = profile and challenge.profile_id == profile.id
-        slots = list(challenge.genre_slots.select_related('concept').all())
+        slots = list(challenge.genre_slots.select_related('concept', 'concept__igdb_match').all())
 
         # Batch-fetch trophy progress for assigned concepts (via their games)
         concept_ids = [s.concept_id for s in slots if s.concept_id]
@@ -905,7 +905,7 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
         context['slots'] = slots
 
         # Bonus slots with progress + subgenres
-        bonus_slots = list(challenge.bonus_slots.select_related('concept').all())
+        bonus_slots = list(challenge.bonus_slots.select_related('concept', 'concept__igdb_match').all())
         bonus_concept_ids = [s.concept_id for s in bonus_slots if s.concept_id]
         if bonus_concept_ids:
             # Reuse progress_map data for bonus concepts too
@@ -985,7 +985,7 @@ class GenreChallengeDetailView(ProfileHotbarMixin, DetailView):
                         'genre': slot.genre,
                         'genre_display': slot.genre_display,
                         'game_name': slot.concept.unified_title,
-                        'game_icon': slot.concept.concept_icon_url or '',
+                        'game_icon': slot.concept.cover_url or '',
                         'progress': progress.get('percentage', 0),
                     })
             context['spinner_slots_json'] = json.dumps(spinner_data)
@@ -1030,7 +1030,7 @@ class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView)
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         challenge = self.object
-        slots = list(challenge.genre_slots.select_related('concept').all())
+        slots = list(challenge.genre_slots.select_related('concept', 'concept__igdb_match').all())
 
         # Attach resolved subgenres to slots for template rendering
         for slot in slots:
@@ -1057,7 +1057,7 @@ class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView)
                     'id': slot.concept.id,
                     'concept_id': slot.concept.concept_id,
                     'unified_title': slot.concept.unified_title,
-                    'concept_icon_url': slot.concept.concept_icon_url or '',
+                    'concept_icon_url': slot.concept.cover_url or '',
                     'genres': slot.concept.genres or [],
                     'subgenres': slot.concept.subgenres or [],
                     'resolved_subgenres': slot.resolved_subgenres,
@@ -1068,7 +1068,7 @@ class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView)
         context['slots_json'] = json.dumps(slots_data)
 
         # Bonus slots for JS
-        bonus_slots = list(challenge.bonus_slots.select_related('concept').all())
+        bonus_slots = list(challenge.bonus_slots.select_related('concept', 'concept__igdb_match').all())
 
         # Attach resolved subgenres to bonus slots
         for bs in bonus_slots:
@@ -1093,7 +1093,7 @@ class GenreChallengeEditView(LoginRequiredMixin, ProfileHotbarMixin, DetailView)
                     'id': bs.concept.id,
                     'concept_id': bs.concept.concept_id,
                     'unified_title': bs.concept.unified_title,
-                    'concept_icon_url': bs.concept.concept_icon_url or '',
+                    'concept_icon_url': bs.concept.cover_url or '',
                     'genres': bs.concept.genres or [],
                     'subgenres': bs.concept.subgenres or [],
                     'resolved_subgenres': bs.resolved_subgenres,
@@ -1143,7 +1143,7 @@ def _attach_genre_cover_images(challenges):
         if challenge.cover_genre:
             for slot in challenge.genre_slots.all():
                 if slot.genre == challenge.cover_genre and slot.concept:
-                    challenge.cover_image_url = slot.concept.concept_icon_url or ''
+                    challenge.cover_image_url = slot.concept.cover_url or ''
                     break
 
 

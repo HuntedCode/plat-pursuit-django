@@ -266,7 +266,7 @@ class RecentReviewsView(APIView):
             qs = (
                 Review.objects
                 .filter(is_deleted=False)
-                .select_related('profile', 'concept')
+                .select_related('profile', 'concept', 'concept__igdb_match')
                 .prefetch_related('profile__user_titles__title')
                 .order_by(*sort_map[sort])
             )
@@ -302,7 +302,7 @@ class RecentReviewsView(APIView):
                 data['concept'] = {
                     'unified_title': review.concept.unified_title,
                     'slug': review.concept.slug,
-                    'concept_icon_url': review.concept.concept_icon_url or '',
+                    'concept_icon_url': review.concept.cover_url or '',
                 }
                 reviews_data.append(data)
 

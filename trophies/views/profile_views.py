@@ -937,7 +937,7 @@ class ProfileDetailView(ProfileHotbarMixin, DetailView):
                 context['profile_banner_data_json'] = json.dumps({
                     'concept_id': bg.id if bg else None,
                     'title_name': (bg.unified_title or '') if bg else '',
-                    'icon_url': (bg.concept_icon_url or '') if bg else '',
+                    'icon_url': (bg.cover_url or '') if bg else '',
                     'bg_url': (bg.bg_url or '') if bg else '',
                     'image_url': profile.banner_image_url or '',
                 })
@@ -1203,7 +1203,7 @@ class ProfileEditorView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
                     {
                         'review_id': r.id,
                         'concept_title': r.concept.unified_title if r.concept else 'Unknown',
-                        'icon_url': r.concept.concept_icon_url if r.concept else '',
+                        'icon_url': r.concept.cover_url if r.concept else '',
                         'recommended': r.recommended,
                         'body_preview': (r.body or '')[:200],
                         'helpful_count': r.helpful_count,

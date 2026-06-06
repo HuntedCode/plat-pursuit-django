@@ -78,7 +78,7 @@ class SettingsView(LoginRequiredMixin, View):
             initial_bg_data = json.dumps({
                 'concept_id': bg.id,
                 'title_name': bg.unified_title or '',
-                'icon_url': bg.concept_icon_url or '',
+                'icon_url': bg.cover_url or '',
             })
 
         context = {

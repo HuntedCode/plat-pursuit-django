@@ -308,7 +308,7 @@ class ReviewService:
             metadata={
                 'concept_title': concept_title,
                 'concept_slug': review.concept.slug,
-                'concept_icon_url': review.concept.concept_icon_url or '',
+                'concept_icon_url': review.concept.cover_url or '',
                 'helpful_count': count,
             },
         )
@@ -384,7 +384,7 @@ class ReviewService:
                     metadata={
                         'concept_title': concept_title,
                         'concept_slug': review.concept.slug,
-                        'concept_icon_url': review.concept.concept_icon_url or '',
+                        'concept_icon_url': review.concept.cover_url or '',
                         'replier_username': profile.display_psn_username or profile.psn_username,
                         'reply_snippet': body[:100],
                     },
