@@ -1,3 +1,5 @@
+import csv
+import io
 import logging
 
 from django.core.management.base import BaseCommand
@@ -36,11 +38,17 @@ class Command(BaseCommand):
             help='One line per developer (name, proportion, flagged count, top genres). '
                  'Easy to copy-paste for staff review.',
         )
+        parser.add_argument(
+            '--csv', action='store_true',
+            help='Emit CSV (no summary text) for upload to a spreadsheet. '
+                 'Redirect to a file: ... --csv > blacklist.csv',
+        )
 
     def handle(self, *args, **options):
         sample_count = options['samples']
         limit = options['limit']
         compact = options['compact']
+        as_csv = options['csv']
         include_whitelisted = options['include_whitelisted']
 
         flag_t = ShovelwareDetectionService.FLAG_THRESHOLD       # 80 (enter)
@@ -108,6 +116,10 @@ class Command(BaseCommand):
         if limit is not None:
             rows = rows[:limit]
 
+        if as_csv:
+            self._render_csv(rows)
+            return
+
         total_flagged = sum(r['flagged_games'] for r in rows)
         self.stdout.write(
             f"Blacklisted developers: {len(rows)}  "
@@ -171,3 +183,33 @@ class Command(BaseCommand):
         self.stdout.write(
             "\nWhitelist legit studios (is_whitelisted=True) via the DeveloperReputation admin."
         )
+
+    def _render_csv(self, rows):
+        """Emit CSV (one row per developer) for spreadsheet upload. Uses the
+        csv module so titles/genres containing commas are quoted correctly."""
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator='\n')
+        writer.writerow([
+            'developer', 'company_id', 'whitelisted',
+            'enter_num', 'enter_denom', 'enter_pct',
+            'evidence_num', 'evidence_denom', 'evidence_pct',
+            'flagged_games', 'top_genres', 'top_themes', 'sample_games',
+        ])
+        for r in rows:
+            company = r['company']
+            denom = r['denom'] or 1  # display-only divide-by-zero guard
+            enter_pct = round(100 * r['num_enter'] / denom)
+            evidence_pct = round(100 * r['num_evidence'] / denom)
+            genres = ", ".join(n for n, _ in r['genres'])
+            themes = ", ".join(n for n, _ in r['themes'])
+            samples = "; ".join(
+                f"{(s['_median_rate'] or 0):.1f}% {s['unified_title'] or '(untitled)'}"
+                for s in r['samples']
+            )
+            writer.writerow([
+                company.name, company.id, r['whitelisted'],
+                r['num_enter'], r['denom'], enter_pct,
+                r['num_evidence'], r['denom'], evidence_pct,
+                r['flagged_games'], genres, themes, samples,
+            ])
+        self.stdout.write(buf.getvalue(), ending='')
