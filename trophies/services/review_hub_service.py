@@ -62,8 +62,14 @@ class ReviewHubService:
         """
         from trophies.models import Concept
 
+        # Fetch instances (not .values()) so cover_url's IGDB-first chain
+        # works for anchored concepts (empty concept_icon_url). The dict key
+        # stays 'concept_icon_url' for template/JS contract consistency; only
+        # the source changed.
         concepts = list(
             Concept.objects
+            .select_related('igdb_match')
+            .defer('igdb_match__raw_response')
             .annotate(
                 review_count=Count(
                     'reviews',
@@ -79,20 +85,16 @@ class ReviewHubService:
             )
             .filter(review_count__gt=0)
             .order_by('-review_count')[:limit]
-            .values(
-                'unified_title', 'slug', 'concept_icon_url',
-                'review_count', 'recommended_count',
-            )
         )
 
         result = []
         for c in concepts:
-            total = c['review_count']
-            pct = round(c['recommended_count'] / total * 100) if total else 0
+            total = c.review_count
+            pct = round(c.recommended_count / total * 100) if total else 0
             result.append({
-                'concept_icon_url': c['concept_icon_url'] or '',
-                'unified_title': c['unified_title'],
-                'slug': c['slug'],
+                'concept_icon_url': c.cover_url or '',
+                'unified_title': c.unified_title,
+                'slug': c.slug,
                 'review_count': total,
                 'recommendation_pct': pct,
             })
@@ -153,7 +155,7 @@ class ReviewHubService:
                 created_at__gte=cutoff,
                 helpful_count__gt=0,
             )
-            .select_related('profile', 'concept')
+            .select_related('profile', 'concept', 'concept__igdb_match')
             .prefetch_related('profile__user_titles__title')
             .order_by('-helpful_count', '-created_at')[:limit]
         )
@@ -172,8 +174,13 @@ class ReviewHubService:
 
         from trophies.models import Concept
 
+        # Fetch instances so cover_url's IGDB-first chain works for anchored
+        # concepts. API contract keeps the 'concept_icon_url' field name (JS
+        # consumers read it); only the source changed.
         concepts = list(
             Concept.objects
+            .select_related('igdb_match')
+            .defer('igdb_match__raw_response')
             .filter(unified_title__icontains=query)
             .exclude(slug__isnull=True)
             .exclude(slug='')
@@ -201,20 +208,16 @@ class ReviewHubService:
             )
             .filter(non_sw_game_count__gt=0)
             .order_by('-review_count', 'unified_title')[:limit]
-            .values(
-                'unified_title', 'slug', 'concept_icon_url',
-                'review_count', 'recommended_count',
-            )
         )
 
         result = []
         for c in concepts:
-            total = c['review_count']
-            pct = round(c['recommended_count'] / total * 100) if total else 0
+            total = c.review_count
+            pct = round(c.recommended_count / total * 100) if total else 0
             result.append({
-                'unified_title': c['unified_title'],
-                'slug': c['slug'],
-                'concept_icon_url': c['concept_icon_url'] or '',
+                'unified_title': c.unified_title,
+                'slug': c.slug,
+                'concept_icon_url': c.cover_url or '',
                 'review_count': total,
                 'recommendation_pct': pct,
             })

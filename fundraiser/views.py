@@ -433,7 +433,10 @@ class BadgeRevealView(StaffRequiredMixin, TemplateView):
         pool_claims = list(
             DonationBadgeClaim.objects
             .filter(status='in_progress')
-            .select_related('badge', 'badge__most_recent_concept', 'profile')
+            .select_related(
+                'badge', 'badge__most_recent_concept',
+                'badge__most_recent_concept__igdb_match', 'profile',
+            )
             .order_by(Lower('series_name'))
         )
 

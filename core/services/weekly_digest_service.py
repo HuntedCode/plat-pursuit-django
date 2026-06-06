@@ -209,7 +209,7 @@ class WeeklyDigestService:
             top_platted_games: [{game_name, game_image, game_slug, plat_count}, ...],
         }
         """
-        from trophies.models import EarnedTrophy, Review, Profile
+        from trophies.models import Concept, EarnedTrophy, Review, Profile
 
         # ── Site-wide trophy stats ──
         trophy_stats = EarnedTrophy.objects.filter(
@@ -255,32 +255,43 @@ class WeeklyDigestService:
         }
 
         # ── Top 5 most-platted games this week ──
-        top_platted_qs = EarnedTrophy.objects.filter(
-            earned=True,
-            trophy__trophy_type='platinum',
-            earned_date_time__gte=week_start,
-            earned_date_time__lt=week_end,
-            trophy__game__concept__isnull=False,
-        ).exclude(
-            trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
-        ).values(
-            'trophy__game__concept_id',
-            'trophy__game__concept__unified_title',
-            'trophy__game__concept__concept_icon_url',
-            'trophy__game__concept__slug',
-        ).annotate(
-            plat_count=Count('id'),
-        ).order_by('-plat_count')[:5]
+        top_platted_rows = list(
+            EarnedTrophy.objects.filter(
+                earned=True,
+                trophy__trophy_type='platinum',
+                earned_date_time__gte=week_start,
+                earned_date_time__lt=week_end,
+                trophy__game__concept__isnull=False,
+            ).exclude(
+                trophy__game__shovelware_status__in=['auto_flagged', 'manually_flagged'],
+            ).values(
+                'trophy__game__concept_id',
+            ).annotate(
+                plat_count=Count('id'),
+            ).order_by('-plat_count')[:5]
+        )
 
-        top_platted_games = [
-            {
-                'game_name': row['trophy__game__concept__unified_title'] or 'Unknown Game',
-                'game_image': row['trophy__game__concept__concept_icon_url'] or '',
-                'game_slug': row['trophy__game__concept__slug'] or '',
+        # Look up the Concept instances separately so cover_url's IGDB-first
+        # chain works for anchored concepts (empty concept_icon_url).
+        concept_ids = [r['trophy__game__concept_id'] for r in top_platted_rows]
+        concept_lookup = {
+            c.id: c
+            for c in Concept.objects
+            .filter(id__in=concept_ids)
+            .select_related('igdb_match')
+            .defer('igdb_match__raw_response')
+        }
+        top_platted_games = []
+        for row in top_platted_rows:
+            c = concept_lookup.get(row['trophy__game__concept_id'])
+            if not c:
+                continue
+            top_platted_games.append({
+                'game_name': c.unified_title or 'Unknown Game',
+                'game_image': c.cover_url or '',
+                'game_slug': c.slug or '',
                 'plat_count': row['plat_count'],
-            }
-            for row in top_platted_qs
-        ]
+            })
 
         # ── Top review of the week by helpful count ──
         top_review_obj = Review.objects.filter(
@@ -288,7 +299,7 @@ class WeeklyDigestService:
             created_at__gte=week_start,
             created_at__lt=week_end,
         ).order_by('-helpful_count', '-created_at').select_related(
-            'profile', 'concept',
+            'profile', 'concept', 'concept__igdb_match',
         ).first()
 
         top_review = None

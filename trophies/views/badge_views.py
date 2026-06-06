@@ -441,7 +441,12 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        return Badge.objects.by_series(series_slug).select_related('funded_by', 'base_badge__funded_by', 'submitted_by', 'base_badge__submitted_by', 'title', 'base_badge__title')
+        return Badge.objects.by_series(series_slug).select_related(
+            'funded_by', 'base_badge__funded_by', 'submitted_by', 'base_badge__submitted_by',
+            'title', 'base_badge__title',
+            # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
+            'most_recent_concept', 'most_recent_concept__igdb_match',
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1060,7 +1065,13 @@ class BadgeLeaderboardsView(ProfileHotbarMixin, DetailView):
 
     def get_object(self, queryset=None):
         series_slug = self.kwargs[self.slug_url_kwarg]
-        badge = get_object_or_404(Badge, series_slug=series_slug, tier=1)
+        # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
+        badge = get_object_or_404(
+            Badge.objects.select_related(
+                'most_recent_concept', 'most_recent_concept__igdb_match',
+            ),
+            series_slug=series_slug, tier=1,
+        )
         if not badge.is_live and not self.request.user.is_staff:
             raise Http404("Series not found")
         return badge
