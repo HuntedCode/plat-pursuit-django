@@ -165,6 +165,7 @@ Concept-sibling writes use a Redis lock to prevent deadlocks between concurrent 
 | `backfill_shovelware` | One-shot reset + rebuild from scratch (whitelists preserved) | `python manage.py backfill_shovelware [--dry-run] [--verbose]` |
 | `update_shovelware` | Surgical reconciliation (idempotent) | `python manage.py update_shovelware [--verbose]` |
 | `lock_shovelware` | Manually flag / clear / unlock a concept | `python manage.py lock_shovelware <np_id> --flag\|--clear\|--unlock` |
+| `review_shovelware_blacklist` | Read-only review sheet of blacklisted developers (proportion, genres/themes, sample games) to decide whitelist candidates | `python manage.py review_shovelware_blacklist [--samples N] [--limit N] [--include-whitelisted]` |
 
 ### Day-to-day flagging
 
