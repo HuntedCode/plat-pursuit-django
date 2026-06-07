@@ -1,0 +1,61 @@
+name: tests
+
+# Runs the pytest suite on every push to main and on every pull request.
+# Once a branch-protection rule requires this check, a red run blocks merging
+# into main, so failing tests can't reach Render (which deploys from main).
+#
+# No secrets needed: CI spins up its own Postgres + Redis service containers and
+# uses settings_test, which requires no real API keys.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: plat_pursuit_dev
+          POSTGRES_USER: plat_user
+          POSTGRES_PASSWORD: securepass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U plat_user -d plat_pursuit_dev"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    env:
+      # Point settings_test at the CI service containers (on localhost).
+      TEST_DB_HOST: localhost
+      TEST_DB_PORT: "5432"
+      TEST_DB_NAME: plat_pursuit_dev
+      TEST_DB_USER: plat_user
+      TEST_DB_PASSWORD: securepass
+      TEST_REDIS_URL: redis://localhost:6379/15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest
