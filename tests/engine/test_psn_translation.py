@@ -136,18 +136,10 @@ def test_create_or_update_profile_game_maps_fields():
     assert pg.earned_trophies == {"bronze": 3, "silver": 0, "gold": 0, "platinum": 0}
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG: Game.played_count is double-incremented on first link. Both the "
-        "post_save signal update_game_played_count_on_save (signals.py) AND "
-        "create_or_update_profile_game (psn_api_service.py:434) increment it, so "
-        "a single new ProfileGame bumps played_count by 2. The signal is the "
-        "canonical maintainer; the service-side increment is the redundant one. "
-        "Remove this marker once the duplicate increment is removed."
-    ),
-    strict=True,
-)
 def test_create_or_update_profile_game_increments_played_count_once():
+    # Regression guard: played_count is maintained solely by the ProfileGame
+    # post_save signal. create_or_update_profile_game must NOT also increment it
+    # (that double-counted to 2 per new link before the fix).
     profile = ProfileFactory()
     game = GameFactory()
 

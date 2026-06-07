@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.db import transaction, IntegrityError, OperationalError
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from collections import defaultdict
-from django.db.models import F, Count, Max, Q
+from django.db.models import Count, Max, Q
 from trophies.models import Profile, Game, ProfileGame, Trophy, EarnedTrophy, Concept, TrophyGroup, Badge
 from psnawp_api.models.title_stats import TitleStats
 from psnawp_api.models.trophies import TrophyTitle, TrophyGroupSummary
@@ -430,9 +430,11 @@ class PsnApiService:
             profile_game.user_hidden = False  # PSN returned this game, so it's not hidden
             profile_game.save()
 
-        if created:
-            game.played_count = F('played_count') + 1
-            game.save()
+        # Game.played_count is maintained by the post_save signal
+        # update_game_played_count_on_save (trophies/signals.py). Do NOT
+        # increment it here as well: doing so was the historical double-count
+        # bug (signal +1 plus this +1 = +2 per newly linked game, while a
+        # removal only decremented by 1, so the counter ratcheted upward).
         return profile_game, created
 
     @classmethod
