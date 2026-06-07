@@ -10,19 +10,24 @@ engine touches most) and grow this as the spine test suite expands.
 """
 
 import factory
+from django.utils import timezone
 
 from trophies.models import (
     Badge,
     Comment,
     Company,
     Concept,
+    ConceptBundle,
     ConceptCompany,
     ConceptGenre,
     ConceptTrophyGroup,
+    Game,
     Genre,
     IGDBMatch,
     Profile,
+    ProfileGame,
     Review,
+    Stage,
     UserBadge,
     UserBadgeProgress,
     UserConceptRating,
@@ -200,3 +205,51 @@ class UserBadgeProgressFactory(factory.django.DjangoModelFactory):
     profile = factory.SubFactory(ProfileFactory)
     badge = factory.SubFactory(BadgeFactory)
     completed_concepts = 0
+
+
+# --- Games + badge evaluation inputs ------------------------------------------
+
+
+class GameFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Game
+
+    title_name = factory.Sequence(lambda n: f"Game {n}")
+    np_communication_id = factory.Sequence(lambda n: f"NPWR{n:05d}_00")
+    concept = factory.SubFactory(ConceptFactory)
+
+
+class ProfileGameFactory(factory.django.DjangoModelFactory):
+    """A profile's play record for a game. has_plat / progress drive badge eval."""
+
+    class Meta:
+        model = ProfileGame
+
+    profile = factory.SubFactory(ProfileFactory)
+    game = factory.SubFactory(GameFactory)
+    progress = 0
+    has_plat = False
+    most_recent_trophy_date = factory.LazyFunction(timezone.now)
+
+
+class StageFactory(factory.django.DjangoModelFactory):
+    """A badge stage. Add concepts via stage.concepts.add(...); required_tiers
+    defaults to [] which means "applies to every tier"."""
+
+    class Meta:
+        model = Stage
+
+    series_slug = factory.Sequence(lambda n: f"series-{n}")
+    stage_number = 1
+    required_tiers = factory.LazyFunction(list)
+
+
+class ConceptBundleFactory(factory.django.DjangoModelFactory):
+    """A bundle of concepts acting as one qualifier on a stage. Add members via
+    bundle.concepts.add(...)."""
+
+    class Meta:
+        model = ConceptBundle
+
+    stage = factory.SubFactory(StageFactory)
+    label = "Bundle"
