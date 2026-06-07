@@ -21,6 +21,7 @@ from trophies.models import (
     ConceptCompany,
     ConceptGenre,
     ConceptTrophyGroup,
+    EarnedTrophy,
     Game,
     Genre,
     IGDBMatch,
@@ -28,6 +29,7 @@ from trophies.models import (
     ProfileGame,
     Review,
     Stage,
+    Trophy,
     UserBadge,
     UserBadgeProgress,
     UserConceptRating,
@@ -253,3 +255,23 @@ class ConceptBundleFactory(factory.django.DjangoModelFactory):
 
     stage = factory.SubFactory(StageFactory)
     label = "Bundle"
+
+
+class TrophyFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Trophy
+
+    game = factory.SubFactory(GameFactory)
+    trophy_id = factory.Sequence(lambda n: n)
+    trophy_type = "bronze"
+    trophy_name = factory.Sequence(lambda n: f"Trophy {n}")
+
+
+class EarnedTrophyFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = EarnedTrophy
+
+    profile = factory.SubFactory(ProfileFactory)
+    trophy = factory.SubFactory(TrophyFactory)
+    earned = True
+    earned_date_time = factory.LazyFunction(timezone.now)
