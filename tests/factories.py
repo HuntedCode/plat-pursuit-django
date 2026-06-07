@@ -44,6 +44,9 @@ class UserFactory(factory.django.DjangoModelFactory):
         model = CustomUser
 
     email = factory.Sequence(lambda n: f"user{n}@example.com")
+    # CustomUser still carries AbstractUser's unique `username`; give it a unique
+    # value so creating multiple users in one test doesn't collide on ''.
+    username = factory.Sequence(lambda n: f"user{n}")
 
     @classmethod
     def _create(cls, model_class, *args, **kwargs):
