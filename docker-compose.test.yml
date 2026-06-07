@@ -1,0 +1,23 @@
+# Test-only services. Committed to the repo because the main docker-compose.yml
+# is gitignored. Brings up an isolated Postgres for the test suite.
+#
+#   docker compose -f docker-compose.test.yml up -d
+#
+# Redis is optional for tests (the raw redis client's leaderboard writes are
+# best-effort and fail fast if it's absent). If you want them to persist, run a
+# redis on localhost:6379 (e.g. your main compose's redis); settings_test uses
+# DB index 15 to stay isolated.
+services:
+  db-test:
+    # Disposable Postgres for tests. Data lives in tmpfs (RAM): fast and wiped on
+    # stop. Django creates/drops test_<dbname> inside it. settings_test defaults
+    # to localhost:5544 with these credentials.
+    image: postgres:15
+    environment:
+      POSTGRES_DB: plat_pursuit_dev
+      POSTGRES_USER: plat_user
+      POSTGRES_PASSWORD: securepass
+    ports:
+      - "5544:5432"
+    tmpfs:
+      - /var/lib/postgresql/data

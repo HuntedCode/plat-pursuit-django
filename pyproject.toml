@@ -8,3 +8,14 @@ exclude = '''
   | static
 )/
 '''
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "plat_pursuit.settings_test"
+python_files = ["test_*.py", "tests.py", "*_test.py"]
+# Discover tests inside the apps + the top-level tests/ package.
+testpaths = ["tests", "trophies", "core", "users", "notifications", "fundraiser", "api"]
+# Don't descend into these (venv ships its own test_*.py files; management/
+# commands contain Django commands literally named test_* that are NOT pytest).
+norecursedirs = ["venv", "node_modules", ".git", "static", "staticfiles", "*/migrations", "*/management"]
+# --reuse-db keeps the test database between runs for speed (drop it with --create-db).
+addopts = "-q --reuse-db --strict-markers"
