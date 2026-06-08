@@ -255,42 +255,6 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     return checked_count
 
 
-def _check_prerequisite_tier(profile, badge, _context=None):
-    """
-    Check if previous tier badge has been earned (prerequisite check).
-
-    Args:
-        profile: Profile instance
-        badge: Badge instance to check prerequisites for
-        _context: Optional pre-fetched context from _build_badge_context
-
-    Returns:
-        bool: True if prerequisite is met or no prerequisite exists, False otherwise
-    """
-    from trophies.models import UserBadge, Badge
-
-    if badge.tier <= 1:
-        return True
-
-    prev_tier = badge.tier - 1
-
-    # Use pre-fetched context to avoid per-badge queries
-    if _context:
-        prev_badge = _context['badges_by_key'].get((badge.series_slug, prev_tier))
-        if prev_badge:
-            return prev_badge.id in _context['earned_badge_ids']
-        # prev tier not in current batch; fall through to DB query
-
-    # Fallback for standalone calls or when prev tier not in batch
-    prev_badge = Badge.objects.filter(
-        series_slug=badge.series_slug, tier=prev_tier, is_live=True
-    ).first()
-
-    return prev_badge and UserBadge.objects.filter(
-        profile=profile, badge=prev_badge
-    ).exists()
-
-
 def _update_badge_progress(profile, badge, completed_count):
     """
     Update or create UserBadgeProgress for a badge.
@@ -673,8 +637,11 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
     if not profile or not badge:
         return False
 
-    # Check prerequisite: Previous tier must be earned first
-    prev_badge_earned = _check_prerequisite_tier(profile, badge, _context=_context)
+    # Tiers are INDEPENDENT: each badge tier is its own framed artifact, earned on
+    # its own merits regardless of whether lower tiers are complete (the
+    # previous-tier prerequisite was removed). prev_badge_earned is kept as the
+    # gate variable name for the award/revoke logic below, now always True.
+    prev_badge_earned = True
 
     # Handle concept-based badges (series, collection, developer, user)
     if badge.badge_type in CONCEPT_BASED_BADGE_TYPES:
