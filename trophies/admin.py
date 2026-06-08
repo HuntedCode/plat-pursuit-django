@@ -1280,6 +1280,11 @@ class BadgeAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':
             kwargs['queryset'] = Badge.objects.filter(tier=1)
+        elif db_field.name == 'franchise':
+            # Validation defense: a collection can never be set as a badge's
+            # franchise (the autocomplete already hides them, see FranchiseAdmin).
+            from trophies.models import Franchise
+            kwargs['queryset'] = Franchise.objects.filter(source_type='franchise')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
@@ -3226,6 +3231,16 @@ class FranchiseAdmin(admin.ModelAdmin):
     # Rename via `name` is fine; everything else is read-only.
     readonly_fields = ('igdb_id', 'source_type')
     inlines = [FranchiseConceptInline]
+
+    def get_search_results(self, request, queryset, search_term):
+        qs, may_have_dupes = super().get_search_results(request, queryset, search_term)
+        # Badge.franchise should offer real franchises ONLY. This model also holds
+        # IGDB collections (source_type='collection'), which were showing up as
+        # doubles in that autocomplete. Scope the filter to that one field so other
+        # franchise autocompletes (e.g. concept links) still see everything.
+        if request.GET.get('model_name') == 'badge' and request.GET.get('field_name') == 'franchise':
+            qs = qs.filter(source_type='franchise')
+        return qs, may_have_dupes
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(
