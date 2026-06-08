@@ -15,11 +15,19 @@ stores the result on ``last_platinum_count``; the banner and event page read
 that cheap stored value and never recompute on the request path.
 """
 
-from os.path import basename
+from os.path import basename, splitext
+from uuid import uuid4
 
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
+
+
+def _artwork_upload_path(instance, filename):
+    """Opaque, unguessable storage path for pre-release artwork. The UI never
+    links a locked item's file, and the random name keeps the raw media URL (S3
+    in prod) from being enumerated or guessed before the reveal."""
+    return f"art_reveal/{uuid4().hex}{splitext(filename)[1].lower()}"
 
 
 class ArtRevealEvent(models.Model):
@@ -123,7 +131,7 @@ class ArtRevealItem(models.Model):
     )
     order = models.PositiveIntegerField(help_text='Reveal position, 1-based. Lower numbers reveal first.')
     artwork = models.ImageField(
-        upload_to='art_reveal/',
+        upload_to=_artwork_upload_path,
         help_text='The to-be-revealed artwork. Hidden until released, then copied onto the badge.',
     )
     placeholder_label = models.CharField(
