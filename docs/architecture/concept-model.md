@@ -95,11 +95,12 @@ families are created inline during IGDB enrichment via `get_or_create`. See
 2. Platform mismatch check: if `TitleID.platform` does not match `Game.title_platform`, the Game's platform is trusted and the API call uses the corrected platform. If successful, `TitleID.platform` is updated at source
 3. PSN API is called to get concept details via `game_title` endpoint
 4. If the API returns valid details (no `errorCode`):
-   - `PsnApiService.create_concept_from_details()` does `get_or_create` on `Concept` using the PSN `concept_id`
+   - `PsnApiService.create_concept_from_details()` does `get_or_create` on `Concept` using `concept_id = f'PSN_{psn_id}'` (prefixed so PSN ids never collide with IGDB raw ids that share the integer space). Distinct from `'PP_'` (stub concepts via `Concept.create_default_concept`).
    - `concept.update_release_date()` and `concept.update_media()` populate metadata
    - `game.add_concept(concept)` assigns the concept (triggers `absorb()` if needed)
    - `concept.add_title_id()` records the title ID association
    - `concept.check_and_mark_regional()` flags games with multiple stacks per platform
+   - At sync_complete, `_try_igdb_enrich` runs per-game anchoring: each Game in the PSN concept gets `match_game` -> `anchor_game_to_canonical(game, raw_id)`, moving the Game to its per-version `str(raw_igdb_id)` slot. The PSN concept absorbs away via `add_concept`'s cascade once empty. Compilations whose individual games don't IGDB-match fall back to concept-level `enrich_concept` so the PSN concept still gets an IGDBMatch.
 5. If the API returns an error or fails:
    - `Concept.create_default_concept(game)` creates a stub concept (`PP_N`)
    - `game.add_concept(default_concept)` assigns it
@@ -174,7 +175,7 @@ This method migrates ALL related data from `other` (the orphaned concept) to `se
 ## Integration Points
 
 - **Token Keeper** (`trophies/token_keeper.py`): The sync pipeline calls `_job_sync_title_id()` for each game during profile sync. This is where concepts are created, assigned, and reassigned. Health check at sync completion ensures every game has a concept.
-- **PSN API Service** (`trophies/services/psn_api_service.py`): `create_concept_from_details()` does `get_or_create` on Concept from PSN API data. `update_profile_game_with_title_stats()` detects stale concepts and triggers re-sync.
+- **PSN API Service** (`trophies/services/psn_api_service.py`): `create_concept_from_details()` does `get_or_create` on Concept from PSN API data using `concept_id = f'PSN_{psn_id}'` (prefixed to avoid colliding with IGDB raw-id slots). `update_profile_game_with_title_stats()` detects stale concepts and triggers re-sync.
 - **Rating System** (`trophies/services/rating_service.py`): `UserConceptRating` is scoped to Concept + ConceptTrophyGroup. Cache invalidation is triggered after `absorb()`.
 - **Review System**: `Review` model has FK to Concept. Reviews are migrated during `absorb()` with deduplication by `(profile_id, concept_trophy_group_id)`.
 - **Roadmap System**: `Roadmap` is 1:1 with Concept (staff-authored platinum guides). Migrated as part of the Checklist legacy data preservation since roadmaps replaced checklists as the user-facing guide surface.
