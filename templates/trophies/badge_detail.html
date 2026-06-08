@@ -54,6 +54,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+{# frame.js powers the Frame primitive (flip + states); loads after base.html's utils.js #}
 <script src="{% static 'js/frame.js' %}"></script>
 <script>
 {# Scroll preservation for tier tab switching #}

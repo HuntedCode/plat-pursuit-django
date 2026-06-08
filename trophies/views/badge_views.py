@@ -987,26 +987,13 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['is_earned'] = is_earned
         context['highest_tier_earned'] = highest_tier_earned
 
+        # image_urls drives the og:image / twitter:image meta blocks. The old
+        # blurred-bg header (header_bg_image, recent_concept_name) was removed in
+        # the Frame-hero rebuild, so only image_urls remains.
         if badge.most_recent_concept:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': badge.most_recent_concept.cover_url}
-            context['recent_concept_name'] = badge.most_recent_concept.unified_title
         else:
             context['image_urls'] = {'bg_url': '', 'recent_concept_icon_url': ''}
-            context['recent_concept_name'] = ''
-
-        # Header background: single hero image for blurred backdrop. Prefer
-        # the landscape bg_url (crops naturally into a wide blurred strip),
-        # falling back to the portrait cover_url if no landscape is available.
-        header_bg_image = ''
-        if badge.most_recent_concept:
-            header_bg_image = (
-                badge.most_recent_concept.bg_url
-                or badge.most_recent_concept.cover_url
-                or ''
-            )
-        if not header_bg_image and structured_data:
-            header_bg_image = structured_data[0]['stage'].stage_icon or ''
-        context['header_bg_image'] = header_bg_image
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
