@@ -248,15 +248,47 @@ Surfaces share two properties with primitives: they're brand-recognition vehicle
 
 ## 4. Tokens
 
-Deferred. This section will hold concrete CSS variables, type scale, color extensions beyond DaisyUI's defaults, and motion vocabulary once Phase 1 gamification design begins and we know what we're tokenizing toward. Drafting tokens before the surfaces that use them is premature.
+**In active development** (2026-06). The bespoke token foundation is being developed
+as a workshop at [`/design/style-guide/`](../../templates/design/style_guide_preview.html)
+(standalone, DaisyUI-free). Direction is agreed; concrete `@theme` values get promoted
+from the workshop into `static/css/input.css` when the first real surface (Badge detail)
+is rebuilt, and DaisyUI's theme is re-pointed at them for instant site-wide ownership.
+This is a **living layer** — extend it as new surfaces surface new needs.
 
-When this section opens, expected contents:
+Agreed direction:
 
-- Typography pair (display + body) and scale for the Tally treatment
-- Color extensions for tier states, Horizon gradients, and earnest-warm accents
-- Motion vocabulary for level-up beats, badge-earn moments, Pursuer Card animations
-- Spacing additions specific to identity surfaces (badge gallery, Logbook hero)
-- DaisyUI overrides where the default token doesn't carry the identity
+- **Color.** Keep and formalize the existing character (slate surfaces; **cyan =
+  primary/platinum** and the one "active / in progress" accent; violet secondary;
+  warm-orange forge-spark accent; trophy tiers; semantics), re-homed as owned `--pp-*`
+  tokens so templates stop referencing DaisyUI's `base-*`.
+- **Type.** **Bricolage Grotesque** (display, locked in the Tally workshop) reserved for
+  **hero headlines + numbers only**; **Inter** for body and sub-headers. Scarcity makes
+  the display face hit; Inter keeps the broad UI calm and readable.
+- **Shape.** Near-square radii + crisp **2px borders** = the "matted, framed artifact"
+  read. **Material over drop-shadow** for richness: a top-edge light-catch + faint
+  surface gradient ("workbench material") on resting cards; shadow reserved for raised
+  surfaces.
+
+Guiding principles for this layer (the test gates):
+
+- **Neon / glow is earned by *state*, never painted on *surfaces*.** It marks active /
+  hover / near-completion / earn moments using the one cyan accent (tier tints only for
+  tier-specific glows); it never washes backgrounds, body text, or resting chrome.
+  Resting = calm matte; glow = reward energy on top. (Keeps us PS-era-premium, not the
+  cyberpunk / mobile-game / NFT anti-refs in §5.)
+- **Premium substrate, charm seasoning.** Premium is the baseline quality bar on every
+  surface, earned through restraint + craft + consistency (NOT more effects). Indie charm
+  is deliberate moments on top (flavor, easter eggs, personality), never a coat of paint
+  that cheapens. *Prestigious + modern* carry the substrate; *charming + earnest* carry
+  the seasoning.
+- **Signature moments on a budget.** Invest deep craft in a few canonical beats (badge
+  Earn Moment, level-up, first-sync "Pursuer emerges", milestones) and let everything
+  else breathe. The calm makes the wow land. Motion is GPU-friendly (transform/opacity),
+  honors `prefers-reduced-motion`, and never blocks reading — jank reads as cheap.
+
+Still to formalize as the workshop matures: the concrete type scale, spacing scale,
+elevation scale, and the per-surface motion vocabulary (these solidify against real
+surfaces rather than in the abstract).
 
 ---
 

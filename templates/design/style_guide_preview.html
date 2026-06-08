@@ -1,0 +1,432 @@
+{% comment %}
+Style Guide / Token workshop. Standalone + DaisyUI-free on purpose: it
+demonstrates the proposed bespoke token foundation (palette, type, shape,
+elevation, components, motion) without depending on output.css or DaisyUI,
+so it needs no Tailwind rebuild. Once locked, these tokens graduate into
+input.css @theme and the component patterns into design-system.md.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="en" data-display-reach="numbers">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PlatPursuit — Style Guide (proposed tokens)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap" />
+<style>
+/* ============================================================ TOKENS */
+:root {
+  /* --- Surfaces (dark, the default) : a deep slate set --------------- */
+  --pp-bg-0: oklch(0.17 0.012 254);   /* page */
+  --pp-bg-1: oklch(0.23 0.014 253);   /* card / surface */
+  --pp-bg-2: oklch(0.28 0.016 252);   /* raised surface */
+  --pp-bg-3: oklch(0.33 0.018 252);   /* hover / inset */
+
+  /* --- Text ----------------------------------------------------------- */
+  --pp-text:     oklch(0.97 0.012 256);
+  --pp-text-dim: oklch(0.72 0.02 256);
+  --pp-text-mute:oklch(0.55 0.02 256);
+
+  /* --- Lines ---------------------------------------------------------- */
+  --pp-border:  oklch(0.40 0.02 254 / 0.55);
+  --pp-divider: oklch(0.40 0.02 254 / 0.30);
+
+  /* --- Brand ---------------------------------------------------------- */
+  --pp-primary:   oklch(0.86 0.142 206);  /* cyan / platinum */
+  --pp-secondary: oklch(0.74 0.21 285);   /* violet */
+  --pp-accent:    oklch(0.80 0.18 45);     /* warm orange / forge spark */
+
+  /* --- Trophy tiers --------------------------------------------------- */
+  --pp-bronze:   #8d4d2a;
+  --pp-silver:   #9aa3b0;
+  --pp-gold:     #d2a24c;
+  --pp-platinum: #67d1f8;
+
+  /* --- Semantic ------------------------------------------------------- */
+  --pp-success: oklch(0.80 0.16 162);
+  --pp-warning: oklch(0.86 0.17 90);
+  --pp-error:   oklch(0.70 0.21 22);
+  --pp-info:    oklch(0.74 0.16 245);
+
+  /* --- Type ----------------------------------------------------------- */
+  --pp-font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --pp-font-body:    "Inter", system-ui, sans-serif;
+
+  /* --- Shape ---------------------------------------------------------- */
+  --pp-radius-sm: 0.25rem;
+  --pp-radius-md: 0.375rem;
+  --pp-radius-lg: 0.5rem;
+  --pp-border-w:  2px;
+
+  /* --- Elevation ------------------------------------------------------ */
+  --pp-elev-1: 0 1px 2px oklch(0 0 0 / 0.30);
+  --pp-elev-2: 0 4px 12px oklch(0 0 0 / 0.35);
+  --pp-elev-3: 0 12px 32px oklch(0 0 0 / 0.45);
+
+  /* --- Motion --------------------------------------------------------- */
+  --pp-dur-fast: 140ms;
+  --pp-dur:      240ms;
+  --pp-dur-slow: 520ms;
+  --pp-ease: cubic-bezier(0.22, 0.61, 0.36, 1);   /* organic, slight overshoot-free ease-out */
+}
+
+/* ============================================================ BASE */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: radial-gradient(ellipse at 50% -10%, oklch(0.24 0.02 254) 0%, var(--pp-bg-0) 55%);
+  color: var(--pp-text);
+  font-family: var(--pp-font-body);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 48px 24px 120px; }
+
+h1,h2,h3 { font-family: var(--pp-font-display); font-weight: 700; line-height: 1.1; margin: 0 0 .4em; }
+/* The "display reach" toggle: when set to numbers-only, sub-headers fall back to Inter. */
+[data-display-reach="numbers"] h2,
+[data-display-reach="numbers"] h3 { font-family: var(--pp-font-body); font-weight: 700; }
+
+a { color: var(--pp-primary); }
+section { margin-top: 56px; }
+.eyebrow {
+  font-family: var(--pp-font-body); font-size: .72rem; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--pp-text-mute);
+  margin: 0 0 14px;
+}
+.note { color: var(--pp-text-dim); font-size: .9rem; max-width: 62ch; }
+.divider { height: 1px; background: var(--pp-divider); border: 0; margin: 56px 0 0; }
+.grid { display: grid; gap: 14px; }
+
+/* ============================================================ PALETTE */
+.swatches { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.swatch {
+  border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md);
+  overflow: hidden; background: var(--pp-bg-1);
+}
+.swatch__chip { height: 64px; }
+.swatch__meta { padding: 8px 10px; font-size: .76rem; }
+.swatch__name { font-weight: 600; }
+.swatch__val { color: var(--pp-text-mute); font-family: var(--pp-font-body); font-size: .68rem; }
+
+/* ============================================================ TYPE */
+.type-row { display: flex; align-items: baseline; gap: 18px; padding: 10px 0; border-bottom: 1px solid var(--pp-divider); }
+.type-row__label { width: 120px; flex: none; color: var(--pp-text-mute); font-size: .72rem; }
+.t-display-xl { font-family: var(--pp-font-display); font-weight: 800; font-size: 3.5rem; font-variation-settings: "wdth" 100; }
+.t-display-lg { font-family: var(--pp-font-display); font-weight: 700; font-size: 2.5rem; }
+.t-h1 { font-family: var(--pp-font-display); font-weight: 700; font-size: 2rem; }
+.t-h2 { font-family: var(--pp-font-display); font-weight: 600; font-size: 1.5rem; }
+.t-body { font-family: var(--pp-font-body); font-size: 1rem; }
+.t-small { font-family: var(--pp-font-body); font-size: .875rem; color: var(--pp-text-dim); }
+.t-micro { font-family: var(--pp-font-body); font-size: .75rem; color: var(--pp-text-mute); }
+
+.reach-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+.reach-card { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-md); padding: 18px; background: var(--pp-bg-1); }
+.reach-card h4 { margin: 0 0 4px; font-size: 1.35rem; }
+.reach-card .b { font-family: var(--pp-font-display); font-weight: 700; }
+.reach-card .i { font-family: var(--pp-font-body); font-weight: 700; }
+
+/* ============================================================ COMPONENTS */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; align-items: start; }
+.btn {
+  font-family: var(--pp-font-body); font-weight: 600; font-size: .9rem;
+  padding: 10px 18px; border-radius: var(--pp-radius-sm); border: var(--pp-border-w) solid transparent;
+  cursor: pointer; transition: transform var(--pp-dur-fast) var(--pp-ease),
+    box-shadow var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.btn--primary { background: var(--pp-primary); color: oklch(0.17 0.02 252); }
+.btn--secondary { background: transparent; color: var(--pp-text); border-color: var(--pp-border); }
+.btn--ghost { background: transparent; color: var(--pp-text-dim); border-color: transparent; }
+.btn:hover { box-shadow: 0 0 0 3px oklch(0.86 0.142 206 / 0.25); }   /* hover GLOW, not scale */
+.btn--secondary:hover { border-color: var(--pp-primary); color: var(--pp-text); }
+
+.card {
+  position: relative;
+  /* subtle surface gradient = "matted board / workbench" material, no neon */
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.05), oklch(1 0 0 / 0) 45%), var(--pp-bg-1);
+  border: var(--pp-border-w) solid var(--pp-border);
+  border-radius: var(--pp-radius-lg); padding: 18px; box-shadow: var(--pp-elev-1);
+  transition: box-shadow var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
+}
+.card::before {  /* light catching the top edge — tactility without glow */
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.28), transparent);
+  border-top-left-radius: inherit; border-top-right-radius: inherit;
+}
+.card--hover:hover { box-shadow: var(--pp-elev-2), 0 0 22px oklch(0.86 0.142 206 / 0.22); border-color: var(--pp-primary); }
+.card--active {  /* "currently active / in progress" — disciplined cyan glow, earned by state */
+  border-color: var(--pp-primary);
+  box-shadow: 0 0 0 1px var(--pp-primary), 0 0 26px oklch(0.86 0.142 206 / 0.28);
+}
+.card--flat { background: var(--pp-bg-1); }   /* the "before" — no material, for comparison */
+.card--flat::before { display: none; }
+.section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.section-header__title { font-family: var(--pp-font-display); font-weight: 600; font-size: 1.05rem; }
+.section-header__rule { flex: 1; height: 1px; background: var(--pp-divider); }
+
+.stat { background: oklch(1 0 0 / 0.03); border: 1px solid var(--pp-divider); border-radius: var(--pp-radius-md); padding: 14px 16px; }
+.stat__num { font-family: var(--pp-font-display); font-weight: 800; font-size: 2.1rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.stat__label { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 6px; }
+
+.row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--pp-divider); border-radius: var(--pp-radius-md); background: var(--pp-bg-1); }
+.row__icon { width: 34px; height: 34px; border-radius: var(--pp-radius-sm); background: var(--pp-bg-3); flex: none; }
+.row__meta { color: var(--pp-text-mute); margin-left: auto; font-size: .8rem; }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; font-weight: 600;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--pp-border); color: var(--pp-text-dim); }
+.chip--tier { border-color: var(--pp-gold); color: var(--pp-gold); }
+
+.input {
+  width: 100%; font-family: var(--pp-font-body); font-size: .9rem; color: var(--pp-text);
+  background: var(--pp-bg-0); border: var(--pp-border-w) solid var(--pp-border);
+  border-radius: var(--pp-radius-sm); padding: 10px 12px;
+  transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+.input:focus { outline: none; border-color: var(--pp-primary); box-shadow: 0 0 0 3px oklch(0.86 0.142 206 / 0.20); }
+
+/* ============================================================ MOTION & DELIGHT */
+/* No overflow:hidden — it would clip the fill's box-shadow glow (the pulse). The
+   fill keeps its own pill radius, so the ends stay rounded without clipping. */
+.horizon { height: 12px; border-radius: 999px; background: var(--pp-bg-3); position: relative; }
+.horizon__fill {
+  height: 100%; width: 68%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--pp-secondary), var(--pp-primary));
+  position: relative;
+}
+.horizon__fill::after {  /* near-completion glow pulse */
+  content: ""; position: absolute; inset: 0; border-radius: 999px;
+  box-shadow: 0 0 16px var(--pp-primary); opacity: .0;
+  animation: pp-pulse 2.4s var(--pp-ease) infinite;
+}
+@keyframes pp-pulse { 0%,100% { opacity: .25; } 50% { opacity: .85; } }
+
+.tick { font-family: var(--pp-font-display); font-weight: 800; font-size: 2.6rem; font-variant-numeric: tabular-nums; display: inline-block; }
+.tick.is-rolling { animation: pp-tick 640ms var(--pp-ease); }
+@keyframes pp-tick {
+  0%   { transform: translateY(0.55em); opacity: 0; filter: blur(2px); }
+  55%  { opacity: 1; filter: blur(0); }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.spark-btn { position: relative; overflow: hidden; }
+.spark-btn:hover { box-shadow: 0 0 0 3px oklch(0.80 0.18 45 / 0.30); }
+
+/* Guardrail: kill non-essential motion when the user asks for it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+.controls { position: sticky; top: 0; z-index: 5; background: oklch(0.17 0.012 254 / 0.9);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--pp-divider);
+  padding: 10px 24px; display: flex; gap: 14px; align-items: center; font-size: .8rem; }
+.controls button { font-family: var(--pp-font-body); }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <strong style="font-family:var(--pp-font-display)">Style Guide</strong>
+  <span class="note" style="margin:0">Display reach:</span>
+  <button class="btn btn--secondary" onclick="document.documentElement.dataset.displayReach='headers'">Bricolage on all headers</button>
+  <button class="btn btn--ghost" onclick="document.documentElement.dataset.displayReach='numbers'">Bricolage on hero + numbers only</button>
+  <button class="btn btn--ghost" onclick="window.ppReplayTicks && window.ppReplayTicks()">Replay tick-up</button>
+</div>
+
+<div id="rm-banner" style="display:none; padding:10px 24px; background:oklch(0.86 0.17 90 / 0.15); border-bottom:1px solid var(--pp-warning); color:var(--pp-text); font-size:.82rem;">
+  Heads-up: your system has <strong>“reduce motion”</strong> enabled, so every animation here is intentionally suppressed — that's our accessibility guardrail working as designed. Toggle it off (OS or browser) to preview the motion samples.
+</div>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">PlatPursuit · proposed token foundation (v0)</p>
+    <h1 class="t-display-xl">The chrome frames the art.</h1>
+    <p class="note">A working proposal for our owned design tokens, expressed without DaisyUI. Palette, type, shape, elevation, core components, and motion. Nothing here is locked: react to it, and we iterate, then it graduates into <code>input.css</code> <code>@theme</code> and <code>design-system.md</code>. Toggle the display-reach control above to compare Bricolage on all headers vs. hero + numbers only.</p>
+  </header>
+
+  <section>
+    <p class="eyebrow">Color</p>
+    <h2 class="t-h2">Surfaces &amp; text</h2>
+    <div class="grid swatches">
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-bg-0)"></div><div class="swatch__meta"><div class="swatch__name">bg-0 · page</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-bg-1)"></div><div class="swatch__meta"><div class="swatch__name">bg-1 · surface</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-bg-2)"></div><div class="swatch__meta"><div class="swatch__name">bg-2 · raised</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-bg-3)"></div><div class="swatch__meta"><div class="swatch__name">bg-3 · hover/inset</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-text)"></div><div class="swatch__meta"><div class="swatch__name">text</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-text-dim)"></div><div class="swatch__meta"><div class="swatch__name">text-dim</div></div></div>
+    </div>
+    <h2 class="t-h2" style="margin-top:28px">Brand &amp; accents</h2>
+    <div class="grid swatches">
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-primary)"></div><div class="swatch__meta"><div class="swatch__name">primary</div><div class="swatch__val">cyan / platinum</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-secondary)"></div><div class="swatch__meta"><div class="swatch__name">secondary</div><div class="swatch__val">violet</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-accent)"></div><div class="swatch__meta"><div class="swatch__name">accent</div><div class="swatch__val">forge spark</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-bronze)"></div><div class="swatch__meta"><div class="swatch__name">bronze</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-silver)"></div><div class="swatch__meta"><div class="swatch__name">silver</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-gold)"></div><div class="swatch__meta"><div class="swatch__name">gold</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-platinum)"></div><div class="swatch__meta"><div class="swatch__name">platinum</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-success)"></div><div class="swatch__meta"><div class="swatch__name">success</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-warning)"></div><div class="swatch__meta"><div class="swatch__name">warning</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-error)"></div><div class="swatch__meta"><div class="swatch__name">error</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--pp-info)"></div><div class="swatch__meta"><div class="swatch__name">info</div></div></div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <p class="eyebrow">Typography</p>
+    <h2 class="t-h2">Scale — Bricolage display, Inter body</h2>
+    <div>
+      <div class="type-row"><span class="type-row__label">display-xl</span><span class="t-display-xl">Platinum</span></div>
+      <div class="type-row"><span class="type-row__label">display-lg</span><span class="t-display-lg">Your Pursuit</span></div>
+      <div class="type-row"><span class="type-row__label">h1</span><span class="t-h1">Resident Evil Master</span></div>
+      <div class="type-row"><span class="type-row__label">h2</span><span class="t-h2">How to earn this badge</span></div>
+      <div class="type-row"><span class="type-row__label">body</span><span class="t-body">Earn the platinum in every mainline entry to complete this badge. Each tier adds the spin-offs and remasters.</span></div>
+      <div class="type-row"><span class="type-row__label">small</span><span class="t-small">147 Pursuers have earned this badge.</span></div>
+      <div class="type-row"><span class="type-row__label">micro</span><span class="t-micro">Last earned 2 hours ago</span></div>
+    </div>
+    <h2 class="t-h2" style="margin-top:28px">Display reach — same header, two systems</h2>
+    <div class="reach-compare">
+      <div class="reach-card"><div class="t-micro">Bricolage</div><h4 class="b">How to earn this badge</h4><p class="t-small" style="margin:0">Characterful, monumental. Carries identity into every header.</p></div>
+      <div class="reach-card"><div class="t-micro">Inter (bold)</div><h4 class="i">How to earn this badge</h4><p class="t-small" style="margin:0">Quieter, utilitarian. Reserves Bricolage for hero + numbers.</p></div>
+    </div>
+    <p class="note" style="margin-top:12px">Use the “Display reach” toggle at the top to flip every sub-header between these two and see which feels right site-wide.</p>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <p class="eyebrow">Shape &amp; elevation</p>
+    <div class="cols">
+      <div><div class="card" style="border-radius:var(--pp-radius-sm)">radius-sm · 4px</div></div>
+      <div><div class="card" style="border-radius:var(--pp-radius-md)">radius-md · 6px</div></div>
+      <div><div class="card" style="border-radius:var(--pp-radius-lg)">radius-lg · 8px</div></div>
+    </div>
+    <div class="cols" style="margin-top:14px">
+      <div><div class="card" style="box-shadow:var(--pp-elev-1)">elev-1</div></div>
+      <div><div class="card" style="box-shadow:var(--pp-elev-2)">elev-2</div></div>
+      <div><div class="card" style="box-shadow:var(--pp-elev-3)">elev-3</div></div>
+    </div>
+    <p class="note" style="margin-top:12px">Crisp 2px borders + near-square corners = the “matted, framed artifact” read. Modern and prestigious without rounding into friendliness.</p>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <p class="eyebrow">Components (DaisyUI-free)</p>
+    <h2 class="t-h2">Buttons</h2>
+    <div style="display:flex; gap:12px; flex-wrap:wrap">
+      <button class="btn btn--primary">Start your Pursuit</button>
+      <button class="btn btn--secondary">View badge</button>
+      <button class="btn btn--ghost">Cancel</button>
+      <button class="btn btn--primary spark-btn" style="background:var(--pp-accent); color:oklch(0.18 0.02 45)">Forge (accent)</button>
+    </div>
+
+    <h2 class="t-h2" style="margin-top:28px">Card material — flat vs. crafted</h2>
+    <div class="reach-compare">
+      <div class="card card--flat"><div class="t-micro">Flat · no material</div><p class="t-small" style="margin:6px 0 0">Plain surface. Functional, but reads a touch bland.</p></div>
+      <div class="card"><div class="t-micro">Material · top-edge catch + surface gradient</div><p class="t-small" style="margin:6px 0 0">Light catches the top edge; a faint gradient gives the surface body. Calm, but crafted — no glow needed.</p></div>
+    </div>
+
+    <h2 class="t-h2" style="margin-top:28px">Cards, headers, stats, rows</h2>
+    <div class="cols">
+      <div class="card card--hover">
+        <div class="section-header"><span class="section-header__title">Active progression</span><span class="section-header__rule"></span></div>
+        <p class="t-small" style="margin:0 0 12px">1 platinum from Silver.</p>
+        <div class="horizon"><div class="horizon__fill"></div></div>
+      </div>
+      <div class="card">
+        <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px">
+          <div class="stat"><div class="stat__num">128</div><div class="stat__label">Platinums</div></div>
+          <div class="stat"><div class="stat__num">37</div><div class="stat__label">Badges</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row"><div class="row__icon"></div><div><div style="font-weight:600">Detective</div><div class="t-micro">Lv. 24</div></div><span class="row__meta">+250 XP</span></div>
+        <div style="height:10px"></div>
+        <span class="chip">PS5</span> <span class="chip chip--tier">Gold tier</span>
+      </div>
+      <div class="card">
+        <label class="t-small" style="display:block; margin-bottom:6px">Search badges</label>
+        <input class="input" placeholder="e.g. Resident Evil" />
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <p class="eyebrow">Neon / glow — earned, never wallpaper</p>
+    <h2 class="t-h2">Glow signals meaning</h2>
+    <p class="note">Luminous cyan-on-dark is our PlayStation-era love letter and our one brand accent for <strong>active / in-progress</strong>. The rule that keeps it prestigious instead of cyberpunk: <strong>glow is earned by state, never painted on surfaces.</strong> It marks active, hovered, near-complete, and earn moments — it never washes backgrounds, body text, or resting chrome. Resting = calm matte; glow = the reward energy on top.</p>
+    <div class="cols" style="margin-top:18px">
+      <div class="card"><div class="t-micro">Resting · calm matte</div><p class="t-small" style="margin:6px 0 0">Default cards stay quiet and prestigious. Most of the UI lives here.</p></div>
+      <div class="card card--active"><div class="t-micro">Active · cyan glow</div><p class="t-small" style="margin:6px 0 0">“Currently in progress” earns the glow. Reserved for meaning.</p></div>
+      <div class="card card--hover"><div class="t-micro">Hover me · edge glow</div><p class="t-small" style="margin:6px 0 0">Interactive surfaces glow at the edge, not scale.</p></div>
+    </div>
+    <p class="note" style="margin-top:12px"><strong>Do:</strong> active/“working on” edges, hover, Horizon near-completion, earn moments — one cyan accent (tier tints only for tier-specific glows). <strong>Don’t:</strong> glow on every card, neon bars everywhere, glowing body text, full-surface neon gradients (those are the cyberpunk / mobile-game / NFT anti-references our docs call out).</p>
+  </section>
+
+  <hr class="divider" />
+
+  <section>
+    <p class="eyebrow">Motion &amp; delight</p>
+    <h2 class="t-h2">Reward, never obstruction</h2>
+    <p class="note">Motion celebrates progress and gives feedback. It is additive flair: informational content is fully legible static, and everything here is disabled under <code>prefers-reduced-motion</code>. Principles: weighted, organic, desynchronized — never frantic.</p>
+    <div class="cols" style="margin-top:18px">
+      <div class="card">
+        <div class="t-micro" style="margin-bottom:8px">Weighted tick-up (level number)</div>
+        <span class="tick is-rolling">42</span>
+        <p class="t-small" style="margin-top:10px">Numbers roll with mass on change, not a spinning counter. Use the “Replay tick-up” control above.</p>
+      </div>
+      <div class="card">
+        <div class="t-micro" style="margin-bottom:8px">Horizon pulse (near completion)</div>
+        <div class="horizon"><div class="horizon__fill"></div></div>
+        <p class="t-small" style="margin-top:10px">Cooler-to-warmer gradient; a soft glow breathes as you approach the next tier.</p>
+      </div>
+      <div class="card card--hover">
+        <div class="t-micro" style="margin-bottom:8px">Hover glow (not scale)</div>
+        <p class="t-small" style="margin:0">Hover this card. Interactive surfaces glow at the edge rather than jumping in size — calmer, more premium.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  (function () {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      var b = document.getElementById('rm-banner');
+      if (b) b.style.display = 'block';
+    }
+
+    var ticks = document.querySelectorAll('.tick');
+
+    // Animate a number CLIMBING to its target (the brief's "watching them climb").
+    // Not a frantic spinner: a short, eased count-up paired with the roll-in flourish.
+    function countUp(el) {
+      var target = parseInt(el.dataset.target || el.textContent, 10) || 0;
+      el.dataset.target = target;
+      if (reduce) { el.textContent = target; return; }
+      var start = Math.max(0, target - 8), dur = 700, t0 = null;
+      el.classList.remove('is-rolling'); void el.offsetWidth; el.classList.add('is-rolling');
+      function step(ts) {
+        if (t0 === null) t0 = ts;
+        var p = Math.min(1, (ts - t0) / dur);
+        var eased = 1 - Math.pow(1 - p, 3);  // ease-out
+        el.textContent = Math.round(start + (target - start) * eased);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    window.ppReplayTicks = function () { ticks.forEach(countUp); };
+    window.ppReplayTicks();
+    if (!reduce) setInterval(window.ppReplayTicks, 3600);
+  })();
+</script>
+</body>
+</html>

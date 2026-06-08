@@ -376,6 +376,7 @@ urlpatterns = [
     path('design/horizon/', TemplateView.as_view(template_name='design/horizon_preview.html'), name='design_horizon_preview'),
     path('design/pursuer-card/', PursuerCardPreviewView.as_view(), name='design_pursuer_card_preview'),
     path('design/pursuer-card-customization/', PursuerCardCustomizationPreviewView.as_view(), name='design_pursuer_card_customization_preview'),
+    path('design/style-guide/', TemplateView.as_view(template_name='design/style_guide_preview.html'), name='design_style_guide_preview'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),
