@@ -15,7 +15,7 @@ def art_reveal_banner(request):
         return {}
     latest = (
         event.items.filter(released=True)
-        .select_related('badge').order_by('-order').first()
+        .select_related('badge', 'badge__base_badge').order_by('-order').first()
     )
     return {
         'art_reveal_event': event,

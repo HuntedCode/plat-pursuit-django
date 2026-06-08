@@ -24,10 +24,10 @@ Permanent, pinned event banner. Sticks directly below the nav chrome via
             {% if art_reveal_latest %}
             <a href="{% url 'badge_detail' art_reveal_latest.badge.series_slug %}"
                class="flex items-center gap-1.5 mt-1 min-w-0 group/latest"
-               title="Just unlocked: {{ art_reveal_latest.badge.name }}">
+               title="Just unlocked: {{ art_reveal_latest.badge.effective_display_series|default:art_reveal_latest.badge.name }}">
               <img src="{{ art_reveal_latest.artwork.url }}" alt="" class="w-5 h-5 object-contain shrink-0 drop-shadow">
               <span class="text-[11px] text-base-content/55 truncate">
-                Just unlocked: <span class="font-semibold text-base-content/80 group-hover/latest:text-primary transition-colors">{{ art_reveal_latest.badge.name }}</span>
+                Just unlocked: <span class="font-semibold text-base-content/80 group-hover/latest:text-primary transition-colors">{{ art_reveal_latest.badge.effective_display_series|default:art_reveal_latest.badge.name }}</span>
               </span>
             </a>
             {% endif %}

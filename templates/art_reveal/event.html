@@ -82,11 +82,11 @@
                         {% for item in released_items %}
                         <figure class="w-full shrink-0 flex flex-col items-center px-2">
                             <div class="aspect-square w-full max-w-md bg-gradient-to-b from-base-200/60 to-base-300/40 rounded-xl flex items-center justify-center p-6">
-                                <img src="{{ item.artwork.url }}" alt="{{ item.badge.name }} badge artwork"
+                                <img src="{{ item.artwork.url }}" alt="{{ item.badge.effective_display_series|default:item.badge.name }} badge artwork"
                                      class="max-h-full max-w-full object-contain drop-shadow-lg">
                             </div>
                             <figcaption class="text-center mt-4 space-y-0.5">
-                                <p class="text-lg lg:text-xl font-bold">{{ item.badge.name }}</p>
+                                <p class="text-lg lg:text-xl font-bold">{{ item.badge.effective_display_series|default:item.badge.name }}</p>
                                 <p class="text-xs text-base-content/50">
                                     Reveal #{{ item.order }}
                                     {% if item.released_at %}&middot; {{ item.released_at|date:"M j, Y" }}{% endif %}
@@ -150,7 +150,7 @@
             <a href="{% url 'badge_detail' item.badge.series_slug %}" class="group flex flex-col gap-1.5">
                 {% if item.released %}
                 <div class="aspect-square rounded-lg bg-base-200 border border-base-content/10 group-hover:border-primary/50 transition-colors p-2.5 flex items-center justify-center">
-                    <img src="{{ item.artwork.url }}" alt="{{ item.badge.name }} artwork"
+                    <img src="{{ item.artwork.url }}" alt="{{ item.badge.effective_display_series|default:item.badge.name }} artwork"
                          class="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform">
                 </div>
                 {% else %}
@@ -160,7 +160,7 @@
                 </div>
                 {% endif %}
                 <div class="min-w-0 px-0.5">
-                    <p class="text-xs lg:text-sm font-semibold leading-tight truncate group-hover:text-primary transition-colors{% if not item.released %} text-base-content/55{% endif %}">{{ item.badge.name }}</p>
+                    <p class="text-xs lg:text-sm font-semibold leading-tight truncate group-hover:text-primary transition-colors{% if not item.released %} text-base-content/55{% endif %}">{{ item.badge.effective_display_series|default:item.badge.name }}</p>
                     {% if item.badge.effective_funded_by %}
                     <p class="text-[10px] lg:text-[11px] text-base-content/45 truncate">Funded by {{ item.badge.effective_funded_by.display_psn_username }}</p>
                     {% endif %}
