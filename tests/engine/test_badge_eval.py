@@ -119,9 +119,8 @@ def test_plat_check_tier_ignores_progress_without_platinum():
 
 
 def test_progress_check_tier_counts_progress_without_platinum():
-    # Tier 2 (progress-check): the same 100%-no-plat game DOES complete the stage.
-    # (Award is separately gated by the tier-1 prerequisite; here we assert the
-    # stage was counted as complete via progress.)
+    # Tier 2 (progress-check): the same 100%-no-plat game DOES complete the stage
+    # (and, with tiers now independent, earns the badge outright).
     series = "rebuild-progresscheck"
     badge = BadgeFactory(series_slug=series, tier=2)
     _, _, game = _stage_with_concept(series, 1)
@@ -133,31 +132,28 @@ def test_progress_check_tier_counts_progress_without_platinum():
     assert _completed_count(profile, badge) == 1
 
 
-# --- prerequisite chain -------------------------------------------------------
+# --- tier independence (no prerequisite) --------------------------------------
 
 
-def test_prerequisite_blocks_higher_tier_until_lower_earned():
-    series = "rebuild-prereq"
+def test_tiers_are_independent_no_prerequisite():
+    # Each badge tier is its own framed artifact, earned on its own merits — a
+    # higher tier is awarded even if a lower tier is not, with no prerequisite.
+    series = "rebuild-independent"
     tier1 = BadgeFactory(series_slug=series, tier=1)
     tier2 = BadgeFactory(series_slug=series, tier=2)
     # One stage applies to all tiers; the game satisfies both plat- and
-    # progress-checks so completion never blocks (only the prerequisite does).
+    # progress-checks, so tier 2's requirements are met.
     _, _, game = _stage_with_concept(series, 1)
     profile = ProfileFactory()
     ProfileGameFactory(profile=profile, game=game, has_plat=True, progress=100)
 
     ctx = _build_badge_context(profile, [tier1, tier2])
 
-    # Tier 2 first: complete, but tier 1 not yet earned -> blocked.
+    # Handle ONLY tier 2 (tier 1 never earned) — it is still awarded.
     handle_badge(profile, tier2, add_role_only=True, _context=ctx)
-    assert not _earned(profile, tier2)
 
-    # Earn tier 1, then tier 2 unblocks.
-    handle_badge(profile, tier1, add_role_only=True, _context=ctx)
-    assert _earned(profile, tier1)
-
-    handle_badge(profile, tier2, add_role_only=True, _context=ctx)
     assert _earned(profile, tier2)
+    assert not _earned(profile, tier1)  # lower tier irrelevant to earning tier 2
 
 
 # --- stage 0 + required_tiers -------------------------------------------------

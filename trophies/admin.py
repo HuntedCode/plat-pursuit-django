@@ -1220,22 +1220,25 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
-    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by')
-    list_filter = ['is_live', 'tier', 'badge_type']
+    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'franchise_col', 'developer_col', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
+    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'developer', 'base_badge', 'base_badge__franchise', 'base_badge__developer')
+    list_filter = ['is_live', 'tier', 'badge_type', 'rarity_class']
     list_editable = ['is_live']
     search_fields = ['name', 'series_slug', 'description']
-    readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value']
+    autocomplete_fields = ['franchise', 'developer']
+    readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value', 'rarity_pct', 'rarity_rank', 'rarity_class']
     date_hierarchy = 'created_at'
     fields = [
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
-        'tier', 'badge_type', 'title', 'display_title', 'display_series',
+        'tier', 'badge_type', 'franchise', 'developer', 'set_number',
+        'title', 'display_title', 'display_series',
         'discord_role_id', 'requires_all', 'min_required', 'requirements',
         'most_recent_concept', 'funded_by', 'submitted_by',
         'earned_count', 'view_count', 'required_stages', 'required_value',
+        'rarity_pct', 'rarity_rank', 'rarity_class',
         'created_at',
     ]
-    actions = ['mark_series_live', 'mark_series_not_live']
+    actions = ['mark_series_live', 'mark_series_not_live', 'assign_set_numbers']
 
     def mark_series_live(self, request, queryset):
         series_slugs = set(queryset.values_list('series_slug', flat=True))
@@ -1249,10 +1252,49 @@ class BadgeAdmin(admin.ModelAdmin):
         self.message_user(request, f"Marked {updated} badges across {len(series_slugs)} series as not live.")
     mark_series_not_live.short_description = "Mark series not live (all tiers)"
 
+    @admin.action(description="Assign next 4 set numbers to selected badge series")
+    def assign_set_numbers(self, request, queryset):
+        """Stamp the next 4 sequential set numbers onto each selected series' tier
+        badges (Bronze-Platinum). Skips series without exactly 4 tiers, or already
+        numbered. The assignment logic + atomicity live on Badge (and are tested)."""
+        result = Badge.assign_next_set_numbers(queryset.values_list('series_slug', flat=True))
+        for slug in result['invalid_tiers']:
+            self.message_user(
+                request,
+                f"Series '{slug}' does not have exactly 4 tiers (Bronze-Platinum); skipped.",
+                level=messages.ERROR,
+            )
+        for slug in result['already_numbered']:
+            self.message_user(
+                request,
+                f"Series '{slug}' already has set numbers; skipped (clear them to renumber).",
+                level=messages.WARNING,
+            )
+        if result['assigned']:
+            self.message_user(
+                request,
+                f"Assigned set numbers to {len(result['assigned'])} series.",
+                level=messages.SUCCESS,
+            )
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':
             kwargs['queryset'] = Badge.objects.filter(tier=1)
+        elif db_field.name == 'franchise':
+            # Validation defense: a collection can never be set as a badge's
+            # franchise (the autocomplete already hides them, see FranchiseAdmin).
+            from trophies.models import Franchise
+            kwargs['queryset'] = Franchise.objects.filter(source_type='franchise')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description='Franchise', ordering='franchise')
+    def franchise_col(self, obj):
+        # Inherited from the base (tier-1) badge when not set on this tier.
+        return obj.effective_franchise
+
+    @admin.display(description='Developer', ordering='developer')
+    def developer_col(self, obj):
+        return obj.effective_developer
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
     """Validates that no Concept appears in multiple bundles on the same Stage,
@@ -3198,6 +3240,16 @@ class FranchiseAdmin(admin.ModelAdmin):
     # Rename via `name` is fine; everything else is read-only.
     readonly_fields = ('igdb_id', 'source_type')
     inlines = [FranchiseConceptInline]
+
+    def get_search_results(self, request, queryset, search_term):
+        qs, may_have_dupes = super().get_search_results(request, queryset, search_term)
+        # Badge.franchise should offer real franchises ONLY. This model also holds
+        # IGDB collections (source_type='collection'), which were showing up as
+        # doubles in that autocomplete. Scope the filter to that one field so other
+        # franchise autocompletes (e.g. concept links) still see everything.
+        if request.GET.get('model_name') == 'badge' and request.GET.get('field_name') == 'franchise':
+            qs = qs.filter(source_type='franchise')
+        return qs, may_have_dupes
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(
