@@ -36,10 +36,37 @@
                      style="width: {{ p.pct_overall }}%"></div>
             </div>
         </div>
-        <p class="text-xs text-base-content/45 max-w-xl mx-auto pt-1.5">
-            Only <span class="font-semibold text-base-content/70">badge platinums</span> count: a platinum earned, by anyone in the community, on a game that's part of a badge. Every {{ p.per_reveal }} unlocks the next artwork.
-        </p>
     </header>
+
+    {# ===== How it works ===== #}
+    <section class="max-w-4xl mx-auto">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 text-left">
+            <div class="rounded-xl bg-base-200/50 border border-base-content/10 p-4 lg:p-5 hover:border-primary/30 transition-colors">
+                <div class="flex items-center gap-2.5 mb-2.5">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 text-primary font-extrabold text-sm shrink-0 ring-1 ring-primary/20">1</span>
+                    <svg class="w-5 h-5 text-primary/70" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.9H22l-6 4.5 2.3 7L12 16.9 5.7 20.4 8 13.4l-6-4.5h7.6L12 2z"/></svg>
+                </div>
+                <p class="font-bold text-sm lg:text-base">Earn badge platinums</p>
+                <p class="text-xs lg:text-sm text-base-content/60 mt-1">Platinum any game that counts toward a badge. Every plat the <span class="font-semibold text-base-content/80">whole community</span> earns pushes the meter forward.</p>
+            </div>
+            <div class="rounded-xl bg-base-200/50 border border-base-content/10 p-4 lg:p-5 hover:border-primary/30 transition-colors">
+                <div class="flex items-center gap-2.5 mb-2.5">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-secondary/15 text-secondary font-extrabold text-sm shrink-0 ring-1 ring-secondary/20">2</span>
+                    <svg class="w-5 h-5 text-secondary/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 8h14M5 8a2 2 0 100-4h14a2 2 0 100 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-7 4v6m-3-3h6"/></svg>
+                </div>
+                <p class="font-bold text-sm lg:text-base">Unlock the next piece</p>
+                <p class="text-xs lg:text-sm text-base-content/60 mt-1">Every <span class="font-semibold text-base-content/80">{{ p.per_reveal }} badge platinums</span> reveals the next of {{ p.total }} artworks, in order.</p>
+            </div>
+            <div class="rounded-xl bg-base-200/50 border border-base-content/10 p-4 lg:p-5 hover:border-primary/30 transition-colors">
+                <div class="flex items-center gap-2.5 mb-2.5">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 text-primary font-extrabold text-sm shrink-0 ring-1 ring-primary/20">3</span>
+                    <svg class="w-5 h-5 text-primary/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <p class="font-bold text-sm lg:text-base">Live across the site</p>
+                <p class="text-xs lg:text-sm text-base-content/60 mt-1">Each revealed artwork becomes that badge's <span class="font-semibold text-base-content/80">permanent art</span> everywhere on PlatPursuit.</p>
+            </div>
+        </div>
+    </section>
 
     {# ===== Hero carousel (released artwork) ===== #}
     <section class="card bg-base-100 border border-base-content/10 overflow-hidden">
