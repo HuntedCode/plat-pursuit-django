@@ -1220,8 +1220,8 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
-    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'developer')
+    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'franchise_col', 'developer_col', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
+    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'developer', 'base_badge', 'base_badge__franchise', 'base_badge__developer')
     list_filter = ['is_live', 'tier', 'badge_type', 'rarity_class']
     list_editable = ['is_live']
     search_fields = ['name', 'series_slug', 'description']
@@ -1286,6 +1286,15 @@ class BadgeAdmin(admin.ModelAdmin):
             from trophies.models import Franchise
             kwargs['queryset'] = Franchise.objects.filter(source_type='franchise')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description='Franchise', ordering='franchise')
+    def franchise_col(self, obj):
+        # Inherited from the base (tier-1) badge when not set on this tier.
+        return obj.effective_franchise
+
+    @admin.display(description='Developer', ordering='developer')
+    def developer_col(self, obj):
+        return obj.effective_developer
 
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
     """Validates that no Concept appears in multiple bundles on the same Stage,

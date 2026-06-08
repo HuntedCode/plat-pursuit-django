@@ -1750,7 +1750,26 @@ class Badge(models.Model):
         elif self.base_badge and self.base_badge.display_series:
             return self.base_badge.display_series
         return None
-    
+
+    @property
+    def effective_franchise(self):
+        """Franchise on this badge, else inherited from the series' base (tier-1)
+        badge, so it only needs to be set once per series."""
+        if self.franchise_id:
+            return self.franchise
+        if self.base_badge and self.base_badge.franchise_id:
+            return self.base_badge.franchise
+        return None
+
+    @property
+    def effective_developer(self):
+        """Developer on this badge, else inherited from the series' base badge."""
+        if self.developer_id:
+            return self.developer
+        if self.base_badge and self.base_badge.developer_id:
+            return self.base_badge.developer
+        return None
+
     @property
     def effective_display_title(self):
         if self.display_title:
