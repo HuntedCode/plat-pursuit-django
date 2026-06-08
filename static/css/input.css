@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./components/frame.css";
+@import "./components/badge-hero.css";
 @plugin "daisyui";
 
 @theme {

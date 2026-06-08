@@ -8,20 +8,8 @@
 {% with target_profile as profile %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb view_count=view_count %}
 
-    {# Header with blurred hero background + tier accent #}
-    <div class="relative rounded-xl overflow-hidden mb-3">
-        {% if header_bg_image %}
-        <div class="absolute inset-0 overflow-hidden">
-            <img src="{{ header_bg_image }}" alt="" class="w-full h-full object-cover scale-125 opacity-40" />
-        </div>
-        {% endif %}
-        <div class="absolute inset-0 bg-base-200/65"></div>
-        <div class="absolute inset-0 bg-gradient-to-br from-transparent to-current opacity-[0.1]"
-             style="color: var(--color-{{ badge.tier|badge_color }});"></div>
-        <div class="relative z-10 p-3 md:p-4">
-            {% include 'trophies/partials/badge_detail/badge_detail_header.html' %}
-        </div>
-    </div>
+    {# Rebuilt hero: Frame primitive as the artifact + identity/progress (chunk 1b). #}
+    {% include 'trophies/partials/badge_detail/_hero.html' %}
 
     <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral mt-3">
         <div class="card-body p-3 md:p-4">
@@ -66,6 +54,7 @@
 {% endblock %}
 
 {% block js_scripts %}
+<script src="{% static 'js/frame.js' %}"></script>
 <script>
 {# Scroll preservation for tier tab switching #}
 document.addEventListener('DOMContentLoaded', function() {

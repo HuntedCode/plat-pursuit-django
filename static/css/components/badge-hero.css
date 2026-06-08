@@ -1,0 +1,77 @@
+/* Badge detail hero — the Frame primitive as the collectible artifact, with the
+   identity + at-a-glance progress beside it. Bespoke, token-driven, DaisyUI-free.
+   The rebuild's first real surface. Tokens: var(--pp-*) from input.css. */
+
+.bd-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: 24px;
+  padding: 24px;
+  margin-bottom: 12px;
+  border: var(--pp-border-w) solid var(--pp-border);
+  border-radius: var(--pp-radius-lg);
+  /* "matted board" material — light from above, faint surface body. No glow. */
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.04), oklch(1 0 0 / 0) 45%), var(--pp-bg-1);
+}
+.bd-hero::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.28), transparent);
+  border-top-left-radius: inherit; border-top-right-radius: inherit;
+}
+
+@media (min-width: 768px) {
+  .bd-hero {
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    align-items: center;
+    gap: 40px;
+    padding: 32px;
+  }
+}
+
+.bd-hero__frame { display: flex; justify-content: center; }
+.bd-hero__identity { min-width: 0; text-align: center; }
+@media (min-width: 768px) { .bd-hero__identity { text-align: left; } }
+
+.bd-hero__series {
+  font-family: var(--pp-font-body);
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--pp-text-mute);
+  margin: 0 0 8px;
+}
+
+/* Hero headline = Bricolage (display reach: hero + numbers only). */
+.bd-hero__title {
+  font-family: var(--pp-font-display);
+  font-weight: 800; font-size: clamp(1.8rem, 4vw, 2.75rem); line-height: 1.05;
+  color: var(--pp-text); margin: 0 0 12px;
+}
+
+.bd-hero__desc {
+  font-family: var(--pp-font-body); color: var(--pp-text-dim);
+  font-size: 0.95rem; line-height: 1.55; margin: 0 auto 18px; max-width: 60ch;
+}
+@media (min-width: 768px) { .bd-hero__desc { margin-left: 0; } }
+
+.bd-hero__status {
+  font-family: var(--pp-font-body);
+  font-size: 0.85rem; font-weight: 600; color: var(--pp-text-dim);
+  margin-bottom: 12px;
+}
+.bd-hero__status--earned { color: var(--pp-primary); }
+
+.bd-hero__horizon {
+  height: 10px; border-radius: 999px; background: var(--pp-bg-3);
+  max-width: 360px; margin: 0 auto; overflow: hidden;
+}
+@media (min-width: 768px) { .bd-hero__horizon { margin-left: 0; } }
+.bd-hero__horizon-fill {
+  height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--pp-secondary), var(--pp-primary));
+  box-shadow: 0 0 14px oklch(0.86 0.142 206 / 0.35);
+  transition: width var(--pp-dur-slow) var(--pp-ease);
+}
+.bd-hero__stages { font-size: 0.78rem; color: var(--pp-text-mute); margin-top: 8px; }
