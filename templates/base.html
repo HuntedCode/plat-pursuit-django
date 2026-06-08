@@ -205,6 +205,13 @@
 
     <!-- Load shared utilities first -->
     <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
+    <script>
+        // Always re-fetch from the server on a history (back/forward) cache miss,
+        // and don't keep an htmx history snapshot cache. Avoids stale partial
+        // restores from the bfcache on browse pages.
+        htmx.config.refreshOnHistoryMiss = true;
+        htmx.config.historyCacheSize = 0;
+    </script>
     <script src="{% static 'js/vendor/Sortable.min.js' %}"></script>
     <script src="{% static 'js/utils.js' %}"></script>
     <script src="{% static 'js/celebrations.js' %}"></script>
