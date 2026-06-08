@@ -267,8 +267,22 @@ class PsnApiService:
         except Exception:
             descriptions_long = ''
 
+        # Prefix the PSN concept_id with 'PSN_' so it shares no identifier
+        # namespace with IGDB raw ids. Without the prefix, a PSN concept at
+        # str(psn_id) can collide with an IGDB anchor target at str(igdb_id)
+        # whenever the two integers happen to match, surfacing as a
+        # `concept_id_collision` review. Distinct from the 'PP_' prefix used
+        # by `Concept.create_default_concept` stubs (a no-PSN-details
+        # placeholder) — those still get treated as stubs by `is_stub` checks
+        # in cover-url chains, while PSN concepts here carry real PSN data
+        # (icon, bg_url, title) and should be displayed normally. Existing
+        # bare-int PSN concepts stay valid until they drain through the
+        # sync_complete auto-anchor.
+        psn_id = details.get('id')
+        prefixed_id = f'PSN_{psn_id}' if psn_id else None
+
         return Concept.objects.get_or_create(
-            concept_id=details.get('id'),
+            concept_id=prefixed_id,
             defaults={
                 'unified_title': details.get('nameEn') or details.get('name', ''),
                 'publisher_name': details.get('publisherName', ''),
