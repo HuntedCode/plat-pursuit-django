@@ -1,8 +1,10 @@
 {% if art_reveal_event %}
 {% with p=art_reveal_progress %}
-{# Permanent, pinned event banner. Sticks directly below the nav chrome via
-   --chrome-nav-height (set in main.js); its own height is folded into
-   --chrome-height so the hotbar / sidebar ads / scroll-padding clear it. #}
+{% comment %}
+Permanent, pinned event banner. Sticks directly below the nav chrome via
+--chrome-nav-height (set in main.js); its own height is folded into
+--chrome-height so the hotbar / sidebar ads / scroll-padding clear it.
+{% endcomment %}
 <div id="art-reveal-banner"
      class="sticky z-30 bg-gradient-to-r from-primary/15 via-secondary/15 to-primary/15 border-b-2 border-primary/40 backdrop-blur shadow-lg shadow-primary/5"
      style="top: var(--chrome-nav-height, 7rem)"
