@@ -15,14 +15,14 @@ site-wide banner does no per-request DB work.
     <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-6">
 
       {# Title + (mobile) CTA #}
-      <div class="flex items-center justify-between gap-3 shrink-0 lg:w-56 lg:justify-start">
+      <div class="flex items-center justify-between gap-3 min-w-0 lg:shrink-0 lg:max-w-xs lg:justify-start">
         <div class="flex items-center gap-2.5 min-w-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 shrink-0 text-primary drop-shadow" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2l2.4 6.9H22l-6 4.5 2.3 7L12 16.9 5.7 20.4 8 13.4l-6-4.5h7.6L12 2z"/>
           </svg>
           <div class="min-w-0">
             <p class="text-[10px] uppercase tracking-[0.18em] text-primary font-bold leading-none mb-0.5">Badge Art Reveal</p>
-            <p class="text-sm lg:text-base font-extrabold truncate leading-tight">{{ b.name }}</p>
+            <p class="text-sm lg:text-base font-extrabold leading-tight">{{ b.name }}</p>
             {% if b.latest %}
             <a href="{% url 'badge_detail' b.latest.series_slug %}"
                class="flex items-center gap-1.5 mt-1 min-w-0 group/latest"
