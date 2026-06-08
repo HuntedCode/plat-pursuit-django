@@ -12,6 +12,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | Top of every hour | `process_scheduled_notifications` | Hourly | None |
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
+| Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
@@ -58,6 +59,15 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Dependencies**: Badge data should be reasonably current. No hard ordering dependency, but running after a badge series refresh gives more accurate results.
 - **Idempotency**: Fully safe to re-run. Overwrites existing cache keys.
 - **Failure impact**: Leaderboard pages show stale data until the cache expires (7h TTL). Individual series failures are caught and logged without blocking other series.
+
+### process_art_reveals
+
+- **Schedule**: Every 15 minutes, but only needs to run while a Badge Art Reveal event is live. Safe to leave registered year-round (it no-ops when nothing is active).
+- **Command**: `python manage.py process_art_reveals`
+- **What it does**: For each live `ArtRevealEvent`, recounts community badge-platinums (since the event's `started_at`, on non-shovelware badge-covered games) via `reconcile_event`, stores the count on `last_platinum_count`, and releases any items whose threshold has been crossed (copying their artwork onto the badge so it goes live). See [Badge Art Reveal](../features/badge-art-reveal.md).
+- **Dependencies**: None. Reads directly from the database. Sync being caught up makes the count fresher but isn't required.
+- **Idempotency**: Fully safe to re-run. It reconciles the released set to the current count each run (forward-only), and the event row is locked so overlapping runs can't double-release. A missed run self-heals on the next.
+- **Failure impact**: Artwork reveals lag behind the true community count until the next successful run; the banner/page show the last stored count. No data loss.
 
 ### process_scheduled_notifications
 

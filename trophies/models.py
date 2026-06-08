@@ -1703,6 +1703,33 @@ class Badge(models.Model):
     required_value = models.PositiveIntegerField(default=0, help_text="Denormalized required value for misc badges")
     is_live = models.BooleanField(default=False, help_text="Whether this badge is visible to regular users. New badges start hidden until explicitly released.")
 
+    # --- Frame display + smart-tracking data ---
+    franchise = models.ForeignKey(
+        'Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='badges',
+        help_text="Associated IGDB franchise (series/collection badges). Drives the Frame's subject name + enables franchise reporting.",
+    )
+    developer = models.ForeignKey(
+        'Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='developed_badges',
+        help_text="Associated developer/company (developer badges). Drives the Frame's subject name + enables developer reporting.",
+    )
+    set_number = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Edition / print-run number engraved on the Frame. Admin-assigned per tier (4 consecutive numbers per series).",
+    )
+    rarity_pct = models.FloatField(
+        null=True, blank=True,
+        help_text="Denormalized: % of linked profiles who have earned this badge. Refreshed by the rarity command (not hand-edited).",
+    )
+    rarity_rank = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Denormalized: rank among live badges by rarity (1 = rarest). Refreshed by the rarity command.",
+    )
+    rarity_class = models.CharField(
+        max_length=10, blank=True, default='',
+        choices=[('common', 'Common'), ('uncommon', 'Uncommon'), ('rare', 'Rare'), ('mythic', 'Mythic')],
+        help_text="Denormalized rarity bucket (drives the Frame's rarity icon). Refreshed by the rarity command.",
+    )
+
     objects = BadgeManager()
 
     class Meta:
@@ -1723,7 +1750,26 @@ class Badge(models.Model):
         elif self.base_badge and self.base_badge.display_series:
             return self.base_badge.display_series
         return None
-    
+
+    @property
+    def effective_franchise(self):
+        """Franchise on this badge, else inherited from the series' base (tier-1)
+        badge, so it only needs to be set once per series."""
+        if self.franchise_id:
+            return self.franchise
+        if self.base_badge and self.base_badge.franchise_id:
+            return self.base_badge.franchise
+        return None
+
+    @property
+    def effective_developer(self):
+        """Developer on this badge, else inherited from the series' base badge."""
+        if self.developer_id:
+            return self.developer
+        if self.base_badge and self.base_badge.developer_id:
+            return self.base_badge.developer
+        return None
+
     @property
     def effective_display_title(self):
         if self.display_title:
@@ -1798,6 +1844,32 @@ class Badge(models.Model):
             'has_custom_image': False,
             'is_avatar': False,
         }
+
+    @classmethod
+    def assign_next_set_numbers(cls, series_slugs):
+        """Stamp the next sequential set numbers onto each series' four tier badges
+        (Bronze=N, Silver=N+1, Gold=N+2, Platinum=N+3). Atomic, so each series gets
+        a contiguous, non-overlapping block even under concurrent admin actions.
+        Skips a series that doesn't have exactly 4 tiers (1-4) or that already has
+        set numbers. Returns {'assigned': [...], 'invalid_tiers': [...],
+        'already_numbered': [...]} (slugs)."""
+        result = {'assigned': [], 'invalid_tiers': [], 'already_numbered': []}
+        with transaction.atomic():
+            next_num = (cls.objects.aggregate(m=Max('set_number'))['m'] or 0) + 1
+            for slug in dict.fromkeys(series_slugs):  # dedup, preserve order
+                tiers = list(cls.objects.filter(series_slug=slug).order_by('tier'))
+                if [b.tier for b in tiers] != [1, 2, 3, 4]:
+                    result['invalid_tiers'].append(slug)
+                    continue
+                if any(b.set_number for b in tiers):
+                    result['already_numbered'].append(slug)
+                    continue
+                for badge in tiers:
+                    badge.set_number = next_num
+                    badge.save(update_fields=['set_number'])
+                    next_num += 1
+                result['assigned'].append(slug)
+        return result
 
     def update_most_recent_concept(self):
         concepts = Concept.objects.filter(stages__series_slug=self.series_slug).distinct()
@@ -1935,6 +2007,15 @@ class UserBadge(models.Model):
     badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='earned_by')
     earned_at = models.DateTimeField(auto_now_add=True)
     is_displayed = models.BooleanField(default=False, help_text="User's selected display badge.")
+    status = models.CharField(
+        max_length=12, default='earned',
+        choices=[('earned', 'Earned'), ('maintenance', 'Maintenance')],
+        help_text="Earned badges are NEVER deleted. If a series grows and the user lapses, the badge enters 'maintenance' (repair) instead of being revoked, so earn_rank stays permanent.",
+    )
+    earn_rank = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Permanent all-time earn order (the Nth profile to earn this badge tier). Stamped at award; never changes.",
+    )
 
     class Meta:
         unique_together = ['profile', 'badge']
