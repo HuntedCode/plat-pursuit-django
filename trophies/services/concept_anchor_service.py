@@ -355,21 +355,33 @@ def identity_cross_check(
 
 
 def try_anchor_new_game(game):
-    """Live-sync entry point: try to anchor a brand-new Game at its canonical Concept.
+    """Live-sync entry point: try to anchor a brand-new Game at its per-version
+    IGDB Concept.
+
+    Mirrors the manual-anchor path (`anchor_concept_to_canonical` /
+    `anchor_game_to_canonical`): each Concept represents ONE specific IGDB
+    version (raw id), and the family link is via canonical resolution
+    inside `process_match`. So the slot is `concept_id = str(raw_igdb_id)`,
+    NOT canonical — otherwise a family like N. Sane Trilogy lumps all three
+    remastered Crash games into the trilogy's canonical concept because each
+    remaster's `version_parent` chain resolves up to the trilogy. The bulk
+    `anchor_concepts` command had already been using raw ids; live sync was
+    the odd one out.
 
     Three outcomes:
 
-      1. Clean canonical match — finds or creates the IGDB-anchored Concept
-         at `concept_id = str(canonical_igdb_id)`, refreshes its IGDBMatch
-         against canonical data (which captures media + Tier 1 fields via
-         `process_match`), and assigns it to the Game. Returns the target.
+      1. Clean match — finds or creates the IGDB-anchored Concept at
+         `concept_id = str(raw_igdb_id)`, refreshes its IGDBMatch against the
+         RAW version's data (which captures the per-version media + Tier 1
+         fields via `process_match`), and assigns it to the Game. Returns the
+         target.
 
       2. Match found but identity cross-check flagged it (low confidence,
-         title mismatch, platform overlap missing, release-year drift, or
-         a `concept_id_collision` where the bare-integer slot is already
-         taken by an unrelated Concept) — writes a `ConceptJoinReview` so
-         staff can resolve, then returns None for the caller to fall back
-         to its existing PSN/stub placement.
+         title mismatch, platform overlap missing, release-year drift, or a
+         `concept_id_collision` where the str(raw_id) slot is already taken
+         by an unrelated family) — writes a `ConceptJoinReview` so staff can
+         resolve, then returns None for the caller to fall back to its
+         existing PSN/stub placement.
 
       3. No IGDB match at all — returns None silently. No review created
          because there's no actionable IGDB candidate to record.
@@ -387,7 +399,7 @@ def try_anchor_new_game(game):
     Returns:
         Concept on clean anchor; None on any non-clean-anchor outcome.
     """
-    from django.db import transaction
+    from django.db import IntegrityError, transaction
     from django.utils import timezone
 
     from trophies.models import Concept
@@ -420,46 +432,71 @@ def try_anchor_new_game(game):
         _write_sync_review(game, match, cross, extra_flags=())
         return None
 
+    raw_id = match['raw_igdb_id']
     canonical_id = match['canonical_igdb_id']
-    concept_id_str = str(canonical_id)
 
     try:
         with transaction.atomic():
-            target = Concept.objects.filter(concept_id=concept_id_str).first()
-            canonical_data = None
+            # Find an existing per-version Concept for this raw id within the
+            # canonical family. Same lookup the manual anchor uses, so live
+            # sync and `anchor_concepts` converge on the same target.
+            raw_map = build_family_raw_igdb_map(canonical_id)
+            target = raw_map.get(raw_id)
+            raw_data = None
 
-            if target:
-                # Existing Concept owns this PK. Verify it really anchors at
-                # the same canonical id; if not it's a collision and we bail
-                # to the review queue + caller fallback.
-                existing_match = getattr(target, 'igdb_match', None)
-                if existing_match and existing_match.igdb_id:
-                    existing_canonical = IGDBService._resolve_canonical_igdb_id(
-                        existing_match.raw_response or {}, existing_match.igdb_id
-                    )
-                    if existing_canonical != canonical_id:
-                        _write_sync_review(
-                            game, match, cross,
-                            extra_flags=('concept_id_collision',),
+            if target is None:
+                target_concept_id = str(raw_id)
+                existing = Concept.objects.filter(concept_id=target_concept_id).first()
+                if existing:
+                    existing_match = getattr(existing, 'igdb_match', None)
+                    if existing_match and existing_match.igdb_id:
+                        existing_canonical = IGDBService._resolve_canonical_igdb_id(
+                            existing_match.raw_response or {}, existing_match.igdb_id
                         )
-                        return None
-            else:
-                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
-                if not canonical_data:
-                    return None
-                target = Concept.objects.create(
-                    concept_id=concept_id_str,
-                    unified_title=canonical_data.get('name', ''),
-                )
+                        if existing_canonical != canonical_id:
+                            # Bare-integer slot owned by an unrelated family.
+                            _write_sync_review(
+                                game, match, cross,
+                                extra_flags=('concept_id_collision',),
+                            )
+                            return None
+                        if existing_match.igdb_id != raw_id:
+                            # Same family but anchored at a different raw —
+                            # allocate a sibling so we don't trample.
+                            target_concept_id = allocate_sibling_concept_id(raw_id)
+                            existing = None
+                        else:
+                            target = existing  # same raw — reuse
+                    else:
+                        # Slot exists but has no IGDBMatch (legacy) — safe to reuse.
+                        target = existing
 
-            # Refresh target's IGDBMatch against canonical (captures media
-            # + Tier 1). Idempotent — process_match update_or_creates.
-            # Reuse fetch from above when present.
-            if canonical_data is None:
-                canonical_data = IGDBService.fetch_full_game_data(canonical_id)
-            if canonical_data:
+                if target is None:
+                    raw_data = IGDBService.fetch_full_game_data(raw_id)
+                    if not raw_data:
+                        return None
+                    try:
+                        with transaction.atomic():
+                            target = Concept.objects.create(
+                                concept_id=target_concept_id,
+                                unified_title=raw_data.get('name', ''),
+                            )
+                    except IntegrityError:
+                        target = Concept.objects.filter(
+                            concept_id=target_concept_id
+                        ).first()
+                        if target is None:
+                            return None
+
+            # Refresh target's IGDBMatch with the RAW (version-specific) data
+            # so the Concept's metadata reflects THIS version (PS3 vs Remaster
+            # vs Trilogy etc.). process_match links the Concept to the family
+            # via canonical resolution internally.
+            if raw_data is None:
+                raw_data = IGDBService.fetch_full_game_data(raw_id)
+            if raw_data:
                 IGDBService.process_match(
-                    target, canonical_data, confidence=1.0, method='manual',
+                    target, raw_data, confidence=1.0, method='manual',
                 )
 
             target.anchor_migration_completed_at = timezone.now()
