@@ -23,9 +23,22 @@ document.addEventListener('DOMContentLoaded', function() {
             subnavH = Math.round(subnav.getBoundingClientRect().height);
         }
 
-        // --chrome-height: navbar + sub-nav only. Used by elements outside the
-        // main content column (sidebar ads) that don't overlap the hotbar.
-        const chromeH = navH + subnavH;
+        // --chrome-nav-height: navbar + sub-nav only (excludes the reveal banner).
+        // The pinned Badge Art Reveal banner offsets its own sticky top by this.
+        const navChromeH = navH + subnavH;
+        document.documentElement.style.setProperty('--chrome-nav-height', navChromeH + 'px');
+
+        // The reveal banner pins directly below the nav chrome and joins the
+        // pinned stack, so everything downstream must clear it too.
+        let bannerH = 0;
+        const revealBanner = document.getElementById('art-reveal-banner');
+        if (revealBanner) {
+            bannerH = Math.round(revealBanner.getBoundingClientRect().height);
+        }
+
+        // --chrome-height: navbar + sub-nav (+ reveal banner). Used by elements
+        // outside the main content column (sidebar ads) that don't overlap the hotbar.
+        const chromeH = navChromeH + bannerH;
         document.documentElement.style.setProperty('--chrome-height', chromeH + 'px');
 
         // --sticky-top: the full pinned-chrome stack including the hotbar
