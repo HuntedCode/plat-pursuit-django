@@ -16,3 +16,6 @@ share_temp_images/
 profile_sigs/
 docs/minigames/DEVELOPMENT_GUIDE.md
 .claude
+
+# Local design-concept scratch files (not part of the app)
+puzzle-event-demo*.html
