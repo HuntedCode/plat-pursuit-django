@@ -105,6 +105,12 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 |---------|---------|-----------|---------------|
 | `fix_badge_picks` | Recompute `badge_picks_earned` for fundraiser donations from users who donated multiple times across overlapping campaigns. One-time repair, safe to re-run. | `--dry-run` | `python manage.py fix_badge_picks --dry-run` |
 
+### art_reveal
+
+| Command | Purpose | Key Flags | Typical Usage |
+|---------|---------|-----------|---------------|
+| `process_art_reveals` | Recount community badge-platinums for each live Badge Art Reveal event and release any newly-unlocked artwork (copies the art onto the badge). Idempotent; reconciles to the current count each run. | (none) | `python manage.py process_art_reveals` |
+
 ---
 
 ## Command Categories

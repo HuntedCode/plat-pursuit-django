@@ -235,6 +235,7 @@ INSTALLED_APPS = [
     'djstripe',
     'notifications.apps.NotificationsConfig',
     'fundraiser.apps.FundraiserConfig',
+    'art_reveal.apps.ArtRevealConfig',
     'django_htmx',
 ]
 
@@ -327,6 +328,7 @@ TEMPLATES = [
                 "plat_pursuit.context_processors.high_sync_volume",
                 "plat_pursuit.context_processors.psn_outage",
                 "plat_pursuit.context_processors.active_fundraiser",
+                "art_reveal.context_processors.art_reveal_banner",
                 "plat_pursuit.context_processors.hub_subnav",
             ],
         },

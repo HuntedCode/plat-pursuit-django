@@ -1296,6 +1296,17 @@ class BadgeAdmin(admin.ModelAdmin):
     def developer_col(self, obj):
         return obj.effective_developer
 
+    def get_search_results(self, request, queryset, search_term):
+        # A Badge Art Reveal item picks a SERIES, represented by its tier-1 (base)
+        # badge so the revealed art propagates to all four tiers. Scope that one
+        # autocomplete dropdown to tier-1 badges (validation is enforced separately
+        # by the inline's formfield queryset).
+        queryset, may_have_dupes = super().get_search_results(request, queryset, search_term)
+        if (request.GET.get('model_name') == 'artrevealitem'
+                and request.GET.get('field_name') == 'badge'):
+            queryset = queryset.filter(tier=1)
+        return queryset, may_have_dupes
+
 class ConceptBundleInlineFormSet(BaseInlineFormSet):
     """Validates that no Concept appears in multiple bundles on the same Stage,
     that no bundle Concept is also a standalone qualifier on the parent Stage,
