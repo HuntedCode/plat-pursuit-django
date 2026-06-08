@@ -755,10 +755,20 @@ class IGDBService:
                     f'using {source}: "{title}"'
                 )
 
-        # Build list of PSN IDs to try for external matching
+        # Build list of PSN IDs to try for external matching. IGDB's
+        # external_games table stores bare PSN SKUs, so the prefixed concept
+        # slots are not direct matches: strip 'PSN_' to recover the PSN id,
+        # skip 'PP_' stubs entirely (no PSN identity). Bare-int ids may be
+        # either legacy PSN concepts or str(igdb_raw_id) anchored concepts;
+        # include them and let the IGDB query reject false positives by
+        # returning no match (cheap).
         psn_ids = []
-        if concept.concept_id and not str(concept.concept_id).startswith('PP_'):
-            psn_ids.append(concept.concept_id)
+        cid = concept.concept_id
+        if cid and not str(cid).startswith('PP_'):
+            if str(cid).startswith('PSN_'):
+                psn_ids.append(str(cid)[len('PSN_'):])
+            else:
+                psn_ids.append(cid)
         psn_ids.extend(concept.title_ids or [])
 
         # Strategy 1: External ID match (skipped for Game-level matching)

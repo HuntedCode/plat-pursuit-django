@@ -2073,12 +2073,28 @@ class TokenKeeper:
                 )
 
         if not matched_any:
+            # Per-game matching uses each Game's trophy_group_title — the
+            # canonical signal but it can miss true compilations where IGDB
+            # has a single entry covering several PSN trophy lists (e.g.
+            # "Resident Evil Origins Collection"). Before marking no_match,
+            # try the concept-level `enrich_concept` (match_concept against
+            # `unified_title`) as a safety net so compilations still get an
+            # IGDBMatch without waiting for the weekly retry cron.
             try:
-                IGDBService.record_no_match(concept)
+                fallback = IGDBService.enrich_concept(concept)
             except Exception:
                 logger.exception(
-                    f"Failed to record no_match marker for concept {concept.concept_id}"
+                    f"sync_complete auto-anchor: enrich_concept fallback "
+                    f"failed for concept {concept.concept_id}"
                 )
+                fallback = None
+            if fallback is None:
+                try:
+                    IGDBService.record_no_match(concept)
+                except Exception:
+                    logger.exception(
+                        f"Failed to record no_match marker for concept {concept.concept_id}"
+                    )
 
     @staticmethod
     def _pending_igdb_enrich_key(profile_id) -> str:
