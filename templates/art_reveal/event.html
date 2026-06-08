@@ -36,6 +36,9 @@
                      style="width: {{ p.pct_overall }}%"></div>
             </div>
         </div>
+        <p class="text-xs text-base-content/45 max-w-xl mx-auto pt-1.5">
+            Only <span class="font-semibold text-base-content/70">badge platinums</span> count: a platinum earned, by anyone in the community, on a game that's part of a badge. Every {{ p.per_reveal }} unlocks the next artwork.
+        </p>
     </header>
 
     {# ===== Hero carousel (released artwork) ===== #}
@@ -98,7 +101,7 @@
             <div class="flex items-center justify-between gap-3 mb-2">
                 <h2 class="text-sm lg:text-base font-bold">Next reveal</h2>
                 <span class="text-xs text-base-content/60">
-                    <span class="font-semibold text-base-content">{{ p.remaining_to_next }}</span> platinum{{ p.remaining_to_next|pluralize }} to go
+                    <span class="font-semibold text-base-content">{{ p.remaining_to_next }}</span> badge platinum{{ p.remaining_to_next|pluralize }} to go
                 </span>
             </div>
             <div class="h-2.5 rounded-full bg-base-content/10 overflow-hidden">
@@ -106,7 +109,7 @@
                      style="width: {{ p.pct_next }}%"></div>
             </div>
             <p class="text-[11px] text-base-content/50 mt-1.5 text-right">
-                {{ p.into_current }} / {{ p.per_reveal }} toward artwork #{{ p.revealed|add:'1' }}
+                {{ p.into_current }} / {{ p.per_reveal }} badge plats toward artwork #{{ p.revealed|add:'1' }}
             </p>
         </div>
     </section>
