@@ -170,6 +170,27 @@ def test_progress_math():
     assert p['complete'] is False
 
 
+def test_banner_payload_is_cached(media_root, monkeypatch, django_assert_num_queries):
+    from django.core.cache import cache
+    from art_reveal.services import get_active_banner
+
+    cache.clear()
+    event = _event_with_items(n=2, per=5)
+    ArtRevealEvent.objects.filter(pk=event.pk).update(banner_active=True)
+    monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
+                        lambda *, since: 5)
+    reconcile_event(event)  # releases item 1, clears the banner cache
+
+    first = get_active_banner()  # warms the cache
+    assert first['name'] == event.name
+    assert first['progress']['revealed'] == 1
+    assert first['latest']['series_slug'] == event.items.get(order=1).badge.series_slug
+
+    with django_assert_num_queries(0):  # warm cache => no per-request DB work
+        cached = get_active_banner()
+    assert cached == first
+
+
 def test_progress_complete_state():
     event = ArtRevealEvent(platinums_per_reveal=5, last_platinum_count=999)
     with patch.object(ArtRevealEvent, 'total_items', new_callable=PropertyMock, return_value=4):

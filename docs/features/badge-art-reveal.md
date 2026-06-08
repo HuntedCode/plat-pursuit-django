@@ -45,10 +45,16 @@ join multiplication, no need for an outer `DISTINCT`).
 
 The count is **heavy** (community-wide aggregation) and runs **only in the cron**
 (`process_art_reveals` → `reconcile_event`), which stores the result on
-`ArtRevealEvent.last_platinum_count`. The banner and event page read that cheap
-stored counter and the cached active-event pk; they never recompute on the request
-path. This follows the project rules: per-user/community aggregates must be
-DB-side, and heavy work must stay off the render path.
+`ArtRevealEvent.last_platinum_count`. The event page reads that cheap stored
+counter; it never recomputes on the request path.
+
+The **site-wide banner** renders on every page, so its data is a cache of plain
+primitives (`get_active_banner`, 60s TTL): name, the `progress()` dict, and the
+latest-unlock summary. After a warm cache the banner does **zero** per-request DB
+work; the count + latest-unlock lookups run at most once per TTL, not once per
+render. `reconcile_event` invalidates the cache on each reveal so the banner
+refreshes immediately. This follows the project rules: per-user/community
+aggregates must be DB-side, and heavy work must stay off the render path.
 
 ## Data model
 

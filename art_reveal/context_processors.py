@@ -1,24 +1,15 @@
-"""Inject the active Badge Art Reveal event + progress for the site-wide banner.
+"""Inject the active Badge Art Reveal banner payload for the site-wide banner.
 
-Mirrors plat_pursuit.context_processors.active_fundraiser: the active-event pk is
-cached (60s) inside get_active_event(), and progress() reads the cheap stored
-counter, so this adds at most a couple of light queries per render when an event
-is live and nothing when it isn't.
+The payload is a cache of plain primitives (see services.get_active_banner), so
+this adds no per-request DB work after a warm cache and nothing at all when no
+event is live.
 """
 
-from .services import get_active_event
+from .services import get_active_banner
 
 
 def art_reveal_banner(request):
-    event = get_active_event()
-    if not event or not event.show_banner():
+    payload = get_active_banner()
+    if not payload:
         return {}
-    latest = (
-        event.items.filter(released=True)
-        .select_related('badge', 'badge__base_badge').order_by('-order').first()
-    )
-    return {
-        'art_reveal_event': event,
-        'art_reveal_progress': event.progress(),
-        'art_reveal_latest': latest,
-    }
+    return {'art_reveal_banner': payload}

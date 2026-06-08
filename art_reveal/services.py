@@ -21,6 +21,11 @@ _SHOVELWARE_EXCLUDED = ('auto_flagged', 'manually_flagged')
 _ACTIVE_CACHE_KEY = 'art_reveal:active_event_pk'
 _ACTIVE_CACHE_TTL = 60
 
+# Cache key for the fully-rendered banner payload (plain primitives). Lets the
+# site-wide banner do zero per-request DB work after a warm cache.
+_BANNER_CACHE_KEY = 'art_reveal:banner_payload'
+_BANNER_CACHE_TTL = 60
+
 
 def _badge_concept_ids():
     """All concept ids covered by at least one badge's stages (Badge and Stage
@@ -75,6 +80,8 @@ def reconcile_event(event, *, now=None):
         ArtRevealEvent.objects.filter(pk=ev.pk).update(
             last_platinum_count=count, last_counted_at=now,
         )
+    # Refresh the banner immediately after a reveal rather than waiting out the TTL.
+    cache.delete_many([_ACTIVE_CACHE_KEY, _BANNER_CACHE_KEY])
     return {'count': count, 'target': min(count // per, event.items.count()), 'released': released}
 
 
@@ -99,3 +106,33 @@ def get_active_event():
     if event and event.is_live():
         return event
     return None
+
+
+def get_active_banner():
+    """Request-path-safe banner payload (plain primitives) for the active event, or
+    None when no banner should show. Cached for the TTL so the site-wide banner adds
+    no per-request DB work after a warm cache (the count + latest-unlock lookups run
+    at most once per TTL, not once per render). Invalidated on each reveal."""
+    MISS = object()
+    cached = cache.get(_BANNER_CACHE_KEY, MISS)
+    if cached is not MISS:
+        return cached  # may legitimately be None ("no active banner")
+
+    event = get_active_event()
+    if not event or not event.show_banner():
+        cache.set(_BANNER_CACHE_KEY, None, _BANNER_CACHE_TTL)
+        return None
+
+    latest = (
+        event.items.filter(released=True)
+        .select_related('badge', 'badge__base_badge').order_by('-order').first()
+    )
+    payload = {'name': event.name, 'progress': event.progress(), 'latest': None}
+    if latest:
+        payload['latest'] = {
+            'series_title': latest.badge.effective_display_series or latest.badge.name,
+            'series_slug': latest.badge.series_slug,
+            'artwork_url': latest.artwork.url,
+        }
+    cache.set(_BANNER_CACHE_KEY, payload, _BANNER_CACHE_TTL)
+    return payload
