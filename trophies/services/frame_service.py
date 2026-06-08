@@ -40,6 +40,12 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
       - unearned    : no progress
     Anonymous viewers (profile=None) get the showcase 'earned' look so public
     badge pages present the artwork in full rather than locked.
+
+    PERFORMANCE: with a profile this issues two profile-scoped queries (UserBadge,
+    UserBadgeProgress) plus the FK reads in get_badge_layers(). Fine for a single
+    hero. When rendering MANY frames for one profile (e.g. the badge gallery),
+    do NOT call this in a loop — batch-fetch the viewer's UserBadge/UserBadgeProgress
+    in the view and add an optional pre-fetched-progress arg here to avoid N+1.
     """
     from trophies.models import UserBadge, UserBadgeProgress
 

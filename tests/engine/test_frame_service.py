@@ -68,3 +68,15 @@ def test_unearned_viewer_with_no_progress():
 
     assert frame["state"] == "unearned"
     assert frame["stages_done"] == 0
+
+
+def test_in_progress_with_zero_required_stages_no_divide_by_zero():
+    # required_stages=0 must not raise ZeroDivisionError in the progress math.
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=0)
+    UserBadgeProgressFactory(profile=profile, badge=badge, completed_concepts=2)
+
+    frame = build_badge_frame(badge, profile)
+
+    assert frame["state"] == "in_progress"
+    assert frame["progress_pct"] == 0  # guarded fallback, not an exception
