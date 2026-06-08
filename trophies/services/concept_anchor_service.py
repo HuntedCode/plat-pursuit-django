@@ -824,7 +824,7 @@ def anchor_concept_to_canonical(source_concept, canonical_igdb_id, *, user=None)
         return result
 
 
-def anchor_game_to_canonical(game, canonical_igdb_id, *, user=None) -> dict:
+def anchor_game_to_canonical(game, canonical_igdb_id, *, user=None, raw_data=None) -> dict:
     """Manually anchor a single Game to a staff-provided IGDB id.
 
     Per-game analogue of `anchor_concept_to_canonical`. Use when one Game inside
@@ -839,6 +839,11 @@ def anchor_game_to_canonical(game, canonical_igdb_id, *, user=None) -> dict:
         game: the Game to re-anchor.
         canonical_igdb_id: the IGDB id staff believes is correct for THIS Game.
         user: the staff user driving the action (audit info on any review).
+        raw_data: optional preloaded IGDB game record for `canonical_igdb_id`.
+            Pass this from callers that already have the data in hand (e.g.
+            sync_complete auto-anchor's `match_game` result) to skip an
+            otherwise-redundant IGDB fetch. Defaults to None which triggers
+            a fresh `fetch_full_game_data` lookup.
 
     Returns:
         dict with keys:
@@ -880,7 +885,8 @@ def anchor_game_to_canonical(game, canonical_igdb_id, *, user=None) -> dict:
         result['error'] = f'Invalid IGDB id: {canonical_igdb_id!r}'
         return result
 
-    raw_data = IGDBService.fetch_full_game_data(provided_igdb_id)
+    if raw_data is None:
+        raw_data = IGDBService.fetch_full_game_data(provided_igdb_id)
     if not raw_data:
         result['error'] = f'IGDB returned no data for id {provided_igdb_id}'
         return result
