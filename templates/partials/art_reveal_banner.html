@@ -1,0 +1,104 @@
+{% if art_reveal_event %}
+{% with p=art_reveal_progress %}
+<div id="art-reveal-banner"
+     class="bg-gradient-to-r from-primary/20 via-secondary/20 to-primary/20 border-b-2 border-primary/40"
+     role="banner"
+     data-slug="{{ art_reveal_event.slug }}"
+     data-reshow-days="{{ art_reveal_event.banner_dismiss_days }}">
+    <div class="mx-auto px-4 py-2 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
+
+        {# Message + CTA #}
+        <div class="flex items-center gap-2 min-w-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2l2.4 6.9H22l-6 4.5 2.3 7L12 16.9 5.7 20.4 8 13.4l-6-4.5h7.6L12 2z"/>
+            </svg>
+            <p class="text-xs lg:text-sm font-medium min-w-0">
+                <span class="font-bold">{{ art_reveal_event.name }}</span>
+                {% if p.complete %}
+                    &middot; all {{ p.total }} artworks revealed!
+                {% else %}
+                    &middot; {{ p.revealed }}/{{ p.total }} revealed
+                    &middot; <span class="text-primary font-semibold">{{ p.remaining_to_next }}</span> platinum{{ p.remaining_to_next|pluralize }} to the next
+                {% endif %}
+                <a href="{% url 'art_reveal_event' %}"
+                   class="underline font-semibold hover:text-primary transition-colors ml-1 whitespace-nowrap">
+                    See the reveal &rarr;
+                </a>
+            </p>
+        </div>
+
+        {# Progress bars #}
+        <div class="flex items-center gap-3 lg:gap-4 shrink-0">
+            {% if not p.complete %}
+            <div class="flex-1 lg:w-40">
+                <div class="flex justify-between text-[10px] uppercase tracking-wide text-base-content/60 mb-0.5">
+                    <span>Next</span><span>{{ p.into_current }}/{{ p.per_reveal }}</span>
+                </div>
+                <div class="h-1.5 rounded-full bg-base-content/10 overflow-hidden">
+                    <div class="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-[width] duration-700"
+                         style="width: {{ p.pct_next }}%"></div>
+                </div>
+            </div>
+            {% endif %}
+            <div class="flex-1 lg:w-40">
+                <div class="flex justify-between text-[10px] uppercase tracking-wide text-base-content/60 mb-0.5">
+                    <span>Overall</span><span>{{ p.revealed }}/{{ p.total }}</span>
+                </div>
+                <div class="h-1.5 rounded-full bg-base-content/10 overflow-hidden">
+                    <div class="h-full rounded-full bg-gradient-to-r from-secondary to-primary transition-[width] duration-700"
+                         style="width: {{ p.pct_overall }}%"></div>
+                </div>
+            </div>
+            <button id="art-reveal-banner-dismiss"
+                    class="btn btn-ghost btn-xs shrink-0"
+                    aria-label="Dismiss banner">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var banner = document.getElementById('art-reveal-banner');
+    var dismissBtn = document.getElementById('art-reveal-banner-dismiss');
+    if (!banner || !dismissBtn) return;
+
+    var STORAGE_KEY = 'pp_art_reveal_banner_dismissed_at';
+    var slug = banner.dataset.slug;
+    var reshowDays = parseInt(banner.dataset.reshowDays, 10);
+
+    // 0 days = session-only dismiss (sessionStorage), >0 = persistent (localStorage)
+    if (reshowDays === 0) {
+        if (sessionStorage.getItem(STORAGE_KEY) === slug) {
+            banner.style.display = 'none';
+            return;
+        }
+        dismissBtn.addEventListener('click', function() {
+            sessionStorage.setItem(STORAGE_KEY, slug);
+            banner.style.display = 'none';
+        });
+    } else {
+        var reshowMs = reshowDays * 24 * 60 * 60 * 1000;
+        var stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                var data = JSON.parse(stored);
+                if (data.slug === slug && (Date.now() - data.ts) < reshowMs) {
+                    banner.style.display = 'none';
+                    return;
+                }
+            } catch(e) {
+                localStorage.removeItem(STORAGE_KEY);
+            }
+        }
+        dismissBtn.addEventListener('click', function() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({ slug: slug, ts: Date.now() }));
+            banner.style.display = 'none';
+        });
+    }
+})();
+</script>
+{% endwith %}
+{% endif %}

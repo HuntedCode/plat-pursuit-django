@@ -157,8 +157,8 @@ class ArtRevealItem(models.Model):
             return False
         now = now or timezone.now()
         if self.artwork and not self.badge.badge_image:
-            self.artwork.open('rb')
-            self.badge.badge_image.save(basename(self.artwork.name), self.artwork, save=True)
+            with self.artwork.open('rb') as f:
+                self.badge.badge_image.save(basename(self.artwork.name), f, save=True)
         self.released = True
         self.released_at = now
         self.save(update_fields=['released', 'released_at'])

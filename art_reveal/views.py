@@ -24,6 +24,11 @@ class ArtRevealEventView(TemplateView):
             event.items.select_related('badge', 'badge__base_badge').order_by('order')
         )
         released = [i for i in items if i.released]
+        # Map each released item to its slide position so grid tiles can jump the
+        # carousel; locked items get None (no slide, art never sent to the client).
+        slide_of = {item.id: index for index, item in enumerate(released)}
+        for item in items:
+            item.carousel_index = slide_of.get(item.id)
         ctx.update({
             'progress': event.progress(),
             'items': items,

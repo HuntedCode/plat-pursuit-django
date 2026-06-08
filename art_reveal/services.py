@@ -14,7 +14,7 @@ from trophies.models import Badge, Concept, EarnedTrophy
 from .models import ArtRevealEvent
 
 # Games whose shovelware status disqualifies their platinums from the count.
-_SHOVELWARE_FLAGGED = ('auto_flagged', 'manually_flagged')
+_SHOVELWARE_EXCLUDED = ('auto_flagged', 'manually_flagged')
 
 # Cache key for the active-event lookup (mirrors plat_pursuit.context_processors
 # .active_fundraiser). Stores the pk, or 0 to mean "no active event".
@@ -47,7 +47,7 @@ def compute_badge_platinum_count(*, since):
             trophy__trophy_type='platinum',
             trophy__game__concept_id__in=_badge_concept_ids(),
         )
-        .exclude(trophy__game__shovelware_status__in=_SHOVELWARE_FLAGGED)
+        .exclude(trophy__game__shovelware_status__in=_SHOVELWARE_EXCLUDED)
         .count()
     )
 
@@ -57,6 +57,10 @@ def reconcile_event(event, *, now=None):
     threshold has been crossed. Idempotent and concurrency-safe (the event row is
     locked, so two overlapping crons can't double-release)."""
     now = now or timezone.now()
+    # Count BEFORE locking: the aggregation can take seconds, and we don't want to
+    # hold the event row lock that whole time. Releases are forward-only and
+    # idempotent, so a count that drifts between here and the lock self-corrects
+    # on the next run.
     count = compute_badge_platinum_count(since=event.started_at)
     per = event.platinums_per_reveal or 1
 
