@@ -1220,22 +1220,25 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
-    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by')
-    list_filter = ['is_live', 'tier', 'badge_type']
+    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'display_series', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
+    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'developer')
+    list_filter = ['is_live', 'tier', 'badge_type', 'rarity_class']
     list_editable = ['is_live']
     search_fields = ['name', 'series_slug', 'description']
-    readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value']
+    autocomplete_fields = ['franchise', 'developer']
+    readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value', 'rarity_pct', 'rarity_rank', 'rarity_class']
     date_hierarchy = 'created_at'
     fields = [
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
-        'tier', 'badge_type', 'title', 'display_title', 'display_series',
+        'tier', 'badge_type', 'franchise', 'developer', 'set_number',
+        'title', 'display_title', 'display_series',
         'discord_role_id', 'requires_all', 'min_required', 'requirements',
         'most_recent_concept', 'funded_by', 'submitted_by',
         'earned_count', 'view_count', 'required_stages', 'required_value',
+        'rarity_pct', 'rarity_rank', 'rarity_class',
         'created_at',
     ]
-    actions = ['mark_series_live', 'mark_series_not_live']
+    actions = ['mark_series_live', 'mark_series_not_live', 'assign_set_numbers']
 
     def mark_series_live(self, request, queryset):
         series_slugs = set(queryset.values_list('series_slug', flat=True))
@@ -1248,6 +1251,31 @@ class BadgeAdmin(admin.ModelAdmin):
         updated = Badge.objects.filter(series_slug__in=series_slugs).update(is_live=False)
         self.message_user(request, f"Marked {updated} badges across {len(series_slugs)} series as not live.")
     mark_series_not_live.short_description = "Mark series not live (all tiers)"
+
+    @admin.action(description="Assign next 4 set numbers to selected badge series")
+    def assign_set_numbers(self, request, queryset):
+        """Stamp the next 4 sequential set numbers onto each selected series' tier
+        badges (Bronze-Platinum). Skips series without exactly 4 tiers, or already
+        numbered. The assignment logic + atomicity live on Badge (and are tested)."""
+        result = Badge.assign_next_set_numbers(queryset.values_list('series_slug', flat=True))
+        for slug in result['invalid_tiers']:
+            self.message_user(
+                request,
+                f"Series '{slug}' does not have exactly 4 tiers (Bronze-Platinum); skipped.",
+                level=messages.ERROR,
+            )
+        for slug in result['already_numbered']:
+            self.message_user(
+                request,
+                f"Series '{slug}' already has set numbers; skipped (clear them to renumber).",
+                level=messages.WARNING,
+            )
+        if result['assigned']:
+            self.message_user(
+                request,
+                f"Assigned set numbers to {len(result['assigned'])} series.",
+                level=messages.SUCCESS,
+            )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'base_badge':

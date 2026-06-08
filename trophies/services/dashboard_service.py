@@ -316,29 +316,10 @@ def provide_badge_progress(profile, settings=None):
         .order_by('-pct')[:fetch_limit]
     )
 
-    # Pre-fetch earned badge IDs for prerequisite checking (single query)
-    earned_badge_ids = set(
-        UserBadge.objects.filter(profile=profile).values_list('badge_id', flat=True)
-    )
-
-    # Build lookup of badges by (series_slug, tier) for prerequisite resolution
-    from trophies.models import Badge
-    series_slugs = {bp.badge.series_slug for bp in progress_list}
-    badges_by_key = {}
-    if series_slugs:
-        for b in Badge.objects.filter(series_slug__in=series_slugs, is_live=True).only('id', 'series_slug', 'tier'):
-            badges_by_key[(b.series_slug, b.tier)] = b.id
-
+    # Tiers are independent (no prerequisite), so every in-progress tier shows.
     badges_in_progress = []
     for bp in progress_list:
         badge = bp.badge
-
-        # Only show if prerequisite tier is met:
-        # Tier 1 (Bronze) has no prerequisite. Higher tiers require previous tier earned.
-        if badge.tier > 1:
-            prev_badge_id = badges_by_key.get((badge.series_slug, badge.tier - 1))
-            if not prev_badge_id or prev_badge_id not in earned_badge_ids:
-                continue
 
         badges_in_progress.append({
             'layers': badge.get_badge_layers(),

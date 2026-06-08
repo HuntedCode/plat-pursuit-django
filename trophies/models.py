@@ -1826,6 +1826,32 @@ class Badge(models.Model):
             'is_avatar': False,
         }
 
+    @classmethod
+    def assign_next_set_numbers(cls, series_slugs):
+        """Stamp the next sequential set numbers onto each series' four tier badges
+        (Bronze=N, Silver=N+1, Gold=N+2, Platinum=N+3). Atomic, so each series gets
+        a contiguous, non-overlapping block even under concurrent admin actions.
+        Skips a series that doesn't have exactly 4 tiers (1-4) or that already has
+        set numbers. Returns {'assigned': [...], 'invalid_tiers': [...],
+        'already_numbered': [...]} (slugs)."""
+        result = {'assigned': [], 'invalid_tiers': [], 'already_numbered': []}
+        with transaction.atomic():
+            next_num = (cls.objects.aggregate(m=Max('set_number'))['m'] or 0) + 1
+            for slug in dict.fromkeys(series_slugs):  # dedup, preserve order
+                tiers = list(cls.objects.filter(series_slug=slug).order_by('tier'))
+                if [b.tier for b in tiers] != [1, 2, 3, 4]:
+                    result['invalid_tiers'].append(slug)
+                    continue
+                if any(b.set_number for b in tiers):
+                    result['already_numbered'].append(slug)
+                    continue
+                for badge in tiers:
+                    badge.set_number = next_num
+                    badge.save(update_fields=['set_number'])
+                    next_num += 1
+                result['assigned'].append(slug)
+        return result
+
     def update_most_recent_concept(self):
         concepts = Concept.objects.filter(stages__series_slug=self.series_slug).distinct()
         if not concepts.exists():
