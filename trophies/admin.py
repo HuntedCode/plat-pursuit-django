@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin import SimpleListFilter
 from django.core.exceptions import ValidationError
@@ -1947,13 +1948,18 @@ ChecklistReport._meta.verbose_name_plural = '[Deprecated] Checklist reports'
 
 
 class _DeprecatedReadOnlyAdmin(admin.ModelAdmin):
-    """Read-only admin base for deprecated models kept for historical data."""
+    """Read-only admin base for deprecated models kept for historical data.
+
+    Production keeps these frozen tables read-only to prevent accidental
+    deletion of historical data. Deletion is permitted only when DEBUG is on,
+    so the rows can be cleaned up from a local/dev database.
+    """
 
     def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        return settings.DEBUG
 
     def get_readonly_fields(self, request, obj=None):
         return [f.name for f in self.model._meta.fields]
