@@ -13,7 +13,12 @@ def art_reveal_banner(request):
     event = get_active_event()
     if not event or not event.show_banner():
         return {}
+    latest = (
+        event.items.filter(released=True)
+        .select_related('badge').order_by('-order').first()
+    )
     return {
         'art_reveal_event': event,
         'art_reveal_progress': event.progress(),
+        'art_reveal_latest': latest,
     }

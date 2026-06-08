@@ -21,6 +21,16 @@ Permanent, pinned event banner. Sticks directly below the nav chrome via
           <div class="min-w-0">
             <p class="text-[10px] uppercase tracking-[0.18em] text-primary font-bold leading-none mb-0.5">Badge Art Reveal</p>
             <p class="text-sm lg:text-base font-extrabold truncate leading-tight">{{ art_reveal_event.name }}</p>
+            {% if art_reveal_latest %}
+            <a href="{% url 'badge_detail' art_reveal_latest.badge.series_slug %}"
+               class="flex items-center gap-1.5 mt-1 min-w-0 group/latest"
+               title="Just unlocked: {{ art_reveal_latest.badge.name }}">
+              <img src="{{ art_reveal_latest.artwork.url }}" alt="" class="w-5 h-5 object-contain shrink-0 drop-shadow">
+              <span class="text-[11px] text-base-content/55 truncate">
+                Just unlocked: <span class="font-semibold text-base-content/80 group-hover/latest:text-primary transition-colors">{{ art_reveal_latest.badge.name }}</span>
+              </span>
+            </a>
+            {% endif %}
           </div>
         </div>
         <a href="{% url 'art_reveal_event' %}"

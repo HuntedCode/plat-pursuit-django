@@ -127,7 +127,8 @@ class ArtRevealItem(models.Model):
     event = models.ForeignKey(ArtRevealEvent, on_delete=models.CASCADE, related_name='items')
     badge = models.ForeignKey(
         'trophies.Badge', on_delete=models.CASCADE, related_name='art_reveal_items',
-        help_text='Tier-1 (base) badge of the series whose art is revealed. Tiers 2-4 inherit the art.',
+        help_text='The badge SERIES to reveal (pick its tier-1 base badge). The uploaded '
+                  'artwork is the series art and propagates to all four tiers on release.',
     )
     order = models.PositiveIntegerField(help_text='Reveal position, 1-based. Lower numbers reveal first.')
     artwork = models.ImageField(
