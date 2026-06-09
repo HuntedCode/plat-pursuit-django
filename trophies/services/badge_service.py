@@ -38,9 +38,12 @@ def _build_badge_context(profile, badges):
     """
     from trophies.models import UserBadge, Stage, ProfileGame
 
+    # Only ACTIVELY-earned badges gate the award/lapse logic. Maintenance rows
+    # still exist (badges are never deleted) but must be re-activated when the
+    # profile re-qualifies, so they must NOT read as "already earned" here.
     earned_badge_ids = set(
         UserBadge.objects.filter(
-            profile=profile, badge__in=badges
+            profile=profile, badge__in=badges, status='earned'
         ).values_list('badge_id', flat=True)
     )
     badges_by_key = {(b.series_slug, b.tier): b for b in badges}
@@ -468,33 +471,53 @@ def _record_stage_completions(profile, badge, stage_completion_dict, _context=No
             existing[stage_obj.id].delete()
 
 
+def _compute_earn_rank(badge):
+    """The permanent "Nth profile to earn this tier" ordinal for a freshly-created
+    UserBadge: the count of all UserBadge rows for this badge (maintenance rows
+    included, since those profiles still earned it). Called right after the row is
+    created, so the count includes it. Stamped once and never recomputed.
+
+    Note: not strictly serialized, so two simultaneous first-earns of the same tier
+    could tie. Acceptable for a flavor stat; badge eval is per-profile sequential.
+    """
+    from trophies.models import UserBadge
+
+    return UserBadge.objects.filter(badge=badge).count()
+
+
 def _award_badge(profile, badge, _already_checked_exists=None):
     """
-    Award a badge to a profile and create associated title if applicable.
+    Award (or re-activate) a badge for a profile and grant its title if applicable.
+
+    Three cases, all handled by get_or_create:
+      - brand-new earn: create the row and stamp the permanent earn_rank
+      - re-qualify after a lapse: flip status maintenance -> earned, keep earn_rank
+      - already actively earned: no-op
 
     Args:
         profile: Profile instance
         badge: Badge instance to award
-        _already_checked_exists: If provided (True/False), skip the .exists() check
+        _already_checked_exists: vestigial; retained for call-site compatibility
 
     Returns:
-        bool: True if badge was newly created, False if already exists
+        bool: True if the badge transitioned to actively-earned, else False
     """
     from trophies.models import UserBadge
 
-    if _already_checked_exists is None:
-        user_badge_exists = UserBadge.objects.filter(
-            profile=profile, badge=badge
-        ).exists()
+    user_badge, created = UserBadge.objects.get_or_create(
+        profile=profile, badge=badge, defaults={'status': 'earned'},
+    )
+    if created:
+        user_badge.earn_rank = _compute_earn_rank(badge)
+        user_badge.save(update_fields=['earn_rank'])
+    elif user_badge.status != 'earned':
+        # Earned before, lapsed to maintenance, now re-qualified. Re-activate;
+        # earn_rank is preserved (it is set once and never changes).
+        user_badge.status = 'earned'
+        user_badge.save(update_fields=['status'])
     else:
-        user_badge_exists = _already_checked_exists
+        return False  # already actively earned
 
-    if user_badge_exists:
-        return False
-
-    _, created = UserBadge.objects.get_or_create(profile=profile, badge=badge)
-    if not created:
-        return False
     logger.info(
         f"Awarded badge {badge.effective_display_title} (tier: {badge.tier}) "
         f"to {profile.display_psn_username}"
@@ -514,21 +537,28 @@ def _award_badge(profile, badge, _already_checked_exists=None):
     return True
 
 
-def _revoke_badge(profile, badge):
+def _lapse_badge(profile, badge):
     """
-    Revoke a badge from a profile and remove associated title if applicable.
+    The profile no longer meets this badge's requirements. Per the no-delete
+    policy, move the earned badge to 'maintenance' (repair) instead of deleting it,
+    so the row and its permanent earn_rank survive. The associated title and Discord
+    role represent active possession, so they are removed while lapsed (and restored
+    by _award_badge when the profile re-qualifies).
 
     Args:
         profile: Profile instance
-        badge: Badge instance to revoke
+        badge: Badge instance that lapsed
     """
     from trophies.models import UserBadge
 
-    UserBadge.objects.filter(profile=profile, badge=badge).delete()
-    logger.info(
-        f"Revoked badge {badge.effective_display_title} (tier: {badge.tier}) "
-        f"from {profile.display_psn_username}"
-    )
+    updated = UserBadge.objects.filter(
+        profile=profile, badge=badge, status='earned'
+    ).update(status='maintenance')
+    if updated:
+        logger.info(
+            f"Badge {badge.effective_display_title} (tier: {badge.tier}) "
+            f"entered maintenance for {profile.display_psn_username}"
+        )
 
     # Remove UserTitle if badge had an associated title
     if badge.title:
@@ -561,7 +591,7 @@ def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned,
         user_badge_exists = badge.id in _context['earned_badge_ids']
     else:
         user_badge_exists = UserBadge.objects.filter(
-            profile=profile, badge=badge
+            profile=profile, badge=badge, status='earned'
         ).exists()
     badge_created = False
 
@@ -571,7 +601,7 @@ def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned,
         if badge_created and _context:
             _context['earned_badge_ids'].add(badge.id)
     elif (not badge_earned or not prev_badge_earned) and user_badge_exists:
-        _revoke_badge(profile, badge)
+        _lapse_badge(profile, badge)
         # Remove Discord role after transaction commits (avoid holding DB txn open during HTTP)
         if badge.discord_role_id and profile.is_discord_verified and profile.discord_id:
             role_id = badge.discord_role_id
@@ -819,6 +849,7 @@ def sync_discord_roles(profile):
     badge_role_ids = list(
         UserBadge.objects.filter(
             profile=profile,
+            status='earned',
             badge__discord_role_id__isnull=False,
         ).values_list('badge__discord_role_id', flat=True)
     )
