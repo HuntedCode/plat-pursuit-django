@@ -127,7 +127,7 @@ def get_active_banner():
         event.items.filter(released=True)
         .select_related('badge', 'badge__base_badge').order_by('-order').first()
     )
-    payload = {'name': event.name, 'progress': event.progress(), 'latest': None}
+    payload = {'name': event.name, 'slug': event.slug, 'progress': event.progress(), 'latest': None}
     if latest:
         payload['latest'] = {
             'series_title': latest.badge.effective_display_series or latest.badge.name,
