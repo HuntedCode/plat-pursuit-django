@@ -1871,6 +1871,55 @@ class Badge(models.Model):
                 result['assigned'].append(slug)
         return result
 
+    # Rarity buckets by % of linked profiles who earned the badge (lower = rarer).
+    RARITY_THRESHOLDS = ((1.0, 'mythic'), (5.0, 'rare'), (20.0, 'uncommon'))
+
+    @staticmethod
+    def rarity_class_for(pct):
+        """Bucket a rarity percentage; lower percentages are rarer."""
+        for ceiling, name in Badge.RARITY_THRESHOLDS:
+            if pct < ceiling:
+                return name
+        return 'common'
+
+    @classmethod
+    def recompute_rarity(cls):
+        """Refresh rarity_pct / rarity_class / rarity_rank for every badge from the
+        current earner counts over the PSN-linked profile base:
+          - rarity_pct  = linked profiles who earned it / all linked profiles * 100
+          - rarity_class = bucket of that percentage (lower = rarer)
+          - rarity_rank  = rank among LIVE badges, 1 = rarest (non-live get None)
+
+        DB-aggregated; iterates the bounded set of badges (not per-user). Run via the
+        recalc_badge_rarity command, off the request path. Returns a summary dict.
+        """
+        from django.db.models import Count
+
+        linked = Profile.objects.filter(is_linked=True).count()
+        # Numerator is linked earners only, so the ratio can't exceed 100%. Counts
+        # every earner regardless of status (maintenance rows still "earned" it).
+        earner_counts = dict(
+            UserBadge.objects.filter(profile__is_linked=True)
+            .values('badge_id').annotate(c=Count('id'))
+            .values_list('badge_id', 'c')
+        )
+
+        badges = list(cls.objects.all())
+        for badge in badges:
+            earners = earner_counts.get(badge.id, 0)
+            pct = (earners / linked * 100.0) if linked else 0.0
+            badge.rarity_pct = round(pct, 2)
+            badge.rarity_class = cls.rarity_class_for(pct)
+            badge.rarity_rank = None  # only live badges are ranked (set below)
+
+        # Rank live badges, rarest (lowest %) first; deterministic id tie-break.
+        live = sorted((b for b in badges if b.is_live), key=lambda b: (b.rarity_pct, b.id))
+        for index, badge in enumerate(live, start=1):
+            badge.rarity_rank = index
+
+        cls.objects.bulk_update(badges, ['rarity_pct', 'rarity_class', 'rarity_rank'])
+        return {'badges': len(badges), 'live_ranked': len(live), 'linked_profiles': linked}
+
     def update_most_recent_concept(self):
         concepts = Concept.objects.filter(stages__series_slug=self.series_slug).distinct()
         if not concepts.exists():
