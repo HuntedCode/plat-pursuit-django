@@ -512,9 +512,13 @@ def _award_badge(profile, badge, _already_checked_exists=None):
         user_badge.save(update_fields=['earn_rank'])
     elif user_badge.status != 'earned':
         # Earned before, lapsed to maintenance, now re-qualified. Re-activate;
-        # earn_rank is preserved (it is set once and never changes).
+        # earn_rank is preserved (it is set once and never changes). save() with
+        # update_fields fires post_save but the earned signal ignores non-create
+        # updates, so refresh gamification explicitly (the badge's XP comes back).
         user_badge.status = 'earned'
         user_badge.save(update_fields=['status'])
+        from trophies.services.xp_service import refresh_profile_gamification
+        refresh_profile_gamification(profile)
     else:
         return False  # already actively earned
 
@@ -559,6 +563,10 @@ def _lapse_badge(profile, badge):
             f"Badge {badge.effective_display_title} (tier: {badge.tier}) "
             f"entered maintenance for {profile.display_psn_username}"
         )
+        # .update() bypasses signals, so refresh XP explicitly: a maintenance
+        # badge no longer grants its completion bonus.
+        from trophies.services.xp_service import refresh_profile_gamification
+        refresh_profile_gamification(profile)
 
     # Remove UserTitle if badge had an associated title
     if badge.title:

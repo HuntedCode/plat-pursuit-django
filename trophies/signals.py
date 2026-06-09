@@ -307,9 +307,12 @@ def update_gamification_on_badge_earned(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=UserBadge, dispatch_uid="update_gamification_on_badge_revoked")
 def update_gamification_on_badge_revoked(sender, instance, **kwargs):
     """
-    Update ProfileGamification and earners leaderboard when a badge is revoked.
+    Update ProfileGamification and earners leaderboard when a badge is deleted.
 
     Removes the 3000 XP badge completion bonus and updates sorted set leaderboard.
+    NOTE: lapsing no longer deletes badges (see badge_service._lapse_badge, which
+    moves them to status='maintenance' and refreshes gamification itself). This now
+    fires only on a true UserBadge delete: a Profile deletion cascade or admin removal.
     """
     from trophies.models import ProfileGamification
     from trophies.services.xp_service import (

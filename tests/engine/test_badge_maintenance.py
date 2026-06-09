@@ -86,6 +86,40 @@ def test_earn_rank_follows_earn_order_across_profiles():
     assert ranks == [1, 2, 3]
 
 
+def test_calculate_total_xp_excludes_maintenance_completion_bonus():
+    from trophies.services.xp_service import calculate_total_xp, BADGE_TIER_XP
+
+    profile = ProfileFactory()
+    badge = BadgeFactory(series_slug="xp-maint", tier=1)
+    ub = UserBadge.objects.create(profile=profile, badge=badge, status='earned')
+    earned_total, _s1, earned_count, _u1 = calculate_total_xp(profile)
+
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')
+    maint_total, _s2, maint_count, _u2 = calculate_total_xp(profile)
+
+    assert earned_total - maint_total == BADGE_TIER_XP  # lost exactly the completion bonus
+    assert earned_count == maint_count == 1             # still counted (shows everywhere)
+
+
+def test_lapse_and_repair_recompute_cached_badge_xp():
+    from trophies.models import ProfileGamification
+
+    badge, game = _series_with_one_stage("xp-cache")
+    profile = ProfileFactory()
+    _earn(profile, badge, game)
+    earned_xp = ProfileGamification.objects.get(profile=profile).total_badge_xp
+    assert earned_xp > 0
+
+    _lapse(profile, badge, game)
+    lapsed_xp = ProfileGamification.objects.get(profile=profile).total_badge_xp
+    assert lapsed_xp < earned_xp  # maintenance badge no longer grants XP
+
+    ProfileGame.objects.filter(profile=profile, game=game).update(has_plat=True)
+    _evaluate(profile, badge)
+    repaired_xp = ProfileGamification.objects.get(profile=profile).total_badge_xp
+    assert repaired_xp == earned_xp  # XP comes back on repair
+
+
 def test_maintenance_earner_still_counts_toward_later_ranks():
     badge, game = _series_with_one_stage("rebuild-rank-maint")
     p1 = ProfileFactory()
