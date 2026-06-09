@@ -74,49 +74,52 @@ def reconcile_event(event, *, now=None):
     per = event.platinums_per_reveal or 1
 
     released = []
-    released_items = []
     with transaction.atomic():
         ev = ArtRevealEvent.objects.select_for_update().get(pk=event.pk)
         total = ev.items.count()
         target = min(count // per, total)
-        for item in ev.items.select_related('badge').filter(
-            released=False, order__lte=target
-        ).order_by('order'):
+        for item in ev.items.filter(released=False, order__lte=target).order_by('order'):
             if item.release(now=now):
                 released.append(item.order)
-                released_items.append(item)
         ArtRevealEvent.objects.filter(pk=ev.pk).update(
             last_platinum_count=count, last_counted_at=now,
         )
     # Refresh the banner immediately after a reveal rather than waiting out the TTL.
     cache.delete_many([_ACTIVE_CACHE_KEY, _BANNER_CACHE_KEY])
 
-    # Post-commit: complete the fundraiser badge-artwork claim for each newly-
-    # revealed badge (credits the funder + sends them the artwork-complete
-    # email/notification). Kept out of the locked transaction above.
-    for item in released_items:
-        _complete_badge_claim_for_reveal(item.badge)
+    # Post-commit: complete the fundraiser badge-artwork claim for every REVEALED
+    # badge whose claim is still pending (credits the funder on all tiers + sends
+    # the artwork-complete email/notification). An event-wide sweep, so it
+    # self-heals badges that were revealed before this hook existed or via any
+    # other path. Kept out of the locked transaction above.
+    _complete_pending_claims_for_event(event)
 
     return {'count': count, 'target': min(count // per, event.items.count()), 'released': released}
 
 
-def _complete_badge_claim_for_reveal(badge):
-    """When an art reveal item goes live, complete its fundraiser badge-artwork claim
-    (if any) so the funder is credited and notified. Cross-app and best-effort: a
-    fundraiser-side failure must not break the reveal."""
+def _complete_pending_claims_for_event(event):
+    """Complete the fundraiser badge-artwork claim for every revealed badge in the
+    event whose claim isn't done yet. Cross-app and best-effort: a fundraiser-side
+    failure must not break the reveal. One query finds only the still-pending claims,
+    so a fully-credited event costs nothing here."""
     try:
         from fundraiser.models import DonationBadgeClaim
         from fundraiser.services.donation_service import DonationService
 
-        claim = (
+        pending = (
             DonationBadgeClaim.objects
-            .filter(badge=badge).exclude(status='completed')
-            .select_related('profile').first()
+            .filter(
+                badge__art_reveal_items__event=event,
+                badge__art_reveal_items__released=True,
+            )
+            .exclude(status='completed')
+            .select_related('profile')
+            .distinct()
         )
-        if claim:
+        for claim in pending:
             DonationService.complete_badge_claim(claim)
     except Exception:
-        logger.exception("art_reveal: failed to complete badge claim on release")
+        logger.exception("art_reveal: failed to complete pending badge claims on reveal")
 
 
 def get_active_event():

@@ -265,6 +265,27 @@ def test_reveal_completes_funder_claim(media_root, monkeypatch):
     assert item.badge.funded_by_id == profile.id
 
 
+def test_reconcile_self_heals_claim_for_already_released_badge(media_root, monkeypatch):
+    # A badge revealed BEFORE the claim-completion hook existed: released already,
+    # claim still in_progress. The next reconcile must complete it (event-wide sweep).
+    event = _event_with_items(n=1, per=5)
+    item = event.items.first()
+    item.released = True
+    item.released_at = timezone.now()
+    item.save(update_fields=['released', 'released_at'])
+    profile = ProfileFactory()
+    claim = _make_claim(item.badge, profile)  # in_progress
+    monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
+                        lambda *, since: 5)
+
+    reconcile_event(event)  # no NEW release this run, but the sweep still runs
+
+    claim.refresh_from_db()
+    assert claim.status == 'completed'
+    item.badge.refresh_from_db()
+    assert item.badge.funded_by_id == profile.id
+
+
 def test_reveal_without_a_claim_is_a_noop(media_root, monkeypatch):
     event = _event_with_items(n=1, per=5)  # badge has no fundraiser claim
     monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
