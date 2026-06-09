@@ -16,7 +16,7 @@ from art_reveal.models import ArtRevealEvent, ArtRevealItem
 from art_reveal.services import compute_badge_platinum_count, reconcile_event
 from tests.factories import (
     BadgeFactory, ConceptFactory, EarnedTrophyFactory, GameFactory,
-    StageFactory, TrophyFactory,
+    ProfileFactory, StageFactory, TrophyFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -199,3 +199,67 @@ def test_progress_complete_state():
     assert p['complete'] is True
     assert p['next_threshold'] is None
     assert p['pct_overall'] == 100
+
+
+# --- funder claim completion on reveal ---------------------------------------
+
+
+def _make_claim(badge, profile, status='in_progress'):
+    from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
+    fr = Fundraiser.objects.create(
+        name='F', slug='fr-' + badge.series_slug, description='',
+        start_date=timezone.now(),
+    )
+    don = Donation.objects.create(
+        fundraiser=fr, amount=10, provider='stripe',
+        provider_transaction_id='tx-' + badge.series_slug, status='completed',
+    )
+    return DonationBadgeClaim.objects.create(
+        donation=don, profile=profile, badge=badge,
+        series_slug=badge.series_slug, series_name=badge.name, status=status,
+    )
+
+
+def test_complete_badge_claim_credits_all_tiers_and_notifies(monkeypatch):
+    from fundraiser.services.donation_service import DonationService
+
+    # Verify delegation to the senders without depending on email/template infra.
+    calls = []
+    monkeypatch.setattr(DonationService, 'send_artwork_complete_email',
+                        staticmethod(lambda c: calls.append('email')))
+    monkeypatch.setattr(DonationService, 'send_artwork_complete_notification',
+                        staticmethod(lambda c: calls.append('notif')))
+
+    profile = ProfileFactory()
+    t1 = BadgeFactory(series_slug='claim-s', tier=1)
+    t2 = BadgeFactory(series_slug='claim-s', tier=2)
+    claim = _make_claim(t1, profile)
+
+    assert DonationService.complete_badge_claim(claim) is True
+
+    claim.refresh_from_db()
+    assert claim.status == 'completed'
+    assert claim.completed_at is not None
+    t1.refresh_from_db()
+    t2.refresh_from_db()
+    assert t1.funded_by_id == profile.id
+    assert t2.funded_by_id == profile.id  # every tier credited
+    assert calls == ['email', 'notif']    # email + notification fired
+
+    assert DonationService.complete_badge_claim(claim) is False  # idempotent
+
+
+def test_reveal_completes_funder_claim(media_root, monkeypatch):
+    event = _event_with_items(n=1, per=5)
+    item = event.items.first()
+    profile = ProfileFactory()
+    claim = _make_claim(item.badge, profile)
+    monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
+                        lambda *, since: 5)
+
+    reconcile_event(event)
+
+    claim.refresh_from_db()
+    assert claim.status == 'completed'
+    item.badge.refresh_from_db()
+    assert item.badge.funded_by_id == profile.id

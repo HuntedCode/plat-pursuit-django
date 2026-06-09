@@ -477,6 +477,31 @@ class DonationService:
             logger.exception(f"Failed to send badge claim email for claim {claim.id}")
 
     @staticmethod
+    def complete_badge_claim(claim):
+        """Mark a badge-artwork claim complete: stamp completed_at, credit the donor
+        on every tier of the series (Badge.funded_by), and send the artwork-complete
+        email + in-app notification. Idempotent: returns False if already completed.
+
+        Single source of truth shared by the staff claim-status endpoint and the
+        Badge Art Reveal release path. Email/notification fire after the DB commit.
+        """
+        from trophies.models import Badge
+
+        if claim.status == 'completed':
+            return False
+
+        with transaction.atomic():
+            claim.status = 'completed'
+            claim.completed_at = timezone.now()
+            # Credit the donor on all tiers of this badge series.
+            Badge.objects.filter(series_slug=claim.series_slug).update(funded_by=claim.profile)
+            claim.save(update_fields=['status', 'completed_at'])
+
+        DonationService.send_artwork_complete_email(claim)
+        DonationService.send_artwork_complete_notification(claim)
+        return True
+
+    @staticmethod
     def send_artwork_complete_email(claim):
         """Send notification that artwork has been completed for a claimed badge."""
         user = claim.profile.user if claim.profile else None

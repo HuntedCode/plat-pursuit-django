@@ -6,10 +6,8 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django_ratelimit.decorators import ratelimit
@@ -18,7 +16,6 @@ from trophies.mixins import StaffRequiredAPIMixin
 
 from fundraiser.models import Fundraiser, Donation, DonationBadgeClaim
 from fundraiser.services.donation_service import DonationService
-from trophies.models import Badge
 
 logger = logging.getLogger(__name__)
 
@@ -174,30 +171,19 @@ class UpdateClaimStatusView(StaffRequiredAPIMixin, View):
 
         claim = get_object_or_404(DonationBadgeClaim, id=claim_id)
         old_status = claim.status
-        claim.status = new_status
 
-        with transaction.atomic():
-            update_fields = ['status']
-            if new_status == 'completed':
-                claim.completed_at = timezone.now()
-                update_fields.append('completed_at')
-
-                # Credit the donor on all tiers of this badge series
-                Badge.objects.filter(series_slug=claim.series_slug).update(
-                    funded_by=claim.profile
-                )
-
-            claim.save(update_fields=update_fields)
+        # Completion (credit funder on all tiers + email + notification) is shared
+        # with the Badge Art Reveal release path via complete_badge_claim().
+        if new_status == 'completed':
+            DonationService.complete_badge_claim(claim)
+        else:
+            claim.status = new_status
+            claim.save(update_fields=['status'])
 
         logger.info(
             f"Claim {claim_id} ({claim.series_name}) status updated: "
             f"{old_status} -> {new_status} by admin (user_id={request.user.id})"
         )
-
-        # Send notifications when artwork is completed
-        if new_status == 'completed':
-            DonationService.send_artwork_complete_email(claim)
-            DonationService.send_artwork_complete_notification(claim)
 
         return JsonResponse({
             'success': True,
