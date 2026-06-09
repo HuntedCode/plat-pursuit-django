@@ -48,6 +48,7 @@ Self-contained feature documentation. Read the relevant doc when working on that
 | Doc | Description |
 |-----|-------------|
 | [Advertising](features/advertising.md) | Google AdSense + Funding Choices CMP, slot inventory, suppression rules, content signals, future gaming-network migration |
+| [Badge Art Reveal](features/badge-art-reveal.md) | Community platinum-driven badge-artwork reveal event: site-wide progress banner + event page (carousel + grid), art auto-released as the community earns badge platinums |
 | [Challenge Systems](features/challenge-systems.md) | A-Z, Calendar, and Genre platinum challenges |
 | [Comment System (Legacy)](features/comment-system.md) | Read-only legacy: surviving moderation/vote endpoints, why no new comments are accepted |
 | [Community Flags](features/community-flags.md) | User-submitted game data quality flags (delisted, shovelware, VR, buggy trophies) |

@@ -90,10 +90,12 @@ def calculate_series_xp(profile, series_slug: str) -> int:
         for prog in progress_records
     )
 
-    # Add badge completion bonuses
+    # Add badge completion bonuses. Maintenance badges still show in the
+    # collection but do NOT grant XP, so only status='earned' badges count.
     badges_earned = UserBadge.objects.filter(
         profile=profile,
-        badge__series_slug=series_slug
+        badge__series_slug=series_slug,
+        status='earned',
     ).count()
 
     return progress_xp + (badges_earned * BADGE_TIER_XP)
@@ -133,23 +135,30 @@ def calculate_total_xp(profile) -> tuple[int, dict, int, int]:
         series_xp[series_slug] += xp
         total_progress_xp += xp
 
-    # Add badge completion bonuses to series totals
+    # Add badge completion bonuses to series totals. Maintenance badges still show
+    # in the collection (counted in total_badges / earned_series) but do NOT grant
+    # XP, so only status='earned' badges contribute the completion bonus.
     earned_badges = UserBadge.objects.filter(
         profile=profile
     ).select_related('badge')
 
-    total_badges = 0
+    total_badges = 0      # all badges, incl. maintenance (they show everywhere)
+    active_badges = 0     # status='earned' only (these grant the XP bonus)
     earned_series = set()
     for user_badge in earned_badges:
+        total_badges += 1
+        is_active = user_badge.status == 'earned'
+        if is_active:
+            active_badges += 1
         series_slug = user_badge.badge.series_slug
         if series_slug:
-            if series_slug not in series_xp:
-                series_xp[series_slug] = 0
-            series_xp[series_slug] += BADGE_TIER_XP
             earned_series.add(series_slug)
-        total_badges += 1
+            if is_active:
+                if series_slug not in series_xp:
+                    series_xp[series_slug] = 0
+                series_xp[series_slug] += BADGE_TIER_XP
 
-    total_xp = total_progress_xp + (total_badges * BADGE_TIER_XP)
+    total_xp = total_progress_xp + (active_badges * BADGE_TIER_XP)
 
     return total_xp, series_xp, total_badges, len(earned_series)
 
@@ -385,6 +394,20 @@ def bulk_gamification_update():
                 update_progress_leaderboards_for_profile(profile)
             except Exception as e:
                 logger.error(f"Failed to update leaderboards for {profile.psn_username}: {e}")
+
+
+def refresh_profile_gamification(profile):
+    """Recompute + store a profile's gamification XP after its actively-earned badge
+    set changes OUTSIDE the create/delete signals, i.e. a lapse-to-maintenance or a
+    repair (both use .update()/update_fields and so don't fire post_save/post_delete).
+    Respects the bulk-update deferral used during sync, so it's a no-op cost there."""
+    if is_bulk_update_active():
+        defer_profile_update(profile)
+        return
+    try:
+        update_profile_gamification(profile)
+    except Exception:
+        logger.exception("Failed to refresh gamification after badge status change")
 
 
 def is_bulk_update_active() -> bool:

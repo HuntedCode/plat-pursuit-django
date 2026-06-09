@@ -1,0 +1,142 @@
+{% if art_reveal_banner %}
+{% with b=art_reveal_banner p=art_reveal_banner.progress %}
+{% comment %}
+Permanent, pinned event banner. Sticks directly below the nav chrome via
+--chrome-nav-height (set in main.js); its own height is folded into
+--chrome-height so the hotbar / sidebar ads / scroll-padding clear it. All values
+come from a cached primitives dict (art_reveal.services.get_active_banner) so the
+site-wide banner does no per-request DB work. The toggle collapses the full banner
+to a slim strip (state persisted per-event in localStorage).
+{% endcomment %}
+<div id="art-reveal-banner"
+     class="sticky z-30 bg-gradient-to-r from-primary/15 via-secondary/15 to-primary/15 border-b-2 border-primary/40 backdrop-blur shadow-lg shadow-primary/5"
+     style="top: var(--chrome-nav-height, 7rem)"
+     data-slug="{{ b.slug }}"
+     role="region" aria-label="{{ b.name }} progress">
+
+  {# Collapse / expand toggle (one button, serves both states) #}
+  <button type="button" data-art-reveal-toggle aria-label="Collapse banner" aria-expanded="true"
+          class="absolute top-1.5 right-1.5 z-10 btn btn-ghost btn-xs btn-circle text-base-content/60 hover:text-base-content">
+    <svg data-chevron class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7"/>
+    </svg>
+  </button>
+
+  {# ===== Full ===== #}
+  <div data-art-reveal-full class="container mx-auto pl-4 pr-9 py-2.5 lg:py-3">
+    <div class="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-6">
+
+      {# Title + (mobile) CTA #}
+      <div class="flex items-center justify-between gap-3 min-w-0 lg:shrink-0 lg:max-w-xs lg:justify-start">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 shrink-0 text-primary drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2l2.4 6.9H22l-6 4.5 2.3 7L12 16.9 5.7 20.4 8 13.4l-6-4.5h7.6L12 2z"/>
+          </svg>
+          <div class="min-w-0">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-primary font-bold leading-none mb-0.5">Badge Art Reveal</p>
+            <p class="text-sm lg:text-base font-extrabold leading-tight">{{ b.name }}</p>
+            {% if b.latest %}
+            <a href="{% url 'badge_detail' b.latest.series_slug %}"
+               class="flex items-center gap-1.5 mt-1 min-w-0 group/latest"
+               title="Just unlocked: {{ b.latest.series_title }}">
+              <img src="{{ b.latest.artwork_url }}" alt="" class="w-5 h-5 object-contain shrink-0 drop-shadow">
+              <span class="text-[11px] text-base-content/55 truncate">
+                Just unlocked: <span class="font-semibold text-base-content/80 group-hover/latest:text-primary transition-colors">{{ b.latest.series_title }}</span>
+              </span>
+            </a>
+            {% endif %}
+          </div>
+        </div>
+        <a href="{% url 'art_reveal_event' %}"
+           class="btn btn-primary btn-sm gap-1 shrink-0 shadow-md shadow-primary/20 lg:hidden">
+          See it
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+
+      {# Progress bars #}
+      <div class="flex-1 grid gap-2 min-w-0">
+        {% if not p.complete %}
+        <div>
+          <div class="flex justify-between items-baseline text-[11px] mb-1">
+            <span class="font-semibold text-base-content/70 uppercase tracking-wide">Next reveal</span>
+            <span class="font-bold tabular-nums">{{ p.into_current }}<span class="text-base-content/40">/{{ p.per_reveal }} badge plats</span></span>
+          </div>
+          <div class="h-3 lg:h-3.5 rounded-full bg-base-content/10 overflow-hidden ring-1 ring-inset ring-base-content/5">
+            <div class="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-[width] duration-700 ease-out" style="width: {{ p.pct_next }}%"></div>
+          </div>
+        </div>
+        {% endif %}
+        <div>
+          <div class="flex justify-between items-baseline text-[11px] mb-1">
+            <span class="font-semibold text-base-content/70 uppercase tracking-wide">
+              {% if p.complete %}Complete{% else %}Overall progress{% endif %}
+            </span>
+            <span class="font-bold tabular-nums">
+              {% if p.complete %}All {{ p.total }} revealed!{% else %}{{ p.revealed }}<span class="text-base-content/40">/{{ p.total }} revealed</span>{% endif %}
+            </span>
+          </div>
+          <div class="h-3 lg:h-3.5 rounded-full bg-base-content/10 overflow-hidden ring-1 ring-inset ring-base-content/5">
+            <div class="h-full rounded-full bg-gradient-to-r from-secondary to-primary transition-[width] duration-700 ease-out" style="width: {{ p.pct_overall }}%"></div>
+          </div>
+        </div>
+      </div>
+
+      {# Desktop CTA #}
+      <a href="{% url 'art_reveal_event' %}"
+         class="hidden lg:inline-flex btn btn-primary gap-1.5 shrink-0 shadow-md shadow-primary/20 hover:shadow-primary/40 transition-shadow">
+        See the reveal
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+  </div>
+
+  {# ===== Slim (collapsed) ===== #}
+  <div data-art-reveal-slim class="hidden container mx-auto pl-4 pr-9 py-1.5">
+    <a href="{% url 'art_reveal_event' %}" class="flex items-center gap-2.5 min-w-0 group/slim">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-primary" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2l2.4 6.9H22l-6 4.5 2.3 7L12 16.9 5.7 20.4 8 13.4l-6-4.5h7.6L12 2z"/>
+      </svg>
+      <span class="text-xs font-bold shrink-0 hidden sm:inline group-hover/slim:text-primary transition-colors">Badge Art Reveal</span>
+      <div class="flex-1 h-1.5 rounded-full bg-base-content/10 overflow-hidden min-w-0 ring-1 ring-inset ring-base-content/5">
+        <div class="h-full rounded-full bg-gradient-to-r from-secondary to-primary" style="width: {{ p.pct_overall }}%"></div>
+      </div>
+      <span class="text-[11px] font-bold tabular-nums shrink-0">{{ p.revealed }}/{{ p.total }}</span>
+    </a>
+  </div>
+</div>
+<script>
+(function() {
+  var banner = document.getElementById('art-reveal-banner');
+  if (!banner) return;
+  var KEY = 'pp_art_reveal_collapsed';
+  var slug = banner.dataset.slug;
+  var full = banner.querySelector('[data-art-reveal-full]');
+  var slim = banner.querySelector('[data-art-reveal-slim]');
+  var btn = banner.querySelector('[data-art-reveal-toggle]');
+  var chevron = banner.querySelector('[data-chevron]');
+
+  function apply(collapsed, persist) {
+    full.classList.toggle('hidden', collapsed);
+    slim.classList.toggle('hidden', !collapsed);
+    if (chevron) chevron.classList.toggle('rotate-180', collapsed);
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.setAttribute('aria-label', collapsed ? 'Expand banner' : 'Collapse banner');
+    if (persist) {
+      try { collapsed ? localStorage.setItem(KEY, slug) : localStorage.removeItem(KEY); } catch (e) {}
+    }
+    // The banner just changed height; re-run the chrome aligner in main.js.
+    window.dispatchEvent(new Event('resize'));
+  }
+
+  var startCollapsed = false;
+  try { startCollapsed = localStorage.getItem(KEY) === slug; } catch (e) {}
+  apply(startCollapsed, false);
+
+  btn.addEventListener('click', function() {
+    apply(!full.classList.contains('hidden'), true);
+  });
+})();
+</script>
+{% endwith %}
+{% endif %}

@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **69 custom management commands** spread across 5 Django apps: `trophies` (42), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **71 custom management commands** spread across 5 Django apps: `trophies` (44), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
@@ -30,11 +30,13 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | `backfill_stub_concept_icons` | Copy `title_icon_url` from associated games to `PP_` stub Concepts missing icons. | `--dry-run`, `--batch-size` (default: 100) | `python manage.py backfill_stub_concept_icons` |
 | `backfill_platted_subgenre_count` | Fix `platted_subgenre_count` on genre challenges and revoke incorrectly awarded `subgenre_progress` milestones. | `--dry-run` | `python manage.py backfill_platted_subgenre_count --dry-run` |
 | `recalculate_gamification` | Recalculate gamification stats (badge XP, tiers, series XP) for one or all profiles. | `--profile`, `--dry-run` | `python manage.py recalculate_gamification --profile Jlowe` |
+| `recalc_badge_rarity` | Recompute `rarity_pct` / `rarity_class` / `rarity_rank` on every Badge from current earner counts over the PSN-linked profile base (rank is among live badges, 1 = rarest). Run on a schedule; safe to re-run. | (none) | `python manage.py recalc_badge_rarity` |
 | `clean_titles` | Strip TM/registered symbols, normalize Unicode Roman numerals, and remove "trophy set" suffixes from Game, Concept, Trophy, and GameFamily titles. | `--dry-run` | `python manage.py clean_titles --dry-run` |
 | `psn_probe` | Probe PSN API endpoints directly and dump raw payloads. Troubleshooting tool for sync discrepancies. 12 endpoints: `profile`, `profile_legacy`, `presence`, `region`, `friendship`, `trophy_summary`, `trophy_titles`, `trophy_titles_for_title`, `title_stats`, `trophies`, `trophy_groups_summary`, `game_details`. Requires `NPSSO_TOKEN` in `.env`. | `endpoint` (positional), `--user` (default: `abu_abu`), `--np-comm-id`, `--np-title-id`, `--platform` (default: `PS5`), `--trophy-group-id` (default: `all`), `--include-progress`, `--title-ids`, `--limit`, `--offset`, `--page-size`, `--first` (default: `5`, `0` = all) | `python manage.py psn_probe profile_legacy --user abu_abu` |
 | `backfill_game_regions` | Populate `Game.region` from TitleID region data (loaded by `populate_title_ids`). | `--dry-run`, `--verbose` | `python manage.py backfill_game_regions --dry-run --verbose` |
 | `enforce_az_challenge_rules` | Remove non-completed A-Z challenge slot assignments where the game is now excluded by anti-stack rules. | `--dry-run` | `python manage.py enforce_az_challenge_rules --dry-run` |
 | `check_all_badges` | Full badge recheck for all profiles (or a single user). Reports awarded and revoked badges with before/after diffing. | `--username`, `--dry-run` | `python manage.py check_all_badges --dry-run` |
+| `audit_badge_coverage` | For each tier-1 franchise/developer badge, find concepts of that franchise (is_main titles) / developer (developed games) not covered by the badge's stages, and email the gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game needs adding to the badge. Emails only when gaps exist unless `--always`. | `--dry-run`, `--always` | `python manage.py audit_badge_coverage --dry-run` |
 | `backfill_concept_slugs` | Generate URL slugs for Concepts that don't have one. Handles collisions with counter suffixes. | `--dry-run`, `--batch-size` (default: 100) | `python manage.py backfill_concept_slugs` |
 | `populate_milestones` | Create/update milestone definitions and associated Title objects from the hardcoded definitions list. Idempotent: safe to re-run. | `--dry-run` | `python manage.py populate_milestones` |
 | `grant_milestone` | Manually grant a milestone (with all side effects: UserTitle, Discord role, notification) to one or more users. | `milestone` (positional, required), `--username`, `--usernames` (comma-separated), `--dry-run`, `--silent` | `python manage.py grant_milestone "Platinum Race Winner" --username Jlowe` |
@@ -104,6 +106,12 @@ PlatPursuit has **69 custom management commands** spread across 5 Django apps: `
 | Command | Purpose | Key Flags | Typical Usage |
 |---------|---------|-----------|---------------|
 | `fix_badge_picks` | Recompute `badge_picks_earned` for fundraiser donations from users who donated multiple times across overlapping campaigns. One-time repair, safe to re-run. | `--dry-run` | `python manage.py fix_badge_picks --dry-run` |
+
+### art_reveal
+
+| Command | Purpose | Key Flags | Typical Usage |
+|---------|---------|-----------|---------------|
+| `process_art_reveals` | Recount community badge-platinums for each live Badge Art Reveal event and release any newly-unlocked artwork (copies the art onto the badge). Idempotent; reconciles to the current count each run. | (none) | `python manage.py process_art_reveals` |
 
 ---
 

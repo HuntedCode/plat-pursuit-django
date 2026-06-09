@@ -12,11 +12,13 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | Top of every hour | `refresh_homepage_hourly` | Hourly | None |
 | Top of every hour | `process_scheduled_notifications` | Hourly | None |
 | Every 6 hours | `update_leaderboards` | Every 6 hours | Badge data should be reasonably current |
+| Every 15 min (only while an event runs) | `process_art_reveals` | Every 15 minutes | None |
 | 00:00 UTC daily | `check_subscription_milestones` | Daily | None |
 | 02:00 UTC daily | `populate_title_ids` | Daily | None |
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
+| 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
 | Weekly (Saturday 09:00 UTC) | `enrich_from_igdb --missing-or-no-match --max-minutes 60` | Weekly | None |
@@ -58,6 +60,15 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Dependencies**: Badge data should be reasonably current. No hard ordering dependency, but running after a badge series refresh gives more accurate results.
 - **Idempotency**: Fully safe to re-run. Overwrites existing cache keys.
 - **Failure impact**: Leaderboard pages show stale data until the cache expires (7h TTL). Individual series failures are caught and logged without blocking other series.
+
+### process_art_reveals
+
+- **Schedule**: Every 15 minutes, but only needs to run while a Badge Art Reveal event is live. Safe to leave registered year-round (it no-ops when nothing is active).
+- **Command**: `python manage.py process_art_reveals`
+- **What it does**: For each live `ArtRevealEvent`, recounts community badge-platinums (since the event's `started_at`, on non-shovelware badge-covered games) via `reconcile_event`, stores the count on `last_platinum_count`, and releases any items whose threshold has been crossed (copying their artwork onto the badge so it goes live). See [Badge Art Reveal](../features/badge-art-reveal.md).
+- **Dependencies**: None. Reads directly from the database. Sync being caught up makes the count fresher but isn't required.
+- **Idempotency**: Fully safe to re-run. It reconciles the released set to the current count each run (forward-only), and the event row is locked so overlapping runs can't double-release. A missed run self-heals on the next.
+- **Failure impact**: Artwork reveals lag behind the true community count until the next successful run; the banner/page show the last stored count. No data loss.
 
 ### process_scheduled_notifications
 
@@ -117,6 +128,15 @@ historical pass after Phase 3's rematch run.
 - **Dependencies**: None. Read-heavy; off-peak window.
 - **Idempotency**: Fully safe to re-run. Computes deltas and skips rows whose values already match. `--dry-run` reports counts without writing.
 - **Failure impact**: Type counters drift up to 24h until the next run if signals miss something. Users with active trophy hunting could see slightly off bronze/silver/gold/plat counts during that window. No user-facing breakage.
+
+### audit_badge_coverage
+
+- **Schedule**: Daily, 05:00 UTC
+- **Command**: `python manage.py audit_badge_coverage` (add `--always` for a daily heartbeat email even when there are no gaps)
+- **What it does**: For each tier-1 badge that tracks a franchise and/or developer, checks that every is_main franchise title / developed game (concept) is covered by one of the badge's series stages. Emails any gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game shipped and needs adding to the badge (or a data error). See [Management Commands](management-commands.md). Logic lives in `trophies/services/badge_coverage_service.py`.
+- **Dependencies**: None. Read-only. More accurate after IGDB enrichment (franchise/developer + concept links) is current.
+- **Idempotency**: Fully safe to re-run; pure read + email. By default sends mail only when gaps exist.
+- **Failure impact**: Staff miss a day of "new game not in its badge" alerts; no data effect. Re-running catches up.
 
 ### update_shovelware
 

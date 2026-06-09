@@ -488,7 +488,14 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             }
 
         if target_profile:
-            highest_tier_earned = UserBadge.objects.filter(profile=target_profile, badge__series_slug=self.kwargs['series_slug']).aggregate(max_tier=Max('badge__tier'))['max_tier'] or 0
+            # Tiers are independent, so we need the full earned-tier SET (not just
+            # the max) to default-select the right tab below.
+            earned_tiers = set(
+                UserBadge.objects.filter(
+                    profile=target_profile, badge__series_slug=self.kwargs['series_slug']
+                ).values_list('badge__tier', flat=True)
+            )
+            highest_tier_earned = max(earned_tiers) if earned_tiers else 0
             badge = series_badges.filter(tier=highest_tier_earned).first()
             if badge and highest_tier_earned > 0:
                 is_earned = True
@@ -515,8 +522,11 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
             selected_tier = None
 
         if selected_tier is None:
-            if target_profile and highest_tier_earned > 0:
-                selected_tier = min(highest_tier_earned + 1, max_tier)
+            if target_profile:
+                # Tiers are independent: default to the lowest tier NOT yet earned
+                # (the next available win), or the highest tier if all are earned.
+                unearned = [t for t in range(1, max_tier + 1) if t not in earned_tiers]
+                selected_tier = unearned[0] if unearned else (max_tier or 1)
             else:
                 selected_tier = 1
         context['selected_tier'] = selected_tier

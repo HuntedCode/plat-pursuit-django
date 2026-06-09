@@ -2006,25 +2006,95 @@ class TokenKeeper:
                 logger.exception(f"Exception recovery also failed for {game.title_name} (Title ID {title_id.title_id}): {recovery_err}")
 
     def _try_igdb_enrich(self, concept):
-        """Best-effort IGDB enrichment for a newly created concept.
+        """Per-game IGDB anchoring for a newly created PSN concept.
 
-        On miss, write a `no_match` marker so the concept is not silently
-        skipped by future default enrichment passes. The weekly retry cron
-        (`enrich_from_igdb --missing-or-no-match`) re-attempts these later.
+        `sync_title_id` calls `try_anchor_new_game` upfront, but trophy data
+        isn't loaded yet at that point (sync_trophies is a separate later job),
+        so the per-game matcher has no `_extract_trophy_group_title` signal
+        and returns None. Every new game falls through to a PSN-storefront
+        concept. This method runs at sync_complete (drained from a Redis set,
+        AFTER trophy_groups are populated) and is the actual anchoring step:
+        per-game `match_game` (the canonical signal per the title-name-
+        poisoning rule) -> `anchor_game_to_canonical` routes each Game to its
+        per-version `str(raw_igdb_id)` slot, exactly like `anchor_concepts`
+        does. The now-empty PSN concept absorbs into the survivor(s) via
+        add_concept's cascade.
+
+        Skips the older concept-level `enrich_concept` call. It used
+        `match_concept` (PSN's `unified_title`, which the title-name-poisoning
+        memory flags as unreliable), and `process_match` would have written an
+        IGDBMatch onto the PSN concept right before per-game anchoring
+        emptied and absorbed it — pure waste, plus a redundant IGDB call.
+        The weekly `enrich_from_igdb --missing-or-no-match` cron still picks
+        up concepts whose games never matched.
+
+        When no game in the concept matches, record a no_match marker on the
+        PSN concept so the weekly retry cron picks it up later.
         """
         from trophies.services.igdb_service import IGDBService
-        try:
-            match = IGDBService.enrich_concept(concept)
-        except Exception:
-            logger.exception(f"IGDB enrichment failed for concept {concept.concept_id}")
+        from trophies.services.concept_anchor_service import anchor_game_to_canonical
+
+        # Already-anchored concept: no per-game routing needed (the migration
+        # / a prior auto-anchor pass already placed games at their per-version
+        # slots). Don't disturb.
+        if concept.anchor_migration_completed_at is not None:
             return
-        if match is None:
+
+        # Per-game anchoring: re-route each Game in the PSN concept to its
+        # per-version IGDB-anchored concept. anchor_game_to_canonical handles
+        # identity cross-check + trophy fingerprint comparison and writes a
+        # ConceptJoinReview on mismatch (game stays put), so divergent games
+        # surface in the staff queue rather than getting silently mis-grouped.
+        # The IGDB data is preloaded from match_game and threaded into
+        # anchor_game_to_canonical so we never re-fetch the same id.
+        matched_any = False
+        for game in list(concept.games.all()):
             try:
-                IGDBService.record_no_match(concept)
+                game_match = IGDBService.match_game(game)
             except Exception:
                 logger.exception(
-                    f"Failed to record no_match marker for concept {concept.concept_id}"
+                    f"sync_complete auto-anchor: match_game failed for game pk={game.pk}"
                 )
+                continue
+            if not game_match:
+                continue
+            matched_any = True
+            try:
+                anchor_game_to_canonical(
+                    game,
+                    game_match['raw_igdb_id'],
+                    user=None,
+                    raw_data=game_match['igdb_data'],
+                )
+            except Exception:
+                logger.exception(
+                    f"sync_complete auto-anchor: anchor_game_to_canonical failed "
+                    f"for game pk={game.pk}"
+                )
+
+        if not matched_any:
+            # Per-game matching uses each Game's trophy_group_title — the
+            # canonical signal but it can miss true compilations where IGDB
+            # has a single entry covering several PSN trophy lists (e.g.
+            # "Resident Evil Origins Collection"). Before marking no_match,
+            # try the concept-level `enrich_concept` (match_concept against
+            # `unified_title`) as a safety net so compilations still get an
+            # IGDBMatch without waiting for the weekly retry cron.
+            try:
+                fallback = IGDBService.enrich_concept(concept)
+            except Exception:
+                logger.exception(
+                    f"sync_complete auto-anchor: enrich_concept fallback "
+                    f"failed for concept {concept.concept_id}"
+                )
+                fallback = None
+            if fallback is None:
+                try:
+                    IGDBService.record_no_match(concept)
+                except Exception:
+                    logger.exception(
+                        f"Failed to record no_match marker for concept {concept.concept_id}"
+                    )
 
     @staticmethod
     def _pending_igdb_enrich_key(profile_id) -> str:

@@ -57,6 +57,7 @@
     {% block global_banners %}
     {% include 'partials/site_banner.html' %}
     {% include 'partials/fundraiser_banner.html' %}
+    {% include 'partials/art_reveal_banner.html' %}
     {% include 'partials/anon_profile_banner.html' %}
     {% if user.is_authenticated and not user.premium_tier %}
         {% include 'partials/premium_upsell_banner.html' %}
@@ -205,6 +206,13 @@
 
     <!-- Load shared utilities first -->
     <script src="{% static 'js/vendor/htmx.min.js' %}"></script>
+    <script>
+        // Always re-fetch from the server on a history (back/forward) cache miss,
+        // and don't keep an htmx history snapshot cache. Avoids stale partial
+        // restores from the bfcache on browse pages.
+        htmx.config.refreshOnHistoryMiss = true;
+        htmx.config.historyCacheSize = 0;
+    </script>
     <script src="{% static 'js/vendor/Sortable.min.js' %}"></script>
     <script src="{% static 'js/utils.js' %}"></script>
     <script src="{% static 'js/celebrations.js' %}"></script>
