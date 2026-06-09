@@ -1,6 +1,6 @@
 # Management Commands
 
-PlatPursuit has **70 custom management commands** spread across 5 Django apps: `trophies` (43), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
+PlatPursuit has **71 custom management commands** spread across 5 Django apps: `trophies` (44), `core` (19), `notifications` (5), `users` (2), and `fundraiser` (1). All commands follow the standard Django pattern and are invoked with `python manage.py <command_name>`. Many support `--dry-run` for safe previewing before applying changes.
 
 ---
 
