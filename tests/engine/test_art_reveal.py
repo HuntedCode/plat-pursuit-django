@@ -263,3 +263,34 @@ def test_reveal_completes_funder_claim(media_root, monkeypatch):
     assert claim.status == 'completed'
     item.badge.refresh_from_db()
     assert item.badge.funded_by_id == profile.id
+
+
+def test_reveal_without_a_claim_is_a_noop(media_root, monkeypatch):
+    event = _event_with_items(n=1, per=5)  # badge has no fundraiser claim
+    monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
+                        lambda *, since: 5)
+
+    result = reconcile_event(event)  # must not raise
+
+    assert result['released'] == [1]
+    assert event.items.first().released is True
+
+
+def test_reveal_does_not_recomplete_an_already_completed_claim(media_root, monkeypatch):
+    from fundraiser.services.donation_service import DonationService
+
+    event = _event_with_items(n=1, per=5)
+    item = event.items.first()
+    _make_claim(item.badge, ProfileFactory(), status='completed')
+
+    calls = []
+    monkeypatch.setattr(DonationService, 'send_artwork_complete_email',
+                        staticmethod(lambda c: calls.append('email')))
+    monkeypatch.setattr(DonationService, 'send_artwork_complete_notification',
+                        staticmethod(lambda c: calls.append('notif')))
+    monkeypatch.setattr('art_reveal.services.compute_badge_platinum_count',
+                        lambda *, since: 5)
+
+    reconcile_event(event)
+
+    assert calls == []  # already-completed claim is not re-completed / re-notified

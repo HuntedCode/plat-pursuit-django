@@ -169,7 +169,7 @@
                     {% endif %}
                     <p class="text-xs lg:text-sm font-semibold leading-tight truncate group-hover:text-primary transition-colors px-0.5{% if not item.released %} text-base-content/55{% endif %}">{{ item.badge.effective_display_series|default:item.badge.name }}</p>
                 </a>
-                {% if item.badge.effective_funded_by %}
+                {% if item.released and item.badge.effective_funded_by %}
                 <a href="{% url 'profile_detail' item.badge.effective_funded_by.psn_username %}"
                    class="block px-0.5 text-[10px] lg:text-[11px] text-base-content/45 hover:text-primary truncate transition-colors">
                     Funded by <span class="font-medium">{{ item.badge.effective_funded_by.display_psn_username }}</span>
