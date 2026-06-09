@@ -5,6 +5,8 @@ wide aggregation) and must run only off the request path (the cron). The request
 path reads the cheap cached ``ArtRevealEvent.last_platinum_count`` instead.
 """
 
+import logging
+
 from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
@@ -12,6 +14,8 @@ from django.utils import timezone
 from trophies.models import Badge, Concept, EarnedTrophy
 
 from .models import ArtRevealEvent
+
+logger = logging.getLogger(__name__)
 
 # Games whose shovelware status disqualifies their platinums from the count.
 _SHOVELWARE_EXCLUDED = ('auto_flagged', 'manually_flagged')
@@ -70,19 +74,49 @@ def reconcile_event(event, *, now=None):
     per = event.platinums_per_reveal or 1
 
     released = []
+    released_items = []
     with transaction.atomic():
         ev = ArtRevealEvent.objects.select_for_update().get(pk=event.pk)
         total = ev.items.count()
         target = min(count // per, total)
-        for item in ev.items.filter(released=False, order__lte=target).order_by('order'):
+        for item in ev.items.select_related('badge').filter(
+            released=False, order__lte=target
+        ).order_by('order'):
             if item.release(now=now):
                 released.append(item.order)
+                released_items.append(item)
         ArtRevealEvent.objects.filter(pk=ev.pk).update(
             last_platinum_count=count, last_counted_at=now,
         )
     # Refresh the banner immediately after a reveal rather than waiting out the TTL.
     cache.delete_many([_ACTIVE_CACHE_KEY, _BANNER_CACHE_KEY])
+
+    # Post-commit: complete the fundraiser badge-artwork claim for each newly-
+    # revealed badge (credits the funder + sends them the artwork-complete
+    # email/notification). Kept out of the locked transaction above.
+    for item in released_items:
+        _complete_badge_claim_for_reveal(item.badge)
+
     return {'count': count, 'target': min(count // per, event.items.count()), 'released': released}
+
+
+def _complete_badge_claim_for_reveal(badge):
+    """When an art reveal item goes live, complete its fundraiser badge-artwork claim
+    (if any) so the funder is credited and notified. Cross-app and best-effort: a
+    fundraiser-side failure must not break the reveal."""
+    try:
+        from fundraiser.models import DonationBadgeClaim
+        from fundraiser.services.donation_service import DonationService
+
+        claim = (
+            DonationBadgeClaim.objects
+            .filter(badge=badge).exclude(status='completed')
+            .select_related('profile').first()
+        )
+        if claim:
+            DonationService.complete_badge_claim(claim)
+    except Exception:
+        logger.exception("art_reveal: failed to complete badge claim on release")
 
 
 def get_active_event():
