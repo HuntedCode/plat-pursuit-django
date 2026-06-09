@@ -27,14 +27,17 @@ def audit_badge_coverage():
     findings = []
     badges = (
         Badge.objects.filter(tier=1)
-        .select_related(
-            'franchise', 'developer',
-            'base_badge', 'base_badge__franchise', 'base_badge__developer',
-        )
+        .select_related('franchise', 'developer', 'base_badge')
         .order_by(Lower('name'))
     )
 
     for badge in badges:
+        # A badge with no series_slug has no stages of its own; skip it rather than
+        # treat every candidate as missing (filtering stages__series_slug='' / None
+        # would match unrelated empty-slug stages, not "this series").
+        if not badge.series_slug:
+            continue
+
         franchise = badge.effective_franchise
         developer = badge.effective_developer
         if not franchise and not developer:

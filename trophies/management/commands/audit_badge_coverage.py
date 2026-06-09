@@ -17,6 +17,10 @@ from trophies.services.badge_coverage_service import audit_badge_coverage
 ALERT_EMAIL = 'badge-alerts@platpursuit.com'
 
 
+def _plural(count, singular, plural=None):
+    return singular if count == 1 else (plural or singular + 's')
+
+
 def format_report(findings):
     """Plain-text report body for the given audit_badge_coverage() findings."""
     total = sum(len(f['missing']) for f in findings)
@@ -25,8 +29,9 @@ def format_report(findings):
                 "covers its concepts. No gaps found.")
 
     lines = [
-        f"Badge coverage audit: {total} concept(s) across {len(findings)} badge(s) "
-        f"are NOT assigned to a badge stage.",
+        f"Badge coverage audit: {total} {_plural(total, 'concept')} across "
+        f"{len(findings)} {_plural(len(findings), 'badge')} "
+        f"{_plural(total, 'is', 'are')} NOT assigned to a badge stage.",
         "A gap usually means a new game needs adding to the badge, or a data error occurred.",
         "",
     ]
@@ -74,8 +79,8 @@ class Command(BaseCommand):
 
         total = sum(len(f['missing']) for f in findings)
         subject = (
-            f"[PlatPursuit] Badge coverage: {total} unassigned concept(s) "
-            f"across {len(findings)} badge(s)"
+            f"[PlatPursuit] Badge coverage: {total} unassigned "
+            f"{_plural(total, 'concept')} across {len(findings)} {_plural(len(findings), 'badge')}"
             if findings else
             "[PlatPursuit] Badge coverage: all clear"
         )

@@ -110,6 +110,65 @@ def test_tie_in_concept_not_flagged():
     assert audit_badge_coverage() == []
 
 
+def test_badge_with_both_franchise_and_developer_unions_dedups_and_orders():
+    badge = BadgeFactory(series_slug="cov-both", tier=1)
+    fran = _franchise(slug="cov-both-f")
+    dev = CompanyFactory(name="Both Studio")
+    badge.franchise = fran
+    badge.developer = dev
+    badge.save()
+
+    fran_only = _concept_with_game("Apple Franchise Game")
+    dev_only = _concept_with_game("Banana Dev Game")
+    both = _concept_with_game("Cherry Both Game")
+    _link_franchise(fran_only, fran)
+    ConceptCompanyFactory(concept=dev_only, company=dev, is_developer=True)
+    _link_franchise(both, fran)
+    ConceptCompanyFactory(concept=both, company=dev, is_developer=True)
+
+    findings = audit_badge_coverage()
+
+    assert len(findings) == 1
+    missing = findings[0]['missing']
+    # union of both sources, the 'both' concept appears exactly once (deduped)
+    assert sorted(c.id for c in missing) == sorted([fran_only.id, dev_only.id, both.id])
+    # ordered by unified_title
+    assert [c.unified_title for c in missing] == [
+        "Apple Franchise Game", "Banana Dev Game", "Cherry Both Game",
+    ]
+
+
+def test_covered_across_multiple_stages():
+    badge = BadgeFactory(series_slug="cov-multi", tier=1)
+    fran = _franchise(slug="cov-multi-f")
+    badge.franchise = fran
+    badge.save()
+    c1 = _concept_with_game("Stage One Game")
+    c2 = _concept_with_game("Stage Two Game")
+    c3 = _concept_with_game("Uncovered Game")
+    for c in (c1, c2, c3):
+        _link_franchise(c, fran)
+    _cover(c1, badge.series_slug, stage_number=1)
+    _cover(c2, badge.series_slug, stage_number=2)
+
+    findings = audit_badge_coverage()
+    assert len(findings) == 1
+    assert [c.id for c in findings[0]['missing']] == [c3.id]
+
+
+def test_blank_series_slug_badge_is_skipped():
+    # Guard: a tracked badge with no series_slug has no stages; it must NOT flag
+    # every franchise concept as missing.
+    badge = BadgeFactory(series_slug="", tier=1)
+    fran = _franchise(slug="cov-blank-f")
+    badge.franchise = fran
+    badge.save()
+    c = _concept_with_game("Orphan Game")
+    _link_franchise(c, fran)
+
+    assert audit_badge_coverage() == []
+
+
 # --- command (email) ----------------------------------------------------------
 
 
