@@ -28,30 +28,29 @@
 
     {# Bulk Stage Toggle #}
     <div class="flex justify-end mt-3">
-        <button id="badge-stage-toggle-all" class="btn btn-ghost btn-xs md:btn-sm gap-1 text-base-content/50 hover:text-base-content">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 transition-transform duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        <button id="badge-stage-toggle-all" class="bd-collapse-all">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
             <span>Collapse All</span>
         </button>
     </div>
 
-    {# Stage Sections (applicable to selected tier) #}
-    {% for data in stage_data %}
-        {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
-    {% endfor %}
+    {# Stage Sections (applicable to selected tier) — laid out as a vertical journey (spine + nodes). #}
+    <div class="bd-stages">
+        {% for data in stage_data %}
+            {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
+        {% endfor %}
+    </div>
 
     {# Stages required only for higher tiers (collapsed by default) #}
     {% if other_tier_stages %}
-    <div class="collapse collapse-arrow bg-base-200/40 border border-base-300 rounded-lg mt-3">
-        <input type="checkbox" />
-        <div class="collapse-title py-2 min-h-0 text-xs md:text-sm font-semibold text-base-content/60">
-            {{ other_tier_stages|length }} stage{{ other_tier_stages|length|pluralize }} required only for higher tiers
-        </div>
-        <div class="collapse-content">
+    <details class="bd-other-tiers mt-3">
+        <summary class="bd-other-tiers__summary">{{ other_tier_stages|length }} stage{{ other_tier_stages|length|pluralize }} required only for higher tiers</summary>
+        <div>
             {% for data in other_tier_stages %}
                 {% include 'trophies/partials/badge_detail/badge_detail_stage_section.html' %}
             {% endfor %}
         </div>
-    </div>
+    </details>
     {% endif %}
 {% endwith %}
 {% endblock %}

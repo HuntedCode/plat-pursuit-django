@@ -117,6 +117,24 @@ def test_leaderboard_links_point_to_full_board(client, stub_leaderboards):
     assert resp.content.decode().count(lb_url) >= 2
 
 
+def test_stage_with_unobtainable_game_renders(client, stub_leaderboards):
+    # Exercises the unobtainable/delisted collapsible branch of the stage section.
+    series = "rebuild-unobt"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    concept = ConceptFactory()
+    GameFactory(concept=concept)                       # obtainable
+    GameFactory(concept=concept, is_obtainable=False)  # unobtainable
+    stage = StageFactory(series_slug=series, stage_number=1, required_tiers=[])
+    stage.concepts.add(concept)
+
+    profile = ProfileFactory()
+    client.force_login(profile.user)
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+
+    assert resp.status_code == 200
+    assert 'Unobtainable/Delisted' in resp.content.decode()
+
+
 def test_anonymous_viewer_has_empty_earned_tiers(client, stub_leaderboards):
     series = "rebuild-tier-tabs-anon"
     BadgeFactory(series_slug=series, tier=1, is_live=True)

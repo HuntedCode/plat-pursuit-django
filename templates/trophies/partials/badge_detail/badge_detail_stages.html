@@ -1,82 +1,60 @@
 {% load static custom_filters %}
-<div class="flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg transition-colors cursor-pointer focus:ring-2 focus:ring-primary focus:outline-none
-            {% if data.stage_completion_state == 'complete' %}bg-success/10 border border-success/10 hover:bg-success/15{% else %}bg-white/[0.03] border border-base-content/5 hover:bg-white/[0.06]{% endif %}"
+{% comment %} Stage header = the collapse toggle. Stage state (.bd-stage--done) lives on the section wrapper. {% endcomment %}
+<div class="bd-stage__head"
      data-stage-toggle="{{ stage.stage_number }}"
      data-stage-complete="{% if data.stage_completion_state == 'complete' %}true{% else %}false{% endif %}"
      data-stage-bonus="{% if stage.stage_number == 0 %}true{% else %}false{% endif %}"
      role="button" aria-expanded="true" tabindex="0">
-    {# Stage Icon #}
-    <div class="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden border shrink-0
-                {% if data.stage_completion_state == 'complete' %}border-success/30{% else %}border-base-content/10{% endif %}">
-        <img src="{{ stage.stage_icon }}" alt="{{ stage.title }}" class="w-full h-full object-cover" loading="lazy" />
+
+    <div class="bd-stage__icon">
+        <img src="{{ stage.stage_icon }}" alt="{{ stage.title }}" loading="lazy" />
     </div>
 
-    {# Stage Title + Completion #}
-    <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-1.5">
-            <h2 class="text-sm md:text-base font-semibold line-clamp-1 pr-1">
-                <span class="md:hidden text-accent font-bold">{% if stage.stage_number == 0 %}Bonus{% else %}S{{ stage.stage_number }}{% endif %}:</span>
-                <span class="hidden md:inline text-accent font-bold">{% if stage.stage_number == 0 %}Bonus{% else %}Stage {{ stage.stage_number }}{% endif %}:</span>
-                {{ stage.title }}
-            </h2>
+    <div class="bd-stage__id">
+        <div class="bd-stage__title">
+            <span class="bd-stage__num">{% if stage.stage_number == 0 %}Bonus{% else %}<span class="md:hidden">S{{ stage.stage_number }}</span><span class="hidden md:inline">Stage {{ stage.stage_number }}</span>{% endif %}:</span>
+            <span class="bd-stage__title-text">{{ stage.title }}</span>
             {% if target_profile and data.stage_completion_state and stage.stage_number != 0 %}
                 {% if data.stage_completion_state == 'complete' %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-success shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <svg class="bd-stage__check bd-stage__check--done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 {% elif data.stage_completion_state == 'partial' %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-warning shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <svg class="bd-stage__check bd-stage__check--partial" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 {% else %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-error shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <svg class="bd-stage__check bd-stage__check--todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 {% endif %}
                 {% if data.stage_progress %}
-                <span class="text-[0.6rem] font-bold shrink-0
-                             {% if data.stage_progress.completed == data.stage_progress.total %}text-success
-                             {% elif data.stage_progress.completed > 0 %}text-warning
-                             {% else %}text-base-content/30{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
+                <span class="bd-stage__pcount {% if data.stage_progress.completed == data.stage_progress.total %}bd-stage__check--done{% elif data.stage_progress.completed > 0 %}bd-stage__check--partial{% else %}bd-stage__check--todo{% endif %}">{{ data.stage_progress.completed }}/{{ data.stage_progress.total }}</span>
                 {% endif %}
             {% endif %}
         </div>
+        {% include 'trophies/partials/badge_detail/badge_stage_stats.html' %}
     </div>
 
-    {# Tier Indicators #}
     {% if stage.stage_number != 0 %}
-    <div class="flex gap-0.5 md:gap-1 shrink-0">
+    <div class="bd-stage__tiers">
         {% if not stage.required_tiers %}
             {% for i in '1234' %}
-                {% with completion|dict_get:i as comp %}
-                {% with stage.stage_number as num %}
-                {% with comp|dict_get:num as earned %}
-                <figure class="relative w-4 h-4 md:w-5 md:h-5">
-                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" class="absolute inset-0 w-full {% if earned %}grayscale{% endif %}" loading="lazy" />
-                    {% if earned %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="absolute inset-0 w-full text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    {% endif %}
-                </figure>
+                {% with completion|dict_get:i as comp %}{% with stage.stage_number as num %}{% with comp|dict_get:num as earned %}
+                <span class="bd-stage__tier{% if earned %} bd-stage__tier--earned{% endif %}">
+                    <img src="{% static 'images/badges/backdrops/'|add:i|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" loading="lazy" />
+                    {% if earned %}<svg class="bd-stage__tier-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>{% endif %}
+                </span>
                 {% endwith %}{% endwith %}{% endwith %}
             {% endfor %}
         {% else %}
             {% for i in stage.required_tiers %}
-                {% with completion|dict_get:i as comp %}
-                {% with stage.stage_number as num %}
-                {% with comp|dict_get:num as earned %}
-                <figure class="relative w-4 h-4 md:w-5 md:h-5">
-                    {% with i|stringformat:'s' as i_str %}
-                    <img src="{% static 'images/badges/backdrops/'|add:i_str|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" class="absolute inset-0 w-full {% if earned %}grayscale{% endif %}" loading="lazy" />
-                    {% endwith %}
-                    {% if earned %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="absolute inset-0 w-full text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    {% endif %}
-                </figure>
+                {% with completion|dict_get:i as comp %}{% with stage.stage_number as num %}{% with comp|dict_get:num as earned %}
+                <span class="bd-stage__tier{% if earned %} bd-stage__tier--earned{% endif %}">
+                    {% with i|stringformat:'s' as i_str %}<img src="{% static 'images/badges/backdrops/'|add:i_str|add:'_backdrop.png' %}" alt="{{ i|badge_tier }}" loading="lazy" />{% endwith %}
+                    {% if earned %}<svg class="bd-stage__tier-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>{% endif %}
+                </span>
                 {% endwith %}{% endwith %}{% endwith %}
             {% endfor %}
         {% endif %}
     </div>
     {% endif %}
 
-    {# Game count (visible when collapsed) #}
-    <span class="badge badge-ghost badge-xs font-bold shrink-0 hidden" data-stage-game-count="{{ stage.stage_number }}">
-        {{ data.games|length }}
-    </span>
+    <span class="bd-stage__count hidden" data-stage-game-count="{{ stage.stage_number }}">{{ data.games|length }}</span>
 
-    {# Chevron #}
-    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-base-content/30 shrink-0 transition-transform duration-300" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    <svg class="bd-stage__chevron" data-stage-chevron="{{ stage.stage_number }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
 </div>

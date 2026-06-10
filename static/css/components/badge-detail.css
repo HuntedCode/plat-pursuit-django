@@ -400,3 +400,176 @@ a.bd-stat { color: inherit; text-decoration: none; }
 .bd-game__ratings { display: flex; align-items: center; gap: 8px; font-size: 0.55rem; font-weight: 700; }
 .bd-game__rating { display: inline-flex; align-items: center; gap: 2px; }
 .bd-game__rating svg { width: 9px; height: 9px; }
+
+/* ── Stage section ──────────────────────────────────────────────────────────
+   A stage is a .bd-card holding a clickable header (collapse toggle), an
+   optional stats row, and a collapsible body of game cards / bundles. Complete
+   stages earn a success tint on the header. */
+.bd-stage { scroll-margin-top: 1rem; }
+
+.bd-stage__head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; cursor: pointer;
+    border-radius: var(--pp-radius-lg);
+    transition: background var(--pp-dur) var(--pp-ease);
+}
+.bd-stage__head:hover { background: oklch(1 0 0 / 0.03); }
+.bd-stage__head:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: -2px; }
+.bd-stage--done .bd-stage__head { background: color-mix(in oklch, var(--pp-success) 8%, transparent); }
+.bd-stage--done .bd-stage__head:hover { background: color-mix(in oklch, var(--pp-success) 13%, transparent); }
+
+.bd-stage__icon {
+    width: 42px; height: 42px; border-radius: var(--pp-radius-md); overflow: hidden;
+    border: 1px solid var(--pp-border); flex-shrink: 0;
+}
+.bd-stage--done .bd-stage__icon { border-color: color-mix(in oklch, var(--pp-success) 40%, transparent); }
+.bd-stage__icon img { width: 100%; height: 100%; object-fit: cover; }
+
+.bd-stage__id { min-width: 0; flex: 1; }
+.bd-stage__title {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.9rem; font-weight: 600; color: var(--pp-text);
+}
+.bd-stage__num { color: var(--pp-accent); font-weight: 800; flex-shrink: 0; }
+.bd-stage__title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-stage__check { flex-shrink: 0; width: 15px; height: 15px; }
+.bd-stage__check--done { color: var(--pp-success); }
+.bd-stage__check--partial { color: var(--pp-warning); }
+.bd-stage__check--todo { color: var(--pp-error); }
+.bd-stage__pcount { font-size: 0.6rem; font-weight: 700; flex-shrink: 0; }
+
+.bd-stage__tiers { display: flex; gap: 3px; flex-shrink: 0; }
+.bd-stage__tier { position: relative; width: 18px; height: 18px; }
+.bd-stage__tier img { width: 100%; height: 100%; object-fit: contain; }
+.bd-stage__tier--earned img { filter: grayscale(1); opacity: 0.45; }
+.bd-stage__tier-check { position: absolute; inset: 0; color: var(--pp-success); }
+
+.bd-stage__count {
+    font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute);
+    padding: 1px 7px; border-radius: 999px; background: var(--pp-bg-2); flex-shrink: 0;
+}
+.bd-stage__chevron {
+    width: 18px; height: 18px; color: var(--pp-text-mute); flex-shrink: 0;
+    transition: transform var(--pp-dur) var(--pp-ease);
+}
+
+/* Per-stage personal metrics — a quiet caption under the stage title (folded
+   into the header), not a separate pill row. Muted so it never competes with
+   the completed-green header. */
+.bd-stage__stats { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 3px; }
+.bd-stage__stat { display: inline-flex; align-items: center; gap: 3px; font-size: 0.64rem; font-weight: 600; color: var(--pp-text-mute); }
+.bd-stage__stat svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+/* Collapse body — the grid-rows trick (JS toggles grid-template-rows on
+   [data-stage-games]). The inner grid is padded so card hover-glows breathe
+   instead of clipping at the overflow:hidden boundary. */
+.bd-stage__collapse { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 300ms var(--pp-ease); }
+.bd-stage__collapse-inner { overflow: hidden; }
+.bd-stage__grid {
+    display: grid; gap: 10px; padding: 14px;
+    grid-template-columns: repeat(2, 1fr);
+}
+@media (min-width: 768px)  { .bd-stage__grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .bd-stage__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1280px) { .bd-stage__grid { grid-template-columns: repeat(5, 1fr); } }
+
+/* Unobtainable / delisted titles — compact collapsible list above the grid. */
+.bd-stage__unobt { margin: 0 14px; border: 1px solid; border-radius: var(--pp-radius-md); }
+.bd-stage__unobt--done { border-color: color-mix(in oklch, var(--pp-success) 25%, transparent); background: color-mix(in oklch, var(--pp-success) 6%, transparent); }
+.bd-stage__unobt--partial { border-color: color-mix(in oklch, var(--pp-warning) 25%, transparent); background: color-mix(in oklch, var(--pp-warning) 6%, transparent); }
+.bd-stage__unobt--todo { border-color: color-mix(in oklch, var(--pp-error) 22%, transparent); background: color-mix(in oklch, var(--pp-error) 6%, transparent); }
+.bd-stage__unobt-summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    padding: 7px 10px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim);
+}
+.bd-stage__unobt-summary::-webkit-details-marker { display: none; }
+.bd-stage__unobt-summary svg { width: 14px; height: 14px; flex-shrink: 0; }
+.bd-stage__unobt-summary::after {
+    content: ""; width: 7px; height: 7px; margin-left: auto;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
+}
+.bd-stage__unobt[open] .bd-stage__unobt-summary::after { transform: rotate(-135deg); }
+.bd-stage__unobt-list { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 8px; }
+.bd-stage__unobt-row {
+    display: flex; align-items: center; gap: 8px; padding: 4px 6px;
+    border-radius: var(--pp-radius-sm); text-decoration: none;
+    transition: background var(--pp-dur-fast) var(--pp-ease);
+}
+.bd-stage__unobt-row:hover { background: oklch(1 0 0 / 0.05); }
+.bd-stage__unobt-status { width: 14px; height: 14px; flex-shrink: 0; }
+.bd-stage__unobt-thumb { width: 22px; height: 22px; border-radius: var(--pp-radius-sm); overflow: hidden; flex-shrink: 0; }
+.bd-stage__unobt-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bd-stage__unobt-thumb--dim img { opacity: 0.4; }
+.bd-stage__unobt-name {
+    flex: 1; font-size: 0.7rem; font-style: italic; color: var(--pp-text-mute);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 0.25rem;
+}
+.bd-stage__unobt-pct { font-size: 0.58rem; font-weight: 700; color: var(--pp-text-mute); flex-shrink: 0; }
+
+/* Concept bundle qualifier. */
+.bd-bundle { margin: 0 14px 4px; border: 1px solid; border-radius: var(--pp-radius-md); }
+.bd-bundle--done { border-color: color-mix(in oklch, var(--pp-success) 35%, transparent); background: color-mix(in oklch, var(--pp-success) 6%, transparent); }
+.bd-bundle--todo { border-color: color-mix(in oklch, var(--pp-info) 30%, transparent); background: color-mix(in oklch, var(--pp-info) 6%, transparent); }
+.bd-bundle__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; }
+.bd-bundle__icon { display: flex; flex-shrink: 0; width: 18px; height: 18px; }
+.bd-bundle__icon--done { color: var(--pp-success); }
+.bd-bundle__icon--todo { color: var(--pp-info); }
+.bd-bundle__label { font-size: 0.85rem; font-weight: 600; color: var(--pp-text); }
+.bd-bundle__note { font-size: 0.65rem; font-style: italic; color: var(--pp-text-mute); margin-left: auto; padding-right: 0.25rem; }
+.bd-bundle__grid {
+    display: grid; gap: 10px; padding: 0 12px 12px;
+    grid-template-columns: repeat(2, 1fr);
+}
+@media (min-width: 768px)  { .bd-bundle__grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .bd-bundle__grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1280px) { .bd-bundle__grid { grid-template-columns: repeat(5, 1fr); } }
+
+/* Stage list as a vertical journey. A spine ties the stages together (it shows
+   through the gaps between cards) with a node per stage, so they read as
+   sequential steps toward the badge rather than floating cards. Completed stages
+   fill their node green — progress down the path. */
+.bd-stages { position: relative; padding-left: 28px; }
+.bd-stages::before {
+    content: ""; position: absolute; left: 9px; top: 28px; bottom: 24px;
+    width: 2px; border-radius: 1px; z-index: 0;
+    background: var(--pp-border);
+}
+.bd-stages > .bd-stage { position: relative; z-index: 1; }
+.bd-stages > .bd-stage::before {
+    content: ""; position: absolute; left: -24px; top: 23px;
+    width: 12px; height: 12px; border-radius: 50%; z-index: 1;
+    background: var(--pp-bg-2); border: 2px solid var(--pp-border);
+    transition: background var(--pp-dur) var(--pp-ease), border-color var(--pp-dur) var(--pp-ease);
+}
+.bd-stages > .bd-stage--done::before {
+    background: var(--pp-success);
+    border-color: var(--pp-success);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--pp-success) 18%, transparent);
+}
+
+/* Bulk "collapse/expand all" toggle (a quiet text button). */
+.bd-collapse-all {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--pp-font-body); font-size: 0.72rem; font-weight: 600;
+    color: var(--pp-text-mute); background: none; border: none; cursor: pointer;
+    padding: 4px 8px; border-radius: var(--pp-radius-sm);
+    transition: color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.bd-collapse-all:hover { color: var(--pp-text); background: oklch(1 0 0 / 0.04); }
+.bd-collapse-all svg { width: 14px; height: 14px; transition: transform var(--pp-dur) var(--pp-ease); }
+
+/* "Stages required only for higher tiers" disclosure. */
+.bd-other-tiers__summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    padding: 9px 14px; font-size: 0.78rem; font-weight: 600; color: var(--pp-text-dim);
+    background: var(--pp-bg-1); border: var(--pp-border-w) solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+}
+.bd-other-tiers__summary::-webkit-details-marker { display: none; }
+.bd-other-tiers__summary::after {
+    content: ""; width: 7px; height: 7px; margin-left: auto;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); transition: transform var(--pp-dur) var(--pp-ease);
+}
+.bd-other-tiers[open] .bd-other-tiers__summary::after { transform: rotate(-135deg); }
