@@ -48,6 +48,10 @@
 
     --frame-aspect: 1 / 1;
     --frame-art-pad: 10px;
+    /* Default fixed frame size — the same everywhere (the frame renders at exact
+       key sizes, never container-stretched). The --compact / --mini variants set
+       their own widths. */
+    --pp-frame-w: 248px;
 }
 
 @property --pp-build {
@@ -89,6 +93,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    width: var(--pp-frame-w);
     background: var(--frame-bg);
     border: 1px solid var(--frame-border);
     border-radius: 6px;
@@ -243,6 +248,16 @@
     flex: 1;
     min-width: 0;
 }
+/* Badge type tag — right of the name row, across from franchise/developer. */
+.pp-frame__type-tag {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.2;
+    color: rgba(255, 255, 255, 0.5);
+}
 .pp-frame__plinth-meta {
     display: flex;
     justify-content: space-between;
@@ -259,10 +274,11 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
+    font-size: 11px;            /* larger than the 9px meta — rarity is a headline stat */
     font-weight: 700;
     letter-spacing: 0.02em;
 }
-.pp-frame__rarity svg { width: 10px; height: 10px; flex-shrink: 0; }
+.pp-frame__rarity svg { width: 12px; height: 12px; flex-shrink: 0; }
 .pp-frame__rarity--common   { color: rgba(255, 255, 255, 0.5); font-weight: 600; }
 .pp-frame__rarity--uncommon { color: rgba(170, 220, 195, 0.9); }
 .pp-frame__rarity--rare {
@@ -460,13 +476,14 @@
     z-index: 3;
 }
 .pp-frame__engraving-num {
-    font-size: 9.5px;
+    font-size: 12.5px;          /* bigger than the original 9.5 but still a mark, not text */
     font-weight: 800;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.78);
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.82);
+    /* Carved/etched bevel: dark top edge of the groove, light catch on the bottom. */
     text-shadow:
-        0 1px 0 rgba(0, 0, 0, 0.55),
-        0 -0.5px 0 rgba(255, 255, 255, 0.08);
+        0 -1px 1px rgba(0, 0, 0, 0.7),
+        0 1px 0 rgba(255, 255, 255, 0.14);
 }
 .pp-frame--bronze   .pp-frame__engraving-num { color: rgba(220, 150, 80, 0.9); }
 .pp-frame--silver   .pp-frame__engraving-num { color: rgba(215, 220, 225, 0.9); }
@@ -540,22 +557,23 @@
     position: absolute;
     bottom: 5px;
     right: 9px;
-    font-size: 8.5px;
+    font-size: 11px;            /* bigger than the original 8.5 but still an etched mark */
     font-weight: 800;
-    letter-spacing: 0.18em;
-    color: rgba(255, 255, 255, 0.38);
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.5);
+    /* Same carved bevel as the engraving (dark top groove, light bottom catch). */
     text-shadow:
-        0 1px 0 rgba(0, 0, 0, 0.6),
-        0 -0.5px 0 rgba(255, 255, 255, 0.08);
+        0 -1px 1px rgba(0, 0, 0, 0.7),
+        0 1px 0 rgba(255, 255, 255, 0.12);
     line-height: 1;
     pointer-events: none;
     font-variant-numeric: tabular-nums;
     z-index: 3;
 }
-.pp-frame--bronze   .pp-frame__set-mark { color: rgba(220, 180, 130, 0.5); }
-.pp-frame--silver   .pp-frame__set-mark { color: rgba(225, 230, 240, 0.5); }
-.pp-frame--gold     .pp-frame__set-mark { color: rgba(245, 220, 140, 0.55); }
-.pp-frame--platinum .pp-frame__set-mark { color: rgba(220, 240, 250, 0.6); }
+.pp-frame--bronze   .pp-frame__set-mark { color: rgba(225, 185, 135, 0.66); }
+.pp-frame--silver   .pp-frame__set-mark { color: rgba(228, 233, 242, 0.66); }
+.pp-frame--gold     .pp-frame__set-mark { color: rgba(247, 223, 145, 0.72); }
+.pp-frame--platinum .pp-frame__set-mark { color: rgba(224, 242, 251, 0.76); }
 
 /* Shared hover lift + tier-tinted outer shadow. Gleam sweep
  * sits on .pp-hover-a below. */

@@ -3,7 +3,8 @@
 {# Expects: frame (dict), tier (str), state (str). #}
 
 <div class="pp-frame__title">
-    <div class="pp-frame__series"><span class="pp-frame__series-track" data-text="{{ frame.series_name }}">{{ frame.series_name }}</span></div>
+    {# Top-left: the badge name (e.g. "Crash Bandicoot Series Master"). #}
+    <div class="pp-frame__series">{{ frame.badge_name }}</div>
 </div>
 
 <div class="pp-frame__art">
@@ -68,22 +69,16 @@
 <div class="pp-frame__plinth-clipwrap">
 <div class="pp-frame__plinth">
     <div class="pp-frame__plinth-name-row">
-        <div class="pp-frame__name">{{ frame.badge_name }}</div>
-        {% if state == 'earned' and frame.current_rank %}
-            {# Current-cycle PRINT — refreshed alongside the rest of the printed text #}
-            {# (name, dates, rarity) whenever the card is repaired. Mint engraving #}
-            {# below stays etched-in-chrome permanent; this line is part of the print. #}
-            <div class="pp-frame__cycle-print">
-                <span class="pp-frame__cycle-print-num">#{{ frame.current_rank|intcomma }}</span><span class="pp-frame__cycle-print-label">{% if frame.current_cycle %}Cycle {{ frame.current_cycle }}{% else %}Current{% endif %}</span>
-            </div>
-        {% elif state == 'maintenance' or frame.is_maint_staged %}
-            {# Maintenance status — same visual slot as the cycle print, but the #}
-            {# label carries the "needs reactivation" signal instead of a live rank. #}
-            {# Renders for staged-maintenance cards too (hidden by .pp-frame--maint-staged #}
-            {# until the maintenance moment animation reveals it). #}
+        {# Lower-bold identity: franchise (or developer), else the badge name. #}
+        <div class="pp-frame__name">{% if frame.franchise %}{{ frame.franchise }}{% elif frame.developer %}{{ frame.developer }}{% else %}{{ frame.badge_name }}{% endif %}</div>
+        {% if state == 'maintenance' or frame.is_maint_staged %}
+            {# Maintenance status in the right slot (live rank moved to the back). #}
             <div class="pp-frame__cycle-print pp-frame__cycle-print--maintenance">
                 <span class="pp-frame__cycle-print-label">{{ frame.maintenance_label|default:"Reactivate" }}</span>
             </div>
+        {% elif frame.badge_type %}
+            {# Badge type, across from the franchise/developer name. #}
+            <div class="pp-frame__type-tag">{{ frame.badge_type }}</div>
         {% endif %}
     </div>
     <div class="pp-frame__plinth-meta">
