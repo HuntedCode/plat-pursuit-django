@@ -62,6 +62,9 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     state = "earned"
     earned_date = None
     progress_pct = None
+    earn_rank = None       # permanent "Nth profile to earn this tier" (engraving)
+    current_rank = None    # live per-series earners leaderboard position
+    series_xp = None       # viewer's XP for this badge's series
 
     if profile is not None:
         earned = UserBadge.objects.filter(profile=profile, badge=badge).first()
@@ -69,6 +72,12 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
             state = "earned"
             stages_done = stages_total
             earned_date = date_filter(earned.earned_at, "M j, Y")
+            earn_rank = earned.earn_rank
+            from trophies.services.redis_leaderboard_service import get_earners_rank
+            from trophies.services.xp_service import calculate_series_xp
+            # get_earners_rank is already 1-indexed (or None if not on the board).
+            current_rank = get_earners_rank(badge.series_slug, profile.id)
+            series_xp = calculate_series_xp(profile, badge.series_slug)
         else:
             prog = UserBadgeProgress.objects.filter(
                 profile=profile, badge=badge
@@ -102,7 +111,30 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     if progress_pct is not None:
         frame["progress_pct"] = progress_pct
 
-    # Intentionally omitted this pass (need a rarity source / earn-rank compute):
-    # rarity_pct, rarity_rank, rarity_class, engraving_rank.
+    # --- STEP 2 data: type, franchise/developer, set mark, rarity, engraving,
+    # live leaderboard position, series XP. The front face already renders the
+    # rarity / engraving / set-mark / current-rank slots; the rest feed the
+    # type + franchise/developer + back-of-card stats. ---
+    frame["badge_type"] = badge.get_badge_type_display()
+    franchise = badge.effective_franchise
+    developer = badge.effective_developer
+    if franchise:
+        frame["franchise"] = franchise.name
+    if developer:
+        frame["developer"] = developer.name
+    if badge.set_number:
+        frame["set_number"] = badge.set_number
+    if badge.rarity_pct is not None:
+        frame["rarity_pct"] = round(badge.rarity_pct, 1)
+        frame["rarity_rank"] = badge.rarity_rank
+        if badge.rarity_class:
+            frame["rarity_class"] = badge.rarity_class
+    if earn_rank:
+        frame["engraving_rank"] = earn_rank   # permanent "Nth to earn" engraving
+    if current_rank is not None:
+        frame["current_rank"] = current_rank  # live per-series position (labeled "Current")
+    if series_xp:
+        frame["series_xp"] = series_xp
+
     # FUTURE: user frame customization layers onto `frame` here (see module docstring).
     return frame

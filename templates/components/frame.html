@@ -58,6 +58,24 @@
                         <div class="pp-frame__back-stat-value">{{ frame.rarity_pct }}%{% if frame.rarity_rank %} · #{{ frame.rarity_rank|intcomma }}{% endif %}</div>
                     </div>
                     {% endif %}
+                    {% if frame.engraving_rank %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Earn rank</div>
+                        <div class="pp-frame__back-stat-value">#{{ frame.engraving_rank|intcomma }}</div>
+                    </div>
+                    {% endif %}
+                    {% if frame.current_rank %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Leaderboard</div>
+                        <div class="pp-frame__back-stat-value">#{{ frame.current_rank|intcomma }}</div>
+                    </div>
+                    {% endif %}
+                    {% if frame.series_xp %}
+                    <div class="pp-frame__back-stat">
+                        <div class="pp-frame__back-stat-label">Series XP</div>
+                        <div class="pp-frame__back-stat-value">{{ frame.series_xp|intcomma }}</div>
+                    </div>
+                    {% endif %}
                     {% if frame.next_tier_label %}
                     <div class="pp-frame__back-stat">
                         <div class="pp-frame__back-stat-label">{% if frame.next_tier_label == "Maxed" %}Status{% else %}Next tier{% endif %}</div>
