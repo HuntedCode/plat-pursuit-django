@@ -86,6 +86,31 @@ def test_rarity_set_number_and_type_in_frame():
     assert frame["badge_type"]  # human display label
 
 
+def test_earned_count_and_funder_in_frame():
+    funder = ProfileFactory(display_psn_username='HeroHunter')
+    badge = BadgeFactory(tier=1, earned_count=1234)
+    badge.funded_by = funder
+    badge.save()
+
+    frame = build_badge_frame(badge)
+
+    assert frame["earned_count"] == 1234
+    assert frame["funded_by"] == 'HeroHunter'
+
+
+def test_funder_credit_falls_back_to_psn_username():
+    # A real donor whose display name is unset must still get credited
+    # (psn_username is normalized to lowercase, which is fine for a credit).
+    funder = ProfileFactory(psn_username='rawhandle', display_psn_username='')
+    badge = BadgeFactory(tier=1)
+    badge.funded_by = funder
+    badge.save()
+
+    frame = build_badge_frame(badge)
+
+    assert frame["funded_by"] == 'rawhandle'
+
+
 def test_effective_franchise_and_developer_in_frame():
     from trophies.models import Franchise
     fr = Franchise.objects.create(igdb_id=1, name='Halo', slug='halo', source_type='franchise')

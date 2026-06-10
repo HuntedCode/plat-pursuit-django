@@ -3,8 +3,8 @@
 {# Expects: frame (dict), tier (str), state (str). #}
 
 <div class="pp-frame__title">
-    {# Top-left: the badge name (e.g. "Crash Bandicoot Series Master"). #}
-    <div class="pp-frame__series">{{ frame.badge_name }}</div>
+    {# Top-left: franchise/developer (mirrors the plinth bold line; reads cleaner than the full badge name). #}
+    <div class="pp-frame__series">{% if frame.franchise %}{{ frame.franchise }}{% elif frame.developer %}{{ frame.developer }}{% else %}{{ frame.badge_name }}{% endif %}</div>
 </div>
 
 <div class="pp-frame__art">

@@ -1612,11 +1612,20 @@
     background: linear-gradient(105deg, transparent 30%, var(--gleam-color, rgba(255,255,255,0.2)) 50%, transparent 70%);
     transform: translateX(-100%);
     opacity: 0;
-    transition: transform 900ms ease, opacity 200ms ease;
 }
-.pp-hover-a:hover .pp-frame__gleam {
-    transform: translateX(100%);
-    opacity: 1;
+/* Hover sheen is JS-driven (frame.js wireGleam). The controller adds
+ * .pp-gleam-sweeping for one full sweep, loops it ~every 5s while the
+ * card stays hovered, resets on mouse-out, and guards against
+ * re-triggering mid-sweep. Keyframe duration MUST match GLEAM_DURATION
+ * in frame.js. */
+.pp-hover-a.pp-gleam-sweeping .pp-frame__gleam {
+    animation: pp-gleam-hover-sweep 900ms ease forwards;
+}
+@keyframes pp-gleam-hover-sweep {
+    0%   { transform: translateX(-100%); opacity: 0; }
+    12%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
 }
 .pp-hover-a.pp-frame--bronze { --gleam-color: rgba(255, 200, 150, 0.20); }
 .pp-hover-a.pp-frame--silver { --gleam-color: rgba(220, 230, 245, 0.30); }
@@ -1750,6 +1759,27 @@
     font-weight: 700;
     line-height: 1.2;
 }
+/* Artwork-funder credit — a unique, charming line that ties community-funded
+   badge art into the card. Sits just above the footer. */
+.pp-frame__back-funder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.5);
+}
+.pp-frame__back-funder svg {
+    width: 9px;
+    height: 9px;
+    color: rgba(235, 130, 150, 0.85);
+    flex-shrink: 0;
+}
+.pp-frame__back-funder span { color: rgba(255, 255, 255, 0.82); font-weight: 700; }
+
 .pp-frame__back-footer {
     display: flex;
     justify-content: space-between;

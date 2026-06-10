@@ -77,7 +77,8 @@
                 initialSnapshot: null,
                 maintTimers: [],
                 maintResolve: null,
-                maintSnapshot: null
+                maintSnapshot: null,
+                gleam: null
             };
             FRAME_STATE.set(target, s);
         }
@@ -183,6 +184,94 @@
     function flip(target) {
         if (!target || !target.classList.contains('pp-frame--flippable')) return;
         target.classList.toggle('is-flipped');
+    }
+
+
+    /* --------------------------------------------------------
+     * Hover sheen loop
+     *
+     * The front-face gleam sweeps once on a hover, then repeats
+     * every GLEAM_INTERVAL (start-to-start) for as long as the
+     * card stays hovered. Driven entirely from JS so we can:
+     *   - loop while hovered (CSS :hover fires only once)
+     *   - reset on mouse-out (next hover sweeps from the top
+     *     immediately, not from wherever the loop left off)
+     *   - guarantee a sweep ALWAYS finishes: a fresh sweep only
+     *     starts when none is in flight, so a quick hover/un-hover
+     *     can't restart it mid-animation or stack two sweeps.
+     *
+     * GLEAM_DURATION must match the pp-gleam-hover-sweep keyframe
+     * length in frame.css.
+     * -------------------------------------------------------- */
+    var GLEAM_DURATION = 900;    // one sweep (ms) — keep in sync with frame.css
+    var GLEAM_INTERVAL = 5000;   // start-to-start cadence while hovered (ms)
+
+    // States that never show a hover sheen (CSS suppresses it too).
+    // NOTE: flipped is deliberately NOT gated here — the loop tracks
+    // HOVER, not facing. A flip is a click with the mouse still on the
+    // card, so the loop keeps running: an in-flight sweep finishes
+    // (invisibly, behind the rotated-away front face) and the cadence
+    // ticks on, so flipping back rejoins the loop already in progress.
+    function canGleam(target) {
+        if (reducedMotion) return false;
+        if (target.classList.contains('pp-frame--blueprint')) return false;
+        if (target.classList.contains('pp-frame--unearned')) return false;
+        if (target.classList.contains('pp-frame--maintenance')) return false;
+        return true;
+    }
+
+    function wireGleam(target) {
+        if (!target.classList.contains('pp-hover-a')) return;
+
+        var g = {
+            hovering: false,
+            sweeping: false,
+            loopTimer: null,   // pending NEXT sweep (cancelled on mouse-out)
+            endTimer: null      // clears `sweeping` when the current sweep ends
+        };
+        getState(target).gleam = g;
+
+        function startSweep() {
+            // The finish-guard: never start while one is already running.
+            if (g.sweeping || !g.hovering || !canGleam(target)) return;
+            g.sweeping = true;
+            // Re-arm the keyframe from 0% (reflow between remove/add).
+            target.classList.remove('pp-gleam-sweeping');
+            void target.offsetWidth;
+            target.classList.add('pp-gleam-sweeping');
+            g.endTimer = window.setTimeout(function () {
+                g.endTimer = null;
+                g.sweeping = false;
+                target.classList.remove('pp-gleam-sweeping');
+                // Loop only while still hovered; schedule start-to-start.
+                if (g.hovering && canGleam(target)) {
+                    g.loopTimer = window.setTimeout(startSweep, GLEAM_INTERVAL - GLEAM_DURATION);
+                }
+            }, GLEAM_DURATION);
+        }
+
+        target.addEventListener('mouseenter', function () {
+            g.hovering = true;
+            startSweep();  // immediate from the top (guard no-ops if mid-sweep)
+        });
+        target.addEventListener('mouseleave', function () {
+            g.hovering = false;
+            // Cancel a pending NEXT sweep so the loop stops. An in-flight
+            // sweep is left alone — it finishes cleanly and won't reschedule
+            // (hovering is now false), so the next hover starts fresh.
+            if (g.loopTimer) { window.clearTimeout(g.loopTimer); g.loopTimer = null; }
+        });
+    }
+
+    function teardownGleam(target) {
+        var state = FRAME_STATE.get(target);
+        var g = state && state.gleam;
+        if (!g) return;
+        if (g.loopTimer) { window.clearTimeout(g.loopTimer); g.loopTimer = null; }
+        if (g.endTimer) { window.clearTimeout(g.endTimer); g.endTimer = null; }
+        g.sweeping = false;
+        g.hovering = false;
+        target.classList.remove('pp-gleam-sweeping');
     }
 
 
@@ -1111,6 +1200,7 @@
         if (!target) return;
         cancelEarnMoment(target);
         cancelMaintenanceMoment(target);
+        teardownGleam(target);
         var state = FRAME_STATE.get(target);
         if (state) {
             if (state.resizeObserver) {
@@ -1126,6 +1216,7 @@
         if (WIRED.has(target)) return;
         WIRED.add(target);
         wireFlip(target);
+        wireGleam(target);
         wireTitleScroll(target);
         // No per-card JS init for the maintenance state -- the ambient
         // sheen sweep on the maintenance band is pure CSS, scoped to

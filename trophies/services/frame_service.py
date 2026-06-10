@@ -44,9 +44,10 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     PERFORMANCE: with a profile this issues, per call: the UserBadge query, an
     earners-leaderboard Redis lookup + a series-XP DB query (both for earned
     viewers), a UserBadgeProgress query (in-progress/unearned/maintenance), the FK
-    reads in get_badge_layers(), and effective_franchise/effective_developer (FK
-    reads on badge + base_badge — select_related them in the caller). Fine for a
-    single hero. When rendering MANY frames for one profile (e.g. the badge
+    reads in get_badge_layers(), and effective_franchise/effective_developer/
+    effective_funded_by (FK reads on badge + base_badge — select_related them in
+    the caller: franchise, developer, funded_by, and their base_badge__ twins).
+    Fine for a single hero. When rendering MANY frames for one profile (e.g. the badge
     gallery), do NOT call this in a loop — batch the per-viewer fetches in the view
     and add a pre-fetched arg here to avoid N+1 (queries AND Redis round-trips).
     """
@@ -144,6 +145,13 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
         frame["rarity_rank"] = badge.rarity_rank
         if badge.rarity_class:
             frame["rarity_class"] = badge.rarity_class
+    if badge.earned_count:
+        frame["earned_count"] = badge.earned_count   # how many hunters hold this tier
+    funder = badge.effective_funded_by
+    if funder:
+        # display_psn_username is blank/null-able; fall back to the canonical
+        # psn_username so a real donor without a display name still gets credited.
+        frame["funded_by"] = funder.display_psn_username or funder.psn_username  # artwork-funder credit (back footer)
     if earn_rank:
         frame["engraving_rank"] = earn_rank   # permanent "Nth to earn" engraving
     if current_rank is not None:
