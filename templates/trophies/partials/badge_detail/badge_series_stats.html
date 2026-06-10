@@ -10,10 +10,10 @@
                 <span class="bd-stat__value">{{ stats.total_games }}</span>
                 <span class="bd-stat__label">Games</span>
             </div>
-            <div class="bd-stat">
+            <a class="bd-stat bd-stat--link" href="{% url 'badge_leaderboards' badge.series_slug %}" title="See who owns this badge">
                 <span class="bd-stat__value">{{ stats.tier_earner_counts.1|default:0|intcomma }}</span>
-                <span class="bd-stat__label">Earners</span>
-            </div>
+                <span class="bd-stat__label">Earners<svg class="bd-stat__link-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg></span>
+            </a>
             <div class="bd-stat">
                 {% if stats.series_avg_difficulty != None %}
                     <span class="bd-stat__value {% if stats.series_avg_difficulty < 4 %}bd-stat__value--good{% elif stats.series_avg_difficulty < 8 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}">{{ stats.series_avg_difficulty }}<span class="bd-stat__unit">/10</span></span>

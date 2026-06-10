@@ -248,3 +248,69 @@
     display: inline-flex; align-items: center; gap: 3px;
     font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem;
 }
+
+/* A stat tile that links somewhere (e.g. Earners -> full leaderboards). Hover
+   earns the cyan action accent; a small arrow marks it as a jump. */
+a.bd-stat { color: inherit; text-decoration: none; }
+.bd-stat--link {
+    cursor: pointer;
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.bd-stat--link:hover {
+    border-color: color-mix(in oklch, var(--pp-primary) 45%, transparent);
+    background: color-mix(in oklch, var(--pp-primary) 6%, var(--pp-bg-2));
+}
+.bd-stat--link:hover .bd-stat__value { color: var(--pp-primary); }
+.bd-stat__link-arrow {
+    display: inline-block;   /* override Tailwind preflight's svg { display: block } */
+    width: 10px; height: 10px; margin-left: 3px; vertical-align: -1px;
+    opacity: 0.75; transition: opacity var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
+}
+.bd-stat--link:hover .bd-stat__link-arrow { opacity: 1; color: var(--pp-primary); }
+
+/* ── Section header (generic, reusable across sections) ─────────────────────── */
+.bd-head {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--pp-text-dim);
+}
+.bd-head::before {
+    content: ""; width: 3px; height: 12px; border-radius: 2px;
+    background: var(--pp-text-mute);
+}
+
+/* ── Leaderboard section ────────────────────────────────────────────────────── */
+.bd-lb { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+/* Anon rank summary is only 2 tiles — keep them side-by-side at every width
+   (the 4-col stats grid would strand them in the left half on tablet+). */
+.bd-lb__grid-duo { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+/* Prominent CTA to the full leaderboards page (the "who owns this" list). The
+   cyan action accent is earned on hover, not painted on at rest. */
+.bd-lb__cta {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--pp-border);
+    border-radius: var(--pp-radius-md);
+    background: var(--pp-bg-2);
+    text-decoration: none;
+    transition: border-color var(--pp-dur) var(--pp-ease), background var(--pp-dur) var(--pp-ease);
+}
+.bd-lb__cta:hover {
+    border-color: color-mix(in oklch, var(--pp-primary) 55%, transparent);
+    background: color-mix(in oklch, var(--pp-primary) 8%, var(--pp-bg-2));
+}
+.bd-lb__cta-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 999px; flex-shrink: 0;
+    background: color-mix(in oklch, var(--pp-primary) 15%, transparent);
+    color: var(--pp-primary);
+}
+.bd-lb__cta-icon svg { width: 16px; height: 16px; }
+.bd-lb__cta-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bd-lb__cta-title { font-size: 0.85rem; font-weight: 700; color: var(--pp-text); }
+.bd-lb__cta-sub { font-size: 0.72rem; color: var(--pp-text-mute); }
+.bd-lb__cta-arrow {
+    width: 16px; height: 16px; flex-shrink: 0; color: var(--pp-text-mute);
+    transition: transform var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
+}
+.bd-lb__cta:hover .bd-lb__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }

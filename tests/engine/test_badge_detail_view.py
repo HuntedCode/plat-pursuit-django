@@ -100,6 +100,23 @@ def test_series_stats_contract(client, stub_leaderboards):
     assert stats['user_stages_platinumed'] == 1     # games[0] platted
 
 
+def test_leaderboard_links_point_to_full_board(client, stub_leaderboards):
+    # The "who owns this" path: both the leaderboard CTA and the stats "Earners"
+    # jump link to the full leaderboards page.
+    series = "rebuild-lb-links"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    _series_with_stage(series, 1)
+
+    profile = ProfileFactory()
+    client.force_login(profile.user)
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+
+    assert resp.status_code == 200
+    lb_url = reverse('badge_leaderboards', args=[series])
+    # Earners jump (stats) + leaderboard section CTA both target the full board.
+    assert resp.content.decode().count(lb_url) >= 2
+
+
 def test_anonymous_viewer_has_empty_earned_tiers(client, stub_leaderboards):
     series = "rebuild-tier-tabs-anon"
     BadgeFactory(series_slug=series, tier=1, is_live=True)
