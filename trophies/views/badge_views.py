@@ -444,6 +444,8 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         return Badge.objects.by_series(series_slug).select_related(
             'funded_by', 'base_badge__funded_by', 'submitted_by', 'base_badge__submitted_by',
             'title', 'base_badge__title',
+            # effective_franchise/developer read badge.<fk> then base_badge.<fk>.
+            'franchise', 'base_badge__franchise', 'developer', 'base_badge__developer',
             # cover_url on most_recent_concept reads igdb_match; prefetch to avoid N+1.
             'most_recent_concept', 'most_recent_concept__igdb_match',
         )

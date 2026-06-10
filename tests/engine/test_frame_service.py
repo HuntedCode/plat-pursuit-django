@@ -114,6 +114,47 @@ def test_earn_rank_becomes_engraving_and_series_xp_when_earned():
     assert frame["series_xp"] > 0  # earned -> completion bonus counts
 
 
+def test_maintenance_badge_renders_maintenance_state():
+    from trophies.models import UserBadge
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    ub = UserBadgeFactory(profile=profile, badge=badge)
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance', earn_rank=3)
+
+    frame = build_badge_frame(badge, profile)
+
+    assert frame["state"] == "maintenance"  # not 'earned'
+    assert frame["engraving_rank"] == 3     # permanent, survives the lapse
+
+
+def test_current_rank_uses_earners_leaderboard(monkeypatch):
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1)
+    UserBadgeFactory(profile=profile, badge=badge)
+    monkeypatch.setattr(
+        'trophies.services.redis_leaderboard_service.get_earners_rank',
+        lambda slug, pid: 7,
+    )
+
+    frame = build_badge_frame(badge, profile)
+
+    assert frame["current_rank"] == 7  # used as-is (already 1-indexed)
+
+
+def test_current_rank_omitted_when_not_on_leaderboard(monkeypatch):
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1)
+    UserBadgeFactory(profile=profile, badge=badge)
+    monkeypatch.setattr(
+        'trophies.services.redis_leaderboard_service.get_earners_rank',
+        lambda slug, pid: None,
+    )
+
+    frame = build_badge_frame(badge, profile)
+
+    assert "current_rank" not in frame
+
+
 def test_in_progress_with_zero_required_stages_no_divide_by_zero():
     # required_stages=0 must not raise ZeroDivisionError in the progress math.
     profile = ProfileFactory()

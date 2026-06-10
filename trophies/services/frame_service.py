@@ -41,11 +41,14 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     Anonymous viewers (profile=None) get the showcase 'earned' look so public
     badge pages present the artwork in full rather than locked.
 
-    PERFORMANCE: with a profile this issues two profile-scoped queries (UserBadge,
-    UserBadgeProgress) plus the FK reads in get_badge_layers(). Fine for a single
-    hero. When rendering MANY frames for one profile (e.g. the badge gallery),
-    do NOT call this in a loop — batch-fetch the viewer's UserBadge/UserBadgeProgress
-    in the view and add an optional pre-fetched-progress arg here to avoid N+1.
+    PERFORMANCE: with a profile this issues, per call: the UserBadge query, an
+    earners-leaderboard Redis lookup + a series-XP DB query (both for earned
+    viewers), a UserBadgeProgress query (in-progress/unearned/maintenance), the FK
+    reads in get_badge_layers(), and effective_franchise/effective_developer (FK
+    reads on badge + base_badge — select_related them in the caller). Fine for a
+    single hero. When rendering MANY frames for one profile (e.g. the badge
+    gallery), do NOT call this in a loop — batch the per-viewer fetches in the view
+    and add a pre-fetched arg here to avoid N+1 (queries AND Redis round-trips).
     """
     from trophies.models import UserBadge, UserBadgeProgress
 
@@ -69,8 +72,9 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     if profile is not None:
         earned = UserBadge.objects.filter(profile=profile, badge=badge).first()
         if earned:
-            state = "earned"
-            stages_done = stages_total
+            # status is 'earned' or 'maintenance' (a lapsed-but-never-deleted badge);
+            # the Frame component has a dedicated maintenance/repair variant.
+            state = earned.status
             earned_date = date_filter(earned.earned_at, "M j, Y")
             earn_rank = earned.earn_rank
             from trophies.services.redis_leaderboard_service import get_earners_rank
@@ -78,6 +82,17 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
             # get_earners_rank is already 1-indexed (or None if not on the board).
             current_rank = get_earners_rank(badge.series_slug, profile.id)
             series_xp = calculate_series_xp(profile, badge.series_slug)
+            if state == "maintenance":
+                # Lapsed: show the current repair progress, not the full earned bar.
+                prog = UserBadgeProgress.objects.filter(
+                    profile=profile, badge=badge
+                ).first()
+                stages_done = prog.completed_concepts if prog else 0
+                progress_pct = (
+                    round(stages_done / stages_total * 100) if stages_total else 0
+                )
+            else:
+                stages_done = stages_total
         else:
             prog = UserBadgeProgress.objects.filter(
                 profile=profile, badge=badge
