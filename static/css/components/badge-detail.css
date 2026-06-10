@@ -156,7 +156,7 @@
 }
 .bd-req__status { width: 16px; height: 16px; flex-shrink: 0; }
 .bd-req__status--done { color: var(--pp-success); }
-.bd-req__status--todo { color: oklch(0.65 0.15 25); }
+.bd-req__status--todo { color: var(--pp-error); }
 .bd-req__status--anon { color: var(--pp-text-mute); }
 .bd-req__stage-icon {
   width: 22px; height: 22px; border-radius: var(--pp-radius-sm);
@@ -170,3 +170,81 @@
 }
 .bd-req__stage-link:hover { color: var(--pp-primary); }
 .bd-req__stage-num { color: var(--pp-primary); font-weight: 700; }
+
+/* ── Series stats ───────────────────────────────────────────────────────────
+   The Tally primitive: clean stat tiles, numbers in the display face. Color is
+   reserved for signals that carry meaning (XP, difficulty/hours traffic-light,
+   trophy tiers); plain counts stay neutral so the readout reads premium, not
+   like a generic colored dashboard. */
+.bd-stats { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+.bd-stats__group { display: flex; flex-direction: column; gap: 8px; }
+.bd-stats__label {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--pp-text-dim);
+}
+.bd-stats__label::before {
+    content: ""; width: 3px; height: 12px; border-radius: 2px;
+    background: var(--pp-text-mute);
+}
+/* Each section carries its own accent: warm orange (forge-spark) for the
+   community "Series Stats", cool cyan (pursuer) for personal "Your Stats". The
+   distinct colors give each an identity without competing — warm community,
+   cool personal. */
+.bd-stats__group--series .bd-stats__label { color: var(--pp-accent); }
+.bd-stats__group--series .bd-stats__label::before { background: var(--pp-accent); }
+/* "Your Stats" — the pursuer's own data. Separated from the community stats and
+   carrying the cyan pursuer accent so it clearly reads as personal, not buried
+   in one undifferentiated wall of series stats. */
+.bd-stats__group--you { padding-top: 14px; border-top: 1px solid var(--pp-border); }
+.bd-stats__group--you .bd-stats__label { color: var(--pp-primary); }
+.bd-stats__group--you .bd-stats__label::before { background: var(--pp-primary); }
+.bd-stats__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+@media (min-width: 768px) { .bd-stats__grid { grid-template-columns: repeat(4, 1fr); } }
+
+.bd-stat {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 9px 6px; text-align: center;
+    background: var(--pp-bg-2);
+    border: 1px solid oklch(1 0 0 / 0.05);
+    border-radius: var(--pp-radius-md);
+}
+.bd-stat--wide { grid-column: span 2; }
+.bd-stat__value {
+    font-family: var(--pp-font-display);
+    font-size: 1.05rem; font-weight: 800; line-height: 1; color: var(--pp-text);
+}
+.bd-stat__unit {
+    font-family: var(--pp-font-body); font-size: 0.6rem; font-weight: 600;
+    color: var(--pp-text-mute);
+}
+.bd-stat__label {
+    font-size: 0.53rem; font-weight: 600; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--pp-text-dim); line-height: 1.15;
+}
+/* Meaning-bearing accents (semantic, not decorative glow). */
+.bd-stat__value--xp { color: var(--pp-primary); }
+.bd-stat__value--xp-alt { color: var(--pp-secondary); }
+.bd-stat__value--plat { color: var(--color-trophy-platinum); }
+.bd-stat__value--good { color: var(--pp-success); }
+.bd-stat__value--mid { color: var(--pp-warning); }
+.bd-stat__value--hard { color: var(--pp-error); }
+.bd-stat__value--muted { color: var(--pp-text-mute); }
+.bd-stat__value--date {
+    font-family: var(--pp-font-body); font-size: 0.8rem;
+    font-weight: 700; color: var(--pp-text-dim);
+}
+
+/* Composite tiles: tier distribution + trophy breakdown (icons inline with counts). */
+.bd-stat__inline {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; flex-wrap: wrap;
+}
+.bd-stat__inline-item { display: inline-flex; align-items: center; gap: 4px; }
+.bd-stat__inline-item img { width: 18px; height: 18px; object-fit: contain; }
+.bd-stat__inline-item span { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.8rem; }
+.bd-stat__trophies { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.bd-stat__trophy {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-family: var(--pp-font-display); font-weight: 800; font-size: 0.72rem;
+}

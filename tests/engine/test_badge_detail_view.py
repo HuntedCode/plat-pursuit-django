@@ -15,6 +15,7 @@ from tests.factories import (
     ConceptFactory,
     GameFactory,
     ProfileFactory,
+    ProfileGameFactory,
     StageFactory,
     UserBadgeFactory,
 )
@@ -64,6 +65,39 @@ def test_tier_tabs_mark_by_earned_set_not_max(client, stub_leaderboards):
     assert resp.context['highest_tier_earned'] == 2
     assert 1 not in resp.context['earned_tiers']
     assert 3 not in resp.context['earned_tiers']
+
+
+def _series_with_games(series, n_games=2, stage_number=1):
+    """One stage (applies to all tiers) whose concept holds n_games games."""
+    concept = ConceptFactory()
+    games = [GameFactory(concept=concept) for _ in range(n_games)]
+    stage = StageFactory(series_slug=series, stage_number=stage_number, required_tiers=[])
+    stage.concepts.add(concept)
+    return stage, games
+
+
+def test_series_stats_contract(client, stub_leaderboards):
+    # Pins the series-stats numbers the (rebuilding) stats section renders, so the
+    # contract survives the template rebuild.
+    series = "rebuild-series-stats"
+    BadgeFactory(series_slug=series, tier=1, is_live=True)
+    BadgeFactory(series_slug=series, tier=2, is_live=True)
+    _, games = _series_with_games(series, 2)
+
+    profile = ProfileFactory()
+    ProfileGameFactory(profile=profile, game=games[0], progress=100, has_plat=True)
+    ProfileGameFactory(profile=profile, game=games[1], progress=50, has_plat=False)
+
+    client.force_login(profile.user)
+    resp = client.get(reverse('badge_detail', kwargs={'series_slug': series}))
+
+    assert resp.status_code == 200
+    stats = resp.context['badge_series_stats']
+    assert stats['total_games'] == 2
+    assert stats['avg_progress'] == 75.0            # (100 + 50) / 2
+    assert stats['total_required_stages'] == 1
+    assert stats['user_stages_played'] == 1         # one stage, games played
+    assert stats['user_stages_platinumed'] == 1     # games[0] platted
 
 
 def test_anonymous_viewer_has_empty_earned_tiers(client, stub_leaderboards):
