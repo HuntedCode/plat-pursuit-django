@@ -95,6 +95,11 @@
     overflow: visible;
     transition: transform 280ms ease, box-shadow 280ms ease, border-color 280ms ease;
     cursor: pointer;
+    /* Promote to a compositing layer at REST too. The plinth-clipwrap's rounded
+       overflow:hidden bottom leaves a 1px anti-aliasing seam that hides the bottom
+       border; the :hover transform masks it by compositing, which made the border
+       only appear on hover. Compositing at rest keeps the bottom border visible. */
+    backface-visibility: hidden;
 }
 
 /* Corner notches: tier-aware brand mark at every corner. The
