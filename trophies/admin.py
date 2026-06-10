@@ -831,6 +831,7 @@ class ConceptAdmin(admin.ModelAdmin):
         'lock_games', 'unlock_games',
         'lock_titles', 'unlock_titles',
         'clear_title_review',
+        'clear_anchor_last_attempt',
     ]
     inlines = [ConceptGameInline, ConceptCompanyInline, ConceptFranchiseInline]
 
@@ -1153,6 +1154,25 @@ class ConceptAdmin(admin.ModelAdmin):
         messages.success(
             request,
             f"Cleared title_reviewed_at on {count} concept(s). They'll re-surface on next review_title_merges run."
+        )
+
+    @admin.action(description="Clear anchor last-attempt timestamp")
+    def clear_anchor_last_attempt(self, request, queryset):
+        """Null out `anchor_migration_last_attempt_at` on the selected Concepts.
+
+        The 'Attempted but not anchored (deferred)' filter on ConceptAdmin keys
+        off this timestamp, and so does the anchor_concepts command's resume
+        bookkeeping. Clearing it lets a previously-deferred Concept be
+        re-evaluated by the next anchor_concepts run as if it had never been
+        attempted, without forcing staff to chase down the underlying flag.
+        """
+        count = queryset.filter(
+            anchor_migration_last_attempt_at__isnull=False,
+        ).update(anchor_migration_last_attempt_at=None)
+        messages.success(
+            request,
+            f"Cleared anchor_migration_last_attempt_at on {count} concept(s). "
+            f"They'll be re-evaluated on the next anchor_concepts run.",
         )
 
     @admin.action(description="Duplicate selected concepts")

@@ -29,6 +29,7 @@ flag. A Family is "done" when none of its Concepts are null on that field.
 Usage:
     python manage.py anchor_concepts [--family N] [--orphans] [--limit N]
                                      [--dry-run] [--api-delay 0.5]
+                                     [--non-shovelware]
 
 Note: there's no concept_id collision pre-flight pass. PSN concept_ids that
 happen to be bare integers exist throughout the DB and are typically far
@@ -96,10 +97,24 @@ class Command(BaseCommand):
             '--api-delay', type=float, default=0.5,
             help='Seconds to sleep after each IGDB canonical-data fetch.',
         )
+        parser.add_argument(
+            '--non-shovelware', action='store_true',
+            help=(
+                'Skip Families and orphan Concepts whose every Game is '
+                'flagged as shovelware (auto_flagged or manually_flagged). '
+                'Use to focus a run on legitimate games and skip junk the '
+                'shovelware detector has already caught. Implemented by '
+                'restricting the iterated queryset to records with at least '
+                'one Game whose shovelware_status is clean or '
+                'manually_cleared. Has NO effect when --family or --concept '
+                'is set — those are explicit single-target overrides.'
+            ),
+        )
 
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
         self.api_delay = options['api_delay']
+        self.non_shovelware = options['non_shovelware']
         # Django's --verbosity (0..3). 1 is the default, 2 unlocks per-game
         # match tracing via self._vlog, 3 also flips IGDBService._debug_scoring
         # which dumps full per-candidate scoring breakdowns (platform skips,
@@ -122,14 +137,18 @@ class Command(BaseCommand):
         self.start_time = time.time()
 
         if options['concept'] is not None:
+            # Explicit single-target override; --non-shovelware does not apply.
             self._process_single_concept(options['concept'])
         elif options['family'] is not None:
+            # Explicit single-target override; --non-shovelware does not apply.
             families = GameFamily.objects.filter(pk=options['family'])
             self._process_families(families, limit=None)
         elif options['orphans']:
             self._process_orphans(limit=options['limit'])
         else:
             families = GameFamily.objects.order_by('pk')
+            if self.non_shovelware:
+                families = self._exclude_all_shovelware_families(families)
             self._process_families(families, limit=options['limit'])
             if options['limit'] is None:
                 self._process_orphans(limit=None)
@@ -204,11 +223,35 @@ class Command(BaseCommand):
                 self._process_concept(concept)
         self.batches_processed += 1
 
+    def _exclude_all_shovelware_families(self, families_qs):
+        """Restrict a GameFamily queryset to families with at least one Game
+        whose shovelware_status is clean or manually_cleared.
+
+        Families whose every Game is auto- or manually-flagged drop out — the
+        shovelware detector has already triaged them and there's no value in
+        re-running the anchor pipeline against them. manually_cleared counts
+        as clean (staff explicitly OK'd the auto flag). distinct() guards
+        against the family->concept->game join multiplying rows.
+        """
+        return families_qs.filter(
+            concepts__games__shovelware_status__in=('clean', 'manually_cleared'),
+        ).distinct()
+
+    def _exclude_all_shovelware_concepts(self, concepts_qs):
+        """Mirror of `_exclude_all_shovelware_families` for direct Concept
+        querysets (used by the orphan pass). Keep concepts with at least one
+        non-shovelware Game."""
+        return concepts_qs.filter(
+            games__shovelware_status__in=('clean', 'manually_cleared'),
+        ).distinct()
+
     def _process_orphans(self, limit):
         qs = Concept.objects.filter(
             family__isnull=True,
             anchor_migration_completed_at__isnull=True,
         ).order_by('pk')
+        if self.non_shovelware:
+            qs = self._exclude_all_shovelware_concepts(qs)
         self.stdout.write(self.style.HTTP_INFO(
             f'\n=== Orphan Concepts (no Family) ==='
         ))
