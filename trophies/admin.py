@@ -802,6 +802,56 @@ class ConceptAnchorStatusFilter(SimpleListFilter):
         return queryset
 
 
+class ConceptShovelwareFilter(SimpleListFilter):
+    """Filter Concepts by the shovelware status of their games.
+
+    Shovelware status lives on Game (per-platform release), not Concept, so
+    every option here is "concept has at least one game whose status is X"
+    (.distinct() guards against the FK join multiplying rows). The two
+    "all games" buckets are useful for finding concept-level shovelware
+    consensus (every game in the concept agrees) vs. mixed concepts that
+    might need staff attention.
+    """
+
+    title = 'Shovelware status'
+    parameter_name = 'shovelware'
+
+    _FLAGGED_STATUSES = ('auto_flagged', 'manually_flagged')
+
+    def lookups(self, request, model_admin):
+        return (
+            ('any_flagged', 'Has any flagged game (auto or manual)'),
+            ('auto_flagged', 'Has auto-flagged game'),
+            ('manually_flagged', 'Has manually-flagged game'),
+            ('manually_cleared', 'Has manually-cleared game'),
+            ('all_flagged', 'All games flagged'),
+            ('all_clean', 'All games clean (no flagged games)'),
+        )
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value == 'any_flagged':
+            return queryset.filter(
+                games__shovelware_status__in=self._FLAGGED_STATUSES
+            ).distinct()
+        if value in ('auto_flagged', 'manually_flagged', 'manually_cleared'):
+            return queryset.filter(games__shovelware_status=value).distinct()
+        if value == 'all_flagged':
+            # No game in this concept is 'clean' or 'manually_cleared' (i.e.
+            # every game has a flagged status). Excludes concepts with zero
+            # games to avoid surfacing empty/transient PSN concepts.
+            return queryset.filter(games__isnull=False).exclude(
+                games__shovelware_status__in=('clean', 'manually_cleared')
+            ).distinct()
+        if value == 'all_clean':
+            # No game has a flagged status (manually_cleared counts as clean
+            # because staff explicitly OK'd it). Also excludes empty concepts.
+            return queryset.filter(games__isnull=False).exclude(
+                games__shovelware_status__in=self._FLAGGED_STATUSES
+            ).distinct()
+        return queryset
+
+
 @admin.register(Concept)
 class ConceptAdmin(admin.ModelAdmin):
     list_display = (
@@ -813,7 +863,10 @@ class ConceptAdmin(admin.ModelAdmin):
         'publishers_display', 'genres_display',
     )
     list_select_related = ('family', 'igdb_match')
-    list_filter = ('family__is_verified', 'title_lock', ConceptAnchorStatusFilter)
+    list_filter = (
+        'family__is_verified', 'title_lock',
+        ConceptAnchorStatusFilter, ConceptShovelwareFilter,
+    )
     # Searching ``concept_companies__company__name`` matches ANY linked
     # company (developer, publisher, porter, supporter). Broader than just
     # developers, but more useful in practice — admins typing a studio name
