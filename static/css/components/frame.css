@@ -95,11 +95,12 @@
     overflow: visible;
     transition: transform 280ms ease, box-shadow 280ms ease, border-color 280ms ease;
     cursor: pointer;
-    /* Promote to a compositing layer at REST too. The plinth-clipwrap's rounded
-       overflow:hidden bottom leaves a 1px anti-aliasing seam that hides the bottom
-       border; the :hover transform masks it by compositing, which made the border
-       only appear on hover. Compositing at rest keeps the bottom border visible. */
-    backface-visibility: hidden;
+    /* Keep the frame on its own compositing layer at REST. The plinth-clipwrap's
+       rounded overflow:hidden bottom leaves a sub-pixel seam that swallows the 1px
+       bottom border; the :hover transform re-rasterizes on a layer and the seam
+       vanishes (so the border only showed on hover). will-change forces that layer
+       at rest too. backface-visibility is too weak a hint here (Chrome ignores it). */
+    will-change: transform;
 }
 
 /* Corner notches: tier-aware brand mark at every corner. The
