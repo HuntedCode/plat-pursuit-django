@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./components/chips.css";
 @import "./components/frame.css";
 @import "./components/badge-hero.css";
 @import "./components/badge-detail.css";
@@ -20,7 +21,9 @@
   default: true;
   prefersdark: true;
   color-scheme: "dark";
-  --color-base-100: oklch(0.28 0.016 252.4);
+  /* Re-pointed to the bespoke dark substrate (--pp-bg-0) so the page background
+     matches the rebuild. Stays theme-aware: light mode keeps its own base-100. */
+  --color-base-100: oklch(0.17 0.012 254);
   --color-base-200: oklch(23.26% 0.014 253.1);
   --color-base-300: oklch(21.15% 0.012 254.09);
   --color-base-content: oklch(97.807% 0.029 256.847);

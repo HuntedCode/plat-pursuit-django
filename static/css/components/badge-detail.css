@@ -314,3 +314,89 @@ a.bd-stat { color: inherit; text-decoration: none; }
     transition: transform var(--pp-dur) var(--pp-ease), color var(--pp-dur) var(--pp-ease);
 }
 .bd-lb__cta:hover .bd-lb__cta-arrow { transform: translateX(2px); color: var(--pp-primary); }
+
+/* ── Stage game card ────────────────────────────────────────────────────────
+   A game within a stage: cover art + state-driven chrome + progress / plat /
+   ratings. Completed and has-plat states EARN their border + a hover glow;
+   default games are neutral with a primary hover. Hover = glow, not scale. */
+.bd-game {
+    position: relative; display: flex; flex-direction: column;
+    border: 2px solid var(--pp-border); border-radius: var(--pp-radius-md);
+    overflow: hidden; background: var(--pp-bg-1); text-decoration: none;
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease);
+}
+.bd-game:hover {
+    border-color: color-mix(in oklch, var(--pp-primary) 50%, transparent);
+    box-shadow: 0 0 16px color-mix(in oklch, var(--pp-primary) 20%, transparent);
+}
+.bd-game--done { border-color: color-mix(in oklch, var(--pp-success) 45%, transparent); }
+.bd-game--done:hover {
+    border-color: var(--pp-success);
+    box-shadow: 0 0 16px color-mix(in oklch, var(--pp-success) 24%, transparent);
+}
+.bd-game--plat { border-color: color-mix(in oklch, var(--pp-warning) 45%, transparent); }
+.bd-game--plat:hover {
+    border-color: var(--pp-warning);
+    box-shadow: 0 0 16px color-mix(in oklch, var(--pp-warning) 24%, transparent);
+}
+
+/* Cover */
+.bd-game__cover { position: relative; aspect-ratio: 3 / 4; overflow: hidden; background: var(--pp-bg-3); }
+.bd-game__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.bd-game__cover--dim img { opacity: 0.45; }
+
+.bd-game__flag {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+}
+.bd-game__flag--done {
+    top: 4px; right: 4px; width: 18px; height: 18px;
+    background: var(--pp-success); color: var(--pp-bg-0);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.4);
+}
+.bd-game__flag--plat { top: 4px; right: 4px; filter: drop-shadow(0 1px 2px oklch(0 0 0 / 0.5)); }
+.bd-game__flag--guide {
+    top: 4px; left: 4px; width: 17px; height: 17px;
+    background: color-mix(in oklch, var(--pp-accent) 88%, transparent); color: var(--pp-bg-0);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.4);
+}
+.bd-game__flag--done svg { width: 12px; height: 12px; }
+.bd-game__flag--guide svg { width: 11px; height: 11px; }
+
+.bd-game__imgbar { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: oklch(0 0 0 / 0.45); }
+.bd-game__imgbar-fill { display: block; height: 100%; }
+
+/* Progress traffic-light (shared by image bar + footer mini bar). */
+.bd-prog--low { background: var(--pp-error); }
+.bd-prog--mid { background: var(--pp-warning); }
+.bd-prog--high { background: var(--pp-success); }
+.bd-prog--max { background: var(--pp-primary); }
+
+/* Body */
+.bd-game__body { display: flex; flex-direction: column; gap: 4px; padding: 6px 7px; background: var(--pp-bg-2); flex: 1; }
+.bd-game__title {
+    font-size: 0.72rem; font-weight: 600; line-height: 1.2; color: var(--pp-text);
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    transition: color var(--pp-dur) var(--pp-ease);
+}
+.bd-game:hover .bd-game__title { color: var(--pp-primary); }
+.bd-game__badges { display: flex; flex-wrap: wrap; gap: 2px; }
+
+.bd-game__foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    margin-top: auto; padding-top: 5px;
+    border-top: 1px solid oklch(1 0 0 / 0.06);
+}
+.bd-game__plat { display: inline-flex; align-items: center; gap: 3px; font-size: 0.6rem; font-weight: 700; }
+.bd-game__plat--earned { color: var(--pp-warning); }
+.bd-game__plat--has { color: var(--pp-text-mute); }
+.bd-game__plat--none { color: color-mix(in oklch, var(--pp-error) 75%, var(--pp-text-mute)); }
+.bd-game__prog { display: flex; align-items: center; gap: 4px; }
+.bd-game__prog-track { display: block; width: 36px; height: 4px; border-radius: 999px; background: oklch(1 0 0 / 0.1); overflow: hidden; flex-shrink: 0; }
+.bd-game__prog-fill { display: block; height: 100%; border-radius: 999px; }
+.bd-game__prog-pct { font-size: 0.6rem; font-weight: 700; color: var(--pp-text-mute); }
+.bd-game__prog-pct--done { color: var(--pp-success); }
+
+.bd-game__ratings { display: flex; align-items: center; gap: 8px; font-size: 0.55rem; font-weight: 700; }
+.bd-game__rating { display: inline-flex; align-items: center; gap: 2px; }
+.bd-game__rating svg { width: 9px; height: 9px; }

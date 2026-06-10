@@ -1,100 +1,85 @@
 {% load custom_filters static %}
 
+{% comment %} Stage game card. Expects: game, pgame (profile_game), ratings, has_guide, profile. {% endcomment %}
 <a href="{% if profile %}{% url 'game_detail_with_profile' game.np_communication_id profile.psn_username %}{% else %}{% url 'game_detail' game.np_communication_id %}{% endif %}"
-   class="relative flex flex-col rounded-lg overflow-hidden border-2 transition-all duration-200 group
-          {% if pgame.progress == 100 %}border-success/50 hover:border-success shadow-sm shadow-success/20 hover:shadow-lg hover:shadow-success/30
-          {% elif pgame.earned_trophies.platinum == 1 %}border-warning/50 hover:border-warning shadow-sm shadow-warning/20 hover:shadow-lg hover:shadow-warning/30
-          {% else %}border-base-content/10 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/30{% endif %}">
+   class="bd-game{% if pgame.progress == 100 %} bd-game--done{% elif pgame.earned_trophies.platinum == 1 %} bd-game--plat{% endif %}">
 
-    {# Game Cover Image #}
-    <div class="relative aspect-[3/4] overflow-hidden bg-base-300">
-        <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" class="w-full h-full object-cover object-top" loading="lazy" />
+    {# Cover #}
+    <div class="bd-game__cover{% if not pgame or pgame.progress == 0 %} bd-game__cover--dim{% endif %}">
+        <img src="{{ game.display_image_url }}" alt="{{ game.title_name }}" loading="lazy" />
 
-        {# Completion overlay #}
+        {# Completion / platinum flag #}
         {% if pgame.progress == 100 %}
-        <div class="absolute top-1 right-1 bg-success rounded-full p-0.5 shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-success-content" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </div>
+        <span class="bd-game__flag bd-game__flag--done" title="Completed 100%">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </span>
         {% elif pgame.earned_trophies.platinum == 1 %}
-        <div class="absolute top-1 right-1">
-            {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-4 h-4 drop-shadow-md' %}
-        </div>
+        <span class="bd-game__flag bd-game__flag--plat" title="Platinum earned">
+            {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-4 h-4' %}
+        </span>
         {% endif %}
 
-
-        {# Guide available indicator #}
+        {# Roadmap available #}
         {% if has_guide %}
-        <div class="absolute top-1 left-1 bg-accent/80 rounded-full p-0.5 shadow-md" title="Roadmap available">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-accent-content" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-        </div>
+        <span class="bd-game__flag bd-game__flag--guide" title="Roadmap available">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+        </span>
         {% endif %}
 
-        {# Progress bar at bottom of image #}
+        {# Progress bar on the image #}
         {% if pgame and pgame.progress != None %}
-        <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-base-300/80">
-            <div class="h-full {% if pgame.progress < 33 %}bg-error{% elif pgame.progress < 66 %}bg-warning{% elif pgame.progress < 100 %}bg-success{% else %}bg-primary{% endif %}" style="width: {{ pgame.progress }}%"></div>
+        <div class="bd-game__imgbar">
+            <div class="bd-game__imgbar-fill {% if pgame.progress < 33 %}bd-prog--low{% elif pgame.progress < 66 %}bd-prog--mid{% elif pgame.progress < 100 %}bd-prog--high{% else %}bd-prog--max{% endif %}" style="width: {{ pgame.progress }}%"></div>
         </div>
         {% endif %}
     </div>
 
-    {# Info Section #}
-    <div class="p-1.5 md:p-2 bg-base-200/80 flex flex-col gap-1 flex-1">
-        {# Title #}
-        <p class="text-xs font-semibold line-clamp-2 pr-1 leading-tight group-hover:text-primary transition-colors">{{ game.title_name }}</p>
+    {# Body #}
+    <div class="bd-game__body">
+        <p class="bd-game__title">{{ game.title_name }}</p>
 
-        {# Flag badges #}
         {% include 'trophies/partials/_game_flags.html' with game=game %}
 
-        {# Platform + Region #}
-        <div class="flex flex-wrap gap-0.5">
+        <div class="bd-game__badges">
             {% for platform in game.title_platform reversed %}
-                <span class="badge badge-xs badge-ghost font-bold border border-{{ platform|platform_color_str }} rounded-box">{{ platform }}</span>
+                <span class="bd-meta-tag bd-meta-tag--{{ platform|platform_color_str }}">{{ platform }}</span>
             {% endfor %}
             {% include 'partials/region_badges.html' with game=game badge_size='badge-xs' %}
         </div>
 
-        {# Platinum status + Progress #}
-        <div class="flex items-center justify-between mt-auto pt-1 border-t border-base-content/5">
+        {# Platinum status + progress #}
+        <div class="bd-game__foot">
             {% if game.defined_trophies.platinum %}
                 {% if pgame.earned_trophies.platinum == 1 %}
-                    <div class="flex items-center gap-0.5">
-                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-warning)' size='w-3 h-3' %}
-                        <span class="text-[0.6rem] font-bold text-warning">Earned</span>
-                    </div>
+                    <span class="bd-game__plat bd-game__plat--earned">
+                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3' %}Earned
+                    </span>
                 {% else %}
-                    <div class="flex items-center gap-0.5">
-                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3 opacity-40' %}
-                        <span class="text-[0.6rem] font-bold text-base-content/30">Has Plat</span>
-                    </div>
+                    <span class="bd-game__plat bd-game__plat--has">
+                        {% include 'partials/icons/trophy_cup.html' with color='var(--color-trophy-platinum)' size='w-3 h-3 opacity-40' %}Has Plat
+                    </span>
                 {% endif %}
             {% else %}
-                <span class="text-[0.6rem] font-bold text-error/60">No Plat</span>
+                <span class="bd-game__plat bd-game__plat--none">No Plat</span>
             {% endif %}
 
-            {% if pgame %}
-                <div class="flex items-center gap-1">
-                    <div class="w-10 h-1 rounded-full bg-base-300/60 overflow-hidden">
-                        <div class="h-full rounded-full {% if pgame.progress < 33 %}bg-error{% elif pgame.progress < 66 %}bg-warning{% elif pgame.progress < 100 %}bg-success{% else %}bg-primary{% endif %}" style="width: {{ pgame.progress|default:0 }}%"></div>
-                    </div>
-                    <span class="text-[0.6rem] font-bold {% if pgame.progress == 100 %}text-success{% elif pgame.progress > 0 %}text-base-content/60{% else %}text-base-content/25{% endif %}">{{ pgame.progress|default:0 }}%</span>
-                </div>
-            {% else %}
-                <div class="flex items-center gap-1">
-                    <div class="w-10 h-1 rounded-full bg-base-300/60"></div>
-                    <span class="text-[0.6rem] font-bold text-base-content/20">0%</span>
-                </div>
-            {% endif %}
+            <span class="bd-game__prog">
+                <span class="bd-game__prog-track">
+                    <span class="bd-game__prog-fill {% if pgame.progress < 33 %}bd-prog--low{% elif pgame.progress < 66 %}bd-prog--mid{% elif pgame.progress < 100 %}bd-prog--high{% else %}bd-prog--max{% endif %}" style="width: {{ pgame.progress|default:0 }}%"></span>
+                </span>
+                <span class="bd-game__prog-pct{% if pgame.progress == 100 %} bd-game__prog-pct--done{% endif %}">{{ pgame.progress|default:0 }}%</span>
+            </span>
         </div>
 
-        {# Ratings row (if available) #}
+        {# Community ratings #}
         {% if ratings %}
-        <div class="flex items-center gap-2 text-[0.55rem]">
-            <span class="font-bold {% if ratings.avg_difficulty < 4 %}text-success{% elif ratings.avg_difficulty < 8 %}text-warning{% else %}text-error{% endif %}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
+        <div class="bd-game__ratings">
+            <span class="bd-game__rating {% if ratings.avg_difficulty < 4 %}bd-stat__value--good{% elif ratings.avg_difficulty < 8 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M16.2 7.8l-2 6.3-6.4 2.1 2-6.3z"/></svg>
                 {{ ratings.avg_difficulty|floatformat:1 }}
             </span>
-            <span class="font-bold {% if ratings.avg_hours < 25 %}text-success{% elif ratings.avg_hours < 75 %}text-warning{% else %}text-error{% endif %}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span class="bd-game__rating {% if ratings.avg_hours < 25 %}bd-stat__value--good{% elif ratings.avg_hours < 75 %}bd-stat__value--mid{% else %}bd-stat__value--hard{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 {{ ratings.avg_hours|floatformat:0 }}h
             </span>
         </div>
