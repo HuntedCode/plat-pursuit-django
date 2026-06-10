@@ -477,6 +477,9 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         badge = None
         is_earned = False
         highest_tier_earned = 0
+        # Tiers are independent (a higher tier can be held without a lower one),
+        # so the earned SET — not just the max — drives per-tab "earned" marks.
+        earned_tiers = set()
         max_tier = series_badges.aggregate(max_tier=Max('tier'))['max_tier'] or 0
 
         # Bulk-fetch progress for all badges in this series (single query, reused below)
@@ -998,6 +1001,9 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
         context['badge_requirements'] = badge_requirements
         context['is_earned'] = is_earned
         context['highest_tier_earned'] = highest_tier_earned
+        # Exposed so the tier tabs mark each tier by actual earned-set membership
+        # (tiers are independent — see earned_tiers init above).
+        context['earned_tiers'] = earned_tiers
 
         # image_urls drives the og:image / twitter:image meta blocks. The old
         # blurred-bg header (header_bg_image, recent_concept_name) was removed in

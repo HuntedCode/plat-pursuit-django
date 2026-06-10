@@ -28,6 +28,11 @@
     {# Earn-staged in-progress cards also render the back face — hidden via pp-earn-back-staged #}
     {# until the earn moment's back-scan phase reveals it. Maintenance cards keep the flip #}
     {# affordance since the badge HAS been earned and the back stats are still real. #}
+    {# Flip affordance lives OUTSIDE .pp-frame__inner so it never rotates with the flip; it rises from behind the card's top edge on hover. The whole card is the click target (wireFlip); this is a hint only. #}
+    <span class="pp-frame__flip-hint" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+        <span class="pp-frame__flip-hint-label">Flip</span>
+    </span>
     <div class="pp-frame__inner">
         <div class="pp-frame__face pp-frame__face--front">
             {% include "components/_frame_face_front.html" with frame=frame tier=tier state=state %}
@@ -98,7 +103,7 @@
             {% endif %}
             <div class="pp-frame__back-footer">
                 <span>PlatPursuit</span>
-                <span class="pp-frame__back-flip-hint">click to flip</span>
+                <span class="pp-frame__back-flip-hint"></span>
             </div>
         </div>
     </div>

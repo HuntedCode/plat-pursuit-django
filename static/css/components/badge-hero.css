@@ -75,3 +75,24 @@
   transition: width var(--pp-dur-slow) var(--pp-ease);
 }
 .bd-hero__stages { font-size: 0.78rem; color: var(--pp-text-mute); margin-top: 8px; }
+
+/* Arrival — a single quiet "settle onto the board" on page load. A signature
+   moment kept on a budget: ~600ms, one beat, distinct from (and far lighter
+   than) the Frame's earn choreography. The entrance animates the hero WRAPPERS,
+   never .pp-frame itself, so it can't collide with the Frame's hover-lift / flip
+   transforms; `backwards` fill holds the start state (and the identity's stagger
+   delay) without leaving any end-state transform behind to fight those
+   interactions. Gated on no-preference so reduced-motion shows the resting state
+   instantly — no motion, no flash. */
+@media (prefers-reduced-motion: no-preference) {
+  .bd-hero__frame { animation: bd-hero-frame-arrive 600ms var(--pp-ease) backwards; }
+  .bd-hero__identity { animation: bd-hero-identity-arrive 520ms var(--pp-ease) 140ms backwards; }
+}
+@keyframes bd-hero-frame-arrive {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes bd-hero-identity-arrive {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}

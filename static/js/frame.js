@@ -227,13 +227,17 @@
             hovering: false,
             sweeping: false,
             loopTimer: null,   // pending NEXT sweep (cancelled on mouse-out)
-            endTimer: null      // clears `sweeping` when the current sweep ends
+            endTimer: null,    // clears `sweeping` when the current sweep ends
+            sweepOnce: null     // exposed one-off sweep (arrival flourish, etc.)
         };
         getState(target).gleam = g;
 
-        function startSweep() {
-            // The finish-guard: never start while one is already running.
-            if (g.sweeping || !g.hovering || !canGleam(target)) return;
+        // One guarded sweep. The finish-guard (g.sweeping) means it always runs
+        // to completion and never stacks; canGleam keeps it off suppressed /
+        // reduced-motion states. onEnd fires when the sweep finishes (the hover
+        // loop uses it to reschedule).
+        function beginSweep(onEnd) {
+            if (g.sweeping || !canGleam(target)) return;
             g.sweeping = true;
             // Re-arm the keyframe from 0% (reflow between remove/add).
             target.classList.remove('pp-gleam-sweeping');
@@ -243,12 +247,23 @@
                 g.endTimer = null;
                 g.sweeping = false;
                 target.classList.remove('pp-gleam-sweeping');
+                if (onEnd) onEnd();
+            }, GLEAM_DURATION);
+        }
+
+        function startSweep() {
+            if (!g.hovering) return;
+            beginSweep(function () {
                 // Loop only while still hovered; schedule start-to-start.
                 if (g.hovering && canGleam(target)) {
                     g.loopTimer = window.setTimeout(startSweep, GLEAM_INTERVAL - GLEAM_DURATION);
                 }
-            }, GLEAM_DURATION);
+            });
         }
+
+        // A single sweep with no hover dependency and no loop — for callers like
+        // the badge-detail hero that want one flourish as the Frame arrives.
+        g.sweepOnce = function () { beginSweep(null); };
 
         target.addEventListener('mouseenter', function () {
             g.hovering = true;
@@ -261,6 +276,14 @@
             // (hovering is now false), so the next hover starts fresh.
             if (g.loopTimer) { window.clearTimeout(g.loopTimer); g.loopTimer = null; }
         });
+    }
+
+    // Fire a single arrival-flourish sweep on a wired frame. No-ops cleanly if
+    // the frame isn't wired, isn't gleam-capable, or a sweep is already running.
+    function triggerGleam(target) {
+        if (!target) return;
+        var state = FRAME_STATE.get(target);
+        if (state && state.gleam && state.gleam.sweepOnce) state.gleam.sweepOnce();
     }
 
     function teardownGleam(target) {
@@ -1241,6 +1264,7 @@
         cancelEarnMoment: cancelEarnMoment,
         triggerMaintenanceMoment: triggerMaintenanceMoment,
         cancelMaintenanceMoment: cancelMaintenanceMoment,
+        triggerGleam: triggerGleam,
         refreshTitleScroll: refreshTitleScroll,
         destroy: destroy
     };

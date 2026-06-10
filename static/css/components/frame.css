@@ -1714,6 +1714,62 @@
 .pp-frame--silver   .pp-frame__face--back { border-top: 2px solid var(--tier-silver); }
 .pp-frame--gold     .pp-frame__face--back { border-top: 2px solid var(--tier-gold); }
 .pp-frame--platinum .pp-frame__face--back { border-top: 2px solid var(--tier-platinum); }
+
+/* Flip affordance — a little tab that rises from behind the card's TOP EDGE on
+   hover and rests on it, so it sacrifices none of the card face and isn't part
+   of the flip rotation (it lives outside .pp-frame__inner). Hidden at rest, so
+   the prestige face stays clean; surfaces only while the user is engaging (when
+   the card is already "alive" with the gleam). pointer-events:none — the whole
+   card is the click target (wireFlip). Centered: pin is top-left, clear of it.
+   Placed before .pp-frame__inner in source order so the card paints over its
+   lower portion → it reads as emerging from behind the top edge. */
+.pp-frame__flip-hint {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px 4px;
+    border-radius: 7px 7px 0 0;
+    background: linear-gradient(180deg, rgba(42, 42, 50, 0.97), rgba(24, 24, 30, 0.97));
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-bottom: none;
+    color: rgba(255, 255, 255, 0.82);
+    font-family: var(--pp-font-body);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    /* Hidden: tucked down behind the top edge. */
+    opacity: 0;
+    transform: translate(-50%, -25%);
+    transition: opacity var(--pp-dur) var(--pp-ease),
+                transform var(--pp-dur) var(--pp-ease);
+}
+.pp-frame__flip-hint svg { width: 9px; height: 9px; flex-shrink: 0; }
+/* Risen: resting on the top edge (bottom flush with the card top). Stays up the
+   whole time the card is hovered — front OR back — since the tab is a stable
+   top-edge control that doesn't rotate with the flip. */
+.pp-frame--flippable:hover .pp-frame__flip-hint {
+    opacity: 1;
+    transform: translate(-50%, -100%);
+}
+@media (prefers-reduced-motion: reduce) {
+    /* Still reveals on hover, just without the rise. */
+    .pp-frame__flip-hint { transition: none; }
+}
+
+/* Back-face hint wording adapts to the input: "click" on pointer devices,
+   "tap" on touch (coarse / no-hover). Text lives in CSS so it stays in one
+   place; the span is decorative. */
+.pp-frame__back-flip-hint::after { content: "click to flip"; }
+@media (hover: none) {
+    .pp-frame__back-flip-hint::after { content: "tap to flip"; }
+}
 .pp-frame__back-header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     padding-bottom: 8px;
