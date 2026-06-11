@@ -65,6 +65,19 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            '--by-stage', action='store_true', dest='by_stage',
+            help=(
+                'Analyze at the BADGE STAGE level (the gamification XP unit) instead of '
+                'per-concept: how many specialization genres a stage spans (informs jobs-'
+                'per-stage), and which genres/themes cover the most stages (informs the '
+                'job catalog). Implies --badge-stages.'
+            ),
+        )
+        parser.add_argument(
+            '--base-genre', default='Adventure',
+            help='Near-universal base genre excluded from per-stage "specialization" counts (default: Adventure).',
+        )
+        parser.add_argument(
             '--top', type=int, default=40,
             help='Rows to show per COMBINATION / co-occurrence table (0 = all). Marginals always show in full.',
         )
@@ -72,7 +85,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         top = options['top']
 
-        badge_stages = options['badge_stages']
+        by_stage = options['by_stage']
+        badge_stages = options['badge_stages'] or by_stage  # --by-stage implies badge scope
 
         # Target concept set: anchored AND non-shovelware AND developer-attributed,
         # optionally narrowed to concepts that sit in a Badge stage.
@@ -102,6 +116,10 @@ class Command(BaseCommand):
         theme_by_concept = defaultdict(set)
         for cid, tname in ConceptTheme.objects.filter(concept_id__in=id_set).values_list('concept_id', 'theme__name'):
             theme_by_concept[cid].add(tname)
+
+        if by_stage:
+            self._stage_report(id_set, genre_by_concept, theme_by_concept, options['base_genre'])
+            return
 
         # --- Aggregations (in-memory over the bounded concept set) ---
         genre_marginal = Counter()
@@ -164,6 +182,79 @@ class Command(BaseCommand):
                 writer.writerow([concept_id, title, slug, genres, themes])
         w('')
         w(self.style.SUCCESS(f'Wrote per-concept CSV ({total:,} rows) -> {path}'))
+
+    def _stage_report(self, id_set, genre_by_concept, theme_by_concept, base_genre):
+        """Stage-level view: stages are the gamification XP unit, so aggregate each
+        Badge stage's member concepts and ask how many *specialization* genres it
+        spans (jobs-per-stage signal) and which genres/themes cover the most stages
+        (job-catalog signal)."""
+        # stage -> set of qualifying concept ids (direct + bundle members).
+        stage_concepts = defaultdict(set)
+        for sid, cid in Stage.objects.values_list('id', 'concepts__id'):
+            if cid in id_set:
+                stage_concepts[sid].add(cid)
+        for sid, cid in Stage.objects.values_list('id', 'concept_bundles__concepts__id'):
+            if cid in id_set:
+                stage_concepts[sid].add(cid)
+        stage_concepts = {s: cs for s, cs in stage_concepts.items() if cs}
+
+        w = self.stdout.write
+        head = self.style.MIGRATE_HEADING
+        n_stages = len(stage_concepts)
+        if not n_stages:
+            w(self.style.WARNING('No badge stages with qualifying concepts.'))
+            return
+
+        spec_hist = Counter()        # # specialization genres (excl base) per stage
+        dom_spec_hist = Counter()    # # dominant specialization genres per stage
+        genre_cover = Counter()      # genre -> # stages featuring it (any member)
+        genre_dom = Counter()        # genre -> # stages where it's in >= half the members
+        theme_cover = Counter()
+        total_concepts = 0
+
+        for cs in stage_concepts.values():
+            n = len(cs)
+            total_concepts += n
+            gfreq, tfreq = Counter(), Counter()
+            for cid in cs:
+                for g in genre_by_concept.get(cid, ()):
+                    gfreq[g] += 1
+                for t in theme_by_concept.get(cid, ()):
+                    tfreq[t] += 1
+            for g in gfreq:
+                genre_cover[g] += 1
+            for t in tfreq:
+                theme_cover[t] += 1
+            thresh = (n + 1) // 2  # present in at least half the stage's concepts
+            dom = {g for g, c in gfreq.items() if c >= thresh}
+            for g in dom:
+                genre_dom[g] += 1
+            spec_hist[len(set(gfreq) - {base_genre})] += 1
+            dom_spec_hist[len(dom - {base_genre})] += 1
+
+        w(head(f'Badge-stage JOB analysis  (stage = XP unit; base genre excluded: {base_genre})'))
+        w(f'  Stages analyzed:       {n_stages:>6,}')
+        w(f'  Avg concepts / stage:  {total_concepts / n_stages:>6.1f}')
+
+        def _hist(title, hist):
+            w('')
+            w(head(title))
+            for k in sorted(hist):
+                c = hist[k]
+                w(f'  {c:>5,}  {c / n_stages * 100:5.1f}%  {k} genre{"" if k == 1 else "s"}')
+
+        _hist(f'Specialization genres per stage (distinct, excluding {base_genre})', spec_hist)
+        _hist(f'DOMINANT specialization genres per stage (in >= half the concepts, excl. {base_genre})', dom_spec_hist)
+
+        def _cover(title, counter):
+            w('')
+            w(head(title))
+            for name, c in counter.most_common():
+                w(f'  {c:>5,}  {c / n_stages * 100:5.1f}%  {name}')
+
+        _cover('Stage genre coverage (# of stages featuring the genre)', genre_cover)
+        _cover('Stage genre DOMINANCE (genre in >= half the stage concepts)', genre_dom)
+        _cover('Stage theme coverage (# of stages featuring the theme)', theme_cover)
 
     # --- table helpers ---
     def _marginal(self, title, counter, total):
