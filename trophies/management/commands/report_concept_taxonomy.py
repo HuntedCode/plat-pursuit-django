@@ -13,6 +13,10 @@ Scope of the concept set (all three must hold):
                     developer (is_developer) and/or a porting developer
                     (is_porting). Publisher/supporting-only concepts are excluded.
 
+Optional --badge-stages narrows to concepts that sit in a Badge stage (the curated
+games behind the registered badges) - the real near-term jobs sample, vs the full
+library. Same other criteria, so it's an apples-to-apples narrowing.
+
 Output (stdout):
   - Totals + taxonomy gaps (concepts with no genre / no theme).
   - Genre marginals and Theme marginals (single value -> concept count).
@@ -31,7 +35,7 @@ from collections import Counter, defaultdict
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
-from trophies.models import Concept, ConceptGenre, ConceptTheme
+from trophies.models import Concept, ConceptGenre, ConceptTheme, Stage
 
 NON_SHOVELWARE_STATUSES = ('clean', 'manually_cleared')
 
@@ -52,6 +56,15 @@ class Command(BaseCommand):
             help='Skip the per-concept CSV; print the analysis only.',
         )
         parser.add_argument(
+            '--badge-stages', action='store_true', dest='badge_stages',
+            help=(
+                'Restrict to concepts that appear in a Badge stage (Stage.concepts '
+                'or a ConceptBundle on a stage) - the real near-term jobs sample: '
+                'the curated games behind the registered badges. Same other criteria, '
+                'so it is an apples-to-apples narrowing of the full run.'
+            ),
+        )
+        parser.add_argument(
             '--top', type=int, default=40,
             help='Rows to show per COMBINATION / co-occurrence table (0 = all). Marginals always show in full.',
         )
@@ -59,14 +72,19 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         top = options['top']
 
-        # Target concept set: anchored AND non-shovelware AND developer-attributed.
+        badge_stages = options['badge_stages']
+
+        # Target concept set: anchored AND non-shovelware AND developer-attributed,
+        # optionally narrowed to concepts that sit in a Badge stage.
         concepts = (
             Concept.objects
             .filter(anchor_migration_completed_at__isnull=False)
             .filter(games__shovelware_status__in=NON_SHOVELWARE_STATUSES)
             .filter(Q(concept_companies__is_developer=True) | Q(concept_companies__is_porting=True))
-            .distinct()
         )
+        if badge_stages:
+            concepts = concepts.filter(Q(stages__isnull=False) | Q(bundles__isnull=False))
+        concepts = concepts.distinct()
 
         # Identity rows + the two taxonomy maps, loaded once.
         id_rows = list(concepts.values_list('id', 'concept_id', 'unified_title', 'slug'))
@@ -113,8 +131,14 @@ class Command(BaseCommand):
         # --- Output ---
         w = self.stdout.write
         head = self.style.MIGRATE_HEADING
-        w(head('Anchored / non-shovelware / developer-attributed concept taxonomy'))
+        scope = ' (BADGE-STAGE GAMES ONLY)' if badge_stages else ''
+        w(head(f'Anchored / non-shovelware / developer-attributed concept taxonomy{scope}'))
         w(f'  Total concepts:   {total:>7,}')
+        if badge_stages:
+            series_n = Stage.objects.filter(
+                Q(concepts__id__in=id_set) | Q(concept_bundles__concepts__id__in=id_set)
+            ).values('series_slug').distinct().count()
+            w(f'  Badge series:     {series_n:>7,}')
         w(f'  With >=1 genre:   {total - no_genre:>7,}   (no genre: {no_genre:,})')
         w(f'  With >=1 theme:   {total - no_theme:>7,}   (no theme: {no_theme:,})')
         w(f'  Distinct genres:  {len(genre_marginal):>7,}')
