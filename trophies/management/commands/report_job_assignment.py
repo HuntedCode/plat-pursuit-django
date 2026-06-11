@@ -9,11 +9,13 @@ oversized job each (Outlaw|Wayfarer, Mascot|Jester); and a Freelancer fallback
 catches games that specialize in nothing. Reports how many stages would feed each
 job and how many jobs a stage gets, so we see where the catalog lands on real data.
 
-Concept scope mirrors report_concept_taxonomy --badge-stages: anchored
-(anchor_migration_completed_at set) + non-shovelware (>=1 game clean/manually_
-cleared) + developer-attributed (ConceptCompany is_developer or is_porting).
-A stage's genre/theme profile = the union across its qualifying member concepts
-(direct + ConceptBundle members). Read-only, offline analysis.
+Only SERIES and DEVELOPER badge stages count: those are the badge types that will
+grant XP (one consistent home per game), unlike genre/calendar/megamix badges that
+would fire a game's XP repeatedly. Concept scope is otherwise the same as
+report_concept_taxonomy: anchored (anchor_migration_completed_at set) + non-
+shovelware (>=1 game clean/manually_cleared) + developer-attributed (ConceptCompany
+is_developer or is_porting). A stage's genre/theme profile = the union across its
+qualifying member concepts (direct + ConceptBundle members). Read-only, offline.
 
 NOTE: the JOBS catalog below is the working v1 design artifact. When the real Job
 system ships it should move to config/model; this command keeps it inline so we
@@ -24,9 +26,14 @@ from collections import Counter, defaultdict
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
-from trophies.models import Concept, ConceptGenre, ConceptTheme, Stage
+from trophies.models import Badge, Concept, ConceptGenre, ConceptTheme, Stage
 
 NON_SHOVELWARE_STATUSES = ('clean', 'manually_cleared')
+
+# Only these badge types will grant XP. Series and Developer badges give each game
+# ONE consistent home; genre/calendar/megamix/etc. would fire a game's XP several
+# times (a game sits in many of those), so the true XP footprint is their stages only.
+XP_BADGE_TYPES = ('series', 'developer')
 
 # (name, genres, themes, overrides) -- a job matches when:
 #   genres only  -> stage has ANY of these genres
@@ -107,34 +114,44 @@ class Command(BaseCommand):
     help = "Simulate the v1 Job catalog against current Badge stages (job feed + jobs-per-stage)."
 
     def handle(self, *args, **options):
-        concepts = (
+        # Slugs of the badges that will grant XP (series + developer only).
+        xp_slugs = set(
+            Badge.objects.filter(badge_type__in=XP_BADGE_TYPES).values_list('series_slug', flat=True)
+        )
+        xp_slugs.discard(None)
+
+        # Qualifying concepts: anchored + non-shovelware + developer-attributed.
+        qualifying_ids = set(
             Concept.objects
             .filter(anchor_migration_completed_at__isnull=False)
             .filter(games__shovelware_status__in=NON_SHOVELWARE_STATUSES)
             .filter(Q(concept_companies__is_developer=True) | Q(concept_companies__is_porting=True))
-            .filter(Q(stages__isnull=False) | Q(bundles__isnull=False))
-            .distinct()
+            .values_list('id', flat=True)
         )
-        id_set = set(concepts.values_list('id', flat=True))
-        if not id_set:
-            self.stdout.write(self.style.WARNING('No qualifying badge-stage concepts found.'))
+
+        # Stage profile = union over qualifying member concepts (direct + bundle),
+        # restricted to stages on an XP-granting badge.
+        stages = Stage.objects.filter(series_slug__in=xp_slugs)
+        stage_concepts = defaultdict(set)
+        for sid, cid in stages.values_list('id', 'concepts__id'):
+            if cid in qualifying_ids:
+                stage_concepts[sid].add(cid)
+        for sid, cid in stages.values_list('id', 'concept_bundles__concepts__id'):
+            if cid in qualifying_ids:
+                stage_concepts[sid].add(cid)
+        stage_concepts = {s: cs for s, cs in stage_concepts.items() if cs}
+
+        if not stage_concepts:
+            self.stdout.write(self.style.WARNING('No qualifying series/developer badge stages found.'))
             return
 
+        id_set = set().union(*stage_concepts.values())
         genre_by_concept = defaultdict(set)
         for cid, g in ConceptGenre.objects.filter(concept_id__in=id_set).values_list('concept_id', 'genre__name'):
             genre_by_concept[cid].add(g)
         theme_by_concept = defaultdict(set)
         for cid, t in ConceptTheme.objects.filter(concept_id__in=id_set).values_list('concept_id', 'theme__name'):
             theme_by_concept[cid].add(t)
-
-        stage_concepts = defaultdict(set)
-        for sid, cid in Stage.objects.values_list('id', 'concepts__id'):
-            if cid in id_set:
-                stage_concepts[sid].add(cid)
-        for sid, cid in Stage.objects.values_list('id', 'concept_bundles__concepts__id'):
-            if cid in id_set:
-                stage_concepts[sid].add(cid)
-        stage_concepts = {s: cs for s, cs in stage_concepts.items() if cs}
 
         n_stages = len(stage_concepts)
         job_feed = Counter()          # job -> # stages awarding it
@@ -155,7 +172,8 @@ class Command(BaseCommand):
         w = self.stdout.write
         head = self.style.MIGRATE_HEADING
         fallback_n = job_feed.get(FALLBACK_JOB, 0)
-        w(head('Job assignment simulation (v1 catalog, badge stages, no cap)'))
+        w(head('Job assignment simulation (v1 catalog, SERIES + DEVELOPER badges, no cap)'))
+        w(f'  XP badges (slugs):    {len(xp_slugs):>6,}')
         w(f'  Stages:               {n_stages:>6,}')
         w(f'  Avg jobs / stage:     {total_assignments / n_stages:>6.2f}')
         w(f'  Freelancer fallback:  {fallback_n:>6,}  ({fallback_n / n_stages * 100:.1f}%)')

@@ -12,6 +12,7 @@ from django.utils import timezone
 from trophies.management.commands.report_job_assignment import assign_jobs
 from trophies.models import ConceptGenre, ConceptTheme, Genre, Theme
 from tests.factories import (
+    BadgeFactory,
     ConceptCompanyFactory,
     ConceptFactory,
     GameFactory,
@@ -56,22 +57,33 @@ def test_freelancer_fallback_for_no_specialization():
 
 
 @pytest.mark.django_db
-def test_command_runs_against_a_stage():
+def test_command_counts_only_series_developer_badge_stages():
     rpg = Genre.objects.create(igdb_id=1, name='Role-playing (RPG)', slug='rpg')
     fantasy = Theme.objects.create(igdb_id=1, name='Fantasy', slug='fantasy')
-    c = ConceptFactory(unified_title='Fantasy RPG', anchor_migration_completed_at=timezone.now())
-    GameFactory(concept=c, shovelware_status='clean')
-    ConceptCompanyFactory(concept=c)
-    ConceptGenre.objects.create(concept=c, genre=rpg)
-    ConceptTheme.objects.create(concept=c, theme=fantasy)
-    stage = StageFactory(series_slug='series-x', stage_number=1)
-    stage.concepts.add(c)
+    shooter = Genre.objects.create(igdb_id=2, name='Shooter', slug='shooter')
+
+    def _concept(title, genre):
+        c = ConceptFactory(unified_title=title, anchor_migration_completed_at=timezone.now())
+        GameFactory(concept=c, shovelware_status='clean')
+        ConceptCompanyFactory(concept=c)
+        ConceptGenre.objects.create(concept=c, genre=genre)
+        return c
+
+    # A Fantasy RPG on a SERIES badge stage -> counts (maps to Mage).
+    mage = _concept('Fantasy RPG', rpg)
+    ConceptTheme.objects.create(concept=mage, theme=fantasy)
+    BadgeFactory(series_slug='series-rpg')
+    StageFactory(series_slug='series-rpg', stage_number=1).concepts.add(mage)
+
+    # A Shooter on a GENRE badge stage -> excluded (genre badges grant no XP).
+    gun = _concept('Genre Shooter', shooter)
+    BadgeFactory(series_slug='genre-shooter', badge_type='genre')
+    StageFactory(series_slug='genre-shooter', stage_number=1).concepts.add(gun)
 
     out = io.StringIO()
     call_command('report_job_assignment', stdout=out)
     report = out.getvalue()
 
-    assert 'Job assignment simulation' in report
-    assert 'Job feed' in report
-    assert 'Mage' in report          # the Fantasy RPG maps to Mage (combo override)
-    assert '1 job' in report         # exactly one job on the stage
+    assert 'SERIES + DEVELOPER badges' in report
+    assert '100.0%  Mage' in report          # Mage on the ONLY counted stage (the series badge)
+    assert '0.0%  Gunslinger' in report      # the genre-badge shooter is excluded (count 0)
