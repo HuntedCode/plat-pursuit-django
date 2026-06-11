@@ -11,7 +11,12 @@ from django.core.management import call_command
 from django.utils import timezone
 
 from trophies.models import ConceptGenre, ConceptTheme, Genre, Theme
-from tests.factories import ConceptCompanyFactory, ConceptFactory, GameFactory
+from tests.factories import (
+    ConceptCompanyFactory,
+    ConceptFactory,
+    GameFactory,
+    StageFactory,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -69,6 +74,32 @@ def test_summary_scope_and_distribution():
     assert 'Genre COMBINATIONS' in report
     assert 'Genre x Theme co-occurrence' in report
     assert 'RPG  x  Fantasy' in report   # concept A pairs RPG genre with Fantasy theme
+
+
+def test_badge_stages_flag_narrows_to_stage_concepts():
+    shooter = Genre.objects.create(igdb_id=10, name='Shooter', slug='shooter')
+    racing = Genre.objects.create(igdb_id=11, name='Racing', slug='racing')
+
+    # Qualifies AND sits in a badge stage.
+    in_stage = _anchored('InStage')
+    ConceptGenre.objects.create(concept=in_stage, genre=shooter)
+    ConceptCompanyFactory(concept=in_stage)
+    stage = StageFactory(series_slug='series-x', stage_number=1)
+    stage.concepts.add(in_stage)
+
+    # Qualifies but is in NO stage -> excluded by --badge-stages.
+    out_stage = _anchored('OutStage')
+    ConceptGenre.objects.create(concept=out_stage, genre=racing)
+    ConceptCompanyFactory(concept=out_stage)
+
+    out = io.StringIO()
+    call_command('report_concept_taxonomy', '--badge-stages', '--no-csv', stdout=out)
+    report = out.getvalue()
+
+    assert 'BADGE-STAGE GAMES ONLY' in report
+    assert 'Badge series:' in report
+    assert 'Shooter' in report        # the in-stage concept's genre
+    assert 'Racing' not in report     # out-of-stage concept excluded
 
 
 def test_csv_lists_only_qualifying_concepts(tmp_path):
