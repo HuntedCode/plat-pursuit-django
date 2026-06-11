@@ -102,6 +102,35 @@ def test_badge_stages_flag_narrows_to_stage_concepts():
     assert 'Racing' not in report     # out-of-stage concept excluded
 
 
+def test_by_stage_specialization_and_coverage():
+    adv = Genre.objects.create(igdb_id=20, name='Adventure', slug='adventure')
+    shooter = Genre.objects.create(igdb_id=21, name='Shooter', slug='shooter')
+    rpg = Genre.objects.create(igdb_id=22, name='RPG', slug='rpg')
+
+    # One stage, two concepts: Adventure+Shooter and Adventure+RPG.
+    # Specialization genres (excluding the Adventure base) = {Shooter, RPG} = 2.
+    c1 = _anchored('Stage1 GameA')
+    ConceptCompanyFactory(concept=c1)
+    ConceptGenre.objects.create(concept=c1, genre=adv)
+    ConceptGenre.objects.create(concept=c1, genre=shooter)
+    c2 = _anchored('Stage1 GameB')
+    ConceptCompanyFactory(concept=c2)
+    ConceptGenre.objects.create(concept=c2, genre=adv)
+    ConceptGenre.objects.create(concept=c2, genre=rpg)
+    stage = StageFactory(series_slug='series-x', stage_number=1)
+    stage.concepts.add(c1, c2)
+
+    out = io.StringIO()
+    call_command('report_concept_taxonomy', '--by-stage', stdout=out)
+    report = out.getvalue()
+
+    assert 'Badge-stage JOB analysis' in report
+    assert 'Specialization genres per stage' in report
+    assert 'Stage genre coverage' in report
+    assert '2 genres' in report                  # the stage spans 2 specializations
+    assert 'Shooter' in report and 'RPG' in report
+
+
 def test_csv_lists_only_qualifying_concepts(tmp_path):
     a, b = _setup()
     csv_path = tmp_path / 'taxonomy.csv'
