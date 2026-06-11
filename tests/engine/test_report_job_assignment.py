@@ -38,8 +38,21 @@ def test_merged_tactician():
     assert assign_jobs({'MOBA'}, set()) == {'Tactician'}
 
 
-def test_pure_adventure_yields_no_job():
-    assert assign_jobs({'Adventure'}, {'Action'}) == set()
+def test_open_world_partitions_on_combat_genre():
+    # Open-world + a combat genre -> Outlaw; open-world without -> Wayfarer.
+    assert assign_jobs({'Shooter'}, {'Open world'}) == {'Gunslinger', 'Outlaw'}
+    assert assign_jobs({'Role-playing (RPG)'}, {'Open world'}) == {'Roleplayer', 'Wayfarer'}
+
+
+def test_comedy_partitions_on_platform():
+    assert assign_jobs({'Platform'}, {'Comedy'}) == {'Acrobat', 'Mascot'}      # mascot platformer
+    assert assign_jobs({'Puzzle'}, {'Comedy'}) == {'Puzzler', 'Jester'}        # other comedy
+
+
+def test_freelancer_fallback_for_no_specialization():
+    assert assign_jobs({'Adventure'}, {'Action'}) == {'Freelancer'}
+    # ...but any real specialization suppresses the fallback.
+    assert 'Freelancer' not in assign_jobs({'Shooter'}, set())
 
 
 @pytest.mark.django_db
