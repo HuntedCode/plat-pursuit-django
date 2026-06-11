@@ -109,3 +109,52 @@ Detection = "has this genre/theme". ~22 jobs:
 5. The 4–8 categories for the radar (Combat / Exploration / Mind / Story / Simulation / Sport / Casual …).
 6. Job count target (~20–24 here) and naming convention (evocative class names).
 7. Pull IGDB *modes* too (extend the command) for mode-based jobs — now or later?
+
+---
+
+## Badge-stage sample — the REAL XP signal (run prod 2026-06-11, `--badge-stages`)
+
+Jobs are fed by **games in Badge stages** (per the plan), so this 943-concept set
+(across all **101 badge series**) — not the 11,677 full library — is what actually
+generates job XP today. It's profoundly different: badge curation skews to
+platinum-worthy / AAA titles, so the casual long tail collapses.
+
+**Genre shifts (badge % vs full %):**
+
+| Genre | Full | Badge | Move |
+|---|---|---|---|
+| Adventure | 52% | **73.5%** | up up (near-universal base) |
+| Shooter | 20% | **30.0%** | up up |
+| RPG | 23% | **28.3%** | up |
+| Hack & slash | 7% | **15.0%** | up up (doubled) |
+| Platform | 16% | 16.8% | = |
+| Puzzle | 20% | 14.2% | down |
+| **Indie** | 41% | **7.7%** | collapsed |
+| **Arcade** | 23% | **5.2%** | collapsed |
+| **Simulator** | 21% | **6.8%** | collapsed |
+| **Sport** | 9% | **2.3%** | down down |
+| Strategy | 16% | 6.3% | down down |
+
+**Theme shifts:** Action 65%->**86%**; Open world 6%->**21%**; Stealth 3%->**13%**;
+Sci-fi 16%->31%; Fantasy 21%->32%; Survival 6%->11%; Historical 5%->10%. Erotic/4X
+vanish. Badge games are AAA action-adventure with rich themes.
+
+**Top badge genre combos:** Adventure+RPG (9.8%) · Adventure+Shooter (7.3%) · Shooter (6.7%) ·
+Adventure (5.7%) · Adventure+Platform (5.2%) · Adventure+Hack&slash (4.6%).
+-> The pattern is **"Adventure + <specialization>"**: Adventure is the base, the second genre is the job.
+
+### Implication for the catalog
+
+- **Design jobs against the BADGE sample first** (it's what earns XP), keep the catalog
+  genre-complete for future-proofing, and accept that some genre-jobs (Sim/Sport/Arcade/
+  Music/Card) are **rare specializations that level slowly** -- fine, even good, in an
+  RPG-skill model.
+- **Adventure (73.5%) is the baseline, not a discriminator.** Either an "everyone levels it"
+  base job, or *not a job* with the specialization genres carrying identity (open: pure-
+  Adventure games, 5.7%, then map to no job -- needs a catch).
+- **Well-fed core jobs:** Gunslinger (Shooter) · Roleplayer (RPG) · Slayer (Hack&slash) ·
+  Acrobat (Platform) · Puzzler (Puzzle).
+- **Themes that EARNED job/spec status in badges:** Open world (21%), Stealth (13%),
+  Survival (11%), Horror (14%) -- far stronger here than in the full library.
+- **Niche/slow jobs (low badge feed):** Tycoon (Sim 7%), Brawler (Fighting 5%), Driver
+  (Racing 5%), Arcader (5%), Storyteller (VN 2.5%), Athlete (Sport 2%), Maestro (Music 1%).
