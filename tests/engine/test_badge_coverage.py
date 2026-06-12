@@ -174,6 +174,38 @@ def test_badge_with_both_franchise_and_developer_unions_dedups_and_orders():
     ]
 
 
+def test_badge_with_franchise_and_collection_unions_and_dedups():
+    # Franchises and collections share the ConceptFranchise table and can co-occur
+    # on one badge. A concept that is both an is_main franchise title AND a
+    # collection member must appear exactly once in the missing set.
+    badge = BadgeFactory(series_slug="cov-fc", tier=1)
+    fran = _franchise(slug="cov-fc-f")
+    coll = _collection(slug="cov-fc-c")
+    badge.franchise = fran
+    badge.collection = coll
+    badge.save()
+
+    fran_only = _concept_with_game("Apple Fran Game")
+    coll_only = _concept_with_game("Banana Coll Game")
+    both = _concept_with_game("Cherry Both Game")
+    _link_franchise(fran_only, fran, is_main=True)
+    _link_franchise(coll_only, coll, is_main=False)
+    _link_franchise(both, fran, is_main=True)     # an is_main franchise title...
+    _link_franchise(both, coll, is_main=False)    # ...and a collection member
+
+    findings = audit_badge_coverage()
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding['franchise'] == fran
+    assert finding['collection'] == coll
+    # union of both sources; the 'both' concept appears exactly once (deduped)
+    assert sorted(c.id for c in finding['missing']) == sorted([fran_only.id, coll_only.id, both.id])
+    assert [c.unified_title for c in finding['missing']] == [
+        "Apple Fran Game", "Banana Coll Game", "Cherry Both Game",
+    ]
+
+
 def test_covered_across_multiple_stages():
     badge = BadgeFactory(series_slug="cov-multi", tier=1)
     fran = _franchise(slug="cov-multi-f")
