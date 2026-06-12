@@ -915,6 +915,16 @@ class Concept(models.Model):
         ),
     )
     title_ids = models.JSONField(default=list, blank=True)
+    franchises_locked = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, IGDB refresh/enrichment will NOT wipe or rebuild this "
+            "concept's Franchise/Collection links (ConceptFranchise rows), so "
+            "manually-curated links and is_main flags survive every sync. Set by "
+            "admins who've hand-tuned a concept's franchise/collection membership "
+            "(e.g. excluding a spin-off's parent collection)."
+        ),
+    )
     family = models.ForeignKey(
         GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='concepts'
     )
@@ -1214,6 +1224,13 @@ class Concept(models.Model):
         if other.family and not self.family:
             self.family = other.family
             self.save(update_fields=['family'])
+
+        # Inherit the franchises lock: the survivor just received `other`'s
+        # franchise/collection links, so if those were locked for manual curation
+        # the survivor must stay locked too, or the next refresh would wipe them.
+        if other.franchises_locked and not self.franchises_locked:
+            self.franchises_locked = True
+            self.save(update_fields=['franchises_locked'])
 
         # StageCompletionEvent concept references
         StageCompletionEvent.objects.filter(concept=other).update(concept=self)

@@ -1977,6 +1977,11 @@ class IGDBService:
             (ConceptEngine, 'engines'),
             (ConceptFranchise, 'franchises'),
         ]:
+            # A franchises-locked concept keeps its hand-curated franchise/
+            # collection links + is_main flags; the rest of enrichment still refreshes.
+            if model is ConceptFranchise and concept.franchises_locked:
+                deleted[key] = 0
+                continue
             count, _ = model.objects.filter(concept=concept).delete()
             deleted[key] = count
 
@@ -2032,8 +2037,10 @@ class IGDBService:
         # Create normalized Genre/Theme/Engine records
         cls._create_normalized_tags(concept, igdb_data)
 
-        # Create normalized Franchise records
-        cls._create_concept_franchises(concept, igdb_data)
+        # Create normalized Franchise records (skipped entirely when the concept's
+        # franchise/collection links are locked for manual curation).
+        if not concept.franchises_locked:
+            cls._create_concept_franchises(concept, igdb_data)
 
         # Add VR platforms to Games that are missing them
         cls._apply_vr_platforms(concept, igdb_data)
