@@ -35,17 +35,15 @@
 
                 <div class="flex-1 min-w-0 text-center sm:text-left">
                     {% comment %}
-                        Eyebrow label always says "Franchise" regardless of the
-                        underlying source_type. Browse treats franchises and
-                        collections uniformly (users arriving via nav/browse
-                        should land on a page that matches their mental model).
-                        The game detail "About" card is where the franchise vs.
-                        collection distinction is still surfaced, since that's
-                        where users are investigating a specific game.
+                        Eyebrow label reflects the underlying source_type so a
+                        collection reads as "Collection" (and a franchise as
+                        "Franchise"). The page layout is otherwise identical: browse
+                        treats both uniformly, the label just tells the user which
+                        kind of grouping they landed on.
                     {% endcomment %}
                     <div class="flex items-center gap-2 justify-center sm:justify-start mb-1.5">
                         <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-primary/80">
-                            Franchise
+                            {% if object.source_type == 'collection' %}Collection{% else %}Franchise{% endif %}
                         </span>
                         <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-primary/40 to-transparent"></div>
                     </div>
