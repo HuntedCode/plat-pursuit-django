@@ -1225,13 +1225,6 @@ class Concept(models.Model):
             self.family = other.family
             self.save(update_fields=['family'])
 
-        # Inherit the franchises lock: the survivor just received `other`'s
-        # franchise/collection links, so if those were locked for manual curation
-        # the survivor must stay locked too, or the next refresh would wipe them.
-        if other.franchises_locked and not self.franchises_locked:
-            self.franchises_locked = True
-            self.save(update_fields=['franchises_locked'])
-
         # StageCompletionEvent concept references
         StageCompletionEvent.objects.filter(concept=other).update(concept=self)
 
@@ -1319,6 +1312,14 @@ class Concept(models.Model):
                 if cf.franchise_id not in existing_franchise_ids:
                     cf.concept = self
                     cf.save(update_fields=['concept'])
+
+            # Inherit the franchises lock ONLY here, where `other`'s curated links
+            # actually migrate to the survivor. In the re-anchor case (inherit_match
+            # is False) other's links are dropped with its match, so the survivor
+            # must NOT lock its own auto-generated links.
+            if other.franchises_locked and not self.franchises_locked:
+                self.franchises_locked = True
+                self.save(update_fields=['franchises_locked'])
 
             # IGDBMatch: target lacks one, so inherit source's.
             other.igdb_match.concept = self
