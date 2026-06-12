@@ -240,6 +240,24 @@ def test_concept_covered_via_bundle_on_stage_is_not_flagged():
     assert audit_badge_coverage() == []
 
 
+def test_bundle_on_another_series_stage_does_not_cover():
+    # The bundle coverage path must respect series_slug: a concept bundled onto a
+    # DIFFERENT series' stage is still missing from THIS badge (guards the filter).
+    badge = BadgeFactory(series_slug="cov-bundle-own", tier=1)
+    fran = _franchise(slug="cov-bundle-own-f")
+    badge.franchise = fran
+    badge.save()
+
+    orphan = _concept_with_game("Orphan Bundled Game")
+    _link_franchise(orphan, fran)
+    other_stage = StageFactory(series_slug="some-other-series", stage_number=1)
+    ConceptBundleFactory(stage=other_stage).concepts.add(orphan)
+
+    findings = audit_badge_coverage()
+    assert len(findings) == 1
+    assert [c.id for c in findings[0]['missing']] == [orphan.id]
+
+
 def test_blank_series_slug_badge_is_skipped():
     # Guard: a tracked badge with no series_slug has no stages; it must NOT flag
     # every franchise concept as missing.
