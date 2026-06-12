@@ -915,6 +915,16 @@ class Concept(models.Model):
         ),
     )
     title_ids = models.JSONField(default=list, blank=True)
+    franchises_locked = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, IGDB refresh/enrichment will NOT wipe or rebuild this "
+            "concept's Franchise/Collection links (ConceptFranchise rows), so "
+            "manually-curated links and is_main flags survive every sync. Set by "
+            "admins who've hand-tuned a concept's franchise/collection membership "
+            "(e.g. excluding a spin-off's parent collection)."
+        ),
+    )
     family = models.ForeignKey(
         GameFamily, null=True, blank=True, on_delete=models.SET_NULL, related_name='concepts'
     )
@@ -1302,6 +1312,14 @@ class Concept(models.Model):
                 if cf.franchise_id not in existing_franchise_ids:
                     cf.concept = self
                     cf.save(update_fields=['concept'])
+
+            # Inherit the franchises lock ONLY here, where `other`'s curated links
+            # actually migrate to the survivor. In the re-anchor case (inherit_match
+            # is False) other's links are dropped with its match, so the survivor
+            # must NOT lock its own auto-generated links.
+            if other.franchises_locked and not self.franchises_locked:
+                self.franchises_locked = True
+                self.save(update_fields=['franchises_locked'])
 
             # IGDBMatch: target lacks one, so inherit source's.
             other.igdb_match.concept = self

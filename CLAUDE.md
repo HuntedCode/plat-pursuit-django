@@ -106,6 +106,7 @@ Currently handled by `absorb()`:
 - ConceptSplitEvent.parent_concept (FK) + .child_concepts (M2M)
 - Genre challenge slots + bonus slots
 - GameFamily (inherit if target has none)
+- Concept.franchises_locked (inherit when `other` was locked, so the curated franchise/collection links the survivor just received stay protected from the next IGDB refresh)
 - IGDB enrichment through-rows (ConceptCompany, ConceptGenre, ConceptTheme, ConceptEngine, ConceptFranchise) + IGDBMatch itself travel TOGETHER, gated on `inherit_match` (target has no IGDBMatch of its own). IGDB enrichment is a deterministic projection of the IGDBMatch, so when the target keeps its OWN match (the re-anchor / reassignment case) the source's enrichment describes a DIFFERENT IGDB game and is DROPPED (cascade-deletes with the source), not merged. Only when the target lacks a match does it inherit the source's match AND its enrichment rows (companies merge roles via OR-of-flags; genres/themes/engines/franchises dedup by their respective id). Merging enrichment unconditionally was the re-anchor data bug: re-pointing an erroneously-matched concept left the survivor showing both matches' developers/genres/themes/franchises stacked together.
 - Concept.title_ids (merged/deduplicated)
 - Roadmaps (per-CTG: each Concept may have N Roadmaps, one per ConceptTrophyGroup. Each source roadmap is matched to a surviving CTG by `trophy_group_id` and re-pointed; if the target concept already has a roadmap for that CTG the source's roadmap cascade-deletes with the source concept)
