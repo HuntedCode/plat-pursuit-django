@@ -133,9 +133,12 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     # type + franchise/developer + back-of-card stats. ---
     frame["badge_type"] = badge.get_badge_type_display()
     franchise = badge.effective_franchise
+    collection = badge.effective_collection
     developer = badge.effective_developer
     if franchise:
         frame["franchise"] = franchise.name
+    if collection:
+        frame["collection"] = collection.name
     if developer:
         frame["developer"] = developer.name
     if badge.set_number:

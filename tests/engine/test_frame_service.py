@@ -111,18 +111,23 @@ def test_funder_credit_falls_back_to_psn_username():
     assert frame["funded_by"] == 'rawhandle'
 
 
-def test_effective_franchise_and_developer_in_frame():
+def test_effective_franchise_collection_and_developer_in_frame():
     from trophies.models import Franchise
     fr = Franchise.objects.create(igdb_id=1, name='Halo', slug='halo', source_type='franchise')
+    coll = Franchise.objects.create(igdb_id=2, name='Bungie Classics', slug='bungie-classics', source_type='collection')
     dev = CompanyFactory(name='Bungie')
     badge = BadgeFactory(tier=1)
     badge.franchise = fr
+    badge.collection = coll
     badge.developer = dev
     badge.save()
 
     frame = build_badge_frame(badge)
 
+    # All three subject keys populate; the front face picks one by precedence
+    # (franchise > collection > developer) in the template.
     assert frame["franchise"] == 'Halo'
+    assert frame["collection"] == 'Bungie Classics'
     assert frame["developer"] == 'Bungie'
 
 
