@@ -69,7 +69,7 @@ class Command(BaseCommand):
             .exclude(raw_response={})
             .exclude(raw_response__isnull=True)
             .select_related('concept')
-            .only('concept_id', 'concept', 'raw_response')
+            .only('concept_id', 'concept', 'raw_response', 'concept__franchises_locked')
         )
         total_matches = matches.count()
 
@@ -96,16 +96,27 @@ class Command(BaseCommand):
         # data in place than half-rebuild and leave the table in chaos.
         processed = 0
         errors = 0
+        skipped = 0
         with transaction.atomic():
             if wipe:
                 self.stdout.write(self.style.MIGRATE_HEADING("\n=== Wiping existing rows ==="))
-                deleted_links = ConceptFranchise.objects.all().delete()[0]
-                deleted_franchises = Franchise.objects.all().delete()[0]
-                self.stdout.write(f"  Deleted {deleted_links} ConceptFranchise row(s)")
+                # Preserve franchises-locked concepts: keep their CF links AND the
+                # Franchise rows they reference (Franchise -> ConceptFranchise is
+                # CASCADE, so deleting the parent Franchise would take the link too).
+                deleted_links = ConceptFranchise.objects.exclude(
+                    concept__franchises_locked=True
+                ).delete()[0]
+                deleted_franchises = Franchise.objects.exclude(
+                    franchise_concepts__concept__franchises_locked=True
+                ).delete()[0]
+                self.stdout.write(f"  Deleted {deleted_links} ConceptFranchise row(s) (locked concepts preserved)")
                 self.stdout.write(f"  Deleted {deleted_franchises} Franchise row(s)")
 
             self.stdout.write(self.style.MIGRATE_HEADING("\n=== Rebuilding from cache ==="))
             for match in matches.iterator(chunk_size=200):
+                if match.concept.franchises_locked:
+                    skipped += 1
+                    continue
                 try:
                     # The enrichment helper handles all the get_or_create + dedup
                     # logic, including the (igdb_id, source_type) composite key.
@@ -132,5 +143,6 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"\nProcessed {processed}/{total_matches} matches"
+            + (f", skipped {skipped} franchises-locked" if skipped else "")
             + (f" with {errors} error(s)" if errors else " cleanly") + "."
         ))

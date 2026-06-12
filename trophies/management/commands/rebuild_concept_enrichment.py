@@ -139,7 +139,13 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             for model, key in through_models:
-                count, _ = model.objects.all().delete()
+                qs = model.objects.all()
+                if model is ConceptFranchise:
+                    # franchises-locked concepts keep their curated links; the
+                    # rebuild loop's _apply_enrichment guard also skips recreating
+                    # them, so they'd be lost forever without this exclusion.
+                    qs = qs.exclude(concept__franchises_locked=True)
+                count, _ = qs.delete()
                 stats[f'wiped_{key}'] = count
 
             # Reset Concept.igdb_genres / igdb_themes in a single UPDATE.

@@ -749,9 +749,16 @@ class ConceptFranchiseInline(admin.TabularInline):
     model = ConceptFranchise
     fk_name = 'concept'
     extra = 0
-    fields = ('franchise', 'is_main')
+    fields = ('franchise', 'franchise_type', 'is_main')
+    readonly_fields = ('franchise_type',)
     autocomplete_fields = ('franchise',)
     can_delete = True
+
+    @admin.display(description='Type')
+    def franchise_type(self, obj):
+        # Franchises and collections share this table + name space; surface which
+        # is which so staff aren't guessing (e.g. "Saints Row" franchise vs collection).
+        return obj.franchise.get_source_type_display() if obj.franchise_id else '-'
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('franchise')
@@ -857,14 +864,14 @@ class ConceptAdmin(admin.ModelAdmin):
     list_display = (
         'id', 'concept_id', 'unified_title',
         'anchor_migration_completed_at', 'anchor_migration_last_attempt_at',
-        'title_lock', 'title_reviewed_at',
+        'title_lock', 'franchises_locked', 'title_reviewed_at',
         'family_pk_display', 'family_display',
         'release_date_display', 'developers_display',
         'publishers_display', 'genres_display',
     )
     list_select_related = ('family', 'igdb_match')
     list_filter = (
-        'family__is_verified', 'title_lock',
+        'family__is_verified', 'title_lock', 'franchises_locked',
         ConceptAnchorStatusFilter, ConceptShovelwareFilter,
     )
     # Searching ``concept_companies__company__name`` matches ANY linked
@@ -883,6 +890,7 @@ class ConceptAdmin(admin.ModelAdmin):
         'duplicate_concept',
         'lock_games', 'unlock_games',
         'lock_titles', 'unlock_titles',
+        'lock_franchises', 'unlock_franchises',
         'clear_title_review',
         'clear_anchor_last_attempt',
     ]
@@ -1200,6 +1208,16 @@ class ConceptAdmin(admin.ModelAdmin):
     def unlock_titles(self, request, queryset):
         count = queryset.filter(title_lock=True).update(title_lock=False)
         messages.success(request, f"Unlocked title on {count} concept(s).")
+
+    @admin.action(description="Lock franchises (IGDB refresh won't touch franchise/collection links)")
+    def lock_franchises(self, request, queryset):
+        count = queryset.filter(franchises_locked=False).update(franchises_locked=True)
+        messages.success(request, f"Locked franchises on {count} concept(s).")
+
+    @admin.action(description="Unlock franchises (allow IGDB refresh to rebuild links)")
+    def unlock_franchises(self, request, queryset):
+        count = queryset.filter(franchises_locked=True).update(franchises_locked=False)
+        messages.success(request, f"Unlocked franchises on {count} concept(s).")
 
     @admin.action(description="Clear title review (re-surface in review_title_merges)")
     def clear_title_review(self, request, queryset):
