@@ -22,6 +22,8 @@ class Command(BaseCommand):
         all_series = options['all_series']
 
         if all_series:
+            if series_slug:
+                self.stdout.write(self.style.WARNING("--all overrides --series; ignoring --series."))
             slugs = list(
                 Badge.objects
                 .exclude(series_slug__isnull=True).exclude(series_slug='')
@@ -51,6 +53,7 @@ class Command(BaseCommand):
         badges = Badge.objects.filter(series_slug=series_slug).order_by('tier')
         if not badges.exists():
             self.stdout.write(self.style.WARNING(f"No badges found for series_slug '{series_slug}'."))
+            self.stdout.write(self.style.SUCCESS(f"{prefix}--- END series '{series_slug}' ---"))
             return
 
         profiles = Profile.objects.filter(played_games__game__concept__stages__series_slug=series_slug).distinct()

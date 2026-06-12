@@ -25,6 +25,7 @@ def test_all_refreshes_each_distinct_series(spy):
     BadgeFactory(series_slug='aaa', tier=2)   # same series, two tiers -> counted once
     BadgeFactory(series_slug='bbb', tier=1)
     BadgeFactory(series_slug='', tier=1)      # blank slug -> excluded
+    BadgeFactory(series_slug=None, tier=1)    # null slug -> excluded
 
     call_command('refresh_badge_series', '--all')
 
@@ -34,6 +35,16 @@ def test_all_refreshes_each_distinct_series(spy):
 def test_series_refreshes_just_one(spy):
     call_command('refresh_badge_series', '--series', 'zzz')
     assert spy == ['zzz']
+
+
+def test_all_overrides_series_when_both_given(spy):
+    BadgeFactory(series_slug='aaa', tier=1)
+    BadgeFactory(series_slug='bbb', tier=1)
+
+    call_command('refresh_badge_series', '--series', 'zzz', '--all')
+
+    # --all wins; the --series filter is ignored (not in the call set).
+    assert sorted(spy) == ['aaa', 'bbb']
 
 
 def test_no_args_is_a_noop(spy):
