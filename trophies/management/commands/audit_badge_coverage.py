@@ -1,8 +1,8 @@
-"""Daily audit: alert when a franchise/developer badge is missing one of its games.
+"""Daily audit: alert when a franchise/collection/developer badge is missing a game.
 
-For each tier-1 badge that tracks a franchise/developer, finds concepts of that
-franchise/developer not covered by the badge's stages and emails the findings to the
-badge-alerts inbox. A gap usually means a new game needs adding to the badge.
+For each tier-1 badge that tracks a franchise, collection, and/or developer, finds
+concepts of that source not covered by the badge's stages and emails the findings to
+the badge-alerts inbox. A gap usually means a new game needs adding to the badge.
 
 By default the email is sent only when there are gaps; pass --always for a daily
 heartbeat (an "all clear" email even when nothing is missing).
@@ -25,8 +25,8 @@ def format_report(findings):
     """Plain-text report body for the given audit_badge_coverage() findings."""
     total = sum(len(f['missing']) for f in findings)
     if not findings:
-        return ("Badge coverage audit: every tracked franchise/developer badge "
-                "covers its concepts. No gaps found.")
+        return ("Badge coverage audit: every tracked franchise/collection/developer "
+                "badge covers its concepts. No gaps found.")
 
     lines = [
         f"Badge coverage audit: {total} {_plural(total, 'concept')} across "
@@ -40,6 +40,8 @@ def format_report(findings):
         sources = []
         if finding['franchise']:
             sources.append(f"franchise: {finding['franchise'].name}")
+        if finding['collection']:
+            sources.append(f"collection: {finding['collection'].name}")
         if finding['developer']:
             sources.append(f"developer: {finding['developer'].name}")
         lines.append(f"{badge.name}  ({'; '.join(sources)})  [series: {badge.series_slug}]")
@@ -52,8 +54,8 @@ def format_report(findings):
 
 class Command(BaseCommand):
     help = (
-        "Audit tier-1 franchise/developer badges for concepts missing from their "
-        "stages and email findings to the badge-alerts inbox."
+        "Audit tier-1 franchise/collection/developer badges for concepts missing "
+        "from their stages and email findings to the badge-alerts inbox."
     )
 
     def add_arguments(self, parser):
