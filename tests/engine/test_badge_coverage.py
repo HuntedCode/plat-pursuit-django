@@ -23,6 +23,12 @@ def _franchise(name="Fran", igdb_id=1, slug="fran"):
     )
 
 
+def _collection(name="Coll", igdb_id=900, slug="coll"):
+    return Franchise.objects.create(
+        igdb_id=igdb_id, name=name, slug=slug, source_type='collection',
+    )
+
+
 def _link_franchise(concept, franchise, is_main=True):
     ConceptFranchise.objects.create(concept=concept, franchise=franchise, is_main=is_main)
 
@@ -76,6 +82,36 @@ def test_developer_badge_flags_uncovered_concept():
 
     assert len(findings) == 1
     assert [c.id for c in findings[0]['missing']] == [missing.id]
+
+
+def test_collection_badge_flags_uncovered_member_via_any_link():
+    # Collections never set is_main, so EVERY linked concept is a member -- an
+    # uncovered collection member must be flagged even though its link is is_main=False.
+    badge = BadgeFactory(series_slug="cov-coll", tier=1)
+    coll = _collection(slug="cov-coll-c")
+    badge.collection = coll
+    badge.save()
+
+    covered = _concept_with_game("Coll Covered")
+    missing = _concept_with_game("Coll Missing")
+    _link_franchise(covered, coll, is_main=False)   # collection links carry is_main=False
+    _link_franchise(missing, coll, is_main=False)
+    _cover(covered, badge.series_slug)
+
+    findings = audit_badge_coverage()
+
+    assert len(findings) == 1
+    assert findings[0]['collection'] == coll
+    assert [c.id for c in findings[0]['missing']] == [missing.id]
+
+
+def test_effective_collection_inherits_from_base_badge():
+    base = BadgeFactory(series_slug="cov-inh", tier=1)
+    coll = _collection(slug="cov-inh-c")
+    base.collection = coll
+    base.save()
+    child = BadgeFactory(series_slug="cov-inh", tier=2, base_badge=base)
+    assert child.effective_collection == coll
 
 
 def test_no_gap_when_all_covered():
@@ -191,6 +227,22 @@ def test_command_emails_when_gaps(mailoutbox):
     assert msg.to == ['badge-alerts@platpursuit.com']
     assert 'unassigned concept' in msg.subject
     assert 'Cmd Missing Game' in msg.body
+
+
+def test_command_email_labels_collection_source(mailoutbox):
+    badge = BadgeFactory(series_slug="cov-coll-cmd", tier=1)
+    coll = _collection(name="My Collection", slug="cov-coll-cmd-c")
+    badge.collection = coll
+    badge.save()
+    missing = _concept_with_game("Coll Cmd Missing")
+    _link_franchise(missing, coll, is_main=False)
+
+    call_command('audit_badge_coverage')
+
+    assert len(mailoutbox) == 1
+    body = mailoutbox[0].body
+    assert 'collection: My Collection' in body
+    assert 'Coll Cmd Missing' in body
 
 
 def test_command_sends_nothing_when_clean(mailoutbox):

@@ -13,21 +13,23 @@ from trophies.models import Badge, Concept
 
 
 def audit_badge_coverage():
-    """For each tier-1 badge that tracks a franchise and/or developer, find concepts
-    of that franchise (is_main titles) / developer (developed games) that are NOT
-    covered by any stage of the badge's series.
+    """For each tier-1 badge that tracks a franchise, collection, and/or developer,
+    find concepts of that franchise (is_main titles) / collection (any member) /
+    developer (developed games) that are NOT covered by any stage of the badge's
+    series.
 
     Returns a list (sorted by badge name) of dicts, one per badge WITH gaps:
-        {'badge': Badge, 'franchise': Franchise|None,
+        {'badge': Badge, 'franchise': Franchise|None, 'collection': Franchise|None,
          'developer': Company|None, 'missing': [Concept]}
 
-    Only tier-1 badges are scanned: franchise/developer is set on the series' base
-    (tier-1) badge and inherited by the others, so each series is checked once.
+    Only tier-1 badges are scanned: franchise/collection/developer is set on the
+    series' base (tier-1) badge and inherited by the others, so each series is
+    checked once.
     """
     findings = []
     badges = (
         Badge.objects.filter(tier=1)
-        .select_related('franchise', 'developer', 'base_badge')
+        .select_related('franchise', 'collection', 'developer', 'base_badge')
         .order_by(Lower('name'))
     )
 
@@ -39,8 +41,9 @@ def audit_badge_coverage():
             continue
 
         franchise = badge.effective_franchise
+        collection = badge.effective_collection
         developer = badge.effective_developer
-        if not franchise and not developer:
+        if not franchise and not collection and not developer:
             continue
 
         # Concepts this badge is expected to cover.
@@ -50,6 +53,14 @@ def audit_badge_coverage():
                 Concept.objects.filter(
                     concept_franchises__franchise=franchise,
                     concept_franchises__is_main=True,
+                ).values_list('id', flat=True)
+            )
+        if collection:
+            # Collections never set is_main (different IGDB taxonomy), so EVERY
+            # linked concept is a member -- match any link, not is_main only.
+            candidate_ids |= set(
+                Concept.objects.filter(
+                    concept_franchises__franchise=collection,
                 ).values_list('id', flat=True)
             )
         if developer:
@@ -77,6 +88,7 @@ def audit_badge_coverage():
             findings.append({
                 'badge': badge,
                 'franchise': franchise,
+                'collection': collection,
                 'developer': developer,
                 'missing': missing,
             })

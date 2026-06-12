@@ -1293,17 +1293,17 @@ class StageInline(admin.TabularInline):
 
 @admin.register(Badge)
 class BadgeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'franchise_col', 'developer_col', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
-    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'developer', 'base_badge', 'base_badge__franchise', 'base_badge__developer')
+    list_display = ['name', 'is_live', 'tier', 'badge_type', 'series_slug', 'set_number', 'rarity_class', 'title', 'franchise_col', 'collection_col', 'developer_col', 'required_stages', 'requires_all', 'min_required', 'earned_count', 'most_recent_concept', 'funded_by', 'submitted_by']
+    list_select_related = ('most_recent_concept', 'title', 'funded_by', 'submitted_by', 'franchise', 'collection', 'developer', 'base_badge', 'base_badge__franchise', 'base_badge__collection', 'base_badge__developer')
     list_filter = ['is_live', 'tier', 'badge_type', 'rarity_class']
     list_editable = ['is_live']
     search_fields = ['name', 'series_slug', 'description']
-    autocomplete_fields = ['franchise', 'developer']
+    autocomplete_fields = ['franchise', 'collection', 'developer']
     readonly_fields = ['created_at', 'earned_count', 'view_count', 'required_stages', 'required_value', 'rarity_pct', 'rarity_rank', 'rarity_class']
     date_hierarchy = 'created_at'
     fields = [
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
-        'tier', 'badge_type', 'franchise', 'developer', 'set_number',
+        'tier', 'badge_type', 'franchise', 'collection', 'developer', 'set_number',
         'title', 'display_title', 'display_series',
         'discord_role_id', 'requires_all', 'min_required', 'requirements',
         'most_recent_concept', 'funded_by', 'submitted_by',
@@ -1358,12 +1358,21 @@ class BadgeAdmin(admin.ModelAdmin):
             # franchise (the autocomplete already hides them, see FranchiseAdmin).
             from trophies.models import Franchise
             kwargs['queryset'] = Franchise.objects.filter(source_type='franchise')
+        elif db_field.name == 'collection':
+            # Mirror of the franchise defense: the collection FK accepts ONLY
+            # IGDB collections (the autocomplete scopes to them, see FranchiseAdmin).
+            from trophies.models import Franchise
+            kwargs['queryset'] = Franchise.objects.filter(source_type='collection')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='Franchise', ordering='franchise')
     def franchise_col(self, obj):
         # Inherited from the base (tier-1) badge when not set on this tier.
         return obj.effective_franchise
+
+    @admin.display(description='Collection', ordering='collection')
+    def collection_col(self, obj):
+        return obj.effective_collection
 
     @admin.display(description='Developer', ordering='developer')
     def developer_col(self, obj):
@@ -3327,12 +3336,16 @@ class FranchiseAdmin(admin.ModelAdmin):
 
     def get_search_results(self, request, queryset, search_term):
         qs, may_have_dupes = super().get_search_results(request, queryset, search_term)
-        # Badge.franchise should offer real franchises ONLY. This model also holds
-        # IGDB collections (source_type='collection'), which were showing up as
-        # doubles in that autocomplete. Scope the filter to that one field so other
+        # This model holds BOTH franchises and IGDB collections (source_type),
+        # which collided as name-doubles in the badge autocompletes. Scope each
+        # badge FK to its own type so the pickers stay disambiguated; other
         # franchise autocompletes (e.g. concept links) still see everything.
-        if request.GET.get('model_name') == 'badge' and request.GET.get('field_name') == 'franchise':
-            qs = qs.filter(source_type='franchise')
+        if request.GET.get('model_name') == 'badge':
+            field_name = request.GET.get('field_name')
+            if field_name == 'franchise':
+                qs = qs.filter(source_type='franchise')
+            elif field_name == 'collection':
+                qs = qs.filter(source_type='collection')
         return qs, may_have_dupes
 
     def get_queryset(self, request):

@@ -1706,7 +1706,11 @@ class Badge(models.Model):
     # --- Frame display + smart-tracking data ---
     franchise = models.ForeignKey(
         'Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='badges',
-        help_text="Associated IGDB franchise (series/collection badges). Drives the Frame's subject name + enables franchise reporting.",
+        help_text="Associated IGDB franchise (source_type='franchise'). Drives the Frame's subject name + enables franchise reporting.",
+    )
+    collection = models.ForeignKey(
+        'Franchise', on_delete=models.SET_NULL, null=True, blank=True, related_name='collection_badges',
+        help_text="Associated IGDB collection (source_type='collection'). Frame attribution + reporting. Franchise takes display precedence when both are set.",
     )
     developer = models.ForeignKey(
         'Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='developed_badges',
@@ -1768,6 +1772,15 @@ class Badge(models.Model):
             return self.developer
         if self.base_badge and self.base_badge.developer_id:
             return self.base_badge.developer
+        return None
+
+    @property
+    def effective_collection(self):
+        """Collection on this badge, else inherited from the series' base badge."""
+        if self.collection_id:
+            return self.collection
+        if self.base_badge and self.base_badge.collection_id:
+            return self.base_badge.collection
         return None
 
     @property
