@@ -10,8 +10,8 @@ from django.core.management import call_command
 from trophies.models import ConceptFranchise, Franchise
 from trophies.services.badge_coverage_service import audit_badge_coverage
 from tests.factories import (
-    BadgeFactory, CompanyFactory, ConceptCompanyFactory, ConceptFactory,
-    GameFactory, StageFactory,
+    BadgeFactory, CompanyFactory, ConceptBundleFactory, ConceptCompanyFactory,
+    ConceptFactory, GameFactory, StageFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -222,6 +222,22 @@ def test_covered_across_multiple_stages():
     findings = audit_badge_coverage()
     assert len(findings) == 1
     assert [c.id for c in findings[0]['missing']] == [c3.id]
+
+
+def test_concept_covered_via_bundle_on_stage_is_not_flagged():
+    # Coverage must count concepts inside a ConceptBundle on a stage, not just
+    # direct Stage.concepts members -- otherwise a bundle-covered game false-flags.
+    badge = BadgeFactory(series_slug="cov-bundle", tier=1)
+    fran = _franchise(slug="cov-bundle-f")
+    badge.franchise = fran
+    badge.save()
+
+    bundled = _concept_with_game("Bundled Game")
+    _link_franchise(bundled, fran)
+    stage = StageFactory(series_slug=badge.series_slug, stage_number=1)
+    ConceptBundleFactory(stage=stage).concepts.add(bundled)
+
+    assert audit_badge_coverage() == []
 
 
 def test_blank_series_slug_badge_is_skipped():

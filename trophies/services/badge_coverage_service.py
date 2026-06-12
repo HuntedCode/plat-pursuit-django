@@ -7,6 +7,7 @@ concept that doesn't usually means a new game shipped and needs adding to the ba
 formats and emails them.
 """
 
+from django.db.models import Q
 from django.db.models.functions import Lower
 
 from trophies.models import Badge, Concept
@@ -73,11 +74,15 @@ def audit_badge_coverage():
         if not candidate_ids:
             continue
 
-        # Concepts actually covered by one of this badge series' stages.
+        # Concepts actually covered by one of this badge series' stages -- either a
+        # direct stage member (Stage.concepts) OR a member of a ConceptBundle on a
+        # stage (Stage.concept_bundles -> ConceptBundle.concepts). Missing the bundle
+        # path falsely flagged bundle-covered games as uncovered.
         covered_ids = set(
-            Concept.objects
-            .filter(stages__series_slug=badge.series_slug)
-            .values_list('id', flat=True)
+            Concept.objects.filter(
+                Q(stages__series_slug=badge.series_slug)
+                | Q(bundles__stage__series_slug=badge.series_slug)
+            ).values_list('id', flat=True)
         )
 
         missing_ids = candidate_ids - covered_ids
