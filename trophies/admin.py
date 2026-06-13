@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractMembership, ContractBundle
 
 
 # Register your models here.
@@ -4665,6 +4665,11 @@ _ROADMAP_ADMIN_OBJECT_NAMES = frozenset({
     'RoadmapNote', 'RoadmapNoteRead',
 })
 
+_GAMIFICATION_ADMIN_OBJECT_NAMES = frozenset({
+    'Contract', 'Job',                                    # Job Board curation
+    'ProfileGamification', 'StatType', 'StageStatValue',  # XP stats + scaffolding
+})
+
 _original_get_app_list = admin.site.get_app_list
 
 
@@ -4674,6 +4679,7 @@ def _platpursuit_get_app_list(request, app_label=None):
     Trophies gets carved into:
       - "Roadmap System": authoring + lock/session + history models
       - "IGDB & Enrichment": matching + normalized metadata models
+      - "Gamification": Job Board curation (Contract, Job) + XP stats
       - "Trophies": everything else
     Other apps are passed through unchanged. Internally all these models
     still belong to the `trophies` app_label — we only reshape the index
@@ -4687,10 +4693,12 @@ def _platpursuit_get_app_list(request, app_label=None):
             continue
         roadmap_models = [m for m in app['models'] if m['object_name'] in _ROADMAP_ADMIN_OBJECT_NAMES]
         igdb_models = [m for m in app['models'] if m['object_name'] in _IGDB_ADMIN_OBJECT_NAMES]
+        gamification_models = [m for m in app['models'] if m['object_name'] in _GAMIFICATION_ADMIN_OBJECT_NAMES]
         other_models = [
             m for m in app['models']
             if m['object_name'] not in _ROADMAP_ADMIN_OBJECT_NAMES
             and m['object_name'] not in _IGDB_ADMIN_OBJECT_NAMES
+            and m['object_name'] not in _GAMIFICATION_ADMIN_OBJECT_NAMES
         ]
         if roadmap_models:
             # Order roadmap models semantically: authoring → lock → history.
@@ -4713,9 +4721,92 @@ def _platpursuit_get_app_list(request, app_label=None):
                 'name': 'IGDB & Enrichment',
                 'models': igdb_models,
             })
+        if gamification_models:
+            # Curation models first (Contract, Job), then the XP stats.
+            gam_order = ['Contract', 'Job', 'ProfileGamification', 'StatType', 'StageStatValue']
+            gam_idx = {name: i for i, name in enumerate(gam_order)}
+            gamification_models.sort(key=lambda m: gam_idx.get(m['object_name'], 99))
+            result.append({
+                **app,
+                'name': 'Gamification',
+                'models': gamification_models,
+            })
         if other_models:
             result.append({**app, 'models': other_models})
     return result
 
 
 admin.site.get_app_list = _platpursuit_get_app_list
+
+
+# --- Gamification: Job Board & Contracts ---
+
+class ContractMembershipForm(forms.ModelForm):
+    """Surfaces the one-home-Contract rule as a clean admin error instead of a raw
+    IntegrityError 500 when a curator re-homes an already-homed Concept."""
+    class Meta:
+        model = ContractMembership
+        fields = '__all__'
+
+    def clean_concept(self):
+        concept = self.cleaned_data.get('concept')
+        if concept:
+            clash = ContractMembership.objects.filter(concept=concept)
+            if self.instance.pk:
+                clash = clash.exclude(pk=self.instance.pk)
+            other = clash.select_related('contract').first()
+            if other:
+                raise forms.ValidationError(
+                    f"'{concept}' already belongs to Contract '{other.contract}'. "
+                    f"A game can have only one home Contract."
+                )
+        return concept
+
+
+class ContractMembershipInline(admin.TabularInline):
+    """A Contract's home Concepts. Each Concept has at most one Contract (the OneToOne
+    enforces it in the DB; the form gives curators a clean error if they re-home one)."""
+    model = ContractMembership
+    form = ContractMembershipForm
+    extra = 0
+    autocomplete_fields = ('concept',)
+
+
+class ContractBundleInline(admin.TabularInline):
+    """Collection-spanning satisfier groups (mirrors ConceptBundle on Stages)."""
+    model = ContractBundle
+    extra = 0
+    fields = ('label', 'concepts', 'sort_order')
+    autocomplete_fields = ('concepts',)
+
+
+@admin.register(Contract)
+class ContractAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_live', 'job_list', 'member_count', 'created_at')
+    list_filter = ('is_live', 'jobs')
+    list_editable = ('is_live',)
+    search_fields = ('name', 'slug')
+    prepopulated_fields = {'slug': ('name',)}
+    filter_horizontal = ('jobs',)
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [ContractMembershipInline, ContractBundleInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('jobs', 'memberships')
+
+    @admin.display(description='Jobs')
+    def job_list(self, obj):
+        return ', '.join(j.name for j in obj.jobs.all()) or '-'
+
+    @admin.display(description='Members')
+    def member_count(self, obj):
+        return len(obj.memberships.all())
+
+
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):
+    list_display = ('name', 'discipline', 'is_fallback', 'display_order')
+    list_filter = ('discipline', 'is_fallback')
+    search_fields = ('name', 'slug')
+    ordering = ('discipline', 'display_order')
+    readonly_fields = ('created_at',)

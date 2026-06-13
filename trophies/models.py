@@ -1212,6 +1212,20 @@ class Concept(models.Model):
                 bundle.concepts.add(self)
             bundle.concepts.remove(other)
 
+        # ContractMembership (OneToOne home Contract for job XP): re-point other's
+        # membership to the survivor if the survivor has none. If the survivor already
+        # has a home Contract, other's cascade-deletes with it (a concept has ONE home).
+        other_membership = ContractMembership.objects.filter(concept=other).first()
+        if other_membership and not ContractMembership.objects.filter(concept=self).exists():
+            other_membership.concept = self
+            other_membership.save(update_fields=['concept'])
+
+        # ContractBundle satisfier membership (per-bundle M2M): move other's links to self.
+        for cbundle in other.contract_bundles.all():
+            if not cbundle.concepts.filter(pk=self.pk).exists():
+                cbundle.concepts.add(self)
+            cbundle.concepts.remove(other)
+
         # GameFamilyProposal M2M removed — proposal model deleted in Phase 2.6.
 
         # Genre challenge slots
@@ -2359,6 +2373,93 @@ class StageStatValue(models.Model):
             4: self.platinum_value,
         }
         return tier_map.get(tier, 0)
+
+
+class Job(models.Model):
+    """A gamification specialization (e.g. Gunslinger, Mage), auto-suggested from a
+    Contract's IGDB genres/themes and confirmed by staff. The 24 specializations +
+    the Freelancer fallback are seeded; each belongs to one of 5 disciplines (the
+    radar axes). See docs/design/rebuild/job-board-contracts.md."""
+    DISCIPLINES = [
+        ('combat', 'Combat'),
+        ('exploration', 'Exploration'),
+        ('mind', 'Mind'),
+        ('heart', 'Heart'),
+        ('finesse', 'Finesse'),
+    ]
+    slug = models.SlugField(max_length=50, unique=True, primary_key=True)
+    name = models.CharField(max_length=50)
+    discipline = models.CharField(max_length=20, choices=DISCIPLINES, db_index=True)
+    description = models.TextField(blank=True)
+    # icon/color are populated in the visual-design pass (same convention as StatType).
+    icon = models.CharField(max_length=50, blank=True, default='')
+    color = models.CharField(max_length=20, blank=True, default='', help_text='Hex color for UI theming (set in the visual pass).')
+    is_fallback = models.BooleanField(default=False, help_text='True only for Freelancer (the no-specialization catch-all).')
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['discipline', 'display_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class Contract(models.Model):
+    """A curated Job Board entry: a game (one or more grouped Concepts) that grants job
+    XP once per user. Decoupled from badges -- a Concept can be in many badges but has at
+    most ONE Contract. See docs/design/rebuild/job-board-contracts.md."""
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, unique=True)
+    is_live = models.BooleanField(default=False, help_text='Visible/active to users. Curate while False.')
+    jobs = models.ManyToManyField(
+        Job, related_name='contracts', blank=True,
+        help_text='The job profile -- job XP splits evenly across these jobs.',
+    )
+    xp_total_override = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='Override the global base XP total for this Contract (special cases only).',
+    )
+    notes = models.TextField(blank=True, help_text='Staff curation notes.')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class ContractMembership(models.Model):
+    """Links a Concept to its home Contract. The OneToOne on `concept` enforces the core
+    invariant -- each Concept belongs to AT MOST ONE Contract -- which guarantees job XP is
+    earned once per game. Collection 'satisfier' concepts live in ContractBundle, not here."""
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='memberships')
+    concept = models.OneToOneField('Concept', on_delete=models.CASCADE, related_name='contract_membership')
+
+    class Meta:
+        ordering = ['contract']
+
+    def __str__(self):
+        return f"{self.concept} -> {self.contract}"
+
+
+class ContractBundle(models.Model):
+    """A grouped set of Concepts that satisfy a Contract as one qualifier -- mirrors
+    ConceptBundle on badge Stages. For the collection-spanning case (a collection list
+    that covers games which also have their own lists). A satisfier concept may appear in
+    several bundles across Contracts, so it is EXEMPT from the membership-unique rule."""
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='bundles')
+    label = models.CharField(max_length=120, help_text="Display label, e.g. 'Collection list covers this game'.")
+    concepts = models.ManyToManyField('Concept', related_name='contract_bundles')
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order']
+
+    def __str__(self):
+        return f"{self.contract} bundle: {self.label}"
 
 
 class Stage(models.Model):
