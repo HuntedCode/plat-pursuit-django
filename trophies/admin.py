@@ -1507,6 +1507,52 @@ class StageAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ['concepts']
     inlines = [ConceptBundleInline]
+    actions = ['convert_to_contract']
+
+    @admin.action(description="Convert to Contract (copy concepts + bundles, suggest jobs)")
+    def convert_to_contract(self, request, queryset):
+        """Spin up a draft Contract per selected stage: copy the stage's concepts as
+        memberships (skipping any already homed in another Contract), copy its
+        ConceptBundles, and auto-suggest jobs. A one-click stage -> Job Board draft."""
+        from django.db import transaction
+        from django.utils.text import slugify
+        from trophies.models import Contract, ContractMembership, ContractBundle, Job
+        from trophies.services.job_detection import suggest_jobs_for_contract
+
+        created = 0
+        skipped_homed = []
+        for stage in queryset:
+            with transaction.atomic():
+                name = stage.title or f"{stage.series_slug} (stage {stage.stage_number})"
+                base = slugify(name) or f"contract-stage-{stage.id}"
+                slug, n = base, 2
+                while Contract.objects.filter(slug=slug).exists():
+                    slug, n = f"{base}-{n}", n + 1
+                contract = Contract.objects.create(name=name, slug=slug)
+
+                for concept in stage.concepts.all():
+                    if ContractMembership.objects.filter(concept=concept).exists():
+                        skipped_homed.append(str(concept))
+                        continue
+                    ContractMembership.objects.create(contract=contract, concept=concept)
+
+                for bundle in stage.concept_bundles.all():
+                    cb = ContractBundle.objects.create(
+                        contract=contract, label=bundle.label, sort_order=bundle.sort_order,
+                    )
+                    cb.concepts.set(bundle.concepts.all())
+
+                slugs = suggest_jobs_for_contract(contract)
+                if slugs:
+                    contract.jobs.set(Job.objects.filter(slug__in=slugs))
+                created += 1
+
+        msg = f"Created {created} Contract(s)."
+        if skipped_homed:
+            shown = ', '.join(skipped_homed[:10])
+            extra = f" (+{len(skipped_homed) - 10} more)" if len(skipped_homed) > 10 else ''
+            msg += f" Skipped {len(skipped_homed)} already-homed concept(s): {shown}{extra}"
+        self.message_user(request, msg)
 
     # Cap how many concepts we list per column on the changelist; rows
     # with more than this many qualifiers show "+N more" to keep the cell
@@ -4790,6 +4836,7 @@ class ContractAdmin(admin.ModelAdmin):
     filter_horizontal = ('jobs',)
     readonly_fields = ('created_at', 'updated_at')
     inlines = [ContractMembershipInline, ContractBundleInline]
+    actions = ['suggest_jobs']
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related('jobs', 'memberships')
@@ -4801,6 +4848,22 @@ class ContractAdmin(admin.ModelAdmin):
     @admin.display(description='Members')
     def member_count(self, obj):
         return len(obj.memberships.all())
+
+    @admin.action(description="Suggest jobs from IGDB genres/themes (replaces current)")
+    def suggest_jobs(self, request, queryset):
+        from trophies.services.job_detection import suggest_jobs_for_contract
+        updated = skipped = 0
+        for contract in queryset:
+            if not contract.memberships.exists() and not contract.bundles.exists():
+                skipped += 1
+                continue
+            slugs = suggest_jobs_for_contract(contract)
+            contract.jobs.set(Job.objects.filter(slug__in=slugs))
+            updated += 1
+        msg = f"Suggested jobs for {updated} contract(s)."
+        if skipped:
+            msg += f" Skipped {skipped} with no concepts."
+        self.message_user(request, msg)
 
 
 @admin.register(Job)
