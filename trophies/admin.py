@@ -1516,7 +1516,6 @@ class StageAdmin(admin.ModelAdmin):
         ConceptBundles, and auto-suggest jobs. A one-click stage -> Job Board draft."""
         from django.db import transaction
         from django.utils.text import slugify
-        from trophies.models import Contract, ContractMembership, ContractBundle, Job
         from trophies.services.job_detection import suggest_jobs_for_contract
 
         created = 0
