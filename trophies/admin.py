@@ -4723,10 +4723,33 @@ admin.site.get_app_list = _platpursuit_get_app_list
 
 # --- Gamification: Job Board & Contracts ---
 
+class ContractMembershipForm(forms.ModelForm):
+    """Surfaces the one-home-Contract rule as a clean admin error instead of a raw
+    IntegrityError 500 when a curator re-homes an already-homed Concept."""
+    class Meta:
+        model = ContractMembership
+        fields = '__all__'
+
+    def clean_concept(self):
+        concept = self.cleaned_data.get('concept')
+        if concept:
+            clash = ContractMembership.objects.filter(concept=concept)
+            if self.instance.pk:
+                clash = clash.exclude(pk=self.instance.pk)
+            other = clash.select_related('contract').first()
+            if other:
+                raise forms.ValidationError(
+                    f"'{concept}' already belongs to Contract '{other.contract}'. "
+                    f"A game can have only one home Contract."
+                )
+        return concept
+
+
 class ContractMembershipInline(admin.TabularInline):
     """A Contract's home Concepts. Each Concept has at most one Contract (the OneToOne
-    enforces it in the DB) -- adding a Concept already homed elsewhere will error."""
+    enforces it in the DB; the form gives curators a clean error if they re-home one)."""
     model = ContractMembership
+    form = ContractMembershipForm
     extra = 0
     autocomplete_fields = ('concept',)
 

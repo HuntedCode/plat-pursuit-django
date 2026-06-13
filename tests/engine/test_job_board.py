@@ -74,3 +74,31 @@ def test_absorb_migrates_bundle_membership():
 
     assert bundle.concepts.filter(pk=survivor.pk).exists()
     assert not bundle.concepts.filter(pk=absorbed.pk).exists()
+
+
+def test_absorb_bundle_dedups_when_survivor_already_satisfier():
+    # Both already in the bundle -> survivor stays once, absorbed removed (no dup).
+    survivor, absorbed = ConceptFactory(), ConceptFactory()
+    bundle = ContractBundle.objects.create(
+        contract=Contract.objects.create(name='C', slug='c'), label='collection',
+    )
+    bundle.concepts.add(survivor, absorbed)
+
+    survivor.absorb(absorbed)
+
+    assert list(bundle.concepts.values_list('pk', flat=True)) == [survivor.pk]
+
+
+# --- admin validation (friendly re-home error) ---
+
+def test_membership_form_rejects_rehoming_a_concept():
+    from trophies.admin import ContractMembershipForm
+    concept = ConceptFactory()
+    home = Contract.objects.create(name='Home', slug='home')
+    other = Contract.objects.create(name='Other', slug='other')
+    ContractMembership.objects.create(contract=home, concept=concept)
+
+    form = ContractMembershipForm(data={'contract': other.pk, 'concept': concept.pk})
+
+    assert not form.is_valid()
+    assert 'already belongs' in str(form.errors)
