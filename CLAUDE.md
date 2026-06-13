@@ -101,6 +101,8 @@ Currently handled by `absorb()`:
 - Badge.most_recent_concept
 - Stage.concepts (M2M)
 - ConceptBundle.concepts (M2M, per-bundle membership; skips duplicates so target's existing bundle membership isn't disturbed)
+- ContractMembership.concept (OneToOne home Contract for job XP: re-point `other`'s to the survivor only if the survivor has none — a concept has ONE home Contract; otherwise `other`'s cascade-deletes)
+- ContractBundle.concepts (M2M satisfier membership, same dedup pattern as ConceptBundle)
 - StageCompletionEvent.concept (FK, SET_NULL)
 - ConceptJoinReview.proposed_concept (FK, SET_NULL — re-pointed to the survivor. The `game` OneToOne needs no branch: games move out before absorb runs and each `join_review` travels with its Game)
 - ConceptSplitEvent.parent_concept (FK) + .child_concepts (M2M)

@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractMembership, ContractBundle
 
 
 # Register your models here.
@@ -4719,3 +4719,53 @@ def _platpursuit_get_app_list(request, app_label=None):
 
 
 admin.site.get_app_list = _platpursuit_get_app_list
+
+
+# --- Gamification: Job Board & Contracts ---
+
+class ContractMembershipInline(admin.TabularInline):
+    """A Contract's home Concepts. Each Concept has at most one Contract (the OneToOne
+    enforces it in the DB) -- adding a Concept already homed elsewhere will error."""
+    model = ContractMembership
+    extra = 0
+    autocomplete_fields = ('concept',)
+
+
+class ContractBundleInline(admin.TabularInline):
+    """Collection-spanning satisfier groups (mirrors ConceptBundle on Stages)."""
+    model = ContractBundle
+    extra = 0
+    fields = ('label', 'concepts', 'sort_order')
+    autocomplete_fields = ('concepts',)
+
+
+@admin.register(Contract)
+class ContractAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_live', 'job_list', 'member_count', 'created_at')
+    list_filter = ('is_live', 'jobs')
+    list_editable = ('is_live',)
+    search_fields = ('name', 'slug')
+    prepopulated_fields = {'slug': ('name',)}
+    filter_horizontal = ('jobs',)
+    readonly_fields = ('created_at', 'updated_at')
+    inlines = [ContractMembershipInline, ContractBundleInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('jobs', 'memberships')
+
+    @admin.display(description='Jobs')
+    def job_list(self, obj):
+        return ', '.join(j.name for j in obj.jobs.all()) or '-'
+
+    @admin.display(description='Members')
+    def member_count(self, obj):
+        return len(obj.memberships.all())
+
+
+@admin.register(Job)
+class JobAdmin(admin.ModelAdmin):
+    list_display = ('name', 'discipline', 'is_fallback', 'display_order')
+    list_filter = ('discipline', 'is_fallback')
+    search_fields = ('name', 'slug')
+    ordering = ('discipline', 'display_order')
+    readonly_fields = ('created_at',)
