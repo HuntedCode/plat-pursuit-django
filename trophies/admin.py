@@ -4665,6 +4665,11 @@ _ROADMAP_ADMIN_OBJECT_NAMES = frozenset({
     'RoadmapNote', 'RoadmapNoteRead',
 })
 
+_GAMIFICATION_ADMIN_OBJECT_NAMES = frozenset({
+    'Contract', 'Job',                                    # Job Board curation
+    'ProfileGamification', 'StatType', 'StageStatValue',  # XP stats + scaffolding
+})
+
 _original_get_app_list = admin.site.get_app_list
 
 
@@ -4674,6 +4679,7 @@ def _platpursuit_get_app_list(request, app_label=None):
     Trophies gets carved into:
       - "Roadmap System": authoring + lock/session + history models
       - "IGDB & Enrichment": matching + normalized metadata models
+      - "Gamification": Job Board curation (Contract, Job) + XP stats
       - "Trophies": everything else
     Other apps are passed through unchanged. Internally all these models
     still belong to the `trophies` app_label — we only reshape the index
@@ -4687,10 +4693,12 @@ def _platpursuit_get_app_list(request, app_label=None):
             continue
         roadmap_models = [m for m in app['models'] if m['object_name'] in _ROADMAP_ADMIN_OBJECT_NAMES]
         igdb_models = [m for m in app['models'] if m['object_name'] in _IGDB_ADMIN_OBJECT_NAMES]
+        gamification_models = [m for m in app['models'] if m['object_name'] in _GAMIFICATION_ADMIN_OBJECT_NAMES]
         other_models = [
             m for m in app['models']
             if m['object_name'] not in _ROADMAP_ADMIN_OBJECT_NAMES
             and m['object_name'] not in _IGDB_ADMIN_OBJECT_NAMES
+            and m['object_name'] not in _GAMIFICATION_ADMIN_OBJECT_NAMES
         ]
         if roadmap_models:
             # Order roadmap models semantically: authoring → lock → history.
@@ -4712,6 +4720,16 @@ def _platpursuit_get_app_list(request, app_label=None):
                 **app,
                 'name': 'IGDB & Enrichment',
                 'models': igdb_models,
+            })
+        if gamification_models:
+            # Curation models first (Contract, Job), then the XP stats.
+            gam_order = ['Contract', 'Job', 'ProfileGamification', 'StatType', 'StageStatValue']
+            gam_idx = {name: i for i, name in enumerate(gam_order)}
+            gamification_models.sort(key=lambda m: gam_idx.get(m['object_name'], 99))
+            result.append({
+                **app,
+                'name': 'Gamification',
+                'models': gamification_models,
             })
         if other_models:
             result.append({**app, 'models': other_models})
