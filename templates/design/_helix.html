@@ -1,0 +1,11 @@
+{% comment %}
+Platinum DNA helix: two neutral backbone strands + rungs, with the element rungs
+highlighted as colored nodes (in sequence). Expects `helix`: {w, h, strandA, strandB,
+rungs:[{y,xA,xB,cx,element,symbol,disc_slug}]}.
+{% endcomment %}
+<svg class="helix" viewBox="0 0 {{ helix.w }} {{ helix.h }}" role="img" aria-label="Platinum DNA">
+    <polyline class="helix__strand" points="{% for p in helix.strandA %}{{ p.0 }},{{ p.1 }} {% endfor %}" />
+    <polyline class="helix__strand" points="{% for p in helix.strandB %}{{ p.0 }},{{ p.1 }} {% endfor %}" />
+    {% for r in helix.rungs %}<line class="helix__rung" x1="{{ r.xA }}" y1="{{ r.y }}" x2="{{ r.xB }}" y2="{{ r.y }}" />{% endfor %}
+    {% for r in helix.rungs %}{% if r.element %}<g style="--disc: var(--disc-{{ r.disc_slug }});"><circle class="helix__node" cx="{{ r.cx }}" cy="{{ r.y }}" r="11.5" /><text class="helix__sym" x="{{ r.cx }}" y="{{ r.y }}">{{ r.symbol }}</text></g>{% endif %}{% endfor %}
+</svg>

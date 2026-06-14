@@ -1,0 +1,14 @@
+{% comment %}
+Tiny compound fragment for a card corner: this element's atom (its shape) bonded
+to two neutral atoms, previewing how it reads inside a Compound. Inherits --disc.
+Expects `shape`. Decorative teaser of the Compound generator.
+{% endcomment %}
+<svg class="cprev" viewBox="0 0 84 60" aria-hidden="true">
+    <line class="cprev__bond" x1="42" y1="30" x2="14" y2="14" />
+    <line class="cprev__bond" x1="42" y1="30" x2="70" y2="46" />
+    <circle class="cprev__sat" cx="14" cy="14" r="7" />
+    <circle class="cprev__sat" cx="70" cy="46" r="7" />
+    <svg x="27" y="15" width="30" height="30" viewBox="0 0 100 100" class="cprev__core">
+        {% include 'design/_atom_shape.html' %}
+    </svg>
+</svg>

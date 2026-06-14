@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, PursuerCardPreviewView, PursuerCardCustomizationPreviewView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, PursuerCardPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap, RoadmapSitemap,
@@ -377,6 +377,9 @@ urlpatterns = [
     path('design/pursuer-card/', PursuerCardPreviewView.as_view(), name='design_pursuer_card_preview'),
     path('design/pursuer-card-customization/', PursuerCardCustomizationPreviewView.as_view(), name='design_pursuer_card_customization_preview'),
     path('design/style-guide/', TemplateView.as_view(template_name='design/style_guide_preview.html'), name='design_style_guide_preview'),
+    path('design/jobs/', JobsWorkshopView.as_view(), name='design_jobs_preview'),
+    path('design/lab/', LabWorkshopView.as_view(), name='design_lab_preview'),
+    path('design/research-panel/', ResearchPanelView.as_view(), name='design_research_panel_preview'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

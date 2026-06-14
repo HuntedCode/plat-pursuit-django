@@ -1,0 +1,24 @@
+{% comment %}
+Element card (detail / expanded view) -- vertical layout so five fit on a family
+row. Crest (atom shape) + corner compound preview up top, name/number/flavor below,
+XP readout at the bottom, over a ghosted symbol watermark. Expects `card`: a dict
+with number, name, disc_slug, shape, symbol, level, progress (0-100), xp_current,
+xp_next, description, and state ('locked' | 'active' | 'mastered'). Sets --disc.
+{% endcomment %}
+<div class="ecard ecard--{{ card.state }}" style="--disc: var(--disc-{{ card.disc_slug }});">
+    <div class="ecard__top">
+        <span class="ecard__crest">
+            <span class="ecard__atom">{% include 'design/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
+            <span class="ecard__lv">{% if card.state == 'locked' %}Locked{% elif card.state == 'mastered' %}MAX{% else %}Lv {{ card.level }}{% endif %}</span>
+        </span>
+        <span class="ecard__cprev">{% include 'design/_spectrum.html' with spectrum=card.spectrum %}</span>
+    </div>
+    <div class="ecard__name">{{ card.name }}</div>
+    <div class="ecard__no">No. {{ card.number }}</div>
+    {% if card.description %}<div class="ecard__desc">{{ card.description }}</div>{% endif %}
+    <div class="ecard__xp">
+        <div class="ecard__xp-cap">{% if card.state == 'mastered' %}Mastered{% elif card.state == 'locked' %}Not started{% else %}{{ card.progress }}% to Lv {{ card.level|add:1 }}{% endif %}</div>
+        <div class="ecard__bar"><div class="ecard__fill" style="width: {{ card.progress }}%;"></div></div>
+        {% if card.state != 'mastered' %}<div class="ecard__xp-nums">{{ card.xp_current }} / {{ card.xp_next }} XP</div>{% endif %}
+    </div>
+</div>

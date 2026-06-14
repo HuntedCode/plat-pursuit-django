@@ -1,0 +1,10 @@
+{% comment %}
+Minimal "printed" Compound: flat line-art for list contexts (the Research Panel).
+Hollow family-outlined atoms (reusing _atom.html) + thin bonds, no glow/gradient/
+substrate. Same `compound` data as the heavy version; no gradient ids needed.
+{% endcomment %}
+<svg class="compound-min" viewBox="0 0 200 200" role="img" aria-label="Compound">
+    {% for b in compound.bonds %}{% for l in b.lines %}<line class="compound-min__bond" x1="{{ l.x1 }}" y1="{{ l.y1 }}" x2="{{ l.x2 }}" y2="{{ l.y2 }}" />{% endfor %}{% endfor %}
+    {% for s in compound.scaffold %}<circle class="compound-min__scaf" cx="{{ s.cx }}" cy="{{ s.cy }}" r="{{ s.r }}" />{% endfor %}
+    {% for a in compound.atoms %}<svg x="{{ a.x0 }}" y="{{ a.y0 }}" width="{{ a.size }}" height="{{ a.size }}" viewBox="0 0 100 100" style="--disc: var(--disc-{{ a.disc_slug }});">{% include 'design/_atom.html' with shape=a.shape symbol=a.symbol %}</svg>{% endfor %}
+</svg>

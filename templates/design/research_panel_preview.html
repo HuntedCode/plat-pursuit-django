@@ -1,0 +1,140 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Research Panel · PlatPursuit</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <style>
+    /* ================================================================
+     * RESEARCH PANEL  (/design/research-panel/)
+     * A scannable LIST of Projects (user-facing skin for curated Contracts).
+     * Each row leads with the game (cover + title), then a clear "you level
+     * these elements" + the fixed XP reward. The spectral fingerprint is a
+     * small accent strip, not the focal point. Reuses element components.
+     * ================================================================ */
+
+    :root {
+        --disc-combat:      oklch(0.68 0.20 25);
+        --disc-exploration: oklch(0.78 0.15 155);
+        --disc-mind:        oklch(0.72 0.16 285);
+        --disc-heart:       oklch(0.72 0.19 0);
+        --disc-finesse:     oklch(0.82 0.15 75);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(1200px 600px at 50% -10%, oklch(0.23 0.03 285 / 0.45), transparent 60%), var(--pp-bg-0); color: var(--pp-text); font-family: var(--pp-font-body, "Inter", system-ui, sans-serif); -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; }
+    h1 { font-family: var(--pp-font-display, system-ui); font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .lede { color: var(--pp-text-dim); max-width: 64ch; line-height: 1.55; margin: 0 0 8px; }
+    .note { color: var(--pp-text-mute); font-size: 13px; max-width: 70ch; line-height: 1.5; }
+    section { margin-top: 44px; }
+    .eyebrow { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-primary); margin-bottom: 14px; }
+    h2 { font-family: var(--pp-font-display, system-ui); font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+
+    /* spectrum + atom (reused) */
+    .spectrum { display: block; width: 100%; height: auto; border-radius: var(--pp-radius-sm); overflow: hidden; }
+    .spectrum__bg { fill: #05070b; }
+    .spectrum__line { stroke: var(--lc); stroke-width: 2.4; filter: drop-shadow(0 0 3px var(--lc)); }
+    .atom { display: block; width: 100%; height: 100%; overflow: visible; }
+    .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); stroke: color-mix(in oklab, var(--disc) 55%, transparent); stroke-width: 2.5; }
+    .atom__sym { fill: var(--disc); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 36px; text-anchor: middle; dominant-baseline: central; }
+
+    /* filter bar */
+    .rp-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
+    .rp-chip:hover { color: var(--pp-text); }
+    .rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+
+    /* project list rows */
+    .rp-list { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+    .rp-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 13px 16px; border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+    .rp-row:hover { border-color: var(--pp-text-mute); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25); }
+    .rp-row__cover { width: 56px; height: 56px; border-radius: var(--pp-radius-md); overflow: hidden; background: var(--pp-bg-2); display: grid; place-items: center; flex: none; }
+    .rp-row__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+    .rp-row__cover-ph { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 22px; color: var(--pp-text-mute); }
+    .rp-row__main { min-width: 0; }
+    .rp-row__titlerow { display: flex; align-items: center; gap: 10px; }
+    .rp-row__title { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 15px; line-height: 1.2; }
+    .rp-row__status { flex: none; font-size: 9px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; border-radius: 999px; padding: 3px 8px; border: 1px solid; }
+    .rp-row__status--available { color: var(--pp-text-mute); border-color: var(--pp-border); }
+    .rp-row__status--pursuing { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 55%, transparent); background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
+    .rp-row__status--completed { color: var(--pp-success); border-color: color-mix(in oklab, var(--pp-success) 55%, transparent); background: color-mix(in oklab, var(--pp-success) 12%, transparent); }
+    .rp-row__levels { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; margin-top: 8px; }
+    .rp-row__levels-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--pp-text-mute); }
+    .rp-el { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--pp-text-dim); }
+    .rp-el__chip { width: 19px; height: 19px; flex: none; }
+    .rp-row__spectrum { margin-top: 9px; max-width: 260px; }
+    .rp-row__spectrum .spectrum { height: 11px; box-shadow: inset 0 0 0 1px var(--pp-divider); }
+    .rp-row__actions { display: flex; flex-direction: column; align-items: flex-end; gap: 9px; flex: none; text-align: right; }
+    .rp-row__xp { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 16px; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+    .rp-row__xp-sub { font-size: 11px; color: var(--pp-text-mute); }
+    .pjbtn { font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; border-radius: var(--pp-radius-md); padding: 8px 18px; border: 1px solid; transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease; white-space: nowrap; }
+    .pjbtn--available { color: var(--pp-bg-0); background: var(--pp-primary); border-color: var(--pp-primary); }
+    .pjbtn--available:hover { box-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+    .pjbtn--pursuing { color: var(--pp-primary); background: transparent; border-color: var(--pp-primary); }
+    .pjbtn--completed { color: var(--pp-success); background: transparent; border-color: color-mix(in oklab, var(--pp-success) 50%, transparent); cursor: default; }
+
+    @media (max-width: 620px) {
+        .rp-row { grid-template-columns: 48px 1fr; }
+        .rp-row__actions { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; text-align: left; border-top: 1px solid var(--pp-divider); padding-top: 11px; }
+    }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Research Panel</h1>
+    <p class="lede">The bench where <strong>Projects</strong> are posted — each a curated game whose
+    elements you level by completing it. Every Project pays the same total,
+    <strong>{{ t_total }} XP</strong>, split evenly among its elements.</p>
+
+    <section>
+        <span class="eyebrow">Projects</span>
+        <h2>On the bench</h2>
+        <div class="rp-filter">
+            <button type="button" class="rp-chip is-active" data-filter="all">All</button>
+            <button type="button" class="rp-chip" data-filter="available">Available</button>
+            <button type="button" class="rp-chip" data-filter="pursuing">Pursuing</button>
+            <button type="button" class="rp-chip" data-filter="completed">Completed</button>
+        </div>
+        <div class="rp-list" id="sample-list">
+            {% for p in projects %}{% include 'design/_project_row.html' with p=p %}{% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Live — from your dev Contracts</span>
+        <h2>Real Projects</h2>
+        <p class="note">Generated from the actual Contracts on this server — the game's cover + title
+        come from the Contract's Concept; the elements are its assigned jobs.</p>
+        {% if contracts %}
+        <div class="rp-list">
+            {% for p in contracts %}{% include 'design/_project_row.html' with p=p %}{% endfor %}
+        </div>
+        {% else %}
+        <p class="note" style="color: var(--pp-text-mute); border: 1px dashed var(--pp-border); border-radius: var(--pp-radius-md); padding: 20px; text-align: center;">
+            No Contracts with assigned jobs on this server yet. Create one in admin (assign it jobs), then refresh.
+        </p>
+        {% endif %}
+    </section>
+</div>
+
+<script>
+(function () {
+    var bar = document.querySelector('.rp-filter');
+    if (!bar) return;
+    var rows = document.querySelectorAll('#sample-list .rp-row');
+    bar.querySelectorAll('.rp-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            bar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
+            chip.classList.add('is-active');
+            var f = chip.dataset.filter;
+            rows.forEach(function (row) {
+                row.style.display = (f === 'all' || row.dataset.status === f) ? '' : 'none';
+            });
+        });
+    });
+})();
+</script>
+</body>
+</html>

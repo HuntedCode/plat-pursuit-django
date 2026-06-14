@@ -1,0 +1,594 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jobs Workshop · PlatPursuit</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
+    <style>
+    /* ================================================================
+     * JOBS WORKSHOP  (/design/jobs/)
+     * Visual pass at the gamification Jobs system: the 5 disciplines
+     * (radar axes), their colors, the nested per-discipline radars, and
+     * the per-job card. Grounded in the visual identity -- premium slate
+     * substrate, one luminous accent per element, glow reserved for the
+     * "earned/active" state. Icons are placeholders (monograms) this pass.
+     * ================================================================ */
+
+    :root {
+        /* Discipline accents -- proposal v1. Five well-separated hues at a
+         * shared lightness/chroma so they read as one cohesive luminous set
+         * on the dark substrate (not a generic rainbow dashboard). */
+        --disc-combat:      oklch(0.68 0.20 25);   /* red    -- you fight */
+        --disc-exploration: oklch(0.78 0.15 155);  /* green  -- you discover */
+        --disc-mind:        oklch(0.72 0.16 285);  /* violet -- you outwit */
+        --disc-heart:       oklch(0.72 0.19 0);    /* rose   -- you feel */
+        --disc-finesse:     oklch(0.82 0.15 75);   /* amber  -- you perform */
+    }
+
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background:
+            radial-gradient(1200px 600px at 50% -10%, oklch(0.23 0.03 285 / 0.45), transparent 60%),
+            var(--pp-bg-0);
+        color: var(--pp-text);
+        font-family: var(--pp-font-body, "Inter", system-ui, sans-serif);
+        -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 48px 24px 96px; }
+
+    h1 {
+        font-family: var(--pp-font-display, system-ui);
+        font-size: clamp(28px, 4vw, 44px); font-weight: 800;
+        letter-spacing: -0.02em; margin: 0 0 8px;
+    }
+    .lede { color: var(--pp-text-dim); max-width: 64ch; line-height: 1.55; margin: 0 0 8px; }
+    .note { color: var(--pp-text-mute); font-size: 13px; max-width: 70ch; line-height: 1.5; }
+
+    section { margin-top: 56px; }
+    .eyebrow {
+        display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.18em;
+        text-transform: uppercase; color: var(--pp-primary); margin-bottom: 14px;
+    }
+    h2 { font-family: var(--pp-font-display, system-ui); font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+
+    /* ---- Discipline palette ---- */
+    .palette { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: 20px; }
+    @media (max-width: 760px) { .palette { grid-template-columns: repeat(2, 1fr); } }
+    .swatch {
+        border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg);
+        background: var(--pp-bg-1); overflow: hidden;
+    }
+    .swatch__chip { height: 88px; background: var(--disc); position: relative; }
+    .swatch__chip::after {
+        content: ""; position: absolute; inset: 0;
+        background: radial-gradient(120px 60px at 50% 120%, var(--disc), transparent 70%);
+        opacity: 0.5;
+    }
+    .swatch__body { padding: 12px 14px 16px; }
+    .swatch__name { font-weight: 700; font-size: 15px; }
+    .swatch__tag { color: var(--pp-text-mute); font-size: 12px; margin-top: 2px; }
+
+    /* ---- Radar (overview + per-discipline drill-down on one stage) ---- */
+    .radar-card {
+        border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg);
+        background: var(--pp-bg-1); padding: 24px 28px 30px; margin-top: 20px;
+    }
+    .radar-tabs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
+    .radar-tab {
+        font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+        color: var(--pp-text-dim); background: var(--pp-bg-2);
+        border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px;
+        transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .radar-tab[data-mode="overview"] { --disc: var(--pp-primary); }
+    .radar-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc) 60%, var(--pp-border)); }
+    .radar-tab.is-active {
+        color: var(--disc); border-color: var(--disc);
+        background: color-mix(in oklab, var(--disc) 14%, var(--pp-bg-2));
+        box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 30%, transparent);
+    }
+    .radar-body { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: 40px; align-items: center; }
+    @media (max-width: 780px) { .radar-body { grid-template-columns: 1fr; gap: 28px; } }
+    .radar-stage { display: grid; place-items: center; }
+    .radar-stage canvas { max-width: 440px; width: 100%; height: auto; }
+    .radar-detail__title { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 16px; }
+    .rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 12px 0; }
+    .rd-row__label { font-size: 13px; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rd-row__bar { display: block; height: 8px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+    .rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+    .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ---- Jobs by discipline ---- */
+    .disc-group { margin-top: 40px; }
+    .disc-group__head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+    .disc-group__bar { width: 28px; height: 4px; border-radius: 2px; background: var(--disc); box-shadow: 0 0 12px var(--disc); }
+    .disc-group__name { font-weight: 700; font-size: 17px; }
+    .disc-group__tagline { color: var(--pp-text-mute); font-size: 13px; }
+
+    .jobs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+    @media (max-width: 900px) { .jobs { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 560px) { .jobs { grid-template-columns: repeat(2, 1fr); } }
+
+    /* Element tile -- one periodic-cell silhouette for every family; color + symbol differentiate */
+    .job {
+        position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1));
+        border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        display: flex; flex-direction: column;
+    }
+    .job:hover {
+        transform: translateY(-2px);
+        border-color: color-mix(in oklab, var(--disc) 75%, transparent);
+        box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent);
+    }
+    .job__top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .job__no { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; color: color-mix(in oklab, var(--disc) 65%, var(--pp-text-mute)); }
+    .job__mark { width: 27px; height: 27px; flex: none; }
+    .job__lvbox { text-align: center; margin: 9px 0 4px; }
+    .job__lv-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in oklab, var(--disc) 38%, transparent); }
+    .job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
+    .job__name { font-weight: 700; font-size: 13px; text-align: center; color: var(--pp-text); }
+    .job__foot { margin-top: auto; padding-top: 12px; }
+    .job__bar { height: 5px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+    .job__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+    .job__xp { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: center; font-variant-numeric: tabular-nums; }
+
+    /* ---- Element states (neon earned by state) ---- */
+    .job--locked { filter: grayscale(0.92); opacity: 0.5; }
+    .job--locked:hover { transform: none; box-shadow: none; border-color: color-mix(in oklab, var(--disc) 35%, transparent); }
+    .job--mastered {
+        border-color: color-mix(in oklab, var(--disc) 78%, transparent);
+        background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1));
+        animation: jobPulse 3.4s ease-in-out infinite;
+    }
+    .job--mastered .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
+    @keyframes jobPulse {
+        0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 35%, transparent), 0 6px 22px color-mix(in oklab, var(--disc) 16%, transparent); }
+        50%      { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 62%, transparent), 0 10px 34px color-mix(in oklab, var(--disc) 36%, transparent); }
+    }
+    /* States showcase row: three readable tiles, not the full 5-up grid */
+    .jobs--states { grid-template-columns: repeat(3, minmax(0, 190px)); justify-content: start; }
+    @media (max-width: 720px) { .jobs--states { grid-template-columns: 1fr; max-width: 260px; } }
+
+    /* ---- Element card (detail view) -- vertical so five fit per family row ---- */
+    .ecards { display: grid; gap: 14px; margin-top: 20px; }
+    .ecards--states { grid-template-columns: repeat(3, minmax(0, 210px)); justify-content: start; }
+    @media (max-width: 720px) { .ecards--states { grid-template-columns: 1fr; max-width: 280px; } }
+    .ecards--grid { grid-template-columns: repeat(5, 1fr); }
+    @media (max-width: 900px) { .ecards--grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 560px) { .ecards--grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .ecard {
+        position: relative; overflow: hidden; border-radius: var(--pp-radius-lg); padding: 14px;
+        background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1));
+        border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        display: flex; flex-direction: column;
+    }
+    .ecard:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 72%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 22%, transparent); }
+
+    /* Atom glyph (shared: card crest + compound preview + future Compound generator) */
+    .atom { display: block; width: 100%; height: 100%; overflow: visible; }
+    .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); stroke: color-mix(in oklab, var(--disc) 55%, transparent); stroke-width: 2.5; }
+    .atom__sym { fill: var(--disc); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 32px; text-anchor: middle; dominant-baseline: central; }
+    .cprev { display: block; width: 100%; height: 100%; }
+    .cprev__bond { stroke: color-mix(in oklab, var(--disc) 50%, var(--pp-text-mute)); stroke-width: 2.5; }
+    .cprev__sat { fill: var(--pp-bg-3); stroke: color-mix(in oklab, var(--disc) 35%, transparent); stroke-width: 2; }
+    /* Atoms render filled inside compounds (the generator will do the same) */
+    .cprev__core .atom__shape { fill: var(--disc); stroke: color-mix(in oklab, var(--disc) 75%, black); }
+
+    .ecard__top { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .ecard__crest { position: relative; flex: none; width: 44px; height: 44px; }
+    .ecard__atom { display: block; width: 44px; height: 44px; }
+    .ecard__lv {
+        position: absolute; bottom: -5px; right: -8px;
+        font-size: 9px; font-weight: 800; letter-spacing: 0.03em; line-height: 1;
+        color: var(--pp-bg-0); background: var(--disc);
+        border-radius: 999px; padding: 3px 7px; white-space: nowrap; box-shadow: 0 0 0 2px var(--pp-bg-1);
+    }
+    .ecard__cprev { position: relative; flex: none; width: 82px; opacity: 0.95; }
+    .ecard__name { position: relative; font-weight: 700; font-size: 15px; line-height: 1.15; margin-top: 12px; }
+    .ecard__no { position: relative; font-family: ui-monospace, monospace; font-size: 11px; color: var(--pp-text-mute); margin-top: 3px; }
+    .ecard__desc { position: relative; color: var(--pp-text-dim); font-size: 12px; line-height: 1.4; font-style: italic; margin-top: 8px; padding-right: 1px; }
+    .ecard__xp { position: relative; margin-top: auto; padding-top: 12px; }
+    .ecard__xp-cap { font-size: 11px; color: var(--pp-text-dim); margin-bottom: 5px; }
+    .ecard__bar { height: 6px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+    .ecard__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+    .ecard__xp-nums { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: right; font-variant-numeric: tabular-nums; }
+    .ecard--locked { filter: grayscale(0.92); opacity: 0.55; }
+    .ecard--mastered { border-color: color-mix(in oklab, var(--disc) 78%, transparent); animation: jobPulse 3.4s ease-in-out infinite; }
+    .ecard--mastered .atom__shape { fill: var(--disc); }
+    .ecard--mastered .atom__sym { fill: var(--pp-bg-0); }
+
+    /* ---- Compound generator ---- */
+    .compounds { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-top: 20px; }
+    .compound-card { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 16px; text-align: center; }
+    /* Inset blueprint substrate -- a dark gridded well so the molecule reads as a crafted readout */
+    .compound-stage {
+        display: grid; place-items: center; padding: 12px; border-radius: var(--pp-radius-md);
+        background:
+            radial-gradient(circle at 50% 44%, color-mix(in oklab, var(--pp-bg-2) 75%, transparent), transparent 70%),
+            repeating-linear-gradient(0deg, color-mix(in oklab, var(--pp-border) 28%, transparent) 0 1px, transparent 1px 17px),
+            repeating-linear-gradient(90deg, color-mix(in oklab, var(--pp-border) 28%, transparent) 0 1px, transparent 1px 17px),
+            var(--pp-bg-0);
+        box-shadow: inset 0 0 0 1px var(--pp-divider), inset 0 10px 26px rgba(0, 0, 0, 0.38);
+    }
+    .compound { display: block; width: 100%; max-width: 166px; height: auto; overflow: visible; }
+    .compound__bond { stroke: color-mix(in oklab, var(--pp-text-dim) 55%, var(--pp-bg-3)); stroke-width: 2.4; stroke-linecap: round; }
+    .cscaf { fill: var(--pp-bg-3); stroke: var(--pp-border); stroke-width: 2; }
+    /* Dimensional atoms: per-atom radial-gradient orb (set in the SVG) + family glow + bright rim */
+    .compound .catom { overflow: visible; filter: drop-shadow(0 0 5px color-mix(in oklab, var(--disc) 52%, transparent)); }
+    .catom__shape { stroke: color-mix(in oklab, var(--disc) 40%, white); stroke-width: 2; }
+    .catom__sym { fill: var(--pp-bg-0); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 30px; text-anchor: middle; dominant-baseline: central; }
+    .compound-name { font-weight: 700; font-size: 15px; margin-top: 14px; }
+    .compound-formula { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+    .formula-chip { display: inline-block; width: 28px; height: 28px; }
+    .formula-chip .atom__sym { font-size: 36px; }
+
+    /* ---- Printed (minimal) compound: flat line-art on the card paper ---- */
+    .pcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 20px; }
+    .pcard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 18px 16px; text-align: center; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+    .pcard:hover { border-color: var(--pp-text-mute); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
+    .pcard__stage { display: grid; place-items: center; min-height: 148px; }
+    .compound-min { display: block; width: 100%; max-width: 150px; height: auto; overflow: visible; }
+    .compound-min__bond { stroke: color-mix(in oklab, var(--pp-text-mute) 75%, transparent); stroke-width: 1.6; stroke-linecap: round; }
+    .compound-min__scaf { fill: var(--pp-bg-1); stroke: color-mix(in oklab, var(--pp-text-mute) 55%, transparent); stroke-width: 1.6; }
+    .compound-min .atom__shape { fill: var(--pp-bg-1); stroke: color-mix(in oklab, var(--disc) 62%, transparent); stroke-width: 2; }
+    .compound-min .atom__sym { fill: var(--disc); font-size: 29px; }
+    .pcard__name { font-weight: 700; font-size: 15px; margin-top: 12px; }
+
+    /* ---- Emission spectrum ---- */
+    .pcard__spectrum { margin-bottom: 4px; }
+    .spectrum { display: block; width: 100%; height: auto; border-radius: var(--pp-radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
+    .spectrum__bg { fill: #05070b; }
+    .spectrum__line { stroke: var(--lc); stroke-width: 2.4; filter: drop-shadow(0 0 3px var(--lc)); }
+
+    /* ---- DNA helix ---- */
+    .helices { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 20px; }
+    .hcard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 16px; text-align: center; }
+    .hcard__stage { display: grid; place-items: center; }
+    .helix { display: block; width: 100%; max-width: 120px; height: auto; overflow: visible; }
+    .helix__strand { fill: none; stroke: color-mix(in oklab, var(--pp-text-dim) 50%, var(--pp-bg-3)); stroke-width: 2.5; stroke-linecap: round; }
+    .helix__rung { stroke: color-mix(in oklab, var(--pp-text-mute) 45%, transparent); stroke-width: 1.5; }
+    .helix__node { fill: var(--disc); stroke: color-mix(in oklab, var(--disc) 45%, white); stroke-width: 1.5; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--disc) 55%, transparent)); }
+    .helix__sym { fill: var(--pp-bg-0); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 11px; text-anchor: middle; dominant-baseline: central; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Elements Workshop</h1>
+    <p class="lede">Visual pass at the gamification <strong>Elements</strong> system — the five
+    <strong>families</strong> that form the radar axes, their colors, the family radar drill-down,
+    and the two element formats (periodic tile + detail card). Grounded in the visual identity:
+    premium slate substrate, one luminous accent per element, glow reserved for the earned/active
+    state.</p>
+    <p class="note">Family colors, copy, and symbols are <em>proposals</em> — react and we iterate.</p>
+
+    <section>
+        <span class="eyebrow">Foundation</span>
+        <h2>The five families</h2>
+        <p class="note">Each family is a thing you <em>do</em>. Every element inherits its
+        family's hue; the radar plots them as axes.</p>
+        <div class="palette">
+            {% for d in disciplines %}
+            <div class="swatch" style="--disc: var(--disc-{{ d.slug }});">
+                <div class="swatch__chip"></div>
+                <div class="swatch__body">
+                    <div class="swatch__name">{{ d.label }}</div>
+                    <div class="swatch__tag">{{ d.tagline }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Centerpiece</span>
+        <h2>The radar</h2>
+        <p class="note">One radar that drills down. <strong>Overview</strong> plots your five
+        families ("what kind of hunter are you"); pick a family to zoom that same radar into its
+        five elements. This is how it'd live on a profile — one hero chart, not a wall of them.
+        Sample data.</p>
+        <div class="radar-card">
+            <div class="radar-tabs">
+                <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
+                {% for d in disciplines %}
+                <button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>
+                {% endfor %}
+            </div>
+            <div class="radar-body">
+                <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
+                <div class="radar-detail" id="radar-detail"></div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Format A — detail card</span>
+        <h2>The element card</h2>
+        <p class="note">The richer format for a detail / focus view: crest, name, atomic number,
+        flavor copy, full XP readout, and a ghosted symbol watermark. Neon is earned by state —
+        <strong>locked</strong> until you start it, glowing while <strong>active</strong>, pulsing
+        once <strong>mastered</strong>.</p>
+        <div class="ecards ecards--states">
+            {% for card in demo_states %}{% include 'design/_element_card.html' %}{% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Format B — periodic tile</span>
+        <h2>The element tile</h2>
+        <p class="note">The compact format that tiles into the table: atomic number, dominant symbol,
+        name, level, and a slim XP bar. Same three states.</p>
+        <div class="jobs jobs--states">
+            {% for card in demo_states %}{% include 'design/_job_card.html' %}{% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Catalog — detail cards</span>
+        <h2>All 25 element cards, by family</h2>
+        <p class="note">The full set in the detail format. Note how the crest shape cycles
+        circle → triangle → square → pentagon → hexagon across each family's five slots, and the
+        corner previews how each atom reads inside a Compound.</p>
+        {% for d in disciplines %}
+        <div class="disc-group" style="--disc: var(--disc-{{ d.slug }});">
+            <div class="disc-group__head">
+                <span class="disc-group__bar"></span>
+                <span class="disc-group__name">{{ d.label }}</span>
+                <span class="disc-group__tagline">{{ d.tagline }}</span>
+            </div>
+            <div class="ecards ecards--grid">
+                {% for job in d.jobs %}{% include 'design/_element_card.html' with card=job %}{% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <section>
+        <span class="eyebrow">Catalog — periodic tiles</span>
+        <h2>All 25 element tiles, by family</h2>
+        <p class="note">The same set in the compact tile format: atomic number, dominant symbol,
+        name, level, and a sample XP bar. One silhouette across all families; color and symbol carry
+        the identity. Hover a tile for its flavor line.</p>
+        {% for d in disciplines %}
+        <div class="disc-group" style="--disc: var(--disc-{{ d.slug }});">
+            <div class="disc-group__head">
+                <span class="disc-group__bar"></span>
+                <span class="disc-group__name">{{ d.label }}</span>
+                <span class="disc-group__tagline">{{ d.tagline }}</span>
+            </div>
+            <div class="jobs">
+                {% for job in d.jobs %}{% include 'design/_job_card.html' with card=job %}{% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <section>
+        <span class="eyebrow">The payoff</span>
+        <h2>Compound generator</h2>
+        <p class="note">Each <strong>Project</strong> synthesizes a <strong>Compound</strong> from its
+        elements — atoms bonded into a molecule that's deterministic (seeded by the project, so it's
+        stable) yet unique (shape depends on which elements, how many, and the seed). Color = family,
+        shape = element. Sample projects, one to five elements:</p>
+        <div class="compounds">
+            {% for p in projects %}
+            <div class="compound-card">
+                <div class="compound-stage">{% include 'design/_compound.html' with compound=p.compound cid=forloop.counter %}</div>
+                <div class="compound-name">{{ p.name }}</div>
+                <div class="compound-formula">
+                    {% for el in p.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Live — from your dev Contracts</span>
+        <h2>Real compounds</h2>
+        <p class="note">Generated from the actual Contracts on this server — each Contract's assigned
+        jobs become its elements. Add or edit a Contract in admin (Gamification → Contracts), assign
+        it jobs, refresh, and its molecule updates here.</p>
+        {% if contracts %}
+        <div class="compounds">
+            {% for c in contracts %}
+            <div class="compound-card">
+                <div class="compound-stage">{% include 'design/_compound.html' with compound=c.compound cid=forloop.counter|add:100 %}</div>
+                <div class="compound-name">{{ c.name }}</div>
+                <div class="compound-formula">
+                    {% for el in c.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="note" style="color: var(--pp-text-mute); border: 1px dashed var(--pp-border); border-radius: var(--pp-radius-md); padding: 20px; text-align: center;">
+            No Contracts with assigned jobs on this server yet. Create one in admin and use the
+            <strong>Suggest jobs</strong> action (or assign jobs manually), then refresh.
+        </p>
+        {% endif %}
+    </section>
+
+    <section>
+        <span class="eyebrow">Minimal — printed</span>
+        <h2>Printed compounds</h2>
+        <p class="note">A lighter "printed on the card" rendering for the Research Panel, where many
+        Project cards sit in a list: flat line-art — hollow family-outlined atoms, thin bonds, no
+        glow, gradient, or inset panel — ink on the card paper. Same molecules as above.</p>
+        <div class="pcards">
+            {% for p in projects %}
+            <div class="pcard">
+                <div class="pcard__stage">{% include 'design/_compound_min.html' with compound=p.compound %}</div>
+                <div class="pcard__name">{{ p.name }}</div>
+                <div class="compound-formula">
+                    {% for el in p.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Alternative — emission spectrum</span>
+        <h2>Spectral fingerprints</h2>
+        <p class="note">Each element emits a fixed set of colored lines; a Project's spectrum is the
+        overlay — a premium "fingerprint" strip, ideal for a dense list. This is the <em>honest
+        fingerprint</em> read: same elements give the same spectrum (we can seed in jitter if you'd
+        rather every one be unique). Same five sample projects.</p>
+        <div class="pcards">
+            {% for p in projects %}
+            <div class="pcard">
+                <div class="pcard__spectrum">{% include 'design/_spectrum.html' with spectrum=p.spectrum %}</div>
+                <div class="pcard__name">{{ p.name }}</div>
+                <div class="compound-formula">
+                    {% for el in p.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if contracts %}
+        <p class="note" style="margin-top: 26px;"><strong>From your dev Contracts:</strong></p>
+        <div class="pcards">
+            {% for c in contracts %}
+            <div class="pcard">
+                <div class="pcard__spectrum">{% include 'design/_spectrum.html' with spectrum=c.spectrum %}</div>
+                <div class="pcard__name">{{ c.name }}</div>
+                <div class="compound-formula">
+                    {% for el in c.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+
+    <section>
+        <span class="eyebrow">Alternative — Platinum DNA</span>
+        <h2>DNA helix</h2>
+        <p class="note">A double helix whose highlighted rungs are the elements in sequence, over a
+        neutral backbone — leaning into the "Platinum DNA" name. A seeded twist varies each Project;
+        sparse element sets still read as a full strand. Same five sample projects.</p>
+        <div class="helices">
+            {% for p in projects %}
+            <div class="hcard">
+                <div class="hcard__stage">{% include 'design/_helix.html' with helix=p.helix %}</div>
+                <div class="compound-name">{{ p.name }}</div>
+                <div class="compound-formula">
+                    {% for el in p.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if contracts %}
+        <p class="note" style="margin-top: 26px;"><strong>From your dev Contracts:</strong></p>
+        <div class="helices">
+            {% for c in contracts %}
+            <div class="hcard">
+                <div class="hcard__stage">{% include 'design/_helix.html' with helix=c.helix %}</div>
+                <div class="compound-name">{{ c.name }}</div>
+                <div class="compound-formula">
+                    {% for el in c.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+</div>
+
+<script>
+(function () {
+    if (typeof Chart === 'undefined') return;
+    var canvas = document.getElementById('disc-radar');
+    if (!canvas) return;
+    var css = getComputedStyle(document.documentElement);
+    var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
+    var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
+    var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
+
+    // Datasets: overview (5 disciplines) + one per discipline (its 5 jobs).
+    var DATA = { overview: { labels: {{ radar_labels_json|safe }}, values: {{ radar_data_json|safe }} } };
+    {% for d in disciplines %}
+    DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
+    {% endfor %}
+
+    var chart = new Chart(canvas, {
+        type: 'radar',
+        data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
+        options: {
+            responsive: true, maintainAspectRatio: true, animation: { duration: 350 },
+            plugins: { legend: { display: false } },
+            scales: {
+                r: {
+                    beginAtZero: true, suggestedMax: 10,
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                    angleLines: { color: 'rgba(255,255,255,0.08)' },
+                    pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } },
+                    ticks: { display: false, stepSize: 2 },
+                },
+            },
+        },
+    });
+
+    var LABELS = {};
+    document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
+    var detail = document.getElementById('radar-detail');
+
+    function renderPanel(mode, labels, values, colorOf, title) {
+        if (!detail) return;
+        var rows = labels.map(function (label, i) {
+            var pct = Math.max(0, Math.min(100, (values[i] / 10) * 100));
+            return '<li class="rd-row" style="--disc: ' + colorOf(i) + ';">'
+                + '<span class="rd-row__label">' + label + '</span>'
+                + '<span class="rd-row__bar"><span class="rd-row__fill" style="width: ' + pct + '%;"></span></span>'
+                + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
+        }).join('');
+        detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
+            + '<ul style="list-style:none; margin:0; padding:0;">' + rows + '</ul>';
+    }
+
+    function paint(mode) {
+        var ds = chart.data.datasets[0];
+        if (mode === 'overview') {
+            chart.data.labels = DATA.overview.labels;
+            ds.data = DATA.overview.values;
+            ds.borderColor = cyan;
+            ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
+            ds.pointBackgroundColor = discColors;
+            ds.pointBorderColor = discColors;
+            renderPanel(mode, DATA.overview.labels, DATA.overview.values,
+                function (i) { return discColors[i]; }, 'Families');
+        } else {
+            var color = css.getPropertyValue('--disc-' + mode).trim();
+            chart.data.labels = DATA[mode].labels;
+            ds.data = DATA[mode].values;
+            ds.borderColor = color;
+            ds.backgroundColor = color.replace(')', ' / 0.16)');  // oklch(...) -> oklch(... / 0.16)
+            ds.pointBackgroundColor = color;
+            ds.pointBorderColor = color;
+            renderPanel(mode, DATA[mode].labels, DATA[mode].values,
+                function () { return color; }, LABELS[mode] + ' elements');
+        }
+        chart.update();
+    }
+
+    paint('overview');
+
+    document.querySelectorAll('.radar-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
+            tab.classList.add('is-active');
+            paint(tab.dataset.mode);
+        });
+    });
+})();
+</script>
+</body>
+</html>
