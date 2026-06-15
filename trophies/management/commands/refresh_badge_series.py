@@ -1,7 +1,6 @@
 from django.core.management.base import BaseCommand
-from trophies.models import Badge, Profile
-from trophies.services.badge_service import handle_badge
-from notifications.services.deferred_notification_service import DeferredNotificationService
+from trophies.models import Badge
+from trophies.services.badge_refresh_service import refresh_badge_series_awards
 
 
 class Command(BaseCommand):
@@ -50,50 +49,16 @@ class Command(BaseCommand):
         prefix = f"{position} " if position else ''
         self.stdout.write(self.style.MIGRATE_HEADING(f"{prefix}--- BEGIN series '{series_slug}' ---"))
 
-        badges = Badge.objects.filter(series_slug=series_slug).order_by('tier')
-        if not badges.exists():
-            self.stdout.write(self.style.WARNING(f"No badges found for series_slug '{series_slug}'."))
-            self.stdout.write(self.style.SUCCESS(f"{prefix}--- END series '{series_slug}' ---"))
-            return
+        # Shared with DLC detection -- see trophies/services/badge_refresh_service.py.
+        processed, profiles_changed, earners_count, progress_count = refresh_badge_series_awards(series_slug)
 
-        profiles = Profile.objects.filter(played_games__game__concept__stages__series_slug=series_slug).distinct()
-
-        if not profiles.exists():
-            self.stdout.write(self.style.WARNING(f"No profiles associated with series_slug '{series_slug}'"))
-
-        # Track which profiles had badges awarded (for notification processing)
-        profiles_with_new_badges = set()
-
-        processed_count = 0
-        for profile in profiles:
-            for badge in badges:
-                try:
-                    created = handle_badge(profile, badge)
-                    if created:
-                        profiles_with_new_badges.add(profile.id)
-                    processed_count += 1
-                except Exception as e:
-                    self.stdout.write(self.style.ERROR(f"Error for profile {profile.psn_username}, badge {badge.id}: {e}"))
-
-        # Process consolidated badge notifications for all affected profiles
-        for profile_id in profiles_with_new_badges:
-            try:
-                DeferredNotificationService.create_badge_notifications(profile_id)
-                self.stdout.write(self.style.SUCCESS(f"Processed badge notifications for profile {profile_id}"))
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f"Failed to process notifications for profile {profile_id}: {e}"))
-
-        self.stdout.write(self.style.SUCCESS(f"Processed {processed_count} badge-profile pairs for series '{series_slug}'."))
-
-        # Rebuild leaderboards for this series (backfills historical progress data)
-        try:
-            from trophies.services.redis_leaderboard_service import rebuild_series_leaderboards
-            earners_count, progress_count = rebuild_series_leaderboards(series_slug)
-            self.stdout.write(
-                f"Rebuilt leaderboards for {series_slug}: "
-                f"{earners_count} earners, {progress_count} progress"
-            )
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f"Failed rebuilding leaderboards for {series_slug}: {e}"))
+        if processed == 0:
+            self.stdout.write(self.style.WARNING(f"Nothing to process for series '{series_slug}' (no badges or no earners)."))
+        else:
+            self.stdout.write(self.style.SUCCESS(
+                f"Processed {processed} badge-profile pairs for series '{series_slug}' "
+                f"({profiles_changed} profiles changed)."
+            ))
+            self.stdout.write(f"Rebuilt leaderboards for {series_slug}: {earners_count} earners, {progress_count} progress")
 
         self.stdout.write(self.style.SUCCESS(f"{prefix}--- END series '{series_slug}' ---"))

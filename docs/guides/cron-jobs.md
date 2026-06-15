@@ -18,6 +18,7 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 | 04:00 UTC daily | `update_shovelware` | Daily | None |
 | 03:00 UTC daily | `recalc_earn_rates` | Daily | None |
 | 03:30 UTC daily | `recalc_profile_counters` | Daily | None |
+| 04:30 UTC daily | `detect_dlc_and_refresh` | Daily | TrophyGroups synced (TokenKeeper current) |
 | 05:00 UTC daily | `audit_badge_coverage` | Daily | None |
 | 16:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-summer) | TokenKeeper sync caught up |
 | 17:30 UTC daily | `post_community_trophy_tracker` | Daily (DST-winter) | TokenKeeper sync caught up |
@@ -60,6 +61,16 @@ PlatPursuit uses **Render Cron Jobs** to run scheduled management commands. Each
 - **Dependencies**: Badge data should be reasonably current. No hard ordering dependency, but running after a badge series refresh gives more accurate results.
 - **Idempotency**: Fully safe to re-run. Overwrites existing cache keys.
 - **Failure impact**: Leaderboard pages show stale data until the cache expires (7h TTL). Individual series failures are caught and logged without blocking other series.
+
+### detect_dlc_and_refresh
+
+- **Schedule**: Daily (04:30 UTC)
+- **Command**: `python manage.py detect_dlc_and_refresh`
+- **What it does**: Detects games that gained **new DLC** since the last run -- a new `TrophyGroup` on a game that already existed before the scan window (a brand-new game's groups are all created together with none predating it, so it is ignored). New DLC can drop earners below 100%, so for each affected concept the command refreshes the **whole badge series** it belongs to (re-evaluates every earner via `handle_badge` + rebuilds the series leaderboards) through the shared `badge_refresh_service` -- the same refresh as `refresh_badge_series`. Uses a Redis watermark (`dlc_detection:last_run`); `--since <iso>` overrides it, `--dry-run` reports affected series without refreshing or advancing the watermark.
+- **Dependencies**: TokenKeeper sync should be reasonably current (a game's new DLC TrophyGroup is created during sync, which is what this detects).
+- **Idempotency**: Safe to re-run. Re-refreshing a series is idempotent (it re-evaluates from current state). If the watermark is lost (Redis flush), it falls back to a 3-day lookback and re-scans -- harmless.
+- **Failure impact**: Badge series with new DLC stay un-refreshed until the next run, so a few earners may show a stale (still-earned) badge tier they've technically lapsed. Per-series failures are caught and logged without blocking the others.
+- **Branch note**: the per-earner lapse behavior comes from `handle_badge` (hard-delete on `main`, `status='maintenance'` on `rebuild`); this command is agnostic to it.
 
 ### process_art_reveals
 
