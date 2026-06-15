@@ -15,6 +15,7 @@ is bounded by the ~25-row Job catalog, so Python iteration is safe (no whale ris
 """
 import json
 import math
+import random
 
 from trophies.models import Job, ProfileJobXP
 from trophies.util_modules.constants import JOB_LEVEL_CAP
@@ -193,3 +194,118 @@ def build_profile_elements(profile):
         'total_xp': total_xp,
         'total': atomic,
     }
+
+
+# --- Compounds (a Project's molecule) -------------------------------------
+
+def job_atom(job):
+    """The atom identity for a job/element inside a Compound: 2-char symbol, family-slot
+    shape, family color. (Distinct from the leveled `element_dict` tile.)"""
+    return {
+        'slug': job.slug,
+        'symbol': SYMBOLS.get(job.slug) or job.icon or job.name[:2],
+        'shape': SHAPES[job.display_order % len(SHAPES)],
+        'disc_slug': job.discipline,
+        'name': job.name,
+    }
+
+
+def build_compound(elements, seed):
+    """Deterministic molecule from a Project's elements (a list of `job_atom` dicts),
+    seeded so each Project is (practically always) visually distinct -- even the many
+    1-2 element Projects that share job-sets. Each element is replicated a seeded number
+    of times (multiplicity) so small Projects get body and same-job Projects diverge,
+    then the atoms are laid out and bonded. Entropy: per-element multiplicity, layout
+    choice, a global rotation, per-atom position jitter, and double bonds. Core bonds
+    carry their two endpoint family colors + a centerline so a bond can run a gradient
+    A -> B. Returns SVG-ready `atoms` + `bonds` in a 200x200 viewBox.
+    """
+    rng = random.Random(seed)
+
+    base = len(elements)
+    extra_pool = {1: [1, 1, 2, 2, 3], 2: [0, 0, 1, 1, 2], 3: [0, 0, 0, 1]}.get(base, [0])
+    expanded = []
+    for a in elements:
+        expanded.append(a)
+        expanded += [a] * rng.choice(extra_pool)
+    rng.shuffle(expanded)
+    atoms = expanded[:9]
+    n = len(atoms)
+    cx = cy = 100.0
+    size = 58.0 if n <= 2 else (52.0 if n <= 4 else (46.0 if n <= 6 else 40.0))
+
+    # 1) canonical core positions + core bonds
+    if n == 1:
+        positions, pairs = [(cx, cy)], []
+    elif n == 2:
+        d = rng.uniform(34, 46)
+        positions = [(cx - d, cy), (cx + d, cy)]
+        pairs = [(0, 1, rng.random() < 0.5)]
+    else:
+        layout = rng.choice(['ring', 'chain']) if n == 3 else rng.choice(['ring', 'hub'])
+        if layout == 'hub':
+            m = n - 1
+            hub_r = rng.uniform(52, 62)
+            a0 = rng.uniform(0, 2 * math.pi)
+            positions = [(cx, cy)] + [
+                (cx + hub_r * math.cos(a0 + k * 2 * math.pi / m), cy + hub_r * math.sin(a0 + k * 2 * math.pi / m))
+                for k in range(m)
+            ]
+            pairs = [(0, k, rng.random() < 0.33) for k in range(1, n)]
+        elif layout == 'chain':
+            spread, rise = rng.uniform(46, 56), rng.uniform(18, 30)
+            positions = [(cx - spread, cy + rise * 0.6), (cx, cy - rise), (cx + spread, cy + rise * 0.6)]
+            pairs = [(0, 1, rng.random() < 0.4), (1, 2, rng.random() < 0.4)]
+        else:  # ring with one double bond
+            ring_r = rng.uniform(48, 58)
+            a0 = -math.pi / 2 + rng.uniform(-0.4, 0.4)
+            positions = [
+                (cx + ring_r * math.cos(a0 + k * 2 * math.pi / n),
+                 cy + ring_r * math.sin(a0 + k * 2 * math.pi / n))
+                for k in range(n)
+            ]
+            pairs = [(k, (k + 1) % n, False) for k in range(n)]
+            di = rng.randrange(n)
+            pairs[di] = (pairs[di][0], pairs[di][1], True)
+
+    # 2) global seeded rotation of the whole core
+    ga = rng.uniform(0, 2 * math.pi)
+    cgv, sgv = math.cos(ga), math.sin(ga)
+    positions = [
+        (cx + (x - cx) * cgv - (y - cy) * sgv, cy + (x - cx) * sgv + (y - cy) * cgv)
+        for (x, y) in positions
+    ]
+
+    # 2b) per-atom position jitter -- the big lever for same-job Projects diverging.
+    if n > 1:
+        positions = [(x + rng.uniform(-7, 7), y + rng.uniform(-7, 7)) for (x, y) in positions]
+
+    # 3) bond lines (with doubles). No scaffold -- the molecule is the element atoms only.
+    bonds = []
+    for i, j, dbl in pairs:
+        x1, y1 = positions[i]
+        x2, y2 = positions[j]
+        if dbl:
+            ddx, ddy = x2 - x1, y2 - y1
+            length = math.hypot(ddx, ddy) or 1.0
+            ox, oy = -ddy / length * 3.0, ddx / length * 3.0
+            segs = [(x1 + ox, y1 + oy, x2 + ox, y2 + oy), (x1 - ox, y1 - oy, x2 - ox, y2 - oy)]
+        else:
+            segs = [(x1, y1, x2, y2)]
+        bonds.append({
+            'lines': [
+                {'x1': round(p, 1), 'y1': round(q, 1), 'x2': round(r, 1), 'y2': round(s, 1)}
+                for (p, q, r, s) in segs
+            ],
+            'a': atoms[i]['disc_slug'], 'b': atoms[j]['disc_slug'],
+            'gx1': round(x1, 1), 'gy1': round(y1, 1), 'gx2': round(x2, 1), 'gy2': round(y2, 1),
+        })
+
+    out_atoms = [
+        {
+            'x0': round(x - size / 2, 1), 'y0': round(y - size / 2, 1), 'size': round(size, 1),
+            'shape': a['shape'], 'symbol': a['symbol'], 'disc_slug': a['disc_slug'],
+        }
+        for (x, y), a in zip(positions, atoms)
+    ]
+    return {'atoms': out_atoms, 'bonds': bonds}

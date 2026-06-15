@@ -10,8 +10,11 @@ per-user reads aggregate in the DB or are bounded by the ~25-row Job catalog (wh
 rule); never iterate a profile's trophy rows in Python.
 """
 import logging
+import zlib
 
-from trophies.models import UserTitle
+from django.db.models import Q
+
+from trophies.models import EarnedContract, UserTitle
 from trophies.services import element_render
 
 logger = logging.getLogger(__name__)
@@ -21,6 +24,31 @@ def _build_lab(profile):
     """The Lab zone: the profile's elements/families view (periodic table, radar data,
     composition summary), assembled from real ProfileJobXP via the element foundation."""
     return element_render.build_profile_elements(profile)
+
+
+def _build_shelf(profile):
+    """The compound shelf: molecules of the Projects (Contracts) this profile has ACCEPTED.
+    Bounded by accepted contracts (capped) with a cheap per-Contract compound build, so it's
+    whale-safe; the molecule is deterministic per Contract (seeded by its slug)."""
+    earned = (
+        EarnedContract.objects
+        .filter(profile=profile)
+        .filter(Q(platinum_accepted_at__isnull=False) | Q(full_accepted_at__isnull=False))
+        .select_related('contract')
+        .prefetch_related('contract__jobs')
+        .order_by('-created_at')[:24]
+    )
+    shelf = []
+    for ec in earned:
+        contract = ec.contract
+        atoms = [element_render.job_atom(j) for j in contract.jobs.all()]
+        if not atoms:
+            continue
+        shelf.append({
+            'name': contract.name,
+            'compound': element_render.build_compound(atoms, zlib.crc32(contract.slug.encode())),
+        })
+    return shelf
 
 
 def _build_hero(profile, lab):
@@ -61,4 +89,9 @@ def build_logbook_context(profile):
     except Exception:
         logger.exception("Logbook hero build failed for profile %s", getattr(profile, 'id', '?'))
         context['hero'] = None
+    try:
+        context['shelf'] = _build_shelf(profile)
+    except Exception:
+        logger.exception("Logbook shelf build failed for profile %s", getattr(profile, 'id', '?'))
+        context['shelf'] = None
     return context

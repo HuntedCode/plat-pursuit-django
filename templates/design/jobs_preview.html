@@ -240,6 +240,15 @@
     .compound-min__scaf { fill: var(--pp-bg-1); stroke: color-mix(in oklab, var(--pp-text-mute) 55%, transparent); stroke-width: 1.6; }
     .compound-min .atom__shape { fill: var(--pp-bg-1); stroke: color-mix(in oklab, var(--disc) 62%, transparent); stroke-width: 2; }
     .compound-min .atom__sym { fill: var(--disc); font-size: 29px; }
+
+    /* ---- Neon "printed" compound (exploration): light family-tinted atoms, glowing edges ---- */
+    .compound-neon { display: block; width: 100%; max-width: 150px; height: auto; overflow: visible; }
+    .compound-neon__bond { stroke: color-mix(in oklab, var(--pp-text-mute) 68%, transparent); stroke-width: 1.8; stroke-linecap: round; }
+    .compound-neon__scaf { fill: var(--pp-bg-1); stroke: color-mix(in oklab, var(--pp-text-mute) 50%, transparent); stroke-width: 1.6; }
+    .compound-neon .atom { filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 80%, transparent)) drop-shadow(0 0 8px color-mix(in oklab, var(--disc) 42%, transparent)); }
+    .compound-neon .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-1)); stroke: color-mix(in oklab, var(--disc) 92%, white); stroke-width: 3; }
+    .compound-neon .atom__sym { fill: color-mix(in oklab, var(--disc) 85%, white); font-size: 29px; }
+    .compound-neon__bond--grad { stroke-width: 2.6; }  /* core bonds: gradient A -> B, set inline */
     .pcard__name { font-weight: 700; font-size: 15px; margin-top: 12px; }
 
     /* ---- Emission spectrum ---- */
@@ -433,6 +442,65 @@
             </div>
             {% endfor %}
         </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Variation — neon</span>
+        <h2>Neon printed compounds</h2>
+        <p class="note">The same printed molecules, but each atom gets a lighter family-tinted fill and
+        a glowing neon edge — flat line-art bones, atoms that read as lit. Same five sample projects.</p>
+        <div class="pcards">
+            {% for p in projects %}
+            <div class="pcard">
+                <div class="pcard__stage">{% include 'design/_compound_neon.html' with compound=p.compound cid=forloop.counter %}</div>
+                <div class="pcard__name">{{ p.name }}</div>
+                <div class="compound-formula">
+                    {% for el in p.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Variation — neon · randomness</span>
+        <h2>Same jobs, different molecules</h2>
+        <p class="note">Every card below is the <strong>same three elements</strong> (Gunslinger,
+        Cartographer, Mage); only the seed differs. Each Contract seeds from its own slug, so two
+        Contracts with identical jobs still synthesize visibly different molecules.</p>
+        <div class="pcards">
+            {% for c in neon_variants %}
+            <div class="pcard">
+                <div class="pcard__stage">{% include 'design/_compound_neon.html' with compound=c cid=forloop.counter|add:200 %}</div>
+                <div class="pcard__name">Seed #{{ forloop.counter }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Variation — neon · live from your dev Contracts</span>
+        <h2>Neon compounds from the DB</h2>
+        <p class="note">The neon treatment on the actual Contracts on this server (same source as the
+        dimensional "Real compounds" above). Create or edit a Contract in admin (Gamification &rarr;
+        Contracts), assign it jobs, and refresh.</p>
+        {% if contracts %}
+        <div class="pcards">
+            {% for c in contracts %}
+            <div class="pcard">
+                <div class="pcard__stage">{% include 'design/_compound_neon.html' with compound=c.compound cid=forloop.counter|add:300 %}</div>
+                <div class="pcard__name">{{ c.name }}</div>
+                <div class="compound-formula">
+                    {% for el in c.elements %}<span class="formula-chip" style="--disc: var(--disc-{{ el.disc_slug }});">{% include 'design/_atom.html' with shape=el.shape symbol=el.symbol %}</span>{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="note" style="color: var(--pp-text-mute); border: 1px dashed var(--pp-border); border-radius: var(--pp-radius-md); padding: 20px; text-align: center;">
+            No Contracts with assigned jobs on this server yet. Create one in admin and assign jobs (or use the <strong>Suggest jobs</strong> action), then refresh.
+        </p>
+        {% endif %}
     </section>
 
     <section>
