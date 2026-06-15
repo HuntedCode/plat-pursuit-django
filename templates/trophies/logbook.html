@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load humanize static %}
+{% load humanize static custom_filters %}
 {% block title %}Your Logbook{% endblock %}
 
 {% block content %}
@@ -135,6 +135,38 @@
             <div id="emodal-panel"></div>
         </div>
     </div>
+    {% endif %}
+
+    {% if collection %}
+    {# ── Collection: your most-recent badges (the spine; links to the full gallery) ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+                    </svg>
+                    <h2 class="text-lg md:text-xl lg:text-2xl font-bold">Collection</h2>
+                </div>
+                <a href="{% url 'badges_list' %}" class="text-xs md:text-sm font-semibold text-primary hover:underline shrink-0">View all{% if collection.total %} {{ collection.total|intcomma }}{% endif %} &rarr;</a>
+            </div>
+            {% if collection.badges %}
+            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 md:gap-4">
+                {% for badge in collection.badges %}
+                <a href="{% url 'badge_detail' badge.series_slug %}" class="group text-center">
+                    <div class="aspect-square mb-1.5">{% include 'partials/badge.html' with layers=badge.get_badge_layers %}</div>
+                    <div class="text-xs font-semibold line-clamp-1 pr-1 group-hover:text-primary transition-colors">{{ badge.effective_display_title }}</div>
+                    <div class="text-[0.6rem] uppercase font-bold tracking-wide text-{{ badge.tier|badge_color }}">{{ badge.tier|badge_tier }}</div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-base-content/50 text-sm">
+                No badges earned yet. <a href="{% url 'badges_list' %}" class="text-primary hover:underline">Explore badges</a> to start your collection.
+            </div>
+            {% endif %}
+        </div>
+    </section>
     {% endif %}
 {% endblock %}
 
