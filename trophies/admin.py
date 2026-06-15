@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from datetime import timedelta
-from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractMembership, ContractBundle
+from .models import Profile, Game, Trophy, EarnedTrophy, ProfileGame, APIAuditLog, FeaturedGame, FeaturedProfile, Concept, TitleID, TrophyGroup, ConceptTrophyGroup, UserTrophySelection, UserConceptRating, Badge, UserBadge, UserBadgeProgress, ProfileBadgeShowcase, ProfileShowcase, FeaturedGuide, Stage, ConceptBundle, DeveloperReputation, Title, UserTitle, Milestone, UserMilestone, UserMilestoneProgress, Comment, CommentVote, CommentReport, ModerationLog, BannedWord, ProfileGamification, StatType, StageStatValue, MonthlyRecap, GameList, GameListItem, GameListLike, Challenge, AZChallengeSlot, GameFamily, Review, ReviewVote, ReviewReply, ReviewReport, ReviewModerationLog, DashboardConfig, StageCompletionEvent, Roadmap, RoadmapStep, RoadmapStepTrophy, TrophyGuide, RoadmapEditLock, RoadmapRevision, RoadmapNote, RoadmapNoteRead, Company, ConceptCompany, IGDBMatch, ConceptJoinReview, RematchSuggestion, ConceptSplitEvent, GameFlag, Genre, ConceptGenre, Theme, ConceptTheme, GameEngine, ConceptEngine, EngineCompany, ScoutAccount, Franchise, ConceptFranchise, Checklist, ChecklistSection, ChecklistItem, ChecklistVote, UserChecklistProgress, ChecklistReport, Job, Contract, ContractMembership, ContractBundle, EarnedContract, ContractXPGrant, ProfileJobXP
 
 
 # Register your models here.
@@ -4712,6 +4712,7 @@ _ROADMAP_ADMIN_OBJECT_NAMES = frozenset({
 
 _GAMIFICATION_ADMIN_OBJECT_NAMES = frozenset({
     'Contract', 'Job',                                    # Job Board curation
+    'EarnedContract', 'ContractXPGrant', 'ProfileJobXP',  # Contract/job XP engine
     'ProfileGamification', 'StatType', 'StageStatValue',  # XP stats + scaffolding
 })
 
@@ -4872,3 +4873,32 @@ class JobAdmin(admin.ModelAdmin):
     search_fields = ('name', 'slug')
     ordering = ('discipline', 'display_order')
     readonly_fields = ('created_at',)
+
+
+@admin.register(EarnedContract)
+class EarnedContractAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'contract', 'has_platinum', 'platinum_reached_at', 'platinum_accepted_at', 'full_reached_at', 'full_accepted_at')
+    list_filter = ('has_platinum',)
+    raw_id_fields = ('profile', 'contract')
+    search_fields = ('profile__psn_username', 'contract__slug')
+
+
+@admin.register(ContractXPGrant)
+class ContractXPGrantAdmin(admin.ModelAdmin):
+    """The immutable XP ledger -- read-only in admin (written only by the engine)."""
+    list_display = ('profile', 'job', 'tier', 'amount', 'base_t', 'multiplier', 'granted_at')
+    list_filter = ('tier', 'job')
+    raw_id_fields = ('earned_contract', 'profile', 'job')
+    search_fields = ('profile__psn_username', 'job__slug')
+    readonly_fields = ('earned_contract', 'profile', 'job', 'tier', 'amount', 'base_t', 'multiplier', 'granted_at')
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(ProfileJobXP)
+class ProfileJobXPAdmin(admin.ModelAdmin):
+    list_display = ('profile', 'job', 'total_xp', 'level', 'updated_at')
+    list_filter = ('job',)
+    raw_id_fields = ('profile', 'job')
+    search_fields = ('profile__psn_username', 'job__slug')

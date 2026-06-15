@@ -64,6 +64,15 @@ GOLD_STAGE_XP = 250    # XP per concept completed at Gold tier
 PLAT_STAGE_XP = 75     # XP per concept completed at Platinum tier
 BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
 
+# Contract (job/element) XP -- starter values; calibrate on real data (open thread).
+# Every Contract pays the same global total T, split evenly among its jobs, across two
+# tiers: Platinum (the bulk) then 100% (the bonus). No-platinum games pay the FULL T at 100%.
+CONTRACT_XP_TOTAL = 5000        # global base T per Contract (override via Contract.xp_total_override)
+CONTRACT_PLATINUM_FRAC = 0.70  # share of T paid at the Platinum tier
+CONTRACT_FULL_FRAC = 0.30      # share of T paid at the 100% (full-completion) tier
+JOB_LEVEL_BASE = 600           # per-level XP cost coefficient: cumulative XP to reach level L = BASE * L*(L+1)/2
+JOB_LEVEL_CAP = 50             # max per-job level (start; revisit toward 99 after calibration)
+
 # Community Guidelines
 COMMUNITY_GUIDELINES = [
     {
