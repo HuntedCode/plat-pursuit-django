@@ -1,0 +1,347 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Lab · PlatPursuit</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
+    <style>
+    /* ================================================================
+     * THE LAB  (/design/lab/)
+     * The element identity home: the Platinum DNA radar, the periodic
+     * table of all 25 elements (real states), the whole-profile spectral
+     * signature, and a composition summary. Reuses the element components
+     * from /design/jobs/ (shared CSS copied here for the workshop phase).
+     * ================================================================ */
+
+    :root {
+        --disc-combat:      oklch(0.68 0.20 25);
+        --disc-exploration: oklch(0.78 0.15 155);
+        --disc-mind:        oklch(0.72 0.16 285);
+        --disc-heart:       oklch(0.72 0.19 0);
+        --disc-finesse:     oklch(0.82 0.15 75);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background:
+            radial-gradient(1200px 600px at 50% -10%, oklch(0.23 0.03 285 / 0.45), transparent 60%),
+            var(--pp-bg-0);
+        color: var(--pp-text);
+        font-family: var(--pp-font-body, "Inter", system-ui, sans-serif);
+        -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 48px 24px 96px; }
+    h1 { font-family: var(--pp-font-display, system-ui); font-size: clamp(28px, 4vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .lede { color: var(--pp-text-dim); max-width: 64ch; line-height: 1.55; margin: 0 0 8px; }
+    .note { color: var(--pp-text-mute); font-size: 13px; max-width: 70ch; line-height: 1.5; }
+    section { margin-top: 56px; }
+    .eyebrow { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-primary); margin-bottom: 14px; }
+    h2 { font-family: var(--pp-font-display, system-ui); font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+
+    /* ---- Composition summary ---- */
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 22px; }
+    @media (max-width: 760px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 18px; }
+    .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
+    .scard__value { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 24px; line-height: 1; }
+    .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
+    .scard--dominant { border-color: color-mix(in oklab, var(--disc) 50%, var(--pp-border)); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); }
+    .scard--dominant .scard__value { color: var(--disc); }
+    .scard__value--big { font-size: 42px; text-shadow: 0 0 22px color-mix(in oklab, var(--disc) 35%, transparent); }
+    .scard__unlock { display: flex; align-items: center; gap: 9px; }
+    .scard__unlock-name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 16px; }
+
+    /* ---- Radar ---- */
+    .radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; margin-top: 20px; }
+    .radar-tabs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
+    .radar-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
+    .radar-tab[data-mode="overview"] { --disc: var(--pp-primary); }
+    .radar-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc) 60%, var(--pp-border)); }
+    .radar-tab.is-active { color: var(--disc); border-color: var(--disc); background: color-mix(in oklab, var(--disc) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 30%, transparent); }
+    .radar-body { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: 40px; align-items: center; }
+    @media (max-width: 780px) { .radar-body { grid-template-columns: 1fr; gap: 28px; } }
+    .radar-stage { display: grid; place-items: center; }
+    .radar-stage canvas { max-width: 440px; width: 100%; height: auto; }
+    .radar-detail__title { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 16px; }
+    .rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 12px 0; }
+    .rd-row__label { font-size: 13px; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rd-row__bar { display: block; height: 8px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+    .rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+    .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ---- Spectral signature (whole profile) ---- */
+    .signature { margin-top: 18px; border-radius: var(--pp-radius-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
+    .signature .spectrum { height: 96px; border-radius: 0; box-shadow: none; }
+    .spectrum { display: block; width: 100%; height: auto; border-radius: var(--pp-radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
+    .spectrum__bg { fill: #05070b; }
+    .spectrum__line { stroke: var(--lc); stroke-width: 2.4; filter: drop-shadow(0 0 3px var(--lc)); }
+
+    /* ---- Atom glyph + element chip (for summary) ---- */
+    .atom { display: block; width: 100%; height: 100%; overflow: visible; }
+    .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); stroke: color-mix(in oklab, var(--disc) 55%, transparent); stroke-width: 2.5; }
+    .atom__sym { fill: var(--disc); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 36px; text-anchor: middle; dominant-baseline: central; }
+    .formula-chip { display: inline-block; width: 30px; height: 30px; flex: none; }
+
+    /* ---- Periodic table (families as columns) ---- */
+    .ptable { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 22px; }
+    @media (max-width: 860px) { .ptable { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .ptable { grid-template-columns: 1fr; } }
+    .ptable__col { display: flex; flex-direction: column; gap: 10px; }
+    .ptable__head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 0 2px 7px; border-bottom: 2px solid color-mix(in oklab, var(--disc) 50%, transparent); margin-bottom: 2px; }
+    .ptable__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 14px; color: var(--disc); letter-spacing: 0.02em; }
+    .ptable__avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+    /* ---- Element tile (shared with /design/jobs/) ---- */
+    .job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; display: flex; flex-direction: column; }
+    .job:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 75%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent); }
+    .job__top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .job__no { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; color: color-mix(in oklab, var(--disc) 65%, var(--pp-text-mute)); }
+    .job__mark { width: 27px; height: 27px; flex: none; }
+    .job__lvbox { text-align: center; margin: 9px 0 4px; }
+    .job__lv-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in oklab, var(--disc) 38%, transparent); }
+    .job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
+    .job__name { font-weight: 700; font-size: 13px; text-align: center; color: var(--pp-text); }
+    .job__foot { margin-top: auto; padding-top: 12px; }
+    .job__bar { height: 5px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+    .job__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+    .job__xp { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: center; font-variant-numeric: tabular-nums; }
+    .job--locked { filter: grayscale(0.92); opacity: 0.5; }
+    .job--locked:hover { transform: none; box-shadow: none; border-color: color-mix(in oklab, var(--disc) 35%, transparent); }
+    .job--mastered { border-color: color-mix(in oklab, var(--disc) 78%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1)); animation: jobPulse 3.4s ease-in-out infinite; }
+    .job--mastered .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
+    @keyframes jobPulse {
+        0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 35%, transparent), 0 6px 22px color-mix(in oklab, var(--disc) 16%, transparent); }
+        50%      { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 62%, transparent), 0 10px 34px color-mix(in oklab, var(--disc) 36%, transparent); }
+    }
+
+    /* ---- Tile -> detail interaction ---- */
+    .ptile { cursor: pointer; border-radius: var(--pp-radius-lg); }
+    .ptile:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+    .emodal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+    .emodal[hidden] { display: none; }
+    .emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.66); backdrop-filter: blur(3px); }
+    .emodal__dialog { position: relative; z-index: 1; width: min(440px, 100%); max-height: 88vh; overflow: auto; background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); padding: 26px 24px 24px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
+    .emodal__close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--pp-text-mute); font-size: 26px; line-height: 1; cursor: pointer; }
+    .emodal__close:hover { color: var(--pp-text); }
+
+    /* ---- Element detail (level/XP first-class) ---- */
+    .edetail__head { display: flex; align-items: center; gap: 14px; }
+    .edetail__glyph { width: 50px; height: 50px; flex: none; }
+    .edetail__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 20px; }
+    .edetail__fam { font-size: 12px; color: var(--pp-text-mute); margin-top: 2px; }
+    .edetail__levelrow { display: flex; align-items: center; gap: 18px; margin-top: 22px; }
+    .edetail__level { flex: none; text-align: center; min-width: 78px; }
+    .edetail__level-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 54px; line-height: 0.9; color: var(--disc); text-shadow: 0 0 24px color-mix(in oklab, var(--disc) 40%, transparent); font-variant-numeric: tabular-nums; }
+    .edetail__level-cap { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); }
+    .edetail__xp { flex: 1; }
+    .edetail__xp-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--pp-text-dim); margin-bottom: 7px; font-variant-numeric: tabular-nums; }
+    .edetail__xp-next { color: var(--pp-text-mute); }
+    .edetail__bar { height: 9px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+    .edetail__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); }
+    .edetail__total { font-size: 11px; color: var(--pp-text-mute); margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .edetail__flavor { margin-top: 20px; font-style: italic; color: var(--pp-text-dim); font-size: 14px; line-height: 1.5; padding-right: 1px; }
+    .edetail__sources { margin-top: 22px; border-top: 1px solid var(--pp-divider); padding-top: 16px; }
+    .edetail__sources-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }
+    .edetail__sources-note { font-size: 12.5px; color: var(--pp-text-dim); line-height: 1.5; margin: 0; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>The Lab</h1>
+    <p class="lede">Your <strong>Platinum DNA</strong> — the elements that make up who you are as a
+    hunter. Your family strengths, your collection across the table, and your spectral signature.
+    Sample in-progress data.</p>
+
+    <section>
+        <span class="eyebrow">Composition</span>
+        <h2>Who you are</h2>
+        <div class="summary">
+            <div class="scard scard--dominant scard--hero" style="--disc: var(--disc-{{ dominant.slug }});">
+                <div class="scard__label">Total level</div>
+                <div class="scard__value scard__value--big">{{ total_level }}</div>
+                <div class="scard__sub">across {{ total }} elements</div>
+            </div>
+            <div class="scard">
+                <div class="scard__label">Total XP</div>
+                <div class="scard__value">{{ total_xp }}</div>
+                <div class="scard__sub">earned all-time</div>
+            </div>
+            <div class="scard">
+                <div class="scard__label">Top element</div>
+                {% if top_element %}
+                <div class="scard__unlock">
+                    <span class="formula-chip" style="--disc: var(--disc-{{ top_element.disc_slug }});">{% include 'design/_atom.html' with shape=top_element.shape symbol=top_element.symbol %}</span>
+                    <span class="scard__unlock-name">{{ top_element.name }} · Lv {{ top_element.level }}</span>
+                </div>
+                {% else %}<div class="scard__value">—</div>{% endif %}
+            </div>
+            <div class="scard">
+                <div class="scard__label">Dominant family</div>
+                <div class="scard__value">{{ dominant.label }}</div>
+                <div class="scard__sub">avg level {{ dominant.avg }}</div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Identity</span>
+        <h2>Platinum DNA radar</h2>
+        <p class="note">Your five family strengths at a glance (each family's level is the average of
+        your elements in it). Pick a family to drill into its five elements.</p>
+        <div class="radar-card">
+            <div class="radar-tabs">
+                <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
+                {% for d in disciplines %}
+                <button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>
+                {% endfor %}
+            </div>
+            <div class="radar-body">
+                <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
+                <div class="radar-detail" id="radar-detail"></div>
+            </div>
+        </div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Signature</span>
+        <h2>Your spectral signature</h2>
+        <p class="note">The combined emission spectrum of every element you've touched — your whole
+        composition as one fingerprint.</p>
+        <div class="signature">{% include 'design/_spectrum.html' with spectrum=profile_spectrum %}</div>
+    </section>
+
+    <section>
+        <span class="eyebrow">Collection</span>
+        <h2>The periodic table</h2>
+        <p class="note">All 25 elements, families as columns, in their real states — locked until you
+        start one, glowing while active, pulsing once mastered.</p>
+        <div class="ptable">
+            {% for d in disciplines %}
+            <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
+                <div class="ptable__head">
+                    <span class="ptable__name">{{ d.label }}</span>
+                    <span class="ptable__avg">avg {{ d.avg }}</span>
+                </div>
+                {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0">{% include 'design/_job_card.html' with card=job %}</div>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        <p class="note" style="margin-top: 14px;">Tap any element to open its detail view.</p>
+    </section>
+</div>
+
+<div id="element-details" hidden>
+    {% for d in disciplines %}{% for job in d.jobs %}<div data-slug="{{ job.slug }}">{% include 'design/_element_detail.html' with card=job %}</div>{% endfor %}{% endfor %}
+</div>
+
+<div class="emodal" id="emodal" hidden>
+    <div class="emodal__backdrop" data-close></div>
+    <div class="emodal__dialog">
+        <button class="emodal__close" data-close aria-label="Close">&times;</button>
+        <div id="emodal-panel"></div>
+    </div>
+</div>
+
+<script>
+(function () {
+    if (typeof Chart === 'undefined') return;
+    var canvas = document.getElementById('disc-radar');
+    if (!canvas) return;
+    var css = getComputedStyle(document.documentElement);
+    var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
+    var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
+    var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
+
+    var DATA = { overview: { labels: {{ radar_labels_json|safe }}, values: {{ radar_data_json|safe }} } };
+    {% for d in disciplines %}
+    DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
+    {% endfor %}
+
+    var chart = new Chart(canvas, {
+        type: 'radar',
+        data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
+        options: {
+            responsive: true, maintainAspectRatio: true, animation: { duration: 350 },
+            plugins: { legend: { display: false } },
+            scales: { r: { beginAtZero: true, suggestedMax: 10, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false, stepSize: 2 } } },
+        },
+    });
+
+    var LABELS = {};
+    document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
+    var detail = document.getElementById('radar-detail');
+
+    function renderPanel(mode, labels, values, colorOf, title) {
+        if (!detail) return;
+        var rows = labels.map(function (label, i) {
+            var pct = Math.max(0, Math.min(100, (values[i] / 10) * 100));
+            return '<li class="rd-row" style="--disc: ' + colorOf(i) + ';">'
+                + '<span class="rd-row__label">' + label + '</span>'
+                + '<span class="rd-row__bar"><span class="rd-row__fill" style="width: ' + pct + '%;"></span></span>'
+                + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
+        }).join('');
+        detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
+            + '<ul style="list-style:none; margin:0; padding:0;">' + rows + '</ul>';
+    }
+
+    function paint(mode) {
+        var ds = chart.data.datasets[0];
+        if (mode === 'overview') {
+            chart.data.labels = DATA.overview.labels;
+            ds.data = DATA.overview.values;
+            ds.borderColor = cyan;
+            ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
+            ds.pointBackgroundColor = discColors;
+            ds.pointBorderColor = discColors;
+            renderPanel(mode, DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Families');
+        } else {
+            var color = css.getPropertyValue('--disc-' + mode).trim();
+            chart.data.labels = DATA[mode].labels;
+            ds.data = DATA[mode].values;
+            ds.borderColor = color;
+            ds.backgroundColor = color.replace(')', ' / 0.16)');
+            ds.pointBackgroundColor = color;
+            ds.pointBorderColor = color;
+            renderPanel(mode, DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' elements');
+        }
+        chart.update();
+    }
+
+    paint('overview');
+
+    document.querySelectorAll('.radar-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
+            tab.classList.add('is-active');
+            paint(tab.dataset.mode);
+        });
+    });
+})();
+
+(function () {
+    var details = document.getElementById('element-details');
+    var modal = document.getElementById('emodal');
+    var panel = document.getElementById('emodal-panel');
+    if (!details || !modal || !panel) return;
+    function openEl(slug) {
+        var src = details.querySelector('[data-slug="' + slug + '"]');
+        if (!src) return;
+        panel.innerHTML = src.innerHTML;
+        modal.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+    function closeEl() { modal.hidden = true; panel.innerHTML = ''; document.body.style.overflow = ''; }
+    document.querySelectorAll('.ptile').forEach(function (t) {
+        t.addEventListener('click', function () { openEl(t.dataset.slug); });
+        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug); } });
+    });
+    modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeEl(); });
+})();
+</script>
+</body>
+</html>

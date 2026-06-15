@@ -1,0 +1,18 @@
+{% comment %}
+Renders a Compound. Each element atom gets its own radial gradient (highlight ->
+family -> dark edge) for spherical shading and a seeded shape rotation (symbol stays
+upright); neutral scaffold nodes + bonds draw behind. Expects `compound` {atoms, scaffold,
+bonds} and `cid` (page-unique compound index for gradient ids).
+{% endcomment %}
+<svg class="compound" viewBox="0 0 200 200" role="img" aria-label="Compound">
+    <defs>
+        {% for a in compound.atoms %}<radialGradient id="cg-{{ cid }}-{{ forloop.counter }}" cx="36%" cy="30%" r="80%">
+            <stop offset="0%" style="stop-color: color-mix(in oklab, var(--disc-{{ a.disc_slug }}) 50%, white);" />
+            <stop offset="52%" style="stop-color: var(--disc-{{ a.disc_slug }});" />
+            <stop offset="100%" style="stop-color: color-mix(in oklab, var(--disc-{{ a.disc_slug }}) 74%, black);" />
+        </radialGradient>{% endfor %}
+    </defs>
+    {% for b in compound.bonds %}{% for l in b.lines %}<line class="compound__bond" x1="{{ l.x1 }}" y1="{{ l.y1 }}" x2="{{ l.x2 }}" y2="{{ l.y2 }}" />{% endfor %}{% endfor %}
+    {% for s in compound.scaffold %}<circle class="cscaf" cx="{{ s.cx }}" cy="{{ s.cy }}" r="{{ s.r }}" />{% endfor %}
+    {% for a in compound.atoms %}<svg class="catom" x="{{ a.x0 }}" y="{{ a.y0 }}" width="{{ a.size }}" height="{{ a.size }}" viewBox="0 0 100 100" style="--disc: var(--disc-{{ a.disc_slug }});">{% if a.shape == 'triangle' %}<polygon class="catom__shape" fill="url(#cg-{{ cid }}-{{ forloop.counter }})" transform="rotate({{ a.rot }} 50 50)" points="50,4 95,85 5,85" />{% elif a.shape == 'square' %}<rect class="catom__shape" fill="url(#cg-{{ cid }}-{{ forloop.counter }})" transform="rotate({{ a.rot }} 50 50)" x="13" y="13" width="74" height="74" rx="7" />{% elif a.shape == 'pentagon' %}<polygon class="catom__shape" fill="url(#cg-{{ cid }}-{{ forloop.counter }})" transform="rotate({{ a.rot }} 50 50)" points="50,8 91,38 75,87 25,87 9,38" />{% elif a.shape == 'hexagon' %}<polygon class="catom__shape" fill="url(#cg-{{ cid }}-{{ forloop.counter }})" transform="rotate({{ a.rot }} 50 50)" points="50,7 89,28 89,72 50,93 11,72 11,28" />{% else %}<circle class="catom__shape" fill="url(#cg-{{ cid }}-{{ forloop.counter }})" cx="50" cy="50" r="42" />{% endif %}<text class="catom__sym" x="50" y="52">{{ a.symbol }}</text></svg>{% endfor %}
+</svg>

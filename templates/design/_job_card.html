@@ -1,0 +1,21 @@
+{% comment %}
+Element tile (periodic-cell). Level is the hero number (Tally-grade); the atom glyph
+is the small identity mark (shape + symbol + family color). Expects `card`: number,
+name, disc_slug, shape, symbol, level, progress (0-100), xp_current, xp_next, and
+state ('locked' | 'active' | 'mastered'). Description rides in the title tooltip.
+{% endcomment %}
+<div class="job job--{{ card.state }}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
+    <div class="job__top">
+        <span class="job__mark">{% include 'design/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
+        <span class="job__no">{{ card.number }}</span>
+    </div>
+    <div class="job__lvbox">
+        <span class="job__lv-num">{{ card.level }}</span>
+        <span class="job__lv-cap">{% if card.state == 'locked' %}Locked{% elif card.state == 'mastered' %}Max{% else %}Level{% endif %}</span>
+    </div>
+    <div class="job__name">{{ card.name }}</div>
+    <div class="job__foot">
+        <div class="job__bar"><div class="job__fill" style="width: {{ card.progress }}%;"></div></div>
+        <div class="job__xp">{% if card.state == 'mastered' %}Maxed{% elif card.state == 'locked' %}Not started{% else %}{{ card.xp_current }} / {{ card.xp_next }} XP{% endif %}</div>
+    </div>
+</div>

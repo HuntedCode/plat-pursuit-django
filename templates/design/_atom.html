@@ -1,0 +1,8 @@
+{% comment %}
+Atom glyph: the element's family-shaped node bearing its 2-char symbol. Inherits
+--disc from an ancestor. Expects `shape` and `symbol`.
+{% endcomment %}
+<svg class="atom" viewBox="0 0 100 100" role="img" aria-label="{{ symbol }}">
+    {% include 'design/_atom_shape.html' %}
+    <text class="atom__sym" x="50" y="52">{{ symbol }}</text>
+</svg>

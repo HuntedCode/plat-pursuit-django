@@ -669,6 +669,537 @@ class PursuerCardCustomizationPreviewView(PursuerCardPreviewView):
     template_name = 'design/pursuer_card_customization_preview.html'
 
 
+class JobsWorkshopView(TemplateView):
+    """Workshop for the gamification Jobs visual system at /design/jobs/.
+
+    Explores the 5 disciplines (Combat / Exploration / Mind / Heart / Finesse) and the
+    seeded 24 + 1 jobs: per-discipline colors, the 5-axis radar, and job-card treatment.
+    Public direct link, not navigated to. See docs/design/rebuild/job-board-contracts.md
+    + docs/design/visual-identity.md.
+    """
+    template_name = 'design/jobs_preview.html'
+
+    DISCIPLINE_LABELS = {
+        'combat': 'Combat', 'exploration': 'Exploration', 'mind': 'Mind',
+        'heart': 'Heart', 'finesse': 'Finesse',
+    }
+    DISCIPLINE_TAGLINE = {
+        'combat': 'You fight.', 'exploration': 'You discover.', 'mind': 'You outwit.',
+        'heart': 'You feel.', 'finesse': 'You perform.',
+    }
+    # A sample pursuer's overall discipline levels, purely to show the radar's shape.
+    SAMPLE_RADAR = {'combat': 9, 'exploration': 5, 'mind': 7, 'heart': 3, 'finesse': 6}
+    # Per-job sample levels (same order as the seed) for the per-discipline radars
+    # and the card XP bars. Placeholder data, varied to show shape.
+    DISCIPLINE_SAMPLE = {
+        'combat':      [9, 6, 7, 4, 8],
+        'exploration': [5, 8, 3, 7, 6],
+        'mind':        [7, 5, 9, 4, 6],
+        'heart':       [6, 8, 5, 3, 7],
+        'finesse':     [8, 5, 7, 6, 4],
+    }
+    # Sample "progress to next level" per card slot (0-100), independent of level.
+    PROGRESS_CYCLE = [72, 38, 90, 21, 55]
+    # Atom shape per family slot: color = family, shape = element (slot within family).
+    SHAPES = ['circle', 'triangle', 'square', 'pentagon', 'hexagon']
+    # Sample projects (game -> its elements) to demo the Compound generator across sizes.
+    SAMPLE_PROJECTS = [
+        {'name': 'Tetris Effect', 'slug': 'tetris-effect', 'elements': ['maestro']},
+        {'name': 'DOOM Eternal', 'slug': 'doom-eternal', 'elements': ['gunslinger', 'slayer']},
+        {'name': 'Stardew Valley', 'slug': 'stardew-valley', 'elements': ['architect', 'tycoon', 'cartographer']},
+        {'name': 'The Witcher 3', 'slug': 'witcher-3', 'elements': ['mage', 'slayer', 'cartographer', 'exorcist']},
+        {'name': 'Persona 5 Royal', 'slug': 'persona-5-royal', 'elements': ['mastermind', 'mage', 'champion', 'librarian', 'infiltrator']},
+    ]
+    # Curated periodic-table-style symbols (cap + lowercase, all unique) used in
+    # place of icons -- a designed mark, not an auto-derived code. Workshop proposal.
+    SYMBOLS = {
+        'slayer': 'Sl', 'gunslinger': 'Gn', 'vanguard': 'Vg', 'outlaw': 'Ol', 'warrior': 'Wr',
+        'pathfinder': 'Pf', 'infiltrator': 'If', 'cartographer': 'Ca', 'mascot': 'Ms', 'survivalist': 'Sv',
+        'mastermind': 'Mm', 'tactician': 'Tc', 'architect': 'Ar', 'tycoon': 'Ty', 'card-shark': 'Cs',
+        'mage': 'Mg', 'champion': 'Ch', 'librarian': 'Lb', 'jester': 'Js', 'exorcist': 'Ex',
+        'gamer': 'Gm', 'driver': 'Dr', 'athlete': 'At', 'maestro': 'Mo', 'freelancer': 'Fl',
+    }
+    # Draft, flavor-forward job copy: evokes the genre/theme WITHOUT naming the IGDB
+    # tags. Recommended voice; react and tune in the workshop.
+    DESCRIPTIONS = {
+        'slayer':       "Crowds of enemies are just a to-do list.",
+        'gunslinger':   "If it moves, it's already in your sights.",
+        'vanguard':     "First through the door, last to fall back.",
+        'outlaw':       "Out here, the rules are more of a suggestion.",
+        'warrior':      "One on one, fists up. Settle it in the ring.",
+        'pathfinder':   "Every ledge is a question. You answer all of them.",
+        'infiltrator':  "They never knew you were there. That's the point.",
+        'cartographer': "The map fills in behind you, one horizon at a time.",
+        'mascot':       "Bright worlds, big jumps, a grin the whole way.",
+        'survivalist':  "Cold, hungry, hunted, still standing.",
+        'mastermind':   "The solution was obvious. Eventually.",
+        'tactician':    "You saw the win three moves ago.",
+        'architect':    "You don't play the world. You build it.",
+        'tycoon':       "Buy low, plat high.",
+        'card-shark':   "The house doesn't always win.",
+        'mage':         "Spellbook in hand, fate in flux.",
+        'champion':     "Glory, measured in trophies. Naturally.",
+        'librarian':    "Every page turned is a story finished.",
+        'jester':       "You came for the story, stayed for the laughs.",
+        'exorcist':     "You walk toward the thing everyone else runs from.",
+        'gamer':        "High score isn't a goal, it's a personality.",
+        'driver':       "The apex belongs to you.",
+        'athlete':      "Reflexes, timing, and a podium with your name on it.",
+        'maestro':      "Every beat, right on time.",
+        'freelancer':   "A little of everything. A specialist in showing up.",
+    }
+
+    @staticmethod
+    def _build_compound(atoms, seed):
+        """Deterministic molecule from a project's/contract's elements, seeded so each
+        one is (practically always) visually distinct -- even the many 1-3 element
+        contracts that share job-sets. Entropy: layout choice, a global rotation,
+        per-shape rotation, double bonds, and a seeded neutral scaffold of pendant
+        atoms fanned off the elements. The colored element atoms stay the meaningful
+        part; scaffold is decorative molecular body. Returns SVG-ready atoms (elements),
+        scaffold (neutral nodes), and bonds in a 200x200 viewBox.
+        """
+        import math
+        import random
+        rng = random.Random(seed)
+        n = len(atoms)
+        cx = cy = 100.0
+        size = 58.0 if n <= 2 else (52.0 if n <= 4 else 46.0)
+
+        # 1) canonical core positions + core bonds
+        if n == 1:
+            positions, pairs = [(cx, cy)], []
+        elif n == 2:
+            positions = [(cx - 40, cy), (cx + 40, cy)]
+            pairs = [(0, 1, rng.random() < 0.5)]
+        else:
+            layout = rng.choice(['ring', 'chain']) if n == 3 else rng.choice(['ring', 'hub'])
+            if layout == 'hub':
+                m = n - 1
+                positions = [(cx, cy)] + [
+                    (cx + 56.0 * math.cos(k * 2 * math.pi / m), cy + 56.0 * math.sin(k * 2 * math.pi / m))
+                    for k in range(m)
+                ]
+                pairs = [(0, k, rng.random() < 0.33) for k in range(1, n)]
+            elif layout == 'chain':
+                positions = [(cx - 52, cy + 18), (cx, cy - 24), (cx + 52, cy + 18)]
+                pairs = [(0, 1, rng.random() < 0.4), (1, 2, rng.random() < 0.4)]
+            else:  # ring with one double bond
+                positions = [
+                    (cx + 52.0 * math.cos(-math.pi / 2 + k * 2 * math.pi / n),
+                     cy + 52.0 * math.sin(-math.pi / 2 + k * 2 * math.pi / n))
+                    for k in range(n)
+                ]
+                pairs = [(k, (k + 1) % n, False) for k in range(n)]
+                di = rng.randrange(n)
+                pairs[di] = (pairs[di][0], pairs[di][1], True)
+
+        # 2) global seeded rotation of the whole core
+        ga = rng.uniform(0, 2 * math.pi)
+        cgv, sgv = math.cos(ga), math.sin(ga)
+        positions = [
+            (cx + (x - cx) * cgv - (y - cy) * sgv, cy + (x - cx) * sgv + (y - cy) * cgv)
+            for (x, y) in positions
+        ]
+
+        # 3) seeded scaffold: neutral pendant atoms fanned outward from the core
+        centroid = (sum(p[0] for p in positions) / n, sum(p[1] for p in positions) / n)
+        scaffold, scaf_bonds = [], []
+        for (px, py) in positions:
+            if n == 1:
+                cnt, base, span = rng.randint(2, 4), rng.uniform(0, 2 * math.pi), 2 * math.pi
+            else:
+                cnt, base, span = rng.choice([0, 0, 1, 1, 2]), math.atan2(py - centroid[1], px - centroid[0]), math.radians(95)
+            for k in range(cnt):
+                if cnt == 1:
+                    ang = base
+                elif n == 1:
+                    ang = base + 2 * math.pi * k / cnt
+                else:
+                    ang = base - span / 2 + span * k / (cnt - 1)
+                dist = size / 2 + rng.uniform(15, 20)
+                sx = min(max(px + dist * math.cos(ang), 12.0), 188.0)
+                sy = min(max(py + dist * math.sin(ang), 12.0), 188.0)
+                scaffold.append({'cx': round(sx, 1), 'cy': round(sy, 1), 'r': rng.choice([6.5, 7.5, 8.5])})
+                scaf_bonds.append({'lines': [{'x1': round(px, 1), 'y1': round(py, 1), 'x2': round(sx, 1), 'y2': round(sy, 1)}]})
+        if not scaffold:  # variety floor -- never leave a molecule bare
+            px, py = positions[0]
+            ang, dist = rng.uniform(0, 2 * math.pi), size / 2 + 17
+            sx = min(max(px + dist * math.cos(ang), 12.0), 188.0)
+            sy = min(max(py + dist * math.sin(ang), 12.0), 188.0)
+            scaffold.append({'cx': round(sx, 1), 'cy': round(sy, 1), 'r': 7.5})
+            scaf_bonds.append({'lines': [{'x1': round(px, 1), 'y1': round(py, 1), 'x2': round(sx, 1), 'y2': round(sy, 1)}]})
+
+        # 4) core bond lines (with doubles) + scaffold bonds
+        bonds = []
+        for i, j, dbl in pairs:
+            x1, y1 = positions[i]
+            x2, y2 = positions[j]
+            if dbl:
+                ddx, ddy = x2 - x1, y2 - y1
+                length = math.hypot(ddx, ddy) or 1.0
+                ox, oy = -ddy / length * 3.0, ddx / length * 3.0
+                segs = [(x1 + ox, y1 + oy, x2 + ox, y2 + oy), (x1 - ox, y1 - oy, x2 - ox, y2 - oy)]
+            else:
+                segs = [(x1, y1, x2, y2)]
+            bonds.append({'lines': [
+                {'x1': round(p, 1), 'y1': round(q, 1), 'x2': round(r, 1), 'y2': round(s, 1)}
+                for (p, q, r, s) in segs
+            ]})
+        bonds += scaf_bonds
+
+        # 5) element atoms (seeded per-shape rotation; the symbol stays upright)
+        out_atoms = [
+            {
+                'x0': round(x - size / 2, 1), 'y0': round(y - size / 2, 1), 'size': round(size, 1),
+                'rot': rng.randint(0, 359),
+                'shape': a['shape'], 'symbol': a['symbol'], 'disc_slug': a['disc_slug'],
+            }
+            for (x, y), a in zip(positions, atoms)
+        ]
+
+        return {'atoms': out_atoms, 'scaffold': scaffold, 'bonds': bonds}
+
+    @staticmethod
+    def _build_spectrum(elements, levels=None):
+        """Emission-spectrum fingerprint: each element emits a fixed set of colored
+        lines (seeded by the element itself, so it's a true composition fingerprint),
+        each in its own SHADE within its family. If `levels` (a {slug: level 0-10} map)
+        is given, line brightness reflects your level in each element (brighter = more
+        leveled) -- used for the whole-profile signature; otherwise intensity is a
+        per-line identity flourish (used for composition fingerprints). Returns line
+        dicts with an x position in a 300-wide band, a CSS color, and shape.
+        """
+        import random
+        import zlib
+        lines = []
+        for el in elements:
+            er = random.Random(zlib.crc32(('line:' + el['slug']).encode()))
+            keep = 100 - er.randint(0, 40)  # per-element shade toward white
+            lc = "color-mix(in oklab, var(--disc-%s) %d%%, white)" % (el['disc_slug'], keep)
+            lvl_intensity = None
+            if levels is not None:
+                lvl_intensity = round(0.3 + 0.65 * (levels.get(el['slug'], 0) / 10.0), 2)
+            for _ in range(er.randint(2, 4)):
+                x = round(2 + er.uniform(0.04, 0.96) * 296, 1)
+                lines.append({
+                    'x': x,
+                    'fx': round(x - 6, 1),
+                    'lc': lc,
+                    'shape': el['shape'],
+                    'intensity': lvl_intensity if lvl_intensity is not None else round(er.uniform(0.65, 1.0), 2),
+                })
+        return lines
+
+    @staticmethod
+    def _build_helix(elements, seed):
+        """DNA double-helix whose highlighted rungs are the elements (in sequence) over
+        a neutral backbone. Seeded twist phase varies the strand per contract. Returns
+        the two strands (point lists) + rungs in a w x h viewBox.
+        """
+        import math
+        import random
+        rng = random.Random(seed)
+        w, h = 120.0, 212.0
+        cxh, amp = w / 2, 34.0
+        top, bot = 16.0, h - 16.0
+        span = bot - top
+        turns = 2.3
+        phase = rng.uniform(0, 2 * math.pi)
+
+        def strand(offset):
+            return [
+                (round(cxh + amp * math.sin(phase + (s / 48) * turns * 2 * math.pi + offset), 1),
+                 round(top + (s / 48) * span, 1))
+                for s in range(49)
+            ]
+
+        n = len(elements)
+        rungs_total = min(max(n + 3, 6), 9)
+        if n == 1:
+            elem_rungs = [rungs_total // 2]
+        else:
+            elem_rungs = sorted({round(k * (rungs_total - 1) / (n - 1)) for k in range(n)})
+        rung_elem = {ri: elements[i] for i, ri in enumerate(elem_rungs) if i < n}
+
+        rungs = []
+        for ri in range(rungs_total):
+            u = (ri + 0.5) / rungs_total
+            y = top + u * span
+            a = phase + u * turns * 2 * math.pi
+            el = rung_elem.get(ri)
+            rungs.append({
+                'y': round(y, 1),
+                'xA': round(cxh + amp * math.sin(a), 1),
+                'xB': round(cxh - amp * math.sin(a), 1),
+                'cx': round(cxh, 1),
+                'element': bool(el),
+                'symbol': el['symbol'] if el else '',
+                'disc_slug': el['disc_slug'] if el else '',
+            })
+        return {'w': w, 'h': h, 'strandA': strand(0), 'strandB': strand(math.pi), 'rungs': rungs}
+
+    def get_context_data(self, **kwargs):
+        import json
+        from trophies.models import Job, Contract
+        ctx = super().get_context_data(**kwargs)
+
+        def _xp(level, progress):
+            """Sample XP into the current level and the span needed for the next."""
+            nxt = (level + 1) * 1200
+            return f"{round(nxt * progress / 100):,}", f"{nxt:,}"
+
+        by_disc = {d: [] for d in self.DISCIPLINE_LABELS}
+        for job in Job.objects.all():
+            by_disc.setdefault(job.discipline, []).append(job)
+
+        disciplines = []
+        atomic = 0  # running atomic number across the whole table (1-25)
+        for slug, label in self.DISCIPLINE_LABELS.items():
+            samples = self.DISCIPLINE_SAMPLE.get(slug, [])
+            job_dicts = []
+            for i, job in enumerate(by_disc.get(slug, [])):
+                atomic += 1
+                level = samples[i] if i < len(samples) else 5
+                progress = self.PROGRESS_CYCLE[i % len(self.PROGRESS_CYCLE)]
+                xp_current, xp_next = _xp(level, progress)
+                shape = self.SHAPES[i % len(self.SHAPES)]
+                job_dicts.append({
+                    'number': atomic,
+                    'name': job.name,
+                    'slug': job.slug,
+                    'disc_slug': slug,
+                    'shape': shape,
+                    'symbol': self.SYMBOLS.get(job.slug, job.name[:2]),
+                    'description': self.DESCRIPTIONS.get(job.slug, ''),
+                    'level': level,
+                    'progress': progress,
+                    'xp_current': xp_current,
+                    'xp_next': xp_next,
+                    'state': 'active',
+                    'spectrum': self._build_spectrum([{'slug': job.slug, 'disc_slug': slug, 'shape': shape}]),
+                })
+            disciplines.append({
+                'slug': slug,
+                'label': label,
+                'tagline': self.DISCIPLINE_TAGLINE[slug],
+                'jobs': job_dicts,
+                'radar_labels_json': json.dumps([j['name'] for j in job_dicts]),
+                'radar_data_json': json.dumps([j['level'] for j in job_dicts]),
+            })
+        ctx['disciplines'] = disciplines
+
+        # Compound generator: synthesize each sample project's molecule from its elements.
+        import zlib
+        element_by_slug = {
+            j['slug']: {'slug': j['slug'], 'symbol': j['symbol'], 'shape': j['shape'], 'disc_slug': j['disc_slug'], 'name': j['name']}
+            for d in disciplines for j in d['jobs']
+        }
+        projects = []
+        for proj in self.SAMPLE_PROJECTS:
+            els = [element_by_slug[s] for s in proj['elements'] if s in element_by_slug]
+            seed = zlib.crc32(proj['slug'].encode())
+            projects.append({
+                'name': proj['name'],
+                'elements': els,
+                'compound': self._build_compound(els, seed),
+                'spectrum': self._build_spectrum(els),
+                'helix': self._build_helix(els, seed),
+            })
+        ctx['projects'] = projects
+
+        # Real compounds: generate molecules from the actual Contracts on this server.
+        # A Contract's assigned jobs are its elements (family = discipline, shape =
+        # position within family). Add/edit a Contract in admin and refresh to update.
+        contracts = []
+        for contract in Contract.objects.prefetch_related('jobs').order_by('name')[:24]:
+            els = [
+                {
+                    'slug': j.slug,
+                    'symbol': self.SYMBOLS.get(j.slug) or j.icon or j.name[:2],
+                    'shape': self.SHAPES[j.display_order % len(self.SHAPES)],
+                    'disc_slug': j.discipline,
+                    'name': j.name,
+                }
+                for j in contract.jobs.all()
+            ]
+            if not els:
+                continue
+            seed = zlib.crc32(contract.slug.encode())
+            contracts.append({
+                'name': contract.name,
+                'elements': els,
+                'compound': self._build_compound(els, seed),
+                'spectrum': self._build_spectrum(els),
+                'helix': self._build_helix(els, seed),
+            })
+        ctx['contracts'] = contracts
+
+        # State showcase: one job (Slayer) in each of the three card states.
+        def _demo(state, level, progress):
+            xc, xn = _xp(level, progress)
+            return {
+                'number': 1, 'name': 'Slayer', 'slug': 'slayer', 'disc_slug': 'combat',
+                'shape': 'circle',
+                'symbol': self.SYMBOLS['slayer'], 'description': self.DESCRIPTIONS['slayer'],
+                'level': level, 'progress': progress, 'xp_current': xc, 'xp_next': xn,
+                'state': state,
+                'spectrum': self._build_spectrum([{'slug': 'slayer', 'disc_slug': 'combat', 'shape': 'circle'}]),
+            }
+        ctx['demo_states'] = [
+            _demo('locked', 0, 0),
+            _demo('active', 4, 60),
+            _demo('mastered', 10, 100),
+        ]
+
+        ctx['radar_labels_json'] = json.dumps(list(self.DISCIPLINE_LABELS.values()))
+        ctx['radar_data_json'] = json.dumps([self.SAMPLE_RADAR[s] for s in self.DISCIPLINE_LABELS])
+        return ctx
+
+
+class LabWorkshopView(JobsWorkshopView):
+    """Workshop for The Lab at /design/lab/ -- the element identity home: the Platinum
+    DNA radar (fed by your element levels), the periodic table of all 25 elements in a
+    realistic mix of states, your whole-profile spectral signature, and a composition
+    summary. Reuses JobsWorkshopView's catalog constants + spectrum generator.
+    """
+    template_name = 'design/lab_preview.html'
+
+    # A sample in-progress collection: some locked (0), some mastered (10), most active.
+    LAB_LEVELS = {
+        'combat':      [10, 7, 4, 0, 8],
+        'exploration': [5, 9, 0, 6, 3],
+        'mind':        [7, 0, 10, 4, 6],
+        'heart':       [6, 8, 0, 2, 5],
+        'finesse':     [9, 4, 7, 0, 10],
+    }
+
+    def get_context_data(self, **kwargs):
+        import json
+        from trophies.models import Job
+        # Skip JobsWorkshopView's heavy catalog build; start from the base TemplateView.
+        ctx = super(JobsWorkshopView, self).get_context_data(**kwargs)
+
+        def _xp(level, progress):
+            nxt = (level + 1) * 1200
+            return f"{round(nxt * progress / 100):,}", f"{nxt:,}"
+
+        by_disc = {d: [] for d in self.DISCIPLINE_LABELS}
+        for job in Job.objects.all():
+            by_disc.setdefault(job.discipline, []).append(job)
+
+        disciplines, radar_vals, all_elements, all_tiles = [], [], [], []
+        level_by_slug = {}
+        atomic = total_level = total_xp = 0
+        for slug, label in self.DISCIPLINE_LABELS.items():
+            fam_levels = self.LAB_LEVELS.get(slug, [5] * 5)
+            tiles = []
+            for i, job in enumerate(by_disc.get(slug, [])):
+                atomic += 1
+                lvl = fam_levels[i] if i < len(fam_levels) else 5
+                state = 'locked' if lvl == 0 else ('mastered' if lvl >= 10 else 'active')
+                progress = 0 if state == 'locked' else (100 if state == 'mastered' else self.PROGRESS_CYCLE[i % len(self.PROGRESS_CYCLE)])
+                xc, xn = _xp(lvl, progress)
+                cum = 1200 * lvl * (lvl + 1) // 2 + round((lvl + 1) * 1200 * progress / 100)
+                shape = self.SHAPES[i % len(self.SHAPES)]
+                tile = {
+                    'number': atomic, 'name': job.name, 'slug': job.slug, 'disc_slug': slug,
+                    'shape': shape, 'symbol': self.SYMBOLS.get(job.slug, job.name[:2]),
+                    'level': lvl, 'progress': progress, 'xp_current': xc, 'xp_next': xn, 'state': state,
+                    'description': self.DESCRIPTIONS.get(job.slug, ''),
+                    'xp_total': "{:,}".format(cum),
+                }
+                tiles.append(tile)
+                all_tiles.append(tile)
+                all_elements.append({'slug': job.slug, 'disc_slug': slug, 'shape': shape})
+                level_by_slug[job.slug] = lvl
+                total_level += lvl
+                total_xp += cum
+            avg = round(sum(fam_levels) / len(fam_levels), 1) if fam_levels else 0
+            radar_vals.append(avg)
+            disciplines.append({
+                'slug': slug, 'label': label, 'tagline': self.DISCIPLINE_TAGLINE[slug],
+                'jobs': tiles, 'avg': avg,
+                'radar_labels_json': json.dumps([t['name'] for t in tiles]),
+                'radar_data_json': json.dumps([t['level'] for t in tiles]),
+            })
+
+        ctx['disciplines'] = disciplines
+        ctx['radar_labels_json'] = json.dumps(list(self.DISCIPLINE_LABELS.values()))
+        ctx['radar_data_json'] = json.dumps(radar_vals)
+        ctx['profile_spectrum'] = self._build_spectrum(all_elements, level_by_slug)
+        ctx['dominant'] = max(disciplines, key=lambda d: d['avg']) if disciplines else None
+        ctx['top_element'] = max(all_tiles, key=lambda t: (t['level'], t['progress'])) if all_tiles else None
+        ctx['total_level'] = total_level
+        ctx['total_xp'] = "{:,}".format(total_xp)
+        ctx['total'] = atomic
+        return ctx
+
+
+class ResearchPanelView(JobsWorkshopView):
+    """Workshop for the Research Panel at /design/research-panel/ -- the browse list of
+    Projects (the user-facing skin for curated Contracts) to pursue. Each Project shows
+    its spectral fingerprint + element composition + a fixed XP reward (the global T,
+    split evenly among its elements). Pulls real Contracts from the DB alongside samples.
+    """
+    template_name = 'design/research_panel_preview.html'
+    T_TOTAL = 5000  # every Project pays the same global total, split among its elements
+    SAMPLE_STATUS = {
+        'tetris-effect': ('pursuing', 45),
+        'doom-eternal': ('completed', 100),
+        'stardew-valley': ('available', 0),
+        'witcher-3': ('pursuing', 70),
+        'persona-5-royal': ('available', 0),
+    }
+
+    def _element_index(self):
+        from trophies.models import Job
+        return {
+            job.slug: {
+                'slug': job.slug, 'symbol': self.SYMBOLS.get(job.slug, job.name[:2]),
+                'shape': self.SHAPES[job.display_order % len(self.SHAPES)],
+                'disc_slug': job.discipline, 'name': job.name,
+            }
+            for job in Job.objects.all()
+        }
+
+    def _project(self, name, element_slugs, status, progress, index, cover=None):
+        els = [index[s] for s in element_slugs if s in index]
+        n = len(els) or 1
+        return {
+            'name': name, 'elements': els, 'spectrum': self._build_spectrum(els),
+            'xp_total': "{:,}".format(self.T_TOTAL), 'xp_each': "{:,}".format(self.T_TOTAL // n),
+            'status': status, 'progress': progress, 'cover': cover,
+        }
+
+    def get_context_data(self, **kwargs):
+        from trophies.models import Contract
+        ctx = super(JobsWorkshopView, self).get_context_data(**kwargs)
+        index = self._element_index()
+
+        ctx['projects'] = [
+            self._project(p['name'], p['elements'], *self.SAMPLE_STATUS.get(p['slug'], ('available', 0)), index)
+            for p in self.SAMPLE_PROJECTS
+        ]
+
+        # Real Projects from DB Contracts -- pull the game (Concept) title + cover.
+        contracts = []
+        for contract in Contract.objects.prefetch_related('jobs', 'memberships__concept').order_by('name')[:24]:
+            slugs = [j.slug for j in contract.jobs.all()]
+            if not any(s in index for s in slugs):
+                continue
+            cover, title = None, contract.name
+            memberships = list(contract.memberships.all())
+            if memberships:
+                concept = memberships[0].concept
+                title = concept.unified_title or contract.name
+                cover = concept.concept_icon_url or None
+            contracts.append(self._project(title, slugs, 'available', 0, index, cover))
+        ctx['contracts'] = contracts
+        ctx['t_total'] = "{:,}".format(self.T_TOTAL)
+        return ctx
+
+
 class CommunityHubView(ProfileHotbarMixin, TemplateView):
     """The Community Hub destination page at /community/.
 
