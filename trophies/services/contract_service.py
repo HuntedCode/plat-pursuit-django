@@ -24,12 +24,10 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractMembership, ContractXPGrant, EarnedContract, ProfileGame,
+    Contract, ContractMembership, ContractXPGrant, EarnedContract, EarnedTrophy, ProfileGame,
     ProfileJobXP, Trophy,
 )
-from trophies.util_modules.constants import (
-    CONTRACT_FULL_FRAC, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL,
-)
+from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
 from trophies.util_modules.leveling import level_for_xp
 
 
@@ -56,13 +54,13 @@ def _active_multiplier():
     return Decimal('1.00')
 
 
-def _has_platinum(contract):
-    """Does this Contract's game(s) define a platinum at all? Drives the tier fractions:
-    games without a platinum pay the FULL T at 100% rather than the bonus fraction."""
-    concept_ids = list(contract.memberships.values_list('concept_id', flat=True))
-    if not concept_ids:
+def _has_platinum(member_ids):
+    """Do this Contract's member concept(s) define a platinum at all? Drives the tier
+    fractions: games without a platinum pay the FULL T at 100% rather than the bonus
+    fraction. Takes the member concept ids (loaded once by the caller)."""
+    if not member_ids:
         return False
-    return Trophy.objects.filter(game__concept_id__in=concept_ids, trophy_type='platinum').exists()
+    return Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum').exists()
 
 
 def home_contract_for_concept(concept):
@@ -73,28 +71,34 @@ def home_contract_for_concept(concept):
     return Contract.objects.filter(bundles__concepts=concept).first()
 
 
-def _detect_tiers(profile, contract):
+def _detect_tiers(profile, contract, member_ids):
     """(platinum_reached, full_reached) for this profile on this Contract.
 
     Platinum = the user earned the platinum on any member concept. 100% = any member
     concept (or a fully-cleared bundle) at progress 100. Completing any one version
-    variant counts.
+    variant counts. Collapsed to two bounded `.exists()` queries over the member set
+    (+ one per bundle) so the sync hot path doesn't fan out a query per concept.
     """
-    member_concepts = [m.concept for m in contract.memberships.select_related('concept').all()]
-    platinum_reached = any(c.has_user_earned_platinum(profile) for c in member_concepts)
-
-    full_reached = False
-    if member_concepts:
+    platinum_reached = full_reached = False
+    if member_ids:
+        platinum_reached = EarnedTrophy.objects.filter(
+            profile=profile, earned=True,
+            trophy__trophy_type='platinum', trophy__game__concept_id__in=member_ids,
+        ).exists()
         full_reached = ProfileGame.objects.filter(
-            profile=profile, game__concept__in=member_concepts, progress=100
+            profile=profile, game__concept_id__in=member_ids, progress=100,
         ).exists()
     if not full_reached:
-        for bundle in contract.bundles.prefetch_related('concepts').all():
-            bconcepts = list(bundle.concepts.all())
-            if bconcepts and all(
-                ProfileGame.objects.filter(profile=profile, game__concept=bc, progress=100).exists()
-                for bc in bconcepts
-            ):
+        for bundle in contract.bundles.all():
+            bundle_ids = set(bundle.concepts.values_list('id', flat=True))
+            if not bundle_ids:
+                continue
+            completed = set(
+                ProfileGame.objects
+                .filter(profile=profile, game__concept_id__in=bundle_ids, progress=100)
+                .values_list('game__concept_id', flat=True)
+            )
+            if bundle_ids <= completed:
                 full_reached = True
                 break
     return platinum_reached, full_reached
@@ -105,13 +109,14 @@ def _detect_tiers(profile, contract):
 def mark_contract_reached(profile, contract):
     """Detection only: stamp newly-reached tiers so the reward becomes claimable.
     Grants NO XP. Returns the EarnedContract if anything changed, else None."""
-    platinum_reached, full_reached = _detect_tiers(profile, contract)
+    member_ids = list(contract.memberships.values_list('concept_id', flat=True))
+    platinum_reached, full_reached = _detect_tiers(profile, contract, member_ids)
     if not (platinum_reached or full_reached):
         return None
 
     ec, _created = EarnedContract.objects.get_or_create(
         profile=profile, contract=contract,
-        defaults={'has_platinum': _has_platinum(contract)},
+        defaults={'has_platinum': _has_platinum(member_ids)},
     )
     changed = []
     now = timezone.now()
@@ -163,18 +168,25 @@ def accept_contract(profile, contract):
     multiplier = _active_multiplier()
     now = timezone.now()
 
-    tiers = []  # (tier, fraction, accepted_field)
+    # Compute the 100% tier as (grand total - platinum tier) rather than rounding its
+    # fraction independently, so platinum + full always sum to exactly the grand total
+    # even when xp_total_override or the multiplier produce a .5 rounding boundary.
+    grand_total = _tier_total(1.0, t, multiplier)
+    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if has_platinum else 0
+
+    tiers = []  # (tier, tier_total, accepted_field)
     if has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
-        tiers.append(('platinum', CONTRACT_PLATINUM_FRAC, 'platinum_accepted_at'))
+        tiers.append(('platinum', platinum_total, 'platinum_accepted_at'))
     if ec.full_reached_at and ec.full_accepted_at is None:
-        # No-platinum games pay the full T at 100%; otherwise the bonus fraction.
-        tiers.append(('full', CONTRACT_FULL_FRAC if has_platinum else 1.0, 'full_accepted_at'))
+        # No-platinum games pay the full T at 100%; otherwise the remainder bonus.
+        full_total = (grand_total - platinum_total) if has_platinum else grand_total
+        tiers.append(('full', full_total, 'full_accepted_at'))
     if not tiers:
         return 0
 
     per_job_added = defaultdict(int)
-    for tier, frac, field in tiers:
-        for job, amount in zip(jobs, _split(_tier_total(frac, t, multiplier), len(jobs))):
+    for tier, tier_total, field in tiers:
+        for job, amount in zip(jobs, _split(tier_total, len(jobs))):
             if amount <= 0:
                 continue
             ContractXPGrant.objects.create(

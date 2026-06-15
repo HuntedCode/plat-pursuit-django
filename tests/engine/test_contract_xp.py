@@ -6,7 +6,8 @@ the ledger->cache recompute, and the leveling curve.
 import pytest
 
 from trophies.models import (
-    Contract, ContractMembership, ContractXPGrant, EarnedContract, Job, ProfileGame, ProfileJobXP,
+    Contract, ContractBundle, ContractMembership, ContractXPGrant, EarnedContract, Job,
+    ProfileGame, ProfileJobXP,
 )
 from trophies.services import contract_service
 from trophies.util_modules import leveling
@@ -173,6 +174,87 @@ def test_check_profile_contracts_marks_reached_for_touched_concepts():
     ec = EarnedContract.objects.get(profile=profile, contract=contract)
     assert ec.platinum_reached_at is not None and ec.full_reached_at is not None
     assert not ProfileJobXP.objects.filter(profile=profile).exists()
+
+
+def test_odd_override_still_sums_to_exactly_T():
+    """An xp_total_override where both tier fractions land on a .5 boundary. Rounding the
+    100% tier independently would overshoot (0.70*1005=704 + 0.30*1005=302 = 1006); paying
+    the 100% tier as (grand - platinum) keeps the two tiers summing to exactly the override."""
+    profile = ProfileFactory()
+    contract = _contract('c-odd', ['gunslinger'])
+    contract.xp_total_override = 1005
+    contract.save(update_fields=['xp_total_override'])
+    _concept, game, plat = _platinum_member(contract)
+    _earn_platinum(profile, game, plat)
+    contract_service.mark_contract_reached(profile, contract)
+
+    granted = contract_service.accept_contract(profile, contract)
+
+    assert granted == 1005  # 704 platinum + 301 full, not 1006
+    assert ProfileJobXP.objects.get(profile=profile, job__slug='gunslinger').total_xp == 1005
+
+
+def test_split_accept_platinum_then_full_sums_to_T():
+    """Platinum earned before 100% -> two separate reaches/accepts. The has_platinum
+    snapshot frozen at first reach keeps the later 100% accept paying the remainder, so the
+    two accepts together still sum to exactly T."""
+    profile = ProfileFactory()
+    contract = _contract('c-split', ['gunslinger'])
+    _concept, game, plat = _platinum_member(contract)
+    EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
+    ProfileGameFactory(profile=profile, game=game, progress=95, has_plat=True)  # platinum, not yet 100%
+
+    contract_service.mark_contract_reached(profile, contract)
+    first = contract_service.accept_contract(profile, contract)
+    assert first == 3500  # platinum tier only (0.70 * 5000)
+    ec = EarnedContract.objects.get(profile=profile, contract=contract)
+    assert ec.platinum_accepted_at is not None and ec.full_accepted_at is None
+
+    ProfileGame.objects.filter(profile=profile, game=game).update(progress=100)  # later hits 100%
+    contract_service.mark_contract_reached(profile, contract)
+    second = contract_service.accept_contract(profile, contract)
+
+    assert second == 1500  # remainder (5000 - 3500)
+    assert ProfileJobXP.objects.get(profile=profile, job__slug='gunslinger').total_xp == CONTRACT_XP_TOTAL
+
+
+def test_bundle_satisfier_completes_full_tier():
+    """A Contract satisfied by a ContractBundle (no direct membership): all of the bundle's
+    concepts at 100% reaches the 100% tier; a bundle has no platinum so it pays full T."""
+    profile = ProfileFactory()
+    contract = _contract('c-bundle', ['mage'])
+    bundle = ContractBundle.objects.create(contract=contract, label='collection')
+    c1, c2 = ConceptFactory(), ConceptFactory()
+    g1, g2 = GameFactory(concept=c1), GameFactory(concept=c2)
+    bundle.concepts.set([c1, c2])
+    ProfileGameFactory(profile=profile, game=g1, progress=100)
+
+    assert contract_service.mark_contract_reached(profile, contract) is None  # only 1 of 2 -> not reached
+
+    ProfileGameFactory(profile=profile, game=g2, progress=100)
+    ec = contract_service.mark_contract_reached(profile, contract)
+    assert ec.full_reached_at is not None and ec.platinum_reached_at is None
+
+    granted = contract_service.accept_contract(profile, contract)
+    assert granted == CONTRACT_XP_TOTAL
+    assert ProfileJobXP.objects.get(profile=profile, job__slug='mage').total_xp == CONTRACT_XP_TOTAL
+
+
+def test_accept_contracts_bulk_accepts_all_claimable():
+    profile = ProfileFactory()
+    c1 = _contract('c-bulk1', ['gunslinger'])
+    concept1, game1, plat1 = _platinum_member(c1)
+    _earn_platinum(profile, game1, plat1)
+    c2 = _contract('c-bulk2', ['mage'])
+    concept2, game2 = _noplat_member(c2)
+    ProfileGameFactory(profile=profile, game=game2, progress=100)
+    contract_service.check_profile_contracts(profile, [concept1.id, concept2.id])
+    assert len(list(contract_service.claimable_contracts(profile))) == 2
+
+    total = contract_service.accept_contracts(profile)  # no list -> accept every claimable
+
+    assert total == 2 * CONTRACT_XP_TOTAL
+    assert not list(contract_service.claimable_contracts(profile))
 
 
 def test_leveling_curve_roundtrips_and_caps():
