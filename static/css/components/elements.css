@@ -15,6 +15,13 @@
     --disc-finesse:     oklch(0.82 0.15 75);
 }
 
+/* ---- Lab view toggle (Table / Radar / Signature) ---- */
+.lab-views { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.lab-view-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 7px 18px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
+.lab-view-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+.lab-view-tab.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
+.lab-view[hidden] { display: none; }
+
 /* ---- Composition summary ---- */
 .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 @media (max-width: 760px) { .summary { grid-template-columns: repeat(2, 1fr); } }

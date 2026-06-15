@@ -58,7 +58,7 @@
     {% endif %}
 
     {% if lab %}
-    {# ── The Lab: identity (composition + Platinum DNA radar) ── #}
+    {# ── The Lab: one card, three element views via a toggle (Table is the default) ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6">
             <div class="flex items-center gap-2 flex-wrap">
@@ -71,7 +71,8 @@
                 Your Platinum DNA: the {{ lab.total }} elements that make up how you play.
             </p>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+            {# Composition headline (view-independent) #}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 {% if lab.dominant %}
                 <div class="scard scard--dominant" style="--disc: var(--disc-{{ lab.dominant.slug }});">
                     <div class="scard__label">Dominant family</div>
@@ -91,43 +92,48 @@
                 {% endif %}
             </div>
 
-            <div class="radar-card">
-                <div class="radar-tabs">
-                    <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
-                    {% for d in lab.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
-                </div>
-                <div class="radar-body">
-                    <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
-                    <div class="radar-detail" id="radar-detail"></div>
+            {# View toggle: Table (default) / Radar / Signature #}
+            <div class="lab-views" role="tablist" aria-label="Lab view">
+                <button type="button" class="lab-view-tab is-active" data-view="table" role="tab" aria-selected="true">Table</button>
+                <button type="button" class="lab-view-tab" data-view="radar" role="tab" aria-selected="false">Radar</button>
+                <button type="button" class="lab-view-tab" data-view="signature" role="tab" aria-selected="false">Signature</button>
+            </div>
+
+            {# Table view (default) #}
+            <div class="lab-view" data-view="table">
+                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">All {{ lab.total }} elements, families as columns. Every element starts at Level 1 and brightens as you level it, pulsing once mastered. Tap any for its detail.</p>
+                <div class="ptable">
+                    {% for d in lab.disciplines %}
+                    <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
+                        <div class="ptable__head">
+                            <span class="ptable__name">{{ d.label }}</span>
+                            <span class="ptable__avg">avg {{ d.avg }}</span>
+                        </div>
+                        {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/elements/_element_tile.html' with card=job %}</div>{% endfor %}
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
-        </div>
-    </section>
 
-    {# ── Spectral signature ── #}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <h3 class="text-base md:text-lg font-bold">Your spectral signature</h3>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-3">The combined emission spectrum of every element you've touched, each line brightening with its level. Your whole composition as one fingerprint.</p>
-            <div class="signature">{% include 'partials/elements/_spectrum.html' with spectrum=lab.profile_spectrum %}</div>
-        </div>
-    </section>
-
-    {# ── The periodic table ── #}
-    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
-            <h3 class="text-base md:text-lg font-bold">The periodic table</h3>
-            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-4">All {{ lab.total }} elements, families as columns, in their real states. Every element starts at Level 1 and brightens as you level it, pulsing once mastered. Tap any element for its detail.</p>
-            <div class="ptable">
-                {% for d in lab.disciplines %}
-                <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
-                    <div class="ptable__head">
-                        <span class="ptable__name">{{ d.label }}</span>
-                        <span class="ptable__avg">avg {{ d.avg }}</span>
+            {# Radar view #}
+            <div class="lab-view" data-view="radar" hidden>
+                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your five family strengths at a glance. Pick a family to drill into its elements.</p>
+                <div class="radar-card">
+                    <div class="radar-tabs">
+                        <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
+                        {% for d in lab.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
                     </div>
-                    {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/elements/_element_tile.html' with card=job %}</div>{% endfor %}
+                    <div class="radar-body">
+                        <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
+                        <div class="radar-detail" id="radar-detail"></div>
+                    </div>
                 </div>
-                {% endfor %}
+            </div>
+
+            {# Signature view #}
+            <div class="lab-view" data-view="signature" hidden>
+                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">The combined emission spectrum of every element you've touched, each line brightening with its level. Your whole composition as one fingerprint.</p>
+                <div class="signature">{% include 'partials/elements/_spectrum.html' with spectrum=lab.profile_spectrum %}</div>
             </div>
         </div>
     </section>
@@ -152,77 +158,94 @@
 <script>
 // The Lab: discipline radar (overview + per-family drill-down) and tile -> detail modal.
 (function () {
-    if (typeof Chart === 'undefined') return;
-    var canvas = document.getElementById('disc-radar');
-    if (!canvas) return;
     var css = getComputedStyle(document.documentElement);
-    var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
-    var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
-    var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
-    var RMAX = {{ lab.radar_max }};
+    var chart = null;
+    var canvas = document.getElementById('disc-radar');
 
-    var DATA = { overview: { labels: {{ lab.radar_labels_json|safe }}, values: {{ lab.radar_data_json|safe }} } };
-    {% for d in lab.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
-    {% endfor %}
+    if (typeof Chart !== 'undefined' && canvas) {
+        var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
+        var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
+        var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
+        var RMAX = {{ lab.radar_max }};
 
-    var chart = new Chart(canvas, {
-        type: 'radar',
-        data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
-        options: {
-            responsive: true, maintainAspectRatio: true, animation: { duration: 350 },
-            plugins: { legend: { display: false } },
-            scales: { r: { beginAtZero: true, suggestedMax: RMAX, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false } } },
-        },
-    });
+        var DATA = { overview: { labels: {{ lab.radar_labels_json|safe }}, values: {{ lab.radar_data_json|safe }} } };
+        {% for d in lab.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
+        {% endfor %}
 
-    var LABELS = {};
-    document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
-    var detail = document.getElementById('radar-detail');
-
-    function renderPanel(labels, values, colorOf, title) {
-        if (!detail) return;
-        var rows = labels.map(function (label, i) {
-            var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
-            return '<li class="rd-row" style="--disc: ' + colorOf(i) + ';">'
-                + '<span class="rd-row__label">' + label + '</span>'
-                + '<span class="rd-row__bar"><span class="rd-row__fill" style="width: ' + pct + '%;"></span></span>'
-                + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
-        }).join('');
-        detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
-            + '<ul style="list-style:none; margin:0; padding:0;">' + rows + '</ul>';
-    }
-
-    function paint(mode) {
-        var ds = chart.data.datasets[0];
-        if (mode === 'overview') {
-            chart.data.labels = DATA.overview.labels;
-            ds.data = DATA.overview.values;
-            ds.borderColor = cyan;
-            ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
-            ds.pointBackgroundColor = discColors;
-            ds.pointBorderColor = discColors;
-            renderPanel(DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Families');
-        } else {
-            var color = css.getPropertyValue('--disc-' + mode).trim();
-            chart.data.labels = DATA[mode].labels;
-            ds.data = DATA[mode].values;
-            ds.borderColor = color;
-            ds.backgroundColor = color.replace(')', ' / 0.16)');
-            ds.pointBackgroundColor = color;
-            ds.pointBorderColor = color;
-            renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' elements');
-        }
-        chart.update();
-    }
-
-    paint('overview');
-    document.querySelectorAll('.radar-tab').forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
-            tab.classList.add('is-active');
-            paint(tab.dataset.mode);
+        chart = new Chart(canvas, {
+            type: 'radar',
+            data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
+            options: {
+                responsive: true, maintainAspectRatio: true, animation: { duration: 350 },
+                plugins: { legend: { display: false } },
+                scales: { r: { beginAtZero: true, suggestedMax: RMAX, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false } } },
+            },
         });
-    });
+
+        var LABELS = {};
+        document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
+        var detail = document.getElementById('radar-detail');
+
+        var renderPanel = function (labels, values, colorOf, title) {
+            if (!detail) return;
+            var rows = labels.map(function (label, i) {
+                var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
+                return '<li class="rd-row" style="--disc: ' + colorOf(i) + ';">'
+                    + '<span class="rd-row__label">' + label + '</span>'
+                    + '<span class="rd-row__bar"><span class="rd-row__fill" style="width: ' + pct + '%;"></span></span>'
+                    + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
+            }).join('');
+            detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
+                + '<ul style="list-style:none; margin:0; padding:0;">' + rows + '</ul>';
+        };
+
+        var paint = function (mode) {
+            var ds = chart.data.datasets[0];
+            if (mode === 'overview') {
+                chart.data.labels = DATA.overview.labels;
+                ds.data = DATA.overview.values;
+                ds.borderColor = cyan;
+                ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
+                ds.pointBackgroundColor = discColors;
+                ds.pointBorderColor = discColors;
+                renderPanel(DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Families');
+            } else {
+                var color = css.getPropertyValue('--disc-' + mode).trim();
+                chart.data.labels = DATA[mode].labels;
+                ds.data = DATA[mode].values;
+                ds.borderColor = color;
+                ds.backgroundColor = color.replace(')', ' / 0.16)');
+                ds.pointBackgroundColor = color;
+                ds.pointBorderColor = color;
+                renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' elements');
+            }
+            chart.update();
+        };
+
+        paint('overview');
+        document.querySelectorAll('.radar-tab').forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
+                tab.classList.add('is-active');
+                paint(tab.dataset.mode);
+            });
+        });
+    }
+
+    // Lab view toggle: Table (default) / Radar / Signature.
+    var viewTabs = document.querySelectorAll('.lab-view-tab');
+    var views = document.querySelectorAll('.lab-view');
+    function showView(name) {
+        views.forEach(function (v) { v.hidden = (v.dataset.view !== name); });
+        viewTabs.forEach(function (t) {
+            var on = t.dataset.view === name;
+            t.classList.toggle('is-active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        // The radar canvas is hidden (0-size) until first revealed; resize it on show.
+        if (name === 'radar' && chart) { chart.resize(); }
+    }
+    viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
 })();
 
 (function () {
