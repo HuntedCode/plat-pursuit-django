@@ -120,11 +120,3 @@
 .compound .atom { filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 80%, transparent)) drop-shadow(0 0 8px color-mix(in oklab, var(--disc) 42%, transparent)); }
 .compound .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-1)); stroke: color-mix(in oklab, var(--disc) 92%, white); stroke-width: 3; }
 .compound .atom__sym { fill: color-mix(in oklab, var(--disc) 85%, white); }
-
-/* ---- Compound shelf (the Projects you've synthesized) ---- */
-.compound-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px; }
-.compound-cell { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 12px 10px; text-align: center; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-.compound-cell:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); }
-.compound-cell__stage { display: grid; place-items: center; }
-.compound-cell__stage .compound { max-width: 116px; }
-.compound-cell__name { font-size: 12px; font-weight: 700; margin-top: 8px; color: var(--pp-text); line-height: 1.3; }
