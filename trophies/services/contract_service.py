@@ -252,10 +252,11 @@ def recompute_profile_job_xp(profile):
         pjx.level = level_for_xp(pjx.total_xp)
         pjx.save()
 
+    floor_level = level_for_xp(0)  # 1 (the level-1 floor)
     for job_id, pjx in existing.items():
-        if job_id not in sums and (pjx.total_xp or pjx.level):
+        if job_id not in sums and (pjx.total_xp or pjx.level != floor_level):
             pjx.total_xp = 0
-            pjx.level = 0
+            pjx.level = floor_level
             pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
 
     return sums
