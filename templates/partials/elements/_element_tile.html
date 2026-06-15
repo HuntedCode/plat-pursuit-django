@@ -11,11 +11,11 @@ description. Description rides in the title tooltip.
     </div>
     <div class="job__lvbox">
         <span class="job__lv-num">{{ card.level }}</span>
-        <span class="job__lv-cap">{% if card.state == 'locked' %}Locked{% elif card.state == 'mastered' %}Max{% else %}Level{% endif %}</span>
+        <span class="job__lv-cap">{% if card.state == 'mastered' %}Max{% else %}Level{% endif %}</span>
     </div>
     <div class="job__name">{{ card.name }}</div>
     <div class="job__foot">
         <div class="job__bar"><div class="job__fill" style="width: {{ card.progress }}%;"></div></div>
-        <div class="job__xp">{% if card.state == 'mastered' %}Maxed{% elif card.state == 'locked' %}Not started{% else %}{{ card.xp_current }} / {{ card.xp_next }} XP{% endif %}</div>
+        <div class="job__xp">{% if card.state == 'mastered' %}Maxed{% else %}{{ card.xp_current }} / {{ card.xp_next }} XP{% endif %}</div>
     </div>
 </div>

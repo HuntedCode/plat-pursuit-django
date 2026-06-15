@@ -73,26 +73,21 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
     """Build one element tile from a job + the viewer's real level/XP for it.
 
     `atomic` is the running 1..N periodic number; `slot_index` is the job's slot within
-    its family (drives the atom shape). XP fields use the real leveling curve.
+    its family (drives the atom shape). XP fields use the real leveling curve. Every
+    element is at least level 1 (the floor), so there is no "locked" state.
     """
-    if level <= 0 and total_xp <= 0:
-        state = 'locked'
-    elif level >= JOB_LEVEL_CAP:
+    level = max(1, level)
+    if level >= JOB_LEVEL_CAP:
         state = 'mastered'
+        progress, xp_current, xp_next = 100, 0, 0
     else:
         state = 'active'
-
-    if state == 'active':
         floor = xp_for_level(level)
         ceil = xp_for_level(level + 1)
         into = max(0, total_xp - floor)
         span = max(1, ceil - floor)
         progress = min(100, round(into / span * 100))
         xp_current, xp_next = into, span
-    elif state == 'mastered':
-        progress, xp_current, xp_next = 100, 0, 0
-    else:
-        progress, xp_current, xp_next = 0, 0, xp_for_level(1)
 
     return {
         'number': atomic,
@@ -135,8 +130,9 @@ def build_profile_elements(profile):
         for i, job in enumerate(by_disc.get(slug, [])):
             atomic += 1
             level, txp = rows.get(job.slug, (0, 0))
-            tiles.append(element_dict(job, level, txp, atomic=atomic, slot_index=i))
-            total_level += level
+            tile = element_dict(job, level, txp, atomic=atomic, slot_index=i)
+            tiles.append(tile)
+            total_level += tile['level']  # floored (>= 1), so Pursuer Level counts every job
             total_xp += txp
         all_tiles.extend(tiles)
         avg = round(sum(t['level'] for t in tiles) / len(tiles), 1) if tiles else 0
@@ -155,6 +151,6 @@ def build_profile_elements(profile):
         'dominant': max(disciplines, key=lambda d: d['avg']) if disciplines else None,
         'top_element': max(all_tiles, key=lambda t: (t['level'], t['progress'])) if all_tiles else None,
         'total_level': total_level,
-        'total_xp': f"{total_xp:,}",
+        'total_xp': total_xp,
         'total': atomic,
     }

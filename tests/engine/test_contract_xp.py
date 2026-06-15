@@ -257,10 +257,11 @@ def test_accept_contracts_bulk_accepts_all_claimable():
     assert not list(contract_service.claimable_contracts(profile))
 
 
-def test_leveling_curve_roundtrips_and_caps():
-    assert leveling.xp_for_level(0) == 0
-    assert leveling.level_for_xp(0) == 0
-    for level in (1, 2, 5, 10, JOB_LEVEL_CAP):
+def test_leveling_curve_is_one_based_and_caps():
+    assert leveling.xp_for_level(1) == 0    # level 1 is the floor (0 XP)
+    assert leveling.level_for_xp(0) == 1    # no XP -> level 1, not 0
+    assert leveling.level_for_xp(-5) == 1   # floors at 1
+    for level in (2, 5, 10, JOB_LEVEL_CAP):
         xp = leveling.xp_for_level(level)
         assert leveling.level_for_xp(xp) == level          # exactly at threshold
         assert leveling.level_for_xp(xp - 1) == level - 1  # just below

@@ -82,8 +82,6 @@
 .job__bar { height: 5px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
 .job__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
 .job__xp { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: center; font-variant-numeric: tabular-nums; }
-.job--locked { filter: grayscale(0.92); opacity: 0.5; }
-.job--locked:hover { transform: none; box-shadow: none; border-color: color-mix(in oklab, var(--disc) 35%, transparent); }
 .job--mastered { border-color: color-mix(in oklab, var(--disc) 78%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1)); animation: jobPulse 3.4s ease-in-out infinite; }
 .job--mastered .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
 @keyframes jobPulse {
