@@ -1,0 +1,122 @@
+/* ================================================================
+ * Elements (the "Element" skin over Jobs)
+ * Component CSS for the periodic-table element tiles, the atom glyph,
+ * the family/discipline radar, the spectral signature, the composition
+ * summary, and the element-detail modal. Used by the Logbook's Lab zone
+ * (and, later, the Research Panel). Family color = --disc-*; shape = the
+ * element's slot within its family. Extracted from the /design/lab/ workshop.
+ * ================================================================ */
+
+:root {
+    --disc-combat:      oklch(0.68 0.20 25);
+    --disc-exploration: oklch(0.78 0.15 155);
+    --disc-mind:        oklch(0.72 0.16 285);
+    --disc-heart:       oklch(0.72 0.19 0);
+    --disc-finesse:     oklch(0.82 0.15 75);
+}
+
+/* ---- Composition summary ---- */
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 760px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 18px; }
+.scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
+.scard__value { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 24px; line-height: 1; }
+.scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
+.scard--dominant { border-color: color-mix(in oklab, var(--disc) 50%, var(--pp-border)); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); }
+.scard--dominant .scard__value { color: var(--disc); }
+.scard__value--big { font-size: 42px; text-shadow: 0 0 22px color-mix(in oklab, var(--disc) 35%, transparent); }
+.scard__unlock { display: flex; align-items: center; gap: 9px; }
+.scard__unlock-name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 16px; }
+
+/* ---- Radar ---- */
+.radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; }
+.radar-tabs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
+.radar-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
+.radar-tab[data-mode="overview"] { --disc: var(--pp-primary); }
+.radar-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc) 60%, var(--pp-border)); }
+.radar-tab.is-active { color: var(--disc); border-color: var(--disc); background: color-mix(in oklab, var(--disc) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 30%, transparent); }
+.radar-body { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: 40px; align-items: center; }
+@media (max-width: 780px) { .radar-body { grid-template-columns: 1fr; gap: 28px; } }
+.radar-stage { display: grid; place-items: center; }
+.radar-stage canvas { max-width: 440px; width: 100%; height: auto; }
+.radar-detail__title { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 16px; }
+.rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 12px 0; }
+.rd-row__label { font-size: 13px; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rd-row__bar { display: block; height: 8px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+.rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+.rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Spectral signature (whole profile) ---- */
+.signature { border-radius: var(--pp-radius-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
+.signature .spectrum { height: 96px; border-radius: 0; box-shadow: none; }
+.spectrum { display: block; width: 100%; height: auto; border-radius: var(--pp-radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
+.spectrum__bg { fill: #05070b; }
+.spectrum__line { stroke: var(--lc); stroke-width: 2.4; filter: drop-shadow(0 0 3px var(--lc)); }
+
+/* ---- Atom glyph + element chip ---- */
+.atom { display: block; width: 100%; height: 100%; overflow: visible; }
+.atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); stroke: color-mix(in oklab, var(--disc) 55%, transparent); stroke-width: 2.5; }
+.atom__sym { fill: var(--disc); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 36px; text-anchor: middle; dominant-baseline: central; }
+.formula-chip { display: inline-block; width: 30px; height: 30px; flex: none; }
+
+/* ---- Periodic table (families as columns) ---- */
+.ptable { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+@media (max-width: 860px) { .ptable { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .ptable { grid-template-columns: 1fr; } }
+.ptable__col { display: flex; flex-direction: column; gap: 10px; }
+.ptable__head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 0 2px 7px; border-bottom: 2px solid color-mix(in oklab, var(--disc) 50%, transparent); margin-bottom: 2px; }
+.ptable__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 14px; color: var(--disc); letter-spacing: 0.02em; }
+.ptable__avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+/* ---- Element tile (periodic cell) ---- */
+.job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; display: flex; flex-direction: column; }
+.job:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 75%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent); }
+.job__top { display: flex; justify-content: space-between; align-items: flex-start; }
+.job__no { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; color: color-mix(in oklab, var(--disc) 65%, var(--pp-text-mute)); }
+.job__mark { width: 27px; height: 27px; flex: none; }
+.job__lvbox { text-align: center; margin: 9px 0 4px; }
+.job__lv-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in oklab, var(--disc) 38%, transparent); }
+.job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
+.job__name { font-weight: 700; font-size: 13px; text-align: center; color: var(--pp-text); }
+.job__foot { margin-top: auto; padding-top: 12px; }
+.job__bar { height: 5px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+.job__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+.job__xp { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: center; font-variant-numeric: tabular-nums; }
+.job--locked { filter: grayscale(0.92); opacity: 0.5; }
+.job--locked:hover { transform: none; box-shadow: none; border-color: color-mix(in oklab, var(--disc) 35%, transparent); }
+.job--mastered { border-color: color-mix(in oklab, var(--disc) 78%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1)); animation: jobPulse 3.4s ease-in-out infinite; }
+.job--mastered .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
+@keyframes jobPulse {
+    0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 35%, transparent), 0 6px 22px color-mix(in oklab, var(--disc) 16%, transparent); }
+    50%      { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 62%, transparent), 0 10px 34px color-mix(in oklab, var(--disc) 36%, transparent); }
+}
+
+/* ---- Tile -> detail interaction ---- */
+.ptile { cursor: pointer; border-radius: var(--pp-radius-lg); }
+.ptile:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.emodal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+.emodal[hidden] { display: none; }
+.emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.66); backdrop-filter: blur(3px); }
+.emodal__dialog { position: relative; z-index: 1; width: min(440px, 100%); max-height: 88vh; overflow: auto; background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); padding: 26px 24px 24px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
+.emodal__close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--pp-text-mute); font-size: 26px; line-height: 1; cursor: pointer; }
+.emodal__close:hover { color: var(--pp-text); }
+
+/* ---- Element detail (level/XP first-class) ---- */
+.edetail__head { display: flex; align-items: center; gap: 14px; }
+.edetail__glyph { width: 50px; height: 50px; flex: none; }
+.edetail__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 20px; }
+.edetail__fam { font-size: 12px; color: var(--pp-text-mute); margin-top: 2px; }
+.edetail__levelrow { display: flex; align-items: center; gap: 18px; margin-top: 22px; }
+.edetail__level { flex: none; text-align: center; min-width: 78px; }
+.edetail__level-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 54px; line-height: 0.9; color: var(--disc); text-shadow: 0 0 24px color-mix(in oklab, var(--disc) 40%, transparent); font-variant-numeric: tabular-nums; }
+.edetail__level-cap { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); }
+.edetail__xp { flex: 1; }
+.edetail__xp-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--pp-text-dim); margin-bottom: 7px; font-variant-numeric: tabular-nums; }
+.edetail__xp-next { color: var(--pp-text-mute); }
+.edetail__bar { height: 9px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
+.edetail__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); }
+.edetail__total { font-size: 11px; color: var(--pp-text-mute); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.edetail__flavor { margin-top: 20px; font-style: italic; color: var(--pp-text-dim); font-size: 14px; line-height: 1.5; padding-right: 1px; }
+.edetail__sources { margin-top: 22px; border-top: 1px solid var(--pp-divider); padding-top: 16px; }
+.edetail__sources-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }
+.edetail__sources-note { font-size: 12.5px; color: var(--pp-text-dim); line-height: 1.5; margin: 0; }

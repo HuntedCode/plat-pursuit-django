@@ -1,0 +1,4 @@
+{% comment %}
+Atom shape (class atom__shape) to drop inside any 0 0 100 100 SVG. Expects `shape`
+('circle'|'triangle'|'square'|'pentagon'|'hexagon'); color comes from --disc.
+{% endcomment %}{% if shape == 'triangle' %}<polygon class="atom__shape" points="50,4 95,85 5,85" />{% elif shape == 'square' %}<rect class="atom__shape" x="13" y="13" width="74" height="74" rx="7" />{% elif shape == 'pentagon' %}<polygon class="atom__shape" points="50,8 91,38 75,87 25,87 9,38" />{% elif shape == 'hexagon' %}<polygon class="atom__shape" points="50,7 89,28 89,72 50,93 11,72 11,28" />{% else %}<circle class="atom__shape" cx="50" cy="50" r="42" />{% endif %}

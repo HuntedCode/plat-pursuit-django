@@ -14,6 +14,7 @@ import logging
 from django.db.models import Sum
 
 from trophies.models import ProfileJobXP, UserTitle
+from trophies.services import element_render
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,12 @@ def _build_hero(profile):
     }
 
 
+def _build_lab(profile):
+    """The Lab zone: the profile's elements/families view (periodic table, radar data,
+    composition summary), assembled from real ProfileJobXP via the element foundation."""
+    return element_render.build_profile_elements(profile)
+
+
 def build_logbook_context(profile):
     """Assemble the full Logbook context for `profile`. Each zone is isolated so a
     failure degrades to a missing section rather than a 500."""
@@ -52,4 +59,9 @@ def build_logbook_context(profile):
     except Exception:
         logger.exception("Logbook hero build failed for profile %s", getattr(profile, 'id', '?'))
         context['hero'] = None
+    try:
+        context['lab'] = _build_lab(profile)
+    except Exception:
+        logger.exception("Logbook lab build failed for profile %s", getattr(profile, 'id', '?'))
+        context['lab'] = None
     return context
