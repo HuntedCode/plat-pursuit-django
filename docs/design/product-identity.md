@@ -8,13 +8,13 @@ This is a living document, but most strategic and architectural decisions in thi
 
 ## The 2-Minute Pitch
 
-> Picture a PlayStation user who just earned their 50th platinum. On every other tracking site, that's a number. On PlatPursuit, that platinum slotted into a Badge they were one game away from completing, leveled up their Detective job, pushed their Intelligence stat closer to the next tier, ticked a daily quest, and earned them currency to spend on a new frame for their Pursuer's Logbook.
+> Picture a PlayStation user who just earned their 50th platinum. On every other tracking site, that's a number. On PlatPursuit, that platinum slotted into a Badge they were one game away from completing, leveled up their Detective and Survivalist, ticked a daily quest, and earned them currency to spend on a new frame for their Pursuer's Logbook.
 >
 > That's PlatPursuit. Trophy hunting already exists; we're the layer built on top of it.
 >
 > The center of everything is Badges. Think of them as platinums for your platinums. Each Badge is a curated game list (every Resident Evil platinum, every From Software soulslike, every PSVR2 100%) with custom artwork our team designs in-house. You can't find these anywhere else. Earning one is a real achievement, with art worth framing and sharing.
 >
-> As you complete the Badges that interest you, your Pursuer levels up, your stats develop, and your Jobs specialize. The stats are P.L.A.T.I.N.U.M.: Power, Luck, Agility, Toughness, Intelligence, Navigation, Utility, Magic. The 25 Jobs cover every kind of player. A Driver with every Forza. A Detective who's solved every Phoenix Wright case. A Spell Caster carrying the Skyrim platinum. Your character is the cumulative shape of how you actually play.
+> As you complete the Badges that interest you, your Pursuer levels up and your Jobs specialize. The 24 Jobs span five disciplines (Combat, Exploration, Mind, Heart, Finesse) and cover every kind of player. A Driver with every Forza. A Detective who's solved every Phoenix Wright case. A Mage carrying the Skyrim platinum. Your character is the cumulative shape of how you actually play.
 >
 > Around that spine, we've built what a serious trophy hunter needs: staff-written platinum roadmaps, community reviews from players who've actually completed the platinum, deep stats and library tools, shareables built for showing off. None of it competes with PSN. The Badge-driven Pursuer does.
 >
@@ -28,9 +28,16 @@ About 320 words, ~125 seconds spoken at conversational pace.
 
 ### The Spine
 
-**Badges + the Pursuer** form the spine of the product. Badges are the moat: curated game lists with custom in-house artwork, framed as "platinums for your platinums." The Pursuer is the user's RPG identity, built from completing Badges through three layers: Character Level (badge XP), P.L.A.T.I.N.U.M. stats (8-stat radar), and Jobs (25 specializations).
+**Badges + the Pursuer** form the spine of the product. Badges are the moat: curated game lists with custom in-house artwork, framed as "platinums for your platinums." The Pursuer is the user's RPG identity, built on two curated rails that both point at the shared **Concept** (game) atom:
 
-Not every PSN trophy fires the engine. Only trophies that contribute to active Badges do. This is the privileged role Badges play.
+- **Badges** — the collection moat. Earning badge tiers fills the gallery and accrues **badge XP**. Unchanged by the gamification update.
+- **The Job Board (Contracts)** — a staff-curated pool of games that grants **job XP once per game**. Completing a game levels the **Jobs** assigned to it. The 24 Jobs (plus a Freelancer fallback) sort into **five disciplines** (Combat, Exploration, Mind, Heart, Finesse), which are the radar axes of "what kind of player am I."
+
+**Pursuer Level** is the headline number: the sum of all job levels (RuneScape's Total Level). Jobs live on their own layer rather than on badge stages because a game sits in many badges, but job XP must be earned only **once per game** (tying it to badge stages would double-pay a game that's in both a Series and a Developer badge). A coverage audit keeps the Job Board a **superset of every badge game**, so completing the Badges you care about always levels your Pursuer; the Job Board just dedupes and curates underneath.
+
+> **The P.L.A.T.I.N.U.M. 8-stat system is retired** (2026-06). The 5 disciplines are the sole characterization; there is no separate stat radar.
+
+Not every PSN trophy fires the engine. Badge tiers and badge XP come from the trophies that contribute to active Badges; job XP comes from completing curated games on the Job Board (the superset of badge games). Trophies outside both curated pools don't move the Pursuer. That curated filter is the privileged role the Badge + Job Board layer plays.
 
 ### Supporting Pillars
 
@@ -47,7 +54,7 @@ Four pillars exist around the spine. They are intentionally subordinated: they s
 
 - **The spine carries engagement and retention.** Pursuers come back to level up.
 - **The pillars carry SEO traffic.** Game-detail pages, guides, and reviews are the inbound funnel. The spine doesn't fight for SEO.
-- **Premium gates expression and depth, not the spine.** The Pursuer identity is visible to all (free can see their level, stats, jobs). Customization, currency, store, and deeper engagement loops are premium.
+- **Premium gates expression and depth, not the spine.** The Pursuer identity is visible to all (free can see their Pursuer Level, jobs, and discipline radar). Customization, currency, store, and deeper engagement loops are premium.
 - **Challenges sit inside the spine** as structured progression layered on Badges, not as a separate pillar.
 - **Surfacing is multi-channel, not nav-driven.** Reviews and Roadmaps don't earn top-nav slots; they get traffic via contextual cross-linking, home page content tiles, and notification-driven re-engagement.
 
@@ -104,7 +111,7 @@ Flat top-level URLs for Pursuit sub-pages because Pursuit's home is `/`. No `/pu
 These are sibling surfaces with distinct roles:
 
 - **Pursuit home (`/`)** is *the chase*. What's happening in your pursuit right now. Badge-led: active progressions, featured editorial picks, recent activity. Pursuer card is compact; identity is at-a-glance.
-- **Logbook (`/logbook/`)** is *who you've become*. RPG identity deep-dive: full P.L.A.T.I.N.U.M. radar with breakdown, all 25 Jobs grid with progress, customization (frames, titles, store entry), star chart preview, quest history, achievement showcase.
+- **Logbook (`/logbook/`)** is *who you've become*. RPG identity deep-dive: the 5-discipline radar with breakdown, all 24 Jobs grid with progress, customization (frames, titles, store entry), star chart preview, quest history, achievement showcase. (Element-skinned as **The Lab**; the final surface name is an open IA item, below.)
 
 Both are badge-rooted. Pursuit pulls you forward; Logbook reflects who you are.
 
@@ -197,10 +204,15 @@ Most surfacing work is *post-Phase-1* once the spine ships and engagement data i
 | **Pursuit** / **The Pursuit** | The hub at `/`. The spine destination. The brand experience. Use "Start your Pursuit" for anonymous copy, "Continue your Pursuit" for signed-in | Committed |
 | **Pursuer** | The user's RPG identity. The character they're building | Committed |
 | **Pursuer's Logbook** / **Logbook** | A sub-page within Pursuit (`/logbook/`) for the RPG identity deep-dive | Committed |
-| **Badge** | A curated game list with custom artwork; the input to gamification | Committed (existing system) |
-| **P.L.A.T.I.N.U.M.** | The 8-stat acronym (Power, Luck, Agility, Toughness, Intelligence, Navigation, Utility, Magic) | Committed |
-| **Job** | One of 25 player specializations driven by completed Badges | Committed |
+| **Badge** | A curated game list with custom artwork; the collection moat | Committed (existing system) |
+| **Badge XP** | Collection-progress XP from earning badge tiers (the `ProfileGamification` denorm). Rename pending (Renown / Prestige / Acclaim) | Committed (existing) |
+| **Job** | One of 24 player specializations (+ a Freelancer fallback). Leveled via the Job Board (Contracts), **not** badge stages | Committed |
+| **Discipline** | One of the 5 job categories (Combat, Exploration, Mind, Heart, Finesse). The radar axes; replaces the retired P.L.A.T.I.N.U.M. stats | Committed |
+| **Pursuer Level** | The headline number: sum of all job levels (RuneScape's Total Level) | Committed |
+| **Contract / Job Board** | The staff-curated pool of games that grants job XP once per game. Both Badges and Contracts reference the shared Concept atom | Committed |
 | **Stage** | A Badge tier (Bronze, Silver, Gold, Platinum) | Committed (existing) |
+| **Element skin** | User-facing presentation lexicon over the Job/Contract models (periodic-table aesthetic): **Element** = Job, **Family** = Discipline, **Project** = Contract, **The Lab** = the identity surface. Models keep the Job/Contract names | Committed (presentation) |
+| ~~**P.L.A.T.I.N.U.M.**~~ | The 8-stat acronym. **Retired 2026-06**; the 5 Disciplines are the sole characterization | Retired |
 
 ---
 
@@ -209,6 +221,7 @@ Most surfacing work is *post-Phase-1* once the spine ships and engagement data i
 Most of the original open threads are now decided. What remains open going into formal planning:
 
 - **Logbook MVP scope.** Which sub-pages ship in the first release vs. v1.x. Star Chart, Quests, frame customization, and the Job deep-dive grid all need scoping.
+- **Element-surface IA & naming.** The job/element identity surface is committed as the Logbook (`/logbook/`) but element-skinned as **The Lab**; the canonical user-facing name (and whether The Lab is the whole page or a section within the Logbook) is open. The **Research Panel** (the Job Board / Contracts-to-pursue browse) is a new surface the Contract model introduced and needs an IA home. Both are inputs to the IA reshape pass that follows this reconciliation.
 - **Premium specifics.** Direction agreed (Duolingo-style: free is generous and complete, premium for expression and engagement). Specifics deferred until after spine ships and we can see real engagement.
 - **Engagement XP ("level 99 enabler").** How users earn job XP through platform engagement (not just trophy-based stage completion) without it feeling chore-like. Open from the vision doc.
 - **Roadmaps list page reveal threshold.** What roadmap volume justifies graduating to a `/games/roadmaps/` list page and Browse sub-nav slot? Author's call.

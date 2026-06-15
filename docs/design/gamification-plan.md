@@ -24,15 +24,16 @@ The system rolls out in phases. Phase 1 ships the loop. Each successive phase el
 
 The simplest possible version of the game, in plain English:
 
-> You play games on PSN. You earn trophies. The trophies you earn contribute to PlatPursuit Badges (curated collections we maintain). As Badge stages and tiers complete, your Pursuer levels up across multiple Jobs (auto-derived from the kinds of games you're playing). Your Logbook grows: more Badges in your gallery, higher job levels, new titles unlocked. Over months and years, your Pursuer becomes a unique reflection of your gaming history.
+> You play games on PSN. You earn trophies. Those trophies feed two curated layers we maintain: **Badges** (collections you complete tier by tier) and the **Job Board** (a pool of curated games that is a superset of every badge game). Completing a game levels the **Jobs** it's tagged with; completing a badge tier adds the Badge to your gallery. Your Logbook grows: more Badges, higher job levels, new titles unlocked. Over months and years, your Pursuer becomes a unique reflection of your gaming history.
 
 That's the entire game. Everything else is elaboration.
 
-The loop has three reward beats per platinum:
+The loop has distinct reward beats:
 
-- **Per-trophy**: small, constant XP tick to relevant jobs (granular feedback)
-- **Per-stage completion**: meaningful XP bonus + visible level-up moments
-- **Per-badge-tier earned**: large XP bonus + the Badge artifact added to your gallery
+- **Game completed (Platinum)**: the game's Contract reaches its Platinum tier, becoming a **claimable** job-XP reward across the Jobs it's tagged with.
+- **Game 100%'d**: the Contract's 100% tier becomes claimable (the bonus; a game with no platinum pays its full reward here).
+- **Reward accepted**: the user **accepts** the completed Contract to bank its job XP toward levels (one accept banks all of its claimable tiers). The deliberate engagement gate: completion is automatic, but banking the XP is a choice you make.
+- **Badge tier earned**: the Badge artifact is added to your gallery and badge XP accrues.
 
 Each beat is satisfying on its own. Together they make the trophy-hunting tempo feel like RPG progression.
 
@@ -46,24 +47,23 @@ The goal of Phase 1 is to make the core loop ship as a complete, satisfying expe
 
 #### 1. The Job system
 
-The Pursuer's progression mechanism. Each job represents a player specialization (Driver, Detective, Survivalist, etc.). Jobs accrue XP automatically based on the games and badges the user engages with.
+The Pursuer's progression mechanism. Each job represents a player specialization (Driver, Detective, Survivalist, etc.). Jobs accrue XP from completing the curated games on the **Job Board** (Contracts), banked when the user accepts a completed Contract.
 
 Key design decisions:
 
-- **Job assignments are auto-derived from IGDB tags on the games in each Badge stage.** No manual stage-to-job mapping. A stage's job tags are the union of IGDB genres / themes / modes on its constituent games, mapped through a job catalog. Auto-scaling, no admin bottleneck.
-- **The job catalog is being re-derived against IGDB's actual taxonomy.** The legacy 25-job list from the prior vision doc is a starting point; the new catalog will be designed to map cleanly to IGDB's genre / theme / mode vocabulary. Final list TBD as a separate design exercise (logged as an open thread).
-- **XP awarding has three layers**:
-  - Per-trophy: small XP tick to the jobs associated with the trophy's game (granular, real-time during sync)
-  - Per-stage completion: medium XP bonus to relevant jobs when a stage completes for any badge tier
-  - Per-badge-tier earned: large XP bonus to relevant jobs + the Badge artifact unlocks in the gallery
-- **Job levels** scale 1 to N (cap TBD; RuneScape's 99 is the inspiration but the actual cap depends on XP curve calibration with real data).
+- **Jobs are assigned to Contracts (the Job Board), not to badge stages.** Job XP must be earned **once per game**, but a game sits in many badges, so jobs live on their own curated layer (tying job XP to badge stages would double-pay a game in both a Series and a Developer badge). Both Badges and Contracts reference the shared **Concept** atom. Full data model: `docs/design/rebuild/job-board-contracts.md`.
+- **Assignment is staff-curated with IGDB assist.** A command (`report_job_assignment`) *suggests* a Contract's jobs from the IGDB genres / themes / modes of its game; staff confirm and trim to the jobs the game is genuinely about. A coverage audit keeps the Job Board a **superset of every live badge game**, so curation stays in sync without double-authoring.
+- **The job catalog is locked**: 24 jobs (+ a Freelancer fallback) across 5 disciplines. See `job-board-contracts.md` / `jobs-taxonomy-data.md`.
+- **Job XP comes from completing Contracts, in two tiers.** Every Contract is worth the same global total `T` (override per Contract for specials), split **evenly** across its assigned jobs. The Platinum tier pays the bulk; the 100% tier pays the remainder (a game with no platinum pays its full `T` at 100%). Each tier is granted **at most once** per user, recorded to an **immutable ledger** (`ContractXPGrant`) at the moment's `base_t` x `multiplier`, so double-XP events and later config changes never rewrite history.
+- **Banking is a user action (the acceptance gate).** Completion is detected automatically on sync and makes the reward **claimable**; the user must **accept** the Contract to bank its XP toward levels. One accept banks all of a Contract's claimable tiers at once, plus a bulk "accept all." There is no "starting" a Contract; you end (accept) it.
+- **Job levels** scale 1 to N (cap starts at 50; RuneScape's 99 is the inspiration, the actual cap depends on XP-curve calibration with real data). **Pursuer Level = sum of all job levels.**
 
 #### 2. The Pursuer
 
 The player's identity. Built from the sum of their job levels.
 
 - **Pursuer Level**: the headline number, equal to the sum of all individual job levels. Mirrors RuneScape's Total Level. Single number, no parallel "Character Level" concept (the legacy vision doc had two; we collapse to one).
-- **Job category radar**: a derived view grouping the jobs into 4 to 8 thematic categories (Combat, Exploration, Puzzle, Story, Social, etc.; final categories TBD with the job catalog redesign). Sums of category-internal job levels render as a radar chart for the "what kind of player am I" view. No separate stat system; categories ARE the high-level characterization.
+- **Discipline radar**: the 24 jobs sort into **5 disciplines** (Combat, Exploration, Mind, Heart, Finesse). Sums of discipline-internal job levels render as a radar chart for the "what kind of player am I" view. No separate stat system; the disciplines ARE the high-level characterization. (This replaces the retired P.L.A.T.I.N.U.M. 8-stat radar.)
 - **Title-based progression rewards**: at job level milestones (e.g., Lv. 5, 25, 50, 99), the user unlocks a job-specific title ("Apprentice Driver," "Skilled Driver," "Master Driver," "Legendary Driver"). Extends the existing Titles system; no new infrastructure. Titles are equippable on the Logbook.
 
 #### 3. The Pursuer's Logbook destination (`/logbook/`)
@@ -187,10 +187,12 @@ If these signals are positive after a soak period (probably 2 to 3 months post-l
 
 Decisions deferred until Phase 1 implementation begins:
 
-- **Job catalog redesign** (re-derive against IGDB taxonomy; replace or refine the legacy 25-job list). Separate design exercise, blocking Phase 1.
-- **Job category groupings** (4 to 8 categories for the radar chart). Falls out of the catalog redesign.
-- **XP curve calibration** (level cap, XP per trophy / stage / tier, balance between job tiers). Needs real data; ship with reasonable initial values, tune from there.
-- **Badge tier requirements integration** (modern stages vs. all stages, platinum vs. 100%). Already designed in the existing badge system; verify it integrates cleanly with the new XP layer.
+- **Job catalog redesign** — DONE. 24 jobs (+ Freelancer fallback) across 5 disciplines are locked (`job-board-contracts.md`, `jobs-taxonomy-data.md`).
+- **Job category groupings** — DONE. The 5 disciplines (Combat, Exploration, Mind, Heart, Finesse) are the radar axes.
+- **XP-engine backend** — DONE. The Contract XP engine (ledger, cache, leveling, detection, acceptance) shipped to `main` and merged to `rebuild`. See `docs/architecture/gamification.md`.
+- **XP curve calibration** (level cap, global `T`, platinum/full split). Ships at starter values (`T`=5000, 70/30, cap 50); tune on real data.
+- **Card & Board job name** — one word still TBD (Gambit / Knave / ...).
+- **"Badge XP" rename** (Renown / Prestige / Acclaim) — pending the team.
 
 ---
 
@@ -276,7 +278,7 @@ Each upgrade should fire a notification to existing earners: "The [Badge Name] y
 
 **Premium model.** Phase 1: premium stays as-is. Phase 2: minor premium hooks (e.g., title customization). Phase 3: full premium overhaul (Duolingo-style framing). Phase 4+: stable; new features tag onto the established premium frame.
 
-**Naming consistency.** Pursuer (the player), Pursuer's Logbook (the destination), Job (specialization), Badge (collection), Stage (unit), Pursuer Level (headline number = sum of job levels). No "Hunter Profile," no "Explorer's Logbook," no "Character Level" parallel concept.
+**Naming consistency.** Pursuer (the player), Pursuer's Logbook (the destination; element-skinned as The Lab), Job (specialization), Discipline (one of 5 job categories), Contract / Job Board (the job-XP layer), Badge (collection), Stage (badge tier), Pursuer Level (headline number = sum of job levels). The user-facing **Element skin** maps Element=Job, Family=Discipline, Project=Contract over the backend models (which keep the Job/Contract names). No "Hunter Profile," no "Explorer's Logbook," no "Character Level" parallel concept, no P.L.A.T.I.N.U.M. stat system (retired 2026-06).
 
 **Admin tooling.** Each phase needs admin support proportional to its scope. Phase 1: job catalog management, IGDB tag mapping configuration. Phase 2: title catalog. Phase 3: quest templates, store catalog, currency dashboards. The admin tooling ships with the feature, not before or after.
 
