@@ -20,7 +20,6 @@
 .lab-view-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 7px 18px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
 .lab-view-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
 .lab-view-tab.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
-.lab-view { min-height: 360px; }  /* keep short views (signature/radar) from collapsing on toggle */
 .lab-view[hidden] { display: none; }
 
 /* ---- Composition summary ---- */
@@ -54,12 +53,8 @@
 .rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
 
-/* ---- Spectral signature (whole profile) ---- */
-.signature { border-radius: var(--pp-radius-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
-.signature .spectrum { height: 200px; border-radius: 0; box-shadow: none; }
-.sig-legend { display: flex; flex-wrap: wrap; gap: 14px 18px; margin-top: 16px; }
-.sig-legend__item { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--pp-text-dim); }
-.sig-legend__dot { width: 11px; height: 11px; border-radius: 50%; background: var(--disc); box-shadow: 0 0 8px color-mix(in oklab, var(--disc) 60%, transparent); }
+/* ---- Emission spectrum (reusable element primitive; kept for a future "share your
+   Platinum DNA" card -- cut from the Logbook as low-utility there) ---- */
 .spectrum { display: block; width: 100%; height: auto; border-radius: var(--pp-radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
 .spectrum__bg { fill: #05070b; }
 .spectrum__line { stroke: var(--lc); stroke-width: 2.4; filter: drop-shadow(0 0 3px var(--lc)); }

@@ -72,29 +72,23 @@
             </p>
 
             {# Summary stats (aggregates you can't read off the grid) #}
-            <div class="grid grid-cols-3 gap-2 md:gap-3 mb-4">
-                <div class="scard">
-                    <div class="scard__label">Mastered</div>
-                    <div class="scard__value">{{ lab.mastered_count }}</div>
-                    <div class="scard__sub">of {{ lab.total }} at max level</div>
-                </div>
-                <div class="scard">
-                    <div class="scard__label">Developed</div>
-                    <div class="scard__value">{{ lab.developed_count }}</div>
-                    <div class="scard__sub">of {{ lab.total }} leveled up</div>
-                </div>
+            <div class="grid grid-cols-2 gap-2 md:gap-3 mb-4">
                 <div class="scard">
                     <div class="scard__label">Average level</div>
                     <div class="scard__value">{{ lab.avg_level }}</div>
-                    <div class="scard__sub">across all elements</div>
+                    <div class="scard__sub">across all {{ lab.total }} elements</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Highest level</div>
+                    <div class="scard__value">{{ lab.highest_level }}</div>
+                    <div class="scard__sub">your single best element</div>
                 </div>
             </div>
 
-            {# View toggle: Table (default) / Radar / Signature #}
+            {# View toggle: Table (default) / Radar #}
             <div class="lab-views" role="tablist" aria-label="Lab view">
                 <button type="button" class="lab-view-tab is-active" data-view="table" role="tab" aria-selected="true">Table</button>
                 <button type="button" class="lab-view-tab" data-view="radar" role="tab" aria-selected="false">Radar</button>
-                <button type="button" class="lab-view-tab" data-view="signature" role="tab" aria-selected="false">Signature</button>
             </div>
 
             {# Table view (default) #}
@@ -127,14 +121,6 @@
                 </div>
             </div>
 
-            {# Signature view #}
-            <div class="lab-view" data-view="signature" hidden>
-                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Every element you've touched, emitting its family's color, each line brightening with its level. Your whole composition as one fingerprint.</p>
-                <div class="signature">{% include 'partials/elements/_spectrum.html' with spectrum=lab.profile_spectrum %}</div>
-                <div class="sig-legend">
-                    {% for d in lab.disciplines %}<span class="sig-legend__item" style="--disc: var(--disc-{{ d.slug }});"><span class="sig-legend__dot"></span>{{ d.label }}</span>{% endfor %}
-                </div>
-            </div>
         </div>
     </section>
 

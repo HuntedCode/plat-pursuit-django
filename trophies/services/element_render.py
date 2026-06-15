@@ -70,6 +70,35 @@ DESCRIPTIONS = {
     'maestro': "Every beat, right on time.",
     'freelancer': "A little of everything. A specialist in showing up.",
 }
+# What kinds of games feed each element (grounded in the real IGDB genre/theme rules in
+# job_detection.py). Shown in the element detail to explain why a game tags as this element.
+CRITERIA = {
+    'slayer': "Hack-and-slash and beat-'em-ups: crowds of enemies, combo counters, big numbers.",
+    'gunslinger': "Shooters where gunplay is the point. (Add a sci-fi setting and it becomes Vanguard.)",
+    'vanguard': "Science-fiction shooters: guns, but make it the future.",
+    'outlaw': "Open-world games with a violent streak: freedom plus firepower.",
+    'warrior': "Fighting games: one on one, frame-perfect, settle it in the ring.",
+    'pathfinder': "Platformers: precise jumps and tricky traversal.",
+    'infiltrator': "Stealth games: unseen, unheard, gone before they knew you were there.",
+    'cartographer': "Open-world games built for exploration: fill in the map, chase the horizon.",
+    'mascot': "Comedic platformers: bright worlds, big jumps, a grin the whole way.",
+    'survivalist': "Survival games: scrape by against cold, hunger, and whatever's hunting you.",
+    'mastermind': "Puzzle games: logic, patterns, and the satisfying click of a solution.",
+    'tactician': "Strategy in all its forms: RTS, turn-based, tactics, MOBA.",
+    'architect': "Sandbox games: you build the world instead of just playing in it.",
+    'tycoon': "Simulators: systems to manage, optimize, and grow.",
+    'card-shark': "Card and board games: the deck, the table, the odds.",
+    'mage': "Fantasy RPGs: magic, monsters, and a world that needs saving.",
+    'champion': "Role-playing games: the build, the levels, the loot. (Add a fantasy setting and it becomes Mage.)",
+    'librarian': "Visual novels and point-and-click adventures: stories you read and click through.",
+    'jester': "Comedy games played for the laughs.",
+    'exorcist': "Horror games: walking toward the thing everyone else runs from.",
+    'gamer': "Arcade games: pick-up-and-play, score-chasing, twitch reflexes.",
+    'driver': "Racing games: the apex, the perfect lap.",
+    'athlete': "Sports games: seasons, podiums, championships.",
+    'maestro': "Rhythm and music games: every beat, right on time.",
+    'freelancer': "The catch-all. When a game fits no single specialty, its XP lands here.",
+}
 
 
 def element_dict(job, level, total_xp, *, atomic, slot_index):
@@ -106,6 +135,7 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
         'xp_total': f"{total_xp:,}",
         'state': state,
         'description': job.description or DESCRIPTIONS.get(job.slug, ''),
+        'criteria': CRITERIA.get(job.slug, ''),
     }
 
 
@@ -172,23 +202,20 @@ def build_profile_elements(profile):
             'radar_data_json': json.dumps([t['level'] for t in tiles]),
         })
 
-    all_elements = [{'slug': t['slug'], 'disc_slug': t['disc_slug'], 'shape': t['shape']} for t in all_tiles]
-    level_by_slug = {t['slug']: t['level'] for t in all_tiles}
     max_avg = max(radar_values) if radar_values else 0
 
     return {
         'disciplines': disciplines,
-        # Aggregate stats the eye can't read off the grid: completion, breadth, depth.
-        'mastered_count': sum(1 for t in all_tiles if t['state'] == 'mastered'),
-        'developed_count': sum(1 for t in all_tiles if t['level'] > 1),
+        # Aggregates the eye can't read off the grid (varies per user, unlike a
+        # "mastered/started" count that is ~0 or ~everything for most of the userbase).
         'avg_level': round(total_level / atomic, 1) if atomic else 0,
+        'highest_level': max((t['level'] for t in all_tiles), default=1),
         'radar_labels_json': json.dumps(list(DISCIPLINE_LABELS.values())),
         'radar_data_json': json.dumps(radar_values),
         # Axis max scales to the family averages (the overview series), rounded up to a
         # "nice" value, so the overview fills well; a family's drill-down with an outlier
         # job above this just soft-extends (Chart.js suggestedMax).
         'radar_max': max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5),
-        'profile_spectrum': build_spectrum(all_elements, level_by_slug),
         'dominant': max(disciplines, key=lambda d: d['avg']) if disciplines else None,
         'top_element': max(all_tiles, key=lambda t: (t['level'], t['progress'])) if all_tiles else None,
         'total_level': total_level,

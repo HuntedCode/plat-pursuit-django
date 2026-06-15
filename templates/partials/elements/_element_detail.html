@@ -28,6 +28,6 @@ xp_current, xp_next, xp_total, description, state).
     {% if card.description %}<div class="edetail__flavor">{{ card.description }}</div>{% endif %}
     <div class="edetail__sources">
         <div class="edetail__sources-title">Where the XP comes from</div>
-        <p class="edetail__sources-note">The games and Projects tagged to this element feed its XP, banked when you accept a completed Project on the Job Board.</p>
+        <p class="edetail__sources-note">{{ card.criteria }}</p>
     </div>
 </div>
