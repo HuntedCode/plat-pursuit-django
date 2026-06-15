@@ -13,7 +13,8 @@ ContractXPGrant ledger, so `recompute_job_xp` would wipe it. Remove with --clear
 """
 from itertools import cycle
 
-from django.core.management.base import BaseCommand
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
 
 from trophies.models import Job, Profile, ProfileJobXP
 from trophies.util_modules.constants import JOB_LEVEL_CAP
@@ -37,6 +38,8 @@ class Command(BaseCommand):
         parser.add_argument('--clear', action='store_true', help='Remove all seeded job XP for the profile.')
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError("seed_test_job_xp is DEV ONLY; refusing to run with DEBUG=False (it writes synthetic XP to a real profile).")
         try:
             profile = Profile.objects.get(id=options['profile_id'])
         except Profile.DoesNotExist:

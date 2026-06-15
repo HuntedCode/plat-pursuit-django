@@ -70,7 +70,7 @@ BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
 CONTRACT_XP_TOTAL = 5000        # global base T per Contract (override via Contract.xp_total_override)
 CONTRACT_PLATINUM_FRAC = 0.70  # share of T paid at the Platinum tier
 CONTRACT_FULL_FRAC = 0.30      # share of T paid at the 100% (full-completion) tier
-JOB_LEVEL_BASE = 600           # per-level XP cost coefficient: cumulative XP to reach level L = BASE * L*(L+1)/2
+JOB_LEVEL_BASE = 600           # per-level XP coefficient: cumulative XP to reach level L = BASE * (L-1)*L/2 (1-based; level 1 = 0 XP)
 JOB_LEVEL_CAP = 50             # max per-job level (start; revisit toward 99 after calibration)
 
 # Community Guidelines

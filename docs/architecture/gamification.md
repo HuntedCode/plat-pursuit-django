@@ -121,7 +121,7 @@ Two tiers per Contract: **Platinum** (`PLATINUM_FRAC = 0.70`, the bulk) and **10
 
 ### Leveling
 
-`trophies/util_modules/leveling.py`: cumulative XP to reach level L = `JOB_LEVEL_BASE * L*(L+1)/2` (`JOB_LEVEL_BASE = 600`), capped at `JOB_LEVEL_CAP = 50`. `xp_for_level(L)` / `level_for_xp(xp)` round-trip; `level_for_xp` is cap-guarded.
+`trophies/util_modules/leveling.py`: the curve is **1-based** (level 1 = 0 XP, the floor every job starts at). Cumulative XP to reach level L (L>=1) = `JOB_LEVEL_BASE * (L-1)*L/2` (`JOB_LEVEL_BASE = 600`), capped at `JOB_LEVEL_CAP = 50`. `xp_for_level(L)` / `level_for_xp(xp)` round-trip; `level_for_xp` always returns >= 1 and is cap-guarded. Pursuer Level = sum of every job's level (min 1 each).
 
 ### Sync seam
 
