@@ -1,9 +1,9 @@
 /* ================================================================
  * Elements (the "Element" skin over Jobs)
  * Component CSS for the periodic-table element tiles, the atom glyph,
- * the family/discipline radar, the spectral signature, the composition
- * summary, and the element-detail modal. Used by the Logbook's Lab zone
- * (and, later, the Research Panel). Family color = --disc-*; shape = the
+ * the family/discipline radar, the summary stat cards, and the
+ * element-detail modal. Used by the Logbook's Lab zone (and, later, the
+ * Research Panel). Family color = --disc-*; shape = the
  * element's slot within its family. Extracted from the /design/lab/ workshop.
  * ================================================================ */
 
@@ -15,25 +15,18 @@
     --disc-finesse:     oklch(0.82 0.15 75);
 }
 
-/* ---- Lab view toggle (Table / Radar / Signature) ---- */
+/* ---- Lab view toggle (Table / Radar) ---- */
 .lab-views { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .lab-view-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 7px 18px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
 .lab-view-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
 .lab-view-tab.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
 .lab-view[hidden] { display: none; }
 
-/* ---- Composition summary ---- */
-.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-@media (max-width: 760px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+/* ---- Summary stat cards ---- */
 .scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 18px; }
 .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
 .scard__value { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 24px; line-height: 1; }
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
-.scard--dominant { border-color: color-mix(in oklab, var(--disc) 50%, var(--pp-border)); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); }
-.scard--dominant .scard__value { color: var(--disc); }
-.scard__value--big { font-size: 42px; text-shadow: 0 0 22px color-mix(in oklab, var(--disc) 35%, transparent); }
-.scard__unlock { display: flex; align-items: center; gap: 9px; }
-.scard__unlock-name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 16px; }
 
 /* ---- Radar ---- */
 .radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; }
@@ -53,17 +46,11 @@
 .rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
 
-/* ---- Emission spectrum (reusable element primitive; kept for a future "share your
-   Platinum DNA" card -- cut from the Logbook as low-utility there) ---- */
-.spectrum { display: block; width: 100%; height: auto; border-radius: var(--pp-radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--pp-divider); }
-.spectrum__bg { fill: #05070b; }
-.spectrum__line { stroke: var(--lc); stroke-width: 2.4; filter: drop-shadow(0 0 3px var(--lc)); }
 
-/* ---- Atom glyph + element chip ---- */
+/* ---- Atom glyph ---- */
 .atom { display: block; width: 100%; height: 100%; overflow: visible; }
 .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); stroke: color-mix(in oklab, var(--disc) 55%, transparent); stroke-width: 2.5; }
 .atom__sym { fill: var(--disc); font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 36px; text-anchor: middle; dominant-baseline: central; }
-.formula-chip { display: inline-block; width: 30px; height: 30px; flex: none; }
 
 /* ---- Periodic table (families as columns) ---- */
 .ptable { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }

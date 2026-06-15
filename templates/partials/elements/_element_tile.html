@@ -1,7 +1,7 @@
 {% comment %}
 Element tile (periodic cell). Level is the hero number; the atom glyph is the identity
 mark (shape + symbol + family color). Expects `card`: number, name, disc_slug, shape,
-symbol, level, progress (0-100), xp_current, xp_next, state ('locked'|'active'|'mastered'),
+symbol, level, progress (0-100), xp_current, xp_next, state ('active'|'mastered'),
 description. Description rides in the title tooltip.
 {% endcomment %}
 <div class="job job--{{ card.state }}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">

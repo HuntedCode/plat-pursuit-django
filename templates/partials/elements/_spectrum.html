@@ -1,9 +1,0 @@
-{% comment %}
-Emission-spectrum fingerprint: shaded family-colored emission lines on a near-black band.
-Each element emits a fixed set of lines in its own family shade. Expects `spectrum`: a
-list of {x, lc (css color), intensity}.
-{% endcomment %}
-<svg class="spectrum" viewBox="0 0 300 56" preserveAspectRatio="none" role="img" aria-label="Spectral fingerprint">
-    <rect class="spectrum__bg" x="0" y="0" width="300" height="56" />
-    {% for ln in spectrum %}<line class="spectrum__line" style="--lc: {{ ln.lc }}; opacity: {{ ln.intensity }};" x1="{{ ln.x }}" y1="6" x2="{{ ln.x }}" y2="50" />{% endfor %}
-</svg>

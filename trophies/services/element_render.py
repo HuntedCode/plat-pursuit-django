@@ -15,8 +15,6 @@ is bounded by the ~25-row Job catalog, so Python iteration is safe (no whale ris
 """
 import json
 import math
-import random
-import zlib
 
 from trophies.models import Job, ProfileJobXP
 from trophies.util_modules.constants import JOB_LEVEL_CAP
@@ -139,31 +137,6 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
     }
 
 
-def build_spectrum(elements, levels=None):
-    """Emission-spectrum fingerprint: each element emits a fixed seeded set of colored
-    lines in its family shade (a true composition fingerprint). When `levels`
-    ({slug: level}) is given, line brightness reflects your level in each element
-    (normalized against the cap); otherwise it's a per-line flourish. Returns line dicts
-    with an x in a 300-wide band, a CSS color, and an opacity intensity.
-    """
-    lines = []
-    for el in elements:
-        er = random.Random(zlib.crc32(('line:' + el['slug']).encode()))
-        keep = 100 - er.randint(0, 40)  # per-element shade toward white
-        lc = "color-mix(in oklab, var(--disc-%s) %d%%, white)" % (el['disc_slug'], keep)
-        lvl_intensity = None
-        if levels is not None:
-            lvl = max(1, levels.get(el['slug'], 1))
-            lvl_intensity = round(0.3 + 0.65 * min(1.0, lvl / JOB_LEVEL_CAP), 2)
-        for _ in range(er.randint(2, 4)):
-            x = round(2 + er.uniform(0.04, 0.96) * 296, 1)
-            lines.append({
-                'x': x, 'fx': round(x - 6, 1), 'lc': lc, 'shape': el['shape'],
-                'intensity': lvl_intensity if lvl_intensity is not None else round(er.uniform(0.65, 1.0), 2),
-            })
-    return lines
-
-
 def build_profile_elements(profile):
     """Assemble the full element/family view for a profile from real `ProfileJobXP`.
 
@@ -216,8 +189,6 @@ def build_profile_elements(profile):
         # "nice" value, so the overview fills well; a family's drill-down with an outlier
         # job above this just soft-extends (Chart.js suggestedMax).
         'radar_max': max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5),
-        'dominant': max(disciplines, key=lambda d: d['avg']) if disciplines else None,
-        'top_element': max(all_tiles, key=lambda t: (t['level'], t['progress'])) if all_tiles else None,
         'total_level': total_level,
         'total_xp': total_xp,
         'total': atomic,
