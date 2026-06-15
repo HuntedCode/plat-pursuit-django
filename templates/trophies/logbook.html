@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Your Logbook{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {% if hero %}
+    {# ── Pursuer hero: identity at a glance ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-6 lg:p-7">
+            <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+                {# Avatar + name + equipped title #}
+                <div class="flex items-center gap-4 md:gap-6 min-w-0">
+                    <div class="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
+                        {% if hero.avatar_url %}
+                            <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
+                        {% else %}
+                            <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|first|upper }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate">{{ hero.pursuer_name }}</h1>
+                        {% if hero.active_title %}
+                            <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
+                        {% else %}
+                            <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# Tally row: the headline numbers #}
+                <div class="md:ml-auto grid grid-cols-3 gap-2 md:gap-3 lg:gap-4 text-center shrink-0">
+                    <div class="rounded-lg bg-base-300/40 border border-base-300 px-3 py-2 md:px-5 md:py-3">
+                        <div class="text-2xl md:text-3xl lg:text-4xl font-black text-primary tabular-nums leading-none">{{ hero.pursuer_level|intcomma }}</div>
+                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Pursuer Level</div>
+                    </div>
+                    <div class="rounded-lg bg-base-300/40 border border-base-300 px-3 py-2 md:px-5 md:py-3">
+                        <div class="text-2xl md:text-3xl lg:text-4xl font-black tabular-nums leading-none">{{ hero.badges_earned|intcomma }}</div>
+                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Badges</div>
+                    </div>
+                    <div class="rounded-lg bg-base-300/40 border border-base-300 px-3 py-2 md:px-5 md:py-3">
+                        <div class="text-2xl md:text-3xl lg:text-4xl font-black tabular-nums leading-none">{{ hero.total_job_xp|intcomma }}</div>
+                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Total XP</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {% comment %}
+    Next zones (built piece by piece): The Lab (discipline radar + periodic table +
+    spectral fingerprint), collection preview, expression, recent activity.
+    {% endcomment %}
+    {% else %}
+        <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+            <div class="card-body p-6 text-center text-base-content/60">
+                Your Logbook is still being prepared. Check back after your next sync.
+            </div>
+        </section>
+    {% endif %}
+{% endblock %}

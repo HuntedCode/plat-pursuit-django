@@ -150,6 +150,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     prefixes=('/my-pursuit/',),
     items=(
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
+        HubSubnavItem('logbook', 'Logbook', 'logbook', 'book', auth_required=True),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
     ),
