@@ -11,44 +11,16 @@ rule); never iterate a profile's trophy rows in Python.
 """
 import logging
 
-from trophies.models import UserBadge, UserTitle
+from trophies.models import UserTitle
 from trophies.services import element_render
 
 logger = logging.getLogger(__name__)
-
-_COLLECTION_PREVIEW = 6
 
 
 def _build_lab(profile):
     """The Lab zone: the profile's elements/families view (periodic table, radar data,
     composition summary), assembled from real ProfileJobXP via the element foundation."""
     return element_render.build_profile_elements(profile)
-
-
-def _build_collection(profile):
-    """Collection preview: the most-recent earned badges (deduped to one per series) +
-    the total. Uses the lightweight badge-icon path (badge.get_badge_layers), NOT the
-    heavy build_badge_frame; bounded to a small recent slice so it's whale-safe."""
-    recent = list(
-        UserBadge.objects
-        .filter(profile=profile, status='earned')
-        .select_related('badge', 'badge__base_badge')
-        .order_by('-earned_at')[:12]
-    )
-    seen, badges = set(), []
-    for ub in recent:
-        series = ub.badge.series_slug
-        if series in seen:
-            continue
-        seen.add(series)
-        badges.append(ub.badge)
-        if len(badges) >= _COLLECTION_PREVIEW:
-            break
-    gamification = getattr(profile, 'gamification', None)
-    return {
-        'badges': badges,
-        'total': gamification.unique_badges_earned if gamification else 0,
-    }
 
 
 def _build_hero(profile, lab):
@@ -89,9 +61,4 @@ def build_logbook_context(profile):
     except Exception:
         logger.exception("Logbook hero build failed for profile %s", getattr(profile, 'id', '?'))
         context['hero'] = None
-    try:
-        context['collection'] = _build_collection(profile)
-    except Exception:
-        logger.exception("Logbook collection build failed for profile %s", getattr(profile, 'id', '?'))
-        context['collection'] = None
     return context
