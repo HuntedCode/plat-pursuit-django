@@ -5,7 +5,7 @@ The gamification layer tracks XP accumulation across the platform. Two XP system
 1. **Badge XP** (this doc, below): users earn XP by completing badge stages (concepts within a stage) and by earning full badges. Denormalized on `ProfileGamification` for fast leaderboard queries.
 2. **Contract / job XP engine** (the "Element" system, see [Contract / Job XP Engine](#contract--job-xp-engine)): per-job XP banked when a user *accepts* a completed Contract. Decoupled from badges, with its own immutable ledger.
 
-The infrastructure for future P.L.A.T.I.N.U.M. stats (Power, Luck, Agility, etc.) exists in the schema but has no data populated yet. See [Gamification Vision](../design/gamification-vision.md) for the full RPG system design, and `docs/design/rebuild/job-board-contracts.md` for the Contract architecture.
+The legacy P.L.A.T.I.N.U.M. 8-stat system was **retired** (2026-06); the 5 job disciplines (Combat, Exploration, Mind, Heart, Finesse) are the sole characterization radar, derived from job levels. The `StatType` / `StageStatValue` schema it would have used remains in the DB but is **vestigial** (no data, not on any roadmap). See `docs/design/product-identity.md` for the committed model and `docs/design/rebuild/job-board-contracts.md` for the Contract architecture.
 
 ## Architecture Overview
 
@@ -39,13 +39,13 @@ XP is recalculated and denormalized onto `ProfileGamification` via Django signal
 
 ### StatType (Schema exists, 1 record: "badge_xp")
 - `slug` (PK), `name`, `description`, `icon`, `color`, `is_active`, `display_order`
-- Designed for future P.L.A.T.I.N.U.M. stats (8 records: power, luck, agility, toughness, intelligence, navigation, utility, magic)
+- Was designed for the P.L.A.T.I.N.U.M. 8-stat system, now **retired** (2026-06). Vestigial: only the `badge_xp` record exists; the 8 stat records were never populated and won't be
 - Admin UI registered via `StageStatValueAdmin`
 
 ### StageStatValue (Schema exists, no data populated)
 - FK to `Stage` + FK to `StatType`, unique together
 - `bronze_value`, `silver_value`, `gold_value`, `platinum_value` (per-tier point values)
-- Will drive the radar chart on the Explorer's Logbook once populated
+- **Vestigial** (P.L.A.T.I.N.U.M. retired). The Logbook's discipline radar derives from job levels (`ProfileJobXP`), not from this table
 
 ## Key Flows
 
@@ -121,7 +121,7 @@ Two tiers per Contract: **Platinum** (`PLATINUM_FRAC = 0.70`, the bulk) and **10
 
 ### Leveling
 
-`trophies/util_modules/leveling.py`: cumulative XP to reach level L = `JOB_LEVEL_BASE * L*(L+1)/2` (`JOB_LEVEL_BASE = 600`), capped at `JOB_LEVEL_CAP = 50`. `xp_for_level(L)` / `level_for_xp(xp)` round-trip; `level_for_xp` is cap-guarded.
+`trophies/util_modules/leveling.py`: the curve is **1-based** (level 1 = 0 XP, the floor every job starts at). Cumulative XP to reach level L (L>=1) = `JOB_LEVEL_BASE * (L-1)*L/2` (`JOB_LEVEL_BASE = 600`), capped at `JOB_LEVEL_CAP = 50`. `xp_for_level(L)` / `level_for_xp(xp)` round-trip; `level_for_xp` always returns >= 1 and is cap-guarded. Pursuer Level = sum of every job's level (min 1 each).
 
 ### Sync seam
 
@@ -132,14 +132,14 @@ In `token_keeper.py`'s `sync_complete` (phase `stats_badges`, right after `check
 - [Token Keeper](token-keeper.md): Badge evaluation during sync triggers XP updates. Uses `bulk_gamification_update()` context manager. The Contract engine's `check_profile_contracts` detection hook also runs here (detection only).
 - [Badge System](badge-system.md): `UserBadgeProgress` and `UserBadge` changes are the sole triggers for XP recalculation.
 - [Notification System](notification-system.md): Badge XP is included in shareable card data via `get_badge_xp_for_game()`.
-- [Gamification Vision](../design/gamification-vision.md): Full design for P.L.A.T.I.N.U.M. stats, Jobs, quests, and currency that will build on this foundation.
+- [Gamification Vision](../design/gamification-vision.md): Original RPG system design (note: the P.L.A.T.I.N.U.M. 8-stat layer is retired; jobs now live on the Contract layer per `job-board-contracts.md`).
 
 ## Gotchas and Pitfalls
 
 - **Full recalculation, not incremental**: `update_profile_gamification()` always recomputes from all `UserBadgeProgress` and `UserBadge` records. This is intentional for correctness but means each call does 2 database queries. The `bulk_gamification_update()` context manager exists specifically to batch these during sync.
 - **Thread-local state**: The bulk update context uses `threading.local()`. This works because Django processes requests in separate threads. If the project ever moves to async workers, this pattern would need revisiting.
 - **Signal ordering matters**: Both `update_badge_earned_count_on_save` and `update_gamification_on_badge_earned` fire on `UserBadge` post_save. The earned_count update uses `F()` expressions (race-safe), while the gamification update does a full recalc.
-- **StageStatValue has no data**: The model exists and admin UI is registered, but no records have been populated. When the P.L.A.T.I.N.U.M. system goes live, this needs to be populated for all stages.
+- **StageStatValue / the 8 StatType records are vestigial**: the P.L.A.T.I.N.U.M. system they were built for is retired (2026-06). The discipline radar derives from job levels, not this table. Leave the schema in place (it's cheap) but don't build on it.
 - **series_badge_xp is a JSONField**: It stores a Python dict serialized as JSON. Query filtering on individual series values requires JSON path queries or Python-side processing.
 
 **Contract / job XP engine:**
