@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load humanize %}
+{% load humanize static %}
 {% block title %}Your Logbook{% endblock %}
 
 {% block content %}
@@ -58,7 +58,7 @@
     {% endif %}
 
     {% if lab %}
-    {# ── The Lab: your elements (periodic table) ── #}
+    {# ── The Lab: identity (composition + Platinum DNA radar) ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6">
             <div class="flex items-center gap-2 flex-wrap">
@@ -68,8 +68,56 @@
                 <h2 class="text-lg md:text-xl lg:text-2xl font-bold">The Lab</h2>
             </div>
             <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-4">
-                Your Platinum DNA: the {{ lab.total }} elements that make up how you play. Every element starts at Level 1 and brightens as you level it, pulsing once mastered.
+                Your Platinum DNA: the {{ lab.total }} elements that make up how you play.
             </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                {% if lab.dominant %}
+                <div class="scard scard--dominant" style="--disc: var(--disc-{{ lab.dominant.slug }});">
+                    <div class="scard__label">Dominant family</div>
+                    <div class="scard__value">{{ lab.dominant.label }}</div>
+                    <div class="scard__sub">avg level {{ lab.dominant.avg }} &middot; {{ lab.dominant.tagline }}</div>
+                </div>
+                {% endif %}
+                {% if lab.top_element %}
+                <div class="scard" style="--disc: var(--disc-{{ lab.top_element.disc_slug }});">
+                    <div class="scard__label">Top element</div>
+                    <div class="scard__unlock">
+                        <span class="formula-chip">{% include 'partials/elements/_atom.html' with shape=lab.top_element.shape symbol=lab.top_element.symbol %}</span>
+                        <span class="scard__unlock-name">{{ lab.top_element.name }}</span>
+                    </div>
+                    <div class="scard__sub">Level {{ lab.top_element.level }}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="radar-card">
+                <div class="radar-tabs">
+                    <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
+                    {% for d in lab.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
+                </div>
+                <div class="radar-body">
+                    <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
+                    <div class="radar-detail" id="radar-detail"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ── Spectral signature ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h3 class="text-base md:text-lg font-bold">Your spectral signature</h3>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-3">The combined emission spectrum of every element you've touched, each line brightening with its level. Your whole composition as one fingerprint.</p>
+            <div class="signature">{% include 'partials/elements/_spectrum.html' with spectrum=lab.profile_spectrum %}</div>
+        </div>
+    </section>
+
+    {# ── The periodic table ── #}
+    <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <h3 class="text-base md:text-lg font-bold">The periodic table</h3>
+            <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-4">All {{ lab.total }} elements, families as columns, in their real states. Every element starts at Level 1 and brightens as you level it, pulsing once mastered. Tap any element for its detail.</p>
             <div class="ptable">
                 {% for d in lab.disciplines %}
                 <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
@@ -77,11 +125,126 @@
                         <span class="ptable__name">{{ d.label }}</span>
                         <span class="ptable__avg">avg {{ d.avg }}</span>
                     </div>
-                    {% for job in d.jobs %}{% include 'partials/elements/_element_tile.html' with card=job %}{% endfor %}
+                    {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/elements/_element_tile.html' with card=job %}</div>{% endfor %}
                 </div>
                 {% endfor %}
             </div>
         </div>
     </section>
+
+    {# Hidden per-element detail panels + the modal shell (populated on tile tap). #}
+    <div id="element-details" hidden>
+        {% for d in lab.disciplines %}{% for job in d.jobs %}<div data-slug="{{ job.slug }}">{% include 'partials/elements/_element_detail.html' with card=job %}</div>{% endfor %}{% endfor %}
+    </div>
+    <div class="emodal" id="emodal" hidden>
+        <div class="emodal__backdrop" data-close></div>
+        <div class="emodal__dialog">
+            <button class="emodal__close" data-close aria-label="Close">&times;</button>
+            <div id="emodal-panel"></div>
+        </div>
+    </div>
     {% endif %}
+{% endblock %}
+
+{% block js_scripts %}
+{% if lab %}
+<script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
+<script>
+// The Lab: discipline radar (overview + per-family drill-down) and tile -> detail modal.
+(function () {
+    if (typeof Chart === 'undefined') return;
+    var canvas = document.getElementById('disc-radar');
+    if (!canvas) return;
+    var css = getComputedStyle(document.documentElement);
+    var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
+    var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
+    var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
+    var RMAX = {{ lab.radar_max }};
+
+    var DATA = { overview: { labels: {{ lab.radar_labels_json|safe }}, values: {{ lab.radar_data_json|safe }} } };
+    {% for d in lab.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
+    {% endfor %}
+
+    var chart = new Chart(canvas, {
+        type: 'radar',
+        data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
+        options: {
+            responsive: true, maintainAspectRatio: true, animation: { duration: 350 },
+            plugins: { legend: { display: false } },
+            scales: { r: { beginAtZero: true, suggestedMax: RMAX, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false } } },
+        },
+    });
+
+    var LABELS = {};
+    document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
+    var detail = document.getElementById('radar-detail');
+
+    function renderPanel(labels, values, colorOf, title) {
+        if (!detail) return;
+        var rows = labels.map(function (label, i) {
+            var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
+            return '<li class="rd-row" style="--disc: ' + colorOf(i) + ';">'
+                + '<span class="rd-row__label">' + label + '</span>'
+                + '<span class="rd-row__bar"><span class="rd-row__fill" style="width: ' + pct + '%;"></span></span>'
+                + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
+        }).join('');
+        detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
+            + '<ul style="list-style:none; margin:0; padding:0;">' + rows + '</ul>';
+    }
+
+    function paint(mode) {
+        var ds = chart.data.datasets[0];
+        if (mode === 'overview') {
+            chart.data.labels = DATA.overview.labels;
+            ds.data = DATA.overview.values;
+            ds.borderColor = cyan;
+            ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
+            ds.pointBackgroundColor = discColors;
+            ds.pointBorderColor = discColors;
+            renderPanel(DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Families');
+        } else {
+            var color = css.getPropertyValue('--disc-' + mode).trim();
+            chart.data.labels = DATA[mode].labels;
+            ds.data = DATA[mode].values;
+            ds.borderColor = color;
+            ds.backgroundColor = color.replace(')', ' / 0.16)');
+            ds.pointBackgroundColor = color;
+            ds.pointBorderColor = color;
+            renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' elements');
+        }
+        chart.update();
+    }
+
+    paint('overview');
+    document.querySelectorAll('.radar-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
+            tab.classList.add('is-active');
+            paint(tab.dataset.mode);
+        });
+    });
+})();
+
+(function () {
+    var details = document.getElementById('element-details');
+    var modal = document.getElementById('emodal');
+    var panel = document.getElementById('emodal-panel');
+    if (!details || !modal || !panel) return;
+    function openEl(slug) {
+        var src = details.querySelector('[data-slug="' + slug + '"]');
+        if (!src) return;
+        panel.innerHTML = src.innerHTML;
+        modal.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+    function closeEl() { modal.hidden = true; panel.innerHTML = ''; document.body.style.overflow = ''; }
+    document.querySelectorAll('.ptile').forEach(function (t) {
+        t.addEventListener('click', function () { openEl(t.dataset.slug); });
+        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug); } });
+    });
+    modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeEl(); });
+})();
+</script>
+{% endif %}
 {% endblock %}
