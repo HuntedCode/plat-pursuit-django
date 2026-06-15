@@ -1483,6 +1483,22 @@ class TokenKeeper:
             PsnApiService.update_profilegame_stats(touched_profilegame_ids)
             check_profile_badges(profile, touched_profilegame_ids)
 
+            # Mark Contract (job XP) tiers as REACHED for the games touched this sync.
+            # Detection only -- no XP is granted here; the user banks it later by ACCEPTING
+            # the Contract. Wrapped so a failure never breaks the sync.
+            try:
+                from trophies.models import ProfileGame
+                from trophies.services.contract_service import check_profile_contracts
+                touched_concept_ids = [
+                    cid for cid in ProfileGame.objects
+                    .filter(id__in=touched_profilegame_ids)
+                    .values_list('game__concept_id', flat=True).distinct()
+                    if cid
+                ]
+                check_profile_contracts(profile, touched_concept_ids)
+            except Exception:
+                logger.exception(f"[profile {profile_id}] sync_complete contract detection failed")
+
             # Create consolidated badge notifications
             try:
                 from notifications.services.deferred_notification_service import DeferredNotificationService

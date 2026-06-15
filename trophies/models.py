@@ -2413,6 +2413,88 @@ class ContractBundle(models.Model):
         return f"{self.contract} bundle: {self.label}"
 
 
+class EarnedContract(models.Model):
+    """Per-user state for a Contract across two gates. A tier is REACHED automatically on
+    sync (you platinum / 100% the game) -- the reward becomes claimable but grants NO XP
+    yet. It only counts toward levels once the user ACCEPTS it; accepting writes the
+    ContractXPGrant rows and bumps ProfileJobXP. This forces interaction to level up (no
+    'starting' a Contract, but you must 'end'/accept it). A tier is claimable when its
+    *_reached_at is set and *_accepted_at is null; the accepted timestamps also make grants
+    idempotent (a tier is paid at most once). See docs/design/rebuild/job-board-contracts.md."""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='earned_contracts')
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='earned_by')
+    # Frozen at first reach: does this Contract have a platinum at all? Drives the tier
+    # fractions. Recomputing it live at accept time would over/underpay the 100% tier if a
+    # platinum is added/removed between split accepts, so it is snapshotted once.
+    has_platinum = models.BooleanField(default=False)
+    # Reached = completion detected on sync (reward becomes claimable; no XP yet).
+    platinum_reached_at = models.DateTimeField(null=True, blank=True, help_text='When Platinum was completed (became claimable).')
+    full_reached_at = models.DateTimeField(null=True, blank=True, help_text='When 100% was completed (became claimable).')
+    # Accepted = user claimed the reward (XP granted at this point).
+    platinum_accepted_at = models.DateTimeField(null=True, blank=True, help_text='When the user accepted the Platinum XP.')
+    full_accepted_at = models.DateTimeField(null=True, blank=True, help_text='When the user accepted the 100% XP.')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['profile', 'contract']
+        indexes = [
+            models.Index(fields=['profile'], name='earnedcontract_profile_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.display_psn_username} -> {self.contract.slug}"
+
+
+class ContractXPGrant(models.Model):
+    """Immutable XP ledger -- the source of truth for job XP payouts. One row per
+    (earned_contract, job, tier), recording the amount AS PAID (base T x multiplier at
+    grant time). NEVER recomputed from current Contract config, so changing a Contract's
+    jobs or total never rewrites history. `job` and `profile` are denormalized so per-job
+    totals aggregate in the DB (Sum), never by Python iteration (whale-OOM rule)."""
+    TIER_CHOICES = [('platinum', 'Platinum'), ('full', '100%')]
+
+    earned_contract = models.ForeignKey(EarnedContract, on_delete=models.CASCADE, related_name='grants')
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='contract_xp_grants')
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='xp_grants')
+    tier = models.CharField(max_length=10, choices=TIER_CHOICES)
+    amount = models.PositiveIntegerField(help_text='XP granted to this job, as paid.')
+    base_t = models.PositiveIntegerField(help_text='The Contract total T in effect when granted.')
+    multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1, help_text='Active XP multiplier at grant time (e.g. double-XP events).')
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['earned_contract', 'job', 'tier']
+        indexes = [
+            models.Index(fields=['profile', 'job'], name='xpgrant_profile_job_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.display_psn_username} {self.job.slug} {self.tier} +{self.amount}"
+
+
+class ProfileJobXP(models.Model):
+    """Denormalized read cache of a user's per-job XP + level (~24 rows/user). Bumped
+    incrementally on each ContractXPGrant; fully rebuildable from
+    Sum(ContractXPGrant.amount) grouped by (profile, job) via
+    contract_service.recompute_profile_job_xp. The read side for the Lab + leaderboards.
+    Pursuer Level = sum of all of a profile's ProfileJobXP.level."""
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='job_xp')
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='profile_xp')
+    total_xp = models.PositiveIntegerField(default=0)
+    level = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['profile', 'job']
+        indexes = [
+            models.Index(fields=['profile'], name='profilejobxp_profile_idx'),
+            models.Index(fields=['job', 'total_xp'], name='profilejobxp_job_xp_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.profile.display_psn_username} {self.job.slug} Lv{self.level}"
+
+
 class Stage(models.Model):
     series_slug = models.SlugField(max_length=100, db_index=True, help_text="Series slug this stage applies to.")
     stage_number = models.IntegerField(validators=[MinValueValidator(0)], help_text="Stage number (0 for optional/tangential concepts.)")
