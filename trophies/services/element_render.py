@@ -178,6 +178,10 @@ def build_profile_elements(profile):
 
     return {
         'disciplines': disciplines,
+        # Aggregate stats the eye can't read off the grid: completion, breadth, depth.
+        'mastered_count': sum(1 for t in all_tiles if t['state'] == 'mastered'),
+        'developed_count': sum(1 for t in all_tiles if t['level'] > 1),
+        'avg_level': round(total_level / atomic, 1) if atomic else 0,
         'radar_labels_json': json.dumps(list(DISCIPLINE_LABELS.values())),
         'radar_data_json': json.dumps(radar_values),
         # Axis max scales to the family averages (the overview series), rounded up to a

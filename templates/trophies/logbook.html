@@ -71,25 +71,23 @@
                 Your Platinum DNA: the {{ lab.total }} elements that make up how you play.
             </p>
 
-            {# Composition headline (view-independent) #}
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                {% if lab.dominant %}
-                <div class="scard scard--dominant" style="--disc: var(--disc-{{ lab.dominant.slug }});">
-                    <div class="scard__label">Dominant family</div>
-                    <div class="scard__value">{{ lab.dominant.label }}</div>
-                    <div class="scard__sub">avg level {{ lab.dominant.avg }} &middot; {{ lab.dominant.tagline }}</div>
+            {# Summary stats (aggregates you can't read off the grid) #}
+            <div class="grid grid-cols-3 gap-2 md:gap-3 mb-4">
+                <div class="scard">
+                    <div class="scard__label">Mastered</div>
+                    <div class="scard__value">{{ lab.mastered_count }}</div>
+                    <div class="scard__sub">of {{ lab.total }} at max level</div>
                 </div>
-                {% endif %}
-                {% if lab.top_element %}
-                <div class="scard" style="--disc: var(--disc-{{ lab.top_element.disc_slug }});">
-                    <div class="scard__label">Top element</div>
-                    <div class="scard__unlock">
-                        <span class="formula-chip">{% include 'partials/elements/_atom.html' with shape=lab.top_element.shape symbol=lab.top_element.symbol %}</span>
-                        <span class="scard__unlock-name">{{ lab.top_element.name }}</span>
-                    </div>
-                    <div class="scard__sub">Level {{ lab.top_element.level }}</div>
+                <div class="scard">
+                    <div class="scard__label">Developed</div>
+                    <div class="scard__value">{{ lab.developed_count }}</div>
+                    <div class="scard__sub">of {{ lab.total }} leveled up</div>
                 </div>
-                {% endif %}
+                <div class="scard">
+                    <div class="scard__label">Average level</div>
+                    <div class="scard__value">{{ lab.avg_level }}</div>
+                    <div class="scard__sub">across all elements</div>
+                </div>
             </div>
 
             {# View toggle: Table (default) / Radar / Signature #}
@@ -101,7 +99,6 @@
 
             {# Table view (default) #}
             <div class="lab-view" data-view="table">
-                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">All {{ lab.total }} elements, families as columns. Every element starts at Level 1 and brightens as you level it, pulsing once mastered. Tap any for its detail.</p>
                 <div class="ptable">
                     {% for d in lab.disciplines %}
                     <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
@@ -117,7 +114,7 @@
 
             {# Radar view #}
             <div class="lab-view" data-view="radar" hidden>
-                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your five family strengths at a glance. Pick a family to drill into its elements.</p>
+                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your Platinum DNA, mapped across the five families.</p>
                 <div class="radar-card">
                     <div class="radar-tabs">
                         <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
@@ -132,8 +129,11 @@
 
             {# Signature view #}
             <div class="lab-view" data-view="signature" hidden>
-                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">The combined emission spectrum of every element you've touched, each line brightening with its level. Your whole composition as one fingerprint.</p>
+                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Every element you've touched, emitting its family's color, each line brightening with its level. Your whole composition as one fingerprint.</p>
                 <div class="signature">{% include 'partials/elements/_spectrum.html' with spectrum=lab.profile_spectrum %}</div>
+                <div class="sig-legend">
+                    {% for d in lab.disciplines %}<span class="sig-legend__item" style="--disc: var(--disc-{{ d.slug }});"><span class="sig-legend__dot"></span>{{ d.label }}</span>{% endfor %}
+                </div>
             </div>
         </div>
     </section>
