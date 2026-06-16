@@ -38,23 +38,3 @@ class ResearchPanelView(ProfileHotbarMixin, TemplateView):
         ]
         context['seo_title'] = 'Research Panel - Platinum Pursuit'
         return context
-
-
-class ResearchPanelCompareView(ProfileHotbarMixin, TemplateView):
-    """Design comparison: the same real Projects rendered in both card treatments (compact
-    vial vs large focal vial) so the look can be judged side by side. Unlisted direct link,
-    same data path as the real page (read-only, whale-safe)."""
-    template_name = 'trophies/research_panel_compare.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        viewer_profile = None
-        if self.request.user.is_authenticated:
-            profile = getattr(self.request.user, 'profile', None)
-            if profile is not None and profile.is_linked:
-                viewer_profile = profile
-        data = build_research_panel_context(viewer_profile)
-        context['projects'] = data['projects']
-        context['profile'] = viewer_profile
-        context['seo_title'] = 'Research Panel - Card Comparison'
-        return context
