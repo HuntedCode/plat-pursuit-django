@@ -45,16 +45,15 @@ span the top, then a [ large vial | games grid ] row. Expects `p`, `profile`, `c
             Complete any one of these {{ p.game_count }} game{{ p.game_count|pluralize }} to finish the Project.
         </p>
 
-        {# ── Focal row: the enlarged vial as a specimen alongside the games ── #}
-        <div class="flex items-start gap-3 md:gap-4">
-            <div class="rp-vial-lg rp-vial--{{ p.status }} hidden sm:block shrink-0">{% include 'partials/elements/_vial.html' with vial_bands=p.vial_bands cid=cid %}</div>
-            <div class="bd-stage__grid flex-1 !px-0 !py-0">
-                {% for g in p.games %}
-                    {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
-                        {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                    {% endwith %}
-                {% endfor %}
-            </div>
+        {# ── Focal row: the vial is a cover-shaped specimen leading the games shelf,
+              its tube ~90% of a cover's height so it sits as a sibling to them ── #}
+        <div class="bd-stage__grid !px-0 !py-0">
+            <div class="rp-vial-cell rp-vial--{{ p.status }} hidden sm:grid place-items-center self-start aspect-[3/4]">{% include 'partials/elements/_vial.html' with vial_bands=p.vial_bands cid=cid %}</div>
+            {% for g in p.games %}
+                {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
+                    {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                {% endwith %}
+            {% endfor %}
         </div>
 
     </div>
