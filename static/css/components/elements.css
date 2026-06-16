@@ -120,3 +120,11 @@
 .compound .atom { filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 80%, transparent)) drop-shadow(0 0 8px color-mix(in oklab, var(--disc) 42%, transparent)); }
 .compound .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-1)); stroke: color-mix(in oklab, var(--disc) 92%, white); stroke-width: 3; }
 .compound .atom__sym { fill: color-mix(in oklab, var(--disc) 85%, white); }
+
+/* ---- Research Panel (Project list) ---- */
+.rp-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
+.rp-chip:hover { color: var(--pp-text); }
+.rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.rp-el { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--pp-text-dim); }
+.rp-el__chip { width: 18px; height: 18px; flex: none; }

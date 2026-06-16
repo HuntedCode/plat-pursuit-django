@@ -32,6 +32,7 @@ from .platinum_grid_views import PlatinumGridView
 from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView
 from .logbook_views import LogbookView
+from .research_panel_views import ResearchPanelView
 from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .franchise_views import FranchiseListView, FranchiseDetailView
@@ -78,6 +79,7 @@ __all__ = [
     'MyShareablesView', 'MyPlatinumSharesView', 'MyChallengeSharesView', 'MyProfileCardView',
     # Logbook view
     'LogbookView',
+    'ResearchPanelView',
     # Stats views
     'MyStatsView',
     # Company views

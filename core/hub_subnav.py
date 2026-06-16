@@ -151,6 +151,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
         HubSubnavItem('logbook', 'Logbook', 'logbook', 'book', auth_required=True),
+        HubSubnavItem('research-panel', 'Research Panel', 'research_panel', 'beaker'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
     ),
