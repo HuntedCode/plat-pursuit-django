@@ -126,5 +126,22 @@
 .rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
 .rp-chip:hover { color: var(--pp-text); }
 .rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
-.rp-el { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--pp-text-dim); }
-.rp-el__chip { width: 18px; height: 18px; flex: none; }
+/* Reward band: the elements a Project levels are a co-focus, not a footnote.
+   Each chip = glowing family atom + name + the XP it actually banks. */
+.rp-reward { display: flex; flex-wrap: wrap; gap: 7px; }
+.rp-el {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 11px 4px 5px; border-radius: 999px;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 15%, var(--pp-bg-1)), var(--pp-bg-1));
+    border: 1px solid color-mix(in oklab, var(--disc) 42%, transparent);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.rp-el__chip { width: 24px; height: 24px; flex: none; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--disc) 55%, transparent)); }
+.rp-el__name { font-size: 13px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
+.rp-el__xp { font-size: 12px; font-weight: 800; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 10px color-mix(in oklab, var(--disc) 35%, transparent); }
+/* Row hover lights up its elements -- the "this game feeds these stats" beat. */
+.rp-row:hover .rp-el { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 22%, transparent); }
+
+/* Compound: readable signature of the Project's element mix (not a speck). */
+.rp-compound { width: 84px; height: 84px; flex: none; }
+@media (min-width: 1024px) { .rp-compound { width: 96px; height: 96px; } }
