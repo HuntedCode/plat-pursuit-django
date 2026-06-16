@@ -145,6 +145,10 @@
 /* Reagent vial: the Project's even XP split drawn as a test tube of equal family bands. */
 .rp-vial { width: 38px; flex: none; }
 @media (min-width: 1024px) { .rp-vial { width: 44px; } }
+/* Focal (Variant B): enlarged so the vial reads as a specimen beside the games. */
+.rp-vial-lg { width: 58px; flex: none; }
+@media (min-width: 768px)  { .rp-vial-lg { width: 70px; } }
+@media (min-width: 1024px) { .rp-vial-lg { width: 84px; } }
 .vial { display: block; width: 100%; height: auto; overflow: visible; }
 .vial__glass { fill: color-mix(in oklab, white 3%, transparent); stroke: color-mix(in oklab, var(--pp-text) 24%, transparent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .vial__rim { stroke: color-mix(in oklab, var(--pp-text) 32%, transparent); stroke-width: 2.4; stroke-linecap: round; }
