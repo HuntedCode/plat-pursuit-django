@@ -2,8 +2,8 @@
  * Elements (the "Element" skin over Jobs)
  * Component CSS for the periodic-table element tiles, the atom glyph,
  * the family/discipline radar, the summary stat cards, and the
- * element-detail modal. Used by the Logbook's Lab zone (and, later, the
- * Research Panel). Family color = --disc-*; shape = the
+ * element-detail modal. Used by The Lab and the Research Panel.
+ * Family color = --disc-*; shape = the
  * element's slot within its family. Extracted from the /design/lab/ workshop.
  * ================================================================ */
 
@@ -45,6 +45,26 @@
 .rd-row__bar { display: block; height: 8px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
 .rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- Lab hero: DNA composition ring (Pursuer Level framed by family shares) ---- */
+.lab-dna { position: relative; width: 108px; height: 108px; flex: none; }
+@media (min-width: 1024px) { .lab-dna { width: 124px; height: 124px; } }
+.lab-dna__ring { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: center; animation: labDnaIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.lab-dna__track { fill: none; stroke: var(--pp-bg-3); stroke-width: 12; }
+.lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); }
+.lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease both; }
+.lab-dna__level { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 28px; line-height: 1; color: var(--pp-text); text-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 28%, transparent); }
+@media (min-width: 1024px) { .lab-dna__level { font-size: 32px; } }
+.lab-dna__cap { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; }
+@keyframes labDnaIn { from { transform: scale(0.55) rotate(-110deg); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes labDnaCenter { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .lab-dna__ring, .lab-dna__center { animation: none; } }
+
+.lab-dna-legend { display: grid; gap: 3px; }
+.lab-dna-legend li { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 8px; font-size: 12px; color: var(--pp-text-dim); }
+.lab-dna-legend__dot { width: 9px; height: 9px; border-radius: 999px; background: var(--disc); box-shadow: 0 0 6px color-mix(in oklab, var(--disc) 55%, transparent); }
+.lab-dna-legend__name { white-space: nowrap; }
+.lab-dna-legend__val { font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 
 
 /* ---- Atom glyph ---- */
@@ -120,3 +140,60 @@
 .compound .atom { filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 80%, transparent)) drop-shadow(0 0 8px color-mix(in oklab, var(--disc) 42%, transparent)); }
 .compound .atom__shape { fill: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-1)); stroke: color-mix(in oklab, var(--disc) 92%, white); stroke-width: 3; }
 .compound .atom__sym { fill: color-mix(in oklab, var(--disc) 85%, white); }
+
+/* ---- Research Panel (Project list) ---- */
+.rp-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
+.rp-chip:hover { color: var(--pp-text); }
+.rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+/* Reward band: the elements a Project levels are a co-focus, not a footnote.
+   Each chip = glowing family atom + name + the XP it actually banks. */
+.rp-reward { display: flex; flex-wrap: wrap; gap: 7px; }
+.rp-el {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 4px 11px 4px 5px; border-radius: 999px;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 15%, var(--pp-bg-1)), var(--pp-bg-1));
+    border: 1px solid color-mix(in oklab, var(--disc) 42%, transparent);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.rp-el__chip { width: 24px; height: 24px; flex: none; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--disc) 55%, transparent)); }
+.rp-el__name { font-size: 13px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
+.rp-el__xp { font-size: 12px; font-weight: 800; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 10px color-mix(in oklab, var(--disc) 35%, transparent); }
+/* Row hover lights up its elements -- the "this game feeds these stats" beat. */
+.rp-row:hover .rp-el { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 22%, transparent); }
+
+/* Reagent vial: the Project's even XP split drawn as a test tube of equal family bands. */
+.rp-vial { width: 38px; flex: none; }
+@media (min-width: 1024px) { .rp-vial { width: 44px; } }
+.vial { display: block; width: 100%; height: auto; overflow: visible; }
+.vial__glass { fill: color-mix(in oklab, white 3%, transparent); stroke: color-mix(in oklab, var(--pp-text) 24%, transparent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.vial__rim { stroke: color-mix(in oklab, var(--pp-text) 32%, transparent); stroke-width: 2.4; stroke-linecap: round; }
+.vial__liquid { transition: opacity 0.2s ease, filter 0.2s ease; }
+.vial__shine { fill: rgba(255, 255, 255, 0.28); }
+.vial__sep { stroke: rgba(0, 0, 0, 0.30); stroke-width: 0.8; }
+.vial__bubble { fill: rgba(255, 255, 255, 0.55); opacity: 0; }
+/* State: available reads cool/dim, pursuing normal, claimable lit + bubbling, accepted settled. */
+.rp-vial--available .vial__liquid { filter: saturate(0.4) brightness(0.72); opacity: 0.62; }
+.rp-vial--claimable .vial { filter: drop-shadow(0 0 5px color-mix(in oklab, var(--rp-fam) 38%, transparent)); }
+.rp-vial--claimable .vial__liquid { filter: brightness(1.12) drop-shadow(0 0 3px color-mix(in oklab, var(--rp-fam) 60%, transparent)); }
+.rp-vial--claimable .vial__bubble { animation: vialBubble 2.6s ease-in infinite; }
+.rp-vial--claimable .vial__bubble--2 { animation-delay: 0.9s; }
+.rp-vial--claimable .vial__bubble--3 { animation-delay: 1.7s; }
+.rp-vial--accepted .vial__liquid { opacity: 0.85; }
+@keyframes vialBubble {
+    0%   { opacity: 0; transform: translateY(0); }
+    20%  { opacity: 0.7; }
+    100% { opacity: 0; transform: translateY(-58px); }
+}
+@media (prefers-reduced-motion: reduce) { .rp-vial--claimable .vial__bubble { animation: none; } }
+
+/* Family identity woven into the card frame: premium dark substrate, family seasoning.
+   --rp-fam (dominant family color) is set per-card inline; the accent bar carries the
+   full family gradient. Status (claimable/accepted) is signalled by an inset ring so it
+   coexists with the family frame instead of fighting it. */
+.rp-row__accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; pointer-events: none; z-index: 1; box-shadow: 0 0 12px color-mix(in oklab, var(--rp-fam) 40%, transparent); }
+.rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 42%, var(--pp-border)); }
+.rp-row::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; }
+.rp-row--claimable::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
+.rp-row--accepted { opacity: 0.92; }
+.rp-row--accepted::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-success) 45%, transparent); }

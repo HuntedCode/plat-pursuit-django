@@ -22,7 +22,7 @@ XP is recalculated and denormalized onto `ProfileGamification` via Django signal
 |------|---------|
 | `trophies/services/xp_service.py` | Central XP calculation and update logic (342 lines) |
 | `trophies/signals.py` | Signal handlers for gamification updates (172 lines) |
-| `trophies/util_modules/constants.py` | XP constants: `BRONZE_STAGE_XP=250`, `SILVER_STAGE_XP=75`, `GOLD_STAGE_XP=250`, `PLAT_STAGE_XP=75`, `BADGE_TIER_XP=3000`; Contract: `CONTRACT_XP_TOTAL=5000`, `CONTRACT_PLATINUM_FRAC=0.70`, `JOB_LEVEL_BASE=600`, `JOB_LEVEL_CAP=50` |
+| `trophies/util_modules/constants.py` | XP constants: `BRONZE_STAGE_XP=250`, `SILVER_STAGE_XP=75`, `GOLD_STAGE_XP=250`, `PLAT_STAGE_XP=75`, `BADGE_TIER_XP=3000`; Contract: `CONTRACT_XP_TOTAL=6000`, `CONTRACT_PLATINUM_FRAC=0.70`, `JOB_LEVEL_BASE=600`, `JOB_LEVEL_CAP=50` |
 | `trophies/models.py` | `ProfileGamification`, `StatType`, `StageStatValue`; Contract engine: `EarnedContract`, `ContractXPGrant`, `ProfileJobXP` |
 | `trophies/services/contract_service.py` | Contract XP engine: detection (`mark_contract_reached` / `check_profile_contracts`), acceptance (`accept_contract` / `accept_contracts`), `claimable_contracts`, `recompute_profile_job_xp` |
 | `trophies/util_modules/leveling.py` | Per-job leveling curve (`xp_for_level` / `level_for_xp`) |
@@ -96,7 +96,7 @@ Total XP: sum across all badge series.
 
 ## Contract / Job XP Engine
 
-A second, badge-independent XP system. A **Contract** groups one or more Concepts (via `ContractMembership`, a one-home invariant, or a `ContractBundle` collection satisfier) and pays the same global total **T** (`CONTRACT_XP_TOTAL = 5000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
+A second, badge-independent XP system. A **Contract** groups one or more Concepts (via `ContractMembership`, a one-home invariant, or a `ContractBundle` collection satisfier) and pays the same global total **T** (`CONTRACT_XP_TOTAL = 6000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
 
 > **Naming skin:** the backend models are `Job` / `Contract`; everything user-facing is **Element / Project / The Lab**. No user-visible text says "job" or "contract".
 
@@ -146,7 +146,7 @@ In `token_keeper.py`'s `sync_complete` (phase `stats_badges`, right after `check
 - **The ledger is immutable, never recomputed from config**: `ContractXPGrant` rows record the amount *as paid* (with `base_t` + `multiplier`). Changing `CONTRACT_XP_TOTAL` or a Contract's jobs later does NOT retroactively change banked XP. `recompute_job_xp` rebuilds only the *cache* (`ProfileJobXP`) by re-summing the existing ledger; it never re-derives amounts.
 - **`has_platinum` is frozen at first reach**: read it from `EarnedContract.has_platinum`, never recompute it live at accept time. Recomputing could over/underpay the 100% tier if a platinum is added/removed between split accepts.
 - **Reached is a one-way ratchet; accept is once-per-tier**: a 100%'d game that later drops below 100% (new DLC) keeps its reached/accepted state and its banked XP. Re-detect + re-accept grants nothing more (idempotent via the accepted timestamps + the ledger `unique_together`). Surfaces that show "claimable" status must read `EarnedContract`, not live `ProfileGame.progress`.
-- **Accept is required for XP**: detection on sync only makes a reward *claimable*. No XP exists until the user accepts. The Research Panel's Accept button is the only grant path.
+- **Accept is required for XP**: detection on sync only makes a reward *claimable*. No XP exists until the user accepts. The Research Panel's Accept button (`POST /api/v1/projects/accept/` with `{slug}` for one or `{all: true}` for every claimable; `api/contract_views.py:AcceptContractView`) is the only grant path. The view is the sole request path that writes grants; it just delegates to `accept_contract` / `accept_contracts`.
 - **Per-user reads must DB-aggregate**: `ProfileJobXP` is ~24 rows/user, but `recompute_profile_job_xp` and any leaderboard read must aggregate in the DB (`Sum` / `annotate`), never iterate the ledger in Python (whale-OOM rule).
 - **When adding a model FK'd to Concept, update `Concept.absorb()`**: `EarnedContract` / `ContractXPGrant` / `ProfileJobXP` FK Profile/Job/Contract (not Concept directly), so they need no absorb branch. `ContractMembership` / `ContractBundle` (which DO reference Concept) are already handled there.
 

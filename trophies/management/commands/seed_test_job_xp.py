@@ -1,4 +1,4 @@
-"""DEV ONLY: seed sample ProfileJobXP rows so the Logbook's Lab is populated.
+"""DEV ONLY: seed sample ProfileJobXP rows so the Lab is populated.
 
 No Contracts have been accepted anywhere yet, so every real profile's elements sit at
 the level-1 floor. This command writes a varied spread of job XP for one profile (default
@@ -22,7 +22,7 @@ from trophies.util_modules.leveling import level_for_xp, xp_for_level
 
 
 class Command(BaseCommand):
-    help = "DEV ONLY: seed sample ProfileJobXP for a profile so the Logbook Lab is populated."
+    help = "DEV ONLY: seed sample ProfileJobXP for a profile so the Lab is populated."
 
     # A varied spread (level-1 floors, mids, and a couple of mastered) across ~25 jobs.
     TARGETS = [

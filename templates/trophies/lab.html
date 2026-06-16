@@ -1,18 +1,18 @@
 {% extends 'base.html' %}
 {% load humanize static %}
-{% block title %}Your Logbook{% endblock %}
+{% block title %}The Lab{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {% if hero %}
-    {# ── Pursuer hero: identity at a glance ── #}
+    {# ── Pursuer hero: identity + the DNA composition ring (your Platinum DNA) ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-6 lg:p-7">
-            <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
-                {# Avatar + name + equipped title #}
-                <div class="flex items-center gap-4 md:gap-6 min-w-0">
-                    <div class="w-20 h-20 md:w-24 md:h-24 lg:w-28 lg:h-28 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                {# Identity #}
+                <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                    <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
                         {% if hero.avatar_url %}
                             <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
                         {% else %}
@@ -27,24 +27,36 @@
                         {% else %}
                             <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
                         {% endif %}
+                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} elements leveled</p>
                     </div>
                 </div>
 
-                {# Tally row: the headline numbers #}
-                <div class="md:ml-auto grid grid-cols-3 gap-2 md:gap-3 lg:gap-4 text-center shrink-0">
-                    <div class="rounded-lg bg-base-300/40 border border-base-300 px-3 py-2 md:px-5 md:py-3">
-                        <div class="text-2xl md:text-3xl lg:text-4xl font-black text-primary tabular-nums leading-none">{{ hero.pursuer_level|intcomma }}</div>
-                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Pursuer Level</div>
+                {# DNA composition ring (Pursuer Level framed by family shares) + legend #}
+                {% if hero.ring %}
+                <div class="flex items-center gap-3 md:gap-4 shrink-0">
+                    <div class="lab-dna">
+                        <svg class="lab-dna__ring" viewBox="0 0 120 120" aria-hidden="true">
+                            <circle class="lab-dna__track" cx="60" cy="60" r="42"></circle>
+                            <g transform="rotate(-90 60 60)">
+                                {% for f in hero.ring %}<circle class="lab-dna__arc" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}
+                            </g>
+                        </svg>
+                        <div class="lab-dna__center">
+                            <span class="lab-dna__level tabular-nums">{{ hero.pursuer_level|intcomma }}</span>
+                            <span class="lab-dna__cap">Level</span>
+                        </div>
                     </div>
-                    <div class="rounded-lg bg-base-300/40 border border-base-300 px-3 py-2 md:px-5 md:py-3">
-                        <div class="text-2xl md:text-3xl lg:text-4xl font-black tabular-nums leading-none">{{ hero.badges_earned|intcomma }}</div>
-                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Badges</div>
-                    </div>
-                    <div class="rounded-lg bg-base-300/40 border border-base-300 px-3 py-2 md:px-5 md:py-3">
-                        <div class="text-2xl md:text-3xl lg:text-4xl font-black tabular-nums leading-none">{{ hero.total_job_xp|intcomma }}</div>
-                        <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Total XP</div>
-                    </div>
+                    <ul class="lab-dna-legend">
+                        {% for f in hero.ring %}
+                        <li style="--disc: var(--disc-{{ f.slug }});">
+                            <span class="lab-dna-legend__dot"></span>
+                            <span class="lab-dna-legend__name">{{ f.label }}</span>
+                            <span class="lab-dna-legend__val">{{ f.avg }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
                 </div>
+                {% endif %}
             </div>
         </div>
     </section>
@@ -52,7 +64,7 @@
     {% else %}
         <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
             <div class="card-body p-6 text-center text-base-content/60">
-                Your Logbook is still being prepared. Check back after your next sync.
+                Your Lab is still being prepared. Check back after your next sync.
             </div>
         </section>
     {% endif %}
@@ -72,7 +84,17 @@
             </p>
 
             {# Summary stats (aggregates you can't read off the grid) #}
-            <div class="grid grid-cols-2 gap-2 md:gap-3 mb-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
+                <div class="scard">
+                    <div class="scard__label">Pursuer Level</div>
+                    <div class="scard__value text-primary">{{ lab.total_level|intcomma }}</div>
+                    <div class="scard__sub">sum of every element</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Total XP</div>
+                    <div class="scard__value" title="{{ lab.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
+                    <div class="scard__sub">earned across all elements</div>
+                </div>
                 <div class="scard">
                     <div class="scard__label">Average level</div>
                     <div class="scard__value">{{ lab.avg_level }}</div>
