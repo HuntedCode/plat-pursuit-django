@@ -45,12 +45,12 @@ span the top, then a [ large vial | games grid ] row. Expects `p`, `profile`, `c
             Complete any one of these {{ p.game_count }} game{{ p.game_count|pluralize }} to finish the Project.
         </p>
 
-        {# ── Focal row: the vial is a framed specimen in its own rail; the games wrap
-              freely in their own shelf beside it (never under the tube). Rail width ==
-              shelf column width so the tube stands exactly cover-height. ── #}
-        <div class="rp-focal-row flex items-start gap-3 md:gap-4 mt-1">
-            <div class="rp-vial-rail rp-vial--{{ p.status }} hidden sm:grid place-items-center">{% include 'partials/elements/_vial.html' with vial_bands=p.vial_bands cid=cid %}</div>
-            <div class="rp-games-shelf flex-1">
+        {% comment %} Focal row: framed vial rail in its own grid column (one cover wide, so
+        the tube stands cover-height) beside a games shelf that wraps freely in its own track,
+        so games never flow under the tube and the tube never stretches. {% endcomment %}
+        <div class="rp-focal-row mt-2">
+            <div class="rp-vial-rail rp-vial--{{ p.status }} hidden sm:block">{% include 'partials/elements/_vial.html' with vial_bands=p.vial_bands cid=cid %}</div>
+            <div class="rp-games-shelf">
                 {% for g in p.games %}
                     {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
                         {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}

@@ -145,24 +145,28 @@
 /* Reagent vial: the Project's even XP split drawn as a test tube of equal family bands. */
 .rp-vial { width: 38px; flex: none; }
 @media (min-width: 1024px) { .rp-vial { width: 44px; } }
-/* Focal (Variant B): the vial sits in its own framed specimen rail to the left of a games
-   shelf. The rail width == the shelf's column width (--rp-cover-w), and the rail is
-   aspect 3/4 (cover-shaped) and items-start (not stretched), so the tube stands exactly
-   cover-height without growing. The shelf is a separate grid that wraps freely, so games
-   never flow under the tube. The tube fills the rail and preserveAspectRatio (meet)
-   centers it. */
-.rp-focal-row { --rp-cover-w: 92px; }
-@media (min-width: 768px)  { .rp-focal-row { --rp-cover-w: 112px; } }
-@media (min-width: 1024px) { .rp-focal-row { --rp-cover-w: 132px; } }
+/* Focal (Variant B): the focal row is one grid -- a vial-rail column the same width as a
+   game column, then the games shelf. Because the rail column and the shelf columns are all
+   1fr, the rail is exactly one cover wide, so the aspect-3/4 rail stands at cover height
+   (covers stay fluid/large, not shrunk to a fixed width). The shelf is its own nested grid
+   that wraps freely, so games never flow under the tube; align-self:start keeps the rail
+   from stretching. The tube fills the rail absolutely (proven to size reliably) and is
+   scaled in a touch for frame breathing room. */
+.rp-focal-row { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 640px)  { .rp-focal-row { grid-template-columns: 1fr 2fr; } }
+@media (min-width: 768px)  { .rp-focal-row { grid-template-columns: 1fr 3fr; } }
+@media (min-width: 1024px) { .rp-focal-row { grid-template-columns: 1fr 4fr; } }
 .rp-vial-rail {
-    flex: none; width: var(--rp-cover-w); aspect-ratio: 3 / 4; padding: 6% 8%;
+    position: relative; aspect-ratio: 3 / 4; align-self: start;
     border: 1px solid color-mix(in oklab, var(--rp-fam) 32%, var(--pp-border));
     border-radius: var(--pp-radius-md);
     background: linear-gradient(180deg, color-mix(in oklab, var(--rp-fam) 14%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 80%);
     box-shadow: inset 0 0 24px color-mix(in oklab, var(--rp-fam) 12%, transparent);
 }
-.rp-vial-rail .vial { width: 100%; height: 100%; }
-.rp-games-shelf { display: grid; grid-template-columns: repeat(auto-fill, var(--rp-cover-w)); gap: 10px; justify-content: start; align-content: start; }
+.rp-vial-rail .vial { position: absolute; inset: 0; width: 100%; height: 100%; transform: scale(0.86); }
+.rp-games-shelf { display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); align-content: start; }
+@media (min-width: 768px)  { .rp-games-shelf { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .rp-games-shelf { grid-template-columns: repeat(4, 1fr); } }
 .vial { display: block; width: 100%; height: auto; overflow: visible; }
 .vial__glass { fill: color-mix(in oklab, white 3%, transparent); stroke: color-mix(in oklab, var(--pp-text) 24%, transparent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .vial__rim { stroke: color-mix(in oklab, var(--pp-text) 32%, transparent); stroke-width: 2.4; stroke-linecap: round; }
