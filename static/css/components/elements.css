@@ -145,14 +145,24 @@
 /* Reagent vial: the Project's even XP split drawn as a test tube of equal family bands. */
 .rp-vial { width: 38px; flex: none; }
 @media (min-width: 1024px) { .rp-vial { width: 44px; } }
-/* Focal (Variant B): the vial leads the games grid as a cover-shaped specimen cell
-   (aspect 3/4 via Tailwind). The SVG absolutely fills that cell and preserveAspectRatio
-   (meet) scales the slim tube to fit by height -> it lands at exactly cover height,
-   centered, tracking the covers as the grid reflows. Filling absolutely avoids the
-   unreliable percentage-height-of-an-aspect-ratio-parent that was inflating the tube.
-   min-height:0 keeps the cell from being grown by its content. */
-.rp-vial-cell { min-height: 0; }
-.rp-vial-cell .vial { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Focal (Variant B): the vial sits in its own framed specimen rail to the left of a games
+   shelf. The rail width == the shelf's column width (--rp-cover-w), and the rail is
+   aspect 3/4 (cover-shaped) and items-start (not stretched), so the tube stands exactly
+   cover-height without growing. The shelf is a separate grid that wraps freely, so games
+   never flow under the tube. The tube fills the rail and preserveAspectRatio (meet)
+   centers it. */
+.rp-focal-row { --rp-cover-w: 92px; }
+@media (min-width: 768px)  { .rp-focal-row { --rp-cover-w: 112px; } }
+@media (min-width: 1024px) { .rp-focal-row { --rp-cover-w: 132px; } }
+.rp-vial-rail {
+    flex: none; width: var(--rp-cover-w); aspect-ratio: 3 / 4; padding: 6% 8%;
+    border: 1px solid color-mix(in oklab, var(--rp-fam) 32%, var(--pp-border));
+    border-radius: var(--pp-radius-md);
+    background: linear-gradient(180deg, color-mix(in oklab, var(--rp-fam) 14%, var(--pp-bg-1)) 0%, var(--pp-bg-1) 80%);
+    box-shadow: inset 0 0 24px color-mix(in oklab, var(--rp-fam) 12%, transparent);
+}
+.rp-vial-rail .vial { width: 100%; height: 100%; }
+.rp-games-shelf { display: grid; grid-template-columns: repeat(auto-fill, var(--rp-cover-w)); gap: 10px; justify-content: start; align-content: start; }
 .vial { display: block; width: 100%; height: auto; overflow: visible; }
 .vial__glass { fill: color-mix(in oklab, white 3%, transparent); stroke: color-mix(in oklab, var(--pp-text) 24%, transparent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .vial__rim { stroke: color-mix(in oklab, var(--pp-text) 32%, transparent); stroke-width: 2.4; stroke-linecap: round; }
