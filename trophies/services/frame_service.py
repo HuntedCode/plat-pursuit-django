@@ -19,6 +19,10 @@ from django.templatetags.static import static
 _TIER_NAME = {1: "bronze", 2: "silver", 3: "gold", 4: "platinum"}
 _NEXT_TIER_LABEL = {1: "Silver", 2: "Gold", 3: "Platinum", 4: "Maxed"}
 
+# Sentinel: distinguishes "caller did not pre-fetch" (query it) from "pre-fetched, and it
+# is None" (the viewer has no UserBadge/UserBadgeProgress for this badge -- do NOT query).
+_UNSET = object()
+
 
 def _resolve_layer_url(path):
     """get_badge_layers() returns either an already-usable URL (badge_image.url,
@@ -31,7 +35,8 @@ def _resolve_layer_url(path):
     return static(path)
 
 
-def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
+def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
+                      earned=_UNSET, progress=_UNSET, include_live_stats=True):
     """Build the Frame data dict for a single-tier Badge.
 
     state is derived from the viewer's progress:
@@ -47,9 +52,17 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     reads in get_badge_layers(), and effective_franchise/effective_developer/
     effective_funded_by (FK reads on badge + base_badge — select_related them in
     the caller: franchise, developer, funded_by, and their base_badge__ twins).
-    Fine for a single hero. When rendering MANY frames for one profile (e.g. the badge
-    gallery), do NOT call this in a loop — batch the per-viewer fetches in the view
-    and add a pre-fetched arg here to avoid N+1 (queries AND Redis round-trips).
+    Fine for a single hero.
+
+    BATCH USE (galleries / the collection album, MANY frames for one profile): do NOT
+    let this query per badge. Bulk-fetch the viewer's UserBadge + UserBadgeProgress once
+    in the caller and pass them via `earned=` (the UserBadge or None) and `progress=`
+    (the UserBadgeProgress or None) to skip the per-badge queries, and pass
+    `include_live_stats=False` to skip the per-earned-badge earners-rank (Redis) +
+    series-XP (DB) lookups (those are back-of-card detail, not needed for a grid). With
+    both, and the badge FKs select_related in the caller, this issues ZERO queries/Redis
+    per call — safe in a loop over hundreds of badges. Defaults preserve the single-hero
+    behavior (query everything, include live stats).
     """
     from trophies.models import UserBadge, UserBadgeProgress
 
@@ -71,23 +84,28 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
     series_xp = None       # viewer's XP for this badge's series
 
     if profile is not None:
-        earned = UserBadge.objects.filter(profile=profile, badge=badge).first()
-        if earned:
+        earned_obj = (
+            UserBadge.objects.filter(profile=profile, badge=badge).first()
+            if earned is _UNSET else earned
+        )
+        if earned_obj:
             # status is 'earned' or 'maintenance' (a lapsed-but-never-deleted badge);
             # the Frame component has a dedicated maintenance/repair variant.
-            state = earned.status
-            earned_date = date_filter(earned.earned_at, "M j, Y")
-            earn_rank = earned.earn_rank
-            from trophies.services.redis_leaderboard_service import get_earners_rank
-            from trophies.services.xp_service import calculate_series_xp
-            # get_earners_rank is already 1-indexed (or None if not on the board).
-            current_rank = get_earners_rank(badge.series_slug, profile.id)
-            series_xp = calculate_series_xp(profile, badge.series_slug)
+            state = earned_obj.status
+            earned_date = date_filter(earned_obj.earned_at, "M j, Y")
+            earn_rank = earned_obj.earn_rank
+            if include_live_stats:
+                from trophies.services.redis_leaderboard_service import get_earners_rank
+                from trophies.services.xp_service import calculate_series_xp
+                # get_earners_rank is already 1-indexed (or None if not on the board).
+                current_rank = get_earners_rank(badge.series_slug, profile.id)
+                series_xp = calculate_series_xp(profile, badge.series_slug)
             if state == "maintenance":
                 # Lapsed: show the current repair progress, not the full earned bar.
-                prog = UserBadgeProgress.objects.filter(
-                    profile=profile, badge=badge
-                ).first()
+                prog = (
+                    UserBadgeProgress.objects.filter(profile=profile, badge=badge).first()
+                    if progress is _UNSET else progress
+                )
                 stages_done = prog.completed_concepts if prog else 0
                 progress_pct = (
                     round(stages_done / stages_total * 100) if stages_total else 0
@@ -95,9 +113,10 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True):
             else:
                 stages_done = stages_total
         else:
-            prog = UserBadgeProgress.objects.filter(
-                profile=profile, badge=badge
-            ).first()
+            prog = (
+                UserBadgeProgress.objects.filter(profile=profile, badge=badge).first()
+                if progress is _UNSET else progress
+            )
             completed = prog.completed_concepts if prog else 0
             if completed > 0:
                 state = "in_progress"
