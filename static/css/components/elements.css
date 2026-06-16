@@ -149,8 +149,8 @@
 /* Family identity woven into the card frame: premium dark substrate, family seasoning.
    --rp-fam (dominant family color) is set per-card inline; the accent bar carries the
    full family gradient. Status (claimable/accepted) is signalled by an inset ring so it
-   coexists with the family frame instead of fighting it. */
-.rp-row { background: linear-gradient(115deg, color-mix(in oklab, var(--rp-fam) 8%, var(--pp-bg-2)) 0%, var(--pp-bg-2) 55%); }
+   coexists with the family frame instead of fighting it. The card background
+   (family_bg, a pronounced diagonal wash spreading the families) is set per-card inline. */
 .rp-row__accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; pointer-events: none; z-index: 1; box-shadow: 0 0 12px color-mix(in oklab, var(--rp-fam) 40%, transparent); }
 .rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 42%, var(--pp-border)); }
 .rp-row::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; }

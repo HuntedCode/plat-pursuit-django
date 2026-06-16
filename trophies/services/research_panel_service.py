@@ -124,7 +124,7 @@ def _build_projects(profile):
         status, progress = _project_status(earned.get(contract.id), max_progress, any_plat)
 
         first_concept = contract_games[0].concept if contract_games else None
-        family_gradient, family_color = _family_styles(elements)
+        family_gradient, family_color, family_bg = _family_styles(elements)
         projects.append({
             'name': (first_concept.unified_title if first_concept else '') or contract.name,
             'slug': contract.slug,
@@ -133,7 +133,8 @@ def _build_projects(profile):
             'elements': elements,          # what you level
             'compound': element_render.build_compound(elements, zlib.crc32(contract.slug.encode())),
             'family_gradient': family_gradient,  # CSS for the family accent bar (gradient if multi-family)
-            'family_color': family_color,        # dominant family color var, for the card tint/glow
+            'family_color': family_color,        # dominant family color var, for the hover/glow
+            'family_bg': family_bg,              # pronounced family wash for the card background
             'xp_total': t,
             'xp_each': t // n,
             'status': status,
@@ -144,22 +145,32 @@ def _build_projects(profile):
 
 
 def _family_styles(elements):
-    """(family_gradient, family_color) CSS for a Project's element families. The accent
-    bar runs a top-to-bottom gradient across the distinct families (solid if one); the
-    dominant (first) family drives the card's subtle tint + glow. Values are built only
-    from the controlled family slug enum (combat/exploration/mind/heart/finesse), never
-    user input, so they are safe to inline in a style attribute."""
+    """(family_gradient, family_color, family_bg) CSS for a Project's element families.
+    The accent bar runs a top-to-bottom gradient across the distinct families (solid if
+    one); the dominant (first) family drives hover/glow; family_bg is a pronounced diagonal
+    wash spreading the families across the whole card. Values are built only from the
+    controlled family slug enum (combat/exploration/mind/heart/finesse), never user input,
+    so they are safe to inline in a style attribute."""
     fams = []
     for el in elements:
         if el['disc_slug'] not in fams:
             fams.append(el['disc_slug'])
     if not fams:
-        return 'var(--pp-border)', 'var(--pp-border)'
+        return 'var(--pp-border)', 'var(--pp-border)', 'var(--pp-bg-2)'
     color = f"var(--disc-{fams[0]})"
     if len(fams) == 1:
-        return color, color
-    stops = ', '.join(f"var(--disc-{f})" for f in fams)
-    return f"linear-gradient(180deg, {stops})", color
+        bar = color
+        bg = f"linear-gradient(115deg, color-mix(in oklab, {color} 22%, var(--pp-bg-2)) 0%, var(--pp-bg-2) 88%)"
+    else:
+        bar = f"linear-gradient(180deg, {', '.join(f'var(--disc-{f})' for f in fams)})"
+        last = len(fams) - 1
+        stops = [
+            f"color-mix(in oklab, var(--disc-{f}) 20%, var(--pp-bg-2)) {round(i * 72 / last)}%"
+            for i, f in enumerate(fams)
+        ]
+        stops.append("var(--pp-bg-2) 100%")
+        bg = f"linear-gradient(115deg, {', '.join(stops)})"
+    return bar, color, bg
 
 
 def build_research_panel_context(profile):
