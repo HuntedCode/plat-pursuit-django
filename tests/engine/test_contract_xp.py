@@ -161,6 +161,20 @@ def test_recompute_rebuilds_cache_from_ledger():
         assert pjx.level == leveling.level_for_xp(2500)
 
 
+def test_recompute_floors_orphan_rows_to_level_one():
+    """A ProfileJobXP row with no backing ledger grants (orphaned) is reset by recompute to
+    the level-1 floor with 0 XP -- not level 0."""
+    profile = ProfileFactory()
+    job = Job.objects.get(slug='gunslinger')
+    ProfileJobXP.objects.create(profile=profile, job=job, total_xp=5000, level=9)
+
+    contract_service.recompute_profile_job_xp(profile)
+
+    pjx = ProfileJobXP.objects.get(profile=profile, job=job)
+    assert pjx.total_xp == 0
+    assert pjx.level == 1
+
+
 def test_check_profile_contracts_marks_reached_for_touched_concepts():
     """The sync seam passes the concept ids of touched games; their Contracts become
     claimable (reached) but earn no XP until accepted."""
@@ -257,10 +271,11 @@ def test_accept_contracts_bulk_accepts_all_claimable():
     assert not list(contract_service.claimable_contracts(profile))
 
 
-def test_leveling_curve_roundtrips_and_caps():
-    assert leveling.xp_for_level(0) == 0
-    assert leveling.level_for_xp(0) == 0
-    for level in (1, 2, 5, 10, JOB_LEVEL_CAP):
+def test_leveling_curve_is_one_based_and_caps():
+    assert leveling.xp_for_level(1) == 0    # level 1 is the floor (0 XP)
+    assert leveling.level_for_xp(0) == 1    # no XP -> level 1, not 0
+    assert leveling.level_for_xp(-5) == 1   # floors at 1
+    for level in (2, 5, 10, JOB_LEVEL_CAP):
         xp = leveling.xp_for_level(level)
         assert leveling.level_for_xp(xp) == level          # exactly at threshold
         assert leveling.level_for_xp(xp - 1) == level - 1  # just below
