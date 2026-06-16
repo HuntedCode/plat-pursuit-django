@@ -51,22 +51,87 @@
 
 {% block js_scripts %}
 <script>
-// Research Panel status filter (client-side show/hide).
+// Research Panel: status filter + Accept (the acceptance gate that banks XP).
 (function () {
-    var bar = document.querySelector('.rp-filters');
     var list = document.getElementById('rp-list');
-    if (!bar || !list) return;
-    var rows = list.querySelectorAll('.rp-row');
-    bar.querySelectorAll('.rp-chip').forEach(function (chip) {
-        chip.addEventListener('click', function () {
-            bar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
-            chip.classList.add('is-active');
-            var f = chip.dataset.filter;
-            rows.forEach(function (row) {
-                row.style.display = (f === 'all' || row.dataset.status === f) ? '' : 'none';
+    if (!list) return;
+    var bar = document.querySelector('.rp-filters');
+    var PP = window.PlatPursuit || {};
+    var API = PP.API, Toast = PP.ToastManager;
+
+    function applyFilter(f) {
+        list.querySelectorAll('.rp-row').forEach(function (row) {
+            row.style.display = (f === 'all' || row.dataset.status === f) ? '' : 'none';
+        });
+    }
+    function activeFilter() {
+        var a = bar && bar.querySelector('.rp-chip.is-active');
+        return a ? a.dataset.filter : 'all';
+    }
+
+    // Status filter chips
+    if (bar) {
+        bar.querySelectorAll('.rp-chip').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                bar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
+                chip.classList.add('is-active');
+                applyFilter(chip.dataset.filter);
             });
         });
+    }
+
+    // Accept flow
+    function markAccepted(card) {
+        card.dataset.status = 'accepted';
+        card.classList.remove('rp-row--claimable');
+        card.classList.add('rp-row--accepted');
+        var vial = card.querySelector('.rp-vial');
+        if (vial) { vial.classList.remove('rp-vial--claimable'); vial.classList.add('rp-vial--accepted'); }
+        var badge = card.querySelector('.rp-badge');
+        if (badge) { badge.className = 'rp-badge badge badge-xs badge-success font-bold shrink-0'; badge.textContent = 'Accepted'; }
+        var cta = card.querySelector('.rp-cta');
+        if (cta) { cta.innerHTML = '<span class="text-xs font-bold text-success">Accepted ✓</span>'; }
+    }
+    function refreshAcceptAll(count) {
+        var btn = document.getElementById('rp-accept-all');
+        if (!btn) return;
+        if (count > 0) { btn.textContent = 'Accept all (' + count + ')'; btn.disabled = false; }
+        else { btn.remove(); }
+    }
+    function applyResult(res) {
+        (res.accepted || []).forEach(function (slug) {
+            var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+            var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
+            if (card) markAccepted(card);
+        });
+        refreshAcceptAll(res.claimable_count || 0);
+        applyFilter(activeFilter());
+        if (Toast && res.granted) {
+            Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+        }
+    }
+    async function accept(payload, btn) {
+        if (!API) return;
+        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
+        try {
+            applyResult(await API.post('/api/v1/projects/accept/', payload));
+        } catch (err) {
+            var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
+            if (Toast) Toast.show((data && data.error) || 'Could not accept the Project.', 'error');
+            if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
+        }
+    }
+
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest('.rp-accept');
+        if (!btn) return;
+        e.preventDefault();
+        accept({ slug: btn.dataset.slug }, btn);
     });
+    var allBtn = document.getElementById('rp-accept-all');
+    if (allBtn) {
+        allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
+    }
 })();
 </script>
 {% endblock %}

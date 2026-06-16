@@ -99,6 +99,7 @@ from .community_stats_views import (
     CommunityStatsDayView, CommunityStatsTodayView, CommunityStatsRecordsView,
 )
 from .youtube_views import YouTubeAttributionLookupView
+from .contract_views import AcceptContractView
 
 app_name = 'api'
 
@@ -185,6 +186,9 @@ urlpatterns = [
 
     # Tracking endpoints
     path('tracking/site-event/', TrackSiteEventView.as_view(), name='tracking-site-event'),
+
+    # Project (Contract) acceptance gate -- banks XP for claimable Projects
+    path('projects/accept/', AcceptContractView.as_view(), name='project-accept'),
 
     # Easter egg endpoints
     path('easter-eggs/roll/', RollEasterEggView.as_view(), name='easter-egg-roll'),
