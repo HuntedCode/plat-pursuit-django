@@ -27,6 +27,9 @@ class ResearchPanelView(ProfileHotbarMixin, TemplateView):
             if profile is not None and profile.is_linked:
                 viewer_profile = profile
         context.update(build_research_panel_context(viewer_profile))
+        # The reused badge game-card partial links to game_detail_with_profile when a
+        # `profile` is in context (and plain game_detail otherwise).
+        context['profile'] = viewer_profile
         context['viewer_has_linked_profile'] = viewer_profile is not None
         context['xp_total'] = CONTRACT_XP_TOTAL
         context['breadcrumb'] = [
