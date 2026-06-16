@@ -4,6 +4,7 @@
 @import "./components/frame.css";
 @import "./components/badge-hero.css";
 @import "./components/badge-detail.css";
+@import "./components/elements.css";
 @plugin "daisyui";
 
 @theme {

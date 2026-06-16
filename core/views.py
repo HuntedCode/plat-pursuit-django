@@ -751,114 +751,11 @@ class JobsWorkshopView(TemplateView):
 
     @staticmethod
     def _build_compound(atoms, seed):
-        """Deterministic molecule from a project's/contract's elements, seeded so each
-        one is (practically always) visually distinct -- even the many 1-3 element
-        contracts that share job-sets. Entropy: layout choice, a global rotation,
-        per-shape rotation, double bonds, and a seeded neutral scaffold of pendant
-        atoms fanned off the elements. The colored element atoms stay the meaningful
-        part; scaffold is decorative molecular body. Returns SVG-ready atoms (elements),
-        scaffold (neutral nodes), and bonds in a 200x200 viewBox.
+        """Workshop delegate to the productionized generator in element_render
+        (single source). Kept so the /design/jobs/ sandbox + its call sites are unchanged.
         """
-        import math
-        import random
-        rng = random.Random(seed)
-        n = len(atoms)
-        cx = cy = 100.0
-        size = 58.0 if n <= 2 else (52.0 if n <= 4 else 46.0)
-
-        # 1) canonical core positions + core bonds
-        if n == 1:
-            positions, pairs = [(cx, cy)], []
-        elif n == 2:
-            positions = [(cx - 40, cy), (cx + 40, cy)]
-            pairs = [(0, 1, rng.random() < 0.5)]
-        else:
-            layout = rng.choice(['ring', 'chain']) if n == 3 else rng.choice(['ring', 'hub'])
-            if layout == 'hub':
-                m = n - 1
-                positions = [(cx, cy)] + [
-                    (cx + 56.0 * math.cos(k * 2 * math.pi / m), cy + 56.0 * math.sin(k * 2 * math.pi / m))
-                    for k in range(m)
-                ]
-                pairs = [(0, k, rng.random() < 0.33) for k in range(1, n)]
-            elif layout == 'chain':
-                positions = [(cx - 52, cy + 18), (cx, cy - 24), (cx + 52, cy + 18)]
-                pairs = [(0, 1, rng.random() < 0.4), (1, 2, rng.random() < 0.4)]
-            else:  # ring with one double bond
-                positions = [
-                    (cx + 52.0 * math.cos(-math.pi / 2 + k * 2 * math.pi / n),
-                     cy + 52.0 * math.sin(-math.pi / 2 + k * 2 * math.pi / n))
-                    for k in range(n)
-                ]
-                pairs = [(k, (k + 1) % n, False) for k in range(n)]
-                di = rng.randrange(n)
-                pairs[di] = (pairs[di][0], pairs[di][1], True)
-
-        # 2) global seeded rotation of the whole core
-        ga = rng.uniform(0, 2 * math.pi)
-        cgv, sgv = math.cos(ga), math.sin(ga)
-        positions = [
-            (cx + (x - cx) * cgv - (y - cy) * sgv, cy + (x - cx) * sgv + (y - cy) * cgv)
-            for (x, y) in positions
-        ]
-
-        # 3) seeded scaffold: neutral pendant atoms fanned outward from the core
-        centroid = (sum(p[0] for p in positions) / n, sum(p[1] for p in positions) / n)
-        scaffold, scaf_bonds = [], []
-        for (px, py) in positions:
-            if n == 1:
-                cnt, base, span = rng.randint(2, 4), rng.uniform(0, 2 * math.pi), 2 * math.pi
-            else:
-                cnt, base, span = rng.choice([0, 0, 1, 1, 2]), math.atan2(py - centroid[1], px - centroid[0]), math.radians(95)
-            for k in range(cnt):
-                if cnt == 1:
-                    ang = base
-                elif n == 1:
-                    ang = base + 2 * math.pi * k / cnt
-                else:
-                    ang = base - span / 2 + span * k / (cnt - 1)
-                dist = size / 2 + rng.uniform(15, 20)
-                sx = min(max(px + dist * math.cos(ang), 12.0), 188.0)
-                sy = min(max(py + dist * math.sin(ang), 12.0), 188.0)
-                scaffold.append({'cx': round(sx, 1), 'cy': round(sy, 1), 'r': rng.choice([6.5, 7.5, 8.5])})
-                scaf_bonds.append({'lines': [{'x1': round(px, 1), 'y1': round(py, 1), 'x2': round(sx, 1), 'y2': round(sy, 1)}]})
-        if not scaffold:  # variety floor -- never leave a molecule bare
-            px, py = positions[0]
-            ang, dist = rng.uniform(0, 2 * math.pi), size / 2 + 17
-            sx = min(max(px + dist * math.cos(ang), 12.0), 188.0)
-            sy = min(max(py + dist * math.sin(ang), 12.0), 188.0)
-            scaffold.append({'cx': round(sx, 1), 'cy': round(sy, 1), 'r': 7.5})
-            scaf_bonds.append({'lines': [{'x1': round(px, 1), 'y1': round(py, 1), 'x2': round(sx, 1), 'y2': round(sy, 1)}]})
-
-        # 4) core bond lines (with doubles) + scaffold bonds
-        bonds = []
-        for i, j, dbl in pairs:
-            x1, y1 = positions[i]
-            x2, y2 = positions[j]
-            if dbl:
-                ddx, ddy = x2 - x1, y2 - y1
-                length = math.hypot(ddx, ddy) or 1.0
-                ox, oy = -ddy / length * 3.0, ddx / length * 3.0
-                segs = [(x1 + ox, y1 + oy, x2 + ox, y2 + oy), (x1 - ox, y1 - oy, x2 - ox, y2 - oy)]
-            else:
-                segs = [(x1, y1, x2, y2)]
-            bonds.append({'lines': [
-                {'x1': round(p, 1), 'y1': round(q, 1), 'x2': round(r, 1), 'y2': round(s, 1)}
-                for (p, q, r, s) in segs
-            ]})
-        bonds += scaf_bonds
-
-        # 5) element atoms (seeded per-shape rotation; the symbol stays upright)
-        out_atoms = [
-            {
-                'x0': round(x - size / 2, 1), 'y0': round(y - size / 2, 1), 'size': round(size, 1),
-                'rot': rng.randint(0, 359),
-                'shape': a['shape'], 'symbol': a['symbol'], 'disc_slug': a['disc_slug'],
-            }
-            for (x, y), a in zip(positions, atoms)
-        ]
-
-        return {'atoms': out_atoms, 'scaffold': scaffold, 'bonds': bonds}
+        from trophies.services.element_render import build_compound
+        return build_compound(atoms, seed)
 
     @staticmethod
     def _build_spectrum(elements, levels=None):
@@ -1007,6 +904,13 @@ class JobsWorkshopView(TemplateView):
                 'helix': self._build_helix(els, seed),
             })
         ctx['projects'] = projects
+
+        # Neon "same jobs, different molecules" demo: ONE fixed element set, many seeds --
+        # shows that two Contracts with identical jobs still synthesize distinct molecules.
+        demo_els = [element_by_slug[s] for s in ('gunslinger', 'cartographer', 'mage') if s in element_by_slug]
+        ctx['neon_variants'] = [
+            self._build_compound(demo_els, zlib.crc32(('variant-%d' % i).encode())) for i in range(8)
+        ]
 
         # Real compounds: generate molecules from the actual Contracts on this server.
         # A Contract's assigned jobs are its elements (family = discipline, shape =

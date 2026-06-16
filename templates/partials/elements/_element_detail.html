@@ -1,0 +1,33 @@
+{% comment %}
+Element detail (opens from a tile in The Lab). Level + XP are the focal point.
+Expects `card`: a tile dict (number, name, disc_slug, shape, symbol, level, progress,
+xp_current, xp_next, xp_total, description, state).
+{% endcomment %}
+<div class="edetail" style="--disc: var(--disc-{{ card.disc_slug }});">
+    <div class="edetail__head">
+        <span class="edetail__glyph">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
+        <div>
+            <div class="edetail__name">{{ card.name }}</div>
+            <div class="edetail__fam">{{ card.disc_slug|capfirst }} family &middot; No. {{ card.number }}</div>
+        </div>
+    </div>
+    <div class="edetail__levelrow">
+        <div class="edetail__level">
+            <span class="edetail__level-num">{{ card.level }}</span>
+            <span class="edetail__level-cap">Level</span>
+        </div>
+        <div class="edetail__xp">
+            <div class="edetail__xp-top">
+                <span>{% if card.state == 'mastered' %}Maxed out{% else %}{{ card.xp_current }} / {{ card.xp_next }} XP{% endif %}</span>
+                {% if card.state == 'active' %}<span class="edetail__xp-next">to Lv {{ card.level|add:1 }}</span>{% endif %}
+            </div>
+            <div class="edetail__bar"><div class="edetail__fill" style="width: {{ card.progress }}%;"></div></div>
+            <div class="edetail__total">{{ card.xp_total }} total XP earned</div>
+        </div>
+    </div>
+    {% if card.description %}<div class="edetail__flavor">{{ card.description }}</div>{% endif %}
+    <div class="edetail__sources">
+        <div class="edetail__sources-title">Where the XP comes from</div>
+        <p class="edetail__sources-note">{{ card.criteria }}</p>
+    </div>
+</div>

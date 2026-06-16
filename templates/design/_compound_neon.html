@@ -1,0 +1,17 @@
+{% comment %}
+Neon "printed" Compound (workshop exploration): flat line-art bones, atoms with a light
+family-tinted fill and a glowing neon edge. Core bonds run a gradient between the two
+elements they connect (A -> B); scaffold bonds stay matte. Same `compound` data + `cid`
+(a page-unique index for the per-bond gradient ids). Reuses _atom.html for the glyph.
+{% endcomment %}
+<svg class="compound-neon" viewBox="0 0 200 200" role="img" aria-label="Compound">
+    <defs>
+        {% for b in compound.bonds %}{% if b.a %}<linearGradient id="bn-{{ cid }}-{{ forloop.counter }}" gradientUnits="userSpaceOnUse" x1="{{ b.gx1 }}" y1="{{ b.gy1 }}" x2="{{ b.gx2 }}" y2="{{ b.gy2 }}">
+            <stop offset="0%" style="stop-color: var(--disc-{{ b.a }});" />
+            <stop offset="100%" style="stop-color: var(--disc-{{ b.b }});" />
+        </linearGradient>{% endif %}{% endfor %}
+    </defs>
+    {% for b in compound.bonds %}{% for l in b.lines %}<line class="compound-neon__bond{% if b.a %} compound-neon__bond--grad{% endif %}"{% if b.a %} style="stroke: url(#bn-{{ cid }}-{{ forloop.parentloop.counter }});"{% endif %} x1="{{ l.x1 }}" y1="{{ l.y1 }}" x2="{{ l.x2 }}" y2="{{ l.y2 }}" />{% endfor %}{% endfor %}
+    {% for s in compound.scaffold %}<circle class="compound-neon__scaf" cx="{{ s.cx }}" cy="{{ s.cy }}" r="{{ s.r }}" />{% endfor %}
+    {% for a in compound.atoms %}<svg x="{{ a.x0 }}" y="{{ a.y0 }}" width="{{ a.size }}" height="{{ a.size }}" viewBox="0 0 100 100" style="--disc: var(--disc-{{ a.disc_slug }});">{% include 'design/_atom.html' with shape=a.shape symbol=a.symbol %}</svg>{% endfor %}
+</svg>
