@@ -4,8 +4,7 @@
 forward-looking Pursuit home). It requires a linked profile, since it renders the
 viewer's own Pursuer. Page data is assembled by `logbook_service.build_logbook_context`.
 
-Built zone by zone; the hero (Pursuer card) is the first zone, with the Lab,
-collection preview, expression, and activity zones layered in next.
+Built zone by zone: the Pursuer hero (Pursuer card) + the Lab (element identity).
 """
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin

@@ -5,9 +5,9 @@ its data here, following the `dashboard_service` / `community_hub_service` patte
 single `build_logbook_context(profile)` entry point that delegates to one helper per
 page zone, each wrapped so a single broken zone never blanks the whole page.
 
-Built zone by zone (hero -> Lab -> collection preview -> expression -> activity). All
-per-user reads aggregate in the DB or are bounded by the ~25-row Job catalog (whale-OOM
-rule); never iterate a profile's trophy rows in Python.
+Built zone by zone (hero + Lab today; further zones land as their homes exist, e.g. a
+badge collection once the Badge Gallery defines how badges are framed). All per-user
+reads aggregate in the DB or are bounded by the ~25-row Job catalog (whale-OOM rule).
 """
 import logging
 

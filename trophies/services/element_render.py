@@ -220,6 +220,8 @@ def build_compound(elements, seed):
     carry their two endpoint family colors + a centerline so a bond can run a gradient
     A -> B. Returns SVG-ready `atoms` + `bonds` in a 200x200 viewBox.
     """
+    if not elements:
+        return {'atoms': [], 'bonds': []}
     rng = random.Random(seed)
 
     base = len(elements)
