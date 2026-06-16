@@ -23,6 +23,16 @@ def _build_lab(profile):
     return element_render.build_profile_elements(profile)
 
 
+def _compact(n):
+    """Compact label for a large stat value (2.6M / 12.3K) so big totals don't overflow a
+    small stat card; the full value is still shown in the card's sub-line."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(int(n))
+
+
 # Circumference of the DNA ring's arc circle (r=42 in the 120x120 viewBox). The hero
 # ring's family arcs are stroke-dash segments summing to this; keep it in sync with
 # `_vial`-style geometry constants and the r=42 in lab.html.
@@ -77,6 +87,7 @@ def build_lab_context(profile):
     except Exception:
         logger.exception("Lab elements build failed for profile %s", getattr(profile, 'id', '?'))
     context['lab'] = lab
+    context['total_xp_compact'] = _compact(lab['total_xp']) if lab else '0'
     try:
         context['hero'] = _build_hero(profile, lab)
     except Exception:

@@ -27,7 +27,7 @@
                         {% else %}
                             <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
                         {% endif %}
-                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} elements &middot; {{ hero.total_job_xp|intcomma }} XP</p>
+                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} elements leveled</p>
                     </div>
                 </div>
 
@@ -84,7 +84,17 @@
             </p>
 
             {# Summary stats (aggregates you can't read off the grid) #}
-            <div class="grid grid-cols-2 gap-2 md:gap-3 mb-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
+                <div class="scard">
+                    <div class="scard__label">Pursuer Level</div>
+                    <div class="scard__value text-primary">{{ lab.total_level|intcomma }}</div>
+                    <div class="scard__sub">sum of every element</div>
+                </div>
+                <div class="scard">
+                    <div class="scard__label">Total XP</div>
+                    <div class="scard__value">{{ total_xp_compact }}</div>
+                    <div class="scard__sub">{{ lab.total_xp|intcomma }} earned</div>
+                </div>
                 <div class="scard">
                     <div class="scard__label">Average level</div>
                     <div class="scard__value">{{ lab.avg_level }}</div>
