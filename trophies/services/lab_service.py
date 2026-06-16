@@ -23,24 +23,38 @@ def _build_lab(profile):
     return element_render.build_profile_elements(profile)
 
 
+# Circumference of the DNA ring's arc circle (r=42 in the 120x120 viewBox). The hero
+# ring's family arcs are stroke-dash segments summing to this; keep it in sync with
+# `_vial`-style geometry constants and the r=42 in lab.html.
+_RING_C = 263.89
+
+
 def _build_hero(profile, lab):
     """The Pursuer hero: element identity at a glance. Pursuer Level + Total XP come from
-    the Lab's element totals (the single source of truth, level-1 floor applied); the
-    family-composition strip ("the shape of your Platinum DNA") is each family's average
-    level scaled to the radar max, so the hero bars and the radar share one scale."""
+    the Lab's element totals (the single source of truth, level-1 floor applied). The DNA
+    ring frames the Pursuer Level with a donut whose family arcs are each family's SHARE of
+    the total level (the composition of your Platinum DNA); `dash`/`offset` are precomputed
+    stroke-dash segments so the template just renders them."""
     active = (
         UserTitle.objects
         .filter(profile=profile, is_displayed=True)
         .select_related('title')
         .first()
     )
-    families = []
+    ring = []
     if lab:
-        rmax = lab.get('radar_max') or 1
-        families = [{
-            'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
-            'pct': round(min(100.0, (d['avg'] / rmax) * 100)),
-        } for d in lab['disciplines']]
+        total = lab.get('total_level') or 0
+        n = len(lab['disciplines']) or 1
+        cumulative = 0.0
+        for d in lab['disciplines']:
+            fam_total = sum(t['level'] for t in d['jobs'])
+            share = (fam_total / total) if total else (1.0 / n)
+            dash = round(share * _RING_C, 2)
+            ring.append({
+                'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
+                'share_pct': round(share * 100), 'dash': dash, 'offset': round(-cumulative, 2),
+            })
+            cumulative += dash
     return {
         'pursuer_name': profile.display_psn_username,
         'avatar_url': profile.avatar_url,
@@ -48,7 +62,7 @@ def _build_hero(profile, lab):
         'total_job_xp': lab['total_xp'] if lab else 0,
         'element_count': lab['total'] if lab else 0,
         'active_title': active.title.name if active else None,
-        'families': families,
+        'ring': ring,
     }
 
 

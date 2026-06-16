@@ -6,50 +6,58 @@
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {% if hero %}
-    {# ── Pursuer hero: element identity + family composition (your Platinum DNA) ── #}
+    {# ── Pursuer hero: identity + the DNA composition ring (your Platinum DNA) ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-6 lg:p-7">
-            {# Identity row: avatar + name/title + Pursuer Level headline #}
-            <div class="flex items-center gap-3 md:gap-6">
-                <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
-                    {% if hero.avatar_url %}
-                        <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
-                    {% else %}
-                        <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|first|upper }}</div>
-                    {% endif %}
-                </div>
-                <div class="min-w-0 flex-1">
-                    <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
-                    <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate">{{ hero.pursuer_name }}</h1>
-                    {% if hero.active_title %}
-                        <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
-                    {% else %}
-                        <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
-                    {% endif %}
-                </div>
-                <div class="shrink-0 text-right">
-                    <div class="text-3xl md:text-4xl lg:text-5xl font-black text-primary tabular-nums leading-none">{{ hero.pursuer_level|intcomma }}</div>
-                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">Pursuer Level</div>
-                    <div class="hidden sm:block text-xs text-base-content/40 mt-1.5 tabular-nums">{{ hero.element_count }} elements &middot; {{ hero.total_job_xp|intcomma }} XP</div>
-                </div>
-            </div>
-
-            {# Family composition: the shape of your Platinum DNA (avg level per family, radar scale) #}
-            {% if hero.families %}
-            <div class="mt-4 md:mt-5 pt-4 md:pt-5 border-t border-base-300/70">
-                <p class="text-[0.65rem] uppercase font-bold tracking-[0.18em] text-base-content/40 mb-3">Family composition</p>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 md:gap-x-10 gap-y-0.5">
-                    {% for f in hero.families %}
-                    <div class="rd-row" style="--disc: var(--disc-{{ f.slug }});">
-                        <span class="rd-row__label">{{ f.label }}</span>
-                        <span class="rd-row__bar"><span class="rd-row__fill" style="width: {{ f.pct }}%;"></span></span>
-                        <span class="rd-row__val">{{ f.avg }}</span>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                {# Identity #}
+                <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                    <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
+                        {% if hero.avatar_url %}
+                            <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
+                        {% else %}
+                            <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|first|upper }}</div>
+                        {% endif %}
                     </div>
-                    {% endfor %}
+                    <div class="min-w-0">
+                        <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate">{{ hero.pursuer_name }}</h1>
+                        {% if hero.active_title %}
+                            <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
+                        {% else %}
+                            <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
+                        {% endif %}
+                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} elements &middot; {{ hero.total_job_xp|intcomma }} XP</p>
+                    </div>
                 </div>
-                <p class="sm:hidden text-xs text-base-content/40 mt-2 tabular-nums">{{ hero.element_count }} elements &middot; {{ hero.total_job_xp|intcomma }} XP</p>
+
+                {# DNA composition ring (Pursuer Level framed by family shares) + legend #}
+                {% if hero.ring %}
+                <div class="flex items-center gap-3 md:gap-4 shrink-0">
+                    <div class="lab-dna">
+                        <svg class="lab-dna__ring" viewBox="0 0 120 120" aria-hidden="true">
+                            <circle class="lab-dna__track" cx="60" cy="60" r="42"></circle>
+                            <g transform="rotate(-90 60 60)">
+                                {% for f in hero.ring %}<circle class="lab-dna__arc" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}
+                            </g>
+                        </svg>
+                        <div class="lab-dna__center">
+                            <span class="lab-dna__level tabular-nums">{{ hero.pursuer_level|intcomma }}</span>
+                            <span class="lab-dna__cap">Level</span>
+                        </div>
+                    </div>
+                    <ul class="lab-dna-legend">
+                        {% for f in hero.ring %}
+                        <li style="--disc: var(--disc-{{ f.slug }});">
+                            <span class="lab-dna-legend__dot"></span>
+                            <span class="lab-dna-legend__name">{{ f.label }}</span>
+                            <span class="lab-dna-legend__val">{{ f.avg }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
     </section>
 
