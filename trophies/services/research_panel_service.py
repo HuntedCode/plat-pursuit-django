@@ -124,6 +124,7 @@ def _build_projects(profile):
         status, progress = _project_status(earned.get(contract.id), max_progress, any_plat)
 
         first_concept = contract_games[0].concept if contract_games else None
+        family_gradient, family_color = _family_styles(elements)
         projects.append({
             'name': (first_concept.unified_title if first_concept else '') or contract.name,
             'slug': contract.slug,
@@ -131,6 +132,8 @@ def _build_projects(profile):
             'game_count': len(game_entries),
             'elements': elements,          # what you level
             'compound': element_render.build_compound(elements, zlib.crc32(contract.slug.encode())),
+            'family_gradient': family_gradient,  # CSS for the family accent bar (gradient if multi-family)
+            'family_color': family_color,        # dominant family color var, for the card tint/glow
             'xp_total': t,
             'xp_each': t // n,
             'status': status,
@@ -138,6 +141,25 @@ def _build_projects(profile):
             'completed': max_progress >= 100 or any_plat,
         })
     return projects
+
+
+def _family_styles(elements):
+    """(family_gradient, family_color) CSS for a Project's element families. The accent
+    bar runs a top-to-bottom gradient across the distinct families (solid if one); the
+    dominant (first) family drives the card's subtle tint + glow. Values are built only
+    from the controlled family slug enum (combat/exploration/mind/heart/finesse), never
+    user input, so they are safe to inline in a style attribute."""
+    fams = []
+    for el in elements:
+        if el['disc_slug'] not in fams:
+            fams.append(el['disc_slug'])
+    if not fams:
+        return 'var(--pp-border)', 'var(--pp-border)'
+    color = f"var(--disc-{fams[0]})"
+    if len(fams) == 1:
+        return color, color
+    stops = ', '.join(f"var(--disc-{f})" for f in fams)
+    return f"linear-gradient(180deg, {stops})", color
 
 
 def build_research_panel_context(profile):

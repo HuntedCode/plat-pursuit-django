@@ -37,7 +37,8 @@
     {# ── Project list ── #}
     <div id="rp-list" class="space-y-3">
         {% for p in projects %}
-        <div class="rp-row card bg-base-200/70 border-2 border-base-300 {% if p.status == 'claimable' %}border-l-4 border-l-primary{% elif p.status == 'accepted' %}border-l-4 border-l-success{% endif %} shadow-md shadow-neutral transition-all hover:shadow-lg" data-status="{{ p.status }}">
+        <div class="rp-row card relative overflow-hidden border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" style="--rp-fam: {{ p.family_color }};">
+            <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
             <div class="card-body p-3 md:p-4">
 
                 {# ── Project header: identity + the elements it levels + reward ── #}
