@@ -119,6 +119,10 @@ def _build_projects(profile):
             (e['profile_game'].progress for e in game_entries if e['profile_game']),
             default=0,
         )
+        # has_plat is a DISPLAY-only heuristic for the pre-EarnedContract fallback (it only
+        # nudges an unreached Project to "pursuing 100%"). The authoritative platinum signal
+        # is the engine's EarnedTrophy-based reach detection (contract_service._detect_tiers);
+        # claimable/accepted status always comes from EarnedContract below, never from this.
         any_plat = any(e['profile_game'] and e['profile_game'].has_plat for e in game_entries)
         status, progress = _project_status(earned.get(contract.id), max_progress, any_plat)
 
