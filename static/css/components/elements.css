@@ -2,8 +2,8 @@
  * Elements (the "Element" skin over Jobs)
  * Component CSS for the periodic-table element tiles, the atom glyph,
  * the family/discipline radar, the summary stat cards, and the
- * element-detail modal. Used by the Logbook's Lab zone (and, later, the
- * Research Panel). Family color = --disc-*; shape = the
+ * element-detail modal. Used by The Lab and the Research Panel.
+ * Family color = --disc-*; shape = the
  * element's slot within its family. Extracted from the /design/lab/ workshop.
  * ================================================================ */
 
