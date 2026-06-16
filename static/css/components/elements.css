@@ -142,15 +142,35 @@
 /* Row hover lights up its elements -- the "this game feeds these stats" beat. */
 .rp-row:hover .rp-el { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 22%, transparent); }
 
-/* Compound: readable signature of the Project's element mix (not a speck). */
-.rp-compound { width: 84px; height: 84px; flex: none; }
-@media (min-width: 1024px) { .rp-compound { width: 96px; height: 96px; } }
+/* Reagent vial: the Project's even XP split drawn as a test tube of equal family bands. */
+.rp-vial { width: 38px; flex: none; }
+@media (min-width: 1024px) { .rp-vial { width: 44px; } }
+.vial { display: block; width: 100%; height: auto; overflow: visible; }
+.vial__glass { fill: color-mix(in oklab, white 3%, transparent); stroke: color-mix(in oklab, var(--pp-text) 24%, transparent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.vial__rim { stroke: color-mix(in oklab, var(--pp-text) 32%, transparent); stroke-width: 2.4; stroke-linecap: round; }
+.vial__liquid { transition: opacity 0.2s ease, filter 0.2s ease; }
+.vial__shine { fill: rgba(255, 255, 255, 0.28); }
+.vial__sep { stroke: rgba(0, 0, 0, 0.30); stroke-width: 0.8; }
+.vial__bubble { fill: rgba(255, 255, 255, 0.55); opacity: 0; }
+/* State: available reads cool/dim, pursuing normal, claimable lit + bubbling, accepted settled. */
+.rp-vial--available .vial__liquid { filter: saturate(0.4) brightness(0.72); opacity: 0.62; }
+.rp-vial--claimable .vial { filter: drop-shadow(0 0 5px color-mix(in oklab, var(--rp-fam) 38%, transparent)); }
+.rp-vial--claimable .vial__liquid { filter: brightness(1.12) drop-shadow(0 0 3px color-mix(in oklab, var(--rp-fam) 60%, transparent)); }
+.rp-vial--claimable .vial__bubble { animation: vialBubble 2.6s ease-in infinite; }
+.rp-vial--claimable .vial__bubble--2 { animation-delay: 0.9s; }
+.rp-vial--claimable .vial__bubble--3 { animation-delay: 1.7s; }
+.rp-vial--accepted .vial__liquid { opacity: 0.85; }
+@keyframes vialBubble {
+    0%   { opacity: 0; transform: translateY(0); }
+    20%  { opacity: 0.7; }
+    100% { opacity: 0; transform: translateY(-58px); }
+}
+@media (prefers-reduced-motion: reduce) { .rp-vial--claimable .vial__bubble { animation: none; } }
 
 /* Family identity woven into the card frame: premium dark substrate, family seasoning.
    --rp-fam (dominant family color) is set per-card inline; the accent bar carries the
    full family gradient. Status (claimable/accepted) is signalled by an inset ring so it
-   coexists with the family frame instead of fighting it. The card background
-   (family_bg, a pronounced diagonal wash spreading the families) is set per-card inline. */
+   coexists with the family frame instead of fighting it. */
 .rp-row__accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; pointer-events: none; z-index: 1; box-shadow: 0 0 12px color-mix(in oklab, var(--rp-fam) 40%, transparent); }
 .rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 42%, var(--pp-border)); }
 .rp-row::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; }

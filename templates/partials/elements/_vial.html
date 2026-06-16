@@ -1,0 +1,29 @@
+{% comment %}
+Reagent vial: a test tube whose liquid is divided into equal family-colored bands, one
+per element -- a literal picture of a Project's even XP split. Expects `vial_bands`
+([{slug, y, h}] from research_panel_service._vial_bands) + `cid` (page-unique, for the
+clip id). State (dim / glow / bubbles) is driven by an .rp-vial--<status> wrapper class.
+{% endcomment %}
+<svg class="vial" viewBox="0 0 44 116" role="img" aria-label="Element split vial">
+    <defs>
+        <clipPath id="vial-{{ cid }}">
+            <path d="M12,12 L12,96 A10,10 0 0 0 32,96 L32,12 Z" />
+        </clipPath>
+    </defs>
+
+    {# Liquid: equal bands, family-colored, clipped to the tube interior #}
+    <g clip-path="url(#vial-{{ cid }})">
+        {% for b in vial_bands %}<rect class="vial__liquid" x="8" y="{{ b.y }}" width="28" height="{{ b.h }}" style="fill: var(--disc-{{ b.slug }});" />{% endfor %}
+        {# Band separators so the segment count reads even when adjacent families match #}
+        {% for b in vial_bands %}{% if not forloop.first %}<line class="vial__sep" x1="8" y1="{{ b.y }}" x2="36" y2="{{ b.y }}" />{% endif %}{% endfor %}
+        {# Rising bubbles (claimable only, via CSS) #}
+        <circle class="vial__bubble vial__bubble--1" cx="19" cy="88" r="1.5" />
+        <circle class="vial__bubble vial__bubble--2" cx="26" cy="92" r="1.1" />
+        <circle class="vial__bubble vial__bubble--3" cx="22" cy="84" r="1.3" />
+    </g>
+
+    {# Glass: walls + rounded bottom, mouth lip, and a soft vertical shine #}
+    <path class="vial__glass" d="M11,7 L11,96 A11,11 0 0 0 33,96 L33,7" />
+    <line class="vial__rim" x1="8.5" y1="7" x2="35.5" y2="7" />
+    <rect class="vial__shine" x="14.5" y="16" width="2.6" height="74" rx="1.3" />
+</svg>
