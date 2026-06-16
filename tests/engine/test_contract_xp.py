@@ -72,7 +72,7 @@ def test_one_accept_banks_platinum_and_full_to_exactly_T():
 
     assert granted == CONTRACT_XP_TOTAL  # both tiers banked in one accept == exactly T
     for slug in ('gunslinger', 'slayer'):
-        assert ProfileJobXP.objects.get(profile=profile, job__slug=slug).total_xp == 2500  # 1750 plat + 750 full
+        assert ProfileJobXP.objects.get(profile=profile, job__slug=slug).total_xp == 3000  # 2100 plat + 900 full
     assert ContractXPGrant.objects.filter(profile=profile).count() == 4  # 2 jobs x 2 tiers
     ec = EarnedContract.objects.get(profile=profile, contract=contract)
     assert ec.platinum_accepted_at is not None and ec.full_accepted_at is not None
@@ -157,8 +157,8 @@ def test_recompute_rebuilds_cache_from_ledger():
 
     for slug in ('gunslinger', 'slayer'):
         pjx = ProfileJobXP.objects.get(profile=profile, job__slug=slug)
-        assert pjx.total_xp == 2500
-        assert pjx.level == leveling.level_for_xp(2500)
+        assert pjx.total_xp == 3000  # T (6000) split evenly across the 2 jobs
+        assert pjx.level == leveling.level_for_xp(3000)
 
 
 def test_recompute_floors_orphan_rows_to_level_one():
@@ -220,7 +220,7 @@ def test_split_accept_platinum_then_full_sums_to_T():
 
     contract_service.mark_contract_reached(profile, contract)
     first = contract_service.accept_contract(profile, contract)
-    assert first == 3500  # platinum tier only (0.70 * 5000)
+    assert first == 4200  # platinum tier only (0.70 * 6000)
     ec = EarnedContract.objects.get(profile=profile, contract=contract)
     assert ec.platinum_accepted_at is not None and ec.full_accepted_at is None
 
@@ -228,7 +228,7 @@ def test_split_accept_platinum_then_full_sums_to_T():
     contract_service.mark_contract_reached(profile, contract)
     second = contract_service.accept_contract(profile, contract)
 
-    assert second == 1500  # remainder (5000 - 3500)
+    assert second == 1800  # remainder (6000 - 4200)
     assert ProfileJobXP.objects.get(profile=profile, job__slug='gunslinger').total_xp == CONTRACT_XP_TOTAL
 
 

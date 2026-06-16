@@ -22,7 +22,7 @@ XP is recalculated and denormalized onto `ProfileGamification` via Django signal
 |------|---------|
 | `trophies/services/xp_service.py` | Central XP calculation and update logic (342 lines) |
 | `trophies/signals.py` | Signal handlers for gamification updates (172 lines) |
-| `trophies/util_modules/constants.py` | XP constants: `BRONZE_STAGE_XP=250`, `SILVER_STAGE_XP=75`, `GOLD_STAGE_XP=250`, `PLAT_STAGE_XP=75`, `BADGE_TIER_XP=3000`; Contract: `CONTRACT_XP_TOTAL=5000`, `CONTRACT_PLATINUM_FRAC=0.70`, `JOB_LEVEL_BASE=600`, `JOB_LEVEL_CAP=50` |
+| `trophies/util_modules/constants.py` | XP constants: `BRONZE_STAGE_XP=250`, `SILVER_STAGE_XP=75`, `GOLD_STAGE_XP=250`, `PLAT_STAGE_XP=75`, `BADGE_TIER_XP=3000`; Contract: `CONTRACT_XP_TOTAL=6000`, `CONTRACT_PLATINUM_FRAC=0.70`, `JOB_LEVEL_BASE=600`, `JOB_LEVEL_CAP=50` |
 | `trophies/models.py` | `ProfileGamification`, `StatType`, `StageStatValue`; Contract engine: `EarnedContract`, `ContractXPGrant`, `ProfileJobXP` |
 | `trophies/services/contract_service.py` | Contract XP engine: detection (`mark_contract_reached` / `check_profile_contracts`), acceptance (`accept_contract` / `accept_contracts`), `claimable_contracts`, `recompute_profile_job_xp` |
 | `trophies/util_modules/leveling.py` | Per-job leveling curve (`xp_for_level` / `level_for_xp`) |
@@ -96,7 +96,7 @@ Total XP: sum across all badge series.
 
 ## Contract / Job XP Engine
 
-A second, badge-independent XP system. A **Contract** groups one or more Concepts (via `ContractMembership`, a one-home invariant, or a `ContractBundle` collection satisfier) and pays the same global total **T** (`CONTRACT_XP_TOTAL = 5000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
+A second, badge-independent XP system. A **Contract** groups one or more Concepts (via `ContractMembership`, a one-home invariant, or a `ContractBundle` collection satisfier) and pays the same global total **T** (`CONTRACT_XP_TOTAL = 6000`, override per Contract via `xp_total_override`), split evenly among the Contract's assigned **jobs** (Elements). Each user banks that XP per job and levels each job independently; the headline **Pursuer Level** is the sum of all per-job levels.
 
 > **Naming skin:** the backend models are `Job` / `Contract`; everything user-facing is **Element / Project / The Lab**. No user-visible text says "job" or "contract".
 
