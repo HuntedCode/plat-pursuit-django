@@ -24,24 +24,31 @@ def _build_lab(profile):
 
 
 def _build_hero(profile, lab):
-    """The Pursuer hero: identity at a glance. Pursuer Level + Total XP come from the Lab's
-    element totals (the single source of truth, with the level-1 floor applied); the rest
-    is profile + equipped title + badge counts."""
+    """The Pursuer hero: element identity at a glance. Pursuer Level + Total XP come from
+    the Lab's element totals (the single source of truth, level-1 floor applied); the
+    family-composition strip ("the shape of your Platinum DNA") is each family's average
+    level scaled to the radar max, so the hero bars and the radar share one scale."""
     active = (
         UserTitle.objects
         .filter(profile=profile, is_displayed=True)
         .select_related('title')
         .first()
     )
-    gamification = getattr(profile, 'gamification', None)
+    families = []
+    if lab:
+        rmax = lab.get('radar_max') or 1
+        families = [{
+            'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
+            'pct': round(min(100.0, (d['avg'] / rmax) * 100)),
+        } for d in lab['disciplines']]
     return {
         'pursuer_name': profile.display_psn_username,
         'avatar_url': profile.avatar_url,
         'pursuer_level': lab['total_level'] if lab else 0,
         'total_job_xp': lab['total_xp'] if lab else 0,
+        'element_count': lab['total'] if lab else 0,
         'active_title': active.title.name if active else None,
-        'badges_earned': gamification.unique_badges_earned if gamification else 0,
-        'badge_tiers_earned': gamification.total_badges_earned if gamification else 0,
+        'families': families,
     }
 
 
