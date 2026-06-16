@@ -146,11 +146,13 @@
 .rp-vial { width: 38px; flex: none; }
 @media (min-width: 1024px) { .rp-vial { width: 44px; } }
 /* Focal (Variant B): the vial leads the games grid as a cover-shaped specimen cell
-   (aspect 3/4 via Tailwind), its tube ~90% of the cover height so it tracks the covers
-   automatically as the grid reflows. min-height:0 stops the SVG's intrinsic size from
-   overriding the aspect-ratio and inflating the row (which stretched the covers). */
+   (aspect 3/4 via Tailwind). The SVG absolutely fills that cell and preserveAspectRatio
+   (meet) scales the slim tube to fit by height -> it lands at exactly cover height,
+   centered, tracking the covers as the grid reflows. Filling absolutely avoids the
+   unreliable percentage-height-of-an-aspect-ratio-parent that was inflating the tube.
+   min-height:0 keeps the cell from being grown by its content. */
 .rp-vial-cell { min-height: 0; }
-.rp-vial-cell .vial { height: 90%; width: auto; max-height: 100%; }
+.rp-vial-cell .vial { position: absolute; inset: 0; width: 100%; height: 100%; }
 .vial { display: block; width: 100%; height: auto; overflow: visible; }
 .vial__glass { fill: color-mix(in oklab, white 3%, transparent); stroke: color-mix(in oklab, var(--pp-text) 24%, transparent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .vial__rim { stroke: color-mix(in oklab, var(--pp-text) 32%, transparent); stroke-width: 2.4; stroke-linecap: round; }
