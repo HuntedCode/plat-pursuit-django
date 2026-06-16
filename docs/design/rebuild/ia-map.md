@@ -23,16 +23,18 @@ The expensive-to-change structure is decided and stable. Do not re-litigate it p
 ## Sections
 
 ### Pursuit (`/`) — the spine
-Home of the Pursuer, the two rails (**Badges** = collection, **Contracts/Elements** = leveling), and identity.
+Home of the Pursuer, the two rails (**Badges** = collection, **Contracts/Elements** = leveling), and identity. **The Pursuit home IS the "where you're at" overview** (Pursuer hero + Lab snapshot + active Projects + recent badges, with quick links into each destination). There is **no separate Logbook page** — that role folds into `/` (see resolution below).
 
 | Page | URL | Status | Links OUT to | Linked IN from |
 |------|-----|--------|--------------|----------------|
-| **Pursuit home** | `/` | identified; **build LAST** (most connective page) | Badges, Logbook, Research Panel, Browse, Community, Stats | navbar logo, redirects |
-| **Logbook** | `/logbook/` | **in design** (first build target) | full Badge gallery, Titles, element detail, (Research Panel?) | Pursuit home, avatar dropdown |
-| **Badges** | `/badges/` | not started | badge detail, Logbook | Pursuit home, sub-nav |
-| **Research Panel** | TBD | not started | Contract/Project detail, accept endpoint | Pursuit home, Logbook? |
+| **Pursuit home** | `/` | identified; **build LAST** (the "where you're at" hub; absorbs the old Logbook role) | The Lab, Research Panel, Badges, Titles, Browse, Community, Stats | navbar logo, redirects |
+| **The Lab** | `/my-pursuit/lab/` (flat `/lab/` per the URL sweep TBD) | **built** (the converted Logbook page: Pursuer hero + element experience — periodic table / radar / element detail) | element detail (in-page modal), Research Panel | Pursuit home (Lab snapshot), sub-nav |
+| **Research Panel** | `/my-pursuit/research-panel/` | **built** (baseline; accept endpoint live) | Project/game detail, accept endpoint | Pursuit home, sub-nav |
+| **Badges** | `/badges/` | not started | badge detail | Pursuit home, sub-nav |
 | **Milestones** | `/milestones/` | exists (legacy, to rebuild) | — | sub-nav |
-| **Titles** | `/titles/` | exists (legacy, to rebuild) | Logbook | Logbook, sub-nav |
+| **Titles** | `/titles/` | exists (legacy, to rebuild) | Pursuit home | Pursuit home, sub-nav |
+
+> **Conversion note:** the Logbook page **was converted directly into The Lab** (`/my-pursuit/logbook/` 301s to `/my-pursuit/lab/`) — the Logbook was always the element-identity page wearing a placeholder name. There is no separate Logbook. The "where you're at" overview role is a **fresh concern for the Pursuit home (`/`)**, assembled last, which previews + links to The Lab, Research Panel, and Badges.
 
 Deferred within Pursuit: **Star Chart**, **Quests** (Phase 2/3).
 
@@ -42,8 +44,12 @@ Existing hub, unchanged by the gamification shift. Games, trophies, companies, f
 ### Community (`/community/`) — social
 Existing hub, unchanged. Reviews, profiles, challenges, lists, leaderboards.
 
+## Resolved IA questions
+
+- **Logbook vs The Lab** (resolved 2026-06-16) — **The Lab is its own destination page.** The "Logbook" was really the personal overview hub, which is the **Pursuit home (`/`)** — so there is no separate Logbook page; that role folds into `/`. This *removes* a page rather than adding one: destinations (Lab, Research Panel, Badge album) are their own pages, and `/` is the single "where you're at" hub that previews + links to them.
+- **Research Panel home** (resolved 2026-06-16) — its **own page** (`/my-pursuit/research-panel/`), a Pursuit sub-nav slot; linked in from the Pursuit home.
+
 ## Open IA questions (resolve as we build)
 
-- **Logbook vs The Lab** — is "The Lab" the whole identity page, or the elements zone within the Logbook? Decide by feel while building the Logbook.
-- **Research Panel home** — its own Pursuit sub-nav slot, a Logbook section, or paired near Badges? Decide when building it.
+- **URL convention sweep** — the stable skeleton calls for flat top-level Pursuit URLs (`/lab/`, `/badges/`), but pages are currently shipping under `/my-pursuit/*` (logbook, research-panel). Do the flat-URL migration as one sweep (with reverse-name 301s) rather than per page; new pages use `/my-pursuit/*` until then for sibling consistency.
 - **Near-term sub-nav shape** — which items show in Phase 1 vs deferred.

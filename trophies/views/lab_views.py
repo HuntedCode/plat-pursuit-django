@@ -1,10 +1,10 @@
-"""Logbook view: the Pursuer's RPG-identity deep-dive.
+"""The Lab view: the Pursuer's element identity ("your Platinum DNA").
 
-`/my-pursuit/logbook/` is "who you've become" (the reflective counterpart to the
-forward-looking Pursuit home). It requires a linked profile, since it renders the
-viewer's own Pursuer. Page data is assembled by `logbook_service.build_logbook_context`.
+`/my-pursuit/lab/` renders the viewer's own elements/families -- the periodic table,
+the family radar, and per-element detail. Requires a linked profile. Page data is
+assembled by `lab_service.build_lab_context`.
 
-Built zone by zone: the Pursuer hero (Pursuer card) + the Lab (element identity).
+Zones: the Pursuer hero (identity at a glance) + the element experience.
 """
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -13,12 +13,12 @@ from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
-from trophies.services.logbook_service import build_logbook_context
+from trophies.services.lab_service import build_lab_context
 
 
-class LogbookView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
-    """The Pursuer's Logbook. Linked-profile gated; renders the viewer's own identity."""
-    template_name = 'trophies/logbook.html'
+class LabView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
+    """The Pursuer's Lab. Linked-profile gated; renders the viewer's own element identity."""
+    template_name = 'trophies/lab.html'
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated:
@@ -30,10 +30,10 @@ class LogbookView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(build_logbook_context(self.request.user.profile))
+        context.update(build_lab_context(self.request.user.profile))
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Logbook'},
+            {'text': 'The Lab'},
         ]
-        context['seo_title'] = 'Your Logbook - Platinum Pursuit'
+        context['seo_title'] = 'The Lab - Platinum Pursuit'
         return context

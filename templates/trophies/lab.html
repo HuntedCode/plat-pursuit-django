@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load humanize static %}
-{% block title %}Your Logbook{% endblock %}
+{% block title %}The Lab{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
@@ -52,7 +52,7 @@
     {% else %}
         <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
             <div class="card-body p-6 text-center text-base-content/60">
-                Your Logbook is still being prepared. Check back after your next sync.
+                Your Lab is still being prepared. Check back after your next sync.
             </div>
         </section>
     {% endif %}

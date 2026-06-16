@@ -1,13 +1,13 @@
-"""Logbook page context builder.
+"""The Lab page context builder.
 
-The Logbook (`/my-pursuit/logbook/`, the Pursuer's RPG-identity deep-dive) assembles
-its data here, following the `dashboard_service` / `community_hub_service` pattern: a
-single `build_logbook_context(profile)` entry point that delegates to one helper per
-page zone, each wrapped so a single broken zone never blanks the whole page.
+The Lab (`/my-pursuit/lab/`, the Pursuer's element identity -- "your Platinum DNA")
+assembles its data here, following the `dashboard_service` / `community_hub_service`
+pattern: a single `build_lab_context(profile)` entry point that delegates to one helper
+per page zone, each wrapped so a single broken zone never blanks the whole page.
 
-Built zone by zone (hero + Lab today; further zones land as their homes exist, e.g. a
-badge collection once the Badge Gallery defines how badges are framed). All per-user
-reads aggregate in the DB or are bounded by the ~25-row Job catalog (whale-OOM rule).
+Zones: the Pursuer hero (identity at a glance) + the element experience (periodic table,
+radar, element detail). All per-user reads aggregate in the DB or are bounded by the
+~25-row Job catalog (whale-OOM rule).
 """
 import logging
 
@@ -45,20 +45,20 @@ def _build_hero(profile, lab):
     }
 
 
-def build_logbook_context(profile):
-    """Assemble the full Logbook context for `profile`. Each zone is isolated so a failure
-    degrades to a missing section rather than a 500. The Lab is built first because the
-    hero reads its element totals (Pursuer Level + Total XP)."""
+def build_lab_context(profile):
+    """Assemble the full Lab context for `profile`. Each zone is isolated so a failure
+    degrades to a missing section rather than a 500. The element experience is built first
+    because the hero reads its element totals (Pursuer Level + Total XP)."""
     context = {}
     lab = None
     try:
         lab = _build_lab(profile)
     except Exception:
-        logger.exception("Logbook lab build failed for profile %s", getattr(profile, 'id', '?'))
+        logger.exception("Lab elements build failed for profile %s", getattr(profile, 'id', '?'))
     context['lab'] = lab
     try:
         context['hero'] = _build_hero(profile, lab)
     except Exception:
-        logger.exception("Logbook hero build failed for profile %s", getattr(profile, 'id', '?'))
+        logger.exception("Lab hero build failed for profile %s", getattr(profile, 'id', '?'))
         context['hero'] = None
     return context
