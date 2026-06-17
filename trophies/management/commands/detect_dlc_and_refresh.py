@@ -76,7 +76,11 @@ class Command(BaseCommand):
 
         for slug in sorted(affected):
             try:
-                processed, changed, earners, _progress = refresh_badge_series_awards(slug)
+                # Automated DLC re-evaluation: stay silent (matches the prior behavior,
+                # where most badges sent no Discord; new DLC mostly lapses badges anyway).
+                processed, changed, earners, _progress = refresh_badge_series_awards(
+                    slug, skip_notifications=True,
+                )
                 self.stdout.write(self.style.SUCCESS(
                     f"  refreshed '{slug}': {processed} pairs, {changed} profiles changed, {earners} earners"
                 ))

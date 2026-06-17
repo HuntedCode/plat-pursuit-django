@@ -197,7 +197,7 @@ Immediate (non-scheduled) bulk notifications follow the same path but skip step 
 
 Discord notifications are completely separate from the in-app notification system. They use a producer-consumer pattern with a daemon thread.
 
-1. **Producer**: `notify_new_platinum()`, `notify_new_badge()`, `send_batch_role_notification()`, or `send_subscription_notification()` builds a Discord embed payload and calls `queue_webhook_send(payload, webhook_url)`.
+1. **Producer**: `notify_new_platinum()`, `send_badge_earned_notification()` (ONE consolidated embed listing every badge a profile earned this run; badges no longer assign Discord roles and there is no per-badge embed), or `send_subscription_notification()` builds a Discord embed payload and calls `queue_webhook_send(payload, webhook_url)`.
 2. **Queue**: Payloads are pushed onto a `queue.Queue()` (thread-safe, in-memory).
 3. **Consumer**: `webhook_sender_worker()` runs on a daemon thread started in `TrophiesConfig.ready()`. It loops forever, pulling payloads from the queue.
 4. **Delivery with retries**: Each payload is POSTed to the Discord webhook URL (optionally via proxy). On HTTP 429 (rate limit), it sleeps for `Retry-After + 0.5s` and retries. Other HTTP errors or request exceptions also retry with a 1-second backoff. Max 5 retries before dropping.
