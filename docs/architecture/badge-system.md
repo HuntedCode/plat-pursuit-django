@@ -29,17 +29,19 @@ The `required_tiers` ArrayField on Stage controls tier-specific visibility. An e
 
 ### Badge Types
 
-- **series**: A franchise badge (e.g., God of War). All non-zero stages must be completed.
+- **series**: A game series (e.g., God of War). All non-zero stages must be completed.
+- **franchise**: A franchise grouping. Same logic as series (a distinct type so it forms its own collection "set").
 - **collection**: A themed collection across franchises. Same logic as series.
 - **developer**: Groups games by studio. Same logic as series.
 - **user**: User-submitted badges. Same evaluation logic as series/collection/developer. Displays "Submitted by" attribution on the detail page via the `submitted_by` FK.
-- **genre**: Groups games by genre/subgenre. Same evaluation logic as series/collection.
+- **event**: Event badges. Same evaluation logic as series.
 - **megamix**: Flexible completion. Can use `requires_all` (complete everything) or `min_required` (complete N of M stages). Always uses platinum checks.
-- **misc**: Admin-awarded only. Never evaluated automatically.
 
 These types are grouped into named constants in `trophies/constants.py`:
-- `CONCEPT_BASED_BADGE_TYPES`: series, collection, developer, user, genre (all stages must be complete)
+- `CONCEPT_BASED_BADGE_TYPES`: series, franchise, collection, developer, user, event (all stages must be complete)
 - `EVALUATABLE_BADGE_TYPES`: concept-based + megamix (all stage-evaluated types)
+
+`set_number` (the edition number engraved on the Frame) is numbered **independently per badge type** (each type's sequence starts at 1) via `Badge.assign_next_set_numbers`, so each type forms its own numbered "set" in the collection album.
 
 ### XP System
 
