@@ -33,10 +33,10 @@ def test_command_counts_only_series_developer_badge_stages():
     BadgeFactory(series_slug='series-rpg')
     StageFactory(series_slug='series-rpg', stage_number=1).concepts.add(mage)
 
-    # A Shooter on a GENRE badge stage -> excluded (genre badges grant no XP).
-    gun = _concept('Genre Shooter', shooter)
-    BadgeFactory(series_slug='genre-shooter', badge_type='genre')
-    StageFactory(series_slug='genre-shooter', stage_number=1).concepts.add(gun)
+    # A Shooter on a COLLECTION badge stage -> excluded (only series + developer count).
+    gun = _concept('Collection Shooter', shooter)
+    BadgeFactory(series_slug='collection-shooter', badge_type='collection')
+    StageFactory(series_slug='collection-shooter', stage_number=1).concepts.add(gun)
 
     out = io.StringIO()
     call_command('report_job_assignment', stdout=out)

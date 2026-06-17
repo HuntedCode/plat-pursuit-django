@@ -3347,9 +3347,10 @@ def provide_advanced_badge_stats(profile, settings=None):
         .annotate(count=Count('id'))
         .values_list('badge__badge_type', 'count')
     )
+    from trophies.constants import BADGE_TYPES
     TYPE_LABELS = {
-        'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
-        'developer': 'Developer', 'user': 'User', 'genre': 'Genre', 'misc': 'Misc',
+        'series': 'Series', 'franchise': 'Franchise', 'collection': 'Collection',
+        'megamix': 'Megamix', 'developer': 'Developer', 'user': 'User', 'event': 'Event',
     }
     type_max = max(type_counts.values()) if type_counts else 1
     stage_max = max(type_stage_counts.values()) if type_stage_counts else 1
@@ -3358,7 +3359,7 @@ def provide_advanced_badge_stats(profile, settings=None):
          'stages': _fmt(type_stage_counts.get(t, 0)),
          'pct': round(type_counts.get(t, 0) / type_max * 100) if type_max else 0,
          'stage_pct': round(type_stage_counts.get(t, 0) / stage_max * 100) if stage_max else 0}
-        for t in ['series', 'collection', 'megamix', 'developer', 'user', 'genre', 'misc']
+        for t in BADGE_TYPES
         if type_counts.get(t, 0) > 0 or type_stage_counts.get(t, 0) > 0
     ]
 
@@ -3662,8 +3663,8 @@ def _build_badge_type_radar_data(profile):
     from django.db.models import Count
 
     TYPE_LABELS = {
-        'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
-        'developer': 'Developer', 'misc': 'Misc', 'user': 'User', 'genre': 'Genre',
+        'series': 'Series', 'franchise': 'Franchise', 'collection': 'Collection',
+        'megamix': 'Megamix', 'developer': 'Developer', 'user': 'User', 'event': 'Event',
     }
 
     type_counts = dict(
@@ -3727,8 +3728,8 @@ def _build_stage_type_breakdown_data(profile):
     from django.db.models import Count
 
     TYPE_LABELS = {
-        'series': 'Series', 'collection': 'Collection', 'megamix': 'Megamix',
-        'developer': 'Developer', 'misc': 'Misc', 'user': 'User', 'genre': 'Genre',
+        'series': 'Series', 'franchise': 'Franchise', 'collection': 'Collection',
+        'megamix': 'Megamix', 'developer': 'Developer', 'user': 'User', 'event': 'Event',
     }
 
     type_counts = dict(

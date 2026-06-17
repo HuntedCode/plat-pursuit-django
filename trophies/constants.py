@@ -90,25 +90,26 @@ VERIFICATION_STATUS_FAILED = 'failed'
 
 # Badge Types
 BADGE_TYPE_SERIES = 'series'
+BADGE_TYPE_FRANCHISE = 'franchise'
 BADGE_TYPE_COLLECTION = 'collection'
 BADGE_TYPE_MEGAMIX = 'megamix'
 BADGE_TYPE_DEVELOPER = 'developer'
-BADGE_TYPE_MISC = 'misc'
 BADGE_TYPE_USER = 'user'
-BADGE_TYPE_GENRE = 'genre'
+BADGE_TYPE_EVENT = 'event'
 
 BADGE_TYPES = [
     BADGE_TYPE_SERIES,
+    BADGE_TYPE_FRANCHISE,
     BADGE_TYPE_COLLECTION,
     BADGE_TYPE_MEGAMIX,
     BADGE_TYPE_DEVELOPER,
-    BADGE_TYPE_MISC,
     BADGE_TYPE_USER,
-    BADGE_TYPE_GENRE,
+    BADGE_TYPE_EVENT,
 ]
 
-# Badge types that use concept-based stage completion (all stages must be complete)
-CONCEPT_BASED_BADGE_TYPES = [BADGE_TYPE_SERIES, BADGE_TYPE_COLLECTION, BADGE_TYPE_DEVELOPER, BADGE_TYPE_USER, BADGE_TYPE_GENRE]
+# Badge types that use concept-based stage completion (all stages must be complete).
+# Franchise + Event behave like Series (series_slug-grouped, concept/stage-based).
+CONCEPT_BASED_BADGE_TYPES = [BADGE_TYPE_SERIES, BADGE_TYPE_FRANCHISE, BADGE_TYPE_COLLECTION, BADGE_TYPE_DEVELOPER, BADGE_TYPE_USER, BADGE_TYPE_EVENT]
 
 # All badge types that have stage-based evaluation (concept-based + megamix)
 EVALUATABLE_BADGE_TYPES = CONCEPT_BASED_BADGE_TYPES + [BADGE_TYPE_MEGAMIX]
