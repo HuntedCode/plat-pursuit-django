@@ -1323,7 +1323,7 @@ class BadgeAdmin(admin.ModelAdmin):
         'name', 'is_live', 'series_slug', 'description', 'badge_image', 'base_badge',
         'tier', 'badge_type', 'franchise', 'collection', 'developer', 'set_number',
         'title', 'display_title', 'display_series',
-        'discord_role_id', 'requires_all', 'min_required', 'requirements',
+        'requires_all', 'min_required', 'requirements',
         'most_recent_concept', 'funded_by', 'submitted_by',
         'earned_count', 'view_count', 'required_stages', 'required_value',
         'rarity_pct', 'rarity_rank', 'rarity_class',

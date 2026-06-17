@@ -1,6 +1,6 @@
 # Badge System
 
-The Badge System is the core gamification layer of Platinum Pursuit, rewarding users for completing curated sets of PlayStation games organized into badge series. Each series tracks a theme (franchise, developer, or curated collection) and offers up to four tiers of difficulty. Completing stages within a series earns XP, and completing all required stages for a tier awards the badge itself along with a 3,000 XP bonus. The system also includes a parallel Milestone subsystem that rewards cumulative platform-wide achievements (platinum counts, playtime, community engagement, and more) using a pluggable handler architecture. Both badges and milestones integrate with Discord role assignments, in-app notifications, and a leaderboard system backed by periodic cache refreshes.
+The Badge System is the core gamification layer of Platinum Pursuit, rewarding users for completing curated sets of PlayStation games organized into badge series. Each series tracks a theme (franchise, developer, or curated collection) and offers up to four tiers of difficulty. Completing stages within a series earns XP, and completing all required stages for a tier awards the badge itself along with a 3,000 XP bonus. The system also includes a parallel Milestone subsystem that rewards cumulative platform-wide achievements (platinum counts, playtime, community engagement, and more) using a pluggable handler architecture. Milestones integrate with Discord role assignments; **badges no longer grant Discord roles** (retired). Both integrate with in-app notifications and a leaderboard system backed by periodic cache refreshes. Earned-badge Discord notifications are sent as ONE consolidated batch per check run (`send_badge_earned_notification`, gated on the profile being Discord-linked), not per badge.
 
 ## Architecture Overview
 
@@ -86,7 +86,6 @@ The central model. Each row represents one tier of one badge series.
 - `required_stages`: Denormalized count of applicable stages, updated by `update_required()`.
 - `funded_by`: FK to Profile, tracking badge artwork donors from the fundraiser system.
 - `submitted_by`: FK to Profile, tracking who submitted user-type badges. Inherits through `base_badge` via `effective_submitted_by`.
-- `discord_role_id`: Optional Discord role assigned/removed when badge is earned/revoked.
 - `title`: FK to Title, creating a UserTitle when the badge is awarded.
 
 ### Stage
@@ -221,17 +220,15 @@ The primary evaluation path runs during PSN sync completion:
      - Megamix with `requires_all=True`: ALL non-zero stages must be complete.
      - Megamix with `requires_all=False`: At least `min_required` stages must be complete.
    - **Progress update**: `_update_badge_progress()` writes `completed_concepts` count to UserBadgeProgress.
-   - **Award/revoke**: `_process_badge_award_revoke()` creates or deletes UserBadge, updates context in-place so subsequent tier checks see the new state.
-   - **Discord**: Role assignment/removal happens via `transaction.on_commit()` to avoid holding DB connections during HTTP calls.
+   - **Award/revoke**: `_process_badge_award_revoke()` creates or deletes UserBadge, updates context in-place so subsequent tier checks see the new state. `handle_badge` is pure award logic and sends NO notifications.
 
-6. **Post-evaluation**: Deferred badge notifications are consolidated by the `DeferredNotificationService` (highest tier only per series, preventing spam).
+6. **Post-evaluation**: each caller collects the badges `handle_badge` reports as newly-created and sends ONE consolidated Discord embed via `send_badge_earned_notification` (no per-badge pings, no roles, Discord-linked profiles only). On-site + email go through the `DeferredNotificationService` (consolidated, highest tier only per series). `refresh_badge_series` accepts `--no-notifications` to silence all three channels for bulk re-evaluations.
 
 ### Initial Badge Check
 
 `initial_badge_check(profile)` is used for first-time syncs or full recalculations. It differs from the incremental path:
 - Checks ALL ProfileGames, not just recently updated ones.
-- Collects all newly earned badges with Discord roles and sends a single batch notification.
-- Uses `add_role_only=True` during iteration (suppresses individual Discord messages).
+- Collects every newly-earned badge `handle_badge` reports and sends ONE consolidated Discord batch (`send_badge_earned_notification`) when `discord_notify` is set and the profile is Discord-linked.
 
 ### XP Calculation
 

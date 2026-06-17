@@ -190,7 +190,7 @@ def _get_stage_completion_from_cache(badge, _context):
     return completion
 
 
-def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
+def check_profile_badges(profile, profilegame_ids, skip_notifications: bool = False):
     """
     Check and award badges for a profile based on recently updated games.
 
@@ -201,12 +201,14 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     Args:
         profile: Profile instance to check badges for
         profilegame_ids: List of ProfileGame IDs that were recently updated
-        skip_notis: If True, skip Discord notifications (default: False)
+        skip_notifications: If True, skip the consolidated Discord notification
+                            (web/email are handled separately by the caller)
 
     Returns:
         int: Number of badges checked
     """
     from trophies.models import ProfileGame, Badge, Stage
+    from trophies.discord_utils.discord_notifications import send_badge_earned_notification
 
     start_time = time.time()
 
@@ -234,15 +236,22 @@ def check_profile_badges(profile, profilegame_ids, skip_notis: bool = False):
     from trophies.services.xp_service import bulk_gamification_update
 
     checked_count = 0
+    created_badges = []
     with bulk_gamification_update():
         for badge in badges:
             try:
-                handle_badge(profile, badge, add_role_only=skip_notis, _context=badge_ctx)
+                if handle_badge(profile, badge, _context=badge_ctx):
+                    created_badges.append(badge)
                 checked_count += 1
             except Exception:
                 logger.exception(
                     f"Error checking badge {badge.id} for profile {profile.psn_username}"
                 )
+
+    # One consolidated Discord notification for everything earned this run (no-op when
+    # nothing was newly earned, or the viewer isn't Discord-linked).
+    if not skip_notifications and created_badges:
+        send_badge_earned_notification(profile, created_badges)
 
     # Invalidate dashboard cache so badge progress module reflects changes
     from trophies.services.dashboard_service import invalidate_dashboard_cache
@@ -572,10 +581,6 @@ def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned,
             _context['earned_badge_ids'].add(badge.id)
     elif (not badge_earned or not prev_badge_earned) and user_badge_exists:
         _revoke_badge(profile, badge)
-        # Remove Discord role after transaction commits (avoid holding DB txn open during HTTP)
-        if badge.discord_role_id and profile.is_discord_verified and profile.discord_id:
-            role_id = badge.discord_role_id
-            transaction.on_commit(lambda rid=role_id: notify_bot_role_removed(profile, rid))
         # Update context so subsequent tier checks see this badge as revoked
         if _context:
             _context['earned_badge_ids'].discard(badge.id)
@@ -583,35 +588,8 @@ def _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned,
     return badge_created
 
 
-def _handle_discord_notifications(profile, badge, badge_created, add_role_only):
-    """
-    Handle Discord role assignment and notifications for badge earning.
-
-    Args:
-        profile: Profile instance
-        badge: Badge instance
-        badge_created: Whether the badge was newly created
-        add_role_only: If True, only assign roles without sending notifications
-    """
-    from trophies.discord_utils.discord_notifications import notify_new_badge
-
-    if not badge_created or not badge.discord_role_id:
-        return
-
-    if not profile.is_discord_verified or not profile.discord_id:
-        return
-
-    # Assign Discord role after transaction commits (avoid holding DB txn open during HTTP)
-    role_id = badge.discord_role_id
-    transaction.on_commit(lambda rid=role_id: notify_bot_role_earned(profile, rid))
-
-    # Send Discord notification for newly earned badge
-    if not add_role_only:
-        transaction.on_commit(lambda b=badge: notify_new_badge(profile, b))
-
-
 @transaction.atomic
-def handle_badge(profile, badge, add_role_only=False, _context=None):
+def handle_badge(profile, badge, _context=None):
     """
     Handle badge logic for a single badge and profile.
 
@@ -620,14 +598,14 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
     2. Calculates badge completion status
     3. Awards or revokes the badge as needed
     4. Updates progress tracking
-    5. Assigns Discord roles if applicable
-    6. Sends notifications if badge was newly earned
+
+    Discord/web/email notifications are NOT sent here. Callers collect the badges
+    this returns as newly-created and send ONE consolidated batch per run (see
+    `check_profile_badges` / `initial_badge_check` / `refresh_badge_series_awards`).
 
     Args:
         profile: Profile instance to check
         badge: Badge instance to evaluate
-        add_role_only: If True, only assign Discord roles without sending
-                       notification messages (used for initial/bulk checks)
         _context: Optional pre-fetched context from _build_badge_context
                   to avoid N+1 queries during batch processing
 
@@ -670,10 +648,6 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
         # Award or revoke badge based on completion
         badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned, _context=_context)
 
-        # Handle Discord notifications
-        if prev_badge_earned and badge_earned:
-            _handle_discord_notifications(profile, badge, badge_created, add_role_only)
-
         return badge_created
 
     # Handle megamix badges (flexible completion requirements)
@@ -707,10 +681,6 @@ def handle_badge(profile, badge, add_role_only=False, _context=None):
 
         # Award or revoke badge based on completion
         badge_created = _process_badge_award_revoke(profile, badge, badge_earned, prev_badge_earned, _context=_context)
-
-        # Handle Discord notifications
-        if prev_badge_earned and badge_earned:
-            _handle_discord_notifications(profile, badge, badge_created, add_role_only)
 
         return badge_created
 
@@ -794,9 +764,10 @@ def sync_discord_roles(profile):
     """
     Sync ALL Discord roles for a verified profile.
 
-    Collects every role the user has earned (badges, milestones, premium) and
-    calls notify_bot_role_earned for each. The bot's /assign-role endpoint is
-    idempotent, so re-assigning an existing role is harmless.
+    Collects every role the user has earned (milestones, premium) and calls
+    notify_bot_role_earned for each. The bot's /assign-role endpoint is idempotent,
+    so re-assigning an existing role is harmless. Badges no longer grant Discord
+    roles (retired); `badge_roles` stays in the response as 0 for contract stability.
 
     Intended to be called:
     - By the bot when a user first verifies (POST /api/v1/sync-roles/)
@@ -808,23 +779,14 @@ def sync_discord_roles(profile):
     Returns:
         dict with counts of roles synced by source
     """
-    from trophies.models import UserBadge, UserMilestone
+    from trophies.models import UserMilestone
 
     if not profile.is_discord_verified or not profile.discord_id:
         return {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
 
+    # `badge_roles` retained at 0 (badges no longer grant roles) so the bot's
+    # sync-roles response shape is unchanged.
     role_counts = {'badge_roles': 0, 'milestone_roles': 0, 'premium_roles': 0}
-
-    # Badge roles
-    badge_role_ids = list(
-        UserBadge.objects.filter(
-            profile=profile,
-            badge__discord_role_id__isnull=False,
-        ).values_list('badge__discord_role_id', flat=True)
-    )
-    for role_id in badge_role_ids:
-        notify_bot_role_earned(profile, role_id)
-    role_counts['badge_roles'] = len(badge_role_ids)
 
     # Milestone roles
     milestone_role_ids = list(
@@ -865,18 +827,19 @@ def initial_badge_check(profile, discord_notify: bool = True):
     have been earned. It's designed for initial profile syncs or full recalculations.
     Unlike check_profile_badges, this examines ALL games, not just recently updated ones.
 
-    The function batches Discord role notifications to send a single consolidated
-    message instead of multiple individual notifications.
+    The function batches Discord notifications into a single consolidated message
+    instead of one per badge.
 
     Args:
         profile: Profile instance to check all badges for
-        discord_notify: If True, send batch notification for earned badges with roles
+        discord_notify: If True, send the consolidated Discord notification for
+                        newly-earned badges (to Discord-linked profiles).
 
     Returns:
         int: Number of badges checked
     """
     from trophies.models import ProfileGame, Badge, Stage
-    from trophies.discord_utils.discord_notifications import send_batch_role_notification
+    from trophies.discord_utils.discord_notifications import send_badge_earned_notification
 
     start_time = time.time()
 
@@ -899,31 +862,23 @@ def initial_badge_check(profile, discord_notify: bool = True):
     # Pre-fetch context to avoid N+1 queries per badge
     badge_ctx = _build_badge_context(profile, badges)
 
-    role_granting_badges = []
+    created_badges = []
     checked_count = 0
 
     for badge in badges:
         try:
-            created = handle_badge(profile, badge, add_role_only=True, _context=badge_ctx)
+            if handle_badge(profile, badge, _context=badge_ctx):
+                created_badges.append(badge)
             checked_count += 1
-            if created and badge.discord_role_id:
-                role_granting_badges.append(badge)
         except Exception:
             logger.exception(
                 f"Error checking badge {badge.id} for profile {profile.psn_username}"
             )
 
-    logger.info(f"Found {len(role_granting_badges)} qualifying role-granting badges")
-
-    # Send batch notification for all earned badges with roles
-    if discord_notify:
-        if role_granting_badges and profile.is_discord_verified and profile.discord_id:
-            send_batch_role_notification(profile, role_granting_badges)
-        else:
-            logger.info(
-                "No notification sent: missing verification, discord_id, "
-                "or qualifying badges"
-            )
+    # One consolidated Discord notification for everything newly earned (no-op when
+    # nothing was earned or the profile isn't Discord-linked).
+    if discord_notify and created_badges:
+        send_badge_earned_notification(profile, created_badges)
 
     duration = time.time() - start_time
     logger.info(

@@ -15,10 +15,19 @@ class Command(BaseCommand):
             '--all', action='store_true', dest='all_series',
             help='Refresh every distinct badge series in the DB.',
         )
+        parser.add_argument(
+            '--no-notifications', action='store_true', dest='no_notifications',
+            help='Silence ALL earned-badge notifications (Discord, on-site, email) for this '
+                 'run. Use for bulk re-evaluations so users are not pinged about badges they '
+                 'effectively already held.',
+        )
 
     def handle(self, *args, **options):
         series_slug = options['series']
         all_series = options['all_series']
+        self.skip_notifications = options['no_notifications']
+        if self.skip_notifications:
+            self.stdout.write(self.style.WARNING("Notifications SILENCED for this run (--no-notifications)."))
 
         if all_series:
             if series_slug:
@@ -50,7 +59,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.MIGRATE_HEADING(f"{prefix}--- BEGIN series '{series_slug}' ---"))
 
         # Shared with DLC detection -- see trophies/services/badge_refresh_service.py.
-        processed, profiles_changed, earners_count, progress_count = refresh_badge_series_awards(series_slug)
+        processed, profiles_changed, earners_count, progress_count = refresh_badge_series_awards(
+            series_slug, skip_notifications=getattr(self, 'skip_notifications', False),
+        )
 
         if processed == 0:
             self.stdout.write(self.style.WARNING(f"Nothing to process for series '{series_slug}' (no badges or no earners)."))
