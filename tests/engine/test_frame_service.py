@@ -195,3 +195,82 @@ def test_in_progress_with_zero_required_stages_no_divide_by_zero():
 
     assert frame["state"] == "in_progress"
     assert frame["progress_pct"] == 0  # guarded fallback, not an exception
+
+
+# --- Batch path (galleries / the collection album: many frames, one profile) -------
+# The caller pre-fetches the viewer's UserBadge/UserBadgeProgress + live stats ONCE and
+# passes them in, so the builder issues no per-badge queries/Redis. These pin that the
+# pre-fetched values win over (and skip) the per-badge lookups.
+
+
+def test_prefetched_earned_none_skips_userbadge_query():
+    """earned=None means 'pre-fetched, viewer does NOT hold it' -- the builder must trust
+    that and render unearned even though a UserBadge exists in the DB (which the single-hero
+    path would have found)."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    UserBadgeFactory(profile=profile, badge=badge)  # present in DB, must be ignored
+
+    frame = build_badge_frame(badge, profile, earned=None, progress=None)
+
+    assert frame["state"] == "unearned"  # trusted the passed-in None, did not query
+
+
+def test_prefetched_progress_used_without_db_row():
+    """progress=<obj> is used verbatim; no UserBadgeProgress row exists in the DB, proving
+    the value came from the caller, not a query."""
+    from trophies.models import UserBadgeProgress
+
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=10)
+    detached = UserBadgeProgress(profile=profile, badge=badge, completed_concepts=4)  # unsaved
+
+    frame = build_badge_frame(badge, profile, earned=None, progress=detached)
+
+    assert frame["state"] == "in_progress"
+    assert frame["stages_done"] == 4
+    assert frame["progress_pct"] == 40
+    assert not UserBadgeProgress.objects.filter(profile=profile, badge=badge).exists()
+
+
+def test_batched_live_stats_win_and_skip_redis_and_xp(monkeypatch):
+    """For an earned badge, pre-fetched current_rank/series_xp are applied as-is and the
+    per-badge Redis (get_earners_rank) + XP (calculate_series_xp) fan-out is skipped -- the
+    whale-safety contract for rendering hundreds of frames."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    ub = UserBadgeFactory(profile=profile, badge=badge)
+
+    def _boom(*a, **k):
+        raise AssertionError("per-badge live-stat fan-out must not run in the batch path")
+
+    monkeypatch.setattr('trophies.services.redis_leaderboard_service.get_earners_rank', _boom)
+    monkeypatch.setattr('trophies.services.xp_service.calculate_series_xp', _boom)
+
+    frame = build_badge_frame(
+        badge, profile, earned=ub, progress=None,
+        include_live_stats=False, current_rank=9, series_xp=4321,
+    )
+
+    assert frame["state"] == "earned"
+    assert frame["current_rank"] == 9
+    assert frame["series_xp"] == 4321
+
+
+def test_batched_live_stats_ignored_for_unearned_badge(monkeypatch):
+    """current_rank/series_xp only mean anything for an earned badge; an unearned frame must
+    not carry a current_rank (back-of-card live stats are an earned-only concept)."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    monkeypatch.setattr(
+        'trophies.services.redis_leaderboard_service.get_earners_rank',
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not query")),
+    )
+
+    frame = build_badge_frame(
+        badge, profile, earned=None, progress=None,
+        include_live_stats=False, current_rank=9, series_xp=4321,
+    )
+
+    assert frame["state"] == "unearned"
+    assert "current_rank" not in frame
