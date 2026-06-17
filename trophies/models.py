@@ -5867,6 +5867,14 @@ class ConceptFranchise(models.Model):
     array (secondary tie-ins). Browse/detail pages filter on this to keep
     franchise pages focused on titles that ARE that franchise rather than
     titles that merely reference it.
+
+    `is_spinoff` reflects IGDB's per-membership ``collection_membership`` type
+    for COLLECTION links only (collections == IGDB "Series"). A game can be a
+    normal "Member" of its own series yet a "Spin-off" of a parent series
+    (e.g. Agents of Mayhem is a Member of the Agents of Mayhem series but a
+    Spin-off of Saints Row). Because the flag is per-(game, collection) it
+    lives here on the link, not on the Concept or Franchise. Always False for
+    franchise-type links (IGDB franchises have no membership type).
     """
     concept = models.ForeignKey(
         Concept, on_delete=models.CASCADE, related_name='concept_franchises'
@@ -5879,6 +5887,14 @@ class ConceptFranchise(models.Model):
         help_text="True when this is the concept's primary franchise (IGDB's "
                   "singular `franchise` field). At most one is_main=True per concept.",
     )
+    is_spinoff = models.BooleanField(
+        default=False,
+        help_text="True when IGDB types this game's membership in the collection "
+                  "(Series) as a 'Spin-off' rather than a normal 'Member'. "
+                  "Collection links only; always False for franchise links. "
+                  "Spin-offs are suppressed from the Series' game list and from "
+                  "collection badge stage coverage.",
+    )
 
     class Meta:
         unique_together = ['concept', 'franchise']
@@ -5886,10 +5902,14 @@ class ConceptFranchise(models.Model):
             models.Index(fields=['concept'], name='conceptfranchise_concept_idx'),
             models.Index(fields=['franchise'], name='conceptfranchise_franchise_idx'),
             models.Index(fields=['is_main'], name='conceptfranchise_main_idx'),
+            # Powers the collection-member-excluding-spin-off lookups (badge
+            # coverage audit + Series detail list).
+            models.Index(fields=['franchise', 'is_spinoff'], name='conceptfranchise_spinoff_idx'),
         ]
 
     def __str__(self):
-        return f"{self.concept} - {self.franchise.name}{' (main)' if self.is_main else ''}"
+        flags = ''.join(f for f, on in ((' (main)', self.is_main), (' (spin-off)', self.is_spinoff)) if on)
+        return f"{self.concept} - {self.franchise.name}{flags}"
 
 
 class IGDBMatch(models.Model):

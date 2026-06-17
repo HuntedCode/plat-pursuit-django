@@ -105,6 +105,29 @@ def test_collection_badge_flags_uncovered_member_via_any_link():
     assert [c.id for c in findings[0]['missing']] == [missing.id]
 
 
+def test_collection_badge_does_not_flag_spinoff_member():
+    """A game IGDB types as a spin-off of the collection (e.g. Agents of Mayhem under the
+    Saints Row series) isn't expected in the collection badge's stages, so an uncovered
+    spin-off must NOT be flagged. Real members still are."""
+    badge = BadgeFactory(series_slug="cov-spin", tier=1)
+    coll = _collection(slug="cov-spin-c")
+    badge.collection = coll
+    badge.save()
+
+    member = _concept_with_game("Real Member")
+    spinoff = _concept_with_game("Spin-off Game")
+    ConceptFranchise.objects.create(concept=member, franchise=coll, is_main=False, is_spinoff=False)
+    ConceptFranchise.objects.create(concept=spinoff, franchise=coll, is_main=False, is_spinoff=True)
+    # Neither is covered by a stage; only the real member should be flagged missing.
+
+    findings = audit_badge_coverage()
+
+    assert len(findings) == 1
+    missing_ids = [c.id for c in findings[0]['missing']]
+    assert member.id in missing_ids
+    assert spinoff.id not in missing_ids
+
+
 def test_effective_collection_inherits_from_base_badge():
     base = BadgeFactory(series_slug="cov-inh", tier=1)
     coll = _collection(slug="cov-inh-c")

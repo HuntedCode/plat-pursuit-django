@@ -59,9 +59,14 @@ def audit_badge_coverage():
         if collection:
             # Collections never set is_main (different IGDB taxonomy), so EVERY
             # linked concept is a member -- match any link, not is_main only.
+            # EXCEPT spin-offs: a game IGDB types as a "Spin-off" of this series
+            # (e.g. Agents of Mayhem in the Saints Row series) is not expected to
+            # live in the collection badge's stages, so don't flag it missing.
+            # This applies only to collections; franchise/developer are untouched.
             candidate_ids |= set(
                 Concept.objects.filter(
                     concept_franchises__franchise=collection,
+                    concept_franchises__is_spinoff=False,
                 ).values_list('id', flat=True)
             )
         if developer:

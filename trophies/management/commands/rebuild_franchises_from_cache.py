@@ -120,9 +120,11 @@ class Command(BaseCommand):
                 try:
                     # The enrichment helper handles all the get_or_create + dedup
                     # logic, including the (igdb_id, source_type) composite key.
-                    # Calling it directly skips the IGDB API entirely.
+                    # Calling it directly skips the IGDB API entirely -- including the
+                    # spin-off membership lookup (fetch_memberships=False). is_spinoff
+                    # resets to False here; re-run backfill_collection_spinoffs after.
                     IGDBService._create_concept_franchises(
-                        match.concept, match.raw_response,
+                        match.concept, match.raw_response, fetch_memberships=False,
                     )
                     processed += 1
                 except Exception as exc:
