@@ -7,12 +7,20 @@ bounded by the ~25-row Job catalog.
 """
 import pytest
 
-from trophies.models import Job, ProfileJobXP
+from trophies.models import Job, ProfileJobXP, Title, UserTitle
 from trophies.services import element_render
-from trophies.services.lab_service import build_lab_context
+from trophies.services.lab_service import _compact, build_lab_context
 from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.mark.parametrize("value, label", [
+    (0, '0'), (999, '999'), (1000, '1.0K'), (12300, '12.3K'),
+    (999_999, '1000.0K'), (1_000_000, '1.0M'), (2_600_000, '2.6M'),
+])
+def test_compact_label_boundaries(value, label):
+    assert _compact(value) == label
 
 
 def _family_job_count():
@@ -77,9 +85,32 @@ def test_dna_ring_arcs_sum_to_the_whole():
     from trophies.services.lab_service import _RING_C
     assert abs(sum(seg['dash'] for seg in ring) - _RING_C) < 0.5
     assert abs(sum(seg['share_pct'] for seg in ring) - 100) <= 2   # 5-way rounding tolerance
-    # Offsets are the running cumulative start of each arc (first starts at 0).
+    # Offsets are the running cumulative start of each arc (first starts at 0); each arc
+    # begins where the previous ones ended (negative stroke-dashoffset convention).
     assert ring[0]['offset'] == 0.0
-    assert all(seg['offset'] <= 0 for seg in ring)   # negative stroke-dashoffset convention
+    assert ring[1]['offset'] == round(-ring[0]['dash'], 2)
+    assert all(seg['offset'] <= 0 for seg in ring)
+
+
+def test_empty_profile_ring_splits_into_equal_family_arcs():
+    """A fresh profile floors every element to level 1, so each of the 5 evenly-sized
+    families holds the same share of the total level -> 5 equal arcs at 20% each."""
+    profile = ProfileFactory()
+
+    ring = build_lab_context(profile)['hero']['ring']
+
+    assert len(ring) == 5
+    assert all(seg['share_pct'] == 20 for seg in ring)
+
+
+def test_active_title_surfaces_displayed_user_title():
+    profile = ProfileFactory()
+    title = Title.objects.create(name='Platinum Sovereign')
+    UserTitle.objects.create(profile=profile, title=title, source_type='badge', is_displayed=True)
+
+    hero = build_lab_context(profile)['hero']
+
+    assert hero['active_title'] == 'Platinum Sovereign'
 
 
 def test_broken_lab_zone_degrades_without_500(monkeypatch):

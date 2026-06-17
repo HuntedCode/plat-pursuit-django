@@ -73,6 +73,27 @@ def test_accept_all_banks_every_claimable():
     assert resp.data['claimable_count'] == 0
 
 
+def test_all_takes_precedence_over_a_bogus_slug():
+    """The view checks `all` before `slug`; {'all': true, 'slug': garbage} must accept-all
+    and ignore the slug (a refactor that reordered the branches would 404 instead)."""
+    profile = _linked_profile()
+    _claimable_contract(profile, 'proj-precedence')
+
+    resp = _client(profile).post(URL, {'all': True, 'slug': 'garbage'}, format='json')
+
+    assert resp.status_code == 200
+    assert resp.data['accepted'] == ['proj-precedence']
+
+
+def test_accept_all_with_nothing_claimable_is_noop():
+    profile = _linked_profile()  # no claimable projects
+
+    resp = _client(profile).post(URL, {'all': True}, format='json')
+
+    assert resp.status_code == 200
+    assert resp.data == {'granted': 0, 'accepted': [], 'claimable_count': 0}
+
+
 def test_unlinked_profile_is_forbidden():
     profile = ProfileFactory(is_linked=False)
     _claimable_contract(profile, 'proj-locked')
@@ -117,7 +138,8 @@ def test_re_accept_grants_zero_and_reports_nothing_accepted():
 
     assert resp.status_code == 200
     assert resp.data['granted'] == 0
-    assert resp.data['accepted'] == []  # nothing newly accepted
+    assert resp.data['accepted'] == []          # nothing newly accepted
+    assert resp.data['claimable_count'] == 0    # state settled after the first accept
 
 
 def test_anonymous_request_is_rejected():

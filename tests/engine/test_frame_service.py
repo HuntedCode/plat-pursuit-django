@@ -274,3 +274,43 @@ def test_batched_live_stats_ignored_for_unearned_badge(monkeypatch):
 
     assert frame["state"] == "unearned"
     assert "current_rank" not in frame
+    assert "series_xp" not in frame  # both live stats are earned-only
+
+
+def test_prefetched_current_rank_wins_over_live_value(monkeypatch):
+    """The docstring's claim: a pre-fetched current_rank takes precedence over the live
+    lookup even when include_live_stats is on. The live path returns a DIFFERENT number, so
+    seeing the pre-fetched one proves precedence (not just that one path ran)."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    UserBadgeFactory(profile=profile, badge=badge)
+    monkeypatch.setattr(
+        'trophies.services.redis_leaderboard_service.get_earners_rank',
+        lambda *a, **k: 99,  # the live value, which must be overridden
+    )
+
+    # earned left to query (finds the UserBadge -> earned); only the rank is pre-fetched.
+    frame = build_badge_frame(badge, profile, include_live_stats=True, current_rank=4)
+
+    assert frame["current_rank"] == 4  # pre-fetched wins over the live 99
+
+
+def test_earned_batch_without_prefetched_stats_omits_them(monkeypatch):
+    """The common collection path for an earned badge when the rank/XP maps have no entry:
+    include_live_stats=False and NO pre-fetched stats -> neither the live fan-out runs nor
+    are the back-of-card keys present. Guards the _UNSET-vs-None asymmetry."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    ub = UserBadgeFactory(profile=profile, badge=badge)
+
+    def _boom(*a, **k):
+        raise AssertionError("no live fan-out when include_live_stats is off")
+
+    monkeypatch.setattr('trophies.services.redis_leaderboard_service.get_earners_rank', _boom)
+    monkeypatch.setattr('trophies.services.xp_service.calculate_series_xp', _boom)
+
+    frame = build_badge_frame(badge, profile, earned=ub, progress=None, include_live_stats=False)
+
+    assert frame["state"] == "earned"
+    assert "current_rank" not in frame
+    assert "series_xp" not in frame

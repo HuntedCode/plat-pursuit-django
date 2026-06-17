@@ -45,24 +45,30 @@ def test_lists_live_project_with_games_elements_and_split():
     assert p['xp_each'] == CONTRACT_XP_TOTAL // 2
     assert len(p['vial_bands']) == 2        # one equal band per element (the even split)
     assert p['family_color'].startswith('var(--disc-')
+    # gunslinger + mage are different families -> the accent bar is a multi-family gradient.
+    assert p['family_gradient'].startswith('linear-gradient')
 
 
 def test_jobless_project_is_hidden():
     profile = ProfileFactory()
     _contract('p-jobless', job_slugs=())  # no elements -> awards nothing
+    _contract('p-keep')                   # a control that MUST still appear
 
-    ctx = build_research_panel_context(profile)
+    slugs = {p['slug'] for p in build_research_panel_context(profile)['projects']}
 
-    assert not any(p['slug'] == 'p-jobless' for p in ctx['projects'])
+    assert 'p-keep' in slugs        # distinguishes "hidden" from "everything is gone"
+    assert 'p-jobless' not in slugs
 
 
 def test_non_live_project_is_excluded():
     profile = ProfileFactory()
     _contract('p-dormant', live=False)
+    _contract('p-live')             # a control that MUST still appear
 
-    ctx = build_research_panel_context(profile)
+    slugs = {p['slug'] for p in build_research_panel_context(profile)['projects']}
 
-    assert ctx['projects'] == []
+    assert 'p-live' in slugs
+    assert 'p-dormant' not in slugs
 
 
 def test_status_available_when_untouched():
@@ -85,6 +91,33 @@ def test_status_pursuing_with_partial_progress():
 
     assert p['status'] == 'pursuing'
     assert p['progress'] == 60
+
+
+def test_status_pursuing_when_complete_but_reach_not_yet_stamped():
+    """The documented seam: a member game is 100% but the sync hasn't run
+    mark_contract_reached yet (no EarnedContract). The read-only render shows 'pursuing'
+    at 100%, not 'claimable' -- the next sync flips it."""
+    profile = ProfileFactory()
+    _c, _concept, game = _contract('p-precommit')
+    ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
+
+    p = _project(build_research_panel_context(profile), 'p-precommit')
+
+    assert p['status'] == 'pursuing'
+    assert p['progress'] == 100
+    assert p['completed'] is True
+
+
+def test_xp_total_override_drives_reward_split():
+    profile = ProfileFactory()
+    contract, _concept, _game = _contract('p-override', ('gunslinger', 'mage'))
+    contract.xp_total_override = 1000
+    contract.save(update_fields=['xp_total_override'])
+
+    p = _project(build_research_panel_context(profile), 'p-override')
+
+    assert p['xp_total'] == 1000           # the override, not CONTRACT_XP_TOTAL
+    assert p['xp_each'] == 500             # 1000 // 2 elements
 
 
 def test_status_claimable_when_reached_not_accepted():
