@@ -401,16 +401,8 @@ class ProfileBadgesForm(forms.Form):
         label='Sort By',
     )
     badge_type = forms.MultipleChoiceField(
-        choices=[
-            ('series', 'Series'),
-            ('collection', 'Collection'),
-            ('developer', 'Developer'),
-            ('user', 'User'),
-            ('genre', 'Genre'),
-            ('megamix', 'Megamix'),
-        ],
         required=False,
-        label='Badge Type',
+        label='Badge Type',  # choices sourced from the model in __init__
     )
     tier = forms.MultipleChoiceField(
         choices=[
@@ -422,6 +414,12 @@ class ProfileBadgesForm(forms.Form):
         required=False,
         label='Tier',
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import Badge
+        self.fields['badge_type'].choices = Badge.BADGE_TYPES
+
 
 class TrophyCaseForm(forms.Form):
     query = forms.CharField(required=False, label='Search by game name')
@@ -519,17 +517,8 @@ class BadgeSearchForm(forms.Form):
         label='Sort By',
     )
     badge_type = forms.ChoiceField(
-        choices=[
-            ('', 'All Types'),
-            ('series', 'Series'),
-            ('collection', 'Collection'),
-            ('developer', 'Developer'),
-            ('user', 'User'),
-            ('genre', 'Genre'),
-            ('megamix', 'Megamix'),
-        ],
         required=False,
-        label='Badge Type',
+        label='Badge Type',  # choices sourced from the model in __init__
     )
     completion_status = forms.ChoiceField(
         choices=[
@@ -541,6 +530,12 @@ class BadgeSearchForm(forms.Form):
         required=False,
         label='Status',
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from trophies.models import Badge
+        self.fields['badge_type'].choices = [('', 'All Types')] + list(Badge.BADGE_TYPES)
+
 
 class GuideSearchForm(forms.Form):
     query = forms.CharField(required=False, label='Search by title')
