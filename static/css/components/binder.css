@@ -1,0 +1,116 @@
+/* ================================================================
+ * Binder (Surface) — baseline production extraction
+ * The badge collection album: paper pages with pocket sleeves holding
+ * Frame cards, binder chrome (binding rings, page tabs, page numbers,
+ * covers) suggested by silhouette (no photoreal texture). Two
+ * presentations via [data-binder-presentation]: "binder" (full chrome)
+ * and "gallery" (chrome stripped, clean grid). "single" view mode shows
+ * one page at a time. Spread / 3D page-flip is deferred (not here).
+ * Pages stay neutral/paper-toned — tier color lives on the Frames.
+ * Reuses the class vocabulary of the /design/binder/ workshop.
+ * ================================================================ */
+
+.pp-binder {
+    --paper: color-mix(in oklab, var(--pp-bg-2) 90%, #c9c4b8 10%);
+    --paper-edge: color-mix(in oklab, var(--pp-bg-1) 80%, black 20%);
+    --ring: color-mix(in oklab, var(--pp-text) 30%, transparent);
+    position: relative;
+}
+
+/* ---- Controls bar (presentation toggle + single-page nav + counts) ---- */
+.pp-binder__controls {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    margin-bottom: 16px;
+}
+.pp-binder__controls-group { display: flex; align-items: center; gap: 6px; }
+.pp-binder__controls-group > span { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); margin-right: 2px; }
+.pp-binder__control-chip {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: var(--pp-text-dim); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 13px;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.pp-binder__control-chip:hover { color: var(--pp-text); }
+.pp-binder__control-chip--active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.pp-binder__nav { display: flex; align-items: center; gap: 8px; }
+.pp-binder__nav-btn { font: inherit; cursor: pointer; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 8px; width: 30px; height: 30px; line-height: 1; transition: border-color 0.15s ease, color 0.15s ease; }
+.pp-binder__nav-btn:hover { border-color: var(--pp-primary); color: var(--pp-primary); }
+.pp-binder__nav-btn:disabled { opacity: 0.4; cursor: default; }
+.pp-binder__nav-counter { font-size: 12px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; min-width: 84px; text-align: center; }
+
+/* ---- Pages ---- */
+.pp-binder__pages-stage { display: flex; flex-direction: column; gap: 22px; align-items: center; }
+.pp-binder__page {
+    position: relative; width: 100%; max-width: 1180px;
+    background: var(--paper);
+    border: 1px solid var(--paper-edge); border-left-width: 0;
+    border-radius: 4px 12px 12px 4px;
+    padding: 22px 24px 30px 56px;  /* left padding leaves room for the binding edge + rings */
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), inset 4px 0 0 color-mix(in oklab, var(--pp-bg-1) 70%, black 30%);
+}
+/* Binding edge: a darker stripe down the left with the rings threaded through it. */
+.pp-binder__page::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 40px;
+    background: linear-gradient(90deg, color-mix(in oklab, var(--pp-bg-1) 60%, black 40%), color-mix(in oklab, var(--pp-bg-1) 85%, transparent));
+    border-radius: 4px 0 0 4px;
+}
+.pp-binder__page-rings { position: absolute; left: 8px; top: 0; bottom: 0; width: 24px; display: flex; flex-direction: column; justify-content: center; gap: 22%; z-index: 1; }
+.pp-binder__page-rings .pp-binder__ring,
+.pp-binder__spine .pp-binder__ring { display: block; width: 16px; height: 16px; border-radius: 999px; border: 2px solid var(--ring); background: color-mix(in oklab, var(--pp-bg-1) 60%, transparent); box-shadow: inset 0 1px 2px rgba(0,0,0,0.4); }
+.pp-binder__spine { display: none; }  /* baseline: no spread, so no central spine */
+
+/* Page tab: a protruding flag on the outer (right) edge, color-keyed per section palette. */
+.pp-binder__page-tab {
+    position: absolute; top: 16px; right: -1px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #0c0f14; background: var(--tab, #6b7280);
+    padding: 4px 12px 4px 14px; border-radius: 6px 0 0 6px;
+    box-shadow: -2px 2px 6px rgba(0, 0, 0, 0.3);
+}
+.pp-binder__page-tab[data-palette="cobalt"]  { --tab: #5b8def; }
+.pp-binder__page-tab[data-palette="amber"]   { --tab: #e6a647; }
+.pp-binder__page-tab[data-palette="emerald"] { --tab: #4cc08a; }
+.pp-binder__page-tab[data-palette="violet"]  { --tab: #a679e0; }
+
+.pp-binder__page-number { margin-top: 16px; text-align: center; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+
+/* ---- Sleeve grid ---- */
+.pp-binder__sleeves { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+.pp-binder__sleeve {
+    position: relative; display: grid; place-items: center;
+    padding: 10px; border-radius: 10px;
+    background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 8%, transparent), inset 0 2px 8px rgba(0, 0, 0, 0.22);
+}
+.pp-binder__sleeve:target { animation: ppSleevePulse 2.2s ease-out 1; }
+@keyframes ppSleevePulse { 0% { box-shadow: 0 0 0 2px var(--pp-primary), inset 0 0 0 1px var(--pp-primary); } 100% { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 8%, transparent), inset 0 2px 8px rgba(0, 0, 0, 0.22); } }
+
+/* ---- Covers (front/back) ---- */
+.pp-binder__page--cover { min-height: 220px; display: grid; place-items: center; background: linear-gradient(135deg, color-mix(in oklab, var(--pp-bg-1) 80%, black 20%), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-bg-1) 50%, black 50%); }
+.pp-binder__cover-content { text-align: center; }
+.pp-binder__cover-plate { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 26px; letter-spacing: 0.04em; color: var(--pp-text); }
+.pp-binder__cover-stamp { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-binder__cover-bookmark { position: absolute; top: 0; right: 40px; width: 18px; height: 56px; background: var(--pp-primary); border-radius: 0 0 4px 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+
+/* ---- Single view mode: show one page at a time ---- */
+.pp-binder[data-mode="single"] .pp-binder__page:not(.is-current) { display: none; }
+.pp-binder:not([data-mode="single"]) .pp-binder__nav { display: none; }
+
+/* ---- Gallery presentation: strip the binder chrome ---- */
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__page--cover,
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__page-rings,
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__page-number,
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__cover-bookmark { display: none; }
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__page {
+    background: transparent; border: 0; box-shadow: none; padding: 0; max-width: none; border-radius: 0;
+}
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__page::before { display: none; }
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__page-tab { position: static; display: inline-block; margin-bottom: 12px; border-radius: 6px; box-shadow: none; }
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__sleeve { background: transparent; box-shadow: none; padding: 0; }
+.pp-binder[data-binder-presentation="gallery"] .pp-binder__pages-stage { gap: 30px; }
+
+/* ---- Mobile: force Single + Gallery below 1024px ---- */
+@media (max-width: 1023px) {
+    .pp-binder__sleeves { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .pp-binder__controls-group--desktop { display: none; }
+}

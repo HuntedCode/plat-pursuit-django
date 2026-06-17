@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% load humanize static %}
+{% block title %}Your Collection{% endblock %}
+
+{% block content %}
+    {% include 'partials/breadcrumb.html' with items=breadcrumb %}
+
+    {# Header: title + collection summary #}
+    <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-4">
+        <div class="card-body p-4 md:p-5 lg:p-6">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                        </svg>
+                        <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Collection</h1>
+                    </div>
+                    <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
+                        Your badge album. Earned badges sit framed in their sleeves; the rest are slots waiting to be filled.
+                    </p>
+                </div>
+                <div class="shrink-0 text-right">
+                    <div class="leading-none">
+                        <span class="font-black text-2xl md:text-3xl text-primary tabular-nums">{{ summary.earned|intcomma }}</span>
+                        <span class="text-sm text-base-content/50">/ {{ summary.total|intcomma }}</span>
+                    </div>
+                    <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">badges collected &middot; {{ summary.pct }}%</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# The album (Binder Surface) #}
+    {% include 'components/binder.html' with pages=pages total_pages=total_pages %}
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/binder.js' %}"></script>
+{% endblock %}

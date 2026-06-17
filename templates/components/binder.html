@@ -1,0 +1,50 @@
+{% comment %}
+Binder Surface (baseline): the badge collection album. Renders the user's badges as
+framed cards in paper pages with binder chrome. Expects `pages` (a list of
+{number, theme, palette, frames}) and `total_pages`; each `frame` is a Frame-component
+dict carrying a `dom_id` for deep-linking. Single view-mode (one page at a time) +
+Binder/Gallery presentation toggle. Spread / 3D page-flip is deferred (not here).
+Wired by static/js/binder.js.
+{% endcomment %}
+<div class="pp-binder" data-binder-presentation="binder" data-mode="single">
+
+    <div class="pp-binder__controls">
+        <div class="pp-binder__controls-group">
+            <span>View</span>
+            <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-presentation="binder">Binder</button>
+            <button type="button" class="pp-binder__control-chip" data-binder-presentation="gallery">Gallery</button>
+        </div>
+        <div class="pp-binder__nav">
+            <button type="button" class="pp-binder__nav-btn" data-binder-prev aria-label="Previous page">&larr;</button>
+            <span class="pp-binder__nav-counter" data-binder-counter>Page 1 / {{ total_pages }}</span>
+            <button type="button" class="pp-binder__nav-btn" data-binder-next aria-label="Next page">&rarr;</button>
+        </div>
+    </div>
+
+    <div class="pp-binder__pages-stage">
+        {% for page in pages %}
+        <article class="pp-binder__page{% if forloop.first %} is-current{% endif %}" data-page-index="{{ forloop.counter0 }}">
+            <div class="pp-binder__page-tab" data-palette="{{ page.palette }}">{{ page.theme }}</div>
+            <div class="pp-binder__page-rings" aria-hidden="true">
+                <span class="pp-binder__ring"></span>
+                <span class="pp-binder__ring"></span>
+                <span class="pp-binder__ring"></span>
+            </div>
+            <div class="pp-binder__sleeves">
+                {% for frame in page.frames %}
+                <div class="pp-binder__sleeve" id="{{ frame.dom_id }}">
+                    {% include "components/frame.html" with frame=frame %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="pp-binder__page-number">Page {{ page.number }} / {{ total_pages }}</div>
+        </article>
+        {% empty %}
+        <article class="pp-binder__page is-current">
+            <div class="pp-binder__sleeves" style="grid-template-columns: 1fr;">
+                <p class="text-center text-base-content/50 py-10">No badges to show yet. Earn your first badge to start your collection.</p>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</div>

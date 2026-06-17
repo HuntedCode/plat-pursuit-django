@@ -5,6 +5,7 @@
 @import "./components/badge-hero.css";
 @import "./components/badge-detail.css";
 @import "./components/elements.css";
+@import "./components/binder.css";
 @plugin "daisyui";
 
 @theme {

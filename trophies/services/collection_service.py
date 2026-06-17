@@ -80,7 +80,7 @@ def _build_pages(profile):
             frame = build_badge_frame(
                 b, profile,
                 earned=earned_map.get(b.id), progress=progress_map.get(b.id),
-                include_live_stats=False,
+                include_live_stats=False, allow_flip=False,
             )
             frame['dom_id'] = f"card-{b.set_number or b.id}"
             frames.append(frame)

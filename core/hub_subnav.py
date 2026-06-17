@@ -149,7 +149,7 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     icon='trophy',
     prefixes=('/my-pursuit/',),
     items=(
-        HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
+        HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True),
         HubSubnavItem('lab', 'The Lab', 'lab', 'flask', auth_required=True),
         HubSubnavItem('research-panel', 'Research Panel', 'research_panel', 'beaker'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
