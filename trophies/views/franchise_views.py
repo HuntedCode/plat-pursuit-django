@@ -25,8 +25,22 @@ DETAIL_SORT_CHOICES = grouping.SORT_CHOICES
 # below expresses "franchise-type requires is_main, collection-type doesn't"
 # in a single filter so one subquery serves both row types on the mixed browse
 # list.
+# Collections additionally bias away from spin-off memberships (IGDB types a game like
+# Agents of Mayhem as a "Spin-off" of Saints Row) so a series' cover art isn't anchored
+# by a spin-off. is_spinoff is always False on franchise-type links, so the franchise
+# clause is unaffected.
+#
+# BEST-EFFORT for cover art only: this filter is applied to a Game queryset as a SECOND
+# .filter() after the OuterRef franchise correlation, so Django joins a separate
+# ConceptFranchise row -- the is_spinoff check isn't guaranteed to be the same membership
+# that ties the game to this collection. A game that's a spin-off of THIS collection but
+# is_main of its own franchise could still surface as the cover. The exact suppression
+# (same-row) lives where it matters: the detail member list (FranchiseDetailView.links_qs)
+# and the browse counts (main_only_filter below), both of which filter ConceptFranchise
+# rows directly. Cover art is cosmetic, so the residual leak is acceptable.
 _MAIN_ONLY_FILTER = (
-    Q(concept__concept_franchises__franchise__source_type='collection')
+    Q(concept__concept_franchises__franchise__source_type='collection',
+      concept__concept_franchises__is_spinoff=False)
     | Q(concept__concept_franchises__is_main=True)
 )
 
@@ -116,8 +130,12 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             )
 
         # Restrict counts to the "main" set for franchise rows; collections
-        # have no is_main concept so allow any link.
-        main_only_filter = Q(franchise__source_type='collection') | Q(is_main=True)
+        # have no is_main concept so allow any link EXCEPT spin-offs (which are
+        # hidden from the series, so they must not pad its game/version counts).
+        main_only_filter = (
+            Q(franchise__source_type='collection', is_spinoff=False)
+            | Q(is_main=True)
+        )
 
         qs = super().get_queryset().filter(
             Q(source_type='collection') | eligible_link_exists,
@@ -218,15 +236,17 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
         # Fetch all concept links and partition by is_main up-front. The map
         # gets passed to build_igdb_groups via extra_per_group so each group
         # knows whether the link is this franchise's primary identity.
-        concept_links = ConceptFranchise.objects.filter(
-            franchise=franchise
-        ).values('concept_id', 'is_main')
+        # Spin-off members are excluded so a Series doesn't list games IGDB
+        # types as spin-offs of it (e.g. Agents of Mayhem under Saints Row).
+        # Franchise-type links are never spin-offs, so this is a no-op for them.
+        links_qs = ConceptFranchise.objects.filter(
+            franchise=franchise, is_spinoff=False,
+        )
+        concept_links = links_qs.values('concept_id', 'is_main')
         is_main_by_concept = {
             row['concept_id']: {'is_main': row['is_main']} for row in concept_links
         }
-        concept_ids_subq = ConceptFranchise.objects.filter(
-            franchise=franchise
-        ).values_list('concept_id', flat=True)
+        concept_ids_subq = links_qs.values_list('concept_id', flat=True)
 
         games = list(
             Game.objects.filter(concept_id__in=Subquery(concept_ids_subq))
