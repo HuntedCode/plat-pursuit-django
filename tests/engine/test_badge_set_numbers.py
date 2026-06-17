@@ -17,6 +17,10 @@ def _series(slug, tiers=(1, 2, 3, 4)):
     return [BadgeFactory(series_slug=slug, tier=t) for t in tiers]
 
 
+def _typed_series(slug, badge_type, tiers=(1, 2, 3, 4)):
+    return [BadgeFactory(series_slug=slug, tier=t, badge_type=badge_type) for t in tiers]
+
+
 def _nums(slug):
     return sorted(
         n for n in Badge.objects.filter(series_slug=slug).values_list("set_number", flat=True)
@@ -82,3 +86,29 @@ def test_dedups_duplicate_slugs_in_selection():
     Badge.assign_next_set_numbers(["rs-e", "rs-e", "rs-e", "rs-e"])
 
     assert _nums("rs-e") == [1, 2, 3, 4]
+
+
+def test_numbering_is_independent_per_badge_type():
+    """Each badge type is its own 'set': numbering restarts at 1 per type, so the same
+    set_number can appear once per type (Series #1 and Franchise #1 both exist)."""
+    _typed_series("sr-a", "series")
+    _typed_series("sr-b", "series")
+    _typed_series("fr-a", "franchise")
+    _typed_series("ev-a", "event")
+
+    Badge.assign_next_set_numbers(["sr-a", "sr-b", "fr-a", "ev-a"])
+
+    assert _nums("sr-a") == [1, 2, 3, 4]
+    assert _nums("sr-b") == [5, 6, 7, 8]   # second series continues the series sequence
+    assert _nums("fr-a") == [1, 2, 3, 4]   # franchise starts its own sequence at 1
+    assert _nums("ev-a") == [1, 2, 3, 4]   # event starts its own sequence at 1
+
+
+def test_existing_numbers_in_one_type_do_not_advance_another():
+    _typed_series("sr-a", "series")
+    Badge.assign_next_set_numbers(["sr-a"])  # series 1-4
+    _typed_series("fr-a", "franchise")
+
+    Badge.assign_next_set_numbers(["fr-a"])  # franchise should still start at 1
+
+    assert _nums("fr-a") == [1, 2, 3, 4]

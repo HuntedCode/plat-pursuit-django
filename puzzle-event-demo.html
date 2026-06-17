@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Community Puzzle Event — Concept Demo</title>
+<style>
+  :root {
+    --bg-0: #0a0e1a;
+    --bg-1: #111827;
+    --bg-2: #1a2235;
+    --border: #2a3349;
+    --text: #e7ecf5;
+    --text-dim: #8a93a8;
+    --accent: #f5b942;
+    --accent-glow: rgba(245, 185, 66, 0.45);
+    --good: #4ade80;
+    --tile-cover: #0d1220;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: radial-gradient(ellipse at top, #131b2e 0%, var(--bg-0) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px 24px 96px;
+  }
+
+  header.hero {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  header.hero h1 {
+    font-size: 28px;
+    margin: 0 0 6px;
+    background: linear-gradient(135deg, #f5b942, #ff7eb3);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: 0.5px;
+  }
+  header.hero p {
+    margin: 0 0 12px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  header.hero .demo-switch {
+    display: inline-flex;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+  }
+  header.hero .demo-switch .current { color: var(--accent); font-weight: 700; }
+  header.hero .demo-switch a { color: var(--text-dim); text-decoration: none; }
+  header.hero .demo-switch a:hover { color: var(--text); }
+  header.hero .demo-switch .sep { color: var(--border); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+  }
+
+  /* ---------- Stage ---------- */
+  .stage-card { padding: 14px; }
+  .stage-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 6px 12px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .stage-meta .counter {
+    color: var(--text);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .stage-meta .counter .pct {
+    color: var(--accent);
+    margin-left: 6px;
+  }
+
+  .stage-scroller {
+    /* Horizontal scroll on viewports narrower than MIN_DESKTOP_WIDTH so
+       mobile/tablet users can swipe to explore the full puzzle at desktop
+       sizing instead of trying to tap microscopic pieces. */
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 6px 0; /* room for the stage frame's outer box-shadows */
+  }
+  .stage-wrapper {
+    margin: 0 auto;
+    /* width set by JS to the integer-clean snapped value. When wrapper width
+       exceeds the scroller, swipe-to-pan kicks in. */
+  }
+  .scroll-hint {
+    display: none;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    font-style: italic;
+    margin-bottom: 8px;
+  }
+  .scroll-hint.visible { display: block; }
+  .stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 600 / 200; /* fallback before JS sets explicit dims */
+    background: #000;
+    border-radius: 10px;
+    overflow: hidden;
+    /* Frame done with box-shadow (not border) so the inner content area
+       stays the full stage size and grid cell math stays integer-clean. */
+    box-shadow:
+      0 0 0 1px rgba(245, 185, 66, 0.32),
+      0 0 0 5px var(--bg-1),
+      0 0 0 6px rgba(255, 255, 255, 0.05),
+      0 0 32px rgba(245, 185, 66, 0.08),
+      0 20px 60px rgba(0, 0, 0, 0.5);
+    transition: background 0.4s ease;
+  }
+
+  .earn-prompt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    background: linear-gradient(90deg, rgba(245,185,66,0.14), rgba(245,185,66,0.04) 60%, transparent);
+    border: 1px solid rgba(245,185,66,0.35);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .earn-prompt .earn-icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+  .earn-prompt strong {
+    color: var(--accent);
+    font-weight: 700;
+    transition: color 0.3s ease;
+  }
+  .earn-prompt.flash strong { animation: nameFlash 700ms ease; }
+  @keyframes nameFlash {
+    0%   { transform: scale(1); }
+    30%  { transform: scale(1.18); color: #fff; }
+    100% { transform: scale(1); color: var(--accent); }
+  }
+  .stage img.base {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* fill not cover: the stage size is snapped to clean grid math, which
+       deviates from the image's natural aspect by a sub-percent. fill
+       guarantees the entire image is visible (no edge crop). */
+    object-fit: fill;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+  .grid-overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    pointer-events: none;
+  }
+  .tile {
+    position: relative;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  .tile.revealed, .tile.instant { cursor: default; }
+  .tile .cover {
+    position: absolute;
+    /* Slight outward inset (-0.5px) so adjacent covers overlap by 1 CSS px
+       total. This eliminates any sub-pixel rendering gaps at tile boundaries
+       (which can happen during pan or at high DPRs even when cell sizes are
+       exact integers). The 0.5px of revealed tile edge briefly hidden by an
+       unrevealed neighbor is imperceptible. */
+    inset: -0.5px;
+    background: var(--tile-cover);
+    /* Inset box-shadow instead of border so the grid line draws OVER the
+       opaque cover background, not over the underlying image — same visual,
+       but no image leak through the line. */
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    will-change: transform, opacity, filter;
+    /* No box-shadow transition: hover indicator snaps instantly so it feels
+       responsive instead of trailing the cursor as the user moves between tiles. */
+    transition: background 0.25s ease;
+  }
+  /* Lift hovered tile above its neighbors so the accent border + glow show
+     on all four sides instead of being clipped by adjacent covers' overlap. */
+  .tile:not(.revealed):not(.instant):hover {
+    z-index: 5;
+  }
+  .tile:not(.revealed):not(.instant):hover .cover {
+    box-shadow: inset 0 0 0 1px var(--accent), 0 0 12px rgba(245,185,66,0.25);
+  }
+  .tile.revealed { pointer-events: none; z-index: 3; }
+  .tile.revealed .cover { animation-fill-mode: forwards; }
+  .tile.instant .cover { opacity: 0; }
+
+  .tile .who {
+    position: absolute;
+    inset: auto 0 0 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
+    color: var(--text);
+    font-size: 9px;
+    padding: 2px 4px 3px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 2;
+  }
+  .tile.show-attr.revealed .who { opacity: 1; }
+  .tile.show-attr.instant .who { opacity: 1; }
+
+  /* ---------- Animations (applied to .cover, not .tile) ---------- */
+  @keyframes fadeOut {
+    to { opacity: 0; }
+  }
+  @keyframes zoomFade {
+    to { opacity: 0; transform: scale(1.4); }
+  }
+  @keyframes spinFade {
+    to { opacity: 0; transform: rotate(180deg) scale(0.4); }
+  }
+  @keyframes dissolve {
+    0% { filter: blur(0px); opacity: 1; }
+    50% { filter: blur(6px); opacity: 0.6; }
+    100% { filter: blur(14px); opacity: 0; }
+  }
+  @keyframes slideUp { to { opacity: 0; transform: translateY(-100%); } }
+  @keyframes slideDown { to { opacity: 0; transform: translateY(100%); } }
+  @keyframes slideLeft { to { opacity: 0; transform: translateX(-100%); } }
+  @keyframes slideRight { to { opacity: 0; transform: translateX(100%); } }
+  @keyframes shatter {
+    0%   { transform: translate(0,0) rotate(0); opacity: 1; }
+    40%  { transform: translate(var(--sx,0), var(--sy,0)) rotate(var(--sr,0)); opacity: 0.85; }
+    100% { transform: translate(calc(var(--sx,0) * 4), calc(var(--sy,0) * 4)) rotate(calc(var(--sr,0) * 6)); opacity: 0; }
+  }
+  @keyframes flashIn {
+    0% { box-shadow: 0 0 0 0 var(--accent-glow); }
+    100% { box-shadow: 0 0 0 14px rgba(245,185,66,0); }
+  }
+
+  .cover.anim-fade     { animation: fadeOut var(--dur,650ms) ease forwards; }
+  .cover.anim-zoom     { animation: zoomFade var(--dur,650ms) ease forwards; }
+  .cover.anim-spin     { animation: spinFade var(--dur,800ms) ease forwards; }
+  .cover.anim-dissolve { animation: dissolve var(--dur,800ms) ease forwards; }
+  .cover.anim-slide    { animation: var(--slideAnim, slideUp) var(--dur,650ms) cubic-bezier(.5,.05,.7,.2) forwards; }
+  .cover.anim-shatter  { animation: shatter var(--dur,900ms) cubic-bezier(.4,.1,.6,.9) forwards; }
+
+  /* One-shot ring pulse on reveal (separate from persistent recent-glow) */
+  .tile.revealed::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 2px;
+    pointer-events: none;
+    animation: flashIn 700ms ease forwards;
+  }
+
+  /* ---------- Controls ---------- */
+  .controls h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-dim);
+    margin: 0 0 10px;
+    font-weight: 700;
+  }
+  .control-group { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .control-group:last-child { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+
+  .preset-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .preset-row button { width: 100%; }
+
+  .dim-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .dim-row label {
+    display: flex;
+    flex-direction: column;
+    font-size: 11px;
+    color: var(--text-dim);
+    gap: 4px;
+  }
+  .dim-row input {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .dim-row input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dim-row input[type=color] {
+    height: 36px;
+    padding: 3px;
+    cursor: pointer;
+  }
+
+  select, button {
+    background: var(--bg-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    font-family: inherit;
+  }
+  select { width: 100%; }
+  button:hover { background: #232d44; border-color: #3a4665; }
+  button.primary {
+    background: linear-gradient(135deg, var(--accent), #e89c2f);
+    color: #1a1304;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  button.primary:hover { filter: brightness(1.08); }
+  button.danger { color: #fca5a5; }
+  button.danger:hover { background: #3a1f25; border-color: #7f3138; }
+  button.full { width: 100%; }
+  .btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .btn-stack > * + * { margin-top: 6px; }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-row .val {
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    font-size: 12px;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle input { accent-color: var(--accent); }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 8px;
+  }
+
+  footer.note {
+    margin-top: 28px;
+    padding: 16px 18px;
+    background: var(--bg-1);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  footer.note strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <h1>Community Puzzle Event — Concept Demo</h1>
+    <p>The community plays games. The community reveals the picture. This is a feel-test, not the real thing.</p>
+    <div class="demo-switch">
+      <span class="current">v1: Card layout</span>
+      <span class="sep">|</span>
+      <a href="puzzle-event-demo-v2.html">v2: r/place full-canvas &rarr;</a>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ===== Stage ===== -->
+    <div class="card stage-card">
+      <div class="stage-meta">
+        <div>Image: <em id="metaImageName">badge-showcase.png</em></div>
+        <div class="counter">
+          <span id="revealedCount">0</span> / <span id="totalCount">0</span> pieces
+          <span class="pct" id="pctRevealed">0%</span>
+        </div>
+      </div>
+      <div class="earn-prompt" id="earnPrompt">
+        <span class="earn-icon">&#10024;</span>
+        <span>You just earned a piece! Click any hidden tile to claim it as <strong id="nextEarner">&mdash;</strong></span>
+      </div>
+      <div class="scroll-hint" id="scrollHint">&harr; Swipe to explore the full puzzle</div>
+      <div class="stage-scroller" id="stageScroller">
+        <div class="stage-wrapper" id="stageWrapper">
+          <div class="stage" id="stage">
+            <img class="base" src="static/images/showcase/badge-showcase.png" alt="Puzzle base image" />
+            <div class="grid-overlay" id="grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Controls ===== -->
+    <div class="card controls">
+
+      <div class="control-group">
+        <h2>Puzzle Image</h2>
+        <button class="full primary" id="uploadBtn">Upload your own image</button>
+        <input type="file" id="imageFile" accept="image/*" hidden />
+        <button class="full" id="resetImageBtn" style="margin-top: 6px;">Reset to badge showcase</button>
+        <div class="hint" id="imageName">Using: <em>badge-showcase.png</em></div>
+      </div>
+
+      <div class="control-group">
+        <h2>Grid Size</h2>
+        <div class="preset-row">
+          <button data-preset="6,8">6 &times; 8 (48)</button>
+          <button data-preset="8,12">8 &times; 12 (96)</button>
+          <button data-preset="10,16">10 &times; 16 (160)</button>
+          <button data-preset="14,20">14 &times; 20 (280)</button>
+        </div>
+        <div class="dim-row">
+          <label>
+            Rows
+            <input type="number" id="rows" min="2" max="40" value="8" />
+          </label>
+          <label>
+            Cols
+            <input type="number" id="cols" min="2" max="60" value="12" />
+          </label>
+        </div>
+        <div class="hint">Presets fill the inputs; tweak freely. Larger grids feel more eventy and harder to brute-force.</div>
+      </div>
+
+      <div class="control-group">
+        <h2>Trigger Reveals</h2>
+        <div class="btn-stack">
+          <div class="btn-row">
+            <button data-unlock="1">Unlock 1</button>
+            <button data-unlock="5">Unlock 5</button>
+          </div>
+          <div class="btn-row">
+            <button data-unlock="10">Unlock 10</button>
+            <button data-unlock="25">Unlock 25</button>
+          </div>
+          <button class="full primary" id="revealAll">Reveal all (cinematic)</button>
+        </div>
+        <div class="hint">In production these would fire when community thresholds are crossed (e.g., every 25th plat). To simulate a single user <em>earning and choosing</em> a piece, click any hidden tile directly &mdash; it&rsquo;ll be claimed by the username shown in the prompt above the puzzle.</div>
+      </div>
+
+      <div class="control-group">
+        <h2>Backdrop &amp; Tile Color</h2>
+        <div class="dim-row">
+          <label>
+            Backdrop
+            <input type="color" id="backdropColor" value="#000000" />
+          </label>
+          <label>
+            Tile cover
+            <input type="color" id="tileColor" value="#0d1220" />
+          </label>
+        </div>
+        <div class="preset-row" style="margin-top: 8px;">
+          <button data-backdrop="radial-gradient(ellipse at center, #1a1a3e 0%, #050510 75%)">Deep Space</button>
+          <button data-backdrop="linear-gradient(180deg, #ff9a56 0%, #ff6a88 50%, #5b2c6f 100%)">Sunset</button>
+          <button data-backdrop="linear-gradient(135deg, #fef3c7 0%, #f4a261 100%)">Indie Cozy</button>
+          <button data-backdrop="linear-gradient(135deg, #f093fb 0%, #f5576c 50%, #4facfe 100%)">Neon Pop</button>
+          <button data-backdrop="linear-gradient(180deg, #0f2027 0%, #203a43 50%, #2c5364 100%)">Midnight</button>
+          <button data-backdrop="#000000">Pure Black</button>
+        </div>
+        <div class="hint">Color pickers set solids; preset buttons apply gradients. Useful for transparent-PNG event art where the backdrop becomes part of the design.</div>
+      </div>
+
+      <div class="control-group">
+        <h2>Reveal Animation</h2>
+        <select id="animStyle">
+          <option value="fade">Fade out</option>
+          <option value="zoom">Zoom + fade</option>
+          <option value="spin">Spin + shrink</option>
+          <option value="dissolve">Dissolve (blur)</option>
+          <option value="slide">Slide away (random direction)</option>
+          <option value="shatter">Shatter</option>
+        </select>
+        <div class="slider-row">
+          <span style="font-size:11px;color:var(--text-dim);">Speed</span>
+          <input type="range" id="speed" min="200" max="1500" step="50" value="700" />
+          <span class="val" id="speedVal">700ms</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="showAttr" />
+          Show attribution labels on tiles
+        </label>
+        <div class="hint">A one-shot accent ring pulses around each piece as it&rsquo;s revealed, so the moment of unlock reads clearly even at a glance.</div>
+      </div>
+
+      <div class="control-group">
+        <h2>Simulate Page Load</h2>
+        <div class="slider-row">
+          <input type="range" id="loadPct" min="0" max="100" step="5" value="40" />
+          <span class="val" id="loadPctVal">40%</span>
+        </div>
+        <button class="full" id="simulateLoad">Apply as &ldquo;already revealed&rdquo;</button>
+        <div class="hint">No animation, just the state a returning visitor would see. Live reveals would still play their animation on top.</div>
+      </div>
+
+      <div class="control-group">
+        <button class="full danger" id="resetBtn">Reset puzzle</button>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="note">
+    <strong>Reading this demo:</strong> The buttons stand in for community events (a plat, a milestone, a donation) that would unlock pieces in the real version. Tile attribution uses fake usernames sampled from a small pool. Page-load behavior previews what a returning visitor sees: <strong>already-revealed pieces appear instantly with no animation</strong>. Live reveals fire their selected animation plus a one-shot accent ring around the unlocking piece. <strong>Upload your own image</strong> to see how a real event poster would feel, and try the Backdrop presets with a transparent PNG to see how dramatically the mood shifts.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  // ---------- State ----------
+  const FAKE_USERS = [
+    'huntedcode47','PlatHunterX','TrophyKween','SoraSurfer','KratosKid',
+    'Bloodborn3','Aeris99','LinkBetweenWorlds','Octocat','SnakeEater',
+    'Sephiroth_','VaultDweller','RatchetFan','SpiderByte','Yorda','Ico',
+    'Ellie_TLOU','NathanD','Joel99','TifaLockheart','Chell','RebornHero',
+    'PlatChaser','Vergil_DT','MorriganX','BayonettaQ','SamusZ','PikminPro',
+    'Gwynevere','Solaire','PatchesTroll','ZagreusGG','Hades_Ofc','SiffrinFan',
+    'Madeline','BadelineX','Hollow_K','Quirrel','HoneyKnight','PSXVet',
+    'Vita4Lyfe','PSPGod','PS5_Day1','TrineQueen','Stardew_Bae','MonHunSiblings',
+    'BloodyPalmer','GodOfWarFan','BotWalker','PlatRoyale','SunsetOverdrv',
+    'AcidGlow','UmbrellaGirl','RaccoonCity','Leonidas99','RedXIII'
+  ];
+
+  let rows = 8, cols = 12;
+  let totalTiles = 0;
+  let revealedTiles = 0;
+  const tileUsers = [];
+  let usersSnapshotShuffled = [...FAKE_USERS];
+  let nextEarnerUsername = null;
+
+  // ---------- DOM ----------
+  const grid = document.getElementById('grid');
+  const stage = document.getElementById('stage');
+  const rowsInput = document.getElementById('rows');
+  const colsInput = document.getElementById('cols');
+  const animSelect = document.getElementById('animStyle');
+  const speedSlider = document.getElementById('speed');
+  const speedVal = document.getElementById('speedVal');
+  const showAttr = document.getElementById('showAttr');
+  const revealedCountEl = document.getElementById('revealedCount');
+  const totalCountEl = document.getElementById('totalCount');
+  const pctEl = document.getElementById('pctRevealed');
+  const loadPct = document.getElementById('loadPct');
+  const loadPctVal = document.getElementById('loadPctVal');
+  const backdropColor = document.getElementById('backdropColor');
+  const tileColor = document.getElementById('tileColor');
+  const nextEarnerEl = document.getElementById('nextEarner');
+  const earnPrompt = document.getElementById('earnPrompt');
+  const stageWrapper = document.getElementById('stageWrapper');
+  const stageScroller = document.getElementById('stageScroller');
+  const scrollHint = document.getElementById('scrollHint');
+  const baseImg = stage.querySelector('img.base');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const imageFile = document.getElementById('imageFile');
+  const resetImageBtn = document.getElementById('resetImageBtn');
+  const imageNameEl = document.getElementById('imageName');
+  const metaImageName = document.getElementById('metaImageName');
+
+  const DEFAULT_IMAGE_SRC = 'static/images/showcase/badge-showcase.png';
+  const DEFAULT_IMAGE_NAME = 'badge-showcase.png';
+  // Below this container width we render the puzzle at MIN_DESKTOP_WIDTH and
+  // let mobile/tablet users pan to explore. Otherwise tiles get untappable.
+  const MIN_DESKTOP_WIDTH = 1024;
+
+  // Natural image dims, used by recalculateStageSize() to fit the stage to a
+  // pixel-clean grid that respects the image's aspect ratio.
+  let naturalImgWidth = 600;
+  let naturalImgHeight = 200;
+
+  function setImageName(name) {
+    metaImageName.textContent = name;
+    imageNameEl.innerHTML = '';
+    imageNameEl.appendChild(document.createTextNode('Using: '));
+    const em = document.createElement('em');
+    em.textContent = name;
+    imageNameEl.appendChild(em);
+  }
+
+  // Snap the stage to a size that gives integer-clean cells:
+  //   stage_width  = (multiple of cols, fitting the available scroller area)
+  //   stage_height = round((stage_width / natural_aspect) / rows) * rows
+  // Below MIN_DESKTOP_WIDTH the stage is forced wider than the viewport and
+  // the user pans horizontally to explore.
+  function recalculateStageSize(centerScroll) {
+    const cs = getComputedStyle(stageScroller);
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
+    const availWidth = stageScroller.clientWidth - padL - padR;
+    if (availWidth <= 0) return;
+
+    const aspect = naturalImgWidth / naturalImgHeight;
+    let W;
+    if (availWidth >= MIN_DESKTOP_WIDTH) {
+      // Desktop: largest multiple of cols that fits available area
+      W = Math.floor(availWidth / cols) * cols;
+    } else {
+      // Mobile/tablet: smallest multiple of cols >= MIN_DESKTOP_WIDTH
+      W = Math.ceil(MIN_DESKTOP_WIDTH / cols) * cols;
+    }
+    if (W < cols) W = cols;
+
+    const Hnatural = W / aspect;
+    let H = Math.round(Hnatural / rows) * rows;
+    if (H < rows) H = rows;
+
+    stageWrapper.style.width = W + 'px';
+    stage.style.aspectRatio = `${W} / ${H}`;
+
+    // Show the swipe hint only when the puzzle exceeds the scroller width
+    scrollHint.classList.toggle('visible', W > availWidth);
+
+    if (centerScroll) {
+      // Defer to next frame so the new width applies before measuring
+      requestAnimationFrame(() => {
+        const overflow = stageScroller.scrollWidth - stageScroller.clientWidth;
+        if (overflow > 0) stageScroller.scrollLeft = overflow / 2;
+      });
+    }
+  }
+
+  function probeAndApplyImage(src, name, onReady) {
+    const probe = new Image();
+    probe.onload = () => {
+      naturalImgWidth = probe.naturalWidth;
+      naturalImgHeight = probe.naturalHeight;
+      baseImg.src = src;
+      setImageName(name);
+      recalculateStageSize(true); // center scroll on image change
+      if (onReady) onReady();
+    };
+    probe.onerror = () => {
+      // Only alert for user-uploaded images (data URLs); silent for default
+      if (typeof src === 'string' && src.startsWith('data:')) {
+        alert('Could not load that image.');
+      }
+    };
+    probe.src = src;
+  }
+
+  // ---------- Helpers ----------
+  function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function shuffle(a){
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function randomUsername() {
+    if (!usersSnapshotShuffled.length) usersSnapshotShuffled = shuffle([...FAKE_USERS]);
+    return usersSnapshotShuffled.pop();
+  }
+
+  function updateCounter() {
+    revealedCountEl.textContent = revealedTiles;
+    totalCountEl.textContent = totalTiles;
+    const pct = totalTiles ? Math.round(revealedTiles / totalTiles * 100) : 0;
+    pctEl.textContent = pct + '%';
+  }
+
+  // ---------- Build grid ----------
+  function buildGrid() {
+    rows = clamp(parseInt(rowsInput.value, 10) || 8, 2, 40);
+    cols = clamp(parseInt(colsInput.value, 10) || 12, 2, 60);
+    rowsInput.value = rows;
+    colsInput.value = cols;
+
+    // Re-snap stage size to integer-clean cells for the new rows/cols
+    recalculateStageSize();
+
+    grid.style.gridTemplateRows    = `repeat(${rows}, 1fr)`;
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    grid.innerHTML = '';
+    totalTiles = rows * cols;
+    revealedTiles = 0;
+    tileUsers.length = 0;
+    usersSnapshotShuffled = shuffle([...FAKE_USERS]);
+
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < totalTiles; i++) {
+      const t = document.createElement('div');
+      t.className = 'tile';
+      t.dataset.idx = i;
+      // Per-tile shatter trajectory so each piece flies a different way
+      t.style.setProperty('--sx', (Math.random() * 60 - 30) + 'px');
+      t.style.setProperty('--sy', (Math.random() * 60 - 30) + 'px');
+      t.style.setProperty('--sr', (Math.random() * 90 - 45) + 'deg');
+
+      const cover = document.createElement('div');
+      cover.className = 'cover';
+      t.appendChild(cover);
+
+      const label = document.createElement('div');
+      label.className = 'who';
+      t.appendChild(label);
+
+      frag.appendChild(t);
+    }
+    grid.appendChild(frag);
+    applyAttrToggle();
+    updateCounter();
+    rollNextEarner();
+  }
+
+  // ---------- Reveal logic ----------
+  function pickHiddenTile() {
+    const hidden = grid.querySelectorAll('.tile:not(.revealed):not(.instant)');
+    if (!hidden.length) return null;
+    return hidden[Math.floor(Math.random() * hidden.length)];
+  }
+
+  function revealTile(tile, presetUsername) {
+    if (!tile) return false;
+    if (tile.classList.contains('revealed') || tile.classList.contains('instant')) return false;
+
+    const idx = parseInt(tile.dataset.idx, 10);
+    const who = presetUsername || randomUsername();
+    tileUsers[idx] = who;
+    tile.querySelector('.who').textContent = who;
+
+    const cover = tile.querySelector('.cover');
+    const style = animSelect.value;
+    cover.style.setProperty('--dur', speedSlider.value + 'ms');
+
+    if (style === 'slide') {
+      tile.style.setProperty('--slideAnim', rand(['slideUp','slideDown','slideLeft','slideRight']));
+    }
+
+    tile.classList.add('revealed');
+    cover.classList.add('anim-' + style);
+
+    revealedTiles++;
+    updateCounter();
+    return true;
+  }
+
+  function revealOne() {
+    return revealTile(pickHiddenTile());
+  }
+
+  function rollNextEarner() {
+    nextEarnerUsername = randomUsername() || '—';
+    nextEarnerEl.textContent = nextEarnerUsername;
+    earnPrompt.classList.remove('flash');
+    void earnPrompt.offsetWidth; // restart animation
+    earnPrompt.classList.add('flash');
+  }
+
+  function revealMany(n, staggerMs) {
+    let done = 0;
+    function step() {
+      if (done >= n) return;
+      if (!revealOne()) return;
+      done++;
+      setTimeout(step, staggerMs);
+    }
+    step();
+  }
+
+  function revealAllCinematic() {
+    const remaining = grid.querySelectorAll('.tile:not(.revealed):not(.instant)');
+    const total = remaining.length;
+    if (!total) return;
+    const totalDuration = Math.min(3000, Math.max(1200, total * 18));
+    const stagger = totalDuration / total;
+    revealMany(total, stagger);
+  }
+
+  function simulatePageLoad() {
+    const pct = parseInt(loadPct.value, 10);
+    buildGrid();
+    const target = Math.round(totalTiles * pct / 100);
+    const indices = shuffle([...Array(totalTiles).keys()]).slice(0, target);
+    indices.forEach(i => {
+      const tile = grid.children[i];
+      const who = randomUsername();
+      tileUsers[i] = who;
+      tile.querySelector('.who').textContent = who;
+      tile.classList.add('instant');
+    });
+    revealedTiles = target;
+    updateCounter();
+  }
+
+  function applyAttrToggle() {
+    const on = showAttr.checked;
+    grid.querySelectorAll('.tile').forEach(t => t.classList.toggle('show-attr', on));
+  }
+
+  // ---------- Wire up controls ----------
+  document.querySelectorAll('[data-preset]').forEach(b => {
+    b.addEventListener('click', () => {
+      const [r, c] = b.dataset.preset.split(',').map(Number);
+      rowsInput.value = r;
+      colsInput.value = c;
+      buildGrid();
+    });
+  });
+  rowsInput.addEventListener('change', buildGrid);
+  colsInput.addEventListener('change', buildGrid);
+
+  speedSlider.addEventListener('input', () => {
+    speedVal.textContent = speedSlider.value + 'ms';
+  });
+
+  showAttr.addEventListener('change', applyAttrToggle);
+
+  document.querySelectorAll('[data-unlock]').forEach(b => {
+    b.addEventListener('click', () => {
+      const n = parseInt(b.dataset.unlock, 10);
+      revealMany(n, n <= 1 ? 0 : 90);
+    });
+  });
+
+  document.getElementById('revealAll').addEventListener('click', revealAllCinematic);
+  document.getElementById('resetBtn').addEventListener('click', buildGrid);
+
+  // Click-to-claim: click any hidden tile to reveal it as the "next earner"
+  grid.addEventListener('click', (e) => {
+    const tile = e.target.closest('.tile');
+    if (!tile || !grid.contains(tile)) return;
+    if (tile.classList.contains('revealed') || tile.classList.contains('instant')) return;
+    if (revealTile(tile, nextEarnerUsername)) {
+      rollNextEarner();
+    }
+  });
+
+  loadPct.addEventListener('input', () => { loadPctVal.textContent = loadPct.value + '%'; });
+  document.getElementById('simulateLoad').addEventListener('click', simulatePageLoad);
+
+  // Image upload + reset
+  uploadBtn.addEventListener('click', () => imageFile.click());
+  imageFile.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-uploading the same file
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => probeAndApplyImage(ev.target.result, file.name, buildGrid);
+    reader.readAsDataURL(file);
+  });
+  resetImageBtn.addEventListener('click', () => {
+    probeAndApplyImage(DEFAULT_IMAGE_SRC, DEFAULT_IMAGE_NAME, buildGrid);
+  });
+
+  // Backdrop + tile color
+  backdropColor.addEventListener('input', () => {
+    stage.style.background = backdropColor.value;
+  });
+  tileColor.addEventListener('input', () => {
+    document.documentElement.style.setProperty('--tile-cover', tileColor.value);
+  });
+  document.querySelectorAll('[data-backdrop]').forEach(b => {
+    b.addEventListener('click', () => {
+      stage.style.background = b.dataset.backdrop;
+      // If preset is a solid hex, sync the color picker so it stays in sync
+      const v = b.dataset.backdrop.trim();
+      if (/^#[0-9a-f]{3,8}$/i.test(v)) backdropColor.value = v;
+    });
+  });
+
+  // Re-snap stage size on container resize (window resize, layout breakpoint
+  // change, etc.) so the grid stays integer-clean at any viewport size. Don't
+  // recenter scroll on resize so the user's pan position isn't disrupted.
+  const resizeObserver = new ResizeObserver(() => recalculateStageSize(false));
+  resizeObserver.observe(stageScroller);
+
+  // ---------- Init ----------
+  // Probe default image first so we have its real natural dimensions before
+  // the first stage-size calculation, then build the grid.
+  probeAndApplyImage(DEFAULT_IMAGE_SRC, DEFAULT_IMAGE_NAME, buildGrid);
+})();
+</script>
+</body>
+</html>
