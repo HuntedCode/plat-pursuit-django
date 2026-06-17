@@ -1,0 +1,99 @@
+{% comment %}
+Collection list view: the sortable / filterable / searchable "hunting tool" sibling to the
+Binder Surface. Expects `list_badges` (flat Frame dicts + theme/palette/row_id/dom_id) and
+`themes` ([{name, palette}]). Each row's "View" deep-links to the binder card (#card-<id>);
+collection.js switches the view + binder.js flips to that page. Styled by
+static/css/components/collection-list.css, wired by static/js/collection.js.
+{% endcomment %}
+{% load humanize %}
+<div class="pp-list">
+    <div class="pp-list__toolbar">
+        <div class="pp-list__group">
+            <span>Tier</span>
+            <button type="button" class="pp-list__chip is-active" data-filter-tier="all">All</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="bronze">Bronze</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="silver">Silver</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="gold">Gold</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="platinum">Platinum</button>
+        </div>
+        <div class="pp-list__group">
+            <span>State</span>
+            <button type="button" class="pp-list__chip is-active" data-filter-state="all">All</button>
+            <button type="button" class="pp-list__chip" data-filter-state="earned">Earned</button>
+            <button type="button" class="pp-list__chip" data-filter-state="in_progress">In Progress</button>
+            <button type="button" class="pp-list__chip" data-filter-state="unearned">Unearned</button>
+        </div>
+        {% if themes|length > 1 %}
+        <div class="pp-list__group">
+            <span>Set</span>
+            <button type="button" class="pp-list__chip is-active" data-filter-theme="all">All</button>
+            {% for theme in themes %}
+                <button type="button" class="pp-list__chip" data-filter-theme="{{ theme.name|slugify }}">{{ theme.name }}</button>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <input type="text" class="pp-list__search" placeholder="Search series or badge&hellip;" data-search aria-label="Search collection" />
+        <div class="pp-list__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</div>
+    </div>
+
+    <table class="pp-list__table">
+        <thead>
+            <tr>
+                <th scope="col" tabindex="0" data-sort="set_number">Set #</th>
+                <th scope="col" tabindex="0" data-sort="series" class="is-sorted-asc" aria-sort="ascending">Series</th>
+                <th scope="col" tabindex="0" data-sort="tier">Tier</th>
+                <th scope="col" tabindex="0" data-sort="state">State</th>
+                <th scope="col" tabindex="0" data-sort="progress">Earned / Progress</th>
+                <th scope="col" tabindex="0" data-sort="rarity">Rarity</th>
+                <th scope="col" tabindex="0" data-sort="rank" class="pp-list__col--rank">Rank</th>
+                <th scope="col" tabindex="0" data-sort="theme" class="pp-list__col--theme">Set</th>
+                <th scope="col"><span class="sr-only">Jump to binder</span></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for badge in list_badges %}
+                <tr id="{{ badge.row_id }}"
+                    data-tier="{{ badge.tier }}"
+                    data-state="{{ badge.state }}"
+                    data-theme="{{ badge.theme|slugify }}"
+                    data-series="{{ badge.series_name|lower }}"
+                    data-badge="{{ badge.badge_name|lower }}"
+                    data-set-number="{{ badge.set_number|default:0 }}"
+                    data-rarity-pct="{{ badge.rarity_pct|default:0 }}"
+                    data-rank="{{ badge.engraving_rank|default:0 }}"
+                    data-progress="{{ badge.progress_pct|default:0 }}">
+                    <td class="pp-list__set-mark">{% if badge.set_number %}#{{ badge.set_number|stringformat:"04d" }}{% else %}&mdash;{% endif %}</td>
+                    <td class="pp-list__series">{{ badge.series_name }}</td>
+                    <td><span class="pp-list__tier pp-list__tier--{{ badge.tier }}">{{ badge.tier|title }}</span></td>
+                    <td>
+                        {% if badge.state == 'in_progress' %}
+                            <span class="pp-list__state pp-list__state--in_progress">In Progress</span>
+                        {% else %}
+                            <span class="pp-list__state pp-list__state--{{ badge.state }}">{{ badge.state|title }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="pp-list__progress">
+                        {% if badge.state == 'earned' %}{{ badge.earned_date }}
+                        {% elif badge.state == 'maintenance' %}{{ badge.stages_done|default:0 }} / {{ badge.stages_total }} repaired
+                        {% elif badge.state == 'in_progress' %}{{ badge.progress_pct|default:0 }}% &middot; {{ badge.stages_done|default:0 }} / {{ badge.stages_total }} stages
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td>{% if badge.rarity_pct %}{{ badge.rarity_pct }}%{% else %}&mdash;{% endif %}</td>
+                    <td class="pp-list__rank pp-list__col--rank">
+                        {% if badge.engraving_rank %}#{{ badge.engraving_rank|intcomma }}{% else %}&mdash;{% endif %}
+                    </td>
+                    <td class="pp-list__col--theme">
+                        <span class="pp-list__theme">
+                            <span class="pp-list__theme-dot" data-palette="{{ badge.palette }}"></span>
+                            {{ badge.theme }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="#{{ badge.dom_id }}" class="pp-list__binder-link" data-binder-link>View &rarr;</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="pp-list__empty" data-empty-message hidden>No badges match the current filters.</div>
+</div>

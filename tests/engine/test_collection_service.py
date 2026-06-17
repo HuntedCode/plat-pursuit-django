@@ -179,6 +179,47 @@ def test_no_badges_returns_empty_summary():
     assert ctx['pages'] == []
     assert ctx['total_pages'] == 0
     assert ctx['summary']['total'] == 0
+    assert ctx['list_badges'] == []
+    assert ctx['themes'] == []
+
+
+# --- list view (the sortable/filterable sibling of the binder) ----------------
+
+
+def test_list_badges_flatten_every_frame_with_theme_and_palette():
+    profile = ProfileFactory()
+    _series('rs-x', 'series')
+    _series('fr-x', 'franchise')
+
+    ctx = build_collection_context(profile)
+
+    assert len(ctx['list_badges']) == 8  # same set as the binder, flattened
+    for b in ctx['list_badges']:
+        assert b['theme'] and b['palette']        # section context attached
+        assert b['dom_id'].startswith('card-')
+        assert b['series_name']                   # carries the frame fields
+
+
+def test_list_row_id_pairs_with_binder_card_anchor():
+    """row-<id> in the list must pair with card-<id> in the binder for cross-view jumps."""
+    profile = ProfileFactory()
+    _series('rs-pair')
+
+    badge = build_collection_context(profile)['list_badges'][0]
+
+    assert badge['row_id'] == badge['dom_id'].replace('card-', 'row-')
+
+
+def test_themes_are_distinct_sections_in_canonical_order():
+    profile = ProfileFactory()
+    _series('ev-x', 'event')
+    _series('rs-x', 'series')
+
+    themes = build_collection_context(profile)['themes']
+
+    # _SECTION_ORDER puts series before event; each theme carries its palette.
+    assert [t['name'] for t in themes] == ['Series', 'Events']
+    assert all(t['palette'] for t in themes)
 
 
 def test_build_failure_degrades_to_empty_context(monkeypatch):

@@ -6,6 +6,7 @@
 @import "./components/badge-detail.css";
 @import "./components/elements.css";
 @import "./components/binder.css";
+@import "./components/collection-list.css";
 @plugin "daisyui";
 
 @theme {

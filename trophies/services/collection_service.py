@@ -124,15 +124,38 @@ def _build_pages(profile):
     return pages, summary
 
 
+def _flatten_for_list(pages):
+    """Flatten the binder pages into the row list + theme set the sibling list view needs.
+
+    Same data, different presentation (the Binder is the display piece, the list is the
+    hunting tool). Each row carries its section's theme/palette and a `row_id` paired with
+    the frame's binder `dom_id` (row-<id> <-> card-<id>) for cross-view deep-linking.
+    """
+    list_badges, themes = [], {}
+    for page in pages:
+        themes.setdefault(page['theme'], page['palette'])
+        for frame in page['frames']:
+            list_badges.append({
+                **frame,
+                'theme': page['theme'],
+                'palette': page['palette'],
+                'row_id': frame['dom_id'].replace('card-', 'row-', 1),
+            })
+    return list_badges, [{'name': name, 'palette': palette} for name, palette in themes.items()]
+
+
 def build_collection_context(profile):
     """Assemble the Collection album context. Read-only + whale-safe (see module docstring)."""
-    context = {'pages': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}}}
+    context = {
+        'pages': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}},
+        'list_badges': [], 'themes': [], 'total_pages': 0,
+    }
     try:
         pages, summary = _build_pages(profile)
         context['pages'] = pages
         context['summary'] = summary
         context['total_pages'] = len(pages)
+        context['list_badges'], context['themes'] = _flatten_for_list(pages)
     except Exception:
         logger.exception("Collection album build failed for profile %s", getattr(profile, 'id', '?'))
-        context['total_pages'] = 0
     return context
