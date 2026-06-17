@@ -19,11 +19,12 @@ from trophies.services.redis_leaderboard_service import get_earners_ranks
 
 logger = logging.getLogger(__name__)
 
-# Section order (badge types) + the binder page palettes that cycle per section.
-_SECTION_ORDER = ['series', 'collection', 'megamix', 'genre', 'dev', 'user', 'misc']
+# Section order (badge types) + the binder page palettes that cycle per section. Each badge
+# type is its own "set" (its own page run + independent set numbering).
+_SECTION_ORDER = ['series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event']
 _SECTION_LABELS = {
-    'series': 'Series', 'collection': 'Collections', 'megamix': 'Mega Mixes',
-    'genre': 'Genre', 'dev': 'Developer', 'user': 'Community', 'misc': 'Misc',
+    'series': 'Series', 'franchise': 'Franchises', 'collection': 'Collections',
+    'megamix': 'Mega Mixes', 'developer': 'Developers', 'user': 'Community', 'event': 'Events',
 }
 _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
 _TIER_NAME = {1: 'bronze', 2: 'silver', 3: 'gold', 4: 'platinum'}
@@ -92,7 +93,9 @@ def _build_pages(profile):
                 include_live_stats=False, allow_flip=True,
                 current_rank=rank_map.get(b.series_slug), series_xp=series_xp_map.get(b.series_slug),
             )
-            frame['dom_id'] = f"card-{b.set_number or b.id}"
+            # Use the badge id (globally unique) for the DOM anchor, since set_number is now
+            # only unique WITHIN a badge type (Series #1 and Franchise #1 both exist).
+            frame['dom_id'] = f"card-{b.id}"
             frames.append(frame)
 
         # A new badge type always starts a fresh page so the page tab labels one section.
