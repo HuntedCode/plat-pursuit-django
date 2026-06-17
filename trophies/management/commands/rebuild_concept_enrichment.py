@@ -183,7 +183,10 @@ class Command(BaseCommand):
                 continue
 
             try:
-                IGDBService._apply_enrichment(match, raw, skip_wipe=True)
+                # Cache-based rebuild: no IGDB calls. Spin-off membership is not in
+                # raw_response, so skip the lookup (reset is_spinoff); operators re-run
+                # backfill_collection_spinoffs afterward to repopulate it.
+                IGDBService._apply_enrichment(match, raw, skip_wipe=True, fetch_memberships=False)
             except Exception as exc:
                 stats['errors'] += 1
                 self.stdout.write(self.style.ERROR(

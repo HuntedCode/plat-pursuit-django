@@ -251,6 +251,12 @@ class IGDBService:
     TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
     API_BASE = 'https://api.igdb.com/v4'
 
+    # IGDB collection_membership_types (probed 2026-06-17; only two exist, both for
+    # the "Series" collection type): 1 = "Member" (normal), 2 = "Spin-off". The
+    # spin-off signal is NOT on the game payload's `collections` array -- it lives only
+    # on the per-(game, collection) row in the /collection_memberships endpoint.
+    COLLECTION_MEMBERSHIP_SPINOFF_TYPE = 2
+
     # Max requests per second across all workers
     MAX_REQUESTS_PER_SECOND = 3  # Conservative (IGDB allows 4)
 
@@ -385,6 +391,47 @@ class IGDBService:
             count = len(data) if isinstance(data, list) else 1
             print(f'  IGDB RESPONSE /{endpoint}: {count} row(s)')
         return data
+
+    @classmethod
+    def fetch_collection_memberships(cls, game_igdb_ids):
+        """Fetch IGDB collection-membership types for the given game IGDB ids.
+
+        The main /games payload's `collections` array is flat -- it does NOT say how a
+        game relates to each series. That `type` (1=Member, 2=Spin-off) lives only on
+        the per-(game, collection) row in /collection_memberships. Returns
+        ``{game_igdb_id: {collection_igdb_id: is_spinoff_bool}}``. Chunked + offset-paged
+        so a large id set never silently truncates at IGDB's 500-row cap. On error the
+        affected chunk is skipped (logged); callers default is_spinoff to False.
+        """
+        ids = [int(i) for i in game_igdb_ids if i]
+        if not ids:
+            return {}
+        out = {}
+        CHUNK = 150  # a game can have several memberships; keep the response well under 500
+        for start in range(0, len(ids), CHUNK):
+            id_list = ','.join(str(i) for i in ids[start:start + CHUNK])
+            offset = 0
+            while True:
+                query = (
+                    f'fields game, collection, type; '
+                    f'where game = ({id_list}); limit 500; offset {offset};'
+                )
+                try:
+                    rows = cls._request('collection_memberships', query)
+                except Exception:
+                    logger.exception('IGDB collection_memberships fetch failed (offset %d)', offset)
+                    break
+                for row in rows or []:
+                    game_id, coll_id = row.get('game'), row.get('collection')
+                    if not game_id or not coll_id:
+                        continue
+                    out.setdefault(game_id, {})[coll_id] = (
+                        row.get('type') == cls.COLLECTION_MEMBERSHIP_SPINOFF_TYPE
+                    )
+                if not rows or len(rows) < 500:
+                    break
+                offset += 500
+        return out
 
     # -----------------------------------------------------------------------
     # Search
@@ -2003,7 +2050,8 @@ class IGDBService:
         return deleted
 
     @classmethod
-    def _apply_enrichment(cls, igdb_match, igdb_data=None, skip_wipe=False):
+    def _apply_enrichment(cls, igdb_match, igdb_data=None, skip_wipe=False,
+                          fetch_memberships=True):
         """Apply IGDB enrichment data to the Concept and create Company/ConceptCompany records.
 
         Called on auto_accepted matches and when admin approves pending matches.
@@ -2014,6 +2062,10 @@ class IGDBService:
         per-concept safety net. Default False preserves the live-path
         guarantee that `_apply_enrichment` leaves the concept's enrichment
         identical to the IGDB response, regardless of prior state.
+
+        `fetch_memberships=False` (the cache-based rebuild commands) skips the
+        per-collection spin-off IGDB lookup so a "no API" rebuild stays offline;
+        re-run `backfill_collection_spinoffs` afterward to repopulate is_spinoff.
         """
         if igdb_data is None:
             igdb_data = igdb_match.raw_response
@@ -2040,7 +2092,7 @@ class IGDBService:
         # Create normalized Franchise records (skipped entirely when the concept's
         # franchise/collection links are locked for manual curation).
         if not concept.franchises_locked:
-            cls._create_concept_franchises(concept, igdb_data)
+            cls._create_concept_franchises(concept, igdb_data, fetch_memberships=fetch_memberships)
 
         # Add VR platforms to Games that are missing them
         cls._apply_vr_platforms(concept, igdb_data)
@@ -2461,7 +2513,7 @@ class IGDBService:
                             )
 
     @classmethod
-    def _create_concept_franchises(cls, concept, igdb_data):
+    def _create_concept_franchises(cls, concept, igdb_data, fetch_memberships=True):
         """Create Franchise and ConceptFranchise records from IGDB franchise/collection data.
 
         IGDB exposes ``franchise`` (singular = primary identity) AND ``franchises``
@@ -2470,6 +2522,13 @@ class IGDBService:
         powers the franchise browse page (only shows franchises that ARE
         someone's main) and the detail page Games / Also Featured split.
         Collections never get is_main set (different IGDB taxonomy entirely).
+
+        ``fetch_memberships`` controls the per-collection spin-off lookup. The live
+        enrichment path leaves it True (one extra /collection_memberships call when the
+        game has collections). The CACHE-based rebuild commands pass False -- they are
+        "no IGDB API" by contract, and the membership type isn't in raw_response anyway,
+        so they reset is_spinoff to False and rely on ``backfill_collection_spinoffs`` to
+        repopulate it from IGDB afterward.
         """
         from trophies.models import Franchise, ConceptFranchise
 
@@ -2512,6 +2571,17 @@ class IGDBService:
             sources.append(([singular_obj], 'franchise'))
         sources.append((igdb_data.get('franchises', []), 'franchise'))
         sources.append((igdb_data.get('collections', []), 'collection'))
+
+        # Per-(game, collection) spin-off flags. The `collections` array is flat, so we
+        # pull the membership types from the dedicated endpoint -- only on the live path
+        # (fetch_memberships) and only when this game actually has collections (skip the
+        # call otherwise). Keyed by collection igdb_id.
+        spinoff_by_collection = {}
+        game_igdb_id = igdb_data.get('id')
+        if fetch_memberships and game_igdb_id and igdb_data.get('collections'):
+            spinoff_by_collection = cls.fetch_collection_memberships(
+                [game_igdb_id]
+            ).get(game_igdb_id, {})
 
         for items, source_type in sources:
             for item in items:
@@ -2566,15 +2636,28 @@ class IGDBService:
                 desired_is_main = (
                     source_type == 'franchise' and igdb_id == main_igdb_id
                 )
+                # Spin-off applies only to collection memberships (franchises have no
+                # membership type). Default False when this collection isn't in the map.
+                desired_is_spinoff = (
+                    source_type == 'collection'
+                    and spinoff_by_collection.get(igdb_id, False)
+                )
                 cf, created = ConceptFranchise.objects.get_or_create(
                     concept=concept,
                     franchise=franchise,
-                    defaults={'is_main': desired_is_main},
+                    defaults={'is_main': desired_is_main, 'is_spinoff': desired_is_spinoff},
                 )
-                # If the row already existed with a stale is_main, fix it.
-                if not created and cf.is_main != desired_is_main:
-                    cf.is_main = desired_is_main
-                    cf.save(update_fields=['is_main'])
+                # If the row already existed with stale flags, fix them.
+                if not created:
+                    stale = []
+                    if cf.is_main != desired_is_main:
+                        cf.is_main = desired_is_main
+                        stale.append('is_main')
+                    if cf.is_spinoff != desired_is_spinoff:
+                        cf.is_spinoff = desired_is_spinoff
+                        stale.append('is_spinoff')
+                    if stale:
+                        cf.save(update_fields=stale)
 
     @classmethod
     def _apply_vr_platforms(cls, concept, igdb_data):

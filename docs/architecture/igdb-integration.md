@@ -25,6 +25,7 @@ Rate limiting is distributed across all workers via Redis, ensuring all 24 token
 | `trophies/views/franchise_views.py` | `FranchiseListView` (browse) + `FranchiseDetailView` (per-franchise page) |
 | `trophies/management/commands/rebuild_franchises_from_cache.py` | Rebuild Franchise/ConceptFranchise rows from cached IGDBMatch.raw_response (no API calls) |
 | `trophies/management/commands/backfill_franchise_main_flag.py` | Recompute `is_main` flags from cached raw_response without re-enriching |
+| `trophies/management/commands/backfill_collection_spinoffs.py` | Stamp `ConceptFranchise.is_spinoff` for collection links by querying IGDB `/collection_memberships` (the type is not in cached raw_response) |
 | `trophies/management/commands/franchise_stats.py` | Read-only diagnostic: taxonomy coverage, browse surfacing counts, orphan concepts |
 | `trophies/management/commands/inspect_franchise_data.py` | Read-only diagnostic: show raw IGDB response vs. stored links for a concept |
 | `trophies/token_keeper.py` | Sync pipeline hook (enriches new concepts on creation) |
@@ -54,7 +55,7 @@ Data we extract from the IGDB response and store in dedicated model fields:
 | **Game engine (legacy)** | IGDBMatch | `game_engine_name` | Single string, kept for backwards compatibility |
 | **Game engine (normalized)** | GameEngine + ConceptEngine | `name`, `slug`, `description`, `logo_image_id`, `companies` | One normalized row per engine; `companies` M2M via `EngineCompany` |
 | **Cover art** | IGDBMatch | `igdb_cover_image_id` | IGDB image hash for URL construction |
-| **Franchises / collections** | Franchise + ConceptFranchise | `name`, `slug`, `source_type`, `is_main` | Main franchise + tie-ins + collections, each as a linkable row |
+| **Franchises / collections** | Franchise + ConceptFranchise | `name`, `slug`, `source_type`, `is_main`, `is_spinoff` | Main franchise + tie-ins + collections, each as a linkable row; `is_spinoff` marks games IGDB types as a spin-off of a series (fetched from `/collection_memberships`) |
 | **Franchise names (legacy)** | IGDBMatch | `franchise_names` (JSONField) | ["Fallout"] (kept for backwards compatibility; prefer the normalized `Franchise` model) |
 | **Similar games** | IGDBMatch | `similar_game_igdb_ids` (JSONField) | IGDB IDs for future recommendations |
 | **External links** | IGDBMatch | `external_urls` (JSONField) | {steam: url, wikipedia: url, official: url, ...} |
@@ -79,10 +80,11 @@ The full IGDB API response is stored in `IGDBMatch.raw_response`. This includes 
 
 ### What We Query
 
-Two API calls per game:
+Up to three API calls per game:
 
 1. **Game details** (`/games` endpoint): All fields listed above via Apicalypse query with field expansion
 2. **Time to beat** (`/game_time_to_beats` endpoint): Separate endpoint, queried by game ID
+3. **Collection memberships** (`/collection_memberships` endpoint): Only when the game has collections — fetches the per-(game, collection) membership `type` (Member vs Spin-off), which is not present on the `/games` payload
 
 Platform filter covers the full PlayStation family: PS1 (7), PS2 (8), PS3 (9), PSP (38), Vita (46), PS4 (48), PSVR (165), PS5 (167), PSVR2 (390).
 
@@ -100,7 +102,7 @@ M2M through table. Links Concept to Company with role flags: `is_developer`, `is
 Normalized IGDB franchise or collection. Fields: `igdb_id` (indexed, NOT globally unique), `name`, `slug` (unique), `source_type` (choice: `'franchise'` or `'collection'`). The composite unique constraint `(igdb_id, source_type)` allows the same numeric ID to exist in both IGDB namespaces without collision — franchise id 222 ("NCAA") and collection id 222 ("Army of Two") get two distinct rows.
 
 ### ConceptFranchise
-M2M through table. Links Concept to Franchise. `is_main` is true exactly when the Franchise is IGDB's primary franchise for this game (derived from the plural `franchises[0]` field at enrichment time, with the singular `franchise` field as a fallback). Collections never have `is_main=True`. Unique on (concept, franchise), indexed on `is_main` for browse-page queries.
+M2M through table. Links Concept to Franchise. `is_main` is true exactly when the Franchise is IGDB's primary franchise for this game (derived from the plural `franchises[0]` field at enrichment time, with the singular `franchise` field as a fallback). Collections never have `is_main=True`. `is_spinoff` is true when IGDB types this game's membership in a **collection** as a "Spin-off" (membership type 2) rather than a normal "Member" — collection links only, always False for franchise links. The flag is per-(game, collection), so it lives on the link, not the Concept or Franchise (a game can be a Member of one series and a Spin-off of another). Unique on (concept, franchise); indexed on `is_main` and on `(franchise, is_spinoff)` for the suppression queries. `is_spinoff` travels intact through `Concept.absorb()` (the row is re-pointed, not recreated).
 
 ### GameEngine
 Normalized IGDB game engine (Unreal, Unity, Decima, RE Engine, etc). Fields: `igdb_id` (unique), `name`, `slug`, `description`, `logo_image_id`, `companies` (M2M through `EngineCompany`). `logo_url(size='logo_med')` method mirrors `Company.logo_url`. Admin-editable via Django admin with `filter_horizontal` on companies.
@@ -194,6 +196,8 @@ Each Concept matches independently. Family-based propagation was removed because
 3. Otherwise no `is_main` flag is set. The concept's `Franchise` links exist but none is primary — typically a collection-only concept (e.g. Astro Bot).
 
 Collections never receive `is_main=True` regardless of how they appear in the response. IGDB's collection taxonomy explicitly does not designate a primary.
+
+**Spin-off memberships.** The game payload's `collections` array is flat — it does not say *how* a game relates to each series. That distinction lives only on IGDB's `/collection_memberships` endpoint, where each (game, collection) row carries a `type`: **1 = "Member"** (normal) or **2 = "Spin-off"** (e.g. Agents of Mayhem is a Member of the Agents of Mayhem series but a *Spin-off* of Saints Row). When a matched game has collections, `_create_concept_franchises` makes one extra `IGDBService.fetch_collection_memberships([game_id])` call and stamps `ConceptFranchise.is_spinoff` per collection link (franchise links are never spin-offs). The call is skipped entirely when the game has no collections, and it runs once per match enrichment (not per sync). Spin-off links are suppressed from the Series' game list/counts ([franchise_views.py](../../trophies/views/franchise_views.py)) and from collection badge stage coverage ([badge_coverage_service.py](../../trophies/services/badge_coverage_service.py)); a future "spin-offs only" view is a trivial filter flip since the data is retained. Because the type was never stored in `raw_response`, the one-time/repair backfill (`backfill_collection_spinoffs`) re-queries IGDB rather than reading the cache.
 
 Deduplication and identity lookups use the composite `(igdb_id, source_type)` key throughout. An earlier implementation dedup'd by `igdb_id` alone, which silently collapsed franchise id 222 ("NCAA") into collection id 222 ("Army of Two") and corrupted thousands of `ConceptFranchise` links across the database. The recovery was a schema migration (dropping the old global-unique constraint), an enrichment-code fix, and a full rebuild via `rebuild_franchises_from_cache --wipe`. If franchise data ever looks suspicious again, run `inspect_franchise_data` to check for drift between the raw IGDB response and the stored links.
 
