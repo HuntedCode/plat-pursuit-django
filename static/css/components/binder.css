@@ -45,7 +45,7 @@
     background: var(--paper);
     border: 1px solid var(--paper-edge); border-left-width: 0;
     border-radius: 4px 12px 12px 4px;
-    padding: 22px 24px 30px 56px;  /* left padding leaves room for the binding edge + rings */
+    padding: 44px 24px 30px 56px;  /* left: binding edge + rings; top: clears the page tab */
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), inset 4px 0 0 color-mix(in oklab, var(--pp-bg-1) 70%, black 30%);
 }
 /* Binding edge: a darker stripe down the left with the rings threaded through it. */
@@ -61,7 +61,7 @@
 
 /* Page tab: a protruding flag on the outer (right) edge, color-keyed per section palette. */
 .pp-binder__page-tab {
-    position: absolute; top: 16px; right: -1px;
+    position: absolute; top: 12px; right: -1px;
     font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
     color: #0c0f14; background: var(--tab, #6b7280);
     padding: 4px 12px 4px 14px; border-radius: 6px 0 0 6px;

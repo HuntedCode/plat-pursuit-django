@@ -36,7 +36,8 @@ def _resolve_layer_url(path):
 
 
 def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
-                      earned=_UNSET, progress=_UNSET, include_live_stats=True):
+                      earned=_UNSET, progress=_UNSET, include_live_stats=True,
+                      current_rank=_UNSET, series_xp=_UNSET):
     """Build the Frame data dict for a single-tier Badge.
 
     state is derived from the viewer's progress:
@@ -63,6 +64,12 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
     both, and the badge FKs select_related in the caller, this issues ZERO queries/Redis
     per call — safe in a loop over hundreds of badges. Defaults preserve the single-hero
     behavior (query everything, include live stats).
+
+    To show the back-of-card live stats in a batch surface WITHOUT the per-badge Redis/DB
+    fan-out, pass them pre-fetched via `current_rank=` (from the batched
+    redis_leaderboard.get_earners_ranks) and `series_xp=` (from the denormalized
+    ProfileGamification.series_badge_xp); these win over include_live_stats and are applied
+    only to earned badges.
     """
     from trophies.models import UserBadge, UserBadgeProgress
 
@@ -79,9 +86,9 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
     state = "earned"
     earned_date = None
     progress_pct = None
-    earn_rank = None       # permanent "Nth profile to earn this tier" (engraving)
-    current_rank = None    # live per-series earners leaderboard position
-    series_xp = None       # viewer's XP for this badge's series
+    earn_rank = None         # permanent "Nth profile to earn this tier" (engraving)
+    current_rank_v = None    # live per-series earners leaderboard position (resolved below)
+    series_xp_v = None       # viewer's XP for this badge's series (resolved below)
 
     if profile is not None:
         earned_obj = (
@@ -94,12 +101,19 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
             state = earned_obj.status
             earned_date = date_filter(earned_obj.earned_at, "M j, Y")
             earn_rank = earned_obj.earn_rank
-            if include_live_stats:
+            # Live back-of-card stats: a pre-fetched (batched) value wins; otherwise compute
+            # per-badge only when include_live_stats is on (the single-hero path).
+            if current_rank is not _UNSET:
+                current_rank_v = current_rank
+            elif include_live_stats:
                 from trophies.services.redis_leaderboard_service import get_earners_rank
-                from trophies.services.xp_service import calculate_series_xp
                 # get_earners_rank is already 1-indexed (or None if not on the board).
-                current_rank = get_earners_rank(badge.series_slug, profile.id)
-                series_xp = calculate_series_xp(profile, badge.series_slug)
+                current_rank_v = get_earners_rank(badge.series_slug, profile.id)
+            if series_xp is not _UNSET:
+                series_xp_v = series_xp
+            elif include_live_stats:
+                from trophies.services.xp_service import calculate_series_xp
+                series_xp_v = calculate_series_xp(profile, badge.series_slug)
             if state == "maintenance":
                 # Lapsed: show the current repair progress, not the full earned bar.
                 prog = (
@@ -176,10 +190,10 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["funded_by"] = funder.display_psn_username or funder.psn_username  # artwork-funder credit (back footer)
     if earn_rank:
         frame["engraving_rank"] = earn_rank   # permanent "Nth to earn" engraving
-    if current_rank is not None:
-        frame["current_rank"] = current_rank  # live per-series position (labeled "Current")
-    if series_xp:
-        frame["series_xp"] = series_xp
+    if current_rank_v is not None:
+        frame["current_rank"] = current_rank_v  # live per-series position (labeled "Current")
+    if series_xp_v:
+        frame["series_xp"] = series_xp_v
 
     # FUTURE: user frame customization layers onto `frame` here (see module docstring).
     return frame

@@ -416,6 +416,25 @@ def get_earners_rank(series_slug, profile_id):
     return _get_rank(_earners_scores_key(series_slug), profile_id)
 
 
+def get_earners_ranks(series_slugs, profile_id):
+    """Batch version of get_earners_rank: {series_slug: rank|None} for many series in ONE
+    Redis pipeline round-trip (one ZREVRANK per series, same member). For surfaces that
+    render many badges at once (the collection album) so rank lookups don't fan out to N
+    round-trips."""
+    slugs = list(dict.fromkeys(series_slugs))  # de-dupe, preserve order
+    if not slugs:
+        return {}
+    member = _member(profile_id)
+    pipe = redis_client.pipeline()
+    for slug in slugs:
+        pipe.zrevrank(_earners_scores_key(slug), member)
+    results = pipe.execute()
+    return {
+        slug: (rank + 1 if rank is not None else None)
+        for slug, rank in zip(slugs, results)
+    }
+
+
 def get_earners_count(series_slug):
     """Get total earners count for a series."""
     return _get_count(_earners_scores_key(series_slug))

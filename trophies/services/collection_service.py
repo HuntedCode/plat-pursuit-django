@@ -15,6 +15,7 @@ from collections import defaultdict
 
 from trophies.models import Badge, UserBadge, UserBadgeProgress
 from trophies.services.frame_service import build_badge_frame
+from trophies.services.redis_leaderboard_service import get_earners_ranks
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ _SECTION_LABELS = {
 }
 _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
 _TIER_NAME = {1: 'bronze', 2: 'silver', 3: 'gold', 4: 'platinum'}
-PAGE_SIZE = 12  # frames per binder page (new badge type always starts a fresh page)
+PAGE_SIZE = 16  # frames per binder page = 4 series x 4 tiers (a new badge type starts a fresh page)
 
 
 def _live_badges():
@@ -57,6 +58,14 @@ def _build_pages(profile):
         for pr in UserBadgeProgress.objects.filter(profile=profile, badge_id__in=badge_ids)
     }
 
+    # Back-of-card live stats, batched once (not per badge): series XP from the denormalized
+    # ProfileGamification.series_badge_xp (one read), and current earners rank from a single
+    # pipelined Redis round-trip over the EARNED series only.
+    gam = getattr(profile, 'gamification', None)
+    series_xp_map = (getattr(gam, 'series_badge_xp', None) or {}) if gam else {}
+    earned_series = {b.series_slug for b in badges if b.id in earned_map and b.series_slug}
+    rank_map = get_earners_ranks(earned_series, profile.id)
+
     by_type = defaultdict(list)
     for b in badges:
         by_type[b.badge_type].append(b)
@@ -80,7 +89,8 @@ def _build_pages(profile):
             frame = build_badge_frame(
                 b, profile,
                 earned=earned_map.get(b.id), progress=progress_map.get(b.id),
-                include_live_stats=False, allow_flip=False,
+                include_live_stats=False, allow_flip=True,
+                current_rank=rank_map.get(b.series_slug), series_xp=series_xp_map.get(b.series_slug),
             )
             frame['dom_id'] = f"card-{b.set_number or b.id}"
             frames.append(frame)
