@@ -225,6 +225,16 @@ Before exiting plan mode, specifically search:
 
 In addition to the standard inline audit, check for Django-specific security pitfalls (CSRF, SQL injection, XSS in templates, unsafe querystring handling).
 
+### Phase 2 Additions: Testing (per global Testing Discipline)
+
+The pytest harness is the home for committed tests (see **[docs/guides/testing.md](docs/guides/testing.md)**). Tests live in `tests/` (engine logic in `tests/engine/`), use factories from `tests/factories.py`, and run against the test DB:
+
+- Spin up the test DB: `docker compose -f docker-compose.test.yml up -d`
+- Run: `& .\venv\Scripts\python.exe -m pytest tests/engine/<file>.py -q -p no:warnings` (targeted), or `pytest` for the suite
+- CI gate is LIVE (branch protection requires the `test` job), so the full suite must be green before merge
+
+Write tests in the same branch as the logic: new services, API endpoints, model methods, management commands, and the per-user/whale-safety guarantees all warrant coverage. Throwaway render/shell scripts are smoke checks during dev, NOT a substitute for a committed test.
+
 ### Phase 3 Additions: Style Audit Criteria
 
 The final audit should review every new/modified template and JS file against:
