@@ -75,7 +75,9 @@
 .pp-binder__page-number { margin-top: 16px; text-align: center; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 
 /* ---- Sleeve grid ---- */
-.pp-binder__sleeves { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+/* 4 columns = one badge series per row (its 4 tiers: bronze -> silver -> gold ->
+   platinum), so a series reads as a unit and each card gets room to breathe. */
+.pp-binder__sleeves { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .pp-binder__sleeve {
     position: relative; display: grid; place-items: center;
     padding: 10px; border-radius: 10px;
@@ -111,6 +113,7 @@
 
 /* ---- Mobile: force Single + Gallery below 1024px ---- */
 @media (max-width: 1023px) {
-    .pp-binder__sleeves { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    /* Mobile: 2 columns keeps the badges readable; a series spans two rows. */
+    .pp-binder__sleeves { grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .pp-binder__controls-group--desktop { display: none; }
 }
