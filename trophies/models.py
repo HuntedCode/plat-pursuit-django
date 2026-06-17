@@ -1703,12 +1703,12 @@ class Badge(models.Model):
     ]
     BADGE_TYPES = [
         ('series', 'Series'),
+        ('franchise', 'Franchise'),
         ('collection', 'Collection'),
         ('megamix', 'Megamix'),
         ('developer', 'Developer'),
         ('user', 'User'),
-        ('genre', 'Genre'),
-        ('misc', 'Miscellaneous'),
+        ('event', 'Event'),
     ]
 
     name = models.CharField(max_length=255)
@@ -1750,7 +1750,7 @@ class Badge(models.Model):
     )
     set_number = models.PositiveIntegerField(
         null=True, blank=True,
-        help_text="Edition / print-run number engraved on the Frame. Admin-assigned per tier (4 consecutive numbers per series).",
+        help_text="Edition / print-run number engraved on the Frame. Admin-assigned per tier (4 consecutive numbers per series), numbered independently within each badge type (every type starts its own sequence at 1).",
     )
     rarity_pct = models.FloatField(
         null=True, blank=True,
@@ -1893,14 +1893,16 @@ class Badge(models.Model):
     @classmethod
     def assign_next_set_numbers(cls, series_slugs):
         """Stamp the next sequential set numbers onto each series' four tier badges
-        (Bronze=N, Silver=N+1, Gold=N+2, Platinum=N+3). Atomic, so each series gets
-        a contiguous, non-overlapping block even under concurrent admin actions.
-        Skips a series that doesn't have exactly 4 tiers (1-4) or that already has
-        set numbers. Returns {'assigned': [...], 'invalid_tiers': [...],
+        (Bronze=N, Silver=N+1, Gold=N+2, Platinum=N+3). Numbering is scoped PER BADGE TYPE:
+        each type (Series, Franchise, Developer, ...) is its own "set" with an independent
+        sequence starting at 1, so the same number can appear once per type. Atomic, so each
+        series gets a contiguous, non-overlapping block even under concurrent admin actions.
+        Skips a series that doesn't have exactly 4 tiers (1-4) or that already has set
+        numbers. Returns {'assigned': [...], 'invalid_tiers': [...],
         'already_numbered': [...]} (slugs)."""
         result = {'assigned': [], 'invalid_tiers': [], 'already_numbered': []}
         with transaction.atomic():
-            next_num = (cls.objects.aggregate(m=Max('set_number'))['m'] or 0) + 1
+            next_by_type = {}  # badge_type -> next set_number (independent sequence per type)
             for slug in dict.fromkeys(series_slugs):  # dedup, preserve order
                 tiers = list(cls.objects.filter(series_slug=slug).order_by('tier'))
                 if [b.tier for b in tiers] != [1, 2, 3, 4]:
@@ -1909,10 +1911,15 @@ class Badge(models.Model):
                 if any(b.set_number for b in tiers):
                     result['already_numbered'].append(slug)
                     continue
+                btype = tiers[0].badge_type  # a series' four tiers share one badge type
+                if btype not in next_by_type:
+                    next_by_type[btype] = (
+                        cls.objects.filter(badge_type=btype).aggregate(m=Max('set_number'))['m'] or 0
+                    ) + 1
                 for badge in tiers:
-                    badge.set_number = next_num
+                    badge.set_number = next_by_type[btype]
                     badge.save(update_fields=['set_number'])
-                    next_num += 1
+                    next_by_type[btype] += 1
                 result['assigned'].append(slug)
         return result
 
