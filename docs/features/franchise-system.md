@@ -32,6 +32,7 @@ Both `Franchise` and `ConceptFranchise` are fully documented in [IGDB Integratio
 
 - `Franchise.source_type`: `'franchise'` or `'collection'`. Browse filters franchises by `is_main=True` and collections by "has orphan concept".
 - `ConceptFranchise.is_main`: true for at most one franchise-type link per concept. Never true for collections.
+- `ConceptFranchise.is_spinoff`: true when IGDB types a game's membership in a **collection** as a "Spin-off" (e.g. Agents of Mayhem under Saints Row). Collection links only; always false for franchises. Spin-off members are hidden from the collection's game list/counts but still shown on the game's *own* detail About card (a spin-off legitimately belongs to its parent series from the game's side).
 
 ## Key Flows
 
@@ -64,7 +65,7 @@ Picked via three parallel `Subquery` annotations so the fallback happens in the 
 
 ### Detail Page Grouping
 
-The detail view fetches all games in concepts linked to the franchise, then groups them by `IGDBMatch.igdb_id`. Concepts that share an IGDB ID represent the same game across different platforms / regions (e.g., Resident Evil 4 Remake on PS4 and PS5). Groups are treated as a single "game" card in the UI with stacked "version rows" inside.
+The detail view fetches all games in concepts linked to the franchise (excluding `is_spinoff=True` members, so a Series like Saints Row doesn't list games IGDB types as spin-offs of it — franchise-type links are never spin-offs, so this is a no-op for them), then groups them by `IGDBMatch.igdb_id`. Concepts that share an IGDB ID represent the same game across different platforms / regions (e.g., Resident Evil 4 Remake on PS4 and PS5). Groups are treated as a single "game" card in the UI with stacked "version rows" inside.
 
 Games without an IGDB match become their own single-entry groups. This preserves them in the list rather than dropping them.
 
@@ -131,6 +132,8 @@ Browse page sort is simpler: alphabetical (default), reverse alphabetical, most 
 
 - **`is_main` precedence must stay in sync**: `IGDBService._create_concept_franchises` (live enrichment) and `backfill_franchise_main_flag` (recovery command) both derive the main flag. They MUST use identical precedence rules (plural[0] first, fall back to singular). If you change one, change both and retest.
 
+- **Spin-off flag is collection-only and lives on the link**: `ConceptFranchise.is_spinoff` is set only for collection (Series) memberships, from IGDB's `/collection_memberships` type (2 = Spin-off). A game can be a normal Member of one series and a Spin-off of another, so the flag is per-link, never per-concept. It suppresses the game from the *collection's* list/counts and from collection badge stage coverage, but NOT from the game's own About card (a spin-off still belongs to its parent series). The signal is not in `raw_response`, so the only ways to populate it are live enrichment (one extra IGDB call when a game has collections) or the `backfill_collection_spinoffs` command (which re-queries IGDB). Don't expect a cache rebuild to recover it.
+
 - **Progress rings use conic-gradient, not SVG**: The `w-7 h-7` progress ring on version rows is a pure CSS conic-gradient with a masked inner circle — no SVG, no JS. Integer percentages only (`ProfileGame.progress` is an IntegerField). Font size is `text-[8px]` to fit inside the ring cleanly; don't bump it without checking every browser.
 
 - **Detail page sorts operate on groups, not games**: Sorting is applied AFTER the IGDB-ID grouping, so "Most versions first" is groups-with-most-versions-first. Sorting individual games within a group would change the row order within each game card, which is a different (and less useful) behavior.
@@ -145,6 +148,7 @@ See [IGDB Integration → Management Commands](../architecture/igdb-integration.
 
 - `rebuild_franchises_from_cache`: Full rebuild from cached raw_response, no IGDB API calls
 - `backfill_franchise_main_flag`: Narrower — only recomputes is_main
+- `backfill_collection_spinoffs`: Stamps `is_spinoff` on collection links (re-queries IGDB `/collection_memberships`; the type isn't in cached raw_response). Supports `--dry-run`, `--limit`, `--batch-size`
 - `franchise_stats`: Read-only diagnostic
 - `inspect_franchise_data`: Single-concept / single-franchise diagnostic
 

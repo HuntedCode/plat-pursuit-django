@@ -749,7 +749,7 @@ class ConceptFranchiseInline(admin.TabularInline):
     model = ConceptFranchise
     fk_name = 'concept'
     extra = 0
-    fields = ('franchise', 'franchise_type', 'is_main')
+    fields = ('franchise', 'franchise_type', 'is_main', 'is_spinoff')
     readonly_fields = ('franchise_type',)
     autocomplete_fields = ('franchise',)
     can_delete = True
@@ -3378,7 +3378,7 @@ class FranchiseConceptInline(admin.TabularInline):
     model = ConceptFranchise
     fk_name = 'franchise'
     extra = 0
-    fields = ('concept', 'is_main')
+    fields = ('concept', 'is_main', 'is_spinoff')
     autocomplete_fields = ('concept',)
     can_delete = True
 
@@ -3440,8 +3440,8 @@ class ConceptFranchiseAdmin(admin.ModelAdmin):
     collisions) — list_filter on is_main + source_type lets you find
     suspicious patterns quickly.
     """
-    list_display = ('concept', 'franchise', 'franchise_source_type', 'is_main')
-    list_filter = ('is_main', 'franchise__source_type')
+    list_display = ('concept', 'franchise', 'franchise_source_type', 'is_main', 'is_spinoff')
+    list_filter = ('is_main', 'is_spinoff', 'franchise__source_type')
     search_fields = ('concept__unified_title', 'concept__concept_id', 'franchise__name')
     autocomplete_fields = ('concept', 'franchise')
     list_select_related = ('concept', 'franchise')
