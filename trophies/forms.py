@@ -669,8 +669,15 @@ class ProfileSettingsForm(forms.ModelForm):
 class BadgeCreationForm(forms.Form):
     name = forms.CharField(max_length=255, required=True, label="Name", widget=forms.TextInput(attrs={'class': 'input w-full'}))
     series_slug = forms.SlugField(max_length=100, required=False, label="Series Slug", widget=forms.TextInput(attrs={'class': 'input w-full'}))
-    badge_type = forms.ChoiceField(choices=[('series', 'Series'), ('collection', 'Collection'), ('megamix', 'Megamix'), ('developer', 'Developer'), ('user', 'User'), ('genre', 'Genre')], required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
+    badge_type = forms.ChoiceField(required=True, label="Badge Type", widget=forms.Select(attrs={'class': 'select w-full'}))
     submitted_by = forms.CharField(max_length=100, required=False, label="Submitted By (PSN Username)", widget=forms.TextInput(attrs={'class': 'input w-full', 'placeholder': 'PSN username of submitter'}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Source the type options from the model so the create form stays in sync as badge
+        # types are added/removed (Badge is imported locally to avoid a circular import).
+        from trophies.models import Badge
+        self.fields['badge_type'].choices = Badge.BADGE_TYPES
 
     def get_badge_data(self):
         if self.is_valid():
