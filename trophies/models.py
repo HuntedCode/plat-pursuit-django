@@ -358,11 +358,8 @@ class Profile(models.Model):
         if should_remove_roles:
             from trophies.services.badge_service import notify_bot_role_removed
 
-            # Collect badge roles
-            all_role_ids.update(
-                UserBadge.objects.filter(profile=self, badge__discord_role_id__isnull=False)
-                .values_list('badge__discord_role_id', flat=True)
-            )
+            # Badges no longer grant Discord roles (retired); only milestone + premium
+            # roles are managed now.
 
             # Collect milestone roles
             all_role_ids.update(
@@ -1719,7 +1716,6 @@ class Badge(models.Model):
     display_title = models.CharField(max_length=100, blank=True)
     display_series = models.CharField(max_length=100, blank=True)
     title = models.ForeignKey('Title', on_delete=models.SET_NULL, null=True, blank=True, related_name='badge_title', help_text='Title awarded to user upon earning.')
-    discord_role_id = models.BigIntegerField(null=True, blank=True, help_text="Discord role ID to auto assign upon earning the badge (optional).")
     tier = models.IntegerField(choices=TIER_CHOICES, default=1)
     badge_type = models.CharField(max_length=10, choices=BADGE_TYPES, default='series')
     requires_all = models.BooleanField(default=True, help_text="If True, user must complete all qualifying Concepts. If false, only the min_required.")

@@ -36,7 +36,7 @@ def test_dlc_on_existing_game_refreshes_its_series():
     with mock.patch(PATCH, return_value=(1, 0, 0, 0)) as m:
         call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
 
-    m.assert_called_once_with('series-dlc')
+    m.assert_called_once_with('series-dlc', skip_notifications=True)
 
 
 def test_first_sync_game_is_not_dlc():
@@ -104,7 +104,7 @@ def test_multiple_dlc_groups_on_one_game_refresh_series_once():
     with mock.patch(PATCH, return_value=(1, 0, 0, 0)) as m:
         call_command('detect_dlc_and_refresh', '--since', watermark.isoformat())
 
-    m.assert_called_once_with('series-multi')
+    m.assert_called_once_with('series-multi', skip_notifications=True)
 
 
 def test_watermark_advances_after_run_but_not_on_dry_run():
