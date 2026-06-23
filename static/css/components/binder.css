@@ -14,6 +14,7 @@
     --paper: color-mix(in oklab, var(--pp-bg-2) 90%, #c9c4b8 10%);
     --paper-edge: color-mix(in oklab, var(--pp-bg-1) 80%, black 20%);
     --ring: color-mix(in oklab, var(--pp-text) 30%, transparent);
+    --pp-spine-w: 54px;  /* center spine width; the flip pivot is HALF this (see transform-origin) */
     position: relative;
 }
 
@@ -161,17 +162,57 @@
 .pp-binder__spread-empty { display: none; }
 .pp-binder[data-mode="single"] .pp-binder__page:not(.is-current) { display: none; }
 
-/* ---- Spread / Flipbook mode (desktop only): two facing pages + center spine ----
- * STAGE 1: instant swap between spreads (one .is-current spread shown). The 3D
- * page-flip animation layers on in stage 2 (perspective is already set up here). */
-.pp-binder[data-mode="spread"] .pp-binder__pages-stage { perspective: 2400px; }
+/* ---- Spread / Flipbook mode (desktop only): two facing pages + center spine ---- */
+.pp-binder[data-mode="spread"] .pp-binder__pages-stage {
+    position: relative; max-width: 1340px; margin: 0 auto;  /* edge drag region lines up with the spread */
+}
 .pp-binder[data-mode="spread"] .pp-binder__spread {
-    display: flex; align-items: stretch;
-    width: 100%; max-width: 1340px;
+    align-items: stretch; width: 100%; max-width: 1340px;
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.4);
     border-radius: 4px;
 }
-.pp-binder[data-mode="spread"] .pp-binder__spread:not(.is-current) { display: none; }
+/* At rest only the current spread shows, as a plain flex row -- NO perspective/preserve-3d.
+ * A live 3D context at rest interferes with :hover hit-testing on the nested cards (their
+ * gleam/lift stops firing); we switch it on only for the duration of a flip below. */
+.pp-binder[data-mode="spread"] .pp-binder__spread { display: none; }
+.pp-binder[data-mode="spread"] .pp-binder__spread.is-current { display: flex; margin: 0 auto; }
+
+/* ---- 3D scene: ON only while .pp-binder--flipping (a flip is animating) ----
+ * is-current paints above via a sub-pixel translateZ -- z-index is unreliable in a
+ * preserve-3d context, so an explicit Z delta is the only thing every browser respects. */
+.pp-binder--flipping[data-mode="spread"] .pp-binder__pages-stage { perspective: 2400px; transform-style: preserve-3d; }
+.pp-binder--flipping[data-mode="spread"] .pp-binder__spread { transform-style: preserve-3d; }
+.pp-binder--flipping[data-mode="spread"] .pp-binder__spread.is-current {
+    position: relative; z-index: 2; transform: translateZ(0.5px);
+}
+.pp-binder--flipping[data-mode="spread"] .pp-binder__spread.is-next {
+    display: flex; position: absolute; top: 0; left: 0; right: 0; margin: 0 auto; z-index: 1;
+}
+
+/* The flipping leaf: the current spread's right page (forward) or left page (backward)
+ * rotates around the SPINE CENTRE. The pivot is pushed HALF the spine width past the page's
+ * own inner edge (derived from --pp-spine-w so the two stay in sync). */
+.pp-binder[data-mode="spread"] .pp-binder__flip-leaf {
+    transform-style: preserve-3d; z-index: 4; will-change: transform;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7), 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+.pp-binder[data-mode="spread"] .pp-binder__page--right.pp-binder__flip-leaf { transform-origin: calc(var(--pp-spine-w) / -2) center; }
+.pp-binder[data-mode="spread"] .pp-binder__page--left.pp-binder__flip-leaf  { transform-origin: calc(100% + var(--pp-spine-w) / 2) center; }
+/* Front content hides past 90deg; the pre-rotated back face (a clone of the destination's
+ * facing page) takes over so the motion shows real content turning over. */
+.pp-binder[data-mode="spread"] .pp-binder__flip-leaf > :not(.pp-binder__flip-leaf-back) { backface-visibility: hidden; }
+.pp-binder__flip-leaf-back {
+    position: absolute; inset: 0; backface-visibility: hidden;
+    transform: rotateY(180deg); background: var(--paper); border-radius: inherit;
+}
+/* No tab override needed: our page tab is position:absolute, so the cloned tab renders as a
+ * correct small flag and turns over with the page (the back face lands at net 0deg, so no
+ * mirror jump). The workshop's relative override existed only for its sticky tab. */
+
+/* Suppress text selection while a flip is mid-drag. */
+.pp-binder.pp-binder__flip-dragging, .pp-binder.pp-binder__flip-dragging * {
+    user-select: none !important; -webkit-user-select: none !important;
+}
 
 /* Pages bind to the CENTER spine, not the left edge: reset the single-mode binding
  * chrome and lean each page's inner shadow toward the spine. */
@@ -202,7 +243,7 @@
 
 /* Center spine with three rings. */
 .pp-binder[data-mode="spread"] .pp-binder__spine {
-    display: flex; flex: 0 0 54px;
+    display: flex; flex: 0 0 var(--pp-spine-w);
     flex-direction: column; align-items: center; justify-content: center; gap: 14%;
     background:
         linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.82) 50%, rgba(0, 0, 0, 0.5)),
@@ -231,7 +272,10 @@
  * stay readable; two-up makes the cards too small. */
 @media (max-width: 1023px) {
     .pp-binder__sleeves { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    /* Flipbook needs desktop width: hide its chip, surface the explainer note. */
+}
+/* Flipbook needs ~1320px to fit two 4-up pages of 128px frames without overflow; below that
+ * hide its chip and surface the explainer note. Kept in sync with FLIPBOOK_MIN in binder.js. */
+@media (max-width: 1319px) {
     .pp-binder__view-chip--desktop { display: none; }
     .pp-binder__flip-hint { display: block; }
 }
