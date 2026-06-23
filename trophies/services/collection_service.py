@@ -115,9 +115,12 @@ def _build_sets(profile, sort=DEFAULT_SORT):
                 include_live_stats=False, allow_flip=True,
                 current_rank=rank_map.get(b.series_slug), series_xp=series_xp_map.get(b.series_slug),
             )
-            # Use the badge id (globally unique) for the DOM anchor, since set_number is now
-            # only unique WITHIN a badge type (Series #1 and Franchise #1 both exist).
+            # Use the badge id (globally unique) for the binder card's DOM anchor, since
+            # set_number is now only unique WITHIN a badge type (Series #1 and Franchise #1
+            # both exist). The list "View ->" deep-links to it. series_slug powers the
+            # per-series badge-detail link in both views.
             frame['dom_id'] = f"card-{b.id}"
+            frame['series_slug'] = b.series_slug
             frames.append(frame)
 
         # Each set is its own binder view; pages are numbered WITHIN the set.
@@ -160,20 +163,16 @@ def _flatten_for_list(binder_sets):
     """Flatten the binder sets into the row list + theme set the sibling list view needs.
 
     Same data, different presentation (the Binder is the display piece, the list is the
-    hunting tool). Each row carries its set's label/palette and a `row_id` paired with the
-    frame's binder `dom_id` (row-<id> <-> card-<id>) for cross-view deep-linking.
+    hunting tool). Each row carries its set's label/palette, the frame's binder `dom_id`
+    (the list "View ->" deep-links to it), and `series_slug` for the detail link.
     """
     list_badges, themes = [], {}
     for s in binder_sets:
         themes.setdefault(s['label'], s['palette'])
         for page in s['pages']:
             for frame in page['frames']:
-                list_badges.append({
-                    **frame,
-                    'theme': s['label'],
-                    'palette': s['palette'],
-                    'row_id': frame['dom_id'].replace('card-', 'row-', 1),
-                })
+                # series_slug already rides along on the frame (set in _build_sets).
+                list_badges.append({**frame, 'theme': s['label'], 'palette': s['palette']})
     return list_badges, [{'name': name, 'palette': palette} for name, palette in themes.items()]
 
 

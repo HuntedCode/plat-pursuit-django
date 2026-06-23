@@ -205,6 +205,35 @@ def test_frames_use_id_based_dom_anchor_and_allow_flip():
     assert frame['allow_flip'] is True
 
 
+def test_frames_carry_series_slug_for_detail_link():
+    """Each frame carries series_slug -- it powers the per-series detail link in the binder
+    header and the series-name link in the list view."""
+    profile = ProfileFactory()
+    _series('rs-link')
+
+    frame = _all_frames(build_collection_context(profile))[0]
+
+    assert frame['series_slug'] == 'rs-link'
+
+
+def test_binder_renders_series_header_linking_to_detail():
+    """The binder groups each row of four tiers under a header that names the series, shows a
+    tier pip per badge, and links to its badge detail page (regroup + url integration)."""
+    from django.template.loader import render_to_string
+
+    profile = ProfileFactory()
+    badges = _series('rs-render')
+    UserBadgeFactory(profile=profile, badge=badges[0])  # bronze earned -> one filled pip
+
+    ctx = build_collection_context(profile)
+    html = render_to_string('components/binder.html', {'binder_sets': ctx['binder_sets']})
+
+    assert 'pp-binder__series-header' in html
+    assert '/my-pursuit/badges/rs-render/' in html          # links to the series detail page
+    assert html.count('pp-binder__series-pip') >= 4          # four tier pips
+    assert 'is-filled' in html                               # the earned bronze pip
+
+
 def test_series_xp_comes_from_denormalized_gamification(monkeypatch):
     """The earned card's back-of-card series XP is read from the denormalized
     ProfileGamification.series_badge_xp (one read), not recomputed per badge."""
@@ -287,16 +316,6 @@ def test_list_badges_flatten_every_frame_with_theme_and_palette():
         assert b['theme'] and b['palette']        # section context attached
         assert b['dom_id'].startswith('card-')
         assert b['series_name']                   # carries the frame fields
-
-
-def test_list_row_id_pairs_with_binder_card_anchor():
-    """row-<id> in the list must pair with card-<id> in the binder for cross-view jumps."""
-    profile = ProfileFactory()
-    _series('rs-pair')
-
-    badge = build_collection_context(profile)['list_badges'][0]
-
-    assert badge['row_id'] == badge['dom_id'].replace('card-', 'row-')
 
 
 def test_themes_are_distinct_sections_in_canonical_order():

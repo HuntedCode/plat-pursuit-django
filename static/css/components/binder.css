@@ -141,12 +141,77 @@
 .pp-binder__sleeves { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; }
 .pp-binder__sleeve {
     position: relative; display: grid; place-items: center;
+    min-width: 0;  /* let the 4 grid tracks shrink below card min-content (rank numbers etc.) */
     padding: 10px; border-radius: 10px;
     background: color-mix(in oklab, var(--pp-bg-1) 55%, transparent);
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 8%, transparent), inset 0 2px 8px rgba(0, 0, 0, 0.22);
 }
+/* Cards fill their grid cell, capped at the frame's natural width, so four always fit inside
+ * the series container instead of overflowing it when the cell is a touch narrower than 248px
+ * (the Frame is otherwise a fixed width with no max). Spread mode caps at its 128px token. */
+.pp-binder__sleeve .pp-frame { width: 100%; max-width: var(--pp-frame-w); min-width: 0; }
+
 .pp-binder__sleeve:target { animation: ppSleevePulse 2.2s ease-out 1; }
 @keyframes ppSleevePulse { 0% { box-shadow: 0 0 0 2px var(--pp-primary), inset 0 0 0 1px var(--pp-primary); } 100% { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 8%, transparent), inset 0 2px 8px rgba(0, 0, 0, 0.22); } }
+
+/* ---- Series group: a thin container per row of four tiers ----
+ * Each series gets a labelled container so its four cards read as one set. The header is the
+ * container's lid: it names the series, shows a tier pip per badge, and links to the badge
+ * detail page. Tinted to the set palette via --tab. In the flipbook the container + header are
+ * stripped, leaving the same 4x4 browse grid (the cards keep their own spread sizing). */
+.pp-binder__groups { display: flex; flex-direction: column; gap: 12px; }
+
+.pp-binder__series-group {
+    padding: 6px;
+    border: 1px solid color-mix(in oklab, var(--tab, var(--pp-primary)) 20%, var(--pp-border));
+    border-radius: 11px;
+    background: color-mix(in oklab, var(--tab, var(--pp-primary)) 4%, transparent);
+}
+.pp-binder__series-group[data-palette="cobalt"]  { --tab: #5b8def; }
+.pp-binder__series-group[data-palette="amber"]   { --tab: #e6a647; }
+.pp-binder__series-group[data-palette="emerald"] { --tab: #4cc08a; }
+.pp-binder__series-group[data-palette="violet"]  { --tab: #a679e0; }
+
+.pp-binder__series-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-bottom: 6px; padding: 6px 10px;
+    border-radius: 7px; text-decoration: none; color: var(--pp-text);
+    background: color-mix(in oklab, var(--tab, var(--pp-primary)) 13%, transparent);
+    border-left: 3px solid var(--tab, var(--pp-primary));
+    transition: background 160ms ease;
+}
+.pp-binder__series-header:hover,
+.pp-binder__series-header:focus-visible {
+    background: color-mix(in oklab, var(--tab, var(--pp-primary)) 24%, transparent);
+}
+.pp-binder__series-name {
+    font-weight: 700; font-size: 13.5px; letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.pp-binder__series-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.pp-binder__series-pips { display: inline-flex; gap: 4px; }
+.pp-binder__series-pip {
+    width: 9px; height: 9px; border-radius: 50%;
+    border: 1.5px solid color-mix(in oklab, var(--pp-text) 22%, transparent);
+    background: transparent;
+}
+.pp-binder__series-pip.is-filled { border-color: transparent; }
+.pp-binder__series-pip--bronze.is-filled   { background: rgb(220, 150, 80); }
+.pp-binder__series-pip--silver.is-filled   { background: rgb(220, 225, 235); }
+.pp-binder__series-pip--gold.is-filled     { background: rgb(245, 220, 130); }
+.pp-binder__series-pip--platinum.is-filled { background: rgb(220, 240, 250); }
+.pp-binder__series-chevron {
+    width: 16px; height: 16px; color: var(--pp-text-dim);
+    transition: color 160ms ease, transform 160ms ease;
+}
+.pp-binder__series-header:hover .pp-binder__series-chevron,
+.pp-binder__series-header:focus-visible .pp-binder__series-chevron {
+    color: var(--tab, var(--pp-primary)); transform: translateX(2px);
+}
+/* Flipbook is the "physical browse" view -- strip the container + header, keep the 4x4. */
+.pp-binder[data-mode="spread"] .pp-binder__groups { gap: 7px; }
+.pp-binder[data-mode="spread"] .pp-binder__series-group { padding: 0; border: none; border-radius: 0; background: none; }
+.pp-binder[data-mode="spread"] .pp-binder__series-header { display: none; }
 
 /* ---- Covers (front/back) ---- */
 .pp-binder__page--cover { min-height: 220px; display: grid; place-items: center; background: linear-gradient(135deg, color-mix(in oklab, var(--pp-bg-1) 80%, black 20%), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--pp-bg-1) 50%, black 50%); }

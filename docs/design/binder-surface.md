@@ -76,7 +76,8 @@ The Gallery preset systematically strips every piece of binder dressing — cove
 
 ### Cross-view navigation
 
-- **Binder ↔ List.** Bidirectional anchor links (`#card-NNNN` ↔ `#row-NNNN`) make jumping between presentations a one-click action with browser-native scroll-into-view behavior.
+- **List → Binder.** Each list row's "View ->" deep-links to its binder card (`#card-NNNN`); the controller shows the binder and the card scrolls/flips into view. (The prototype's reverse `#row-NNNN` jump was dropped in production — the binder links out to badge detail pages instead, via each series header.)
+- **Detail links.** Both views link out to badge detail pages: the List via each row's series name, the Binder via each series header.
 - **Persistent state.** Mode + presentation are not yet persisted across sessions in the prototype; production extraction should consider localStorage or user-preference persistence.
 
 ---

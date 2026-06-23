@@ -184,13 +184,6 @@
 }
 .pp-list__table tbody tr:last-child td { border-bottom: none; }
 
-/* Inbound deep-link from the binder (#row-<id>): pulse so the eye lands. */
-.pp-list__table tbody tr:target { animation: pp-row-target-pulse 2.4s ease-out 1; }
-@keyframes pp-row-target-pulse {
-    0%   { background: rgba(63, 205, 220, 0.28); box-shadow: inset 3px 0 0 rgba(63, 205, 220, 0.9); }
-    40%  { background: rgba(63, 205, 220, 0.18); box-shadow: inset 3px 0 0 rgba(63, 205, 220, 0.7); }
-    100% { background: var(--pp-list-row-1);     box-shadow: none; }
-}
 
 /* ── Cell adornments ──────────────────────────────────────────────── */
 .pp-list__tier {
@@ -244,6 +237,10 @@
 
 .pp-list__set-mark { color: rgba(255, 255, 255, 0.75); font-weight: 700; letter-spacing: 0.08em; font-size: 11.5px; }
 .pp-list__series   { color: rgba(255, 255, 255, 0.92); font-weight: 600; }
+/* Series name links to the badge detail page; reads as text until hovered/focused. */
+.pp-list__series-link { color: inherit; text-decoration: none; transition: color 140ms ease; }
+.pp-list__series-link:hover,
+.pp-list__series-link:focus-visible { color: rgb(63, 205, 220); text-decoration: underline; }
 .pp-list__progress { color: rgba(180, 220, 240, 0.85); font-variant-numeric: tabular-nums; font-size: 11.5px; }
 .pp-list__rank     { color: rgba(245, 220, 130, 0.9); font-weight: 700; font-size: 11.5px; }
 .pp-list__binder-link {

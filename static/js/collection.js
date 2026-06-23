@@ -1,9 +1,10 @@
 /* Collection page controller (baseline).
  * Two concerns: the Surface-level view toggle (Binder vs List, the binder's own
  * Binder/Gallery presentation toggle is separate and owned by binder.js), and the
- * list view's client-side sort / filter / search. The list "View ->" links set a
- * #card-<id> hash; binder.js flips to that page on hashchange, and this controller
- * just makes the binder visible first. Namespaced under window.PlatPursuit.Collection. */
+ * list view's client-side sort / filter / search. The list's "View ->" links set a
+ * #card-<id> hash; binder.js flips to that page on hashchange, and this controller just
+ * makes the binder visible first. (The binder links back via per-series detail-page links,
+ * which are plain server-rendered anchors.) Namespaced under window.PlatPursuit.Collection. */
 (function () {
     'use strict';
 
@@ -32,15 +33,10 @@
             });
         });
 
-        // Initial view: a deep-link hash wins (so #card-<id> lands in the binder and
-        // #row-<id> lands in the list), then the stored preference, else the Binder.
-        var hash = window.location.hash;
+        // Initial view: a #card-<id> deep-link lands in the binder, otherwise the stored
+        // preference, else the Binder.
         var initial = 'binder';
-        if (hash.indexOf('#row-') === 0) {
-            initial = 'list';
-        } else if (hash.indexOf('#card-') === 0) {
-            initial = 'binder';
-        } else {
+        if (window.location.hash.indexOf('#card-') !== 0) {
             try { initial = localStorage.getItem(STORAGE_KEY) || 'binder'; } catch (e) { /* noop */ }
         }
         setView(initial);

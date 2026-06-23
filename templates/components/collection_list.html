@@ -1,9 +1,10 @@
 {% comment %}
 Collection list view: the sortable / filterable / searchable "hunting tool" sibling to the
-Binder Surface. Expects `list_badges` (flat Frame dicts + theme/palette/row_id/dom_id) and
-`themes` ([{name, palette}]). Each row's "View" deep-links to the binder card (#card-<id>);
-collection.js switches the view + binder.js flips to that page. Styled by
-static/css/components/collection-list.css, wired by static/js/collection.js.
+Binder Surface. Expects `list_badges` (flat Frame dicts + theme/palette/dom_id/series_slug)
+and `themes` ([{name, palette}]). Each row's series name links to the badge detail page, and
+its "View" deep-links to the binder card (#card-<id>); collection.js switches the view +
+binder.js flips to that page. Styled by static/css/components/collection-list.css, wired by
+static/js/collection.js.
 {% endcomment %}
 {% load humanize %}
 <div class="pp-list">
@@ -52,8 +53,7 @@ static/css/components/collection-list.css, wired by static/js/collection.js.
         </thead>
         <tbody>
             {% for badge in list_badges %}
-                <tr id="{{ badge.row_id }}"
-                    data-tier="{{ badge.tier }}"
+                <tr data-tier="{{ badge.tier }}"
                     data-state="{{ badge.state }}"
                     data-theme="{{ badge.theme|slugify }}"
                     data-series="{{ badge.series_name|lower }}"
@@ -63,7 +63,11 @@ static/css/components/collection-list.css, wired by static/js/collection.js.
                     data-rank="{{ badge.engraving_rank|default:0 }}"
                     data-progress="{{ badge.progress_pct|default:0 }}">
                     <td class="pp-list__set-mark">{% if badge.set_number %}#{{ badge.set_number|stringformat:"04d" }}{% else %}&mdash;{% endif %}</td>
-                    <td class="pp-list__series">{{ badge.series_name }}</td>
+                    <td class="pp-list__series">
+                        {% if badge.series_slug %}
+                            <a href="{% url 'badge_detail' badge.series_slug %}" class="pp-list__series-link">{{ badge.series_name }}</a>
+                        {% else %}{{ badge.series_name }}{% endif %}
+                    </td>
                     <td><span class="pp-list__tier pp-list__tier--{{ badge.tier }}">{{ badge.tier|title }}</span></td>
                     <td>
                         {% if badge.state == 'in_progress' %}
