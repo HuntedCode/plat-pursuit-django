@@ -142,7 +142,7 @@ All endpoints require staff authentication via SessionAuthentication + IsAdminUs
 
 - `get_roadmap_for_display(concept)` / `get_roadmap_for_preview(concept)`: Full roadmap with all tabs prefetched
 - `get_tab_for_display(concept, trophy_group_id)` / `get_tab_for_preview(...)`: Single tab with full prefetch for detail page
-- `get_available_tabs(concept, include_drafts)`: All tabs with content presence info for DLC navigation
+- `get_available_ctgs(concept, include_drafts)`: All CTGs that have a roadmap, with status + content-presence info. Powers the DLC navigation strip on the public detail page (`partials/roadmap/dlc_nav_strip.html`); public callers pass `include_drafts=False` so only published siblings link.
 - `compute_progress(tab, profile_earned)`: Per-step and overall progress calculation
 - `update_tab(tab_id, ...)`: Update content and metadata fields
 - Step CRUD, reorder, trophy association, guide CRUD, publish/unpublish
