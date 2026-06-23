@@ -215,6 +215,21 @@ class DeferredNotificationService:
             logger.exception(f"Failed to queue badge notification: {e}")
 
     @staticmethod
+    def discard_badge_notifications(profile_id):
+        """
+        Drop a profile's queued badge notifications WITHOUT creating any.
+
+        Used to truly silence on-site + email for a run (e.g. a bulk
+        `refresh_badge_series --no-notifications`). The UserBadge post-save signal
+        queues entries on award regardless of the run's intent; without this drain they
+        would simply be flushed by the profile's next sync (deferred, not silenced).
+        """
+        try:
+            redis_client.delete(f"pending_badges:{profile_id}")
+        except Exception:
+            logger.exception(f"Failed to discard badge notifications for profile {profile_id}")
+
+    @staticmethod
     def create_badge_notifications(profile_id, profile=None):
         """
         Create badge notifications for a profile after sync completes.

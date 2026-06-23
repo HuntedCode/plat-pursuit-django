@@ -28,7 +28,7 @@ def _series_with_one_stage(series="rebuild-maint"):
 
 def _evaluate(profile, badge):
     ctx = _build_badge_context(profile, [badge])
-    handle_badge(profile, badge, add_role_only=True, _context=ctx)
+    handle_badge(profile, badge, _context=ctx)
 
 
 def _earn(profile, badge, game):

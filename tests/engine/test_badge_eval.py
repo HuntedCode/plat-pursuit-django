@@ -16,9 +16,9 @@ or, on plat-check tiers, when any member carries a real platinum), and megamix
 badges use requires_all / min_required instead of "all stages".
 
 These tests drive the real sync path: build the prefetch context with
-_build_badge_context (as check_profile_badges does) and call handle_badge with
-add_role_only=True so no Discord messages fire. Test badges have no
-discord_role_id or title, so award/revoke has no external side effects.
+_build_badge_context (as check_profile_badges does) and call handle_badge directly.
+handle_badge is pure award logic and sends no notifications (those are batched by the
+callers), and test badges have no title, so award/revoke has no external side effects.
 """
 
 import pytest
@@ -57,7 +57,7 @@ def _stage_with_concept(series_slug, stage_number, required_tiers=None):
 def _evaluate(profile, badge, all_badges=None):
     """Run handle_badge through the real prefetch-context path."""
     ctx = _build_badge_context(profile, all_badges or [badge])
-    handle_badge(profile, badge, add_role_only=True, _context=ctx)
+    handle_badge(profile, badge, _context=ctx)
 
 
 def _earned(profile, badge):
@@ -150,7 +150,7 @@ def test_tiers_are_independent_no_prerequisite():
     ctx = _build_badge_context(profile, [tier1, tier2])
 
     # Handle ONLY tier 2 (tier 1 never earned) — it is still awarded.
-    handle_badge(profile, tier2, add_role_only=True, _context=ctx)
+    handle_badge(profile, tier2, _context=ctx)
 
     assert _earned(profile, tier2)
     assert not _earned(profile, tier1)  # lower tier irrelevant to earning tier 2
