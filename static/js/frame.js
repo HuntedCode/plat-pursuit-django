@@ -112,6 +112,7 @@
         var snapshot = {
             wasBlueprint:  target.classList.contains('pp-frame--blueprint'),
             wasUnearned:   target.classList.contains('pp-frame--unearned'),
+            wasGhost:      target.classList.contains('pp-frame--ghost'),
             wasBackStaged: target.classList.contains('pp-earn-back-staged'),
             wasFlipped:    target.classList.contains('is-flipped'),
             ppBuild:       target.style.getPropertyValue('--pp-build')
@@ -131,6 +132,7 @@
         if (!snapshot) return;
         target.classList.toggle('pp-frame--blueprint',  snapshot.wasBlueprint);
         target.classList.toggle('pp-frame--unearned',   snapshot.wasUnearned);
+        target.classList.toggle('pp-frame--ghost',      snapshot.wasGhost);
         target.classList.toggle('pp-earn-back-staged',  snapshot.wasBackStaged);
         target.classList.toggle('is-flipped',           snapshot.wasFlipped);
         if (snapshot.ppBuild) {
@@ -172,6 +174,9 @@
             if (e.target.closest('a, button, input, select, textarea, [role="button"]')) return;
             // Blueprint cards aren't flippable (the badge isn't earned yet).
             if (target.classList.contains('pp-frame--blueprint')) return;
+            // Compact cards (the binder's flipbook spread) don't flip -- the back
+            // face isn't designed for the small size. View full backs in Single mode.
+            if (target.classList.contains('pp-frame--compact')) return;
             // Distinguish tap from scroll-drag.
             var dx = Math.abs(e.clientX - downX);
             var dy = Math.abs(e.clientY - downY);
@@ -183,6 +188,7 @@
 
     function flip(target) {
         if (!target || !target.classList.contains('pp-frame--flippable')) return;
+        if (target.classList.contains('pp-frame--compact')) return;  // compact cards don't flip
         target.classList.toggle('is-flipped');
     }
 
@@ -503,7 +509,7 @@
             // Reduced-motion fast path: skip choreography, apply
             // end-state classes in a single tick.
             if (reducedMotion) {
-                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
+                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned', 'pp-frame--ghost');
                 target.style.setProperty('--pp-build', '100%');
                 if (engraving && engraving.classList.contains('pp-frame__engraving--placeholder')) {
                     engraving.classList.remove('pp-frame__engraving--placeholder');
@@ -525,8 +531,10 @@
             var t = function (ms) { return Math.round(ms * dScale); };
             target.style.setProperty('--earn-scale', dScale);
 
-            // Stage the card in pre-play state (blueprint, build at 90%).
+            // Stage the card in pre-play state (blueprint, build at 90%). A ghost
+            // (not-yet-started) card sheds its ghost treatment as it enters the weld.
             target.classList.add('pp-frame--blueprint', 'pp-frame--unearned', 'pp-earn-back-staged');
+            target.classList.remove('pp-frame--ghost');
             target.style.setProperty('--pp-build', '90%');
 
             // Force reflow so the build transition fires from 90%, not snaps.
@@ -754,7 +762,7 @@
             // Strip blueprint + searing at sear end.
             state.earnTimers.push(window.setTimeout(function () {
                 target.classList.remove('pp-earn-searing');
-                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned');
+                target.classList.remove('pp-frame--blueprint', 'pp-frame--unearned', 'pp-frame--ghost');
             }, t(10000)));
 
             // PHASE 7: Completion sheen sweep.

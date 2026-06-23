@@ -48,7 +48,7 @@
 
     {# The album (Binder Surface) -- the display piece #}
     <div class="pp-collection__view" data-collection-view="binder" id="collection-view-binder" role="tabpanel" aria-labelledby="collection-tab-binder" tabindex="0">
-        {% include 'components/binder.html' with pages=pages total_pages=total_pages %}
+        {% include 'components/binder.html' with binder_sets=binder_sets %}
     </div>
 
     {# The list -- the hunting tool (sort / filter / search) #}

@@ -1,0 +1,22 @@
+{% comment %}
+One binder page (sheet of sleeves). Shared by single mode and by the left/right pages of a
+spread. Expects: page ({number, frames}), set ({key, label, palette}), side ('left'|'right'),
+page_count, set_first/spread_first (booleans, for the no-JS default page). Each page's own
+rings render the single-mode binding edge; in spread mode they're hidden for the spine's rings.
+{% endcomment %}
+<article class="pp-binder__page pp-binder__page--{{ side }}{% if set_first and spread_first and side == 'left' %} is-current{% endif %}" data-set="{{ set.key }}">
+    <div class="pp-binder__page-tab" data-palette="{{ set.palette }}">{{ set.label }}</div>
+    <div class="pp-binder__page-rings" aria-hidden="true">
+        <span class="pp-binder__ring"></span>
+        <span class="pp-binder__ring"></span>
+        <span class="pp-binder__ring"></span>
+    </div>
+    <div class="pp-binder__sleeves">
+        {% for frame in page.frames %}
+        <div class="pp-binder__sleeve" id="{{ frame.dom_id }}">
+            {% include "components/frame.html" with frame=frame %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="pp-binder__page-number">Page {{ page.number }} / {{ page_count }}</div>
+</article>

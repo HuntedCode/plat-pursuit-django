@@ -1,16 +1,16 @@
 """Tests for collection_service.build_collection_context (the Collection album / Binder).
 
 Pins the album contract: the FULL live-badge set shown (earned framed + unearned slots),
-grouping into binder pages by badge type (a new type starts a fresh page), PAGE_SIZE
-pagination, the earned summary, id-based DOM anchors, and -- the load-bearing one -- a
-CONSTANT query count regardless of badge count (the whale-safety batch path: no per-badge
-UserBadge / UserBadgeProgress / Redis fan-out).
+grouping into binder SETS by badge type (each type is its own binder view, paginated
+within the set), PAGE_SIZE pagination, per-set + overall counts, id-based DOM anchors, and
+-- the load-bearing one -- a CONSTANT query count regardless of badge count (the
+whale-safety batch path: no per-badge UserBadge / UserBadgeProgress / Redis fan-out).
 """
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
-from trophies.models import Profile, ProfileGamification, UserBadge
+from trophies.models import Badge, Profile, ProfileGamification, UserBadge
 from trophies.services import collection_service
 from trophies.services.collection_service import PAGE_SIZE, build_collection_context
 from tests.factories import BadgeFactory, ProfileFactory, UserBadgeFactory
@@ -27,7 +27,7 @@ def _series(slug, badge_type='series', tiers=(1, 2, 3, 4), live=True):
 
 
 def _all_frames(ctx):
-    return [f for page in ctx['pages'] for f in page['frames']]
+    return [f for s in ctx['binder_sets'] for page in s['pages'] for f in page['frames']]
 
 
 def test_full_set_shown_with_earned_and_unearned():
@@ -54,42 +54,131 @@ def test_non_live_badges_excluded():
     assert ctx['summary']['total'] == 4  # only the live series
 
 
-def test_new_badge_type_starts_a_fresh_page():
-    """Two small types (4 + 4 badges) must NOT share a page even though 8 < PAGE_SIZE --
-    each binder page labels exactly one section."""
+def test_each_badge_type_is_its_own_set():
+    """Each badge type is a distinct binder view (set), even small ones -- one page each."""
     profile = ProfileFactory()
     _series('rs-series', 'series')
     _series('fr-one', 'franchise')
 
-    ctx = build_collection_context(profile)
+    sets = build_collection_context(profile)['binder_sets']
 
-    assert ctx['total_pages'] == 2
-    themes = [p['theme'] for p in ctx['pages']]
-    assert themes == ['Series', 'Franchises']  # _SECTION_ORDER: series before franchise
+    assert [s['key'] for s in sets] == ['series', 'franchise']
+    assert [s['label'] for s in sets] == ['Series', 'Franchises']
+    assert all(len(s['pages']) == 1 for s in sets)  # 4 badges each -> one page
 
 
-def test_page_size_splits_a_large_section():
+def test_page_size_splits_a_large_set():
     profile = ProfileFactory()
     for i in range(5):  # 5 series x 4 tiers = 20 badges in ONE type
         _series(f'rs-{i}', 'series')
 
-    ctx = build_collection_context(profile)
+    series_set = build_collection_context(profile)['binder_sets'][0]
 
-    assert ctx['total_pages'] == 2  # 16 + 4
-    assert len(ctx['pages'][0]['frames']) == PAGE_SIZE
-    assert len(ctx['pages'][1]['frames']) == 4
+    assert len(series_set['pages']) == 2  # 16 + 4
+    assert len(series_set['pages'][0]['frames']) == PAGE_SIZE
+    assert len(series_set['pages'][1]['frames']) == 4
+    assert [p['number'] for p in series_set['pages']] == [1, 2]  # numbered within the set
 
 
-def test_sections_follow_canonical_order():
+def test_set_carries_earned_and_total_counts():
+    profile = ProfileFactory()
+    badges = _series('rs-count')
+    UserBadgeFactory(profile=profile, badge=badges[0])
+    UserBadgeFactory(profile=profile, badge=badges[1])
+
+    s = build_collection_context(profile)['binder_sets'][0]
+
+    assert s['total'] == 4 and s['earned'] == 2
+
+
+def test_pages_pair_into_facing_page_spreads():
+    profile = ProfileFactory()
+    for i in range(5):  # 5 series x 4 = 20 badges -> 2 pages (16 + 4)
+        _series(f'rs-{i}', 'series')
+
+    s = build_collection_context(profile)['binder_sets'][0]
+
+    assert len(s['pages']) == 2
+    assert len(s['spreads']) == 1                  # 2 pages -> one facing-page spread
+    assert s['spreads'][0]['left'] is s['pages'][0]
+    assert s['spreads'][0]['right'] is s['pages'][1]
+
+
+def test_odd_final_page_leaves_an_empty_right():
+    profile = ProfileFactory()
+    for i in range(9):  # 9 series x 4 = 36 badges -> 3 pages (16 + 16 + 4)
+        _series(f'rs-{i}', 'series')
+
+    s = build_collection_context(profile)['binder_sets'][0]
+
+    assert len(s['pages']) == 3
+    assert len(s['spreads']) == 2                  # [p0,p1] + [p2, empty]
+    assert s['spreads'][1]['left'] is s['pages'][2]
+    assert s['spreads'][1]['right'] is None
+
+
+def test_sets_follow_canonical_order():
     profile = ProfileFactory()
     _series('ev-x', 'event')
     _series('rs-x', 'series')
     _series('co-x', 'collection')
 
-    ctx = build_collection_context(profile)
+    sets = build_collection_context(profile)['binder_sets']
 
     # _SECTION_ORDER = series, franchise, collection, megamix, developer, user, event
-    assert [p['theme'] for p in ctx['pages']] == ['Series', 'Collections', 'Events']
+    assert [s['label'] for s in sets] == ['Series', 'Collections', 'Events']
+
+
+# --- sorting (default set_number, plus the series-name option) -----------------
+
+
+def _number(series, start):
+    for i, b in enumerate(series, start=start):
+        Badge.objects.filter(pk=b.pk).update(set_number=i)
+
+
+def test_default_sort_is_set_number_edition_order():
+    profile = ProfileFactory()
+    _number(_series('alpha', 'series'), 5)   # alphabetically first, numbered LAST
+    _number(_series('zeta', 'series'), 1)     # alphabetically last, numbered FIRST
+
+    frames = _all_frames(build_collection_context(profile))  # default sort
+
+    assert [f.get('set_number') for f in frames] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert [f['series_name'] for f in frames[:4]] == ['zeta'] * 4  # edition beats alpha
+
+
+def test_series_sort_orders_alphabetically():
+    profile = ProfileFactory()
+    _number(_series('zeta', 'series'), 1)
+    _number(_series('alpha', 'series'), 5)
+
+    frames = _all_frames(build_collection_context(profile, sort='series'))
+
+    assert [f['series_name'] for f in frames[:4]] == ['alpha'] * 4  # alpha first under series sort
+    assert [f['series_name'] for f in frames[4:]] == ['zeta'] * 4
+
+
+def test_unnumbered_badges_sort_after_numbered():
+    profile = ProfileFactory()
+    _number(_series('zeta', 'series'), 1)
+    _series('alpha', 'series')  # left unnumbered (set_number stays None)
+
+    frames = _all_frames(build_collection_context(profile))
+
+    assert [f['series_name'] for f in frames[:4]] == ['zeta'] * 4   # numbered first
+    assert [f['series_name'] for f in frames[4:]] == ['alpha'] * 4  # unnumbered last
+
+
+def test_context_exposes_sort_and_options_with_invalid_fallback():
+    profile = ProfileFactory()
+    _series('rs')
+
+    ctx = build_collection_context(profile, sort='bogus')
+
+    assert ctx['sort'] == 'set_number'  # invalid -> default
+    assert ('set_number', 'Set number') in ctx['sort_options']
+    assert ('series', 'Series name') in ctx['sort_options']
 
 
 def test_summary_counts_earned_by_tier():
@@ -176,7 +265,7 @@ def test_no_badges_returns_empty_summary():
 
     ctx = build_collection_context(profile)
 
-    assert ctx['pages'] == []
+    assert ctx['binder_sets'] == []
     assert ctx['total_pages'] == 0
     assert ctx['summary']['total'] == 0
     assert ctx['list_badges'] == []
@@ -223,15 +312,15 @@ def test_themes_are_distinct_sections_in_canonical_order():
 
 
 def test_build_failure_degrades_to_empty_context(monkeypatch):
-    """A failure inside the page build must degrade to an empty album, not raise a 500."""
+    """A failure inside the set build must degrade to an empty album, not raise a 500."""
     monkeypatch.setattr(
-        collection_service, '_build_pages',
-        lambda profile: (_ for _ in ()).throw(RuntimeError('boom')),
+        collection_service, '_build_sets',
+        lambda profile, sort: (_ for _ in ()).throw(RuntimeError('boom')),
     )
     profile = ProfileFactory()
     _series('rs-x')
 
     ctx = build_collection_context(profile)
 
-    assert ctx['pages'] == []
+    assert ctx['binder_sets'] == []
     assert ctx['total_pages'] == 0

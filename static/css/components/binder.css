@@ -2,10 +2,10 @@
  * Binder (Surface) — baseline production extraction
  * The badge collection album: paper pages with pocket sleeves holding
  * Frame cards, binder chrome (binding rings, page tabs, page numbers,
- * covers) suggested by silhouette (no photoreal texture). Two
- * presentations via [data-binder-presentation]: "binder" (full chrome)
- * and "gallery" (chrome stripped, clean grid). "single" view mode shows
- * one page at a time. Spread / 3D page-flip is deferred (not here).
+ * covers) suggested by silhouette (no photoreal texture). Sets (badge
+ * types) are picked from the set tabs; "single" view mode shows one page
+ * at a time, and the grid steps 4 -> 2 -> 1 column responsively (the
+ * chrome slims on phones). Spread / 3D page-flip is deferred (not here).
  * Pages stay neutral/paper-toned — tier color lives on the Frames.
  * Reuses the class vocabulary of the /design/binder/ workshop.
  * ================================================================ */
@@ -17,26 +17,86 @@
     position: relative;
 }
 
-/* ---- Controls bar (presentation toggle + single-page nav + counts) ---- */
+/* ---- Controls bar (single-page nav + counts) ---- */
 .pp-binder__controls {
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
     margin-bottom: 16px;
 }
-.pp-binder__controls-group { display: flex; align-items: center; gap: 6px; }
-.pp-binder__controls-group > span { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); margin-right: 2px; }
-.pp-binder__control-chip {
-    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
-    color: var(--pp-text-dim); background: var(--pp-bg-2);
-    border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 13px;
-    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-.pp-binder__control-chip:hover { color: var(--pp-text); }
-.pp-binder__control-chip--active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
 .pp-binder__nav { display: flex; align-items: center; gap: 8px; }
 .pp-binder__nav-btn { font: inherit; cursor: pointer; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 8px; width: 30px; height: 30px; line-height: 1; transition: border-color 0.15s ease, color 0.15s ease; }
 .pp-binder__nav-btn:hover { border-color: var(--pp-primary); color: var(--pp-primary); }
 .pp-binder__nav-btn:disabled { opacity: 0.4; cursor: default; }
 .pp-binder__nav-counter { font-size: 12px; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; min-width: 84px; text-align: center; }
+
+/* View toggle: Single (all sizes) vs Flipbook (desktop only). */
+.pp-binder__controls-group { display: flex; align-items: center; gap: 6px; }
+.pp-binder__controls-group > span { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-binder__view-chip {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: var(--pp-text-dim); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 13px;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.pp-binder__view-chip:hover { color: var(--pp-text); }
+.pp-binder__view-chip--active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.pp-binder__sort-select {
+    font: inherit; font-size: 13px; cursor: pointer;
+    color: var(--pp-text); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 12px;
+    transition: border-color 0.15s ease;
+}
+.pp-binder__sort-select:hover { border-color: var(--pp-primary); }
+.pp-binder__sort-select:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* Desktop-only flipbook note: shown only below 1024px where Flipbook isn't offered. */
+.pp-binder__flip-hint {
+    display: none; margin-bottom: 16px; padding: 10px 14px; font-size: 12.5px;
+    color: var(--pp-text-dim);
+    background: color-mix(in oklab, var(--pp-primary) 7%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 25%, var(--pp-border));
+    border-radius: 8px;
+}
+.pp-binder__flip-hint strong { color: var(--pp-text); }
+
+/* ---- Set selector: each badge type (Series, Developers, ...) is its own binder view ---- */
+.pp-binder__sets {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 16px; padding-bottom: 14px;
+    border-bottom: 1px solid var(--pp-border);
+}
+.pp-binder__set-tab {
+    --tab: #6b7280;
+    font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    color: var(--pp-text-dim); background: var(--pp-bg-2);
+    border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 14px;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.pp-binder__set-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--tab) 50%, var(--pp-border)); }
+.pp-binder__set-tab.is-active {
+    color: var(--pp-text); border-color: var(--tab);
+    background: color-mix(in oklab, var(--tab) 16%, var(--pp-bg-2));
+}
+.pp-binder__set-tab[data-palette="cobalt"]  { --tab: #5b8def; }
+.pp-binder__set-tab[data-palette="amber"]   { --tab: #e6a647; }
+.pp-binder__set-tab[data-palette="emerald"] { --tab: #4cc08a; }
+.pp-binder__set-tab[data-palette="violet"]  { --tab: #a679e0; }
+.pp-binder__set-dot {
+    width: 9px; height: 9px; border-radius: 999px; flex: none;
+    background: var(--tab); box-shadow: 0 0 6px color-mix(in oklab, var(--tab) 60%, transparent);
+}
+.pp-binder__set-label { white-space: nowrap; }
+.pp-binder__set-count {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
+}
+.pp-binder__set-tab.is-active .pp-binder__set-count { color: color-mix(in oklab, var(--tab) 70%, var(--pp-text)); }
+
+/* Mobile: scroll the set tabs horizontally instead of wrapping into a tall block. */
+@media (max-width: 640px) {
+    .pp-binder__sets { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .pp-binder__set-tab { flex: none; }
+}
 
 /* ---- Pages ---- */
 .pp-binder__pages-stage { display: flex; flex-direction: column; gap: 22px; align-items: center; }
@@ -45,7 +105,7 @@
     background: var(--paper);
     border: 1px solid var(--paper-edge); border-left-width: 0;
     border-radius: 4px 12px 12px 4px;
-    padding: 44px 24px 30px 56px;  /* left: binding edge + rings; top: clears the page tab */
+    padding: 44px 44px 30px 56px;  /* left: binding edge + rings; right widened so the last card isn't flush to the edge; top: clears the page tab */
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28), inset 4px 0 0 color-mix(in oklab, var(--pp-bg-1) 70%, black 30%);
 }
 /* Binding edge: a darker stripe down the left with the rings threaded through it. */
@@ -77,7 +137,7 @@
 /* ---- Sleeve grid ---- */
 /* 4 columns = one badge series per row (its 4 tiers: bronze -> silver -> gold ->
    platinum), so a series reads as a unit and each card gets room to breathe. */
-.pp-binder__sleeves { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.pp-binder__sleeves { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; }
 .pp-binder__sleeve {
     position: relative; display: grid; place-items: center;
     padding: 10px; border-radius: 10px;
@@ -94,26 +154,97 @@
 .pp-binder__cover-stamp { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
 .pp-binder__cover-bookmark { position: absolute; top: 0; right: 40px; width: 18px; height: 56px; background: var(--pp-primary); border-radius: 0 0 4px 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
 
-/* ---- Single view mode: show one page at a time ---- */
+/* ---- Single view mode: show one page at a time ----
+ * The spread wrapper is transparent (display: contents) so its pages flow
+ * individually; one shows at a time. The spine + empty-page filler are hidden. */
+.pp-binder__spread { display: contents; }
+.pp-binder__spread-empty { display: none; }
 .pp-binder[data-mode="single"] .pp-binder__page:not(.is-current) { display: none; }
-.pp-binder:not([data-mode="single"]) .pp-binder__nav { display: none; }
 
-/* ---- Gallery presentation: strip the binder chrome ---- */
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__page--cover,
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__page-rings,
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__page-number,
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__cover-bookmark { display: none; }
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__page {
-    background: transparent; border: 0; box-shadow: none; padding: 0; max-width: none; border-radius: 0;
+/* ---- Spread / Flipbook mode (desktop only): two facing pages + center spine ----
+ * STAGE 1: instant swap between spreads (one .is-current spread shown). The 3D
+ * page-flip animation layers on in stage 2 (perspective is already set up here). */
+.pp-binder[data-mode="spread"] .pp-binder__pages-stage { perspective: 2400px; }
+.pp-binder[data-mode="spread"] .pp-binder__spread {
+    display: flex; align-items: stretch;
+    width: 100%; max-width: 1340px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.4);
+    border-radius: 4px;
 }
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__page::before { display: none; }
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__page-tab { position: static; display: inline-block; margin-bottom: 12px; border-radius: 6px; box-shadow: none; }
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__sleeve { background: transparent; box-shadow: none; padding: 0; }
-.pp-binder[data-binder-presentation="gallery"] .pp-binder__pages-stage { gap: 30px; }
+.pp-binder[data-mode="spread"] .pp-binder__spread:not(.is-current) { display: none; }
 
-/* ---- Mobile: force Single + Gallery below 1024px ---- */
+/* Pages bind to the CENTER spine, not the left edge: reset the single-mode binding
+ * chrome and lean each page's inner shadow toward the spine. */
+.pp-binder[data-mode="spread"] .pp-binder__page {
+    flex: 1 1 50%; min-width: 0; max-width: none;
+    border-left-width: 1px; border-radius: 0;
+    padding: 44px 22px 26px; box-shadow: none;  /* top clears the page tab ribbon */
+    /* Hold a full 4-row page height so a short page (fewer cards) doesn't condense;
+     * lay out as a column with the cards at the top and the page number pinned bottom. */
+    display: flex; flex-direction: column;
+    min-height: 840px;
+}
+.pp-binder[data-mode="spread"] .pp-binder__page-number { margin-top: auto; }
+.pp-binder[data-mode="spread"] .pp-binder__page::before { display: none; }   /* no left binding stripe */
+.pp-binder[data-mode="spread"] .pp-binder__page-rings { display: none; }      /* rings live on the spine */
+.pp-binder[data-mode="spread"] .pp-binder__page--left {
+    border-radius: 4px 0 0 4px; border-right: none;
+    box-shadow: inset -12px 0 20px -10px rgba(0, 0, 0, 0.55);
+}
+.pp-binder[data-mode="spread"] .pp-binder__page--right {
+    border-radius: 0 4px 4px 0; border-left: none;
+    box-shadow: inset 12px 0 20px -10px rgba(0, 0, 0, 0.55);
+}
+/* Page tab on the OUTER edge: left page's tab flips to its left side. */
+.pp-binder[data-mode="spread"] .pp-binder__page--left .pp-binder__page-tab {
+    right: auto; left: -1px; border-radius: 0 6px 6px 0; box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Center spine with three rings. */
+.pp-binder[data-mode="spread"] .pp-binder__spine {
+    display: flex; flex: 0 0 54px;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14%;
+    background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.82) 50%, rgba(0, 0, 0, 0.5)),
+        color-mix(in oklab, var(--pp-bg-1) 70%, black 30%);
+}
+
+/* Empty right page (odd final page of a set). */
+.pp-binder[data-mode="spread"] .pp-binder__spread-empty {
+    display: block; flex: 1 1 50%;
+    border: 1px solid var(--paper-edge); border-left: none; border-radius: 0 4px 4px 0;
+    background:
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.015) 0, rgba(255, 255, 255, 0.015) 12px, transparent 12px, transparent 24px),
+        var(--paper);
+}
+
+/* Compact cards so two pages (32 badges) fit the spread. The Frame is a fixed
+ * width, so shrink the token; binder.js also adds .pp-frame--compact (hides the
+ * plinth meta + shrinks text) so the smaller card still reads cleanly. */
+.pp-binder[data-mode="spread"] .pp-binder__sleeves { gap: 7px; }
+.pp-binder[data-mode="spread"] .pp-binder__sleeve { padding: 5px; border-radius: 7px; }
+.pp-binder[data-mode="spread"] .pp-frame { --pp-frame-w: 128px; cursor: default; }
+
+/* ---- Responsive grid ----
+ * Desktop 1024+: 4 columns (a series = one row). Tablet 768-1023: 2 columns.
+ * Phone < 768: a single column -- the detailed Frame card needs the width to
+ * stay readable; two-up makes the cards too small. */
 @media (max-width: 1023px) {
-    /* Mobile: 2 columns keeps the badges readable; a series spans two rows. */
     .pp-binder__sleeves { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .pp-binder__controls-group--desktop { display: none; }
+    /* Flipbook needs desktop width: hide its chip, surface the explainer note. */
+    .pp-binder__view-chip--desktop { display: none; }
+    .pp-binder__flip-hint { display: block; }
+}
+@media (max-width: 767px) {
+    .pp-binder__sleeves { grid-template-columns: 1fr; gap: 14px; }
+    /* Centre + cap the single card so it doesn't balloon on a wide phone. */
+    .pp-binder__sleeve { max-width: 380px; margin-inline: auto; }
+
+    /* Slim the binder chrome so the single card gets real width (the binding edge
+     * + padding otherwise eat most of a phone screen -- which is why Gallery used
+     * to be force-snapped here). The rings/tab/page-number stay, just trimmed. */
+    .pp-binder__page { padding: 38px 12px 24px 26px; border-radius: 4px 8px 8px 4px; }
+    .pp-binder__page::before { width: 18px; }
+    .pp-binder__page-rings { left: 4px; width: 13px; }
+    .pp-binder__page-rings .pp-binder__ring { width: 11px; height: 11px; border-width: 1.5px; }
 }

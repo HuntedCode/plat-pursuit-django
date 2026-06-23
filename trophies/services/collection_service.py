@@ -30,20 +30,43 @@ _PALETTES = ['cobalt', 'amber', 'emerald', 'violet']
 _TIER_NAME = {1: 'bronze', 2: 'silver', 3: 'gold', 4: 'platinum'}
 PAGE_SIZE = 16  # frames per binder page = 4 series x 4 tiers (a new badge type starts a fresh page)
 
+# Binder sort options (applied WITHIN each set). Both keep a series' four tiers
+# contiguous so a series still reads as one row. (key, label) -- order = dropdown order.
+COLLECTION_SORTS = [
+    ('set_number', 'Set number'),
+    ('series', 'Series name'),
+]
+DEFAULT_SORT = 'set_number'
+
+
+def _sort_key(sort):
+    if sort == 'series':
+        return lambda b: ((b.effective_display_series or b.series_slug or '').lower(), b.tier)
+    # set_number: the admin-assigned edition order (a series is a contiguous block of 4,
+    # blocks run in numbering order). Not-yet-numbered badges fall to the end (alpha, tier).
+    return lambda b: (
+        b.set_number is None, b.set_number or 0,
+        (b.effective_display_series or b.series_slug or '').lower(), b.tier,
+    )
+
 
 def _live_badges():
     """All live badges with every FK build_badge_frame touches select_related, so the
     batched frame build issues zero per-badge FK queries."""
     return list(
         Badge.objects.filter(is_live=True).select_related(
-            'base_badge', 'franchise', 'collection', 'developer', 'funded_by',
+            'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
             'base_badge__franchise', 'base_badge__collection',
-            'base_badge__developer', 'base_badge__funded_by',
+            'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
         )
     )
 
 
-def _build_pages(profile):
+def _build_sets(profile, sort=DEFAULT_SORT):
+    """Group live badges into binder SETS (one per badge type). Each set is its own
+    sub-binder: its pages are numbered within the set, and the page (Series / Developers /
+    ...) is selected as a distinct binder view on the page. Returns (binder_sets, summary).
+    """
     badges = _live_badges()
     if not badges:
         return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}}
@@ -75,12 +98,11 @@ def _build_pages(profile):
         + [t for t in by_type if t not in _SECTION_ORDER]
     )
 
-    pages, page_no, palette_i = [], 0, 0
+    earned_ids = set(earned_map.keys())
+    sort_key = _sort_key(sort)
+    binder_sets, palette_i = [], 0
     for btype in ordered_types:
-        section = sorted(
-            by_type[btype],
-            key=lambda b: ((b.effective_display_series or b.series_slug or '').lower(), b.tier),
-        )
+        section = sorted(by_type[btype], key=sort_key)
         palette = _PALETTES[palette_i % len(_PALETTES)]
         palette_i += 1
         label = _SECTION_LABELS.get(btype, btype.title())
@@ -98,17 +120,27 @@ def _build_pages(profile):
             frame['dom_id'] = f"card-{b.id}"
             frames.append(frame)
 
-        # A new badge type always starts a fresh page so the page tab labels one section.
-        for start in range(0, len(frames), PAGE_SIZE):
-            page_no += 1
-            pages.append({
-                'number': page_no,
-                'theme': label,
-                'palette': palette,
-                'frames': frames[start:start + PAGE_SIZE],
-            })
+        # Each set is its own binder view; pages are numbered WITHIN the set.
+        pages = [
+            {'number': i, 'frames': frames[start:start + PAGE_SIZE]}
+            for i, start in enumerate(range(0, len(frames), PAGE_SIZE), start=1)
+        ]
+        # Spreads pair facing pages for the flipbook (desktop) view: left + right,
+        # with an empty right on an odd final page. Single view uses `pages` directly.
+        spreads = [
+            {'number': i // 2 + 1, 'left': pages[i], 'right': pages[i + 1] if i + 1 < len(pages) else None}
+            for i in range(0, len(pages), 2)
+        ]
+        binder_sets.append({
+            'key': btype,
+            'label': label,
+            'palette': palette,
+            'pages': pages,
+            'spreads': spreads,
+            'total': len(section),
+            'earned': sum(1 for b in section if b.id in earned_ids),
+        })
 
-    earned_ids = set(earned_map.keys())
     by_tier = defaultdict(int)
     for b in badges:
         if b.id in earned_ids:
@@ -121,41 +153,48 @@ def _build_pages(profile):
         'pct': round(earned / total * 100) if total else 0,
         'by_tier': dict(by_tier),
     }
-    return pages, summary
+    return binder_sets, summary
 
 
-def _flatten_for_list(pages):
-    """Flatten the binder pages into the row list + theme set the sibling list view needs.
+def _flatten_for_list(binder_sets):
+    """Flatten the binder sets into the row list + theme set the sibling list view needs.
 
     Same data, different presentation (the Binder is the display piece, the list is the
-    hunting tool). Each row carries its section's theme/palette and a `row_id` paired with
-    the frame's binder `dom_id` (row-<id> <-> card-<id>) for cross-view deep-linking.
+    hunting tool). Each row carries its set's label/palette and a `row_id` paired with the
+    frame's binder `dom_id` (row-<id> <-> card-<id>) for cross-view deep-linking.
     """
     list_badges, themes = [], {}
-    for page in pages:
-        themes.setdefault(page['theme'], page['palette'])
-        for frame in page['frames']:
-            list_badges.append({
-                **frame,
-                'theme': page['theme'],
-                'palette': page['palette'],
-                'row_id': frame['dom_id'].replace('card-', 'row-', 1),
-            })
+    for s in binder_sets:
+        themes.setdefault(s['label'], s['palette'])
+        for page in s['pages']:
+            for frame in page['frames']:
+                list_badges.append({
+                    **frame,
+                    'theme': s['label'],
+                    'palette': s['palette'],
+                    'row_id': frame['dom_id'].replace('card-', 'row-', 1),
+                })
     return list_badges, [{'name': name, 'palette': palette} for name, palette in themes.items()]
 
 
-def build_collection_context(profile):
-    """Assemble the Collection album context. Read-only + whale-safe (see module docstring)."""
+def build_collection_context(profile, sort=DEFAULT_SORT):
+    """Assemble the Collection album context. Read-only + whale-safe (see module docstring).
+
+    `sort` orders the badges within each set; unknown values fall back to the default.
+    """
+    if sort not in dict(COLLECTION_SORTS):
+        sort = DEFAULT_SORT
     context = {
-        'pages': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}},
+        'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}},
         'list_badges': [], 'themes': [], 'total_pages': 0,
+        'sort': sort, 'sort_options': COLLECTION_SORTS,
     }
     try:
-        pages, summary = _build_pages(profile)
-        context['pages'] = pages
+        binder_sets, summary = _build_sets(profile, sort)
+        context['binder_sets'] = binder_sets
         context['summary'] = summary
-        context['total_pages'] = len(pages)
-        context['list_badges'], context['themes'] = _flatten_for_list(pages)
+        context['total_pages'] = sum(len(s['pages']) for s in binder_sets)
+        context['list_badges'], context['themes'] = _flatten_for_list(binder_sets)
     except Exception:
         logger.exception("Collection album build failed for profile %s", getattr(profile, 'id', '?'))
     return context

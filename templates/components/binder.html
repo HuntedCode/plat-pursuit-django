@@ -1,44 +1,73 @@
 {% comment %}
-Binder Surface (baseline): the badge collection album. Renders the user's badges as
-framed cards in paper pages with binder chrome. Expects `pages` (a list of
-{number, theme, palette, frames}) and `total_pages`; each `frame` is a Frame-component
-dict carrying a `dom_id` for deep-linking. Single view-mode (one page at a time) +
-Binder/Gallery presentation toggle. Spread / 3D page-flip is deferred (not here).
+Binder Surface (baseline): the badge collection album. Expects `binder_sets` -- a list of
+{key, label, palette, total, earned, pages:[{number, frames}], spreads:[{number, left, right}]}
+where each frame is a Frame-component dict carrying a `dom_id` for deep-linking. Each SET
+(badge type) is its own binder view, picked from the set tabs. Two view modes within a set:
+Single (one page at a time, all sizes) and Flipbook/Spread (two facing pages, desktop only --
+mobile gets a placeholder note). Grid steps 4 -> 2 -> 1 column responsively in single mode.
 Wired by static/js/binder.js.
 {% endcomment %}
-<div class="pp-binder" data-binder-presentation="binder" data-mode="single">
+<div class="pp-binder" data-mode="single">
+
+    {% if binder_sets %}
+    {# Set selector: each badge type is a distinct binder view. #}
+    <div class="pp-binder__sets" role="tablist" aria-label="Collection sets">
+        {% for set in binder_sets %}
+        <button type="button" class="pp-binder__set-tab{% if forloop.first %} is-active{% endif %}"
+                role="tab" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                data-set-tab="{{ set.key }}" data-palette="{{ set.palette }}">
+            <span class="pp-binder__set-dot" data-palette="{{ set.palette }}"></span>
+            <span class="pp-binder__set-label">{{ set.label }}</span>
+            <span class="pp-binder__set-count">{{ set.earned }}/{{ set.total }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="pp-binder__controls">
+        {# View mode: Single (all sizes) vs Flipbook (desktop only). #}
         <div class="pp-binder__controls-group">
             <span>View</span>
-            <button type="button" class="pp-binder__control-chip pp-binder__control-chip--active" data-binder-presentation="binder">Binder</button>
-            <button type="button" class="pp-binder__control-chip" data-binder-presentation="gallery">Gallery</button>
+            <button type="button" class="pp-binder__view-chip pp-binder__view-chip--active" data-binder-view="single">Single</button>
+            <button type="button" class="pp-binder__view-chip pp-binder__view-chip--desktop" data-binder-view="spread">Flipbook</button>
         </div>
+        {% if sort_options %}
+        <div class="pp-binder__controls-group">
+            <span>Sort</span>
+            <select class="pp-binder__sort-select" data-binder-sort aria-label="Sort badges">
+                {% for key, label in sort_options %}
+                <option value="{{ key }}"{% if key == sort %} selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
         <div class="pp-binder__nav">
-            <button type="button" class="pp-binder__nav-btn" data-binder-prev aria-label="Previous page">&larr;</button>
-            <span class="pp-binder__nav-counter" data-binder-counter>Page 1 / {{ total_pages }}</span>
-            <button type="button" class="pp-binder__nav-btn" data-binder-next aria-label="Next page">&rarr;</button>
+            <button type="button" class="pp-binder__nav-btn" data-binder-prev aria-label="Previous">&larr;</button>
+            <span class="pp-binder__nav-counter" data-binder-counter>Page 1 / 1</span>
+            <button type="button" class="pp-binder__nav-btn" data-binder-next aria-label="Next">&rarr;</button>
         </div>
     </div>
 
+    {# Desktop-only feature note: the flipbook needs the width. #}
+    <div class="pp-binder__flip-hint" role="note">Open the <strong>Flipbook</strong> view on a desktop to page through your collection like a real binder.</div>
+
     <div class="pp-binder__pages-stage">
-        {% for page in pages %}
-        <article class="pp-binder__page{% if forloop.first %} is-current{% endif %}" data-page-index="{{ forloop.counter0 }}">
-            <div class="pp-binder__page-tab" data-palette="{{ page.palette }}">{{ page.theme }}</div>
-            <div class="pp-binder__page-rings" aria-hidden="true">
-                <span class="pp-binder__ring"></span>
-                <span class="pp-binder__ring"></span>
-                <span class="pp-binder__ring"></span>
-            </div>
-            <div class="pp-binder__sleeves">
-                {% for frame in page.frames %}
-                <div class="pp-binder__sleeve" id="{{ frame.dom_id }}">
-                    {% include "components/frame.html" with frame=frame %}
+        {% for set in binder_sets %}
+            {% for spread in set.spreads %}
+            <div class="pp-binder__spread{% if forloop.parentloop.first and forloop.first %} is-current{% endif %}" data-set="{{ set.key }}" data-spread-index="{{ forloop.counter0 }}">
+                {% include "components/_binder_page.html" with page=spread.left set=set side="left" page_count=set.pages|length set_first=forloop.parentloop.first spread_first=forloop.first %}
+                <div class="pp-binder__spine" aria-hidden="true">
+                    <span class="pp-binder__ring"></span>
+                    <span class="pp-binder__ring"></span>
+                    <span class="pp-binder__ring"></span>
                 </div>
-                {% endfor %}
+                {% if spread.right %}
+                    {% include "components/_binder_page.html" with page=spread.right set=set side="right" page_count=set.pages|length set_first=False spread_first=False %}
+                {% else %}
+                    <div class="pp-binder__spread-empty" aria-hidden="true"></div>
+                {% endif %}
             </div>
-            <div class="pp-binder__page-number">Page {{ page.number }} / {{ total_pages }}</div>
-        </article>
+            {% endfor %}
         {% empty %}
         <article class="pp-binder__page is-current">
             <div class="pp-binder__sleeves" style="grid-template-columns: 1fr;">

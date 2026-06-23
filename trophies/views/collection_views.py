@@ -29,7 +29,9 @@ class CollectionView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(build_collection_context(self.request.user.profile))
+        context.update(build_collection_context(
+            self.request.user.profile, sort=self.request.GET.get('sort', ''),
+        ))
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
             {'text': 'Collection'},
