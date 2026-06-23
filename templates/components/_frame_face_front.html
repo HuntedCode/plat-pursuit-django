@@ -8,11 +8,9 @@
 </div>
 
 <div class="pp-frame__art">
-    {% if state == 'in_progress' or state == 'unearned' %}
+    {% if state == 'in_progress' %}
         <div class="pp-frame__blueprint-grid"></div>
-        {% if state == 'in_progress' %}
-            <div class="pp-frame__fab-banner">Fabricating</div>
-        {% endif %}
+        <div class="pp-frame__fab-banner">Fabricating</div>
     {% endif %}
 
     {% if state == 'maintenance' or frame.is_maint_staged %}
@@ -33,16 +31,15 @@
         <div class="pp-frame__damage-overlay"></div>
     {% endif %}
 
-    {% if state == 'in_progress' or state == 'unearned' %}
+    {% if state == 'in_progress' %}
+        {# Padlock stays on the fabricating (in-progress) card. The unearned/ghost
+           card shows nothing extra -- the faint apparition itself is the whole signal. #}
         <div class="pp-frame__locked">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
             </svg>
         </div>
-        {% if state == 'unearned' %}
-            <div class="pp-frame__blueprint-mark">To Earn</div>
-        {% endif %}
     {% endif %}
 
     {% if state == 'maintenance' or frame.is_maint_staged %}

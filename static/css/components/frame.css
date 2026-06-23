@@ -632,6 +632,63 @@
 .pp-frame--unearned .pp-frame__name { color: rgba(255, 255, 255, 0.6); }
 .pp-frame--unearned:hover { transform: translateY(-2px); }
 
+/* ------------------------------------------------------------
+ * State: ghost (not yet started)
+ *
+ * Unlike the in-progress card (which FABRICATES from the bottom via
+ * the blueprint/weld), a not-yet-started badge shows a faint
+ * APPARITION of the final art -- a spectral preview of what the
+ * Pursuer could earn. No schematic grid, no padlock: the ghost
+ * itself is the "not yours yet" signal. On hover it leans toward
+ * focus, as if the badge could materialise.
+ * ------------------------------------------------------------ */
+
+/* A cool radial bloom behind the apparition so it floats in a dim chamber. */
+.pp-frame--ghost .pp-frame__art {
+    background:
+        radial-gradient(80% 65% at 50% 45%, rgba(70, 120, 165, 0.16), transparent 70%),
+        var(--frame-art-bg);
+}
+
+/* Soften the unearned dark veil into a vignette (instead of blacking the
+ * art out) so the apparition reads through it. Higher specificity than the
+ * base .pp-frame--unearned veil so this wins. */
+.pp-frame--ghost.pp-frame--unearned .pp-frame__art::after {
+    background:
+        radial-gradient(135% 105% at 50% 42%,
+            transparent 20%, rgba(8, 10, 16, 0.42) 76%, rgba(6, 8, 12, 0.68) 100%);
+    z-index: 4;
+}
+
+/* The apparition: the real art, unmasked, held faint + cool-cast and
+ * STILL (a ghost image, not a literal spectre -- no idle motion). */
+.pp-frame--ghost .pp-frame__layer {
+    opacity: 0.16;
+    filter: grayscale(0.6) brightness(1.4) contrast(0.9)
+            drop-shadow(0 0 7px rgba(150, 210, 240, 0.3));
+    transition: opacity 260ms ease, filter 260ms ease;
+}
+
+/* Hover: the apparition leans into focus -- "this could be yours."
+ * It brightens + saturates toward the real card and the aura swells. */
+.pp-frame--ghost:hover .pp-frame__layer {
+    opacity: 0.42;
+    filter: grayscale(0.2) brightness(1.15) contrast(1)
+            drop-shadow(0 0 10px rgba(175, 220, 245, 0.5));
+}
+.pp-frame--ghost:hover .pp-frame__art {
+    background:
+        radial-gradient(85% 70% at 50% 45%, rgba(90, 150, 200, 0.28), transparent 72%),
+        var(--frame-art-bg);
+}
+.pp-frame--ghost:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 8px 28px rgba(120, 180, 220, 0.2),
+        0 0 0 1px rgba(150, 200, 230, 0.45);
+    border-color: rgba(170, 210, 235, 0.6);
+}
+
 .pp-frame--blueprint { --pp-build: 0%; }
 
 /* Blueprint grid lives on a dedicated child so we can crossfade
@@ -1758,6 +1815,8 @@
     opacity: 1;
     transform: translate(-50%, -100%);
 }
+/* Compact cards (the binder flipbook spread) can't flip -- never show the hint. */
+.pp-frame--compact .pp-frame__flip-hint { display: none; }
 @media (prefers-reduced-motion: reduce) {
     /* Still reveals on hover, just without the rise. */
     .pp-frame__flip-hint { transition: none; }

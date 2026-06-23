@@ -2,7 +2,11 @@
 
 The Binder is a branded **Surface** in the PlatPursuit design system — a recognizable layout container that arranges Frames into a trading-card binder metaphor. It sits alongside the four signature primitives (Frame, Pursuer Card, Horizon, Tally) defined in [visual-identity.md §3](visual-identity.md#3-signatures), but is categorically different from them: primitives are *atomic* (small repeated units of identity), Surfaces are *composite* (branded containers that arrange primitives).
 
-This doc captures the design decisions and technical learnings from the Binder prototype at [`/design/binder/`](../../templates/design/binder_preview.html). Full code extraction to production partials + CSS + JS (in the style of the Frame component) is deferred until the Binder gets a real mounting point in the product — see [Open Threads](#open-threads).
+This doc captures the design decisions and technical learnings from the Binder prototype at [`/design/binder/`](../../templates/design/binder_preview.html). The workshop below describes the **full** six-view design; the production extraction (see status note) is a deliberate subset.
+
+> **Production status (shipped).** The Binder is mounted at **`/my-pursuit/collection/`** (`templates/components/binder.html` + `binder.css` + `binder.js`, fed by `collection_service.build_collection_context`). The baseline extraction is **Single + Binder presentation only**, with two deliberate divergences from the workshop:
+> - **Sets, not one continuous run.** Each badge type (Series, Developers, …) is its own binder view, picked from a set-tab strip; pages paginate within a set. Cross-linked with the sibling **List** view (`#card-NNNN` ↔ `#row-NNNN`).
+> - **Gallery / Compact / Spread were NOT extracted.** The responsive grid (4 → 2 → 1 columns, chrome slimmed on phones) solved the mobile-fit problem that **Gallery** existed for, and the **List** view covers dense scanning — so Gallery was dropped as a redundant middle ground (Binder = the charm, List = the hunting tool). Compact + Spread remain workshop-only.
 
 ---
 
@@ -72,7 +76,8 @@ The Gallery preset systematically strips every piece of binder dressing — cove
 
 ### Cross-view navigation
 
-- **Binder ↔ List.** Bidirectional anchor links (`#card-NNNN` ↔ `#row-NNNN`) make jumping between presentations a one-click action with browser-native scroll-into-view behavior.
+- **List → Binder.** Each list row's "View ->" deep-links to its binder card (`#card-NNNN`); the controller shows the binder and the card scrolls/flips into view. (The prototype's reverse `#row-NNNN` jump was dropped in production — the binder links out to badge detail pages instead, via each series header.)
+- **Detail links.** Both views link out to badge detail pages: the List via each row's series name, the Binder via each series header.
 - **Persistent state.** Mode + presentation are not yet persisted across sessions in the prototype; production extraction should consider localStorage or user-preference persistence.
 
 ---

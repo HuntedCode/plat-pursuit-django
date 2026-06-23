@@ -1,0 +1,48 @@
+{% comment %}
+One binder page (sheet of sleeves). Shared by single mode and by the left/right pages of a
+spread. Expects: page ({number, frames}), set ({key, label, palette}), side ('left'|'right'),
+page_count, set_first/spread_first (booleans, for the no-JS default page). Each page's own
+rings render the single-mode binding edge; in spread mode they're hidden for the spine's rings.
+{% endcomment %}
+<article class="pp-binder__page pp-binder__page--{{ side }}{% if set_first and spread_first and side == 'left' %} is-current{% endif %}" data-set="{{ set.key }}">
+    <div class="pp-binder__page-tab" data-palette="{{ set.palette }}">{{ set.label }}</div>
+    <div class="pp-binder__page-rings" aria-hidden="true">
+        <span class="pp-binder__ring"></span>
+        <span class="pp-binder__ring"></span>
+        <span class="pp-binder__ring"></span>
+    </div>
+    {% comment %}
+    A page is four series of four tiers. Each series is wrapped in a thin container whose
+    header names it, shows a tier pip per badge, and links to the badge detail page; the four
+    cards flow 4-up inside. In the flipbook the container + header are stripped (browse-only),
+    leaving the same 4x4 grid.
+    {% endcomment %}
+    <div class="pp-binder__groups">
+        {% regroup page.frames by series_slug as series_groups %}
+        {% for group in series_groups %}
+        <section class="pp-binder__series-group" data-palette="{{ set.palette }}">
+            <a class="pp-binder__series-header"
+               {% if group.grouper %}href="{% url 'badge_detail' group.grouper %}"{% endif %}
+               aria-label="{{ group.list.0.series_name }} series details">
+                <span class="pp-binder__series-name">{{ group.list.0.series_name }}</span>
+                <span class="pp-binder__series-meta">
+                    <span class="pp-binder__series-pips" aria-hidden="true">
+                        {% for f in group.list %}
+                        <span class="pp-binder__series-pip pp-binder__series-pip--{{ f.tier }}{% if f.state == 'earned' or f.state == 'maintenance' %} is-filled{% endif %}"></span>
+                        {% endfor %}
+                    </span>
+                    <svg class="pp-binder__series-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+                </span>
+            </a>
+            <div class="pp-binder__sleeves">
+                {% for frame in group.list %}
+                <div class="pp-binder__sleeve" id="{{ frame.dom_id }}">
+                    {% include "components/frame.html" with frame=frame %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+    <div class="pp-binder__page-number">Page {{ page.number }} / {{ page_count }}</div>
+</article>
