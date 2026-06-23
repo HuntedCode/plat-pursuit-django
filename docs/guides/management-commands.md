@@ -55,7 +55,7 @@ PlatPursuit has **70 custom management commands** spread across 5 Django apps: `
 | `inspect_franchise_data` | Read-only diagnostic: compare raw IGDB response to stored links for a concept or franchise. First stop when investigating mis-linked games. Shows drift detection (what's in IGDB but not the DB, or vice versa). | `--search`, `--concept-id`, `--franchise-name` (one required) | `python manage.py inspect_franchise_data --search "College Football"` |
 | `recalculate_calendars` | Recalculate Calendar Challenge fill state and platinum counts for all users, repairing drift between cached counts and the underlying data. | `--dry-run`, `--username` | `python manage.py recalculate_calendars --dry-run` |
 | `render_profile_sigs` | Pre-render forum-signature PNG and SVG variants of the profile card image. Used as a one-time backfill and as a periodic refresh after design changes. | `--username`, `--all` | `python manage.py render_profile_sigs --all` |
-| `trigger_concept_health_checks` | Queue `sync_title_stats` jobs for PS4/PS5 games whose concept is missing or stuck on a stub. Identifies users by `psn_username`, not `user.username`. | `--dry-run`, `--limit` | `python manage.py trigger_concept_health_checks --dry-run` |
+| `trigger_concept_health_checks` | Resolve a concept for every concept-less Game inline (no PSN/worker): tries the IGDB anchor, falls back to a PP_ stub so nothing stays null. Same anchor-or-stub recovery `sync_complete`'s orphan reconcile runs, on demand. Reaches games PSN's title_stats endpoint omits. PP_ stubs are out of scope (use `anchor_concepts` to re-evaluate those). | `--dry-run`, `--profile-id`, `--limit` | `python manage.py trigger_concept_health_checks --dry-run` |
 
 ### core
 
@@ -165,7 +165,7 @@ Commands for staff to run manually as needed.
 | `backfill_collection_spinoffs` | Stamp ConceptFranchise.is_spinoff for collection links (queries IGDB /collection_memberships) |
 | `franchise_stats` | Diagnostic: franchise/collection coverage and browse surfacing |
 | `inspect_franchise_data` | Diagnostic: raw IGDB response vs. stored links for a concept |
-| `trigger_concept_health_checks` | Queue sync for PS4/PS5 games stuck on stub concepts |
+| `trigger_concept_health_checks` | Resolve concept-less games inline via IGDB anchor, else PP_ stub |
 | `render_profile_sigs` | Pre-render forum-signature PNG/SVG variants of the profile card |
 
 ### One-Time Backfills
