@@ -21,7 +21,7 @@ The browse page filters aggressively to stay useful. Only franchises with at lea
 | `templates/trophies/franchise_detail.html` | Detail page with poster hero, user progress stats, tabs |
 | `templates/trophies/partials/franchise_list/browse_results.html` | HTMX partial for the filtered results grid |
 | `templates/trophies/partials/franchise_list/franchise_cards.html` | Individual browse card |
-| `templates/trophies/partials/franchise_detail/game_groups_list.html` | Reusable game-group list (used by both Games and Also Featured tabs) |
+| `templates/trophies/partials/franchise_detail/game_groups_list.html` | Reusable game-group list (single unified list on the franchise detail page) |
 | `templates/trophies/partials/game_detail/franchise_lines.html` | "Franchises / Collections" lines on the game detail About card |
 | `trophies/models.py` (Franchise, ConceptFranchise) | Data models — see [IGDB Integration](../architecture/igdb-integration.md) for full docs |
 | `core/hub_subnav.py` | Adds "Franchises" to the Browse hub sub-nav |
@@ -51,6 +51,14 @@ The browse queryset applies three filters to the `Franchise` table:
 The "orphan concept" subquery is the mechanism that keeps redundant collections hidden. "Resident Evil Main Series" doesn't surface because every RE game already has the Resident Evil franchise on it. "Astro Bot" DOES surface because its games have no franchise-type link — the collection is their only IGDB taxonomy.
 
 A final optional filter (default on) hides entries with `game_count < 2`. Users opt into single-game entries via the `?show_solo=1` URL parameter.
+
+**User-facing filters** (lay on top of the queryset above):
+- `?query=` — case-insensitive substring search on `name`.
+- `?sort=` — `alpha`, `alpha_inv`, `games`, `games_inv` (see `FRANCHISE_SORT_CHOICES`).
+- `?type=` — `all` (default), `franchise`, or `collection`. Renders as a radio-chip group in the toolbar (sr-only inputs + peer-checked button styling, same pattern as Company role chips). Junk values clamp to `all`. Composes with the queryset filters above via AND — `type=collection` still requires `has_orphan_concept=True`, so picking the collection chip won't surface redundant collections.
+- `?show_solo=` — `1` to show single-game entries.
+
+Browse cards wear a colored type badge under the name so users can tell franchises from collections at a glance: **Franchise** (`badge-primary`) for top-level IPs and **Collection** (`badge-info`) for sub-series. Same template lives at `templates/trophies/partials/franchise_list/franchise_cards.html`.
 
 ### Representative Cover Art
 
@@ -96,7 +104,7 @@ The game detail page's About card shows franchise/collection relationships via t
 
 ## Sort Options
 
-Detail page sort (applied to both Games and Also Featured tabs):
+Detail page sort (applied to the unified game list):
 
 | Sort key | Default | Behavior |
 |----------|---------|----------|

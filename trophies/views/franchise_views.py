@@ -199,7 +199,12 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             ('franchise', 'Franchise'),
             ('collection', 'Collection'),
         )
-        context['current_type'] = self.request.GET.get('type', 'all')
+        # Clamp to known values so a junk ?type= URL still renders the "All"
+        # chip as checked instead of an unselected radio group.
+        raw_type = self.request.GET.get('type', 'all')
+        context['current_type'] = raw_type if raw_type in (
+            'all', 'franchise', 'collection',
+        ) else 'all'
         context['seo_description'] = (
             "Browse PlayStation game franchises on Platinum Pursuit. "
             "Explore series like Resident Evil, Final Fantasy, and more."
