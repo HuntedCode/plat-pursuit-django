@@ -11,7 +11,7 @@ import pytest
 from django.urls import reverse
 
 from trophies.models import ConceptFranchise, Franchise
-from tests.factories import ConceptFactory, GameFactory
+from tests.factories import ConceptFactory, GameFactory, IGDBMatchFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -41,11 +41,16 @@ def _spiderman_pair():
     Spider-Man series. Previously the series would have been hidden by
     the orphan-concept rule; the rule has been dropped so both must
     surface together when the user picks the All chip.
+
+    Each concept gets an IGDBMatch so game_count (which counts distinct
+    concept__igdb_match__igdb_id) is non-zero — matching production
+    state and clearing the default show_solo gate (game_count >= 2).
     """
     franchise = _franchise(igdb_id=4001, name='Spider-Man', slug='spider-man')
     series = _series(igdb_id=4002, name='Spider-Man', slug='spider-man-series')
     for _ in range(2):
         concept = ConceptFactory()
+        IGDBMatchFactory(concept=concept)
         # Ensure version_count > 0 so it isn't filtered out by the
         # "at least one Game" gate.
         GameFactory(concept=concept)
