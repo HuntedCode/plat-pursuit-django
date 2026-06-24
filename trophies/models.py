@@ -917,9 +917,9 @@ class Concept(models.Model):
         help_text=(
             "When True, IGDB refresh/enrichment will NOT wipe or rebuild this "
             "concept's Franchise/Collection links (ConceptFranchise rows), so "
-            "manually-curated links and is_main flags survive every sync. Set by "
-            "admins who've hand-tuned a concept's franchise/collection membership "
-            "(e.g. excluding a spin-off's parent collection)."
+            "manually-curated links and is_excluded / is_spinoff admin overrides "
+            "survive every sync. Set by admins who've hand-tuned a concept's "
+            "franchise/collection membership."
         ),
     )
     family = models.ForeignKey(
@@ -1315,10 +1315,17 @@ class Concept(models.Model):
                     ce.concept = self
                     ce.save(update_fields=['concept'])
 
-            # ConceptFranchise: move to target. On duplicate franchise links
-            # `is_excluded` survives if EITHER side had it set (deliberate
-            # curator decision; exclusion should never be silently lost on
-            # merge). `is_spinoff` follows the same union semantic.
+            # ConceptFranchise: move to target. On duplicate franchise links,
+            # `is_excluded` and `is_spinoff` each survive if EITHER side has
+            # them set (curator decisions should never be silently lost on
+            # merge). NOTE: this protection only applies inside the
+            # `inherit_match=True` branch; the re-anchor case (above) drops
+            # `other`'s enrichment entirely with the discarded match, including
+            # any curator-set exclusions on `other`'s links. That's
+            # architecturally consistent (the re-anchored match describes a
+            # DIFFERENT IGDB game, so its curation is no longer meaningful),
+            # but admins doing concept merges across mismatched matches need
+            # to be aware they can lose `other`'s curation in that path.
             existing_links = {
                 cf.franchise_id: cf for cf in self.concept_franchises.all()
             }

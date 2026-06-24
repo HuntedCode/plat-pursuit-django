@@ -702,9 +702,18 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         # context var (None) for template back-compat; the franchises list is
         # passed as `franchise_also_featured` so the existing "Franchise(s):"
         # block renders the unified list. PR 2 will simplify the template.
+        #
+        # `franchise_has_any_links` tracks the raw CF row count (including
+        # excluded). The about-card's `{% elif igdb.franchise_names %}` denorm
+        # fallback is gated on this so it only fires for truly un-enriched
+        # concepts (zero CF rows) — otherwise an admin exclusion would leak
+        # through that fallback because franchise_names is rewritten from IGDB
+        # raw on every enrichment.
         franchises = []
         collections = []
+        cf_row_count = 0
         for cf in game.concept.concept_franchises.all():
+            cf_row_count += 1
             if cf.is_excluded:
                 continue
             if cf.franchise.source_type == 'collection':
@@ -714,6 +723,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         context['franchise_main'] = None
         context['franchise_also_featured'] = franchises
         context['franchise_collections'] = collections
+        context['franchise_has_any_links'] = cf_row_count > 0
 
         # Community averages (base game, for backward compat)
         context['community_averages'] = RatingService.get_cached_community_averages(game.concept)

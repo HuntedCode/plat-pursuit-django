@@ -3378,7 +3378,7 @@ class FranchiseConceptInline(admin.TabularInline):
     model = ConceptFranchise
     fk_name = 'franchise'
     extra = 0
-    fields = ('concept', 'is_main', 'is_spinoff')
+    fields = ('concept', 'is_excluded', 'is_spinoff')
     autocomplete_fields = ('concept',)
     can_delete = True
 

@@ -43,6 +43,35 @@ def test_wipe_clears_franchise_links_when_unlocked():
     assert ConceptGenre.objects.filter(concept=concept).count() == 0
 
 
+def test_absorb_excluded_wins_on_duplicate_franchise_link():
+    """When both sides have a link to the same Franchise, is_excluded and
+    is_spinoff each survive if EITHER side has them set. Curator decisions
+    must not be silently lost on merge. Requires inherit_match=True
+    (survivor has no IGDBMatch of its own) — the re-anchor path drops
+    other's enrichment entirely with the discarded match."""
+    survivor = ConceptFactory(franchises_locked=False)
+    absorbed = ConceptFactory(franchises_locked=False)
+    IGDBMatchFactory(concept=absorbed)  # gives `other` a match -> inherit_match True
+    fr = Franchise.objects.create(igdb_id=42, name='Shared', slug='shared', source_type='franchise')
+
+    # Survivor's link is clean; the absorbed concept's link carries the curated
+    # is_excluded=True. After absorb, the survivor's row should carry True.
+    ConceptFranchise.objects.create(
+        concept=survivor, franchise=fr, is_excluded=False, is_spinoff=False,
+    )
+    ConceptFranchise.objects.create(
+        concept=absorbed, franchise=fr, is_excluded=True, is_spinoff=True,
+    )
+
+    survivor.absorb(absorbed)
+
+    surviving_link = ConceptFranchise.objects.get(concept=survivor, franchise=fr)
+    assert surviving_link.is_excluded is True
+    assert surviving_link.is_spinoff is True
+    # No duplicate created (the absorbed side's row was discarded by the merge).
+    assert ConceptFranchise.objects.filter(franchise=fr).count() == 1
+
+
 def test_absorb_inherits_lock_when_links_migrate():
     # inherit_match=True (survivor has no match): other's curated links migrate, so
     # the survivor inherits the lock to keep protecting them.

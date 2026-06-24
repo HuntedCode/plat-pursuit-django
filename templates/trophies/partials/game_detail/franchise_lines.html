@@ -1,21 +1,20 @@
 {% comment %}
-    Renders Franchise / Also Featured / Collections lines on the game About card.
+    Renders Franchise(s) / Collections lines on the game About card. Two
+    buckets, both derived from the prefetched concept_franchises queryset by
+    GameDetailView._build_concept_context (which already filters out
+    is_excluded=True rows):
 
-    Three buckets, all derived from the same prefetched concept_franchises
-    queryset and partitioned by GameDetailView._build_concept_context:
+      1. franchise_also_featured: list of ConceptFranchise rows where
+                                  franchise.source_type='franchise'.
+      2. franchise_collections:   list of ConceptFranchise rows where
+                                  franchise.source_type='collection'.
 
-      1. franchise_main:        ConceptFranchise or None — IGDB's primary
-                                franchise for this game (singular `franchise`)
-      2. franchise_also_featured: list of ConceptFranchise — tie-ins / featured
-                                IPs (plural `franchises` array, is_main=False)
-      3. franchise_collections: list of ConceptFranchise — collection-type
-                                links (sub-series classification)
+    `franchise_main` is always None post-removal of the is_main field; the
+    block is kept for back-compat and renders nothing.
 
-    Tie-ins and collections each cap at 3 visible with a <details>/<summary>
-    "+ N more" disclosure (no JS, accessible by default).
-
-    Concepts not yet re-enriched (no link flagged is_main=True) fall back to
-    a single "Franchise(s):" line so the data is still useful pre-backfill.
+    Each list caps at 3 visible with a <details>/<summary> "+ N more"
+    disclosure (no JS, accessible by default). PR 2 will collapse the
+    conditional branches into a single unified Franchise(s) line.
 {% endcomment %}
 
 {% if franchise_main %}

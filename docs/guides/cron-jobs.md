@@ -144,7 +144,7 @@ historical pass after Phase 3's rematch run.
 
 - **Schedule**: Daily, 05:00 UTC
 - **Command**: `python manage.py audit_badge_coverage` (add `--always` for a daily heartbeat email even when there are no gaps)
-- **What it does**: For each tier-1 badge that tracks a franchise and/or developer, checks that every is_main franchise title / developed game (concept) is covered by one of the badge's series stages. Emails any gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game shipped and needs adding to the badge (or a data error). See [Management Commands](management-commands.md). Logic lives in `trophies/services/badge_coverage_service.py`.
+- **What it does**: For each tier-1 badge that tracks a franchise and/or developer, checks that every non-excluded franchise-linked concept / developed game is covered by one of the badge's series stages. Emails any gaps to `badge-alerts@platpursuit.com`. A gap usually means a new game shipped and needs adding to the badge (or a data error). See [Management Commands](management-commands.md). Logic lives in `trophies/services/badge_coverage_service.py`.
 - **Dependencies**: None. Read-only. More accurate after IGDB enrichment (franchise/developer + concept links) is current.
 - **Idempotency**: Fully safe to re-run; pure read + email. By default sends mail only when gaps exist.
 - **Failure impact**: Staff miss a day of "new game not in its badge" alerts; no data effect. Re-running catches up.
