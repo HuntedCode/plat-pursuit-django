@@ -64,10 +64,12 @@
                     </button>
                 </div>
 
-                {# Type filter: Franchise vs Collection. IGDB classifies these
-                   in separate namespaces (a franchise like "Resident Evil"
-                   vs. a collection like "Resident Evil Main Series"), and
-                   most users only want one type at a time when searching. #}
+                {% comment %}
+                    Type filter: Franchise vs Collection. IGDB classifies these
+                    in separate namespaces (a franchise like "Resident Evil"
+                    vs. a collection like "Resident Evil Main Series"), and
+                    most users only want one type at a time when searching.
+                {% endcomment %}
                 <div class="flex flex-wrap items-center gap-1.5 mt-2">
                     <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
                     {% for value, display in type_choices %}
