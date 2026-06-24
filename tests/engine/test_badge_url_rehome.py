@@ -39,3 +39,22 @@ def test_badges_is_a_browse_subnav_item():
     # The badge detail page highlights the Badges browse tab.
     assert _URL_NAME_TO_SLUG_OVERRIDES['badge_detail'] == ('browse', 'badges')
     assert _URL_NAME_TO_SLUG_OVERRIDES['badge_detail_with_profile'] == ('browse', 'badges')
+
+
+def test_bot_redirect_collapses_profile_badge_urls_to_new_canonical():
+    """The crawler short-circuit must target the NEW canonical /badges/<slug>/ in one hop --
+    targeting the old /my-pursuit/badges/<slug>/ would now bounce through a second 301."""
+    from plat_pursuit.middleware import _BOT_REDIRECT_RULES
+
+    def collapse(path):
+        for pattern, target in _BOT_REDIRECT_RULES:
+            m = pattern.match(path)
+            if m:
+                return target.format(slug=m.group(1))
+        return None
+
+    # The new canonical profile-scoped path collapses to the canonical badge page.
+    assert collapse('/badges/resident-evil/someuser/') == '/badges/resident-evil/'
+    # Legacy prefixes also collapse straight to the new canonical (one hop, not via a 301).
+    assert collapse('/my-pursuit/badges/re/u/') == '/badges/re/'
+    assert collapse('/achievements/badges/re/u/') == '/badges/re/'

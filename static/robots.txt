@@ -66,6 +66,6 @@ Disallow: /my-guides/
 
 # Profile-scoped variants of canonical pages. These are duplicates of the
 # canonical pages on the <username> axis and dilute crawl budget. Canonical
-# /games/<np_id>/ and /my-pursuit/badges/<badge>/ pages remain crawlable.
+# /games/<np_id>/ and /badges/<badge>/ pages remain crawlable.
 Disallow: /games/*/*
-Disallow: /my-pursuit/badges/*/*
+Disallow: /badges/*/*

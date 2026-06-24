@@ -121,16 +121,16 @@ _BOT_UA_RE = re.compile(
 )
 
 # Each rule maps a profile-scoped URL shape to its canonical target. The badge
-# rule intentionally covers the legacy /badges/<slug>/ and /achievements/badges/
-# /<slug>/ prefixes alongside the canonical /my-pursuit/badges/<slug>/, because
-# crawlers often still follow old backlinks to those prefixes. Short-circuiting
-# to the canonical target in one hop avoids a two-hop redirect chain through
-# the existing legacy 301s in plat_pursuit/urls.py.
+# rule intentionally covers the legacy /my-pursuit/badges/<slug>/ and
+# /achievements/badges/<slug>/ prefixes alongside the canonical /badges/<slug>/,
+# because crawlers often still follow old backlinks to those prefixes. Short-
+# circuiting to the canonical target in one hop avoids a two-hop redirect chain
+# through the existing legacy 301s in plat_pursuit/urls.py.
 _BOT_REDIRECT_RULES = (
     (re.compile(r'^/games/([^/]+)/[^/]+/?$'), '/games/{slug}/'),
     (
         re.compile(r'^/(?:my-pursuit/badges|badges|achievements/badges)/([^/]+)/[^/]+/?$'),
-        '/my-pursuit/badges/{slug}/',
+        '/badges/{slug}/',
     ),
 )
 
