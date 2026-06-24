@@ -2025,7 +2025,8 @@ class IGDBService:
             (ConceptFranchise, 'franchises'),
         ]:
             # A franchises-locked concept keeps its hand-curated franchise/
-            # collection links + is_main flags; the rest of enrichment still refreshes.
+            # collection links + is_excluded / is_spinoff overrides; the rest
+            # of enrichment still refreshes.
             if model is ConceptFranchise and concept.franchises_locked:
                 deleted[key] = 0
                 continue
@@ -2516,12 +2517,13 @@ class IGDBService:
     def _create_concept_franchises(cls, concept, igdb_data, fetch_memberships=True):
         """Create Franchise and ConceptFranchise records from IGDB franchise/collection data.
 
-        IGDB exposes ``franchise`` (singular = primary identity) AND ``franchises``
-        (plural = secondary tie-ins). The link to the singular franchise is
-        flagged ``is_main=True``; everything else is ``is_main=False``. This
-        powers the franchise browse page (only shows franchises that ARE
-        someone's main) and the detail page Games / Also Featured split.
-        Collections never get is_main set (different IGDB taxonomy entirely).
+        IGDB exposes ``franchise`` (singular) AND ``franchises`` (plural). Both
+        arrays are walked equally — the writer no longer flags a "primary"
+        franchise. Every IGDB-listed link becomes a ConceptFranchise row with
+        ``is_excluded=False``. Admins can flip ``is_excluded=True`` on individual
+        rows to hide bad links; combined with ``concept.franchises_locked=True``
+        the override survives future enrichment refreshes. This writer NEVER
+        touches ``is_excluded`` on existing rows — admin territory.
 
         ``fetch_memberships`` controls the per-collection spin-off lookup. The live
         enrichment path leaves it True (one extra /collection_memberships call when the
@@ -2531,30 +2533,6 @@ class IGDBService:
         repopulate it from IGDB afterward.
         """
         from trophies.models import Franchise, ConceptFranchise
-
-        # Determine which franchise should be flagged as main.
-        #
-        # Precedence (intentional — keep in sync with backfill_franchise_main_flag):
-        #   1. First entry of the plural `franchises` array.
-        #      The plural array is IGDB's modern field (singular `franchise`
-        #      is being phased out per their changelog), and is what IGDB's
-        #      own UI surfaces. Within the array, IGDB orders by curator
-        #      confidence, so the first entry is the umbrella IP.
-        #   2. Fall back to the singular `franchise` field only when the
-        #      plural array is empty. Covers older entries that were
-        #      curated before the plural field existed.
-        #   3. Otherwise no main franchise is set for this concept.
-        main_igdb_id = None
-        plural = [
-            f for f in igdb_data.get('franchises', [])
-            if f.get('id') and f.get('name')
-        ]
-        if plural:
-            main_igdb_id = plural[0]['id']
-        else:
-            singular = igdb_data.get('franchise') or {}
-            if singular.get('id'):
-                main_igdb_id = singular['id']
 
         # Build the source list. The singular `franchise` is included as its
         # own source (when present) so a Franchise record gets created for it
@@ -2616,8 +2594,8 @@ class IGDBService:
                         # slug lookup: that returns the WRONG Franchise row
                         # (e.g. the franchise-type "South Park" when we're
                         # trying to create the collection-type "South Park"),
-                        # which then overwrites the correctly-set is_main flag
-                        # via the stale-fix logic below.
+                        # which would then mis-link this concept to the wrong
+                        # source-type franchise via the get_or_create below.
                         dedup_slug = f'{slug}-{igdb_id}'
                         try:
                             franchise, _ = Franchise.objects.get_or_create(
@@ -2631,11 +2609,6 @@ class IGDBService:
                             ).first()
                             if not franchise:
                                 continue
-                # Only the franchise matching IGDB's primary franchise (per the
-                # precedence above) is main. Collections are never main.
-                desired_is_main = (
-                    source_type == 'franchise' and igdb_id == main_igdb_id
-                )
                 # Spin-off applies only to collection memberships (franchises have no
                 # membership type). Default False when this collection isn't in the map.
                 desired_is_spinoff = (
@@ -2645,19 +2618,14 @@ class IGDBService:
                 cf, created = ConceptFranchise.objects.get_or_create(
                     concept=concept,
                     franchise=franchise,
-                    defaults={'is_main': desired_is_main, 'is_spinoff': desired_is_spinoff},
+                    defaults={'is_spinoff': desired_is_spinoff},
                 )
-                # If the row already existed with stale flags, fix them.
-                if not created:
-                    stale = []
-                    if cf.is_main != desired_is_main:
-                        cf.is_main = desired_is_main
-                        stale.append('is_main')
-                    if cf.is_spinoff != desired_is_spinoff:
-                        cf.is_spinoff = desired_is_spinoff
-                        stale.append('is_spinoff')
-                    if stale:
-                        cf.save(update_fields=stale)
+                # If the row already existed with a stale spinoff flag, fix it.
+                # NEVER touch `is_excluded` here — that's admin territory and
+                # would otherwise be clobbered on every enrichment refresh.
+                if not created and cf.is_spinoff != desired_is_spinoff:
+                    cf.is_spinoff = desired_is_spinoff
+                    cf.save(update_fields=['is_spinoff'])
 
     @classmethod
     def _apply_vr_platforms(cls, concept, igdb_data):

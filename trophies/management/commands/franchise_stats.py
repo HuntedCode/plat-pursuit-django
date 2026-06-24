@@ -18,7 +18,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import Count, Exists, OuterRef, Q
 
 from trophies.models import (
-    Concept, ConceptFranchise, Franchise, Game,
+    Concept, ConceptFranchise, Franchise, Game, IGDBMatch,
 )
 
 
@@ -53,7 +53,8 @@ class Command(BaseCommand):
         # =========================================================
         self.stdout.write(H("\n=== ConceptFranchise links ==="))
         cf_total = ConceptFranchise.objects.count()
-        cf_main = ConceptFranchise.objects.filter(is_main=True).count()
+        cf_excluded = ConceptFranchise.objects.filter(is_excluded=True).count()
+        cf_spinoff = ConceptFranchise.objects.filter(is_spinoff=True).count()
         cf_franchise_links = ConceptFranchise.objects.filter(
             franchise__source_type='franchise',
         ).count()
@@ -61,7 +62,8 @@ class Command(BaseCommand):
             franchise__source_type='collection',
         ).count()
         self.stdout.write(f"  Total links:                  {cf_total:>6}")
-        self.stdout.write(f"  is_main=True:                 {cf_main:>6}")
+        self.stdout.write(f"  is_excluded=True (admin curated):{cf_excluded:>3}")
+        self.stdout.write(f"  is_spinoff=True (collections):{cf_spinoff:>6}")
         self.stdout.write(f"  Links to franchise-type rows: {cf_franchise_links:>6}")
         self.stdout.write(f"  Links to collection-type rows:{cf_collection_links:>6}")
 
@@ -101,10 +103,10 @@ class Command(BaseCommand):
         # =========================================================
         self.stdout.write(H("\n=== Browse page surfacing (what users will see) ==="))
 
-        # Franchise-type rows that are at least one game's main.
+        # Franchise-type rows that have at least one non-excluded link.
         browse_franchises = Franchise.objects.filter(
             source_type='franchise',
-            franchise_concepts__is_main=True,
+            franchise_concepts__is_excluded=False,
         ).distinct()
         browse_franchise_count = browse_franchises.count()
 
@@ -182,5 +184,62 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"  - {c.unified_title}  →  {', '.join(collection_names)}"
                 )
+
+        # =========================================================
+        # 6. Smoking-gun audit: concepts whose IGDB cache lists franchises
+        #    or collections, but who have ZERO ConceptFranchise rows. These
+        #    are the cases where the writer silently failed (slug collision,
+        #    cross-namespace clash, race condition, etc.) and the user sees
+        #    "this game's franchise is just missing."
+        # =========================================================
+        self.stdout.write(H("\n=== Audit: cached franchise data with no DB link ==="))
+        # Postgres can ask "is this JSON array non-empty" via __len__gt=0 path;
+        # iterate to be portable / explicit.
+        candidates = (
+            IGDBMatch.objects
+            .exclude(raw_response={})
+            .exclude(raw_response__isnull=True)
+            .filter(
+                Q(raw_response__franchises__isnull=False)
+                | Q(raw_response__franchise__isnull=False)
+                | Q(raw_response__collections__isnull=False),
+            )
+            .select_related('concept')
+            .only('concept_id', 'concept__concept_id', 'concept__unified_title',
+                  'concept__franchises_locked', 'raw_response')
+        )
+        missing = []
+        for match in candidates.iterator(chunk_size=200):
+            raw = match.raw_response or {}
+            plural = raw.get('franchises') or []
+            singular = raw.get('franchise') or {}
+            collections_raw = raw.get('collections') or []
+            cached_link_count = (
+                len([f for f in plural if f.get('id')])
+                + (1 if singular.get('id') else 0)
+                + len([c for c in collections_raw if c.get('id')])
+            )
+            if cached_link_count == 0:
+                continue
+            actual_links = ConceptFranchise.objects.filter(
+                concept_id=match.concept_id,
+            ).count()
+            if actual_links == 0:
+                missing.append((match.concept, cached_link_count))
+
+        if not missing:
+            self.stdout.write(OK("  None — every cached franchise/collection has a DB link."))
+        else:
+            self.stdout.write(WARN(
+                f"  {len(missing)} concept(s) have cached franchise data but ZERO links. "
+                f"Likely candidates for `rebuild_franchises_from_cache`."
+            ))
+            if sample_n > 0:
+                for concept, expected in sorted(missing, key=lambda x: -x[1])[:sample_n]:
+                    locked = ' [LOCKED]' if concept.franchises_locked else ''
+                    self.stdout.write(
+                        f"  - {concept.unified_title} ({concept.concept_id!r}, "
+                        f"cache lists {expected} link(s)){locked}"
+                    )
 
         self.stdout.write("")  # trailing newline

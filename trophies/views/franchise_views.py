@@ -20,40 +20,32 @@ FRANCHISE_SORT_CHOICES = [
 DETAIL_SORT_CHOICES = grouping.SORT_CHOICES
 
 
-# Franchise browse-page cover art has a wrinkle: franchise-type rows need games
-# filtered by is_main=True, collection-type rows need any link. The Q clause
-# below expresses "franchise-type requires is_main, collection-type doesn't"
-# in a single filter so one subquery serves both row types on the mixed browse
-# list.
-# Collections additionally bias away from spin-off memberships (IGDB types a game like
-# Agents of Mayhem as a "Spin-off" of Saints Row) so a series' cover art isn't anchored
-# by a spin-off. is_spinoff is always False on franchise-type links, so the franchise
-# clause is unaffected.
+# Browse / detail cover-art filter. With is_main gone, every non-excluded link
+# is equal — we just need to skip admin-excluded rows and collection spin-offs
+# (so a series' cover isn't anchored by a spin-off). is_spinoff is always False
+# on franchise-type links, so the spinoff clause is a no-op for franchises.
 #
 # BEST-EFFORT for cover art only: this filter is applied to a Game queryset as a SECOND
 # .filter() after the OuterRef franchise correlation, so Django joins a separate
-# ConceptFranchise row -- the is_spinoff check isn't guaranteed to be the same membership
-# that ties the game to this collection. A game that's a spin-off of THIS collection but
-# is_main of its own franchise could still surface as the cover. The exact suppression
-# (same-row) lives where it matters: the detail member list (FranchiseDetailView.links_qs)
-# and the browse counts (main_only_filter below), both of which filter ConceptFranchise
-# rows directly. Cover art is cosmetic, so the residual leak is acceptable.
-_MAIN_ONLY_FILTER = (
-    Q(concept__concept_franchises__franchise__source_type='collection',
-      concept__concept_franchises__is_spinoff=False)
-    | Q(concept__concept_franchises__is_main=True)
+# ConceptFranchise row -- the flags aren't guaranteed to come from the same membership
+# that ties the game to this franchise. The exact suppression (same-row) lives where
+# it matters: the detail member list (FranchiseDetailView.links_qs) and the browse
+# counts (visible_link_filter below), both of which filter ConceptFranchise rows directly.
+# Cover art is cosmetic, so the residual leak is acceptable.
+_VISIBLE_LINK_FILTER = Q(
+    concept__concept_franchises__is_excluded=False,
+    concept__concept_franchises__is_spinoff=False,
 )
 
 
-def _franchise_cover_annotations(*, main_only: bool):
-    """Build the three cover-art Subquery annotations for Franchise rows.
+def _franchise_cover_annotations():
+    """Build the cover-art Subquery annotations for Franchise rows.
 
-    ``main_only=True`` (browse + franchise detail hero) filters games where
-    this franchise is the main. ``main_only=False`` (Collections tab) allows
-    any link.
+    All non-excluded, non-spin-off links contribute. Tiebreak comes from
+    `_MOST_RECENT_RELEASE_ORDER` inside the grouping subqueries.
     """
     path = 'concept__concept_franchises__franchise'
-    extra = _MAIN_ONLY_FILTER if main_only else None
+    extra = _VISIBLE_LINK_FILTER
     return {
         'representative_title_image': grouping.representative_title_image_subquery(
             through_path=path, extra_filter=extra,
@@ -80,10 +72,9 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     def get_queryset(self):
         # The browse page surfaces two kinds of entries:
         #
-        # 1. Franchises (source_type='franchise') that are the MAIN franchise
-        #    of at least one game. Tie-in-only franchises like "Frozen" stay
-        #    hidden — they're discoverable via the "Also Featured" tab on
-        #    whichever franchise IS that game's main.
+        # 1. Franchises (source_type='franchise') with at least one non-excluded
+        #    link. Every IGDB-listed game contributes equally now (no main vs.
+        #    tie-in distinction); admins can hide bad links via is_excluded.
         #
         # 2. Collections (source_type='collection') that contain at least one
         #    "orphan" game — a game with no franchise-type link at all. These
@@ -105,12 +96,10 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         )
 
         # Eligibility check via Exists: a franchise row is browse-visible if
-        # it's a collection OR has at least one is_main link. Express this
-        # without the multi-relation outer .filter() that previously forced a
-        # final .distinct() and exploded the planner on large data.
+        # it's a collection OR has at least one non-excluded link.
         eligible_link_exists = Exists(
             ConceptFranchise.objects.filter(
-                franchise=OuterRef('pk'), is_main=True,
+                franchise=OuterRef('pk'), is_excluded=False,
             )
         )
 
@@ -129,13 +118,11 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                 output_field=IntegerField(),
             )
 
-        # Restrict counts to the "main" set for franchise rows; collections
-        # have no is_main concept so allow any link EXCEPT spin-offs (which are
-        # hidden from the series, so they must not pad its game/version counts).
-        main_only_filter = (
-            Q(franchise__source_type='collection', is_spinoff=False)
-            | Q(is_main=True)
-        )
+        # Counts include every non-excluded link, minus collection spin-offs
+        # (which are hidden from the series, so they must not pad its
+        # game/version counts). is_spinoff is always False on franchise-type
+        # links, so the spinoff clause is a no-op for franchises.
+        visible_link_filter = Q(is_excluded=False, is_spinoff=False)
 
         qs = super().get_queryset().filter(
             Q(source_type='collection') | eligible_link_exists,
@@ -147,14 +134,14 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             # which slightly undercounts, but in practice nearly all
             # concepts in franchise/collection pages have IGDB matches.
             game_count=_per_franchise_count(
-                'concept__igdb_match__igdb_id', extra_filter=main_only_filter,
+                'concept__igdb_match__igdb_id', extra_filter=visible_link_filter,
             ),
             # version_count: distinct Games, i.e. individual PSN records
             # (a game on both PS4 and PS5 counts as 2 versions of 1 game).
             version_count=_per_franchise_count(
-                'concept__games', extra_filter=main_only_filter,
+                'concept__games', extra_filter=visible_link_filter,
             ),
-            **_franchise_cover_annotations(main_only=True),
+            **_franchise_cover_annotations(),
             has_orphan_concept=orphan_concept_exists,
         ).filter(
             # Franchises always pass the type filter above; collections must
@@ -233,19 +220,14 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
             {'text': franchise.name},
         ]
 
-        # Fetch all concept links and partition by is_main up-front. The map
-        # gets passed to build_igdb_groups via extra_per_group so each group
-        # knows whether the link is this franchise's primary identity.
-        # Spin-off members are excluded so a Series doesn't list games IGDB
-        # types as spin-offs of it (e.g. Agents of Mayhem under Saints Row).
-        # Franchise-type links are never spin-offs, so this is a no-op for them.
+        # Fetch all visible concept links. With is_main gone, every non-excluded
+        # link contributes equally to the franchise's game list. Spin-off members
+        # are still excluded so a Series doesn't list games IGDB types as spin-offs
+        # of it (e.g. Agents of Mayhem under Saints Row). Franchise-type links
+        # are never spin-offs, so the spinoff clause is a no-op for them.
         links_qs = ConceptFranchise.objects.filter(
-            franchise=franchise, is_spinoff=False,
+            franchise=franchise, is_excluded=False, is_spinoff=False,
         )
-        concept_links = links_qs.values('concept_id', 'is_main')
-        is_main_by_concept = {
-            row['concept_id']: {'is_main': row['is_main']} for row in concept_links
-        }
         concept_ids_subq = links_qs.values_list('concept_id', flat=True)
 
         games = list(
@@ -269,27 +251,21 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
         user_progress_map = grouping.fetch_user_progress_map(profile, games)
 
         # Shared service: group by IGDB id, compute per-group stats, attach
-        # user progress to each game. is_main is attached per concept via
-        # extra_per_group so we can partition after grouping.
+        # user progress to each game.
         all_groups = grouping.build_igdb_groups(
             games,
             user_progress_map=user_progress_map,
-            extra_per_group=is_main_by_concept,
         )
 
-        # Partition into main vs also-featured. For collection-type detail
-        # pages (rare, direct URL only), is_main is always False so everything
-        # ends up in "main" — collections don't have a primary/secondary
-        # distinction to express.
-        if franchise.source_type == 'franchise':
-            main_groups = [g for g in all_groups if g.get('is_main')]
-            also_featured_groups = [g for g in all_groups if not g.get('is_main')]
-        else:
-            main_groups = all_groups
-            also_featured_groups = []
+        # Single unified game list for both franchise- and collection-type
+        # pages. The legacy "main vs also-featured" partition is gone — every
+        # IGDB-listed link counts equally now. main_groups is kept as the
+        # context-var name for template back-compat; also_featured_groups is
+        # an empty list that the template's optional block renders as nothing.
+        main_groups = all_groups
+        also_featured_groups = []
 
-        # Aggregate stats come from the MAIN set only — tie-ins shouldn't pad
-        # the franchise-wide totals or anchor the hero image.
+        # Aggregate stats include every non-excluded linked game.
         total_trophies = sum(g['total_trophies'] for g in main_groups)
         platinums = sum(1 for g in main_groups if g['has_platinum'])
         main_versions_count = sum(len(g['games']) for g in main_groups)
@@ -298,14 +274,12 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
             main_groups, total_trophies, user_progress_map, profile=profile,
         )
 
-        # Apply user-selected sort to BOTH lists independently.
+        # Apply user-selected sort.
         sort_val = self.request.GET.get('sort', 'release')
         main_groups = grouping.sort_groups(main_groups, sort_val)
-        also_featured_groups = grouping.sort_groups(also_featured_groups, sort_val)
 
-        # Pick hero cover from main groups (newest first). If the franchise has
-        # no main games yet (data not re-enriched), fall back to all groups.
-        hero_cover = grouping.pick_hero_cover(main_groups) or grouping.pick_hero_cover(all_groups)
+        # Pick hero cover from the unified list.
+        hero_cover = grouping.pick_hero_cover(main_groups)
 
         # Related entries of the opposite IGDB source type (collections for a
         # franchise page, or vice versa). Detected via shared concepts: any
@@ -338,8 +312,7 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
             .annotate(
                 related_game_count=_related_count('concept'),
                 related_version_count=_related_count('concept__games'),
-                # Collections never have is_main=True, so allow any link.
-                **_franchise_cover_annotations(main_only=False),
+                **_franchise_cover_annotations(),
             )
             .filter(related_version_count__gt=0)
             .order_by(Lower('name'))

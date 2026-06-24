@@ -235,12 +235,12 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        # Pre-sort by is_main DESC then name so the about-card view-side
-        # partition (see _partition_franchise_links) finds the main first.
+        # All non-excluded links are equal; sort by name for stable display.
+        # The view partitions by source_type into franchises vs collections.
         franchise_prefetch = Prefetch(
             'concept__concept_franchises',
             queryset=ConceptFranchise.objects.select_related('franchise').order_by(
-                '-is_main', 'franchise__name',
+                'franchise__name',
             ),
         )
         return super().get_queryset().select_related('concept', 'concept__igdb_match').prefetch_related(
@@ -695,29 +695,24 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         context = {}
 
-        # Partition the prefetched franchise links into three buckets for the
-        # About card. Done in the view (not template) so the template stays
-        # declarative and the buckets are also available for any future code
-        # that wants them. The franchise_prefetch in get_queryset orders by
-        # is_main DESC then name, so the buckets come out pre-sorted.
-        main_franchise = None
-        also_featured = []
+        # Partition the prefetched franchise links into franchise-type and
+        # collection-type buckets for the About card. All non-excluded links
+        # land in their respective bucket as equal members — the legacy
+        # "main vs. tie-in" split is gone. `franchise_main` is kept as a
+        # context var (None) for template back-compat; the franchises list is
+        # passed as `franchise_also_featured` so the existing "Franchise(s):"
+        # block renders the unified list. PR 2 will simplify the template.
+        franchises = []
         collections = []
         for cf in game.concept.concept_franchises.all():
+            if cf.is_excluded:
+                continue
             if cf.franchise.source_type == 'collection':
                 collections.append(cf)
-            elif cf.is_main:
-                # IGDB schema guarantees at most one is_main=True per concept,
-                # but be defensive: only the first one wins, others fall through
-                # to also_featured so the data isn't silently dropped.
-                if main_franchise is None:
-                    main_franchise = cf
-                else:
-                    also_featured.append(cf)
             else:
-                also_featured.append(cf)
-        context['franchise_main'] = main_franchise
-        context['franchise_also_featured'] = also_featured
+                franchises.append(cf)
+        context['franchise_main'] = None
+        context['franchise_also_featured'] = franchises
         context['franchise_collections'] = collections
 
         # Community averages (base game, for backward compat)
