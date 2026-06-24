@@ -917,9 +917,9 @@ class Concept(models.Model):
         help_text=(
             "When True, IGDB refresh/enrichment will NOT wipe or rebuild this "
             "concept's Franchise/Collection links (ConceptFranchise rows), so "
-            "manually-curated links and is_main flags survive every sync. Set by "
-            "admins who've hand-tuned a concept's franchise/collection membership "
-            "(e.g. excluding a spin-off's parent collection)."
+            "manually-curated links and is_excluded / is_spinoff admin overrides "
+            "survive every sync. Set by admins who've hand-tuned a concept's "
+            "franchise/collection membership."
         ),
     )
     family = models.ForeignKey(
@@ -1315,14 +1315,35 @@ class Concept(models.Model):
                     ce.concept = self
                     ce.save(update_fields=['concept'])
 
-            # ConceptFranchise: move to target, skip duplicates
-            existing_franchise_ids = set(
-                self.concept_franchises.values_list('franchise_id', flat=True)
-            )
+            # ConceptFranchise: move to target. On duplicate franchise links,
+            # `is_excluded` and `is_spinoff` each survive if EITHER side has
+            # them set (curator decisions should never be silently lost on
+            # merge). NOTE: this protection only applies inside the
+            # `inherit_match=True` branch; the re-anchor case (above) drops
+            # `other`'s enrichment entirely with the discarded match, including
+            # any curator-set exclusions on `other`'s links. That's
+            # architecturally consistent (the re-anchored match describes a
+            # DIFFERENT IGDB game, so its curation is no longer meaningful),
+            # but admins doing concept merges across mismatched matches need
+            # to be aware they can lose `other`'s curation in that path.
+            existing_links = {
+                cf.franchise_id: cf for cf in self.concept_franchises.all()
+            }
             for cf in other.concept_franchises.all():
-                if cf.franchise_id not in existing_franchise_ids:
+                survivor = existing_links.get(cf.franchise_id)
+                if survivor is None:
                     cf.concept = self
                     cf.save(update_fields=['concept'])
+                    continue
+                stale = []
+                if cf.is_excluded and not survivor.is_excluded:
+                    survivor.is_excluded = True
+                    stale.append('is_excluded')
+                if cf.is_spinoff and not survivor.is_spinoff:
+                    survivor.is_spinoff = True
+                    stale.append('is_spinoff')
+                if stale:
+                    survivor.save(update_fields=stale)
 
             # Inherit the franchises lock ONLY here, where `other`'s curated links
             # actually migrate to the survivor. In the re-anchor case (inherit_match
@@ -5858,11 +5879,15 @@ class Franchise(models.Model):
 class ConceptFranchise(models.Model):
     """Links a Concept to a Franchise (M2M through model).
 
-    `is_main` reflects IGDB's distinction between the singular ``franchise``
-    field (the primary identity of the game) and the plural ``franchises``
-    array (secondary tie-ins). Browse/detail pages filter on this to keep
-    franchise pages focused on titles that ARE that franchise rather than
-    titles that merely reference it.
+    All IGDB-listed franchises a game belongs to are treated equally — no
+    "primary" or "tie-in" distinction. Curation lives on two flags that are
+    admin territory, never set by the IGDB writer:
+
+    `is_excluded` lets staff hide a specific link from browse / detail / badge
+    coverage even though IGDB lists it. Survives IGDB refresh ONLY when the
+    concept has ``franchises_locked=True`` — the lock is what makes manual
+    curation sticky across enrichment cycles. Use `is_excluded=True` for the
+    occasional bad link IGDB returns; lock the concept to keep it sticky.
 
     `is_spinoff` reflects IGDB's per-membership ``collection_membership`` type
     for COLLECTION links only (collections == IGDB "Series"). A game can be a
@@ -5870,7 +5895,10 @@ class ConceptFranchise(models.Model):
     (e.g. Agents of Mayhem is a Member of the Agents of Mayhem series but a
     Spin-off of Saints Row). Because the flag is per-(game, collection) it
     lives here on the link, not on the Concept or Franchise. Always False for
-    franchise-type links (IGDB franchises have no membership type).
+    franchise-type links (IGDB franchises have no membership type). Like
+    `is_excluded`, the IGDB writer sets it from the IGDB collection_memberships
+    endpoint but admins can override; both survive enrichment refresh under the
+    lock.
     """
     concept = models.ForeignKey(
         Concept, on_delete=models.CASCADE, related_name='concept_franchises'
@@ -5878,10 +5906,13 @@ class ConceptFranchise(models.Model):
     franchise = models.ForeignKey(
         Franchise, on_delete=models.CASCADE, related_name='franchise_concepts'
     )
-    is_main = models.BooleanField(
+    is_excluded = models.BooleanField(
         default=False,
-        help_text="True when this is the concept's primary franchise (IGDB's "
-                  "singular `franchise` field). At most one is_main=True per concept.",
+        help_text="Admin override. When True, every consumer (browse list, "
+                  "franchise detail page, game detail page, franchise-tier "
+                  "badge coverage) filters this link out as if IGDB had never "
+                  "listed it. Survives IGDB refresh only on locked concepts "
+                  "(concept.franchises_locked=True).",
     )
     is_spinoff = models.BooleanField(
         default=False,
@@ -5897,14 +5928,20 @@ class ConceptFranchise(models.Model):
         indexes = [
             models.Index(fields=['concept'], name='conceptfranchise_concept_idx'),
             models.Index(fields=['franchise'], name='conceptfranchise_franchise_idx'),
-            models.Index(fields=['is_main'], name='conceptfranchise_main_idx'),
+            # Partial index on the rare True case — most rows are is_excluded=False,
+            # so we only need the index for admin-curation lookups.
+            models.Index(
+                fields=['is_excluded'],
+                name='conceptfranchise_excl_idx',
+                condition=Q(is_excluded=True),
+            ),
             # Powers the collection-member-excluding-spin-off lookups (badge
             # coverage audit + Series detail list).
             models.Index(fields=['franchise', 'is_spinoff'], name='conceptfranchise_spinoff_idx'),
         ]
 
     def __str__(self):
-        flags = ''.join(f for f, on in ((' (main)', self.is_main), (' (spin-off)', self.is_spinoff)) if on)
+        flags = ''.join(f for f, on in ((' (excluded)', self.is_excluded), (' (spin-off)', self.is_spinoff)) if on)
         return f"{self.concept} - {self.franchise.name}{flags}"
 
 
