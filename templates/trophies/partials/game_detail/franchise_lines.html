@@ -1,44 +1,38 @@
 {% comment %}
-    Renders Franchise(s) / Collections lines on the game About card. Two
-    buckets, both derived from the prefetched concept_franchises queryset by
-    GameDetailView._build_concept_context (which already filters out
-    is_excluded=True rows):
+    Renders Franchise(s) / Series lines on the game About card. Two buckets,
+    both supplied by GameDetailView._build_concept_context (which already
+    filters out is_excluded=True rows):
 
-      1. franchise_also_featured: list of ConceptFranchise rows where
-                                  franchise.source_type='franchise'.
-      2. franchise_collections:   list of ConceptFranchise rows where
-                                  franchise.source_type='collection'.
-
-    `franchise_main` is always None post-removal of the is_main field; the
-    block is kept for back-compat and renders nothing.
+      1. franchises:            ConceptFranchise rows with
+                                franchise.source_type='franchise' — rendered
+                                under the "Franchise(s)" label.
+      2. franchise_collections: ConceptFranchise rows with
+                                franchise.source_type='collection' — rendered
+                                under the "Series" label per user-facing
+                                vocabulary. The variable name keeps the legacy
+                                'collections' suffix to match the DB column
+                                and IGDB API field; only the user-visible
+                                label was renamed.
 
     Each list caps at 3 visible with a <details>/<summary> "+ N more"
-    disclosure (no JS, accessible by default). PR 2 will collapse the
-    conditional branches into a single unified Franchise(s) line.
+    disclosure (no JS, accessible by default). The Franchise label switches
+    singular/plural; the Series label is the same in both forms.
 {% endcomment %}
 
-{% if franchise_main %}
-    <div class="flex items-center gap-1.5 text-xs">
-        <span class="text-base-content/50 shrink-0">Franchise:</span>
-        <a href="{% url 'franchise_detail' slug=franchise_main.franchise.slug %}"
-           class="font-medium text-accent hover:underline line-clamp-1 pr-1">{{ franchise_main.franchise.name }}</a>
-    </div>
-{% endif %}
-
-{% if franchise_also_featured %}
+{% if franchises %}
     <div class="flex items-start gap-1.5 text-xs">
         <span class="text-base-content/50 shrink-0">
-            {% if franchise_main %}Also Featured:{% else %}{% if franchise_also_featured|length == 1 %}Franchise{% else %}Franchises{% endif %}:{% endif %}
+            {% if franchises|length == 1 %}Franchise{% else %}Franchises{% endif %}:
         </span>
         <span class="font-medium text-base-content/80 pr-1 min-w-0">
-            {% for cf in franchise_also_featured|slice:":3" %}<a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
-            {% if franchise_also_featured|length > 3 %}
-                <details class="inline group/tieins">
+            {% for cf in franchises|slice:":3" %}<a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% if franchises|length > 3 %}
+                <details class="inline group/franchises">
                     <summary class="inline-block cursor-pointer text-base-content/50 hover:text-accent transition-colors list-none select-none ml-0.5">
-                        <span class="group-open/tieins:hidden">, +{{ franchise_also_featured|length|add:"-3" }} more</span>
-                        <span class="hidden group-open/tieins:inline">show less</span>
+                        <span class="group-open/franchises:hidden">, +{{ franchises|length|add:"-3" }} more</span>
+                        <span class="hidden group-open/franchises:inline">show less</span>
                     </summary>
-                    <span class="hidden group-open/tieins:inline">{% for cf in franchise_also_featured|slice:"3:" %}, <a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% endfor %}</span>
+                    <span class="hidden group-open/franchises:inline">{% for cf in franchises|slice:"3:" %}, <a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% endfor %}</span>
                 </details>
             {% endif %}
         </span>
@@ -47,9 +41,7 @@
 
 {% if franchise_collections %}
     <div class="flex items-start gap-1.5 text-xs">
-        <span class="text-base-content/50 shrink-0">
-            {% if franchise_collections|length == 1 %}Collection{% else %}Collections{% endif %}:
-        </span>
+        <span class="text-base-content/50 shrink-0">Series:</span>
         <span class="font-medium text-base-content/80 pr-1 min-w-0">
             {% for cf in franchise_collections|slice:":3" %}<a href="{% url 'franchise_detail' slug=cf.franchise.slug %}" class="text-accent hover:underline">{{ cf.franchise.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
             {% if franchise_collections|length > 3 %}
