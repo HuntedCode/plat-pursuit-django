@@ -3,13 +3,16 @@
     both supplied by GameDetailView._build_concept_context (which already
     filters out is_excluded=True rows):
 
-      1. franchises:           list of ConceptFranchise rows where
-                               franchise.source_type='franchise'.
-      2. franchise_collections: list of ConceptFranchise rows where
-                                franchise.source_type='collection'. Displayed
+      1. franchises:            ConceptFranchise rows with
+                                franchise.source_type='franchise' — rendered
+                                under the "Franchise(s)" label.
+      2. franchise_collections: ConceptFranchise rows with
+                                franchise.source_type='collection' — rendered
                                 under the "Series" label per user-facing
-                                vocabulary (the DB column name still reads
-                                'collection' to match IGDB's namespace).
+                                vocabulary. The variable name keeps the legacy
+                                'collections' suffix to match the DB column
+                                and IGDB API field; only the user-visible
+                                label was renamed.
 
     Each list caps at 3 visible with a <details>/<summary> "+ N more"
     disclosure (no JS, accessible by default). The Franchise label switches

@@ -202,8 +202,9 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         )
         context['current_type'] = self._selected_type()
         context['seo_description'] = (
-            "Browse PlayStation game franchises on Platinum Pursuit. "
-            "Explore series like Resident Evil, Final Fantasy, and more."
+            "Browse PlayStation game franchises and series on Platinum Pursuit. "
+            "Explore umbrella IPs like Resident Evil and Final Fantasy and the "
+            "specific series within them."
         )
         track_page_view('franchises_list', 'list', self.request)
         return context
@@ -340,8 +341,13 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
         #   - collections: related_entries (when present)
         # Tabs auto-fall-back to 'games' when their content is empty so a stale
         # querystring doesn't strand users on a blank tab.
+        # Accept ?tab=series (the user-facing label) and the legacy
+        # ?tab=collections alias so any pre-existing bookmark or share
+        # URL keeps working.
         current_tab = self.request.GET.get('tab', 'games')
-        if current_tab == 'collections' and not related_entries:
+        if current_tab == 'collections':
+            current_tab = 'series'
+        if current_tab == 'series' and not related_entries:
             current_tab = 'games'
         if current_tab == 'also_featured' and not also_featured_groups:
             current_tab = 'games'
