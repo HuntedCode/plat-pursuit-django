@@ -24,8 +24,9 @@
     font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
     font-weight: 800;
     font-variant-numeric: tabular-nums;
-    line-height: 1;
-    letter-spacing: -0.01em;
+    /* No line-height / letter-spacing on the base: a bare .pp-tally must be a metrics-free
+     * swap for an existing number (the shipped ones vary -- line-height 0.85-1, tracking 0
+     * or -0.01em). The scale rungs below carry those metrics for new code. */
 }
 
 /* State glow: a tinted bloom that marks "this number is a reward, not a label."
@@ -38,9 +39,9 @@
 /* Scale ladder (for new code). opsz tracks the size so the variable face reads
  * "monumental" big and "ledger" small; the consumer can still set any size on
  * a bare .pp-tally. line-height tightens as numbers grow so they sit as objects. */
-.pp-tally--hero { font-size: clamp(3rem, 5.5vw, 3.75rem); font-variation-settings: "opsz" 96, "wght" 800; line-height: 0.9; }
-.pp-tally--xl   { font-size: 2.75rem; font-variation-settings: "opsz" 54, "wght" 800; line-height: 0.9; }
-.pp-tally--lg   { font-size: 2rem;    font-variation-settings: "opsz" 40, "wght" 800; line-height: 0.92; }
-.pp-tally--md   { font-size: 1.5rem;  font-variation-settings: "opsz" 28, "wght" 800; }
-.pp-tally--sm   { font-size: 1.125rem; font-variation-settings: "opsz" 18, "wght" 800; }
-.pp-tally--xs   { font-size: 0.8125rem; font-variation-settings: "opsz" 13, "wght" 700; letter-spacing: 0; }
+.pp-tally--hero { font-size: clamp(3rem, 5.5vw, 3.75rem); font-variation-settings: "opsz" 96, "wght" 800; line-height: 0.9; letter-spacing: -0.01em; }
+.pp-tally--xl   { font-size: 2.75rem; font-variation-settings: "opsz" 54, "wght" 800; line-height: 0.9; letter-spacing: -0.01em; }
+.pp-tally--lg   { font-size: 2rem;    font-variation-settings: "opsz" 40, "wght" 800; line-height: 0.92; letter-spacing: -0.01em; }
+.pp-tally--md   { font-size: 1.5rem;  font-variation-settings: "opsz" 28, "wght" 800; line-height: 1; }
+.pp-tally--sm   { font-size: 1.125rem; font-variation-settings: "opsz" 18, "wght" 800; line-height: 1; }
+.pp-tally--xs   { font-size: 0.8125rem; font-variation-settings: "opsz" 13, "wght" 700; line-height: 1; }

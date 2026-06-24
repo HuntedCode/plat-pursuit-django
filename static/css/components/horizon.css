@@ -64,9 +64,14 @@
     box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--horizon-to) 70%, transparent);
 }
 
-/* ---- Radial arc (compact tiles / rings) ---- */
+/* ---- Radial arc (compact tiles / rings) ----
+ * The consumer supplies the inline SVG circle(s) and sets stroke-dasharray + stroke-dashoffset
+ * (computed from the circumference) for the fill ratio -- CSS can't do that, so Horizon.update()
+ * (which only sets --horizon-progress) is linear/segmented-only; recompute the dashoffset
+ * yourself for arcs. Stroke width defaults to a non-hairline; override via --horizon-arc-w. */
 .pp-horizon--arc { display: inline-block; line-height: 0; }
 .pp-horizon--arc svg { overflow: visible; transform: rotate(-90deg); }
+.pp-horizon__arc-track, .pp-horizon__arc-fill { stroke-width: var(--horizon-arc-w, 6); }
 .pp-horizon__arc-track { fill: none; stroke: var(--pp-bg-3); }
 .pp-horizon__arc-fill {
     fill: none; stroke: var(--horizon-to); stroke-linecap: round;

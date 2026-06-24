@@ -10,6 +10,6 @@ Params:
   band       explicit band override (cool|warming|warm|hot); else computed from progress
 {% endcomment %}
 {% load custom_filters %}
-<div class="pp-horizon"{% if tone == 'band' %} data-horizon-band="{{ band|default_if_none:'' }}{% if not band %}{{ progress|horizon_band }}{% endif %}"{% endif %} style="--horizon-progress: {{ progress|default:0 }}%;{% if accent %} --horizon-accent: {{ accent }};{% endif %}{% if height %} --horizon-h: {{ height }};{% endif %}">
+<div class="pp-horizon" role="progressbar" aria-valuenow="{{ progress|default:0 }}" aria-valuemin="0" aria-valuemax="100"{% if tone == 'band' %} data-horizon-band="{% if band %}{{ band }}{% else %}{{ progress|horizon_band }}{% endif %}"{% endif %} style="--horizon-progress: {{ progress|default:0 }}%;{% if accent %} --horizon-accent: {{ accent }};{% endif %}{% if height %} --horizon-h: {{ height }};{% endif %}">
     <div class="pp-horizon__track"><span class="pp-horizon__fill"></span></div>
 </div>

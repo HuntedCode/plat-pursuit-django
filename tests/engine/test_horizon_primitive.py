@@ -31,6 +31,12 @@ def test_horizon_partial_band_tone_computes_band_from_progress():
     assert 'pp-horizon__fill' in html
     assert 'data-horizon-band="warm"' in html        # 70% -> warm
     assert '--horizon-progress: 70%' in html
+    assert 'role="progressbar"' in html and 'aria-valuenow="70"' in html
+
+
+def test_horizon_partial_explicit_band_overrides_progress():
+    html = render_to_string('components/horizon.html', {'progress': 10, 'tone': 'band', 'band': 'hot'})
+    assert 'data-horizon-band="hot"' in html          # explicit band wins over 10% -> cool
 
 
 def test_horizon_partial_themed_tone_sets_accent_and_omits_band():
