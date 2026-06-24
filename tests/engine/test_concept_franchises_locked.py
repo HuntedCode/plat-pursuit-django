@@ -68,7 +68,11 @@ def test_absorb_excluded_wins_on_duplicate_franchise_link():
     surviving_link = ConceptFranchise.objects.get(concept=survivor, franchise=fr)
     assert surviving_link.is_excluded is True
     assert surviving_link.is_spinoff is True
-    # No duplicate created (the absorbed side's row was discarded by the merge).
+    # After the absorbed concept itself is deleted, the only link to this
+    # franchise is the merged one on the survivor (CASCADE removes the
+    # duplicate row that absorb() leaves on `other`, matching how
+    # ConceptCompany / ConceptGenre merges work).
+    absorbed.delete()
     assert ConceptFranchise.objects.filter(franchise=fr).count() == 1
 
 
