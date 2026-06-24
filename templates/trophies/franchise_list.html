@@ -64,12 +64,29 @@
                     </button>
                 </div>
 
+                {# Type filter: Franchise vs Collection. IGDB classifies these
+                   in separate namespaces (a franchise like "Resident Evil"
+                   vs. a collection like "Resident Evil Main Series"), and
+                   most users only want one type at a time when searching. #}
+                <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
+                    {% for value, display in type_choices %}
+                        <label class="cursor-pointer">
+                            <input type="radio" name="type" value="{{ value }}"
+                                   class="sr-only peer" {% if current_type == value %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                {{ display }}
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+
                 {% comment %}
                     Solo-entry toggle. Default view hides franchises/collections
                     with only one game (IGDB noise around standalone titles);
                     this checkbox opts into the full list.
                 {% endcomment %}
-                <label class="flex items-center gap-2 mt-2 cursor-pointer w-fit">
+                <label class="flex items-center gap-2 mt-1.5 cursor-pointer w-fit">
                     <input type="checkbox" name="show_solo" value="1"
                            class="checkbox checkbox-sm checkbox-primary"
                            {% if show_solo %}checked{% endif %} />

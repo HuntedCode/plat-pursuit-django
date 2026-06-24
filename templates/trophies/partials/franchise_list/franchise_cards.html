@@ -40,7 +40,16 @@
                     <h3 class="font-bold text-sm md:text-base line-clamp-1 group-hover:text-primary transition-colors">
                         {{ franchise.name }}
                     </h3>
-                    <div class="mt-1">
+                    <div class="flex flex-wrap items-center gap-1 mt-1">
+                        {% if franchise.source_type == 'collection' %}
+                            <span class="badge badge-sm badge-info gap-1" title="IGDB collection (sub-series classification)">
+                                Collection
+                            </span>
+                        {% else %}
+                            <span class="badge badge-sm badge-primary gap-1" title="IGDB franchise (top-level IP)">
+                                Franchise
+                            </span>
+                        {% endif %}
                         <span class="badge badge-sm badge-ghost">
                             {{ franchise.game_count|intcomma }} game{{ franchise.game_count|pluralize }}{% if franchise.version_count != franchise.game_count %} &middot; {{ franchise.version_count|intcomma }} version{{ franchise.version_count|pluralize }}{% endif %}
                         </span>

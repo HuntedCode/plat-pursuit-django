@@ -154,9 +154,18 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
         show_solo = self.request.GET.get('show_solo') == '1'
+        type_val = self.request.GET.get('type', 'all')
 
         if query:
             qs = qs.filter(name__icontains=query)
+
+        # Type filter: IGDB classifies franchises and collections in separate
+        # namespaces. The toolbar chips let users narrow to one type at a time;
+        # unknown values fall through to 'all'.
+        if type_val == 'franchise':
+            qs = qs.filter(source_type='franchise')
+        elif type_val == 'collection':
+            qs = qs.filter(source_type='collection')
 
         # By default, hide entries with only a single game (regardless of how
         # many versions it has) — these are usually collection-of-one noise
@@ -185,6 +194,12 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         context['sort_choices'] = FRANCHISE_SORT_CHOICES
         context['current_sort'] = self.request.GET.get('sort', 'alpha')
         context['show_solo'] = self.request.GET.get('show_solo') == '1'
+        context['type_choices'] = (
+            ('all', 'All'),
+            ('franchise', 'Franchise'),
+            ('collection', 'Collection'),
+        )
+        context['current_type'] = self.request.GET.get('type', 'all')
         context['seo_description'] = (
             "Browse PlayStation game franchises on Platinum Pursuit. "
             "Explore series like Resident Evil, Final Fantasy, and more."
