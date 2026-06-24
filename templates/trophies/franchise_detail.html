@@ -36,14 +36,15 @@
                 <div class="flex-1 min-w-0 text-center sm:text-left">
                     {% comment %}
                         Eyebrow label reflects the underlying source_type so a
-                        collection reads as "Collection" (and a franchise as
-                        "Franchise"). The page layout is otherwise identical: browse
-                        treats both uniformly, the label just tells the user which
-                        kind of grouping they landed on.
+                        series reads as "Series" (and a franchise as "Franchise").
+                        The page layout is otherwise identical: browse treats both
+                        uniformly, the label just tells the user which kind of
+                        grouping they landed on. The DB column name is still
+                        'collection' to match IGDB's namespace.
                     {% endcomment %}
                     <div class="flex items-center gap-2 justify-center sm:justify-start mb-1.5">
                         <span class="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-primary/80">
-                            {% if object.source_type == 'collection' %}Collection{% else %}Franchise{% endif %}
+                            {% if object.source_type == 'collection' %}Series{% else %}Franchise{% endif %}
                         </span>
                         <div class="h-px flex-1 max-w-[80px] bg-gradient-to-r from-primary/40 to-transparent"></div>
                     </div>

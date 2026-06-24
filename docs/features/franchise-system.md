@@ -38,27 +38,25 @@ Both `Franchise` and `ConceptFranchise` are fully documented in [IGDB Integratio
 
 ### Browse Page Query
 
-The browse queryset applies three filters to the `Franchise` table:
+> **Vocabulary note.** Throughout the user-facing site, `source_type='collection'` rows are labeled **Series** (matching the badge system's `series_slug` terminology). The DB column name and IGDB API field stay `collection` to match the upstream namespace; only the UI vocabulary differs. This doc uses both terms in their respective contexts — "series" when discussing UI, "collection" when discussing the data layer.
 
-1. **Type filter**: `source_type='franchise'` rows must have at least one non-excluded link. `source_type='collection'` rows pass through (we haven't excluded anything yet).
+The browse queryset applies two filters to the `Franchise` table:
+
+1. **Eligibility**: `source_type='franchise'` rows must have at least one non-excluded link. `source_type='collection'` rows pass through (the spin-off / `is_excluded` flags cull individual member links, not whole series).
 2. **Game-count annotations**:
    - `game_count` counts distinct concepts (IGDB-unified games).
    - `version_count` counts distinct Game rows (PS4/PS5/EU/NA as separate records).
-3. **Final cut**:
-   - Franchises: `version_count > 0`
-   - Collections: `version_count > 0` AND `has_orphan_concept=True` (at least one member concept has zero franchise-type links — meaning this collection is the only discovery path for that game).
-
-The "orphan concept" subquery is the mechanism that keeps redundant collections hidden. "Resident Evil Main Series" doesn't surface because every RE game already has the Resident Evil franchise on it. "Astro Bot" DOES surface because its games have no franchise-type link — the collection is their only IGDB taxonomy.
+3. **Final cut**: every row of either type with `version_count > 0` surfaces. There is **no orphan-concept rule any more** — the per-card type badge and the Type chip filter make franchise-vs-series duplication obvious enough that name-shared pairs (e.g. "Spider-Man franchise" + "Spider-Man series") both legitimately exist and need to be reachable.
 
 A final optional filter (default on) hides entries with `game_count < 2`. Users opt into single-game entries via the `?show_solo=1` URL parameter.
 
 **User-facing filters** (lay on top of the queryset above):
 - `?query=` — case-insensitive substring search on `name`.
 - `?sort=` — `alpha`, `alpha_inv`, `games`, `games_inv` (see `FRANCHISE_SORT_CHOICES`).
-- `?type=` — `all` (default), `franchise`, or `collection`. Renders as a radio-chip group in the toolbar (sr-only inputs + peer-checked button styling, same pattern as Company role chips). Junk values clamp to `all`. **The orphan-concept rule on collections is dropped when `type=collection`** — picking the chip is an explicit "show me everything in this namespace" signal, so name-shared pairs like the Spider-Man franchise and the Spider-Man collection both surface. The default and `type=franchise` views keep the orphan rule (default view stays curated; `type=franchise` excludes collections entirely so the rule is moot anyway).
+- `?type=` — `franchise` (default), `series`, or `all`. Renders as a radio-chip group in the toolbar (sr-only inputs + peer-checked button styling, same pattern as Company role chips). Junk values clamp to `franchise` so the toolbar always renders one chip as selected. `series` maps to `source_type='collection'` in the queryset — the URL value matches the user-facing label, the DB filter targets the underlying column.
 - `?show_solo=` — `1` to show single-game entries.
 
-Browse cards wear a colored type badge under the name so users can tell franchises from collections at a glance: **Franchise** (`badge-primary`) for top-level IPs and **Collection** (`badge-info`) for sub-series. Same template lives at `templates/trophies/partials/franchise_list/franchise_cards.html`.
+Browse cards wear a colored type badge under the name so users can tell franchises from series at a glance: **Franchise** (`badge-primary`) for umbrella IPs and **Series** (`badge-info`) for sub-series. Template at `templates/trophies/partials/franchise_list/franchise_cards.html`.
 
 ### Representative Cover Art
 

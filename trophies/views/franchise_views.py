@@ -69,51 +69,38 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     partial_template_name = 'trophies/partials/franchise_list/browse_results.html'
     paginate_by = 32
 
-    _VALID_TYPE_VALUES = ('all', 'franchise', 'collection')
+    # User-facing language for source_type='collection' rows is "Series" (aligns
+    # with the badge system's series_slug terminology). The DB still says
+    # 'collection' (IGDB's term), but the URL value, chip label, card badge,
+    # and About-card line all read "Series".
+    _VALID_TYPE_VALUES = ('franchise', 'series', 'all')
+    _DEFAULT_TYPE_VALUE = 'franchise'
 
     def _selected_type(self):
         """Clamped ?type= value used by both get_queryset and get_context_data.
-        Junk values fall through to 'all' so the toolbar always renders one
-        chip as selected and the queryset never silently drops to no-filter
-        for unknown inputs."""
-        raw = self.request.GET.get('type', 'all')
-        return raw if raw in self._VALID_TYPE_VALUES else 'all'
+        Junk values (and a missing param) fall through to the default chip
+        so the toolbar always renders one chip as selected and the queryset
+        never silently drops to no-filter for unknown inputs."""
+        raw = self.request.GET.get('type', self._DEFAULT_TYPE_VALUE)
+        return raw if raw in self._VALID_TYPE_VALUES else self._DEFAULT_TYPE_VALUE
 
     def get_queryset(self):
-        # The browse page surfaces two kinds of entries:
+        # The browse page surfaces every visible franchise + every visible
+        # series (source_type='collection' in the DB; "Series" everywhere
+        # the user sees it). Default chip on page load is "Franchise" so
+        # first-time visitors land in the familiar franchise-only view; the
+        # Series and All chips reveal the rest.
         #
-        # 1. Franchises (source_type='franchise') with at least one non-excluded
-        #    link. Every IGDB-listed game contributes equally now (no main vs.
-        #    tie-in distinction); admins can hide bad links via is_excluded.
-        #
-        # 2. Collections (source_type='collection'). In the default "All" view
-        #    we apply an "orphan concept" rule: a collection only surfaces if
-        #    it contains at least one game with NO franchise-type link.
-        #    Rationale: collections like "Resident Evil Main Series" duplicate
-        #    what the Resident Evil franchise already shows; hiding the
-        #    redundant ones keeps the default view clean. Collections where
-        #    EVERY game is an orphan (e.g. "Astro Bot", no franchise namespace
-        #    entry) still surface so those games stay reachable.
-        #
-        # When the user explicitly picks the Collection chip (?type=collection),
-        # the orphan rule is dropped — they asked for the full list, and the
-        # per-card type badge already prevents franchise/collection confusion.
-        # Without this carve-out, name-shared pairs like "Spider-Man franchise"
-        # vs. "Spider-Man collection" would silently lose the collection.
+        # No orphan-concept rule any more: the per-card type badge already
+        # prevents franchise/series confusion, and silently hiding entries
+        # was burning users searching for name-shared pairs (e.g.
+        # "Spider-Man franchise" + "Spider-Man series" both legitimately
+        # exist on IGDB).
         type_val = self._selected_type()
 
-        # Subquery: this collection has at least one concept with zero
-        # franchise-type links.
-        orphan_concept_exists = Exists(
-            ConceptFranchise.objects.filter(
-                franchise=OuterRef('pk'),
-            ).exclude(
-                concept__concept_franchises__franchise__source_type='franchise',
-            )
-        )
-
         # Eligibility check via Exists: a franchise row is browse-visible if
-        # it's a collection OR has at least one non-excluded link.
+        # it's a series (source_type='collection') OR has at least one
+        # non-excluded link.
         eligible_link_exists = Exists(
             ConceptFranchise.objects.filter(
                 franchise=OuterRef('pk'), is_excluded=False,
@@ -149,7 +136,7 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             # Stick of Truth) count as ONE game. Concepts without an IGDB
             # match are excluded (NULL igdb_id ignored by COUNT DISTINCT)
             # which slightly undercounts, but in practice nearly all
-            # concepts in franchise/collection pages have IGDB matches.
+            # concepts in franchise/series pages have IGDB matches.
             game_count=_per_franchise_count(
                 'concept__igdb_match__igdb_id', extra_filter=visible_link_filter,
             ),
@@ -159,17 +146,9 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
                 'concept__games', extra_filter=visible_link_filter,
             ),
             **_franchise_cover_annotations(),
-            has_orphan_concept=orphan_concept_exists,
-        )
-
-        # Final surfacing cut. Collections normally need an orphan concept to
-        # avoid duplicating their sibling franchise on the page; the rule is
-        # dropped when the user has explicitly asked for collections.
-        collection_clause = Q(source_type='collection', version_count__gt=0)
-        if type_val != 'collection':
-            collection_clause &= Q(has_orphan_concept=True)
-        qs = qs.filter(
-            Q(source_type='franchise', version_count__gt=0) | collection_clause,
+        ).filter(
+            Q(source_type='franchise', version_count__gt=0)
+            | Q(source_type='collection', version_count__gt=0),
         )
 
         query = self.request.GET.get('query', '').strip()
@@ -179,11 +158,12 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         if query:
             qs = qs.filter(name__icontains=query)
 
-        # Type filter: IGDB classifies franchises and collections in separate
-        # namespaces. The toolbar chips let users narrow to one type at a time.
+        # Type filter: IGDB classifies franchises and series (collections in
+        # IGDB's namespace) separately. The toolbar chips let users narrow
+        # to one type at a time; the default is 'franchise'.
         if type_val == 'franchise':
             qs = qs.filter(source_type='franchise')
-        elif type_val == 'collection':
+        elif type_val == 'series':
             qs = qs.filter(source_type='collection')
 
         # By default, hide entries with only a single game (regardless of how
@@ -213,10 +193,12 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         context['sort_choices'] = FRANCHISE_SORT_CHOICES
         context['current_sort'] = self.request.GET.get('sort', 'alpha')
         context['show_solo'] = self.request.GET.get('show_solo') == '1'
+        # Ordered Franchise / Series / All so the default chip ('franchise')
+        # is first and the most-permissive ('all') is last.
         context['type_choices'] = (
-            ('all', 'All'),
             ('franchise', 'Franchise'),
-            ('collection', 'Collection'),
+            ('series', 'Series'),
+            ('all', 'All'),
         )
         context['current_type'] = self._selected_type()
         context['seo_description'] = (
@@ -376,7 +358,7 @@ class FranchiseDetailView(ProfileHotbarMixin, DetailView):
         context['current_sort'] = sort_val
         context['related_entries'] = related_entries
         context['related_entries_label'] = (
-            'Collections' if opposite_type == 'collection' else 'Franchises'
+            'Series' if opposite_type == 'collection' else 'Franchises'
         )
         context['current_tab'] = current_tab
         context['user_progress_stats'] = user_progress_stats

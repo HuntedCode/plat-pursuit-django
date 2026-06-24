@@ -65,10 +65,11 @@
                 </div>
 
                 {% comment %}
-                    Type filter: Franchise vs Collection. IGDB classifies these
-                    in separate namespaces (a franchise like "Resident Evil"
-                    vs. a collection like "Resident Evil Main Series"), and
-                    most users only want one type at a time when searching.
+                    Type filter: Franchise vs Series. IGDB classifies these in
+                    separate namespaces (an umbrella franchise like "Resident
+                    Evil" vs. a sub-series like "Resident Evil Main Series"),
+                    and most users only want one type at a time when searching.
+                    Default chip is Franchise; users can flip to Series or All.
                 {% endcomment %}
                 <div class="flex flex-wrap items-center gap-1.5 mt-2">
                     <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
@@ -84,7 +85,7 @@
                 </div>
 
                 {% comment %}
-                    Solo-entry toggle. Default view hides franchises/collections
+                    Solo-entry toggle. Default view hides franchises and series
                     with only one game (IGDB noise around standalone titles);
                     this checkbox opts into the full list.
                 {% endcomment %}
@@ -94,7 +95,7 @@
                            {% if show_solo %}checked{% endif %} />
                     <span class="text-xs md:text-sm text-base-content/70">
                         Show single-game entries
-                        <span class="text-base-content/40 italic">(franchises or collections with only 1 game)</span>
+                        <span class="text-base-content/40 italic">(franchises or series with only 1 game)</span>
                     </span>
                 </label>
             </div>
