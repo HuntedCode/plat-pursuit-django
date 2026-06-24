@@ -94,7 +94,7 @@
                         </div>
                     {% endif %}
                 {% endwith %}
-                {% if franchise_main or franchise_also_featured or franchise_collections %}
+                {% if franchises or franchise_collections %}
                     {% include 'trophies/partials/game_detail/franchise_lines.html' %}
                 {% elif igdb.franchise_names and not franchise_has_any_links %}
                     {# Fallback for concepts not yet re-enriched after Franchise model rollout.

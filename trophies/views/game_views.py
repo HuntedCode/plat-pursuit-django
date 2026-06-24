@@ -697,11 +697,8 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
 
         # Partition the prefetched franchise links into franchise-type and
         # collection-type buckets for the About card. All non-excluded links
-        # land in their respective bucket as equal members — the legacy
-        # "main vs. tie-in" split is gone. `franchise_main` is kept as a
-        # context var (None) for template back-compat; the franchises list is
-        # passed as `franchise_also_featured` so the existing "Franchise(s):"
-        # block renders the unified list. PR 2 will simplify the template.
+        # land in their respective bucket as equal members; admins can hide
+        # individual links via ConceptFranchise.is_excluded=True.
         #
         # `franchise_has_any_links` tracks the raw CF row count (including
         # excluded). The about-card's `{% elif igdb.franchise_names %}` denorm
@@ -720,8 +717,7 @@ class GameDetailView(ProfileHotbarMixin, DetailView):
                 collections.append(cf)
             else:
                 franchises.append(cf)
-        context['franchise_main'] = None
-        context['franchise_also_featured'] = franchises
+        context['franchises'] = franchises
         context['franchise_collections'] = collections
         context['franchise_has_any_links'] = cf_row_count > 0
 
