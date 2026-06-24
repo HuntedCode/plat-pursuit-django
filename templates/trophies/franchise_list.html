@@ -18,11 +18,11 @@
                     <path d="M8 11h.01"></path>
                     <path d="M8 16h.01"></path>
                 </svg>
-                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Franchise Directory</h1>
+                <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Franchises &amp; Series</h1>
             </div>
             <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                The sagas that keep us coming back. Browse PlayStation's greatest franchises and discover your next series to conquer.
-                Franchise data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
+                The sagas that keep us coming back. Browse PlayStation's greatest franchises and the series within them, and discover your next saga to conquer. Use the Type filter to flip between franchises (umbrella IPs) and series (sub-series like a main numbered line).
+                Data sourced from <a href="https://www.igdb.com" target="_blank" rel="noopener noreferrer" class="link link-primary">IGDB</a>.
             </p>
         </div>
     </div>
@@ -44,7 +44,7 @@
                         </svg>
                         <input type="text" name="query" value="{{ request.GET.query }}"
                                class="input input-bordered input-sm md:input-md w-full pl-9 md:pl-10"
-                               placeholder="Search for a franchise..." />
+                               placeholder="Search franchises or series..." />
                     </div>
 
                     <select name="sort"
@@ -65,17 +65,37 @@
                 </div>
 
                 {% comment %}
-                    Solo-entry toggle. Default view hides franchises/collections
+                    Type filter: Franchise vs Series. IGDB classifies these in
+                    separate namespaces (an umbrella franchise like "Resident
+                    Evil" vs. a sub-series like "Resident Evil Main Series"),
+                    and most users only want one type at a time when searching.
+                    Default chip is Franchise; users can flip to Series or All.
+                {% endcomment %}
+                <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span class="text-xs text-base-content/40 self-center mr-0.5">Type:</span>
+                    {% for value, display in type_choices %}
+                        <label class="cursor-pointer">
+                            <input type="radio" name="type" value="{{ value }}"
+                                   class="sr-only peer" {% if current_type == value %}checked{% endif %} />
+                            <span class="btn btn-xs peer-checked:btn-primary peer-checked:font-bold btn-ghost border border-base-300 transition-all">
+                                {{ display }}
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+
+                {% comment %}
+                    Solo-entry toggle. Default view hides franchises and series
                     with only one game (IGDB noise around standalone titles);
                     this checkbox opts into the full list.
                 {% endcomment %}
-                <label class="flex items-center gap-2 mt-2 cursor-pointer w-fit">
+                <label class="flex items-center gap-2 mt-1.5 cursor-pointer w-fit">
                     <input type="checkbox" name="show_solo" value="1"
                            class="checkbox checkbox-sm checkbox-primary"
                            {% if show_solo %}checked{% endif %} />
                     <span class="text-xs md:text-sm text-base-content/70">
                         Show single-game entries
-                        <span class="text-base-content/40 italic">(franchises or collections with only 1 game)</span>
+                        <span class="text-base-content/40 italic">(franchises or series with only 1 game)</span>
                     </span>
                 </label>
             </div>

@@ -56,11 +56,23 @@ class Command(BaseCommand):
             '--batch-size', type=int, default=100,
             help='Progress reporting interval (default 100).',
         )
+        parser.add_argument(
+            '--force', action='store_true',
+            help=(
+                'Bypass concept.franchises_locked. The lock normally preserves '
+                'manually-curated links (including is_excluded / is_spinoff '
+                'admin overrides) across this rebuild — use --force only when '
+                'the curated data is also corrupted and you want a clean '
+                'rebuild from cached IGDB data. Combine with --wipe for a full '
+                'reset that ignores the lock entirely.'
+            ),
+        )
 
     def handle(self, *args, **options):
         wipe = options['wipe']
         dry_run = options['dry_run']
         batch_size = options['batch_size']
+        force = options['force']
 
         # Only consider matches with usable raw_response data. The bare {}
         # default sentinel and missing dict both get filtered out.
@@ -83,7 +95,9 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING(
                 f"\n[DRY RUN] Would {'wipe and ' if wipe else ''}rebuild from "
-                f"{total_matches} IGDBMatch row(s). No changes written."
+                f"{total_matches} IGDBMatch row(s)"
+                + (" (--force: locked concepts NOT skipped)" if force else "")
+                + ". No changes written."
             ))
             return
 
@@ -100,21 +114,36 @@ class Command(BaseCommand):
         with transaction.atomic():
             if wipe:
                 self.stdout.write(self.style.MIGRATE_HEADING("\n=== Wiping existing rows ==="))
-                # Preserve franchises-locked concepts: keep their CF links AND the
-                # Franchise rows they reference (Franchise -> ConceptFranchise is
-                # CASCADE, so deleting the parent Franchise would take the link too).
-                deleted_links = ConceptFranchise.objects.exclude(
-                    concept__franchises_locked=True
-                ).delete()[0]
-                deleted_franchises = Franchise.objects.exclude(
-                    franchise_concepts__concept__franchises_locked=True
-                ).delete()[0]
-                self.stdout.write(f"  Deleted {deleted_links} ConceptFranchise row(s) (locked concepts preserved)")
-                self.stdout.write(f"  Deleted {deleted_franchises} Franchise row(s)")
+                if force:
+                    # --force + --wipe: nuke EVERYTHING, including locked
+                    # concepts' curated links. Use only when the curated data
+                    # is also corrupted.
+                    deleted_links = ConceptFranchise.objects.all().delete()[0]
+                    deleted_franchises = Franchise.objects.all().delete()[0]
+                    self.stdout.write(self.style.WARNING(
+                        f"  [--force] Deleted {deleted_links} ConceptFranchise row(s) "
+                        f"(locked concepts NOT preserved)"
+                    ))
+                    self.stdout.write(self.style.WARNING(
+                        f"  [--force] Deleted {deleted_franchises} Franchise row(s)"
+                    ))
+                else:
+                    # Preserve franchises-locked concepts: keep their CF links AND the
+                    # Franchise rows they reference (Franchise -> ConceptFranchise is
+                    # CASCADE, so deleting the parent Franchise would take the link too).
+                    deleted_links = ConceptFranchise.objects.exclude(
+                        concept__franchises_locked=True
+                    ).delete()[0]
+                    deleted_franchises = Franchise.objects.exclude(
+                        franchise_concepts__concept__franchises_locked=True
+                    ).delete()[0]
+                    self.stdout.write(f"  Deleted {deleted_links} ConceptFranchise row(s) (locked concepts preserved)")
+                    self.stdout.write(f"  Deleted {deleted_franchises} Franchise row(s)")
 
             self.stdout.write(self.style.MIGRATE_HEADING("\n=== Rebuilding from cache ==="))
             for match in matches.iterator(chunk_size=200):
-                if match.concept.franchises_locked:
+                # --force bypasses the lock and rebuilds locked concepts too.
+                if match.concept.franchises_locked and not force:
                     skipped += 1
                     continue
                 try:

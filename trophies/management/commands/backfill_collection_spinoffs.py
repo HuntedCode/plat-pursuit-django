@@ -1,7 +1,7 @@
 """
 Backfill ConceptFranchise.is_spinoff for collection (Series) links from IGDB.
 
-Unlike backfill_franchise_main_flag (which re-derives from cached raw_response),
+Unlike rebuild_franchises_from_cache (which re-derives from cached raw_response),
 the spin-off signal was NEVER stored in raw_response -- it lives only on IGDB's
 /collection_memberships endpoint. So this command HITS THE IGDB API: it gathers
 every concept that has a collection-type franchise link + an IGDB game id, fetches

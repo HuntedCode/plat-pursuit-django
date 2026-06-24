@@ -40,7 +40,16 @@
                     <h3 class="font-bold text-sm md:text-base line-clamp-1 group-hover:text-primary transition-colors">
                         {{ franchise.name }}
                     </h3>
-                    <div class="mt-1">
+                    <div class="flex flex-wrap items-center gap-1 mt-1">
+                        {% if franchise.source_type == 'collection' %}
+                            <span class="badge badge-sm badge-info gap-1" title="Sub-series within a franchise (e.g. a numbered main series)">
+                                Series
+                            </span>
+                        {% else %}
+                            <span class="badge badge-sm badge-primary gap-1" title="Top-level franchise / IP (umbrella for one or more series)">
+                                Franchise
+                            </span>
+                        {% endif %}
                         <span class="badge badge-sm badge-ghost">
                             {{ franchise.game_count|intcomma }} game{{ franchise.game_count|pluralize }}{% if franchise.version_count != franchise.game_count %} &middot; {{ franchise.version_count|intcomma }} version{{ franchise.version_count|pluralize }}{% endif %}
                         </span>
@@ -56,7 +65,7 @@
                 <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
                 <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
             </svg>
-            <p class="text-base-content/40 text-sm mt-2">No franchises found matching your search.</p>
+            <p class="text-base-content/40 text-sm mt-2">No franchises or series match your filters.</p>
         </div>
     </div>
 {% endfor %}

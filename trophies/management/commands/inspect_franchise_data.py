@@ -13,7 +13,8 @@ Shows three layers per concept:
     2. The Franchise records currently in our DB linked to this concept.
        (Their igdb_id should match something in #1.)
 
-    3. The ConceptFranchise rows joining concept ↔ franchise, with is_main.
+    3. The ConceptFranchise rows joining concept ↔ franchise, with is_excluded
+       and is_spinoff (and the concept's franchises_locked status).
 
 If #1 and #2 disagree, enrichment dropped/added something it shouldn't.
 If #2 looks fine but other concepts are linked to the SAME Franchise row
@@ -118,8 +119,12 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"  -> {f.name}  "
                 f"(franchise.pk={f.pk}, igdb_id={f.igdb_id}, "
-                f"source_type={f.source_type}, is_main={cf.is_main})"
+                f"source_type={f.source_type}, "
+                f"is_excluded={cf.is_excluded}, is_spinoff={cf.is_spinoff})"
             )
+        self.stdout.write(
+            f"  concept.franchises_locked={concept.franchises_locked}"
+        )
 
         # 3. Cross-check: which IGDB IDs are in raw response but NOT linked,
         # and vice versa? Catches drift between upstream and our DB.
@@ -179,7 +184,8 @@ class Command(BaseCommand):
             for cf in cfs:
                 self.stdout.write(
                     f"  -> {cf.concept.unified_title}  "
-                    f"(concept_id={cf.concept.concept_id}, is_main={cf.is_main})"
+                    f"(concept_id={cf.concept.concept_id}, "
+                    f"is_excluded={cf.is_excluded}, is_spinoff={cf.is_spinoff})"
                 )
 
     @staticmethod

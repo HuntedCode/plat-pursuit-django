@@ -59,10 +59,10 @@ def build_igdb_groups(
             each group's ``user_*`` stat fields reflect the viewer's progress.
             When omitted or empty, user stat fields are zeroed / False.
         extra_per_group: Optional ``{concept_id: dict}`` mapping; each dict is
-            merged into the group the concept lands in. Used by FranchiseDetailView
-            to attach the concept's ``is_main`` flag so the view can partition
-            groups into "main" vs "also featured" after grouping runs. Other
-            callers (Company) can omit it.
+            merged into the group the concept lands in. Useful when a caller
+            wants to enrich group dicts with per-concept metadata (e.g. the
+            link's ``is_excluded`` flag or any other per-link signal that
+            shouldn't be re-queried inside the grouping loop).
 
     Returns:
         list[dict]: One group dict per IGDB id (order of first encounter),
@@ -272,8 +272,9 @@ def _base_game_qs(*, outer_ref_pk: str, through_path: str, extra_filter: Q | Non
               - ``'concept__concept_franchises__franchise'``  (Franchise page)
               - ``'concept__concept_companies__company'``     (Company page)
         extra_filter: Optional extra Q() to narrow the games further. Used by
-            FranchiseListView to restrict to is_main=True links for franchise
-            rows while allowing any link for collections.
+            FranchiseListView to skip excluded ConceptFranchise rows
+            (``is_excluded=False``) and to bias collection covers away from
+            spin-off memberships.
     """
     qs = Game.objects.filter(**{through_path: OuterRef(outer_ref_pk)})
     if extra_filter is not None:
