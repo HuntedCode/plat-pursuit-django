@@ -69,7 +69,7 @@ Three hubs plus standalone personal-data surfaces. The Pursuit hub IS the home p
 | Surface | URL | Role |
 |---------|-----|------|
 | **Pursuit** (home) | `/` | The spine destination. Badges + Pursuer identity. The headline experience |
-| **Browse** | `/games/` | IGDB-powered discovery (games, trophies, companies, franchises, genres, themes, engines, recently-added, flagged, roadmaps when justified) |
+| **Browse** | `/games/` | IGDB-powered discovery (games, trophies, **badges catalog + detail**, companies, franchises, genres, themes, engines, recently-added, flagged, roadmaps when justified) |
 | **Community** | `/community/` | Reviews, profiles, challenges, lists, leaderboards |
 | **Profile** (yours or others) | `/community/profiles/<u>/` | Public face: games, trophies, badges, lists. Lives in Community as the social view |
 | **Stats** | `/stats/` | Personal exploratory data tool (rebuilt from old Dashboard Stats; user-driven surfacing, optional exports) |
@@ -82,7 +82,7 @@ Flat top-level URLs for Pursuit sub-pages because Pursuit's home is `/`. No `/pu
 
 ```
 /                Pursuit home (anonymous landing + synced home)
-/badges/         Badges browse and your progress
+/collection/     Your badge album (the Binder; personal, login-gated)   [currently /my-pursuit/collection/]
 /logbook/        Pursuer's Logbook (RPG identity deep-dive)
 /star-chart/     Star Chart constellation
 /quests/         Quests
@@ -94,8 +94,17 @@ Flat top-level URLs for Pursuit sub-pages because Pursuit's home is `/`. No `/pu
 /recap/          Monthly Recap
 
 /games/          Browse hub (existing, unchanged)
+/badges/         Badge CATALOG + detail (public discovery; Browse hub)
 /community/      Community hub (existing, unchanged)
 ```
+
+> **IA amendment (2026-06-23).** Badges live in **two** places, mirroring games: the **public
+> catalog** (find/search badges + per-series detail) is a **Browse** surface at `/badges/` +
+> `/badges/<slug>/`; the **personal album** (the Collection / Binder) stays in Pursuit. This
+> supersedes the earlier "badges only in Pursuit, never Browse" framing and the `/badges/` =
+> "Badges browse and your progress" line above. The catalog is the existing
+> `BadgeListView`/`BadgeDetailView` re-homed (a much better find/search surface than the album,
+> and being public it fixes anonymous discovery). See memory `project_badge_pages_collection_vs_list`.
 
 ### Pursuit home (`/`) by user state
 
@@ -118,10 +127,10 @@ Both are badge-rooted. Pursuit pulls you forward; Logbook reflects who you are.
 ### Pursuit sub-nav
 
 ```
-[Home] [Badges] [Logbook] [Star Chart] [Quests] [Milestones] [Titles]
+[Home] [Collection] [Logbook] [Star Chart] [Quests] [Milestones] [Titles]
 ```
 
-Seven items. **Market** and **Arcade** are deferred to v1.x until their content is ready, then they join the strip.
+Seven items. (Badge *discovery* is the Browse > Badges catalog; the Pursuit slot is the personal **Collection** album.) **Market** and **Arcade** are deferred to v1.x until their content is ready, then they join the strip.
 
 ### Navbar
 

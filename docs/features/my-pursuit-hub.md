@@ -2,7 +2,9 @@
 
 The My Pursuit Hub is PlatPursuit's personal-progression and recognition section at `/my-pursuit/`. It is one of the four top-level hubs in the [hub-of-hubs IA](../architecture/ia-and-subnav.md) (Dashboard / Browse / Community / My Pursuit). Its sub-nav contains Badges, Milestones, and Titles. After the gamification initiative ships, the same hub absorbs the full RPG layer (Logbook, Quests, Star Chart, Arcade, Stellar Market) without requiring another IA shuffle.
 
-> **Status**: shipped. The URL namespace is live, the Badges page acts as the hub landing, and the sub-nav strip surfaces Milestones and Titles on every `/my-pursuit/*` page.
+> **Status**: shipped, but this doc is **substantially superseded by the rebuild** — see `docs/design/rebuild/ia-map.md` + `docs/design/product-identity.md` for current truth. Two changes this doc still describes the old way of:
+> - **Badges re-homed to Browse (2026-06-23).** The badge *catalog* (list + detail) is now a public Browse surface at `/badges/` + `/badges/<slug>/` (`/my-pursuit/badges/*` 301s there). The personal badge *album* is the **Collection** (`/my-pursuit/collection/`), which is now the My Pursuit landing — `/my-pursuit/` 301s to the Collection, not the badge list.
+> - **Sub-nav expanded.** My Pursuit's sub-nav is now Collection / The Lab / Research Panel / Milestones / Titles (not the original Badges / Milestones / Titles). Sections below that say "3 sub-pages" or "Badges is the landing" are stale.
 
 ## Why "My Pursuit"
 

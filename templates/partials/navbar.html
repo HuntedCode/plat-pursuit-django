@@ -50,9 +50,10 @@
                 </a>
             </li>
             <li>
-                {# /my-pursuit/ is a 301 redirect to /my-pursuit/badges/. The     #}
-                {# Badges page IS the hub landing — there is no separate landing  #}
-                {# page. See docs/features/my-pursuit-hub.md for the rationale.   #}
+                {# /my-pursuit/ 301s to the Collection (/my-pursuit/collection/), the hub  #}
+                {# landing. It's personal + login-gated, so anonymous visitors are sent to #}
+                {# sign-in (next=collection). The badge CATALOG moved to Browse (/badges/). #}
+                {# The upcoming navbar rebuild drops this button for anonymous users.       #}
                 <a href="{% url 'my_pursuit_hub' %}"
                    class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
                     My Pursuit

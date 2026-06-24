@@ -425,8 +425,7 @@ class BadgeDetailView(ProfileHotbarMixin, DetailView):
     context_object_name = 'series_badges'
 
     def dispatch(self, request, *args, **kwargs):
-        # Profile-scoped variants (/my-pursuit/badges/<slug>/<username>/ and
-        # the legacy /badges/<slug>/<username>/ prefix) require auth — see
+        # Profile-scoped variant (/badges/<slug>/<username>/) requires auth — see
         # GameDetailView.dispatch for the full rationale. Anonymous visitors
         # are redirected to the canonical badge series page with a
         # from_profile hint that drives a sign-up banner.

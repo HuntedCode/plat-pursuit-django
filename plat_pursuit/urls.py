@@ -94,6 +94,12 @@ urlpatterns = [
     path('franchises/', FranchiseListView.as_view(), name='franchises_list'),
     path('franchises/<slug:slug>/', FranchiseDetailView.as_view(), name='franchise_detail'),
 
+    # Badge pages: the public discovery CATALOG (find/search badges). The personal badge
+    # album (Collection) is a separate, login-gated surface at /my-pursuit/collection/.
+    path('badges/', BadgeListView.as_view(), name='badges_list'),
+    path('badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
+    path('badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
+
     # Genre/Theme pages
     path('genres/', GenreThemeListView.as_view(), name='genres_list'),
     path('genres/<slug:slug>/', GenreDetailView.as_view(), name='genre_detail'),
@@ -111,24 +117,15 @@ urlpatterns = [
     path('community/profiles/<str:psn_username>/', ProfileDetailView.as_view(), name='profile_detail'),
     path('community/profiles/<str:psn_username>/trophy-case/', TrophyCaseView.as_view(), name='trophy_case'),
 
-    # My Pursuit hub: badges, milestones, titles (canonical paths under /my-pursuit/)
-    # The original Phase 10 commit had these under /achievements/. The Phase 10a
-    # rework relocates them to /my-pursuit/ to align with the renamed hub
-    # (see docs/features/my-pursuit-hub.md for the rationale). Both the legacy
-    # /badges/, /milestones/, /my-titles/ paths AND the previous /achievements/*
-    # paths now redirect here via the legacy redirect block below.
+    # My Pursuit hub: the personal Pursuer surfaces (canonical paths under /my-pursuit/).
+    # The badge CATALOG (list + detail) was re-homed to the Browse hub at /badges/ -- it is a
+    # public discovery surface, not personal. The personal badge album (Collection) stays here.
     #
-    # The bare /my-pursuit/ path is a 301 redirect to the headline sub-page
-    # (Badges). My Pursuit deliberately does NOT have its own landing page;
-    # the Badges page IS the landing, and the sub-nav strip handles wayfinding
-    # to Milestones and Titles. This mirrors how /games/ is the Browse hub
-    # landing rather than building a separate Browse landing page. Once the
-    # gamification initiative ships and the section grows to 8+ sub-items,
-    # a dedicated /my-pursuit/ landing page may make sense.
-    path('my-pursuit/', RedirectView.as_view(pattern_name='badges_list', permanent=True), name='my_pursuit_hub'),
-    path('my-pursuit/badges/', BadgeListView.as_view(), name='badges_list'),
-    path('my-pursuit/badges/<str:series_slug>/', BadgeDetailView.as_view(), name='badge_detail'),
-    path('my-pursuit/badges/<str:series_slug>/<str:psn_username>/', BadgeDetailView.as_view(), name='badge_detail_with_profile'),
+    # The bare /my-pursuit/ path 301-redirects to its landing sub-page, the Collection (the
+    # sub-nav strip handles wayfinding to The Lab, Milestones, Titles, etc.). My Pursuit
+    # deliberately has no separate landing page; the Collection IS the landing, mirroring how
+    # /games/ is the Browse hub landing rather than a dedicated Browse landing page.
+    path('my-pursuit/', RedirectView.as_view(pattern_name='badge_collection', permanent=True), name='my_pursuit_hub'),
     path('my-pursuit/milestones/', MilestoneListView.as_view(), name='milestones_list'),
     path('my-pursuit/titles/', MyTitlesView.as_view(), name='my_titles'),
     path('my-pursuit/lab/', LabView.as_view(), name='lab'),
@@ -234,11 +231,12 @@ urlpatterns = [
     path('profiles/<str:psn_username>/', RedirectView.as_view(pattern_name='profile_detail', permanent=True, query_string=True)),
     path('profiles/<str:psn_username>/trophy-case/', RedirectView.as_view(pattern_name='trophy_case', permanent=True, query_string=True)),
 
-    # My Pursuit hub: badges, milestones, titles
-    # Two waves: pre-Phase-10 legacy paths AND the intermediate /achievements/* paths
-    path('badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
-    path('badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
-    path('badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
+    # My Pursuit hub legacy paths. The badge CATALOG re-homed to Browse /badges/, so the
+    # Phase-10a /my-pursuit/badges/* paths now 301 to it. (The pre-Phase-10 /badges/* paths
+    # ARE the canonical now -- no redirect. The /achievements/badges/* wave still 301s below.)
+    path('my-pursuit/badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
+    path('my-pursuit/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
+    path('my-pursuit/badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
     path('milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
     path('my-titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
     path('achievements/badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
