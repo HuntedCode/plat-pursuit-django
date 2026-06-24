@@ -1,0 +1,12 @@
+{% comment %}
+Tally number treatment (primitive). Convenience wrapper over the .pp-tally CSS classes
+(static/css/components/tally.css). For inline numbers you can also just put the classes on
+your own element; this partial is for new templates that want a clean include.
+
+Params:
+  value      the number/text to render (required)
+  size       scale rung: hero | xl | lg | md | sm | xs (optional; omit to inherit font-size)
+  glow       truthy to add the state glow
+  glow_tint  CSS colour for the glow (e.g. "var(--disc)"); defaults to the cyan accent
+{% endcomment %}
+<span class="pp-tally{% if size %} pp-tally--{{ size }}{% endif %}{% if glow %} pp-tally--glow{% endif %}"{% if glow_tint %} style="--pp-tally-glow: {{ glow_tint }};"{% endif %}>{{ value }}</span>
