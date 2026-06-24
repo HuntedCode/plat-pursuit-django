@@ -55,7 +55,7 @@ A final optional filter (default on) hides entries with `game_count < 2`. Users 
 **User-facing filters** (lay on top of the queryset above):
 - `?query=` — case-insensitive substring search on `name`.
 - `?sort=` — `alpha`, `alpha_inv`, `games`, `games_inv` (see `FRANCHISE_SORT_CHOICES`).
-- `?type=` — `all` (default), `franchise`, or `collection`. Renders as a radio-chip group in the toolbar (sr-only inputs + peer-checked button styling, same pattern as Company role chips). Junk values clamp to `all`. Composes with the queryset filters above via AND — `type=collection` still requires `has_orphan_concept=True`, so picking the collection chip won't surface redundant collections.
+- `?type=` — `all` (default), `franchise`, or `collection`. Renders as a radio-chip group in the toolbar (sr-only inputs + peer-checked button styling, same pattern as Company role chips). Junk values clamp to `all`. **The orphan-concept rule on collections is dropped when `type=collection`** — picking the chip is an explicit "show me everything in this namespace" signal, so name-shared pairs like the Spider-Man franchise and the Spider-Man collection both surface. The default and `type=franchise` views keep the orphan rule (default view stays curated; `type=franchise` excludes collections entirely so the rule is moot anyway).
 - `?show_solo=` — `1` to show single-game entries.
 
 Browse cards wear a colored type badge under the name so users can tell franchises from collections at a glance: **Franchise** (`badge-primary`) for top-level IPs and **Collection** (`badge-info`) for sub-series. Same template lives at `templates/trophies/partials/franchise_list/franchise_cards.html`.

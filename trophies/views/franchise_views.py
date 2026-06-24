@@ -69,6 +69,16 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
     partial_template_name = 'trophies/partials/franchise_list/browse_results.html'
     paginate_by = 32
 
+    _VALID_TYPE_VALUES = ('all', 'franchise', 'collection')
+
+    def _selected_type(self):
+        """Clamped ?type= value used by both get_queryset and get_context_data.
+        Junk values fall through to 'all' so the toolbar always renders one
+        chip as selected and the queryset never silently drops to no-filter
+        for unknown inputs."""
+        raw = self.request.GET.get('type', 'all')
+        return raw if raw in self._VALID_TYPE_VALUES else 'all'
+
     def get_queryset(self):
         # The browse page surfaces two kinds of entries:
         #
@@ -76,14 +86,21 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
         #    link. Every IGDB-listed game contributes equally now (no main vs.
         #    tie-in distinction); admins can hide bad links via is_excluded.
         #
-        # 2. Collections (source_type='collection') that contain at least one
-        #    "orphan" game — a game with no franchise-type link at all. These
-        #    are franchises like "Astro Bot" where IGDB only classifies them
-        #    via the collections taxonomy, not the franchises taxonomy. Without
-        #    surfacing them here, the games would be invisible on browse.
-        #    Collections that DON'T have any orphan games (e.g. "Resident Evil
-        #    Main Series" — every member already has the Resident Evil franchise)
-        #    stay hidden to avoid duplicate-looking entries.
+        # 2. Collections (source_type='collection'). In the default "All" view
+        #    we apply an "orphan concept" rule: a collection only surfaces if
+        #    it contains at least one game with NO franchise-type link.
+        #    Rationale: collections like "Resident Evil Main Series" duplicate
+        #    what the Resident Evil franchise already shows; hiding the
+        #    redundant ones keeps the default view clean. Collections where
+        #    EVERY game is an orphan (e.g. "Astro Bot", no franchise namespace
+        #    entry) still surface so those games stay reachable.
+        #
+        # When the user explicitly picks the Collection chip (?type=collection),
+        # the orphan rule is dropped — they asked for the full list, and the
+        # per-card type badge already prevents franchise/collection confusion.
+        # Without this carve-out, name-shared pairs like "Spider-Man franchise"
+        # vs. "Spider-Man collection" would silently lose the collection.
+        type_val = self._selected_type()
 
         # Subquery: this collection has at least one concept with zero
         # franchise-type links.
@@ -143,25 +160,27 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             ),
             **_franchise_cover_annotations(),
             has_orphan_concept=orphan_concept_exists,
-        ).filter(
-            # Franchises always pass the type filter above; collections must
-            # additionally have at least one orphan concept (a concept with no
-            # franchise-type link). Prevents duplicate-looking entries.
-            Q(source_type='franchise', version_count__gt=0)
-            | Q(source_type='collection', version_count__gt=0, has_orphan_concept=True),
+        )
+
+        # Final surfacing cut. Collections normally need an orphan concept to
+        # avoid duplicating their sibling franchise on the page; the rule is
+        # dropped when the user has explicitly asked for collections.
+        collection_clause = Q(source_type='collection', version_count__gt=0)
+        if type_val != 'collection':
+            collection_clause &= Q(has_orphan_concept=True)
+        qs = qs.filter(
+            Q(source_type='franchise', version_count__gt=0) | collection_clause,
         )
 
         query = self.request.GET.get('query', '').strip()
         sort_val = self.request.GET.get('sort', 'alpha')
         show_solo = self.request.GET.get('show_solo') == '1'
-        type_val = self.request.GET.get('type', 'all')
 
         if query:
             qs = qs.filter(name__icontains=query)
 
         # Type filter: IGDB classifies franchises and collections in separate
-        # namespaces. The toolbar chips let users narrow to one type at a time;
-        # unknown values fall through to 'all'.
+        # namespaces. The toolbar chips let users narrow to one type at a time.
         if type_val == 'franchise':
             qs = qs.filter(source_type='franchise')
         elif type_val == 'collection':
@@ -199,12 +218,7 @@ class FranchiseListView(HtmxListMixin, ProfileHotbarMixin, ListView):
             ('franchise', 'Franchise'),
             ('collection', 'Collection'),
         )
-        # Clamp to known values so a junk ?type= URL still renders the "All"
-        # chip as checked instead of an unselected radio group.
-        raw_type = self.request.GET.get('type', 'all')
-        context['current_type'] = raw_type if raw_type in (
-            'all', 'franchise', 'collection',
-        ) else 'all'
+        context['current_type'] = self._selected_type()
         context['seo_description'] = (
             "Browse PlayStation game franchises on Platinum Pursuit. "
             "Explore series like Resident Evil, Final Fantasy, and more."
