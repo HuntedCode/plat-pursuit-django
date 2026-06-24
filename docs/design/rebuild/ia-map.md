@@ -30,7 +30,7 @@ Home of the Pursuer, the two rails (**Badges** = collection, **Contracts/Element
 | **Pursuit home** | `/` | identified; **build LAST** (the "where you're at" hub; absorbs the old Logbook role) | The Lab, Research Panel, Badges, Titles, Browse, Community, Stats | navbar logo, redirects |
 | **The Lab** | `/my-pursuit/lab/` (flat `/lab/` per the URL sweep TBD) | **built** (the converted Logbook page: Pursuer hero + element experience — periodic table / radar / element detail) | element detail (in-page modal), Research Panel | Pursuit home (Lab snapshot), sub-nav |
 | **Research Panel** | `/my-pursuit/research-panel/` | **built** (baseline; accept endpoint live) | Project/game detail, accept endpoint | Pursuit home, sub-nav |
-| **Badges** | `/badges/` | not started | badge detail | Pursuit home, sub-nav |
+| **Collection** | `/my-pursuit/collection/` (flat `/collection/` per the URL sweep) | **built** (the badge album / Binder Surface; the Pursuit "Badges" rail) | badge detail (Browse) | Pursuit home, sub-nav |
 | **Milestones** | `/milestones/` | exists (legacy, to rebuild) | — | sub-nav |
 | **Titles** | `/titles/` | exists (legacy, to rebuild) | Pursuit home | Pursuit home, sub-nav |
 
@@ -39,7 +39,7 @@ Home of the Pursuer, the two rails (**Badges** = collection, **Contracts/Element
 Deferred within Pursuit: **Star Chart**, **Quests** (Phase 2/3).
 
 ### Browse (`/games/`) — discovery
-Existing hub, unchanged by the gamification shift. Games, trophies, companies, franchises, genres, themes, engines, recently-added, flagged.
+Existing hub. Games, trophies, **badges (catalog `/badges/` + detail `/badges/<series_slug>/`)**, companies, franchises, genres, themes, engines, recently-added, flagged. Badges re-homed here 2026-06-23 (re-homed `BadgeListView`/`BadgeDetailView`) — the public find/search catalog; the personal album is the Pursuit Collection. Sub-nav "Badges" item added; `/my-pursuit/badges/*` 301s to `/badges/*`.
 
 ### Community (`/community/`) — social
 Existing hub, unchanged. Reviews, profiles, challenges, lists, leaderboards.
@@ -48,6 +48,7 @@ Existing hub, unchanged. Reviews, profiles, challenges, lists, leaderboards.
 
 - **Logbook vs The Lab** (resolved 2026-06-16) — **The Lab is its own destination page.** The "Logbook" was really the personal overview hub, which is the **Pursuit home (`/`)** — so there is no separate Logbook page; that role folds into `/`. This *removes* a page rather than adding one: destinations (Lab, Research Panel, Badge album) are their own pages, and `/` is the single "where you're at" hub that previews + links to them.
 - **Research Panel home** (resolved 2026-06-16) — its **own page** (`/my-pursuit/research-panel/`), a Pursuit sub-nav slot; linked in from the Pursuit home.
+- **Badge catalog vs Collection** (resolved 2026-06-23) — badges live in TWO surfaces, mirroring games. The public **catalog** (find/search: `/badges/` + `/badges/<series_slug>/`) is a **Browse** page (re-homed `BadgeListView`/`BadgeDetailView`); the personal **Collection** album stays in **Pursuit**. This supersedes "Badges = collection at `/badges/`" — `/badges/` is now the Browse catalog, the Collection is built (currently `/my-pursuit/collection/`). The list is a far better find/search surface than the album, and being public it fixes anonymous discovery. See `product-identity.md` IA amendment + memory `project_badge_pages_collection_vs_list`.
 
 ## Open IA questions (resolve as we build)
 

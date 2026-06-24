@@ -108,6 +108,7 @@ BROWSE_HUB = HubSubnavConfig(
     prefixes=(
         '/games/',
         '/trophies/',
+        '/badges/',
         '/companies/',
         '/franchises/',
         '/genres/',
@@ -117,6 +118,7 @@ BROWSE_HUB = HubSubnavConfig(
     items=(
         HubSubnavItem('games', 'Games', 'games_list', 'gamepad-2'),
         HubSubnavItem('trophies', 'Trophies', 'trophies_list', 'trophy'),
+        HubSubnavItem('badges', 'Badges', 'badges_list', 'award'),
         HubSubnavItem('recently-added', 'Recently Added', 'recently_added', 'clock'),
         HubSubnavItem('flagged', 'Flagged Games', 'flagged_games', 'flag'),
         HubSubnavItem('franchises', 'Franchises', 'franchises_list', 'layers'),
@@ -185,6 +187,8 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'game_detail_with_profile': ('browse', 'games'),
     'company_detail': ('browse', 'companies'),
     'franchise_detail': ('browse', 'franchises'),
+    'badge_detail': ('browse', 'badges'),
+    'badge_detail_with_profile': ('browse', 'badges'),
     'genre_detail': ('browse', 'genres'),
     'theme_detail': ('browse', 'genres'),
     'engine_detail': ('browse', 'engines'),
@@ -213,9 +217,7 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'genre_challenge_setup': ('community', 'challenges'),
     'genre_challenge_edit': ('community', 'challenges'),
     'badge_leaderboards': ('community', 'leaderboards'),
-    # My Pursuit
-    'badge_detail': ('my_pursuit', 'badges'),
-    'badge_detail_with_profile': ('my_pursuit', 'badges'),
+    # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
     # Dashboard: nested sub-pages. The shareables sub-pages all live under
     # /dashboard/shareables/* and should highlight the Shareables sub-nav
     # item; the platinum_grid wizard is one of those nested children.

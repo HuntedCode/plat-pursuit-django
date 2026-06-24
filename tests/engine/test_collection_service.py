@@ -229,7 +229,7 @@ def test_binder_renders_series_header_linking_to_detail():
     html = render_to_string('components/binder.html', {'binder_sets': ctx['binder_sets']})
 
     assert 'pp-binder__series-header' in html
-    assert '/my-pursuit/badges/rs-render/' in html          # links to the series detail page
+    assert '/badges/rs-render/' in html                     # links to the series detail page (Browse catalog)
     assert html.count('pp-binder__series-pip') >= 4          # four tier pips
     assert 'is-filled' in html                               # the earned bronze pip
 
