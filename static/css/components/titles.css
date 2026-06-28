@@ -1,0 +1,167 @@
+/* ================================================================
+ * My Titles page (rebuild) — organized by SOURCE into three cohesive
+ * sections (Badge / Milestone / Special). Each holds earned + unearned
+ * together with its own Have/Need filter + sort, and each uses its
+ * native primitive: badge titles show the Frame (badge art), milestone
+ * titles show Tally + Horizon (progress), special titles are art cards.
+ *
+ * Built on the --pp-* tokens + the shared Tally/Horizon primitives.
+ * Page accent is violet (--pp-secondary): titles are the worn layer of
+ * identity. Equipped/need/hidden are JS-toggled SEMANTIC classes; all
+ * visuals live here (the JS never writes styling).
+ * ================================================================ */
+
+.tt { --tt-accent: var(--pp-secondary); }
+
+/* ---- Matted card base ---- */
+.tt-card {
+    position: relative;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-bg-2) 70%, var(--pp-bg-1)), var(--pp-bg-1));
+    border: var(--pp-border-w) solid var(--pp-border);
+    border-radius: var(--pp-radius-lg);
+    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-text) 7%, transparent);
+}
+
+/* ---- Page header ---- */
+.tt-header { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; padding: 16px 18px; margin-bottom: 14px; border-left: 3px solid var(--tt-accent); }
+.tt-header__title { display: flex; align-items: center; gap: 9px; }
+.tt-header__title h1 { font-family: var(--pp-font-display); font-weight: 800; font-size: clamp(1.25rem, 3vw, 1.75rem); letter-spacing: -0.01em; }
+.tt-header__icon { width: 26px; height: 26px; color: var(--tt-accent); flex-shrink: 0; }
+.tt-header__sub { margin-top: 4px; font-size: 0.8rem; color: var(--pp-text-dim); font-style: italic; max-width: 56ch; }
+
+/* ---- Hero: the equipped title is the centerpiece ---- */
+.tt-hero { overflow: hidden; margin-bottom: 14px; border-color: color-mix(in oklab, var(--tt-accent) 45%, var(--pp-border)); }
+.tt-hero__main { display: flex; align-items: center; gap: 16px; padding: 20px 18px; }
+@media (min-width: 768px) { .tt-hero__main { padding: 26px 28px; gap: 24px; } }
+.tt-hero__avatar { width: 56px; height: 56px; flex-shrink: 0; border-radius: 999px; overflow: hidden; background: var(--pp-bg-3); box-shadow: 0 0 0 2px color-mix(in oklab, var(--tt-accent) 60%, transparent); }
+@media (min-width: 768px) { .tt-hero__avatar { width: 72px; height: 72px; } }
+.tt-hero__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tt-hero__plate { min-width: 0; flex: 1; }
+.tt-hero__cap { display: flex; align-items: center; gap: 6px; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.14em; color: color-mix(in oklab, var(--tt-accent) 70%, var(--pp-text-mute)); font-weight: 700; }
+.tt-hero__cap svg { width: 12px; height: 12px; }
+.tt-hero__title-row { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
+.tt-hero__sparkle { width: 16px; height: 16px; flex-shrink: 0; color: color-mix(in oklab, var(--tt-accent) 60%, transparent); cursor: pointer; }
+.tt-hero__sparkle:first-child { animation: tt-twinkle 3.2s ease-in-out infinite; }
+.tt-hero__sparkle:last-child { animation: tt-twinkle 3.2s ease-in-out 1.6s infinite; }
+@keyframes tt-twinkle { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.18); } }
+.tt-hero__name { font-family: var(--pp-font-display); font-weight: 800; font-style: italic; font-size: clamp(1.4rem, 5vw, 2.4rem); line-height: 1.05; letter-spacing: -0.01em; color: var(--tt-accent); min-width: 0; padding-right: 0.12em; }
+.tt-hero__name.is-empty { color: var(--pp-text-mute); font-weight: 600; font-size: clamp(1.1rem, 3.5vw, 1.6rem); }
+.tt-hero__name.is-legendary { color: transparent; background: linear-gradient(100deg, var(--pp-secondary), var(--pp-primary), var(--pp-accent)); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; animation: tt-legendary 6s linear infinite; }
+@keyframes tt-legendary { to { background-position: 200% center; } }
+.tt-hero__flavor { font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; margin-top: 4px; }
+.tt-hero__unequip { display: none; align-items: center; gap: 5px; margin-top: 10px; padding: 5px 11px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; cursor: pointer; transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
+.tt-hero__unequip svg { width: 13px; height: 13px; }
+.tt-hero__unequip:hover { color: var(--pp-error); border-color: color-mix(in oklab, var(--pp-error) 45%, var(--pp-border)); }
+.tt-hero.is-equipped .tt-hero__unequip { display: inline-flex; }
+.tt-hero:not(.is-equipped) .tt-hero__sparkle { display: none; }
+.tt-hero__strip { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; padding: 9px 14px; border-top: 1px solid var(--pp-divider); background: color-mix(in oklab, var(--pp-text) 2%, transparent); }
+.tt-hero__trophy { display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tt-hero__trophy svg { width: 14px; height: 14px; }
+.tt-hero__strip-sep { width: 1px; height: 14px; background: var(--pp-divider); }
+.tt-hero__earned { font-size: 0.74rem; color: var(--pp-text-dim); }
+
+/* ---- Section shell (one per title source) ---- */
+.tt-section { padding: 14px 16px 16px; margin-bottom: 14px; }
+.tt-section--badge   { border-left: 3px solid var(--pp-secondary); }
+.tt-section--ms      { border-left: 3px solid var(--pp-warning); }
+.tt-section--special { border-left: 3px solid var(--pp-accent); }
+.tt-section__head { display: flex; align-items: center; gap: 9px; margin-bottom: 2px; }
+.tt-section__head > svg { width: 20px; height: 20px; flex-shrink: 0; }
+.tt-section--badge   .tt-section__head > svg { color: var(--pp-secondary); }
+.tt-section--ms      .tt-section__head > svg { color: var(--pp-warning); }
+.tt-section--special .tt-section__head > svg { color: var(--pp-accent); }
+.tt-section__head h2 { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.1rem; }
+.tt-section__tally { margin-left: auto; display: flex; align-items: baseline; gap: 4px; font-variant-numeric: tabular-nums; }
+.tt-section__tally .pp-tally { font-size: 1.05rem; }
+.tt-section--badge   .tt-section__tally .pp-tally { color: var(--pp-secondary); }
+.tt-section--ms      .tt-section__tally .pp-tally { color: var(--pp-warning); }
+.tt-section--special .tt-section__tally .pp-tally { color: var(--pp-accent); }
+.tt-section__tally-sub { font-size: 0.74rem; color: var(--pp-text-mute); }
+.tt-section__sub { font-size: 0.74rem; color: var(--pp-text-dim); font-style: italic; margin: 3px 0 12px; }
+
+/* ---- Section toolbar: Have/Need segmented filter + sort ---- */
+.tt-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.tt-seg { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; background: var(--pp-bg-2); border: 1px solid var(--pp-border); }
+.tt-seg__btn { font: inherit; cursor: pointer; padding: 5px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; color: var(--pp-text-dim); background: transparent; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
+.tt-seg__btn:hover { color: var(--pp-text); }
+.tt-seg__btn.is-active { color: var(--tt-accent); background: color-mix(in oklab, var(--tt-accent) 16%, var(--pp-bg-1)); }
+.tt-sort { font: inherit; font-size: 0.76rem; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 28px 6px 12px; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a0b4' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; background-size: 13px; }
+.tt-sort:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--tt-accent) 45%, var(--pp-border)); }
+
+/* ---- Title card grid (Badge + Special) — the Frame/art is the point ---- */
+.tt-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 640px) { .tt-cards { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 1024px) { .tt-cards { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1280px) { .tt-cards { grid-template-columns: repeat(5, 1fr); } }
+
+.tt-tcard { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 12px 12px; text-align: center; transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease), transform var(--pp-dur) var(--pp-ease); }
+.tt-tcard.is-have { cursor: pointer; }
+.tt-tcard.is-have:hover { border-color: color-mix(in oklab, var(--tt-accent) 55%, var(--pp-border)); transform: translateY(-2px); box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-text) 7%, transparent), 0 10px 24px -14px color-mix(in oklab, var(--tt-accent) 60%, transparent); }
+.tt-tcard.is-equipped { border-color: var(--tt-accent); box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-text) 8%, transparent), 0 0 20px -6px color-mix(in oklab, var(--tt-accent) 55%, transparent); cursor: default; }
+.tt-tcard.is-need { opacity: 0.92; }
+.tt-tcard__art { width: 56px; height: 56px; flex-shrink: 0; display: grid; place-items: center; }
+.tt-tcard__art img { width: 100%; height: 100%; object-fit: contain; }
+.tt-tcard__art--ph { border-radius: 999px; background: var(--pp-bg-3); }
+.tt-tcard__art--ph svg { width: 26px; height: 26px; }
+.tt-tcard.is-need .tt-tcard__art { filter: grayscale(0.9); opacity: 0.65; }
+.tt-tcard__name { font-weight: 700; font-style: italic; font-size: 0.86rem; line-height: 1.2; color: var(--tt-accent); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding: 0 1px; }
+.tt-tcard.is-need .tt-tcard__name { color: var(--pp-text-dim); }
+.tt-tcard.is-legendary.is-have .tt-tcard__name { color: transparent; background: linear-gradient(100deg, var(--pp-secondary), var(--pp-primary), var(--pp-accent)); -webkit-background-clip: text; background-clip: text; }
+.tt-tcard__foot { margin-top: auto; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.tt-tcard__date { font-size: 0.64rem; color: var(--pp-text-mute); }
+/* "Earn this" link for unearned badge titles -> the badge page */
+.tt-tcard__earn { display: inline-flex; align-items: center; gap: 4px; font-size: 0.66rem; font-weight: 600; color: var(--pp-text-mute); text-decoration: none; transition: color var(--pp-dur-fast) var(--pp-ease); }
+.tt-tcard__earn svg { width: 11px; height: 11px; }
+.tt-tcard__earn:hover { color: var(--tt-accent); }
+.tt-tcard__earn b { color: var(--pp-text-dim); font-weight: 700; }
+
+/* ---- Milestone progress list — Tally + Horizon is the point ---- */
+.tt-ms-list { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); overflow: hidden; background: var(--pp-bg-1); }
+.tt-ms-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 11px; padding: 10px 13px; }
+.tt-ms-row:not(:last-child) { border-bottom: 1px solid var(--pp-divider); }
+.tt-ms-row.is-have { cursor: pointer; transition: background var(--pp-dur-fast) var(--pp-ease); }
+.tt-ms-row.is-have:hover { background: color-mix(in oklab, var(--pp-text) 4%, transparent); }
+.tt-ms-row.is-equipped { background: color-mix(in oklab, var(--tt-accent) 8%, transparent); cursor: default; box-shadow: inset 3px 0 0 var(--tt-accent); }
+.tt-ms-row__icon { width: 28px; height: 28px; display: grid; place-items: center; }
+.tt-ms-row__icon img { width: 100%; height: 100%; object-fit: contain; }
+.tt-ms-row__icon svg { width: 16px; height: 16px; color: var(--pp-warning); }
+.tt-ms-row.is-need .tt-ms-row__icon { filter: grayscale(0.85); opacity: 0.7; }
+.tt-ms-row__main { min-width: 0; }
+.tt-ms-row__name { font-style: italic; font-weight: 600; font-size: 0.86rem; color: var(--tt-accent); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 1px; }
+.tt-ms-row.is-need .tt-ms-row__name { color: var(--pp-text-dim); }
+.tt-ms-row.is-legendary.is-have .tt-ms-row__name { color: transparent; background: linear-gradient(100deg, var(--pp-secondary), var(--pp-primary), var(--pp-accent)); -webkit-background-clip: text; background-clip: text; }
+.tt-ms-row__cat { font-size: 0.66rem; color: var(--pp-text-mute); margin-top: 1px; }
+.tt-ms-row__trail { display: flex; align-items: center; gap: 9px; justify-self: end; }
+.tt-ms-row__prog { display: flex; align-items: center; gap: 8px; width: 130px; }
+.tt-ms-row__prog .pp-horizon { flex: 1; }
+.tt-ms-row__prog-val { font-size: 0.64rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tt-ms-row__date { font-size: 0.66rem; color: var(--pp-text-mute); white-space: nowrap; }
+@media (max-width: 600px) {
+    .tt-ms-row { grid-template-columns: 28px 1fr; }
+    .tt-ms-row__trail { grid-column: 2; justify-self: stretch; margin-top: 5px; }
+    .tt-ms-row__prog { width: auto; flex: 1; }
+}
+
+/* ---- Equip affordance (shared; CSS-swapped by .is-equipped) ---- */
+.tt-equip { font: inherit; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; font-size: 0.72rem; font-weight: 700; color: var(--pp-bg-0); background: var(--tt-accent); border: none; border-radius: 999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
+.tt-equip:hover { filter: brightness(1.12); }
+.tt-equipped-mark { flex-shrink: 0; display: none; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 700; color: var(--tt-accent); }
+.tt-equipped-mark svg { width: 13px; height: 13px; }
+.is-equipped .tt-equip { display: none; }
+.is-equipped .tt-equipped-mark { display: inline-flex; }
+
+/* ---- Empty states ---- */
+.tt-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 36px 16px; }
+.tt-empty svg { width: 48px; height: 48px; color: color-mix(in oklab, var(--pp-text) 18%, transparent); margin-bottom: 10px; }
+.tt-empty__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; color: var(--pp-text-dim); font-style: italic; }
+.tt-empty__body { font-size: 0.8rem; color: var(--pp-text-mute); margin-top: 6px; max-width: 44ch; }
+/* per-section "filtered to nothing" note */
+.tt-none { padding: 22px 12px; text-align: center; font-size: 0.8rem; color: var(--pp-text-mute); font-style: italic; }
+
+/* ---- JS-toggled state hooks (semantic only; visuals all live above) ---- */
+.tt-tcard.is-hidden, .tt-ms-row.is-hidden { display: none; }
+
+/* ---- Equip flash (the "it's mine" beat) ---- */
+.tt-flash { animation: tt-flash 0.6s var(--pp-ease); }
+@keyframes tt-flash { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--tt-accent) 65%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+@media (prefers-reduced-motion: reduce) { .tt-flash, .tt-hero__sparkle, .tt-hero__name.is-legendary { animation: none; } }

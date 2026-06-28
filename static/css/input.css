@@ -10,6 +10,7 @@
 @import "./components/binder.css";
 @import "./components/collection-list.css";
 @import "./components/milestones.css";
+@import "./components/titles.css";
 @plugin "daisyui";
 
 @theme {
