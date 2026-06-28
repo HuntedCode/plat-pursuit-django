@@ -1745,9 +1745,22 @@ class UserTitleAdmin(admin.ModelAdmin):
 
 @admin.register(Milestone)
 class MilestoneAdmin(admin.ModelAdmin):
-    list_display = ['name', 'title', 'discord_role_id', 'criteria_type', 'criteria_details', 'premium_only', 'required_value', 'earned_count']
-    list_filter = ['premium_only', 'criteria_type']
+    list_display = ['name', 'title', 'discord_role_id', 'criteria_type', 'criteria_details', 'premium_only', 'is_active', 'required_value', 'earned_count']
+    list_filter = ['is_active', 'premium_only', 'criteria_type']
     search_fields = ['name']
+    actions = ['retire_selected_milestones']
+
+    @admin.action(description="Retire selected milestones (hide + remove granted titles)")
+    def retire_selected_milestones(self, request, queryset):
+        from django.db import transaction
+        from trophies.services.milestone_service import retire_milestones
+        with transaction.atomic():
+            retired, removed = retire_milestones(queryset)
+        self.message_user(
+            request,
+            f"Retired {retired} milestone(s) and removed {removed} granted title(s). "
+            f"Earned records were preserved.",
+        )
 
 @admin.register(UserMilestone)
 class UserMilestoneAdmin(admin.ModelAdmin):
