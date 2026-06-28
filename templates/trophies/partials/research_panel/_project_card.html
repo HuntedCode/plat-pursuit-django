@@ -37,7 +37,7 @@ below. Expects `p` (a project dict from research_panel_service),
 
             {# Reward total + CTA #}
             <div class="shrink-0 flex flex-col items-end gap-1.5 text-right">
-                <div class="leading-none"><span class="font-black text-lg md:text-xl tabular-nums">{{ p.xp_total|intcomma }}</span> <span class="text-xs text-base-content/50">XP</span></div>
+                <div class="leading-none"><span class="pp-tally text-lg md:text-xl">{{ p.xp_total|intcomma }}</span> <span class="text-xs text-base-content/50">XP</span></div>
                 <span class="rp-cta">
                     {% if p.status == 'claimable' %}
                         <button type="button" class="btn btn-xs md:btn-sm btn-primary rp-accept" data-slug="{{ p.slug }}">Accept</button>
