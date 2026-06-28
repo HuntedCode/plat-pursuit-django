@@ -171,7 +171,6 @@
 .ms-empty__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.15rem; color: var(--pp-text-dim); font-style: italic; }
 .ms-empty__body { font-size: 0.82rem; color: var(--pp-text-mute); margin-top: 8px; max-width: 44ch; }
 
-.ms-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
 .ms-divider { height: 1px; background: var(--pp-divider); margin: 16px 0; }
 
 /* ---- Responsive ---- */

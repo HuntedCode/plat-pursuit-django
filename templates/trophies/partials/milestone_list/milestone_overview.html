@@ -46,15 +46,6 @@
 </div>
 {% endif %}
 
-{# ─── Related links ───────────────────────────────────────────────────── #}
-<div class="ms-actions">
-    <a href="{% url 'badges_list' %}" class="btn btn-sm btn-outline btn-secondary">Browse Badges</a>
-    <a href="{% url 'overall_badge_leaderboards' %}" class="btn btn-sm btn-outline btn-accent">Leaderboards</a>
-    {% if user.is_authenticated and user.profile %}
-    <a href="{% url 'my_titles' %}" class="btn btn-sm btn-outline btn-warning">My Titles</a>
-    {% endif %}
-</div>
-
 {# ─── Category cards ──────────────────────────────────────────────────── #}
 <h2 class="ms-section-title">Categories</h2>
 <div class="ms-cats">
