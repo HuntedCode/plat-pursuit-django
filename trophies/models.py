@@ -2714,6 +2714,7 @@ class Milestone(models.Model):
     criteria_type = models.CharField(max_length=30, choices=CRITERIA_TYPES, default='manual')
     criteria_details = models.JSONField(default=dict, blank=True, help_text="Flexible details")
     premium_only = models.BooleanField(default=False, help_text="If True, can only be earned by current premium users")
+    is_active = models.BooleanField(default=True, db_index=True, help_text="If False the milestone is RETIRED: hidden from the milestones page and no longer awarded. Existing earned records persist. Retire via the retire_milestones command, which also removes the titles it granted.")
     required_value = models.PositiveIntegerField(default=0, help_text="Target for milestone")
     earned_count = models.PositiveIntegerField(default=0, help_text="Counter for user earns")
     created_at = models.DateTimeField(auto_now_add=True)
