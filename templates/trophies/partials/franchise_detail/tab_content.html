@@ -1,17 +1,17 @@
 {% load humanize %}
 {% comment %}
-    Renders the active tab's body on the franchise detail page (collections /
+    Renders the active tab's body on the franchise detail page (series /
     also_featured / games). Extracted into a partial so sort changes can swap
     just this block via HTMX without a full page reload.
 
     Required context:
-      current_tab: 'collections' | 'also_featured' | 'games'
+      current_tab: 'series' | 'also_featured' | 'games'
       object: Franchise
       sort_choices, current_sort
       main_groups, also_featured_groups, related_entries
 {% endcomment %}
-{% if current_tab == 'collections' %}
-    {# -- Related Collections Grid -- #}
+{% if current_tab == 'series' %}
+    {# -- Related Series Grid -- #}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-2.5">
         {% for entry in related_entries %}
             <a href="{% url 'franchise_detail' slug=entry.slug %}"
@@ -45,7 +45,7 @@
                                 {{ entry.name }}
                             </h3>
                             <div class="mt-1 flex flex-wrap gap-1">
-                                <span class="badge badge-xs badge-ghost italic">{{ entry.get_source_type_display }}</span>
+                                <span class="badge badge-xs badge-ghost italic">{% if entry.source_type == 'collection' %}Series{% else %}Franchise{% endif %}</span>
                                 <span class="badge badge-xs badge-ghost">
                                     {{ entry.related_game_count|intcomma }} game{{ entry.related_game_count|pluralize }}{% if entry.related_version_count != entry.related_game_count %} &middot; {{ entry.related_version_count|intcomma }} version{{ entry.related_version_count|pluralize }}{% endif %}
                                 </span>

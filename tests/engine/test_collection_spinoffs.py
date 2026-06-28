@@ -112,6 +112,29 @@ def test_ingestion_skips_membership_fetch_when_disabled(monkeypatch):
     assert link.is_spinoff is False
 
 
+def test_writer_does_not_clobber_admin_is_excluded(monkeypatch):
+    """A link the admin has flagged is_excluded=True must survive a re-run of the
+    writer. Otherwise admin curation would be wiped every enrichment refresh."""
+    monkeypatch.setattr(
+        IGDBService, 'fetch_collection_memberships',
+        staticmethod(lambda ids: {}),
+    )
+    concept = ConceptFactory()
+    coll = _collection(197, 'Saints Row', 'saints-row')
+    # Admin has marked this link as excluded.
+    ConceptFranchise.objects.create(
+        concept=concept, franchise=coll, is_excluded=True,
+    )
+
+    # Re-run the writer with the same IGDB data.
+    IGDBService._create_concept_franchises(
+        concept, {'id': 19440, 'collections': [{'id': 197, 'name': 'Saints Row'}]},
+    )
+
+    # is_excluded must still be True; writer is forbidden from touching it.
+    assert ConceptFranchise.objects.get(concept=concept, franchise=coll).is_excluded is True
+
+
 def test_ingestion_corrects_stale_spinoff_on_refresh(monkeypatch):
     """A link previously stored as spin-off that IGDB now reports as a normal member
     gets corrected (and vice-versa) on re-enrichment."""

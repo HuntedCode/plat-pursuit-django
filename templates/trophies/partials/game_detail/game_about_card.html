@@ -94,10 +94,15 @@
                         </div>
                     {% endif %}
                 {% endwith %}
-                {% if franchise_main or franchise_also_featured or franchise_collections %}
+                {% if franchises or franchise_collections %}
                     {% include 'trophies/partials/game_detail/franchise_lines.html' %}
-                {% elif igdb.franchise_names %}
-                    {# Fallback for concepts not yet re-enriched after Franchise model rollout #}
+                {% elif igdb.franchise_names and not franchise_has_any_links %}
+                    {% comment %}
+                        Fallback for concepts not yet re-enriched after Franchise model rollout.
+                        Gated on franchise_has_any_links=False so a concept with admin-excluded
+                        links (which leave franchise_names populated but suppress display) doesn't
+                        leak the hidden links through this denorm.
+                    {% endcomment %}
                     <div class="flex items-center gap-1.5 text-xs">
                         <span class="text-base-content/50 shrink-0">Franchise:</span>
                         <span class="font-medium text-base-content/80 line-clamp-1 pr-1">{{ igdb.franchise_names|join:", " }}</span>

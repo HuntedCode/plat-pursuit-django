@@ -749,7 +749,7 @@ class ConceptFranchiseInline(admin.TabularInline):
     model = ConceptFranchise
     fk_name = 'concept'
     extra = 0
-    fields = ('franchise', 'franchise_type', 'is_main', 'is_spinoff')
+    fields = ('franchise', 'franchise_type', 'is_excluded', 'is_spinoff')
     readonly_fields = ('franchise_type',)
     autocomplete_fields = ('franchise',)
     can_delete = True
@@ -3378,7 +3378,7 @@ class FranchiseConceptInline(admin.TabularInline):
     model = ConceptFranchise
     fk_name = 'franchise'
     extra = 0
-    fields = ('concept', 'is_main', 'is_spinoff')
+    fields = ('concept', 'is_excluded', 'is_spinoff')
     autocomplete_fields = ('concept',)
     can_delete = True
 
@@ -3388,7 +3388,7 @@ class FranchiseConceptInline(admin.TabularInline):
 
 @admin.register(Franchise)
 class FranchiseAdmin(admin.ModelAdmin):
-    list_display = ('name', 'source_type', 'igdb_id', 'slug', 'concept_count', 'main_count')
+    list_display = ('name', 'source_type', 'igdb_id', 'slug', 'concept_count', 'excluded_count')
     list_filter = ('source_type',)
     search_fields = ('name', 'slug')
     # igdb_id and source_type compose the unique constraint — staff editing
@@ -3414,9 +3414,9 @@ class FranchiseAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(
             _concept_count=Count('franchise_concepts', distinct=True),
-            _main_count=Count(
+            _excluded_count=Count(
                 'franchise_concepts',
-                filter=Q(franchise_concepts__is_main=True),
+                filter=Q(franchise_concepts__is_excluded=True),
                 distinct=True,
             ),
         )
@@ -3426,10 +3426,10 @@ class FranchiseAdmin(admin.ModelAdmin):
     concept_count.short_description = 'Concepts'
     concept_count.admin_order_field = '_concept_count'
 
-    def main_count(self, obj):
-        return obj._main_count
-    main_count.short_description = 'As main'
-    main_count.admin_order_field = '_main_count'
+    def excluded_count(self, obj):
+        return obj._excluded_count
+    excluded_count.short_description = 'Excluded'
+    excluded_count.admin_order_field = '_excluded_count'
 
 
 @admin.register(ConceptFranchise)
@@ -3437,11 +3437,11 @@ class ConceptFranchiseAdmin(admin.ModelAdmin):
     """Standalone listing of every concept↔franchise link.
 
     Useful when triaging mis-linked games (e.g. cross-namespace ID
-    collisions) — list_filter on is_main + source_type lets you find
-    suspicious patterns quickly.
+    collisions) — list_filter on is_excluded + source_type lets you find
+    suspicious patterns and admin-curated exclusions quickly.
     """
-    list_display = ('concept', 'franchise', 'franchise_source_type', 'is_main', 'is_spinoff')
-    list_filter = ('is_main', 'is_spinoff', 'franchise__source_type')
+    list_display = ('concept', 'franchise', 'franchise_source_type', 'is_excluded', 'is_spinoff')
+    list_filter = ('is_excluded', 'is_spinoff', 'franchise__source_type')
     search_fields = ('concept__unified_title', 'concept__concept_id', 'franchise__name')
     autocomplete_fields = ('concept', 'franchise')
     list_select_related = ('concept', 'franchise')

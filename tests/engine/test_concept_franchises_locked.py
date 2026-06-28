@@ -1,8 +1,9 @@
 """Tests for the Concept.franchises_locked guard.
 
 A locked concept keeps its hand-curated Franchise/Collection links (and their
-is_main flags) across an IGDB enrichment refresh, while the rest of enrichment
-(companies, genres, themes, engines) still rebuilds normally.
+is_excluded / is_spinoff admin overrides) across an IGDB enrichment refresh,
+while the rest of enrichment (companies, genres, themes, engines) still
+rebuilds normally.
 """
 import pytest
 from django.core.management import call_command
@@ -16,7 +17,7 @@ pytestmark = pytest.mark.django_db
 
 def _seed_links(concept):
     fr = Franchise.objects.create(igdb_id=1, name='Saga', slug='saga', source_type='franchise')
-    ConceptFranchise.objects.create(concept=concept, franchise=fr, is_main=True)
+    ConceptFranchise.objects.create(concept=concept, franchise=fr, is_excluded=True)
     ConceptGenre.objects.create(concept=concept, genre=Genre.objects.create(igdb_id=1, name='RPG', slug='rpg'))
 
 
@@ -28,7 +29,7 @@ def test_wipe_preserves_franchise_links_when_locked():
 
     # Franchise/collection links survive; everything else is still wiped.
     assert ConceptFranchise.objects.filter(concept=concept).count() == 1
-    assert ConceptFranchise.objects.get(concept=concept).is_main is True
+    assert ConceptFranchise.objects.get(concept=concept).is_excluded is True
     assert ConceptGenre.objects.filter(concept=concept).count() == 0
 
 
@@ -40,6 +41,39 @@ def test_wipe_clears_franchise_links_when_unlocked():
 
     assert ConceptFranchise.objects.filter(concept=concept).count() == 0
     assert ConceptGenre.objects.filter(concept=concept).count() == 0
+
+
+def test_absorb_excluded_wins_on_duplicate_franchise_link():
+    """When both sides have a link to the same Franchise, is_excluded and
+    is_spinoff each survive if EITHER side has them set. Curator decisions
+    must not be silently lost on merge. Requires inherit_match=True
+    (survivor has no IGDBMatch of its own) — the re-anchor path drops
+    other's enrichment entirely with the discarded match."""
+    survivor = ConceptFactory(franchises_locked=False)
+    absorbed = ConceptFactory(franchises_locked=False)
+    IGDBMatchFactory(concept=absorbed)  # gives `other` a match -> inherit_match True
+    fr = Franchise.objects.create(igdb_id=42, name='Shared', slug='shared', source_type='franchise')
+
+    # Survivor's link is clean; the absorbed concept's link carries the curated
+    # is_excluded=True. After absorb, the survivor's row should carry True.
+    ConceptFranchise.objects.create(
+        concept=survivor, franchise=fr, is_excluded=False, is_spinoff=False,
+    )
+    ConceptFranchise.objects.create(
+        concept=absorbed, franchise=fr, is_excluded=True, is_spinoff=True,
+    )
+
+    survivor.absorb(absorbed)
+
+    surviving_link = ConceptFranchise.objects.get(concept=survivor, franchise=fr)
+    assert surviving_link.is_excluded is True
+    assert surviving_link.is_spinoff is True
+    # After the absorbed concept itself is deleted, the only link to this
+    # franchise is the merged one on the survivor (CASCADE removes the
+    # duplicate row that absorb() leaves on `other`, matching how
+    # ConceptCompany / ConceptGenre merges work).
+    absorbed.delete()
+    assert ConceptFranchise.objects.filter(franchise=fr).count() == 1
 
 
 def test_absorb_inherits_lock_when_links_migrate():
@@ -75,13 +109,13 @@ def test_rebuild_concept_enrichment_preserves_locked_links():
     concept = ConceptFactory(franchises_locked=True)
     GameFactory(concept=concept)
     fr = Franchise.objects.create(igdb_id=7, name='Saga', slug='saga', source_type='franchise')
-    ConceptFranchise.objects.create(concept=concept, franchise=fr, is_main=True)
+    ConceptFranchise.objects.create(concept=concept, franchise=fr, is_excluded=True)
     IGDBMatchFactory(concept=concept, status='auto_accepted', raw_response={'name': 'X'})
 
     call_command('rebuild_concept_enrichment')   # runs by default; --dry-run is opt-out
 
     link = ConceptFranchise.objects.filter(concept=concept, franchise=fr)
-    assert link.count() == 1 and link.first().is_main is True
+    assert link.count() == 1 and link.first().is_excluded is True
 
 
 def test_rebuild_franchises_from_cache_wipe_preserves_locked():
@@ -89,10 +123,10 @@ def test_rebuild_franchises_from_cache_wipe_preserves_locked():
     # Franchise it references (Franchise -> ConceptFranchise is CASCADE).
     locked = ConceptFactory(franchises_locked=True)
     fr = Franchise.objects.create(igdb_id=8, name='Saga2', slug='saga2', source_type='franchise')
-    ConceptFranchise.objects.create(concept=locked, franchise=fr, is_main=True)
+    ConceptFranchise.objects.create(concept=locked, franchise=fr, is_excluded=True)
     IGDBMatchFactory(concept=locked, status='auto_accepted', raw_response={'name': 'X'})
 
     call_command('rebuild_franchises_from_cache', '--wipe')
 
-    assert ConceptFranchise.objects.filter(concept=locked, franchise=fr, is_main=True).exists()
+    assert ConceptFranchise.objects.filter(concept=locked, franchise=fr, is_excluded=True).exists()
     assert Franchise.objects.filter(pk=fr.pk).exists()   # parent survived the cascade-wipe

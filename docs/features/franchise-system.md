@@ -1,16 +1,18 @@
 # Franchise System
 
-Browse and detail pages for game franchises and collections, sourced from IGDB. The browse list lives at `/franchises/`; each franchise has a detail page at `/franchises/<slug>/` that groups multiple versions of the same game together (similar to PSNProfiles' "stages" concept) and surfaces user progress across the franchise when the viewer has a linked PSN profile. Franchises and collections are both stored in a single `Franchise` model distinguished by `source_type`; the infrastructure lives in the [IGDB Integration](../architecture/igdb-integration.md) doc while this doc covers the user-facing feature.
+Browse and detail pages for game franchises and series, sourced from IGDB. The browse list lives at `/franchises/`; each franchise / series has a detail page at `/franchises/<slug>/` that groups multiple versions of the same game together (similar to PSNProfiles' "stages" concept) and surfaces user progress across the group when the viewer has a linked PSN profile. Franchises and series are both stored in a single `Franchise` model distinguished by `source_type`; the infrastructure lives in the [IGDB Integration](../architecture/igdb-integration.md) doc while this doc covers the user-facing feature.
+
+> **Vocabulary note.** Throughout the user-facing site, `source_type='collection'` rows are labeled **Series** (matching the badge system's `series_slug` terminology). The DB column name and IGDB API field stay `collection` to match the upstream namespace; only the UI vocabulary differs. This doc uses both terms in their respective contexts — "series" when discussing UI, "collection" when discussing data-layer / API state.
 
 ## Architecture Overview
 
 The franchise pages exist because a normalized IGDB layer already captured the data (`Franchise` / `ConceptFranchise` tables), but nothing surfaced it to users. Without these pages, players couldn't discover that multiple games they own belong to the same series, and couldn't see their progress across a franchise at a glance.
 
-Two distinct IGDB taxonomies feed this system: **franchises** ("Resident Evil") are top-level IP umbrellas, and **collections** ("Resident Evil Main Series") are curated sub-series. They live in separate IGDB ID namespaces — franchise id 222 and collection id 222 are completely different entities — which the data model handles via a composite `(igdb_id, source_type)` unique constraint. At the UI level, the two types are mostly treated as one: browse shows them side-by-side with identical cards, detail pages render identically regardless of type. The distinction only surfaces on game detail pages where a user is actively investigating a specific title.
+Two distinct IGDB taxonomies feed this system: **franchises** ("Resident Evil") are top-level IP umbrellas, and **series** (IGDB calls them collections — "Resident Evil Main Series") are curated sub-series within those franchises. They live in separate IGDB ID namespaces — franchise id 222 and collection id 222 are completely different entities — which the data model handles via a composite `(igdb_id, source_type)` unique constraint. At the UI level, the two types use the same card layout and detail page; a colored type badge on each card (**Franchise** / **Series**) and the Type chip filter on the browse toolbar let users tell them apart and narrow on demand.
 
-IGDB also distinguishes the singular `franchise` field (a game's primary identity) from the plural `franchises` array (tie-ins / featured IPs). Disney Dreamlight Valley's main franchise is "Disney"; "Mickey Mouse" and "Frozen" are tie-ins. The `ConceptFranchise.is_main` flag captures this, and the detail page's Games tab shows only games where this franchise is main. A second "Also Featured" tab lists games where it appears as a tie-in, so the full relationship network stays visible without cluttering the primary view.
+Every franchise IGDB lists for a game becomes an equal link — there's no "primary franchise" distinction. Disney Dreamlight Valley appears under "Disney", "Mickey Mouse", AND "Frozen" simultaneously. Admins can hide the occasional bad link via `ConceptFranchise.is_excluded=True`; combined with `Concept.franchises_locked=True` the override survives future enrichment refreshes.
 
-The browse page filters aggressively to stay useful. Only franchises that are at least one game's main, and collections that contain at least one "orphan" game (a game with no franchise-type link), appear in the browse list. Redundant collections like "Resident Evil Main Series" (whose games all already have the Resident Evil franchise) stay hidden. A solo-entry toggle (default off) hides franchises/collections with only a single game to keep the page focused on actual series.
+The browse page surfaces every franchise with at least one non-excluded link and every series with at least one non-excluded, non-spin-off link. The Type chip defaults to "Franchise" so first-time visitors land in the familiar franchise-only view; flipping to "Series" or "All" reveals the rest. A solo-entry toggle (default off) hides entries with only a single game to keep the page focused on actual series.
 
 ## File Map
 
@@ -21,8 +23,8 @@ The browse page filters aggressively to stay useful. Only franchises that are at
 | `templates/trophies/franchise_detail.html` | Detail page with poster hero, user progress stats, tabs |
 | `templates/trophies/partials/franchise_list/browse_results.html` | HTMX partial for the filtered results grid |
 | `templates/trophies/partials/franchise_list/franchise_cards.html` | Individual browse card |
-| `templates/trophies/partials/franchise_detail/game_groups_list.html` | Reusable game-group list (used by both Games and Also Featured tabs) |
-| `templates/trophies/partials/game_detail/franchise_lines.html` | "Franchise / Also Featured / Collections" lines on the game detail About card |
+| `templates/trophies/partials/franchise_detail/game_groups_list.html` | Reusable game-group list (single unified list on the franchise detail page) |
+| `templates/trophies/partials/game_detail/franchise_lines.html` | "Franchises / Series" lines on the game detail About card |
 | `trophies/models.py` (Franchise, ConceptFranchise) | Data models — see [IGDB Integration](../architecture/igdb-integration.md) for full docs |
 | `core/hub_subnav.py` | Adds "Franchises" to the Browse hub sub-nav |
 
@@ -30,27 +32,33 @@ The browse page filters aggressively to stay useful. Only franchises that are at
 
 Both `Franchise` and `ConceptFranchise` are fully documented in [IGDB Integration](../architecture/igdb-integration.md#data-model). Key points for the feature:
 
-- `Franchise.source_type`: `'franchise'` or `'collection'`. Browse filters franchises by `is_main=True` and collections by "has orphan concept".
-- `ConceptFranchise.is_main`: true for at most one franchise-type link per concept. Never true for collections.
-- `ConceptFranchise.is_spinoff`: true when IGDB types a game's membership in a **collection** as a "Spin-off" (e.g. Agents of Mayhem under Saints Row). Collection links only; always false for franchises. Spin-off members are hidden from the collection's game list/counts but still shown on the game's *own* detail About card (a spin-off legitimately belongs to its parent series from the game's side).
+- `Franchise.source_type`: `'franchise'` or `'collection'` in the DB (the latter renders as "Series" everywhere a user sees it). Browse surfaces every row of either type with at least one non-excluded link and `version_count > 0`.
+- `ConceptFranchise.is_excluded`: admin override that hides a specific link from browse / detail / badge coverage. Default False. Sticky across enrichment refresh ONLY when `concept.franchises_locked=True`.
+- `ConceptFranchise.is_spinoff`: true when IGDB types a game's membership in a **series** (`source_type='collection'`) as a "Spin-off" (e.g. Agents of Mayhem under Saints Row). Series links only; always false for franchise-type links. Spin-off members are hidden from the parent series' game list/counts but still shown on the game's *own* detail About card (a spin-off legitimately belongs to its parent series from the game's side).
 
 ## Key Flows
 
 ### Browse Page Query
 
-The browse queryset applies three filters to the `Franchise` table:
+> **Vocabulary note.** Throughout the user-facing site, `source_type='collection'` rows are labeled **Series** (matching the badge system's `series_slug` terminology). The DB column name and IGDB API field stay `collection` to match the upstream namespace; only the UI vocabulary differs. This doc uses both terms in their respective contexts — "series" when discussing UI, "collection" when discussing the data layer.
 
-1. **Type filter**: `source_type='franchise'` rows must have at least one `is_main=True` link. `source_type='collection'` rows pass through (we haven't excluded anything yet).
+The browse queryset applies two filters to the `Franchise` table:
+
+1. **Eligibility**: `source_type='franchise'` rows must have at least one non-excluded link. `source_type='collection'` rows pass through (the spin-off / `is_excluded` flags cull individual member links, not whole series).
 2. **Game-count annotations**:
    - `game_count` counts distinct concepts (IGDB-unified games).
    - `version_count` counts distinct Game rows (PS4/PS5/EU/NA as separate records).
-3. **Final cut**:
-   - Franchises: `version_count > 0`
-   - Collections: `version_count > 0` AND `has_orphan_concept=True` (at least one member concept has zero franchise-type links — meaning this collection is the only discovery path for that game).
-
-The "orphan concept" subquery is the mechanism that keeps redundant collections hidden. "Resident Evil Main Series" doesn't surface because every RE game already has the Resident Evil franchise on it. "Astro Bot" DOES surface because its games have no franchise-type link — the collection is their only IGDB taxonomy.
+3. **Final cut**: every row of either type with `version_count > 0` surfaces. There is **no orphan-concept rule any more** — the per-card type badge and the Type chip filter make franchise-vs-series duplication obvious enough that name-shared pairs (e.g. "Spider-Man franchise" + "Spider-Man series") both legitimately exist and need to be reachable.
 
 A final optional filter (default on) hides entries with `game_count < 2`. Users opt into single-game entries via the `?show_solo=1` URL parameter.
+
+**User-facing filters** (lay on top of the queryset above):
+- `?query=` — case-insensitive substring search on `name`.
+- `?sort=` — `alpha`, `alpha_inv`, `games`, `games_inv` (see `FRANCHISE_SORT_CHOICES`).
+- `?type=` — `franchise` (default), `series`, or `all`. Renders as a radio-chip group in the toolbar (sr-only inputs + peer-checked button styling, same pattern as Company role chips). Junk values clamp to `franchise` so the toolbar always renders one chip as selected. `series` maps to `source_type='collection'` in the queryset — the URL value matches the user-facing label, the DB filter targets the underlying column.
+- `?show_solo=` — `1` to show single-game entries.
+
+Browse cards wear a colored type badge under the name so users can tell franchises from series at a glance: **Franchise** (`badge-primary`) for umbrella IPs and **Series** (`badge-info`) for sub-series. Template at `templates/trophies/partials/franchise_list/franchise_cards.html`.
 
 ### Representative Cover Art
 
@@ -61,7 +69,7 @@ Each browse card shows cover art for its most recent release, with a three-tier 
 3. `title_icon_url` (generic PS icon)
 4. Folder icon placeholder
 
-Picked via three parallel `Subquery` annotations so the fallback happens in the template (not SQL), keeping the query simple. For franchise-type rows, only games where the franchise is main are considered; for collection-type rows, any link counts (collections never have `is_main=True`).
+Picked via three parallel `Subquery` annotations so the fallback happens in the template (not SQL), keeping the query simple. Non-excluded, non-spin-off links contribute equally; `_MOST_RECENT_RELEASE_ORDER` is the tiebreak.
 
 ### Detail Page Grouping
 
@@ -69,19 +77,15 @@ The detail view fetches all games in concepts linked to the franchise (excluding
 
 Games without an IGDB match become their own single-entry groups. This preserves them in the list rather than dropping them.
 
-Each group is then partitioned:
+All non-excluded, non-spin-off linked groups appear as a single unified game list on the detail page — the "main vs tie-in" partition is gone. A separate **Series tab** (`?tab=series`, accepts the legacy `?tab=collections` alias for back-compat — view normalizes to `series`) lists Franchise rows of the opposite `source_type` that share at least one concept with this row; this acts as cross-reference navigation between a franchise and its constituent series (and vice versa).
 
-- **Games tab** (`main_groups`): groups where the concept's link to this franchise has `is_main=True`. These are the canonical "this franchise" games.
-- **Also Featured tab** (`also_featured_groups`): groups where the link is `is_main=False`. Tie-ins, crossovers, featured IPs.
-- **Collections tab** (`related_entries`): separate list of Franchise rows with the opposite `source_type` that share at least one concept with this franchise. Acts as cross-reference navigation.
-
-The tab bar only renders when at least one non-Games tab has content, so simple franchises (no tie-ins, no collections) don't see empty tabs.
+The tab bar only renders when the Series tab has content, so simple franchises with no sub-series don't see empty tabs.
 
 ### User Progress Integration
 
 When the viewer has a linked PSN profile, the detail view runs one additional query to fetch `ProfileGame` rows for every game in the franchise. Each `Game` object gets a `.user_pg` attribute attached so the template can render per-version progress without N+1 queries.
 
-Aggregate stats (games played, versions played, trophies earned, completion %) operate on the `main_groups` set only — tie-ins and collections don't pad the franchise-wide totals. Anonymous users and users with no progress see the totals-only view (just `X games`, `Y versions`, `Z trophies`, `W platinums`).
+Aggregate stats (games played, versions played, trophies earned, completion %) operate on the full non-excluded set. Anonymous users and users with no progress see the totals-only view (just `X games`, `Y versions`, `Z trophies`, `W platinums`).
 
 Each version row shows:
 
@@ -91,17 +95,16 @@ Each version row shows:
 
 ### Game Detail About Card
 
-The game detail page's About card shows franchise/collection relationships via three labeled lines rendered by `templates/trophies/partials/game_detail/franchise_lines.html`. The view (`GameDetailView._build_concept_context`) walks the prefetched `concept_franchises` and partitions into three buckets:
+The game detail page's About card shows franchise/series relationships via two labeled lines rendered by `templates/trophies/partials/game_detail/franchise_lines.html`. The view (`GameDetailView._build_concept_context`) walks the prefetched `concept_franchises` and partitions non-excluded links into two buckets:
 
-- **Franchise**: the single `is_main=True` franchise-type link (at most one).
-- **Also Featured**: tie-in franchises (`source_type='franchise'`, `is_main=False`). Capped at 3 visible with a `<details>`/`<summary>` "+ N more" disclosure for the rest.
-- **Collections**: collection-type links. Same capped-at-3-with-disclosure pattern.
+- **Franchise(s)**: all `source_type='franchise'` links. Singular/plural label. Capped at 3 visible with a `<details>`/`<summary>` "+ N more" disclosure for the rest.
+- **Series**: all `source_type='collection'` links. Same capped-at-3-with-disclosure pattern. The label is "Series" in both singular and plural — fewer template branches and reads cleaner.
 
-Concepts not yet re-enriched (no link flagged `is_main=True`) fall back to showing everything under a single "Franchise(s):" label so pre-backfill data is still useful.
+`is_excluded=True` links are filtered out entirely. The legacy "Franchise: X / Also Featured" partition is gone — every IGDB-listed franchise appears equally now.
 
 ## Sort Options
 
-Detail page sort (applied to both Games and Also Featured tabs):
+Detail page sort (applied to the unified game list):
 
 | Sort key | Default | Behavior |
 |----------|---------|----------|
@@ -124,13 +127,15 @@ Browse page sort is simpler: alphabetical (default), reverse alphabetical, most 
 
 ## Gotchas and Pitfalls
 
-- **Franchise vs collection is an internal distinction, not a UI one**: The browse page treats them uniformly on purpose. The eyebrow label on the detail header always says "FRANCHISE" regardless of `source_type`. The only place the distinction is surfaced is the game detail About card, where users investigating a specific game benefit from seeing the full relationship shape. Resist the urge to add "Collection" badges to browse cards or the franchise detail header — it was tried and removed as clutter that drew attention to an internal concern.
+- **"Series" vs "Collection" — UI label vs DB column**: User-facing surfaces (browse type badge, browse chip filter, browse search/empty-state copy, game-detail About card label, franchise-detail eyebrow + tab label) say **Series**. The DB column (`source_type='collection'`), the IGDB API field, the model `choices` second tuple, `get_source_type_display()`, and admin labels stay **Collection** to match upstream IGDB. When adding new user-facing surfaces, use the inline source_type conditional pattern from `franchise_cards.html` / `franchise_detail.html` / `tab_content.html` — do NOT use `get_source_type_display()` on a user-visible surface (that's how a stale "Collection" badge leaked onto the related-entries cards in the initial Series-rename PR).
 
-- **Browse query visibility is load-bearing**: The orphan-concept subquery and the solo-entry filter together determine which rows surface. If the browse page suddenly gets noisy, `python manage.py franchise_stats --samples 20` is the first diagnostic — it breaks down exactly what's being shown and hidden with sample names.
+- **`?type=` vs `?tab=` URL params**: The browse Type chip uses `?type=franchise` / `?type=series` / `?type=all`. The franchise detail's Series tab uses `?tab=series` (with `?tab=collections` accepted as a back-compat alias normalized in the view). New URL params for source_type-aware features should match the user-facing label (`series`, not `collection`).
+
+- **No orphan-concept rule any more**: Earlier iterations of the browse hid series whose every game also had a franchise-type link (the "Resident Evil Main Series" is redundant with the Resident Evil franchise" pattern). With the per-card type badge and Type chip filter both visible, that suppression silently hid name-shared pairs like the Spider-Man franchise + Spider-Man series; the rule is gone. `python manage.py franchise_stats --samples 20` is still the first diagnostic if browse counts look wrong, but it now reports straightforward "eligible for browse" counts, not orphan-vs-redundant splits.
 
 - **Data corruption symptoms**: If mis-linked games appear (e.g. "College Football 25" linked to "Army of Two"), run `python manage.py inspect_franchise_data --search "College Football"` FIRST before attempting fixes. The output's `[3] Drift detected` section tells you whether the problem is upstream IGDB data, our enrichment logic, or stale DB state. See [IGDB Integration](../architecture/igdb-integration.md) for the specific bug class this catches.
 
-- **`is_main` precedence must stay in sync**: `IGDBService._create_concept_franchises` (live enrichment) and `backfill_franchise_main_flag` (recovery command) both derive the main flag. They MUST use identical precedence rules (plural[0] first, fall back to singular). If you change one, change both and retest.
+- **`is_excluded` is sticky only under the lock**: `ConceptFranchise.is_excluded=True` survives an enrichment refresh only when `concept.franchises_locked=True`. The writer doesn't touch the column directly, but on an unlocked concept the ROW itself gets wiped + recreated on every refresh (the wipe is part of `_apply_enrichment`). Document the lock requirement when staff sets an exclusion.
 
 - **Spin-off flag is collection-only and lives on the link**: `ConceptFranchise.is_spinoff` is set only for collection (Series) memberships, from IGDB's `/collection_memberships` type (2 = Spin-off). A game can be a normal Member of one series and a Spin-off of another, so the flag is per-link, never per-concept. It suppresses the game from the *collection's* list/counts and from collection badge stage coverage, but NOT from the game's own About card (a spin-off still belongs to its parent series). The signal is not in `raw_response`, so the only ways to populate it are live enrichment (one extra IGDB call when a game has collections) or the `backfill_collection_spinoffs` command (which re-queries IGDB). Don't expect a cache rebuild to recover it.
 
@@ -147,7 +152,7 @@ Browse page sort is simpler: alphabetical (default), reverse alphabetical, most 
 See [IGDB Integration → Management Commands](../architecture/igdb-integration.md#management-commands) for:
 
 - `rebuild_franchises_from_cache`: Full rebuild from cached raw_response, no IGDB API calls
-- `backfill_franchise_main_flag`: Narrower — only recomputes is_main
+- `rebuild_franchises_from_cache --force`: bypasses `franchises_locked` when curated data is also corrupted. Combine with `--wipe` for a full reset that ignores the lock entirely.
 - `backfill_collection_spinoffs`: Stamps `is_spinoff` on collection links (re-queries IGDB `/collection_memberships`; the type isn't in cached raw_response). Supports `--dry-run`, `--limit`, `--batch-size`
 - `franchise_stats`: Read-only diagnostic
 - `inspect_franchise_data`: Single-concept / single-franchise diagnostic

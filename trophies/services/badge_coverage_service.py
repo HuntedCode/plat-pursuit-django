@@ -15,9 +15,9 @@ from trophies.models import Badge, Concept
 
 def audit_badge_coverage():
     """For each tier-1 badge that tracks a franchise, collection, and/or developer,
-    find concepts of that franchise (is_main titles) / collection (any member) /
-    developer (developed games) that are NOT covered by any stage of the badge's
-    series.
+    find concepts of that franchise (any non-excluded link) / collection (any
+    non-excluded, non-spin-off member) / developer (developed games) that are
+    NOT covered by any stage of the badge's series.
 
     Returns a list (sorted by badge name) of dicts, one per badge WITH gaps:
         {'badge': Badge, 'franchise': Franchise|None, 'collection': Franchise|None,
@@ -50,23 +50,27 @@ def audit_badge_coverage():
         # Concepts this badge is expected to cover.
         candidate_ids = set()
         if franchise:
+            # Every non-excluded linked concept counts. is_excluded=True is an
+            # admin override that says "despite IGDB linking this game to the
+            # franchise, don't expect a franchise badge to cover it" (e.g. a
+            # tie-in cameo that IGDB lists but isn't really a franchise title).
             candidate_ids |= set(
                 Concept.objects.filter(
                     concept_franchises__franchise=franchise,
-                    concept_franchises__is_main=True,
+                    concept_franchises__is_excluded=False,
                 ).values_list('id', flat=True)
             )
         if collection:
-            # Collections never set is_main (different IGDB taxonomy), so EVERY
-            # linked concept is a member -- match any link, not is_main only.
-            # EXCEPT spin-offs: a game IGDB types as a "Spin-off" of this series
-            # (e.g. Agents of Mayhem in the Saints Row series) is not expected to
-            # live in the collection badge's stages, so don't flag it missing.
-            # This applies only to collections; franchise/developer are untouched.
+            # EVERY linked concept is a member except spin-offs: a game IGDB
+            # types as a "Spin-off" of this series (e.g. Agents of Mayhem in
+            # the Saints Row series) is not expected to live in the collection
+            # badge's stages, so don't flag it missing. Same is_excluded admin
+            # override applies as for franchises.
             candidate_ids |= set(
                 Concept.objects.filter(
                     concept_franchises__franchise=collection,
                     concept_franchises__is_spinoff=False,
+                    concept_franchises__is_excluded=False,
                 ).values_list('id', flat=True)
             )
         if developer:
