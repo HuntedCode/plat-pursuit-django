@@ -42,6 +42,11 @@ def check_and_award_milestone(profile, milestone, _cache=None):
     from trophies.models import UserMilestoneProgress, UserMilestone
     from trophies.milestone_handlers import MILESTONE_HANDLERS
 
+    # Retired milestones are never (re-)awarded, regardless of entry point. The batch
+    # sweep already filters active(), but this chokepoint also covers any direct caller.
+    if not milestone.is_active:
+        return {'awarded': False, 'created': False, 'user_milestone': None}
+
     # Skip premium-only milestones for non-premium users
     if milestone.premium_only and not profile.user_is_premium:
         return {'awarded': False, 'created': False, 'user_milestone': None}
@@ -217,6 +222,12 @@ def award_milestone_directly(profile, milestone, notify=True):
         tuple: (user_milestone, created) where created is True if newly awarded
     """
     from trophies.models import Milestone as MilestoneModel, UserMilestone
+
+    # Retired milestones can't be granted (covers the manual / easter-egg / fundraiser
+    # and grant_milestone paths that bypass the batch sweep). Callers discard the first
+    # tuple element, so returning None is safe.
+    if not milestone.is_active:
+        return None, False
 
     user_milestone, created = UserMilestone.objects.get_or_create(
         profile=profile,
