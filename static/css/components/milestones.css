@@ -113,8 +113,10 @@
 .ms-tier__earners { font-size: 0.68rem; color: var(--pp-text-mute); margin-top: 1px; }
 .ms-tier__target { flex-shrink: 0; color: var(--pp-text-dim); }
 /* Always rendered (even when empty) + min-height so every tier card is the same height
- * regardless of whether it has a title / progress / earned line. */
-.ms-tier__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; padding-left: 50px; min-height: 1.25rem; }
+ * regardless of whether it has a title / progress / earned line. The min-height must
+ * exceed the tallest single-line content (the italic reward text) so it binds uniformly
+ * for ALL states -- otherwise the progress-only active foot stays shorter than text feet. */
+.ms-tier__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; padding-left: 50px; min-height: 1.5rem; }
 .ms-tier__reward { font-size: 0.78rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 78%, var(--pp-text)); white-space: nowrap; }
 .ms-tier__progress { display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px; }
 .ms-tier__progress .pp-horizon { flex: 1; }
