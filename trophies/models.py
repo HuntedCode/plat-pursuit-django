@@ -363,7 +363,7 @@ class Profile(models.Model):
 
             # Collect milestone roles
             all_role_ids.update(
-                UserMilestone.objects.filter(profile=self, milestone__discord_role_id__isnull=False)
+                UserMilestone.objects.filter(profile=self, milestone__discord_role_id__isnull=False, milestone__is_active=True)
                 .values_list('milestone__discord_role_id', flat=True)
             )
 
