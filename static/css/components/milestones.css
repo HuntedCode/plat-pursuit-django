@@ -55,7 +55,7 @@
 .ms-stat--titles .ms-stat__icon { color: var(--pp-warning); }
 .ms-stat--latest .ms-stat__icon { color: var(--pp-success); }
 .ms-stat--pct .ms-stat__icon    { color: var(--pp-info); }
-.ms-stat__latest-name { font-weight: 700; font-size: 0.9rem; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-stat__latest-name { font-weight: 700; font-size: 0.9rem; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* ---- Overview: overall progress ---- */
 .ms-overall { margin-bottom: 20px; }
@@ -73,7 +73,7 @@
 .ms-cat__name { font-weight: 700; font-size: 0.98rem; }
 .ms-cat__meta { display: flex; align-items: baseline; justify-content: space-between; margin-top: 7px; font-size: 0.74rem; color: var(--pp-text-dim); }
 .ms-cat__recent { margin-top: 8px; font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; }
-.ms-cat__recent p { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+.ms-cat__recent p { display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
 
 /* category accent dots (icon colours echo the legacy per-category palette, retoned) */
 .ms-ico--trophy    { color: var(--pp-warning); }
@@ -108,8 +108,8 @@
 .ms-tier__art svg { width: 20px; height: 20px; color: var(--pp-text-mute); }
 .ms-tier__info { min-width: 0; flex: 1; }
 .ms-tier__title-row { display: flex; align-items: center; gap: 6px; }
-.ms-tier__title-row h4 { font-weight: 700; font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-.ms-tier__desc { font-size: 0.74rem; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+.ms-tier__title-row h4 { font-weight: 700; font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-tier__desc { font-size: 0.74rem; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
 .ms-tier__earners { font-size: 0.68rem; color: var(--pp-text-mute); margin-top: 1px; }
 .ms-tier__target { flex-shrink: 0; color: var(--pp-text-dim); }
 /* Always rendered (even when empty) + min-height so every tier card is the same height
@@ -140,8 +140,8 @@
 .ms-month { padding: 11px 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
 .ms-month__abbr { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.86rem; color: var(--pp-text-mute); letter-spacing: 0.04em; }
 .ms-month__icon { width: 22px; height: 22px; color: var(--pp-text-mute); opacity: 0.5; }
-.ms-month__name { font-size: 0.68rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-.ms-month__reward { font-size: 0.66rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 70%, var(--pp-text-mute)); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+.ms-month__name { font-size: 0.68rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-month__reward { font-size: 0.66rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 70%, var(--pp-text-mute)); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
 .ms-month.is-earned { border-color: color-mix(in oklab, var(--pp-success) 55%, var(--pp-border)); background: linear-gradient(180deg, color-mix(in oklab, var(--pp-success) 12%, var(--pp-bg-1)), var(--pp-bg-1)); }
 .ms-month.is-earned .ms-month__abbr { color: var(--pp-success); }
 .ms-month.is-earned .ms-month__icon { color: var(--pp-success); opacity: 1; }
@@ -152,8 +152,8 @@
 .ms-oneoff__art { width: 52px; height: 52px; border-radius: 10px; background: var(--pp-bg-3); display: grid; place-items: center; }
 .ms-oneoff__art img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; }
 .ms-oneoff__art svg { width: 26px; height: 26px; color: var(--pp-text-mute); }
-.ms-oneoff__name { font-weight: 700; font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.ms-oneoff__desc { font-size: 0.74rem; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-oneoff__name { font-weight: 700; font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-oneoff__desc { font-size: 0.74rem; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ms-oneoff__reward { font-size: 0.8rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 78%, var(--pp-text)); }
 .ms-oneoff.is-earned { border-color: color-mix(in oklab, var(--pp-success) 45%, var(--pp-border)); }
 .ms-oneoff:not(.is-earned) .ms-oneoff__art img { filter: grayscale(0.85); }
