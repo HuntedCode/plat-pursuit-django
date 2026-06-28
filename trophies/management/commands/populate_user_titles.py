@@ -92,7 +92,7 @@ class Command(BaseCommand):
 
         user_milestones = UserMilestone.objects.select_related(
             'profile', 'milestone', 'milestone__title'
-        ).filter(milestone__title__isnull=False)
+        ).filter(milestone__title__isnull=False, milestone__is_active=True)
 
         self.stdout.write(f"Processing {user_milestones.count()} milestone awards with titles...")
 

@@ -793,6 +793,7 @@ def sync_discord_roles(profile):
         UserMilestone.objects.filter(
             profile=profile,
             milestone__discord_role_id__isnull=False,
+            milestone__is_active=True,
         ).values_list('milestone__discord_role_id', flat=True)
     )
     for role_id in milestone_role_ids:

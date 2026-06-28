@@ -217,6 +217,8 @@ class Command(BaseCommand):
             'profile', 'milestone', 'milestone__title'
         ).exclude(
             milestone__criteria_type='manual'  # Skip admin-granted milestones
+        ).exclude(
+            milestone__is_active=False  # Never strip earned records of retired milestones
         )
         if profile:
             qs = qs.filter(profile=profile)

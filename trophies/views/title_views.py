@@ -41,7 +41,7 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
         )
         milestone_title_ids = set(
             Milestone.objects.filter(
-                title__isnull=False
+                title__isnull=False, is_active=True
             ).values_list('title_id', flat=True)
         )
         discoverable_ids = badge_title_ids | milestone_title_ids
@@ -66,9 +66,9 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             title__in=discoverable_titles, is_live=True
         ).select_related('title', 'base_badge').order_by('tier')
 
-        # Milestone sources (with title)
+        # Milestone sources (live only, with title)
         milestone_sources = Milestone.objects.filter(
-            title__in=discoverable_titles
+            title__in=discoverable_titles, is_active=True
         ).select_related('title')
 
         sources_by_title = defaultdict(list)

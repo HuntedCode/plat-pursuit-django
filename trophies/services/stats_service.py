@@ -2058,9 +2058,9 @@ def _compute_milestones(profile):
     from trophies.milestone_constants import MONTH_MAP, MILESTONE_CATEGORIES
 
     # All milestones and which ones the user has earned
-    all_milestones = list(Milestone.objects.all().values_list('id', 'criteria_type'))
+    all_milestones = list(Milestone.objects.active().values_list('id', 'criteria_type'))
     earned_ids = set(
-        UserMilestone.objects.filter(profile=profile)
+        UserMilestone.objects.filter(profile=profile, milestone__is_active=True)
         .values_list('milestone_id', flat=True)
     )
 
@@ -2111,7 +2111,7 @@ def _compute_milestones(profile):
     # Next closest unearned milestone
     progress_qs = (
         UserMilestoneProgress.objects.filter(
-            profile=profile, progress_value__gt=0,
+            profile=profile, progress_value__gt=0, milestone__is_active=True,
         )
         .exclude(milestone__id__in=earned_ids)
         .select_related('milestone')
