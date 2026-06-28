@@ -81,6 +81,9 @@
     }
 
     // Accept flow
+    // Styling-free: flip semantic state classes + the badge label; CSS does the rest
+    // (the status pill recolors and the Accept button -> "Accepted" swap are driven by
+    // .rp-row--accepted in elements.css).
     function markAccepted(card) {
         card.dataset.status = 'accepted';
         card.classList.remove('rp-row--claimable');
@@ -88,9 +91,7 @@
         var vial = card.querySelector('.rp-vial');
         if (vial) { vial.classList.remove('rp-vial--claimable'); vial.classList.add('rp-vial--accepted'); }
         var badge = card.querySelector('.rp-badge');
-        if (badge) { badge.className = 'rp-badge badge badge-xs badge-success font-bold shrink-0'; badge.textContent = 'Accepted'; }
-        var cta = card.querySelector('.rp-cta');
-        if (cta) { cta.innerHTML = '<span class="text-xs font-bold text-success">Accepted &check;</span>'; }
+        if (badge) badge.textContent = 'Accepted';
     }
     function refreshAcceptAll(count) {
         var btn = document.getElementById('rp-accept-all');

@@ -40,6 +40,7 @@
 .radar-stage { display: grid; place-items: center; }
 .radar-stage canvas { max-width: 440px; width: 100%; height: auto; }
 .radar-detail__title { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 16px; }
+.radar-detail__list { list-style: none; margin: 0; padding: 0; }
 .rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 12px 0; }
 .rd-row__label { font-size: 13px; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* rd-row bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent) */
@@ -194,3 +195,11 @@
 .rp-row--claimable::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
 .rp-row--accepted { opacity: 0.92; }
 .rp-row--accepted::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-success) 45%, transparent); }
+
+/* Accept flow: the status pill + CTA swap are CSS-driven off .rp-row--accepted, so
+   the JS only flips that one class (no styling/markup rebuilding in the script). */
+.rp-row--accepted .rp-badge { background-color: var(--pp-success); color: var(--pp-bg-0); border-color: var(--pp-success); }
+.rp-cta__done { display: none; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 700; color: var(--pp-success); }
+.rp-cta__pct { font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); }
+.rp-row--accepted .rp-accept { display: none; }
+.rp-row--accepted .rp-cta__done { display: inline-flex; }

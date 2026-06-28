@@ -204,7 +204,7 @@
                     + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
             }).join('');
             detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
-                + '<ul style="list-style:none; margin:0; padding:0;">' + rows + '</ul>';
+                + '<ul class="radar-detail__list">' + rows + '</ul>';
         };
 
         var paint = function (mode) {

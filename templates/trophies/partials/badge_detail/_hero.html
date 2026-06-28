@@ -27,7 +27,7 @@ at-a-glance progress beside it (the "collectible hero + informational body" mode
             </div>
             {% elif hero_frame.state == 'in_progress' %}
             <div class="bd-hero__status">{{ hero_frame.stages_done }} of {{ hero_frame.stages_total }} stages complete</div>
-            <div class="bd-hero__horizon"><div class="bd-hero__horizon-fill" style="width: {{ hero_frame.progress_pct|default:0 }}%"></div></div>
+            <div class="bd-hero__horizon pp-horizon pp-horizon__track" style="--horizon-from: var(--pp-secondary); --horizon-to: var(--pp-primary); --horizon-h: 10px; --horizon-progress: {{ hero_frame.progress_pct|default:0 }}%;"><div class="pp-horizon__fill"></div></div>
             {% else %}
             <div class="bd-hero__status">Not started &middot; {{ hero_frame.stages_total }} stage{{ hero_frame.stages_total|pluralize }} to earn</div>
             {% endif %}
