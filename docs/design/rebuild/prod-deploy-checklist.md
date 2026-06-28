@@ -46,6 +46,7 @@ These are already on the `main`/production path and can/should happen before cut
 | # | Task | Action | When | Done |
 |---|------|--------|------|------|
 | A | **Art Reveal self-heal** — auto-completes already-revealed funder claims (attribution + email) via an event-wide sweep | Merge the self-heal PR to `main`, redeploy | Now | ☐ |
+| B | **Retire deprecated milestones** — hides the dead checklist/review criteria-types (`checklist_upvotes`, `review_count`, `review_helpful_count`) from the milestones page and stops awarding them, and removes the titles they granted (earned `UserMilestone` records are preserved). Destructive on `UserTitle` rows; idempotent (re-runs are no-ops). Requires migration `0254_milestone_is_active` applied. | Dry-run first to review counts: `python manage.py retire_milestones checklist_upvotes review_count review_helpful_count` — then commit: `... --apply` | Now | ☐ |
 
 ---
 

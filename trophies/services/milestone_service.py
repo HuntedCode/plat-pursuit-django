@@ -42,6 +42,11 @@ def check_and_award_milestone(profile, milestone, _cache=None):
     from trophies.models import UserMilestoneProgress, UserMilestone
     from trophies.milestone_handlers import MILESTONE_HANDLERS
 
+    # Retired milestones are never (re-)awarded, regardless of entry point. The batch
+    # sweep already filters active(), but this chokepoint also covers any direct caller.
+    if not milestone.is_active:
+        return {'awarded': False, 'created': False, 'user_milestone': None}
+
     # Skip premium-only milestones for non-premium users
     if milestone.premium_only and not profile.user_is_premium:
         return {'awarded': False, 'created': False, 'user_milestone': None}
@@ -135,7 +140,8 @@ def check_all_milestones_for_user(profile, criteria_type=None, criteria_types=No
     if criteria_type and criteria_types:
         raise ValueError("Pass criteria_type or criteria_types, not both")
 
-    qs = Milestone.objects.all()
+    # active() excludes retired milestones (is_active=False) so they're never newly awarded.
+    qs = Milestone.objects.active()
 
     if criteria_type:
         qs = qs.filter(criteria_type=criteria_type)
@@ -217,6 +223,12 @@ def award_milestone_directly(profile, milestone, notify=True):
     """
     from trophies.models import Milestone as MilestoneModel, UserMilestone
 
+    # Retired milestones can't be granted (covers the manual / easter-egg / fundraiser
+    # and grant_milestone paths that bypass the batch sweep). Callers discard the first
+    # tuple element, so returning None is safe.
+    if not milestone.is_active:
+        return None, False
+
     user_milestone, created = UserMilestone.objects.get_or_create(
         profile=profile,
         milestone=milestone,
@@ -283,3 +295,35 @@ def award_manual_milestone(profile, milestone_name, notify=True):
 
     _, created = award_milestone_directly(profile, milestone, notify=notify)
     return milestone, created
+
+
+def retire_milestones(milestones):
+    """Retire a set of milestones: hide them and remove the titles they granted.
+
+    Sets is_active=False on every milestone in `milestones` (removing them from the
+    milestones page and stopping new awards), then DELETES the UserTitle grants those
+    milestones produced (source_type='milestone'), which auto-unequips anyone displaying
+    one (the displayed title is purely UserTitle.is_displayed -- no denormalized field).
+
+    Earned UserMilestone records are intentionally PRESERVED (history is kept; only the
+    title grant and the catalog visibility are removed). Idempotent. Wrap the caller in a
+    transaction.
+
+    Args:
+        milestones: a Milestone queryset (e.g. Milestone.objects.filter(criteria_type__in=...))
+
+    Returns:
+        tuple: (milestones_retired, titles_removed)
+    """
+    from trophies.models import Milestone
+
+    milestone_ids = list(milestones.values_list('id', flat=True))
+    if not milestone_ids:
+        return 0, 0
+
+    retired = Milestone.objects.filter(id__in=milestone_ids).update(is_active=False)
+    removed, _ = UserTitle.objects.filter(
+        source_type='milestone', source_id__in=milestone_ids,
+    ).delete()
+    logger.info("Retired %d milestone(s); removed %d granted title(s).", retired, removed)
+    return retired, removed

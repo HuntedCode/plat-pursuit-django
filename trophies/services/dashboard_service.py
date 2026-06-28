@@ -1651,7 +1651,7 @@ def provide_milestone_tracker(profile, settings=None):
     # In-progress milestones: fetch all with progress, sort by pct in Python
     progress_qs = (
         UserMilestoneProgress.objects.filter(
-            profile=profile, progress_value__gt=0
+            profile=profile, progress_value__gt=0, milestone__is_active=True
         )
         .select_related('milestone')
         .exclude(milestone__id__in=earned_ids)

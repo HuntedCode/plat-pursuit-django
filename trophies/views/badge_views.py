@@ -1333,7 +1333,8 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
     context_object_name = 'milestones'
 
     def get_queryset(self):
-        return Milestone.objects.select_related('title').ordered_by_value()
+        # active() excludes retired milestones (is_active=False) so the page never shows them.
+        return Milestone.objects.active().select_related('title').ordered_by_value()
 
     def _get_user_data(self, profile, milestones):
         """Fetch earned milestones, progress, and earned dates for a profile."""
