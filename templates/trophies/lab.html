@@ -42,7 +42,7 @@
                             </g>
                         </svg>
                         <div class="lab-dna__center">
-                            <span class="lab-dna__level tabular-nums">{{ hero.pursuer_level|intcomma }}</span>
+                            <span class="lab-dna__level pp-tally">{{ hero.pursuer_level|intcomma }}</span>
                             <span class="lab-dna__cap">Level</span>
                         </div>
                     </div>
@@ -87,22 +87,22 @@
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
                 <div class="scard">
                     <div class="scard__label">Pursuer Level</div>
-                    <div class="scard__value text-primary">{{ lab.total_level|intcomma }}</div>
+                    <div class="scard__value pp-tally text-primary">{{ lab.total_level|intcomma }}</div>
                     <div class="scard__sub">sum of every element</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Total XP</div>
-                    <div class="scard__value" title="{{ lab.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
+                    <div class="scard__value pp-tally" title="{{ lab.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
                     <div class="scard__sub">earned across all elements</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Average level</div>
-                    <div class="scard__value">{{ lab.avg_level }}</div>
+                    <div class="scard__value pp-tally">{{ lab.avg_level }}</div>
                     <div class="scard__sub">across all {{ lab.total }} elements</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Highest level</div>
-                    <div class="scard__value">{{ lab.highest_level }}</div>
+                    <div class="scard__value pp-tally">{{ lab.highest_level }}</div>
                     <div class="scard__sub">your single best element</div>
                 </div>
             </div>
@@ -198,9 +198,9 @@
             if (!detail) return;
             var rows = labels.map(function (label, i) {
                 var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
-                return '<li class="rd-row" style="--disc: ' + colorOf(i) + ';">'
+                return '<li class="rd-row">'
                     + '<span class="rd-row__label">' + label + '</span>'
-                    + '<span class="rd-row__bar"><span class="rd-row__fill" style="width: ' + pct + '%;"></span></span>'
+                    + '<span class="pp-horizon pp-horizon__track" style="--horizon-accent: ' + colorOf(i) + '; --horizon-h: 8px; --horizon-progress: ' + pct + '%;"><span class="pp-horizon__fill"></span></span>'
                     + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
             }).join('');
             detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
