@@ -399,6 +399,16 @@ class MilestoneQuerySet(models.QuerySet):
         """
         return self.filter(premium_only=True)
 
+    def active(self):
+        """
+        Filter to live (non-retired) milestones.
+
+        Returns:
+            QuerySet: Milestones with is_active=True -- shown on the milestones page and
+            still awarded. Retired milestones (is_active=False) are excluded.
+        """
+        return self.filter(is_active=True)
+
 class MilestoneManager(models.Manager):
     """Custom manager for Milestone model."""
 
@@ -413,6 +423,10 @@ class MilestoneManager(models.Manager):
     def ordered_by_value(self):
         """Proxy to queryset method."""
         return self.get_queryset().ordered_by_value()
+
+    def active(self):
+        """Proxy to queryset method."""
+        return self.get_queryset().active()
 
 class CommentQuerySet(models.QuerySet):
     """Custom queryset for Comment model."""
