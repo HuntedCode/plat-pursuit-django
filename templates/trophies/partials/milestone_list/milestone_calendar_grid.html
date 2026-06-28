@@ -1,54 +1,24 @@
 {% load humanize %}
 
-{# ─── Calendar Month Grid ─────────────────────────────────────────────── #}
-<div id="calendar_months" class="mb-4">
-    <div class="flex flex-row items-center justify-between gap-2 mb-3">
-        <h3 class="text-base md:text-lg lg:text-xl font-bold">Monthly Calendar Milestones</h3>
-        {% if user.is_authenticated and user.profile %}
-            <span class="badge {% if calendar_months_earned == 12 %}badge-success{% else %}badge-ghost{% endif %} badge-md">
-                {{ calendar_months_earned }} / 12 Months
-            </span>
-        {% else %}
-            <span class="badge badge-ghost badge-md">12 Months</span>
-        {% endif %}
+<div id="calendar_months" style="margin-bottom: 14px;">
+    <div class="ms-ladder__head" style="margin-bottom: 8px;">
+        <h3 class="ms-ladder__name">Monthly Calendar Milestones</h3>
+        <span class="ms-ladder__count">{% if user.is_authenticated and user.profile %}{{ calendar_months_earned }} / 12 months{% else %}12 months{% endif %}</span>
     </div>
-    <p class="text-sm text-base-content/60 mb-4">
-        Fill every day in a calendar month with a platinum trophy to earn that month's milestone.
-    </p>
+    <p class="ms-cal__intro">Fill every day in a calendar month with a platinum trophy to earn that month's milestone.</p>
 
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-1.5 md:gap-2">
+    <div class="ms-months">
         {% for month in months %}
-            <div class="card border-2 transition-all duration-300 text-center
-                        {% if month.is_earned %}bg-success/15 border-success hover:shadow-success/30 hover:shadow-md{% else %}bg-base-300/50 border-base-300 {% if user.is_authenticated %}opacity-50 hover:opacity-80{% endif %}{% endif %}">
-                <div class="card-body p-2 md:p-3 gap-1 items-center">
-                    {# Month label #}
-                    <span class="text-xs md:text-sm font-bold {% if month.is_earned %}text-success{% else %}text-base-content/50{% endif %}">
-                        {{ month.month_abbr }}
-                    </span>
-
-                    {# Status icon #}
-                    {% if month.is_earned %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 lg:w-7 lg:h-7 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                    {% else %}
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 lg:w-7 lg:h-7 text-base-content/20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                        </svg>
-                    {% endif %}
-
-                    {# Milestone name #}
-                    <span class="text-xs text-base-content/50 line-clamp-1">{{ month.milestone.name }}</span>
-
-                    {# Title reward #}
-                    {% if month.milestone.title %}
-                        <span class="text-xs legendary-title italic pr-1 line-clamp-1 {% if not month.is_earned %}grayscale{% endif %}">
-                            {{ month.milestone.title.name }}
-                        </span>
-                    {% endif %}
-                </div>
-            </div>
+        <div class="ms-card ms-month{% if month.is_earned %} is-earned{% endif %}">
+            <span class="ms-month__abbr">{{ month.month_abbr }}</span>
+            {% if month.is_earned %}
+                <svg class="ms-month__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            {% else %}
+                <svg class="ms-month__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            {% endif %}
+            <span class="ms-month__name">{{ month.milestone.name }}</span>
+            {% if month.milestone.title %}<span class="ms-month__reward">{{ month.milestone.title.name }}</span>{% endif %}
+        </div>
         {% endfor %}
     </div>
 </div>

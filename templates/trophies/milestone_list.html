@@ -4,22 +4,43 @@
 {% block title %}Milestones{% endblock %}
 
 {% block content %}
+<div class="ms">
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
-    {# ─── Tab Bar + Content ────────────────────────────────────────────── #}
+    {# ─── Page header ─────────────────────────────────────────────────── #}
+    <section class="ms-card ms-header">
+        <div class="min-w-0">
+            <div class="ms-header__title">
+                <svg class="ms-header__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path>
+                </svg>
+                <h1>Milestones</h1>
+            </div>
+            <p class="ms-header__sub">The long-haul goals of your whole Pursuit. Climb the tiers, fill the calendar, and unlock titles along the way.</p>
+        </div>
+        {% if user.is_authenticated and user.profile %}
+        <div class="ms-header__stat">
+            <span class="pp-tally pp-tally--lg pp-tally--glow" style="--pp-tally-glow: var(--pp-primary); color: var(--pp-primary);">{{ ms_summary.earned }}</span><span class="pp-tally pp-tally--md" style="color: var(--pp-text-mute);"> / {{ ms_summary.total }}</span>
+            <span class="ms-header__stat-label">milestones earned &middot; {{ ms_summary.pct }}%</span>
+        </div>
+        {% endif %}
+    </section>
+
+    {# ─── Tab Bar + Content ───────────────────────────────────────────── #}
     {% include 'trophies/partials/milestone_list/milestone_tabs.html' %}
+</div>
 {% endblock %}
 
 {% block js_scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         const scrollKey = 'milestoneScrollPos';
         const saved = sessionStorage.getItem(scrollKey);
         if (saved !== null) {
             sessionStorage.removeItem(scrollKey);
             window.scrollTo(0, parseInt(saved, 10));
         }
-        document.querySelectorAll('.tabs [role="tab"]').forEach(tab => {
+        document.querySelectorAll('.ms-tab').forEach(tab => {
             tab.addEventListener('click', () => {
                 sessionStorage.setItem(scrollKey, window.scrollY);
             });

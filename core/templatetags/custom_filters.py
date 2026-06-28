@@ -14,6 +14,28 @@ register = template.Library()
 
 SPOILER_PATTERN = re.compile(r'\|\|(.+?)\|\|')
 
+
+@register.filter
+def horizon_band(value):
+    """Map a completion percentage (0-100) to a Horizon cool->warm band name.
+
+    Powers the `band` tone of the Horizon primitive (static/css/components/horizon.css):
+    `data-horizon-band="{{ pct|horizon_band }}"`. Cooler the further from done, warmer the
+    closer -- the locked 4-band split (visual-identity.md, The Horizon). Keep in sync with
+    bandFor() in static/js/horizon.js.
+    """
+    try:
+        pct = float(value)
+    except (TypeError, ValueError):
+        return 'cool'
+    if pct < 30:
+        return 'cool'
+    if pct < 65:
+        return 'warming'
+    if pct < 90:
+        return 'warm'
+    return 'hot'
+
 @register.filter
 def iso_naturaltime(value):
     """Parse ISO string to datetime and apply naturaltime."""

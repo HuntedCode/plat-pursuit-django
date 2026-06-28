@@ -1,0 +1,15 @@
+{% comment %}
+Horizon linear progress bar (primitive). Convenience wrapper over the .pp-horizon CSS
+(static/css/components/horizon.css). Segmented + arc forms are built inline in their templates.
+
+Params:
+  progress   completion percentage 0-100 (required)
+  tone       "themed" (default; accent-coloured) | "band" (cool->warm by progress)
+  accent     themed-tone tint, a CSS colour token e.g. "var(--disc)" (default cyan)
+  height     bar height, e.g. "6px" (optional; default 8px)
+  band       explicit band override (cool|warming|warm|hot); else computed from progress
+{% endcomment %}
+{% load custom_filters %}
+<div class="pp-horizon" role="progressbar" aria-valuenow="{{ progress|default:0 }}" aria-valuemin="0" aria-valuemax="100"{% if tone == 'band' %} data-horizon-band="{% if band %}{{ band }}{% else %}{{ progress|horizon_band }}{% endif %}"{% endif %} style="--horizon-progress: {{ progress|default:0 }}%;{% if accent %} --horizon-accent: {{ accent }};{% endif %}{% if height %} --horizon-h: {{ height }};{% endif %}">
+    <div class="pp-horizon__track"><span class="pp-horizon__fill"></span></div>
+</div>

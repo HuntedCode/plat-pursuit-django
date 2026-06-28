@@ -1,0 +1,47 @@
+/* ================================================================
+ * Tally — the number/level/count treatment (shared primitive)
+ *
+ * One of the kit's signature primitives (visual-identity.md §3): numbers are
+ * first-class material, and Tally is what makes them enjoyable to look at.
+ * This formalizes the treatment that the Lab, Research Panel, Collection and
+ * badge-detail pages were each hand-rolling: the Bricolage display face at
+ * heavy weight, tabular figures so digits don't jitter, and an optional
+ * state-tinted glow.
+ *
+ * API is CSS-class-first (so existing bespoke number classes retrofit cleanly
+ * by swapping to `.pp-tally`); an optional `components/tally.html` partial wraps
+ * it for new templates.
+ *
+ *   .pp-tally                 base treatment (size = the consumer's own font-size)
+ *   .pp-tally--{hero|xl|lg|md|sm|xs}   scale ladder for new code
+ *   .pp-tally--glow           state glow; tint via --pp-tally-glow (default cyan)
+ *
+ * Live motion (tick-up, level-up beat, fresh-decay) is DEFERRED to when a
+ * surface mounts live number motion (the homepage); this is the static core.
+ * ================================================================ */
+
+.pp-tally {
+    font-family: var(--pp-font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    /* No line-height / letter-spacing on the base: a bare .pp-tally must be a metrics-free
+     * swap for an existing number (the shipped ones vary -- line-height 0.85-1, tracking 0
+     * or -0.01em). The scale rungs below carry those metrics for new code. */
+}
+
+/* State glow: a tinted bloom that marks "this number is a reward, not a label."
+ * Tint defaults to the cyan brand accent; consumers override per context
+ * (e.g. an element level sets --pp-tally-glow: var(--disc) to glow its family). */
+.pp-tally--glow {
+    text-shadow: 0 0 0.42em color-mix(in oklab, var(--pp-tally-glow, var(--pp-primary)) 34%, transparent);
+}
+
+/* Scale ladder (for new code). opsz tracks the size so the variable face reads
+ * "monumental" big and "ledger" small; the consumer can still set any size on
+ * a bare .pp-tally. line-height tightens as numbers grow so they sit as objects. */
+.pp-tally--hero { font-size: clamp(3rem, 5.5vw, 3.75rem); font-variation-settings: "opsz" 96, "wght" 800; line-height: 0.9; letter-spacing: -0.01em; }
+.pp-tally--xl   { font-size: 2.75rem; font-variation-settings: "opsz" 54, "wght" 800; line-height: 0.9; letter-spacing: -0.01em; }
+.pp-tally--lg   { font-size: 2rem;    font-variation-settings: "opsz" 40, "wght" 800; line-height: 0.92; letter-spacing: -0.01em; }
+.pp-tally--md   { font-size: 1.5rem;  font-variation-settings: "opsz" 28, "wght" 800; line-height: 1; }
+.pp-tally--sm   { font-size: 1.125rem; font-variation-settings: "opsz" 18, "wght" 800; line-height: 1; }
+.pp-tally--xs   { font-size: 0.8125rem; font-variation-settings: "opsz" 13, "wght" 700; line-height: 1; }

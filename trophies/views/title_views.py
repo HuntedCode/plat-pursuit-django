@@ -156,66 +156,67 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
                         else:
                             source['progress_pct'] = 0
 
-        # 5. Split into earned, locked, and special titles
-        earned_titles = []
-        locked_titles = []
+        # 5. Partition discoverable titles by SOURCE into three cohesive groups, each
+        #    holding BOTH earned and unearned titles (the template + JS give each its own
+        #    Have/Need filter + sort). A title with a trackable (non-manual) milestone
+        #    source lives in the milestone group -- progress is the actionable framing;
+        #    manual-only titles are Special; everything else is a badge title. Each title
+        #    lands in exactly one group, so it never appears twice.
+        badge_titles = []
+        milestone_titles = []
         special_titles = []
-        badge_title_earned = 0
-        milestone_title_earned = 0
+        badge_earned = 0
+        milestone_earned = 0
 
         for title in discoverable_titles:
             ut = earned_map.get(title.id)
             sources = sources_by_title.get(title.id, [])
-            is_manual = title.id in manual_title_ids
+            earned = ut is not None
 
-            # Manual-only titles: show only if earned, never show locked
-            if is_manual:
+            # Manual-only titles: Special, and only shown once earned.
+            if title.id in manual_title_ids:
                 if ut:
                     special_titles.append({
                         'title': title,
-                        'sources': sources,
+                        'source': sources[0] if sources else None,
+                        'earned': True,
+                        'state': 'have',
                         'is_displayed': ut.is_displayed,
                         'earned_at': ut.earned_at,
                     })
                 continue
 
-            # Determine primary source type for filter tabs
-            source_types = {s['type'] for s in sources}
-            if source_types == {'badge'}:
-                primary_source = 'badge'
-            elif source_types == {'milestone'}:
-                primary_source = 'milestone'
-            else:
-                primary_source = 'both'
-
             entry = {
                 'title': title,
-                'sources': sources,
-                'source_type': primary_source,
+                'earned': earned,
+                'state': 'have' if earned else 'need',
+                'is_displayed': ut.is_displayed if ut else False,
+                'earned_at': ut.earned_at if ut else None,
             }
-            if ut:
-                entry['is_displayed'] = ut.is_displayed
-                entry['earned_at'] = ut.earned_at
-                earned_titles.append(entry)
-                if 'badge' in source_types:
-                    badge_title_earned += 1
-                if 'milestone' in source_types:
-                    milestone_title_earned += 1
-            else:
-                # Determine encouraging flavor text for locked footer
-                max_pct = max(
-                    (s.get('progress_pct', 0) for s in sources
-                     if s['type'] == 'milestone'),
-                    default=0,
-                )
-                entry['lock_flavor'] = (
-                    'Almost there...' if max_pct > 50
-                    else 'The hunt continues...'
-                )
-                locked_titles.append(entry)
 
-        # Sort earned titles by newest first (default)
-        earned_titles.sort(key=lambda e: e['earned_at'], reverse=True)
+            ms_sources = [
+                s for s in sources
+                if s['type'] == 'milestone' and s['object'].criteria_type != 'manual'
+            ]
+            badge_srcs = [s for s in sources if s['type'] == 'badge']
+
+            if ms_sources:
+                # When unearned, surface the CLOSEST milestone (most motivating).
+                src = ms_sources[0] if earned else max(
+                    ms_sources, key=lambda s: s.get('progress_pct', 0)
+                )
+                entry['source'] = src
+                entry['progress_pct'] = 100 if earned else src.get('progress_pct', 0)
+                milestone_titles.append(entry)
+                if earned:
+                    milestone_earned += 1
+            elif badge_srcs:
+                # Lowest tier = the easiest path to the title.
+                entry['source'] = min(badge_srcs, key=lambda s: s['object'].tier)
+                badge_titles.append(entry)
+                if earned:
+                    badge_earned += 1
+
         special_titles.sort(key=lambda e: e['earned_at'], reverse=True)
 
         # Resolve displayed title name directly (works for both regular and special)
@@ -224,15 +225,16 @@ class MyTitlesView(LoginRequiredMixin, TemplateView):
             displayed_title_name = earned_map[displayed_title_id].title.name
 
         context.update({
-            'earned_titles': earned_titles,
-            'locked_titles': locked_titles,
+            'badge_titles': badge_titles,
+            'badge_total': len(badge_titles),
+            'badge_earned': badge_earned,
+            'milestone_titles': milestone_titles,
+            'milestone_total': len(milestone_titles),
+            'milestone_earned': milestone_earned,
             'special_titles': special_titles,
             'displayed_title_id': displayed_title_id,
             'displayed_title_name': displayed_title_name,
-            'total_earned': len(earned_titles),
-            'total_available': len(earned_titles) + len(locked_titles),
-            'badge_title_earned': badge_title_earned,
-            'milestone_title_earned': milestone_title_earned,
+            'total_earned': badge_earned + milestone_earned + len(special_titles),
             'profile': profile,
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},

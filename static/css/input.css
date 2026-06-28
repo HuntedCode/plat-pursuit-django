@@ -2,11 +2,15 @@
 @import "./components/chips.css";
 @import "./components/buttons.css";
 @import "./components/frame.css";
+@import "./components/tally.css";
+@import "./components/horizon.css";
 @import "./components/badge-hero.css";
 @import "./components/badge-detail.css";
 @import "./components/elements.css";
 @import "./components/binder.css";
 @import "./components/collection-list.css";
+@import "./components/milestones.css";
+@import "./components/titles.css";
 @plugin "daisyui";
 
 @theme {

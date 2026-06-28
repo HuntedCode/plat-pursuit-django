@@ -1,0 +1,30 @@
+{% comment %}Milestone title row (progress list). Expects `entry` (title, earned,
+is_displayed, earned_at, state, source, progress_pct), `premium`. Earned shows
+equip/Equipped + date; unearned shows the band Horizon climb + X/Y.{% endcomment %}
+{% load custom_filters %}
+{% with source=entry.source %}
+<div class="tt-ms-row is-{{ entry.state }}{% if entry.is_displayed %} is-equipped{% endif %}{% if premium %} is-legendary{% endif %}"
+     data-title-id="{{ entry.title.id }}" data-title-name="{{ entry.title.name }}"
+     data-earned-at="{% if entry.earned_at %}{{ entry.earned_at|date:'Y-m-d' }}{% endif %}" data-state="{{ entry.state }}" data-progress="{{ entry.progress_pct|default:0 }}">
+    <span class="tt-ms-row__icon">
+        {% if source.image %}<img src="{{ source.image }}" alt="" loading="lazy">
+        {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 9 7 9 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 15 7 15 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>{% endif %}
+    </span>
+    <div class="tt-ms-row__main">
+        <div class="tt-ms-row__name">{{ entry.title.name }}</div>
+        <div class="tt-ms-row__cat">{{ source.category_name }}</div>
+    </div>
+    <div class="tt-ms-row__trail">
+        {% if entry.earned %}
+            <button type="button" class="tt-equip" data-action="equip">Equip</button>
+            <span class="tt-equipped-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Equipped</span>
+            {% if entry.earned_at %}<span class="tt-ms-row__date">{{ entry.earned_at|date:"M j, Y" }}</span>{% endif %}
+        {% else %}
+            <div class="tt-ms-row__prog">
+                {% include 'components/horizon.html' with progress=entry.progress_pct tone='band' height='6px' %}
+                <span class="tt-ms-row__prog-val">{{ source.progress_value|default:0|compact_number }}/{{ source.required_value|compact_number }}</span>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endwith %}

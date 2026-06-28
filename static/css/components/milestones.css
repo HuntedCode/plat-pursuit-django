@@ -1,0 +1,187 @@
+/* ================================================================
+ * Milestones page (rebuild) — the personal achievement tracker.
+ *
+ * Built on the --pp-* token foundation + the Tally (numbers) and Horizon
+ * (progress) primitives. The vocabulary: matted "framed artifact" cards
+ * (2px border, near-square radius, a top light-catch, calm matte at rest),
+ * with neon earned by STATE -- cyan == active/in-progress (the one brand
+ * accent), success == earned/settled, muted == locked. The tier ladder is
+ * the centerpiece: the canonical Tally + Horizon composition.
+ * ================================================================ */
+
+.ms { --ms-radius: var(--pp-radius-lg); }
+
+/* ---- Matted card base (shared by every milestone surface) ---- */
+.ms-card {
+    position: relative;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--pp-bg-2) 70%, var(--pp-bg-1)), var(--pp-bg-1));
+    border: var(--pp-border-w) solid var(--pp-border);
+    border-radius: var(--ms-radius);
+    box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-text) 7%, transparent);
+    transition: border-color var(--pp-dur) var(--pp-ease), box-shadow var(--pp-dur) var(--pp-ease), transform var(--pp-dur) var(--pp-ease);
+}
+
+/* ---- Page header ---- */
+.ms-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px; margin-bottom: 16px; border-left: 3px solid var(--pp-primary); }
+.ms-header__title { display: flex; align-items: center; gap: 9px; }
+.ms-header__title h1 { font-family: var(--pp-font-display); font-weight: 800; font-size: clamp(1.25rem, 3vw, 1.75rem); letter-spacing: -0.01em; }
+.ms-header__icon { width: 26px; height: 26px; color: var(--pp-primary); flex-shrink: 0; }
+.ms-header__sub { margin-top: 4px; font-size: 0.8rem; color: var(--pp-text-dim); font-style: italic; max-width: 52ch; }
+.ms-header__stat { text-align: right; flex-shrink: 0; }
+.ms-header__stat-label { display: block; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--pp-text-mute); margin-top: 3px; }
+
+/* ---- Tab strip ---- */
+.ms-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 14px; scrollbar-width: thin; }
+.ms-tab {
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+    padding: 8px 13px; border-radius: 999px; font-size: 0.82rem; font-weight: 600;
+    color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease);
+    text-decoration: none; flex-shrink: 0;
+}
+.ms-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
+.ms-tab.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.ms-tab__icon { width: 17px; height: 17px; flex-shrink: 0; }
+.ms-tab__count { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); padding: 1px 7px; border-radius: 999px; background: color-mix(in oklab, var(--pp-text) 8%, transparent); }
+.ms-tab.is-active .ms-tab__count { color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-text)); }
+.ms-tab__count.is-complete { color: var(--pp-success); background: color-mix(in oklab, var(--pp-success) 16%, transparent); }
+
+/* ---- Overview: stat cards ---- */
+.ms-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.ms-stat { padding: 14px 12px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 5px; }
+.ms-stat__icon { width: 26px; height: 26px; }
+.ms-stat__label { font-size: 0.72rem; color: var(--pp-text-dim); }
+.ms-stat--earned .ms-stat__icon { color: var(--pp-primary); }
+.ms-stat--titles .ms-stat__icon { color: var(--pp-warning); }
+.ms-stat--latest .ms-stat__icon { color: var(--pp-success); }
+.ms-stat--pct .ms-stat__icon    { color: var(--pp-info); }
+.ms-stat__latest-name { font-weight: 700; font-size: 0.9rem; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ---- Overview: overall progress ---- */
+.ms-overall { margin-bottom: 20px; }
+.ms-overall__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
+.ms-overall__head h2 { font-size: 0.95rem; font-weight: 700; }
+.ms-overall__foot { margin-top: 6px; font-size: 0.72rem; color: var(--pp-text-mute); }
+
+/* ---- Overview: category cards ---- */
+.ms-section-title { font-family: var(--pp-font-display); font-weight: 800; font-size: clamp(1.05rem, 2.4vw, 1.4rem); margin-bottom: 12px; }
+.ms-cats { display: grid; grid-template-columns: 1fr; gap: 11px; }
+.ms-cat { display: block; padding: 14px; text-decoration: none; color: inherit; }
+.ms-cat:hover { border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); transform: translateY(-2px); box-shadow: inset 0 1px 0 color-mix(in oklab, var(--pp-text) 7%, transparent), 0 8px 22px -14px color-mix(in oklab, var(--pp-primary) 60%, transparent); }
+.ms-cat__head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.ms-cat__icon { width: 22px; height: 22px; flex-shrink: 0; }
+.ms-cat__name { font-weight: 700; font-size: 0.98rem; }
+.ms-cat__meta { display: flex; align-items: baseline; justify-content: space-between; margin-top: 7px; font-size: 0.74rem; color: var(--pp-text-dim); }
+.ms-cat__recent { margin-top: 8px; font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; }
+.ms-cat__recent p { display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+
+/* category accent dots (icon colours echo the legacy per-category palette, retoned) */
+.ms-ico--trophy    { color: var(--pp-warning); }
+.ms-ico--community { color: var(--pp-secondary); }
+.ms-ico--collection{ color: var(--pp-accent); }
+.ms-ico--challenges{ color: var(--pp-error); }
+.ms-ico--rocket    { color: var(--pp-success); }
+.ms-ico--supporter { color: oklch(0.8 0.12 0); }
+.ms-ico--sparkle   { color: var(--pp-warning); }
+.ms-ico--overview  { color: var(--pp-info); }
+
+/* ---- Tier ladder (the centerpiece) ---- */
+.ms-ladder { padding: 14px 16px 16px; margin-bottom: 14px; }
+.ms-ladder__head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.ms-ladder__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.05rem; }
+.ms-ladder__segs { flex: 1 1 160px; min-width: 120px; }
+.ms-ladder__count { font-size: 0.72rem; color: var(--pp-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* the climb: a left rail of state dots + connector, then a tier row-card */
+.ms-tier { display: grid; grid-template-columns: 26px 1fr; gap: 0; }
+.ms-tier__rail { display: flex; flex-direction: column; align-items: center; }
+.ms-tier__line { width: 2px; flex: 1; background: var(--pp-divider); min-height: 8px; }
+.ms-tier__line--top { flex: 0 0 16px; }  /* fixed segment above the dot so the rail connects tier-to-tier (no gap) */
+.ms-tier__line--lit { background: color-mix(in oklab, var(--pp-success) 60%, transparent); }
+.ms-tier__dot { width: 15px; height: 15px; border-radius: 999px; flex-shrink: 0; display: grid; place-items: center; background: var(--pp-bg-3); border: 2px solid var(--pp-border); }
+.ms-tier__dot svg { width: 9px; height: 9px; }
+.ms-tier__body { margin: 0 0 9px 0; padding: 9px 11px; }
+.ms-tier__top { display: flex; align-items: center; gap: 10px; }
+.ms-tier__num { font-size: 0.7rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.ms-tier__art { width: 40px; height: 40px; flex-shrink: 0; border-radius: 8px; object-fit: contain; background: var(--pp-bg-3); display: grid; place-items: center; }
+.ms-tier__art img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
+.ms-tier__art svg { width: 20px; height: 20px; color: var(--pp-text-mute); }
+.ms-tier__info { min-width: 0; flex: 1; }
+.ms-tier__title-row { display: flex; align-items: center; gap: 6px; }
+.ms-tier__title-row h4 { font-weight: 700; font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-tier__desc { font-size: 0.74rem; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+.ms-tier__earners { font-size: 0.68rem; color: var(--pp-text-mute); margin-top: 1px; }
+.ms-tier__target { flex-shrink: 0; color: var(--pp-text-dim); }
+/* Always rendered (even when empty) + min-height so every tier card is the same height
+ * regardless of whether it has a title / progress / earned line. The min-height must
+ * exceed the tallest single-line content (the italic reward text) so it binds uniformly
+ * for ALL states -- otherwise the progress-only active foot stays shorter than text feet. */
+.ms-tier__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; padding-left: 50px; min-height: 1.5rem; }
+.ms-tier__reward { font-size: 0.78rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 78%, var(--pp-text)); white-space: nowrap; }
+.ms-tier__progress { display: flex; align-items: center; gap: 8px; flex: 1 1 140px; min-width: 120px; }
+.ms-tier__progress .pp-horizon { flex: 1; }
+.ms-tier__progress-val { font-size: 0.66rem; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-tier__earned-tag { font-size: 0.76rem; font-weight: 600; color: var(--pp-success); }
+.ms-tier__earned-date { font-size: 0.66rem; color: var(--pp-text-mute); }
+
+/* tier states */
+.ms-tier.is-earned  .ms-tier__dot { background: var(--pp-success); border-color: var(--pp-success); color: var(--pp-bg-0); }
+.ms-tier.is-earned  .ms-tier__body { border-color: color-mix(in oklab, var(--pp-success) 45%, var(--pp-border)); }
+.ms-tier.is-active  .ms-tier__dot { background: var(--pp-primary); border-color: var(--pp-primary); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 55%, transparent); animation: ms-pulse 2.4s ease-in-out infinite; }
+.ms-tier.is-active  .ms-tier__body { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
+.ms-tier.is-locked  .ms-tier__body { opacity: 0.55; }
+.ms-tier.is-locked  .ms-tier__art img { filter: grayscale(0.8); opacity: 0.7; }
+.ms-tier.is-preview .ms-tier__body:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
+@keyframes ms-pulse { 0%, 100% { box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 50%, transparent); } 50% { box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 75%, transparent); } }
+
+/* ---- Calendar month grid ---- */
+.ms-cal__intro { font-size: 0.78rem; color: var(--pp-text-dim); margin-bottom: 12px; }
+.ms-months { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.ms-month { padding: 11px 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.ms-month__abbr { font-family: var(--pp-font-display); font-weight: 800; font-size: 0.86rem; color: var(--pp-text-mute); letter-spacing: 0.04em; }
+.ms-month__icon { width: 22px; height: 22px; color: var(--pp-text-mute); opacity: 0.5; }
+.ms-month__name { font-size: 0.68rem; color: var(--pp-text-mute); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-month__reward { font-size: 0.66rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 70%, var(--pp-text-mute)); display: -webkit-box; -webkit-line-clamp: 1; line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; padding-right: 4px; }
+.ms-month.is-earned { border-color: color-mix(in oklab, var(--pp-success) 55%, var(--pp-border)); background: linear-gradient(180deg, color-mix(in oklab, var(--pp-success) 12%, var(--pp-bg-1)), var(--pp-bg-1)); }
+.ms-month.is-earned .ms-month__abbr { color: var(--pp-success); }
+.ms-month.is-earned .ms-month__icon { color: var(--pp-success); opacity: 1; }
+
+/* ---- One-off cards ---- */
+.ms-oneoffs { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.ms-oneoff { padding: 16px 14px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 7px; }
+.ms-oneoff__art { width: 52px; height: 52px; border-radius: 10px; background: var(--pp-bg-3); display: grid; place-items: center; }
+.ms-oneoff__art img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; }
+.ms-oneoff__art svg { width: 26px; height: 26px; color: var(--pp-text-mute); }
+.ms-oneoff__name { font-weight: 700; font-size: 0.92rem; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-oneoff__desc { font-size: 0.74rem; color: var(--pp-text-dim); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ms-oneoff__reward { font-size: 0.8rem; font-style: italic; color: color-mix(in oklab, var(--pp-warning) 78%, var(--pp-text)); }
+.ms-oneoff.is-earned { border-color: color-mix(in oklab, var(--pp-success) 45%, var(--pp-border)); }
+.ms-oneoff:not(.is-earned) .ms-oneoff__art img { filter: grayscale(0.85); }
+
+/* status pills */
+.ms-pill { font-size: 0.7rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+.ms-pill--earned { color: var(--pp-success); background: color-mix(in oklab, var(--pp-success) 15%, transparent); }
+.ms-pill--locked { color: var(--pp-text-mute); background: color-mix(in oklab, var(--pp-text) 7%, transparent); }
+.ms-pill--premium { color: var(--pp-warning); background: color-mix(in oklab, var(--pp-warning) 16%, transparent); }
+
+/* ---- Empty / locked-out states ---- */
+.ms-note { padding: 14px 16px; margin-bottom: 18px; text-align: center; color: var(--pp-text-dim); font-size: 0.85rem; }
+.ms-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 40px 16px; }
+.ms-empty svg { width: 56px; height: 56px; color: color-mix(in oklab, var(--pp-text) 18%, transparent); margin-bottom: 14px; }
+.ms-empty__title { font-family: var(--pp-font-display); font-weight: 800; font-size: 1.15rem; color: var(--pp-text-dim); font-style: italic; }
+.ms-empty__body { font-size: 0.82rem; color: var(--pp-text-mute); margin-top: 8px; max-width: 44ch; }
+
+.ms-divider { height: 1px; background: var(--pp-divider); margin: 16px 0; }
+
+/* ---- Responsive ---- */
+@media (min-width: 768px) {
+    .ms-stats { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .ms-cats { grid-template-columns: repeat(2, 1fr); }
+    .ms-months { grid-template-columns: repeat(4, 1fr); }
+    .ms-oneoffs { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+    .ms-cats { grid-template-columns: repeat(3, 1fr); }
+    .ms-months { grid-template-columns: repeat(6, 1fr); }
+    .ms-oneoffs { grid-template-columns: repeat(3, 1fr); }
+}

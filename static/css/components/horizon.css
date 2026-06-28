@@ -1,0 +1,85 @@
+/* ================================================================
+ * Horizon — the progress / "path forward" treatment (shared primitive)
+ *
+ * Kit signature primitive (visual-identity.md §3): wherever progress shows,
+ * Horizon communicates "there's more this way." This formalizes the pill
+ * progress bar the Lab, Research Panel, Collection and badge-detail pages each
+ * hand-rolled, and adds the locked cool->warm band system as a second tone.
+ *
+ * TWO TONES (a single fill rule; the tone just sets --horizon-from/--horizon-to):
+ *   - themed (default): fill = a passed accent (--horizon-accent, default cyan).
+ *     The element/family colour. Lab & Research Panel use this (--disc).
+ *   - band: fill colour comes from the 6-step cool->warm progression keyed to
+ *     completion, via data-horizon-band="cool|warming|warm|hot" (set server-side
+ *     by the `horizon_band` template filter, or client-side by horizon.js). The
+ *     "how close am I" semantic -- Milestones uses this.
+ *
+ * FORMS: linear bar (workhorse), segmented (tier ladders / discrete steps),
+ * radial arc (compact tiles / rings). Progress is --horizon-progress: <pct>%.
+ * ================================================================ */
+
+.pp-horizon {
+    /* themed defaults; band overrides via [data-horizon-band] below */
+    --horizon-accent: var(--pp-primary);
+    --horizon-from: color-mix(in oklab, var(--horizon-accent) 55%, var(--pp-bg-3));
+    --horizon-to: var(--horizon-accent);
+}
+
+/* ---- Band tone: cool (far) -> hot (nearly done). Locked palette. ---- */
+.pp-horizon[data-horizon-band="cool"]    { --horizon-from: rgb(70, 165, 200);  --horizon-to: rgb(110, 200, 230); }
+.pp-horizon[data-horizon-band="warming"] { --horizon-from: rgb(140, 200, 200); --horizon-to: rgb(200, 195, 145); }
+.pp-horizon[data-horizon-band="warm"]    { --horizon-from: rgb(220, 180, 110); --horizon-to: rgb(255, 200, 100); }
+.pp-horizon[data-horizon-band="hot"]     { --horizon-from: rgb(255, 200, 110); --horizon-to: rgb(255, 230, 170); }
+
+/* ---- Linear bar (the workhorse) ---- */
+.pp-horizon__track {
+    display: block; height: var(--horizon-h, 8px); border-radius: 999px;
+    background: var(--pp-bg-3); overflow: hidden;
+}
+.pp-horizon__fill {
+    display: block; height: 100%; width: var(--horizon-progress, 0%); border-radius: 999px;
+    background: linear-gradient(90deg, var(--horizon-from), var(--horizon-to));
+    box-shadow: 0 0 10px color-mix(in oklab, var(--horizon-to) 50%, transparent);
+    transition: width 0.35s var(--pp-ease, ease);
+}
+/* Near-complete nudge: a gentle pulse on the leading-edge glow ("go finish it"). */
+.pp-horizon[data-horizon-band="hot"] .pp-horizon__fill { animation: pp-horizon-pulse 2.4s ease-in-out infinite; }
+@keyframes pp-horizon-pulse {
+    0%, 100% { box-shadow: 0 0 10px color-mix(in oklab, var(--horizon-to) 50%, transparent); }
+    50%      { box-shadow: 0 0 16px color-mix(in oklab, var(--horizon-to) 70%, transparent); }
+}
+
+/* ---- Segmented (discrete tiers / steps) ---- */
+.pp-horizon--segmented { display: flex; gap: 4px; }
+.pp-horizon--segmented .pp-horizon__seg {
+    flex: 1 1 0; height: var(--horizon-h, 8px); border-radius: 999px;
+    background: var(--pp-bg-3); transition: background 0.3s var(--pp-ease, ease);
+}
+.pp-horizon--segmented .pp-horizon__seg[data-state="done"] {
+    background: linear-gradient(90deg, var(--horizon-from), var(--horizon-to));
+    box-shadow: 0 0 8px color-mix(in oklab, var(--horizon-to) 45%, transparent);
+}
+.pp-horizon--segmented .pp-horizon__seg[data-state="active"] {
+    background: var(--pp-bg-3);
+    box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--horizon-to) 70%, transparent);
+}
+
+/* ---- Radial arc (compact tiles / rings) ----
+ * The consumer supplies the inline SVG circle(s) and sets stroke-dasharray + stroke-dashoffset
+ * (computed from the circumference) for the fill ratio -- CSS can't do that, so Horizon.update()
+ * (which only sets --horizon-progress) is linear/segmented-only; recompute the dashoffset
+ * yourself for arcs. Stroke width defaults to a non-hairline; override via --horizon-arc-w. */
+.pp-horizon--arc { display: inline-block; line-height: 0; }
+.pp-horizon--arc svg { overflow: visible; transform: rotate(-90deg); }
+.pp-horizon__arc-track, .pp-horizon__arc-fill { stroke-width: var(--horizon-arc-w, 6); }
+.pp-horizon__arc-track { fill: none; stroke: var(--pp-bg-3); }
+.pp-horizon__arc-fill {
+    fill: none; stroke: var(--horizon-to); stroke-linecap: round;
+    filter: drop-shadow(0 0 3px color-mix(in oklab, var(--horizon-to) 55%, transparent));
+    transition: stroke-dashoffset 0.45s var(--pp-ease, ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-horizon__fill, .pp-horizon--segmented .pp-horizon__seg, .pp-horizon__arc-fill { transition: none; }
+    .pp-horizon[data-horizon-band="hot"] .pp-horizon__fill { animation: none; }
+}

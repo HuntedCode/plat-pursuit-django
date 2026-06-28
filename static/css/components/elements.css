@@ -25,7 +25,7 @@
 /* ---- Summary stat cards ---- */
 .scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 18px; }
 .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
-.scard__value { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 24px; line-height: 1; }
+.scard__value { font-size: 24px; line-height: 1; }  /* face via shared .pp-tally */
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
 
 /* ---- Radar ---- */
@@ -40,10 +40,10 @@
 .radar-stage { display: grid; place-items: center; }
 .radar-stage canvas { max-width: 440px; width: 100%; height: auto; }
 .radar-detail__title { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 16px; }
+.radar-detail__list { list-style: none; margin: 0; padding: 0; }
 .rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 12px 0; }
 .rd-row__label { font-size: 13px; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rd-row__bar { display: block; height: 8px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
-.rd-row__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+/* rd-row bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent) */
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---- Lab hero: DNA composition ring (Pursuer Level framed by family shares) ---- */
@@ -53,7 +53,7 @@
 .lab-dna__track { fill: none; stroke: var(--pp-bg-3); stroke-width: 12; }
 .lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); }
 .lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease both; }
-.lab-dna__level { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 28px; line-height: 1; color: var(--pp-text); text-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 28%, transparent); }
+.lab-dna__level { display: block; font-size: 28px; line-height: 1; color: var(--pp-text); text-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 28%, transparent); }  /* face via shared .pp-tally */
 @media (min-width: 1024px) { .lab-dna__level { font-size: 32px; } }
 .lab-dna__cap { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; }
 @keyframes labDnaIn { from { transform: scale(0.55) rotate(-110deg); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -90,12 +90,11 @@
 .job:hover .job__expand, .ptile:focus-visible .job__expand { opacity: 0.9; }
 .job__mark { width: 27px; height: 27px; flex: none; }
 .job__lvbox { text-align: center; margin: 9px 0 4px; }
-.job__lv-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in oklab, var(--disc) 38%, transparent); }
+.job__lv-num { display: block; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); text-shadow: 0 0 18px color-mix(in oklab, var(--disc) 38%, transparent); }  /* face via shared .pp-tally */
 .job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
 .job__name { font-weight: 700; font-size: 13px; text-align: center; color: var(--pp-text); }
 .job__foot { margin-top: auto; padding-top: 12px; }
-.job__bar { height: 5px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
-.job__fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); transition: width 0.35s ease; }
+/* job bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent, --horizon-h: 5px) */
 .job__xp { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: center; font-variant-numeric: tabular-nums; }
 .job--mastered { border-color: color-mix(in oklab, var(--disc) 78%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1)); animation: jobPulse 3.4s ease-in-out infinite; }
 .job--mastered .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
@@ -121,13 +120,12 @@
 .edetail__fam { font-size: 12px; color: var(--pp-text-mute); margin-top: 2px; }
 .edetail__levelrow { display: flex; align-items: center; gap: 18px; margin-top: 22px; }
 .edetail__level { flex: none; text-align: center; min-width: 78px; }
-.edetail__level-num { display: block; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 54px; line-height: 0.9; color: var(--disc); text-shadow: 0 0 24px color-mix(in oklab, var(--disc) 40%, transparent); font-variant-numeric: tabular-nums; }
+.edetail__level-num { display: block; font-size: 54px; line-height: 0.9; color: var(--disc); text-shadow: 0 0 24px color-mix(in oklab, var(--disc) 40%, transparent); }  /* face via shared .pp-tally */
 .edetail__level-cap { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); }
 .edetail__xp { flex: 1; }
 .edetail__xp-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--pp-text-dim); margin-bottom: 7px; font-variant-numeric: tabular-nums; }
 .edetail__xp-next { color: var(--pp-text-mute); }
-.edetail__bar { height: 9px; border-radius: 999px; background: var(--pp-bg-3); overflow: hidden; }
-.edetail__fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--disc) 55%, var(--pp-bg-3)), var(--disc)); box-shadow: 0 0 10px color-mix(in oklab, var(--disc) 50%, transparent); }
+/* edetail bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent, --horizon-h: 9px) */
 .edetail__total { font-size: 11px; color: var(--pp-text-mute); margin-top: 8px; font-variant-numeric: tabular-nums; }
 .edetail__flavor { margin-top: 20px; font-style: italic; color: var(--pp-text-dim); font-size: 14px; line-height: 1.5; padding-right: 1px; }
 .edetail__sources { margin-top: 22px; border-top: 1px solid var(--pp-divider); padding-top: 16px; }
@@ -197,3 +195,11 @@
 .rp-row--claimable::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
 .rp-row--accepted { opacity: 0.92; }
 .rp-row--accepted::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-success) 45%, transparent); }
+
+/* Accept flow: the status pill + CTA swap are CSS-driven off .rp-row--accepted, so
+   the JS only flips that one class (no styling/markup rebuilding in the script). */
+.rp-row--accepted .rp-badge { background-color: var(--pp-success); color: var(--pp-bg-0); border-color: var(--pp-success); }
+.rp-cta__done { display: none; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 700; color: var(--pp-success); }
+.rp-cta__pct { font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); }
+.rp-row--accepted .rp-accept { display: none; }
+.rp-row--accepted .rp-cta__done { display: inline-flex; }

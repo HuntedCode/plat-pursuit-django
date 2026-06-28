@@ -1570,6 +1570,18 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
         # Fetch user data once
         earned_ids, progress_dict, earned_dates = self._get_user_data(profile, milestones)
 
+        # Lightweight overall summary, always available (the page header shows it on every
+        # tab). Excludes manual "Feats of Strength" from the denominator, matching the
+        # overview totals. Bounded (~50 milestones), no extra query.
+        countable = [m for m in milestones if m.criteria_type != 'manual']
+        summary_total = len(countable)
+        summary_earned = sum(1 for m in countable if m.id in earned_ids) if profile else 0
+        context['ms_summary'] = {
+            'total': summary_total,
+            'earned': summary_earned,
+            'pct': round(summary_earned / summary_total * 100) if summary_total else 0,
+        }
+
         # Build tab badge counts for all categories
         tab_data = []
         for slug, config in MILESTONE_CATEGORIES.items():
@@ -1610,7 +1622,7 @@ class MilestoneListView(ProfileHotbarMixin, ListView):
 
         context['breadcrumb'] = [
             {'text': 'Home', 'url': reverse_lazy('home')},
-            {'text': 'Badges', 'url': reverse_lazy('badges_list')},
+            {'text': 'My Pursuit', 'url': reverse_lazy('my_pursuit_hub')},
             {'text': 'Milestones'},
         ]
 
