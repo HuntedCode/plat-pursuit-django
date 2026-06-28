@@ -18,6 +18,7 @@
     {% for tier in ladder.tiers %}
     <div class="ms-tier is-{{ tier.state }}">
         <div class="ms-tier__rail">
+            <span class="ms-tier__line ms-tier__line--top{% if tier.state == 'earned' or tier.state == 'active' %} ms-tier__line--lit{% endif %}"{% if forloop.first %} style="visibility: hidden;"{% endif %}></span>
             <span class="ms-tier__dot">
                 {% if tier.state == 'earned' %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>{% endif %}
             </span>
@@ -45,7 +46,6 @@
                 <span class="ms-tier__target pp-tally pp-tally--md">{{ tier.required_value|intcomma }}</span>
             </div>
 
-            {% if tier.milestone.title or tier.state == 'active' or tier.state == 'earned' %}
             <div class="ms-tier__foot">
                 {% if tier.milestone.title %}<span class="ms-tier__reward">{{ tier.milestone.title.name }}</span>{% endif %}
                 {% if tier.state == 'active' %}
@@ -58,7 +58,6 @@
                     {% if tier.earned_at %}<span class="ms-tier__earned-date">{{ tier.earned_at|date:"M j, Y" }}</span>{% endif %}
                 {% endif %}
             </div>
-            {% endif %}
         </div>
     </div>
     {% endfor %}
