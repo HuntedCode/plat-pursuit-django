@@ -58,6 +58,50 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 </section>
 {% endif %}
 
+{# Trophy collection: at-a-glance stats + sync status + bridge to the full profile #}
+{% if glances.snapshot %}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-4 md:p-5 lg:p-6">
+        <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-xs uppercase tracking-[0.15em] text-base-content/50 font-semibold">Trophy collection</h2>
+                {% if glances.snapshot.trophy_level %}<span class="text-[0.65rem] font-bold px-2 py-0.5 rounded-md border border-primary/40 text-primary">Lv {{ glances.snapshot.trophy_level }}</span>{% endif %}
+                {% if glances.snapshot.is_plus %}<span class="text-[0.65rem] font-bold px-2 py-0.5 rounded-md border border-secondary/40 text-secondary">PS+</span>{% endif %}
+            </div>
+            {% if profile_url %}<a href="{{ profile_url }}" class="text-xs text-primary font-semibold inline-flex items-center gap-1 group shrink-0">Full profile <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></a>{% endif %}
+        </div>
+        {% if sync %}
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:text-sm mb-4">
+            <span class="inline-flex items-center gap-1.5 font-semibold text-success"><span class="w-2 h-2 rounded-full bg-success"></span>Synced</span>
+            {% if sync.last_synced %}<span class="text-base-content/60">Updated {{ sync.last_synced|naturaltime }}</span>{% endif %}
+            {% if not sync.ready and sync.next_sync_time %}<span class="text-base-content/30" aria-hidden="true">&middot;</span><span class="text-base-content/60">Next update {{ sync.next_sync_time|naturaltime }}</span>{% endif %}
+        </div>
+        {% endif %}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            <div class="scard text-center"><div class="scard__label">Platinums</div><div class="scard__value pp-tally text-primary">{{ glances.snapshot.total_plats|intcomma }}</div></div>
+            <div class="scard text-center"><div class="scard__label">Golds</div><div class="scard__value pp-tally text-warning">{{ glances.snapshot.total_golds|intcomma }}</div></div>
+            <div class="scard text-center"><div class="scard__label">Silvers</div><div class="scard__value pp-tally text-base-content/70">{{ glances.snapshot.total_silvers|intcomma }}</div></div>
+            <div class="scard text-center"><div class="scard__label">Bronzes</div><div class="scard__value pp-tally text-amber-700">{{ glances.snapshot.total_bronzes|intcomma }}</div></div>
+        </div>
+        <div class="mt-4">
+            <div class="flex items-center justify-between text-xs text-base-content/50 mb-1.5">
+                <span>Average completion</span>
+                <span class="font-bold text-base-content pp-tally">{{ glances.snapshot.avg_progress|floatformat:2 }}%</span>
+            </div>
+            <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--pp-primary); --horizon-h: 8px; --horizon-progress: {{ glances.snapshot.avg_progress|floatformat:0 }}%;"><div class="pp-horizon__fill"></div></div>
+        </div>
+        <div class="grid grid-cols-3 lg:grid-cols-6 gap-x-3 gap-y-3 mt-4 pt-4 border-t border-base-content/10 text-center">
+            <div><div class="text-sm md:text-base font-bold pp-tally text-success">{{ glances.snapshot.total_earned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Earned</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally text-base-content/70">{{ glances.snapshot.total_unearned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Unearned</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_games|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Games</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally text-success">{{ glances.snapshot.total_completes|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">100%</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.total_hiddens|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Hidden</div></div>
+            <div><div class="text-sm md:text-base font-bold pp-tally">{{ glances.snapshot.earn_rate }}%</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Earn rate</div></div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
 {# ── Status glances: claimable rewards + almost-there badges ── #}
 {% if glances.claimable_count or glances.almost_badges %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
@@ -109,88 +153,6 @@ pages (it does not re-implement them). Context from core/services/home_service.p
                 <span class="home-elem__lv pp-tally">{{ e.level }}</span>
             </a>
             {% endfor %}
-        </div>
-    </div>
-</section>
-{% endif %}
-
-{# ── Trophy snapshot: rich collection stats (from the old at-a-glance module) + prominent
-      sync status + a bridge to the full (trophy-data) profile ── #}
-{% if glances.snapshot %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-4 md:p-5">
-        <div class="flex items-center justify-between gap-2 mb-3">
-            <h2 class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">Trophy collection</h2>
-            <div class="flex items-center gap-2">
-                {% if glances.snapshot.is_plus %}<span class="badge badge-accent badge-sm font-bold">PS+</span>{% endif %}
-                {% if glances.snapshot.trophy_level %}<span class="badge badge-primary badge-sm font-bold">Lv. {{ glances.snapshot.trophy_level }}</span>{% endif %}
-                {% if profile_url %}<a href="{{ profile_url }}" class="text-xs text-primary font-semibold inline-flex items-center gap-1 group">Full profile <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></a>{% endif %}
-            </div>
-        </div>
-        {# Sync status (emphasized) #}
-        {% if sync %}
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs md:text-sm mb-3 px-3 py-2 rounded-lg bg-base-100/40 border border-base-300">
-            <span class="inline-flex items-center gap-1.5 font-semibold text-success"><span class="w-2 h-2 rounded-full bg-success"></span>Synced</span>
-            {% if sync.last_synced %}<span class="text-base-content/70">Updated {{ sync.last_synced|naturaltime }}</span>{% endif %}
-            <span class="text-base-content/30" aria-hidden="true">&middot;</span>
-            {% if sync.ready %}<span class="text-base-content/60">Next update due now</span>{% else %}<span class="text-base-content/60">Next update {{ sync.next_sync_time|naturaltime }}</span>{% endif %}
-        </div>
-        {% endif %}
-        {# Trophy-type grid #}
-        <div class="grid grid-cols-4 gap-1.5 md:gap-3">
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
-                <div class="text-lg md:text-xl lg:text-2xl font-black text-primary pp-tally">{{ glances.snapshot.total_plats|intcomma }}</div>
-                <div class="text-xs text-base-content/50 font-medium">Platinums</div>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
-                <div class="text-lg md:text-xl lg:text-2xl font-black text-warning pp-tally">{{ glances.snapshot.total_golds|intcomma }}</div>
-                <div class="text-xs text-base-content/50 font-medium">Golds</div>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
-                <div class="text-lg md:text-xl lg:text-2xl font-black text-secondary pp-tally">{{ glances.snapshot.total_silvers|intcomma }}</div>
-                <div class="text-xs text-base-content/50 font-medium">Silvers</div>
-            </div>
-            <div class="bg-white/[0.03] border border-base-content/5 rounded-lg p-1.5 md:p-3 text-center">
-                <div class="text-lg md:text-xl lg:text-2xl font-black text-amber-700 pp-tally">{{ glances.snapshot.total_bronzes|intcomma }}</div>
-                <div class="text-xs text-base-content/50 font-medium">Bronzes</div>
-            </div>
-        </div>
-        {# Summary stats row #}
-        <div class="grid grid-cols-3 lg:grid-cols-6 gap-1.5 md:gap-3 mt-3 pt-3 border-t border-base-content/10">
-            <div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                <span class="font-bold text-sm lg:text-base text-success pp-tally">{{ glances.snapshot.total_earned|intcomma }}</span>
-                <span class="text-xs text-base-content/50">Earned</span>
-            </div>
-            <div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                <span class="font-bold text-sm lg:text-base text-error/70 pp-tally">{{ glances.snapshot.total_unearned|intcomma }}</span>
-                <span class="text-xs text-base-content/50">Unearned</span>
-            </div>
-            <div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                <span class="font-bold text-sm lg:text-base pp-tally">{{ glances.snapshot.total_games|intcomma }}</span>
-                <span class="text-xs text-base-content/50">Games</span>
-            </div>
-            <div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                <span class="font-bold text-sm lg:text-base text-success pp-tally">{{ glances.snapshot.total_completes|intcomma }}</span>
-                <span class="text-xs text-base-content/50">100%</span>
-            </div>
-            <div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                <span class="font-bold text-sm lg:text-base pp-tally">{{ glances.snapshot.total_hiddens|intcomma }}</span>
-                <span class="text-xs text-base-content/50">Hidden</span>
-            </div>
-            <div class="flex flex-col items-center gap-0.5 p-1 md:p-2 rounded-lg bg-white/[0.03] border border-base-content/5">
-                <span class="font-bold text-sm lg:text-base pp-tally">{{ glances.snapshot.earn_rate }}%</span>
-                <span class="text-xs text-base-content/50">Earn Rate</span>
-            </div>
-        </div>
-        {# Completion bar #}
-        <div class="mt-3">
-            <div class="flex items-center justify-between text-xs text-base-content/50 mb-1">
-                <span>Average completion</span>
-                <span class="font-bold text-base-content">{{ glances.snapshot.avg_progress|floatformat:2 }}%</span>
-            </div>
-            <div class="w-full bg-base-300 rounded-full h-2.5">
-                <div class="bg-primary rounded-full h-2.5 transition-all duration-500" style="width: {{ glances.snapshot.avg_progress|floatformat:0 }}%"></div>
-            </div>
         </div>
     </div>
 </section>
