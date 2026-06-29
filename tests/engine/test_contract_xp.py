@@ -302,6 +302,25 @@ def test_tier_for_level():
     assert leveling.tier_for_level(9999)['key'] == 'legend'  # number keeps climbing past it
 
 
+def test_pursuer_rank_for_level():
+    pr = leveling.pursuer_rank_for_level
+    # Newbie: the divisionless floor -- a fresh account (Pursuer Level ~25) sits here.
+    fresh = pr(25)
+    assert fresh['key'] == 'newbie' and fresh['division'] is None and fresh['label'] == 'Newbie'
+    assert fresh['next_label'] == 'Recruit' and fresh['levels_to_next'] == 15   # 40 - 25
+    # Recruit: divisions enter at V and climb to I (gamer convention, I = top of tier).
+    assert pr(40)['label'] == 'Recruit V' and pr(40)['division'] == 5
+    assert pr(73)['label'] == 'Recruit III'
+    assert pr(119)['label'] == 'Recruit I' and pr(119)['division'] == 1
+    assert pr(119)['next_label'] == 'Seeker'           # the top division promotes to the next tier
+    assert pr(120)['label'] == 'Seeker V'              # crossing the floor is a promotion
+    # Ascendant: the open-ended, divisionless apex -- no next, the number just flexes on.
+    top = pr(5200)
+    assert top['key'] == 'ascendant' and top['division'] is None and top['label'] == 'Ascendant'
+    assert top['next_level'] is None and top['levels_to_next'] == 0
+    assert pr(99999)['key'] == 'ascendant'             # climbs forever past the top
+
+
 def test_contract_grant_unique_together_blocks_duplicate():
     """The DB constraint is the second line of defense behind the accepted-timestamp guard:
     a duplicate (earned_contract, job, tier) contract grant must raise IntegrityError."""

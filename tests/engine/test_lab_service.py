@@ -71,6 +71,17 @@ def test_hero_mirrors_lab_totals():
     assert hero['active_title'] is None     # no displayed UserTitle
 
 
+def test_hero_carries_pursuer_rank():
+    """The hero exposes the account-wide Pursuer rank (off the summed element level) for the
+    DNA ring label. A fresh profile floors every element to level 1, so it sits at Newbie."""
+    profile = ProfileFactory()
+
+    rank = build_lab_context(profile)['hero']['pursuer_rank']
+
+    assert rank['key'] == 'newbie'          # ~25 total level is under the Recruit floor (40)
+    assert rank['label'] == 'Newbie' and rank['division'] is None
+
+
 def test_dna_ring_arcs_sum_to_the_whole():
     profile = ProfileFactory()
     # Spread XP/levels across two different families so the ring has distinct shares.

@@ -45,7 +45,7 @@
                             {% with digits=hero.pursuer_level|stringformat:"d"|length %}
                             <span class="lab-dna__level pp-tally lab-dna__level--d{{ digits }}">{{ hero.pursuer_level|intcomma }}</span>
                             {% endwith %}
-                            <span class="lab-dna__cap">Level</span>
+                            <span class="lab-dna__cap lab-dna__cap--{{ hero.pursuer_rank.key }}">{{ hero.pursuer_rank.label }}</span>
                         </div>
                     </div>
                     <ul class="lab-dna-legend">

@@ -13,6 +13,7 @@ import logging
 
 from trophies.models import UserTitle
 from trophies.services import element_render
+from trophies.util_modules.leveling import pursuer_rank_for_level
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +66,12 @@ def _build_hero(profile, lab):
                 'share_pct': round(share * 100), 'dash': dash, 'offset': round(-cumulative, 2),
             })
             cumulative += dash
+    pursuer_level = lab['total_level'] if lab else 0
     return {
         'pursuer_name': profile.display_psn_username,
         'avatar_url': profile.avatar_url,
-        'pursuer_level': lab['total_level'] if lab else 0,
+        'pursuer_level': pursuer_level,
+        'pursuer_rank': pursuer_rank_for_level(pursuer_level),
         'total_job_xp': lab['total_xp'] if lab else 0,
         'element_count': lab['total'] if lab else 0,
         'active_title': active.title.name if active else None,

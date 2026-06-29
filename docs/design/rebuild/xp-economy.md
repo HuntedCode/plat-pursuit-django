@@ -60,9 +60,30 @@ Cap-less levels carry the infinite endgame; a **bounded, named ladder** carries 
 - **Legend is the open-ended top.** We do *not* invent tiers past it — beyond Legend the **raw level number is the flex** ("Legend · Lv 312"). This also absorbs any future XP inflation: thresholds are config we control, and the uncapped number always differentiates.
 - **Names are placeholders** (mastery-rank flavor). An element-refinement theme (Trace → Pure → Crystalline) is an open option — only the display strings change.
 
-### Pursuer rank (deferred — distinct ladder)
+## Pursuer rank (the account-wide ladder)
 
-A profile-wide rank off the **total** level is wanted, but it's a **separate ladder with its own names**: different scale (sum runs into the thousands) and different meaning (overall *breadth/standing* vs. per-genre *depth*). Its thresholds need real total-level data, so it's a **data-calibrated fast-follow**, not v1.
+The element tiers above rank a *single* element's depth. The **Pursuer rank** ranks the whole account off the **Pursuer Level** (the sum of every element level) — a separate, deliberately **deep** ladder because there is one Pursuer per account, so it's the long-haul thing to reach toward. `leveling.PURSUER_RANKS` + `pursuer_rank_for_level(level)`.
+
+**Shape: military-flavored named tier + Roman-numeral division (`V → I`).**
+
+| Band | Pursuer Level | Divisions |
+|---|---|---|
+| **Newbie** | floor (~25) | none — the divisionless floor |
+| Recruit | 40 | V → I |
+| Seeker | 120 | V → I |
+| Hunter | 250 | V → I |
+| Ranger | 450 | V → I |
+| Warden | 750 | V → I |
+| Marshal | 1,150 | V → I |
+| Vanquisher | 1,700 | V → I |
+| Paragon | 2,500 | V → I |
+| Luminary | 3,600 | V → I |
+| **Ascendant** | 5,200+ | none — open-ended apex |
+
+- **Newbie** and **Ascendant** are the divisionless bookends: a humble floor (a brand-new account, every element at level 1) and a transcendent, open-ended ceiling (past it the raw Pursuer Level number is the flex, same cap-less spirit as the elements' Legend). The 9 middle tiers each split into **5 divisions**, entering at **V** and climbing to **I** (the gamer-ranked convention) — `1 + 9×5 + 1 = 47` rungs.
+- Divisions are computed by splitting each tier's `[min, next_tier_floor)` range into 5 equal bands — so calibration only tunes the **~10 tier thresholds**, not 47 numbers.
+- **Where it lives:** the Lab DNA ring — the rank is the ring's label under the Pursuer Level (`1,234 · Luminary II`), the same number-plus-rank pattern as an element tile. The hero exposes it as `hero.pursuer_rank` (`{key, name, division, division_roman, label, next_label, levels_to_next, …}`).
+- **Names are locked; thresholds are placeholders** — a data-calibrated fast-follow once real total-level data exists (the cadence above is a reasoned guess: frequent early divisions, widening toward the apex).
 
 ## The ledger is the universal source of truth
 

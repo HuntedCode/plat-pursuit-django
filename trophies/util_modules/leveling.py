@@ -61,3 +61,76 @@ def tier_for_level(level: int) -> dict:
         else:
             break
     return {'key': chosen[1], 'name': chosen[2], 'min_level': chosen[0], 'next_level': next_level}
+
+
+# --- Pursuer rank: the account-wide standing on the SUM of element levels ---------
+# A long, military-flavored ladder (named tier + Roman-numeral division, V -> I) that the
+# single Pursuer Level climbs. There is ONE Pursuer per account, so unlike the per-element
+# tiers this ladder is deliberately deep -- a fresh thing to reach toward for the long haul.
+# NEWBIE is the divisionless floor (a brand-new account, every element at level 1); the 9
+# middle tiers each split into 5 divisions (V at entry climbing to I at the top, the gamer
+# convention); ASCENDANT is the divisionless, open-ended apex -- past it the raw Pursuer
+# Level number is the flex (same cap-less spirit as the elements' Legend). Thresholds are
+# config placeholders (tune on real adoption data); the names are locked. See xp-economy.md.
+PURSUER_DIVISIONS = 5
+_PURSUER_NUMERALS = ['V', 'IV', 'III', 'II', 'I']  # index 0 = entry (V) ... index 4 = top (I)
+
+# (min_level, key, name, has_divisions), ascending by min_level.
+PURSUER_RANKS = [
+    (0,    'newbie',     'Newbie',     False),
+    (40,   'recruit',    'Recruit',    True),
+    (120,  'seeker',     'Seeker',     True),
+    (250,  'hunter',     'Hunter',     True),
+    (450,  'ranger',     'Ranger',     True),
+    (750,  'warden',     'Warden',     True),
+    (1150, 'marshal',    'Marshal',    True),
+    (1700, 'vanquisher', 'Vanquisher', True),
+    (2500, 'paragon',    'Paragon',    True),
+    (3600, 'luminary',   'Luminary',   True),
+    (5200, 'ascendant',  'Ascendant',  False),
+]
+
+
+def pursuer_rank_for_level(level: int) -> dict:
+    """The account-wide Pursuer rank for a Pursuer Level (the sum of every element level).
+
+    Returns {key, name, division, division_roman, label, min_level, next_level, next_label,
+    levels_to_next}. `division` is 1-5 (1 = top of the tier, the 'I') for the divisioned
+    middle tiers, or None for Newbie / Ascendant. `next_level` is the Pursuer Level at which
+    the next division or tier begins (None at Ascendant, the open-ended top); `label` is the
+    display string ("Warden III", or just "Newbie" / "Ascendant")."""
+    idx = 0
+    for i, rank in enumerate(PURSUER_RANKS):
+        if level >= rank[0]:
+            idx = i
+        else:
+            break
+    min_level, key, name, has_div = PURSUER_RANKS[idx]
+    next_tier_floor = PURSUER_RANKS[idx + 1][0] if idx + 1 < len(PURSUER_RANKS) else None
+
+    if not has_div:
+        # Newbie (the floor) or Ascendant (the open-ended apex): a single divisionless band.
+        next_label = PURSUER_RANKS[idx + 1][2] if next_tier_floor is not None else None
+        return {
+            'key': key, 'name': name, 'division': None, 'division_roman': '', 'label': name,
+            'min_level': min_level, 'next_level': next_tier_floor, 'next_label': next_label,
+            'levels_to_next': (next_tier_floor - level) if next_tier_floor is not None else 0,
+        }
+
+    # Divisioned tier: split [min_level, next_tier_floor) into PURSUER_DIVISIONS equal bands;
+    # band 0 is entry (numeral V), band 4 is the top (numeral I).
+    step = (next_tier_floor - min_level) / PURSUER_DIVISIONS
+    band = min(PURSUER_DIVISIONS - 1, int((level - min_level) / step))
+    next_boundary = round(min_level + (band + 1) * step)
+    if band + 1 < PURSUER_DIVISIONS:
+        next_label = f'{name} {_PURSUER_NUMERALS[band + 1]}'   # next division up
+    else:
+        next_label = PURSUER_RANKS[idx + 1][2]                  # promote to the next tier
+    return {
+        'key': key, 'name': name,
+        'division': PURSUER_DIVISIONS - band,                  # 5 (V) .. 1 (I)
+        'division_roman': _PURSUER_NUMERALS[band],
+        'label': f'{name} {_PURSUER_NUMERALS[band]}',
+        'min_level': min_level, 'next_level': next_boundary, 'next_label': next_label,
+        'levels_to_next': max(0, next_boundary - level),
+    }

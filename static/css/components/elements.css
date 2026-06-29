@@ -66,7 +66,11 @@
     .lab-dna__level--d5 { font-size: 19px; }
     .lab-dna__level--d6 { font-size: 15px; }
 }
-.lab-dna__cap { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; }
+/* The cap is the Pursuer RANK (e.g. "Warden III") -- the level number's meaning, like an
+   element tile's tier. nowrap keeps the longer "Vanquisher IV" on one line; the top ranks
+   (Luminary, Ascendant) earn the prestige glow. */
+.lab-dna__cap { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 4px; white-space: nowrap; }
+.lab-dna__cap--luminary, .lab-dna__cap--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
 @keyframes labDnaIn { from { transform: scale(0.55) rotate(-110deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes labDnaCenter { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .lab-dna__ring, .lab-dna__center { animation: none; } }
