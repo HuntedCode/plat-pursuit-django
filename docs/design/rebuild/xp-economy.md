@@ -66,24 +66,28 @@ The element tiers above rank a *single* element's depth. The **Pursuer rank** ra
 
 **Shape: military-flavored named tier + Roman-numeral division (`V → I`).**
 
-| Band | Pursuer Level | Divisions |
-|---|---|---|
-| **Newbie** | floor (~25) | none — the divisionless floor |
-| Recruit | 40 | V → I |
-| Seeker | 120 | V → I |
-| Hunter | 250 | V → I |
-| Ranger | 450 | V → I |
-| Warden | 750 | V → I |
-| Marshal | 1,150 | V → I |
-| Vanquisher | 1,700 | V → I |
-| Paragon | 2,500 | V → I |
-| Luminary | 3,600 | V → I |
-| **Ascendant** | 5,200+ | none — open-ended apex |
+Thresholds are anchored on **games completed** (the meaningful unit), via `Pursuer Level ≈ 25 + 2 × games`:
+
+| Band | Games | Pursuer Level | Divisions |
+|---|---|---|---|
+| **Newbie** | 0 | 25 (floor) | none — the divisionless floor |
+| Recruit | ~5 | 35 | V → I |
+| Seeker | ~20 | 65 | V → I |
+| Hunter | ~45 | 115 | V → I |
+| Ranger | ~85 | 195 | V → I |
+| Warden | ~140 | 305 | V → I |
+| Marshal | ~220 | 465 | V → I |
+| Vanquisher | ~330 | 685 | V → I |
+| Paragon | ~480 | 985 | V → I |
+| Luminary | ~690 | 1,405 | V → I |
+| **Ascendant** | ~1,000 | 2,025+ | none — open-ended apex |
+
+Fast early promotions (a division every ~3 games at Recruit) widening to ~60 games/division near the apex — the ramp falls out of the even split because the tiers themselves widen.
 
 - **Newbie** and **Ascendant** are the divisionless bookends: a humble floor (a brand-new account, every element at level 1) and a transcendent, open-ended ceiling (past it the raw Pursuer Level number is the flex, same cap-less spirit as the elements' Legend). The 9 middle tiers each split into **5 divisions**, entering at **V** and climbing to **I** (the gamer-ranked convention) — `1 + 9×5 + 1 = 47` rungs.
 - Divisions are computed by splitting each tier's `[min, next_tier_floor)` range into 5 equal bands — so calibration only tunes the **~10 tier thresholds**, not 47 numbers.
-- **Where it lives:** a **rank badge** in the Lab hero identity (next to the "Pursuer" eyebrow) — the DNA ring keeps its plain `Level` cap. The hero exposes it as `hero.pursuer_rank` (`{key, name, division, division_roman, label, next_label, levels_to_next, …}`); the badge (`.lab-rank`) glows for the top ranks.
-- **Names are locked; thresholds are placeholders** — a data-calibrated fast-follow once real total-level data exists (the cadence above is a reasoned guess: frequent early divisions, widening toward the apex).
+- **Where it lives:** **inline next to the Pursuer name**, separated by a `·` (`Pursuer1 · Warden III`) — the DNA ring keeps its plain `Level` cap. The hero exposes it as `hero.pursuer_rank` (`{key, name, division, division_roman, label, next_label, levels_to_next, …}`); the inline rank (`.lab-rankline`) is tier-keyed (`--<key>`) so the top ranks glow and tiers can carry per-rank display flair later.
+- **Names + thresholds are locked from the games model** (above) — all config, so if the curated Contract pool ends up too small for ~1,000 completions the apex slides down without touching the shape.
 
 ## The ledger is the universal source of truth
 

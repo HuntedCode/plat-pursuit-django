@@ -307,15 +307,15 @@ def test_pursuer_rank_for_level():
     # Newbie: the divisionless floor -- a fresh account (Pursuer Level ~25) sits here.
     fresh = pr(25)
     assert fresh['key'] == 'newbie' and fresh['division'] is None and fresh['label'] == 'Newbie'
-    assert fresh['next_label'] == 'Recruit' and fresh['levels_to_next'] == 15   # 40 - 25
-    # Recruit: divisions enter at V and climb to I (gamer convention, I = top of tier).
-    assert pr(40)['label'] == 'Recruit V' and pr(40)['division'] == 5
-    assert pr(73)['label'] == 'Recruit III'
-    assert pr(119)['label'] == 'Recruit I' and pr(119)['division'] == 1
-    assert pr(119)['next_label'] == 'Seeker'           # the top division promotes to the next tier
-    assert pr(120)['label'] == 'Seeker V'              # crossing the floor is a promotion
+    assert fresh['next_label'] == 'Recruit' and fresh['levels_to_next'] == 10   # 35 - 25
+    # Recruit [35, 65): divisions enter at V and climb to I (gamer convention, I = top of tier).
+    assert pr(35)['label'] == 'Recruit V' and pr(35)['division'] == 5
+    assert pr(50)['label'] == 'Recruit III'
+    assert pr(59)['label'] == 'Recruit I' and pr(59)['division'] == 1
+    assert pr(59)['next_label'] == 'Seeker'            # the top division promotes to the next tier
+    assert pr(65)['label'] == 'Seeker V'               # crossing the floor is a promotion
     # Ascendant: the open-ended, divisionless apex -- no next, the number just flexes on.
-    top = pr(5200)
+    top = pr(2025)
     assert top['key'] == 'ascendant' and top['division'] is None and top['label'] == 'Ascendant'
     assert top['next_level'] is None and top['levels_to_next'] == 0
     assert pr(99999)['key'] == 'ascendant'             # climbs forever past the top

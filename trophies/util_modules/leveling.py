@@ -75,19 +75,22 @@ def tier_for_level(level: int) -> dict:
 PURSUER_DIVISIONS = 5
 _PURSUER_NUMERALS = ['V', 'IV', 'III', 'II', 'I']  # index 0 = entry (V) ... index 4 = top (I)
 
-# (min_level, key, name, has_divisions), ascending by min_level.
+# (min_level, key, name, has_divisions), ascending by min_level. Thresholds are anchored on
+# GAMES completed (Pursuer Level ~= 25 floor + 2 per game): Recruit @ ~5 games, Hunter @ ~45,
+# Warden @ ~140, ... Ascendant @ ~1,000 games. Fast early promotions (a division every ~3
+# games), an aspirational apex. See the games->level table in xp-economy.md.
 PURSUER_RANKS = [
-    (0,    'newbie',     'Newbie',     False),
-    (40,   'recruit',    'Recruit',    True),
-    (120,  'seeker',     'Seeker',     True),
-    (250,  'hunter',     'Hunter',     True),
-    (450,  'ranger',     'Ranger',     True),
-    (750,  'warden',     'Warden',     True),
-    (1150, 'marshal',    'Marshal',    True),
-    (1700, 'vanquisher', 'Vanquisher', True),
-    (2500, 'paragon',    'Paragon',    True),
-    (3600, 'luminary',   'Luminary',   True),
-    (5200, 'ascendant',  'Ascendant',  False),
+    (0,    'newbie',     'Newbie',     False),  # floor (~0 games)
+    (35,   'recruit',    'Recruit',    True),   # ~5 games
+    (65,   'seeker',     'Seeker',     True),   # ~20
+    (115,  'hunter',     'Hunter',     True),   # ~45
+    (195,  'ranger',     'Ranger',     True),   # ~85
+    (305,  'warden',     'Warden',     True),   # ~140
+    (465,  'marshal',    'Marshal',    True),   # ~220
+    (685,  'vanquisher', 'Vanquisher', True),   # ~330
+    (985,  'paragon',    'Paragon',    True),   # ~480
+    (1405, 'luminary',   'Luminary',   True),   # ~690
+    (2025, 'ascendant',  'Ascendant',  False),  # ~1,000 games (open-ended apex)
 ]
 
 
