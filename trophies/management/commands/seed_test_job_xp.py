@@ -36,6 +36,9 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--profile-id', type=int, default=3)
         parser.add_argument('--clear', action='store_true', help='Remove all seeded job XP for the profile.')
+        parser.add_argument('--scale', type=float, default=1.0,
+                            help='Multiply every seeded level (default 1 ~= Pursuer Level 736). '
+                                 'Try ~2 for a 4-digit ring, ~14 for 5-digit.')
 
     def handle(self, *args, **options):
         if not settings.DEBUG:
@@ -51,8 +54,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Cleared {count} job XP row(s) for {profile.display_psn_username}."))
             return
 
+        scale = options['scale']
         jobs = list(Job.objects.all().order_by('discipline', 'display_order'))
         for job, target in zip(jobs, cycle(self.TARGETS)):
+            target = max(1, round(target * scale))
             span = xp_for_level(target + 1) - xp_for_level(target)
             total_xp = xp_for_level(target) + span // 3  # a third into the level, for a varied bar
             ProfileJobXP.objects.update_or_create(
