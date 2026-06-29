@@ -3,18 +3,21 @@ Element detail (opens from a tile in The Lab). Level + XP are the focal point.
 Expects `card`: a tile dict (number, name, disc_slug, shape, symbol, level, progress,
 xp_current, xp_next, xp_total, tier, tier_key, description).
 {% endcomment %}
-<div class="edetail edetail--tier-{{ card.tier_key }}" style="--disc: var(--disc-{{ card.disc_slug }});">
+<div class="edetail" style="--disc: var(--disc-{{ card.disc_slug }});">
     <div class="edetail__head">
         <span class="edetail__glyph">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
         <div>
-            <div class="edetail__name">{{ card.name }}</div>
+            <div class="edetail__name-row">
+                <span class="edetail__name">{{ card.name }}</span>
+                <span class="edetail__tier edetail__tier--{{ card.tier_key }}">{{ card.tier }}</span>
+            </div>
             <div class="edetail__fam">{{ card.disc_slug|capfirst }} family &middot; No. {{ card.number }}</div>
         </div>
     </div>
     <div class="edetail__levelrow">
         <div class="edetail__level">
             <span class="edetail__level-num pp-tally">{{ card.level }}</span>
-            <span class="edetail__level-cap">{{ card.tier }}</span>
+            <span class="edetail__level-cap">Level</span>
         </div>
         <div class="edetail__xp">
             <div class="edetail__xp-top">
