@@ -82,7 +82,7 @@ The element tiers above rank a *single* element's depth. The **Pursuer rank** ra
 
 - **Newbie** and **Ascendant** are the divisionless bookends: a humble floor (a brand-new account, every element at level 1) and a transcendent, open-ended ceiling (past it the raw Pursuer Level number is the flex, same cap-less spirit as the elements' Legend). The 9 middle tiers each split into **5 divisions**, entering at **V** and climbing to **I** (the gamer-ranked convention) — `1 + 9×5 + 1 = 47` rungs.
 - Divisions are computed by splitting each tier's `[min, next_tier_floor)` range into 5 equal bands — so calibration only tunes the **~10 tier thresholds**, not 47 numbers.
-- **Where it lives:** the Lab DNA ring — the rank is the ring's label under the Pursuer Level (`1,234 · Luminary II`), the same number-plus-rank pattern as an element tile. The hero exposes it as `hero.pursuer_rank` (`{key, name, division, division_roman, label, next_label, levels_to_next, …}`).
+- **Where it lives:** a **rank badge** in the Lab hero identity (next to the "Pursuer" eyebrow) — the DNA ring keeps its plain `Level` cap. The hero exposes it as `hero.pursuer_rank` (`{key, name, division, division_roman, label, next_label, levels_to_next, …}`); the badge (`.lab-rank`) glows for the top ranks.
 - **Names are locked; thresholds are placeholders** — a data-calibrated fast-follow once real total-level data exists (the cadence above is a reasoned guess: frequent early divisions, widening toward the apex).
 
 ## The ledger is the universal source of truth

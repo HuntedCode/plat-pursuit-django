@@ -66,11 +66,7 @@
     .lab-dna__level--d5 { font-size: 19px; }
     .lab-dna__level--d6 { font-size: 15px; }
 }
-/* The cap is the Pursuer RANK (e.g. "Warden III") -- the level number's meaning, like an
-   element tile's tier. nowrap keeps the longer "Vanquisher IV" on one line; the top ranks
-   (Luminary, Ascendant) earn the prestige glow. */
-.lab-dna__cap { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 4px; white-space: nowrap; }
-.lab-dna__cap--luminary, .lab-dna__cap--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
+.lab-dna__cap { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; }
 @keyframes labDnaIn { from { transform: scale(0.55) rotate(-110deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes labDnaCenter { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .lab-dna__ring, .lab-dna__center { animation: none; } }
@@ -80,6 +76,10 @@
 .lab-dna-legend__dot { width: 9px; height: 9px; border-radius: 999px; background: var(--disc); box-shadow: 0 0 6px color-mix(in oklab, var(--disc) 55%, transparent); }
 .lab-dna-legend__name { white-space: nowrap; }
 .lab-dna-legend__val { font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+
+/* ---- Pursuer rank badge (account-wide standing, in the Lab hero identity) ---- */
+.lab-rank { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); white-space: nowrap; }
+.lab-rank--luminary, .lab-rank--ascendant { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 50%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 22%, transparent); }
 
 
 /* ---- Atom glyph ---- */

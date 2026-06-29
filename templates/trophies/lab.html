@@ -20,7 +20,10 @@
                         {% endif %}
                     </div>
                     <div class="min-w-0">
-                        <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                            <span class="lab-rank lab-rank--{{ hero.pursuer_rank.key }}">{{ hero.pursuer_rank.label }}</span>
+                        </div>
                         <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate">{{ hero.pursuer_name }}</h1>
                         {% if hero.active_title %}
                             <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
@@ -45,7 +48,7 @@
                             {% with digits=hero.pursuer_level|stringformat:"d"|length %}
                             <span class="lab-dna__level pp-tally lab-dna__level--d{{ digits }}">{{ hero.pursuer_level|intcomma }}</span>
                             {% endwith %}
-                            <span class="lab-dna__cap lab-dna__cap--{{ hero.pursuer_rank.key }}">{{ hero.pursuer_rank.label }}</span>
+                            <span class="lab-dna__cap">Level</span>
                         </div>
                     </div>
                     <ul class="lab-dna-legend">

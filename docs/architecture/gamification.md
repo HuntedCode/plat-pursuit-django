@@ -121,7 +121,7 @@ Two tiers per Contract: **Platinum** (`PLATINUM_FRAC = 0.70`, the bulk) and **10
 
 ### Leveling
 
-`trophies/util_modules/leveling.py`: the curve is **flat + cap-less**, 1-based (level 1 = 0 XP, the floor every job starts at). `xp_for_level(L) = JOB_XP_PER_LEVEL * (L-1)` and `level_for_xp(xp) = xp // JOB_XP_PER_LEVEL + 1` (`JOB_XP_PER_LEVEL = 3000`); always >= 1, never clamps. Prestige tiers (`JOB_TIERS` + `tier_for_level`) carry the per-element milestone journey on top of the open-ended number. Pursuer Level = sum of every job's level (min 1 each); the account-wide **Pursuer rank** (`PURSUER_RANKS` + `pursuer_rank_for_level`) is a deep `Newbie -> Recruit V..I -> ... -> Ascendant` ladder off that sum, shown in the Lab DNA ring. Full rationale: [../design/rebuild/xp-economy.md](../design/rebuild/xp-economy.md).
+`trophies/util_modules/leveling.py`: the curve is **flat + cap-less**, 1-based (level 1 = 0 XP, the floor every job starts at). `xp_for_level(L) = JOB_XP_PER_LEVEL * (L-1)` and `level_for_xp(xp) = xp // JOB_XP_PER_LEVEL + 1` (`JOB_XP_PER_LEVEL = 3000`); always >= 1, never clamps. Prestige tiers (`JOB_TIERS` + `tier_for_level`) carry the per-element milestone journey on top of the open-ended number. Pursuer Level = sum of every job's level (min 1 each); the account-wide **Pursuer rank** (`PURSUER_RANKS` + `pursuer_rank_for_level`) is a deep `Newbie -> Recruit V..I -> ... -> Ascendant` ladder off that sum, shown as a rank badge in the Lab hero. Full rationale: [../design/rebuild/xp-economy.md](../design/rebuild/xp-economy.md).
 
 ### Sync seam
 
