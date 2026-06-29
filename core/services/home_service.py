@@ -1,0 +1,105 @@
+"""The synced Home page context builder.
+
+The synced Home (`/`) is the Pursuer's landing: a glanceable identity + status surface
+that ROUTES into the functional My Pursuit pages, not a re-implementation of them. It
+follows the `community_hub_service` / `lab_service` pattern: a single
+`build_home_context(profile)` entry point delegating to one helper per zone, each wrapped
+so a broken zone degrades to a missing section rather than a 500.
+
+Zones:
+- **hero** -- the Pursuer identity, reused verbatim from the Lab (`lab_service`).
+- **glances** -- the thin status row: pending rewards (count), badges closest to their next
+  tier, and the headline trophy numbers.
+- **recent** -- a small recent-earnings strip.
+- **launchers** -- cards into the functional pages (Lab, Collection, Research, ...).
+
+Every read is cheap by construction: the hero is bounded by the ~25-job catalog, the
+providers are the same ones the dashboard used, and the glances are counts / single rows /
+denormalized Profile fields -- nothing iterates a whale's trophy set (the whale-OOM rule).
+"""
+import logging
+
+from django.urls import NoReverseMatch, reverse
+
+from trophies.services import contract_service, dashboard_service, lab_service
+
+logger = logging.getLogger(__name__)
+
+
+def _safe(zone, profile, fn, default):
+    """Run a zone builder, degrading to `default` (and logging) on any failure so one broken
+    section never blanks the whole page."""
+    try:
+        return fn()
+    except Exception:
+        logger.exception("Home %s build failed for profile %s", zone, getattr(profile, 'id', '?'))
+        return default
+
+
+def _build_glances(profile):
+    """The thin status row -- each a cheap read (a COUNT, a few rows, denormalized fields):
+    pending contract rewards (count only; the claim itself lives on the Research Panel),
+    the badges closest to their next tier, and the headline trophy snapshot."""
+    return {
+        'claimable_count': _safe(
+            'claimable', profile,
+            lambda: contract_service.claimable_contracts(profile).count(), 0),
+        'almost_badges': _safe(
+            'almost_badges', profile,
+            lambda: dashboard_service.provide_badge_progress(profile, {'limit': 3})
+            .get('badges_in_progress', []), []),
+        'snapshot': _safe(
+            'snapshot', profile,
+            lambda: dashboard_service.provide_trophy_snapshot(profile), None),
+    }
+
+
+# (url_name, label, icon, description) for the launcher cards -- the page's real job: getting
+# the Pursuer to where the functionality lives. Icons mirror the My Pursuit sub-nav.
+_LAUNCHERS = [
+    ('lab',             'The Lab',        'flask',  'Your elements and Platinum DNA'),
+    ('badge_collection', 'Collection',    'award',  'Your badge binder'),
+    ('research_panel',  'Research Panel', 'beaker', 'Projects to pursue and rewards to claim'),
+    ('milestones_list', 'Milestones',     'flag',   'Career milestones'),
+    ('my_titles',       'Titles',         'crown',  'Earned and equipped titles'),
+]
+
+
+def _build_launchers(profile, hero, glances):
+    """Launcher cards into the functional pages. A quick-stat is attached only when it's
+    already in hand (no extra queries): the Lab shows the Pursuer Level, the Research Panel
+    the claimable count, Titles the equipped title. A route that doesn't resolve is dropped."""
+    level = (hero or {}).get('pursuer_level')
+    claimable = (glances or {}).get('claimable_count') or 0
+    stats = {
+        'lab': f"Level {level}" if level else None,
+        'research_panel': f"{claimable} to claim" if claimable else None,
+        'my_titles': (hero or {}).get('active_title'),
+    }
+    launchers = []
+    for url_name, label, icon, desc in _LAUNCHERS:
+        try:
+            url = reverse(url_name)
+        except NoReverseMatch:
+            continue
+        launchers.append({
+            'url': url, 'label': label, 'icon': icon,
+            'desc': desc, 'stat': stats.get(url_name),
+        })
+    return launchers
+
+
+def build_home_context(profile):
+    """Assemble the synced Home context for `profile`. Each zone is isolated so a single
+    failure degrades to a missing section rather than a 500."""
+    hero = _safe('hero', profile, lambda: lab_service.build_lab_context(profile).get('hero'), None)
+    glances = _build_glances(profile)
+    recent = _safe(
+        'recent', profile,
+        lambda: dashboard_service.provide_recent_platinums(profile, {'limit': 5}).get('platinums', []), [])
+    return {
+        'hero': hero,
+        'glances': glances,
+        'recent': recent,
+        'launchers': _build_launchers(profile, hero, glances),
+    }
