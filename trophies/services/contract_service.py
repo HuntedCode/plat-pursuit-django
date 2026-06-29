@@ -16,7 +16,6 @@ split evenly among its jobs, across the Platinum (bulk) and 100% (bonus) tiers. 
 with no platinum pay the FULL T at 100%. The recorded grant amount is permanent (never
 recomputed from current config). Per-job totals always aggregate in the DB (whale-OOM rule).
 """
-from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
@@ -61,6 +60,33 @@ def _has_platinum(member_ids):
     if not member_ids:
         return False
     return Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum').exists()
+
+
+def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
+                 tier=None, base_t=None, multiplier=None, earned_contract=None):
+    """The SINGLE job-XP grant primitive: write one immutable ledger row + bump the
+    ProfileJobXP cache (re-leveling under the flat curve). Used by contract accepts AND any
+    future source (quests, double-XP events, manual). Keeping all XP flowing through here
+    is what makes ProfileJobXP = Sum(all grants) hold for every source.
+
+    Caller owns idempotency + the surrounding transaction. ProfileJobXP is row-locked here
+    because it's shared across all of a profile's grants. Returns the amount (0 if <= 0).
+    """
+    if amount <= 0:
+        return 0
+    if multiplier is None:
+        multiplier = Decimal('1.00')
+    ContractXPGrant.objects.create(
+        profile=profile, job=job, amount=amount, multiplier=multiplier,
+        source=source, source_id=source_id,
+        earned_contract=earned_contract, tier=tier, base_t=base_t,
+    )
+    ProfileJobXP.objects.get_or_create(profile=profile, job=job)  # race-safe create
+    pjx = ProfileJobXP.objects.select_for_update().get(profile=profile, job=job)
+    pjx.total_xp += amount
+    pjx.level = level_for_xp(pjx.total_xp)
+    pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
+    return amount
 
 
 def home_contract_for_concept(concept):
@@ -184,32 +210,19 @@ def accept_contract(profile, contract):
     if not tiers:
         return 0
 
-    per_job_added = defaultdict(int)
+    # All grants go through the shared primitive (ledger row + row-locked cache bump),
+    # so contracts/quests/events stay consistent and ProfileJobXP = Sum(all grants).
+    granted = 0
     for tier, tier_total, field in tiers:
         for job, amount in zip(jobs, _split(tier_total, len(jobs))):
-            if amount <= 0:
-                continue
-            ContractXPGrant.objects.create(
-                earned_contract=ec, profile=profile, job=job, tier=tier,
-                amount=amount, base_t=t, multiplier=multiplier,
+            granted += grant_job_xp(
+                profile, job, amount, source='contract', tier=tier,
+                base_t=t, multiplier=multiplier, earned_contract=ec,
             )
-            per_job_added[job.pk] += amount
         setattr(ec, field, now)
 
-    # Bump the cache under a row lock -- ProfileJobXP is shared across all of a profile's
-    # Contracts, so a bare read-modify-write would lose updates under concurrent accepts.
-    for job in jobs:
-        added = per_job_added.get(job.pk, 0)
-        if not added:
-            continue
-        ProfileJobXP.objects.get_or_create(profile=profile, job=job)  # race-safe create
-        pjx = ProfileJobXP.objects.select_for_update().get(profile=profile, job=job)
-        pjx.total_xp += added
-        pjx.level = level_for_xp(pjx.total_xp)
-        pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
-
     ec.save(update_fields=['platinum_accepted_at', 'full_accepted_at'])
-    return sum(per_job_added.values())
+    return granted
 
 
 def claimable_contracts(profile):

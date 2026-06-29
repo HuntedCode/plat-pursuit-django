@@ -67,11 +67,10 @@ BADGE_TIER_XP = 3000   # XP awarded for completing a full badge tier
 # Contract (job/element) XP -- starter values; calibrate on real data (open thread).
 # Every Contract pays the same global total T, split evenly among its jobs, across two
 # tiers: Platinum (the bulk) then 100% (the bonus). No-platinum games pay the FULL T at 100%.
-CONTRACT_XP_TOTAL = 6000        # global base T per Contract (override via Contract.xp_total_override); 6000 splits evenly across 1-6 jobs
+CONTRACT_XP_TOTAL = 6000        # global base T per Contract (override via Contract.xp_total_override); 6000 splits into clean integer shares across 1-6 jobs
 CONTRACT_PLATINUM_FRAC = 0.70  # share of T paid at the Platinum tier
 CONTRACT_FULL_FRAC = 0.30      # share of T paid at the 100% (full-completion) tier
-JOB_LEVEL_BASE = 600           # per-level XP coefficient: cumulative XP to reach level L = BASE * (L-1)*L/2 (1-based; level 1 = 0 XP)
-JOB_LEVEL_CAP = 50             # max per-job level (start; revisit toward 99 after calibration)
+JOB_XP_PER_LEVEL = 3000        # FLAT, CAP-LESS curve: every job level costs this much XP (level = total_xp // K + 1). See docs/design/rebuild/xp-economy.md
 
 # Community Guidelines
 COMMUNITY_GUIDELINES = [
