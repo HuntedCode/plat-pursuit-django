@@ -27,15 +27,9 @@ from trophies.services.dashboard_service import (
 
 
 def _get_site_heartbeat():
-    """Read the site heartbeat dict from cache, with previous-hour fallback."""
-    now = timezone.now()
-    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
-    data = cache.get(key)
-    if data is None:
-        prev = now - timedelta(hours=1)
-        prev_key = f"site_heartbeat_{prev.date().isoformat()}_{prev.hour:02d}"
-        data = cache.get(prev_key)
-    return data
+    """Read the site heartbeat dict from cache (delegates to the heartbeat service)."""
+    from core.services.site_heartbeat import get_cached_heartbeat
+    return get_cached_heartbeat()
 
 
 def build_dashboard_context(request, profile):

@@ -23,6 +23,7 @@ from datetime import timedelta
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
+from core.services.site_heartbeat import get_cached_heartbeat
 from trophies.services import contract_service, dashboard_service, lab_service
 
 logger = logging.getLogger(__name__)
@@ -86,6 +87,33 @@ _LAUNCHERS = [
 ]
 
 
+def _compact_num(n):
+    """Compact a large community total for a small cell: 1.2K / 2.1M."""
+    if not n:
+        return '0'
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return f"{int(n):,}"
+
+
+def _build_community(heartbeat):
+    """A curated community-pulse strip from the cached site heartbeat (computed hourly by
+    cron + cached -- free to read). Big totals are compacted for the small cells."""
+    if not heartbeat:
+        return None
+    always = heartbeat.get('always') or {}
+    expanded = heartbeat.get('expanded') or {}
+    picks = [expanded.get('platinums_total'), always.get('trophies_24h'),
+             always.get('profiles_total'), always.get('trophies_total')]
+    pulse = [
+        {'value': _compact_num(p.get('value')), 'label': p.get('label'), 'sub': p.get('sublabel')}
+        for p in picks if p
+    ]
+    return pulse or None
+
+
 def _build_sync(profile):
     """Sync status for the trophy card: when the library last updated, and when the next
     automatic update is due (the cadence -- 12h for Discord-verified, else 24h)."""
@@ -147,6 +175,7 @@ def build_home_context(profile):
         'elements': _build_elements((lab_ctx or {}).get('lab')),
         'glances': glances,
         'sync': _safe('sync', profile, lambda: _build_sync(profile), None),
+        'community': _safe('community', profile, lambda: _build_community(get_cached_heartbeat()), None),
         'recent': _safe(
             'recent', profile,
             lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})

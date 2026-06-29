@@ -28,9 +28,31 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['recent'] == []
     # The trophy-snapshot card's bridge to the profile resolves (reverse-guarded).
     assert ctx['profile_url']
+    assert 'community' in ctx          # present (None until the heartbeat cache is warm)
     # Elements strip: every element is present (a fresh account floors them all to level 1).
     assert len(ctx['elements']) > 0
     assert all({'symbol', 'level', 'disc_slug', 'name', 'shape'} <= set(e) for e in ctx['elements'])
+
+
+def test_compact_num_boundaries():
+    cn = home_service._compact_num
+    assert cn(0) == '0' and cn(999) == '999' and cn(1500) == '1.5K' and cn(2_600_000) == '2.6M'
+
+
+def test_community_pulse_compacts_and_curates():
+    """The community strip pulls a curated set from the heartbeat dict and compacts totals."""
+    hb = {
+        'always': {
+            'trophies_24h': {'value': 12345, 'label': 'Earned in last 24h', 'sublabel': 'live'},
+            'profiles_total': {'value': 45200, 'label': 'Hunters tracked', 'sublabel': '+90 this week'},
+            'trophies_total': {'value': 1_234_567, 'label': 'Trophies tracked', 'sublabel': 'all-time'},
+        },
+        'expanded': {'platinums_total': {'value': 2_100_000, 'label': 'Platinums earned', 'sublabel': 'all-time'}},
+    }
+    pulse = home_service._build_community(hb)
+    assert pulse[0] == {'value': '2.1M', 'label': 'Platinums earned', 'sub': 'all-time'}
+    assert [c['value'] for c in pulse] == ['2.1M', '12.3K', '45.2K', '1.2M']
+    assert home_service._build_community(None) is None
 
 
 def test_sync_zone_reports_last_and_next():

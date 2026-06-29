@@ -199,4 +199,25 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 </section>
 {% endif %}
 
+{# Community pulse: the cached site heartbeat (free to read) -> the Community hub #}
+{% if community %}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mt-3">
+    <div class="card-body p-4 md:p-5">
+        <a href="{% url 'community_hub' %}" class="flex items-center justify-between mb-3 group">
+            <span class="text-xs uppercase tracking-[0.15em] text-base-content/50 font-semibold">Community pulse</span>
+            <span class="text-xs text-primary font-semibold inline-flex items-center gap-1">Community <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
+        </a>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+            {% for c in community %}
+            <div class="scard text-center">
+                <div class="scard__label">{{ c.label }}</div>
+                <div class="scard__value pp-tally">{{ c.value }}</div>
+                {% if c.sub %}<div class="scard__sub">{{ c.sub }}</div>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
 {% endblock %}

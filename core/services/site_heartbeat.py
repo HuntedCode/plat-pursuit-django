@@ -13,6 +13,7 @@ nested lookups (e.g. heartbeat.always.trophies_total.value).
 import logging
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -20,6 +21,18 @@ from core.services.stats import compute_community_stats
 from trophies.models import EarnedTrophy, ProfileGame
 
 logger = logging.getLogger(__name__)
+
+
+def get_cached_heartbeat():
+    """Read the current hour's heartbeat from cache, falling back to the previous hour (the
+    cron refreshes it hourly). Returns None if neither bucket is warm yet."""
+    now = timezone.now()
+    key = f"site_heartbeat_{now.date().isoformat()}_{now.hour:02d}"
+    data = cache.get(key)
+    if data is None:
+        prev = now - timedelta(hours=1)
+        data = cache.get(f"site_heartbeat_{prev.date().isoformat()}_{prev.hour:02d}")
+    return data
 
 
 def _humanize_compact(n):
