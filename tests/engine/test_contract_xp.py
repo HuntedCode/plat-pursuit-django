@@ -4,6 +4,7 @@ idempotency + one-accept-banks-all-tiers, completion degradation (DLC) not re-pa
 the ledger->cache recompute, and the leveling curve.
 """
 import pytest
+from django.db import transaction
 
 from trophies.models import (
     Contract, ContractBundle, ContractMembership, ContractXPGrant, EarnedContract, Job,
@@ -11,7 +12,9 @@ from trophies.models import (
 )
 from trophies.services import contract_service
 from trophies.util_modules import leveling
-from trophies.util_modules.constants import CONTRACT_XP_TOTAL, JOB_LEVEL_CAP
+from trophies.util_modules.constants import (
+    CONTRACT_XP_TOTAL, CONTRACT_PLATINUM_FRAC, JOB_XP_PER_LEVEL,
+)
 from tests.factories import (
     ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
     TrophyFactory,
@@ -72,7 +75,7 @@ def test_one_accept_banks_platinum_and_full_to_exactly_T():
 
     assert granted == CONTRACT_XP_TOTAL  # both tiers banked in one accept == exactly T
     for slug in ('gunslinger', 'slayer'):
-        assert ProfileJobXP.objects.get(profile=profile, job__slug=slug).total_xp == 2500  # 1750 plat + 750 full
+        assert ProfileJobXP.objects.get(profile=profile, job__slug=slug).total_xp == CONTRACT_XP_TOTAL // 2  # T evenly across 2 jobs
     assert ContractXPGrant.objects.filter(profile=profile).count() == 4  # 2 jobs x 2 tiers
     ec = EarnedContract.objects.get(profile=profile, contract=contract)
     assert ec.platinum_accepted_at is not None and ec.full_accepted_at is not None
@@ -157,8 +160,8 @@ def test_recompute_rebuilds_cache_from_ledger():
 
     for slug in ('gunslinger', 'slayer'):
         pjx = ProfileJobXP.objects.get(profile=profile, job__slug=slug)
-        assert pjx.total_xp == 2500
-        assert pjx.level == leveling.level_for_xp(2500)
+        assert pjx.total_xp == CONTRACT_XP_TOTAL // 2
+        assert pjx.level == leveling.level_for_xp(CONTRACT_XP_TOTAL // 2)
 
 
 def test_recompute_floors_orphan_rows_to_level_one():
@@ -220,7 +223,8 @@ def test_split_accept_platinum_then_full_sums_to_T():
 
     contract_service.mark_contract_reached(profile, contract)
     first = contract_service.accept_contract(profile, contract)
-    assert first == 3500  # platinum tier only (0.70 * 5000)
+    platinum_xp = round(CONTRACT_PLATINUM_FRAC * CONTRACT_XP_TOTAL)
+    assert first == platinum_xp  # platinum tier only (0.70 * T)
     ec = EarnedContract.objects.get(profile=profile, contract=contract)
     assert ec.platinum_accepted_at is not None and ec.full_accepted_at is None
 
@@ -228,7 +232,7 @@ def test_split_accept_platinum_then_full_sums_to_T():
     contract_service.mark_contract_reached(profile, contract)
     second = contract_service.accept_contract(profile, contract)
 
-    assert second == 1500  # remainder (5000 - 3500)
+    assert second == CONTRACT_XP_TOTAL - platinum_xp  # remainder (T - platinum)
     assert ProfileJobXP.objects.get(profile=profile, job__slug='gunslinger').total_xp == CONTRACT_XP_TOTAL
 
 
@@ -271,13 +275,53 @@ def test_accept_contracts_bulk_accepts_all_claimable():
     assert not list(contract_service.claimable_contracts(profile))
 
 
-def test_leveling_curve_is_one_based_and_caps():
+def test_leveling_curve_is_flat_and_capless():
     assert leveling.xp_for_level(1) == 0    # level 1 is the floor (0 XP)
     assert leveling.level_for_xp(0) == 1    # no XP -> level 1, not 0
     assert leveling.level_for_xp(-5) == 1   # floors at 1
-    for level in (2, 5, 10, JOB_LEVEL_CAP):
+    for level in (2, 5, 10, 99, 250):
+        assert leveling.xp_for_level(level) == JOB_XP_PER_LEVEL * (level - 1)  # flat: every level = K
         xp = leveling.xp_for_level(level)
         assert leveling.level_for_xp(xp) == level          # exactly at threshold
         assert leveling.level_for_xp(xp - 1) == level - 1  # just below
-    # Far above the cap must clamp (and not loop forever).
-    assert leveling.level_for_xp(leveling.xp_for_level(JOB_LEVEL_CAP) * 100) == JOB_LEVEL_CAP
+    # cap-less: keeps climbing far past any tier threshold (never clamps)
+    assert leveling.level_for_xp(JOB_XP_PER_LEVEL * 999) == 1000
+
+
+def test_tier_for_level():
+    assert leveling.tier_for_level(1)['key'] == 'initiate'
+    assert leveling.tier_for_level(9)['key'] == 'initiate'
+    assert leveling.tier_for_level(10)['key'] == 'apprentice'
+    assert leveling.tier_for_level(10)['next_level'] == 25   # reports the next threshold
+    assert leveling.tier_for_level(99)['name'] == 'Master'
+    top = leveling.tier_for_level(250)                       # Legend is the open-ended top
+    assert top['key'] == 'legend' and top['next_level'] is None
+    assert leveling.tier_for_level(9999)['key'] == 'legend'  # number keeps climbing past it
+
+
+def test_grant_job_xp_is_source_agnostic():
+    """A non-contract grant (quest/event) writes to the same ledger + cache, so
+    ProfileJobXP == Sum(grants) holds across all sources."""
+    profile = ProfileFactory()
+    job = Job.objects.get(slug='gunslinger')
+    with transaction.atomic():
+        contract_service.grant_job_xp(profile, job, 4000, source='quest', source_id=7)
+    pjx = ProfileJobXP.objects.get(profile=profile, job=job)
+    assert pjx.total_xp == 4000
+    assert pjx.level == leveling.level_for_xp(4000)
+    grant = ContractXPGrant.objects.get(profile=profile, job=job)
+    assert grant.source == 'quest' and grant.source_id == 7
+    assert grant.earned_contract is None and grant.tier is None  # contract-only fields stay null
+
+    with transaction.atomic():                                  # a second source sums in
+        contract_service.grant_job_xp(profile, job, 2000, source='event')
+    assert ProfileJobXP.objects.get(profile=profile, job=job).total_xp == 6000
+
+
+def test_grant_job_xp_zero_is_noop():
+    profile = ProfileFactory()
+    job = Job.objects.get(slug='gunslinger')
+    with transaction.atomic():
+        assert contract_service.grant_job_xp(profile, job, 0) == 0
+    assert not ContractXPGrant.objects.filter(profile=profile).exists()
+    assert not ProfileJobXP.objects.filter(profile=profile).exists()

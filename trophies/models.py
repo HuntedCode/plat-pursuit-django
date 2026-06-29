@@ -2470,30 +2470,43 @@ class EarnedContract(models.Model):
 
 
 class ContractXPGrant(models.Model):
-    """Immutable XP ledger -- the source of truth for job XP payouts. One row per
-    (earned_contract, job, tier), recording the amount AS PAID (base T x multiplier at
-    grant time). NEVER recomputed from current Contract config, so changing a Contract's
-    jobs or total never rewrites history. `job` and `profile` are denormalized so per-job
-    totals aggregate in the DB (Sum), never by Python iteration (whale-OOM rule)."""
-    TIER_CHOICES = [('platinum', 'Platinum'), ('full', '100%')]
+    """Immutable job-XP ledger -- the SINGLE source of truth for ALL job-XP payouts, from
+    any source. Each row records an amount AS PAID (base x multiplier at grant time) and is
+    NEVER recomputed, so config changes never rewrite history. `job` + `profile` are
+    denormalized so per-job totals aggregate in the DB (Sum), never by Python (whale-OOM).
 
-    earned_contract = models.ForeignKey(EarnedContract, on_delete=models.CASCADE, related_name='grants')
+    Originally contract-only (hence the name); now source-agnostic via `source`/`source_id`,
+    so quests, double-XP events, and manual grants all write here too and `ProfileJobXP =
+    Sum(all grants)` holds for every source. Contract grants set earned_contract + tier +
+    base_t; other sources leave those null. (Model rename to JobXPGrant is optional polish.)
+    """
+    TIER_CHOICES = [('platinum', 'Platinum'), ('full', '100%')]
+    SOURCE_CHOICES = [('contract', 'Contract'), ('quest', 'Quest'), ('event', 'Event'), ('manual', 'Manual')]
+
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='contract_xp_grants')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='xp_grants')
-    tier = models.CharField(max_length=10, choices=TIER_CHOICES)
     amount = models.PositiveIntegerField(help_text='XP granted to this job, as paid.')
-    base_t = models.PositiveIntegerField(help_text='The Contract total T in effect when granted.')
     multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1, help_text='Active XP multiplier at grant time (e.g. double-XP events).')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='contract', db_index=True, help_text='Where this XP came from.')
+    source_id = models.PositiveIntegerField(null=True, blank=True, help_text='Id of the granting object (quest id, etc.) when not a contract.')
     granted_at = models.DateTimeField(auto_now_add=True)
+    # Contract-source context (null for other sources):
+    earned_contract = models.ForeignKey(EarnedContract, on_delete=models.CASCADE, related_name='grants', null=True, blank=True)
+    tier = models.CharField(max_length=10, choices=TIER_CHOICES, null=True, blank=True)
+    base_t = models.PositiveIntegerField(null=True, blank=True, help_text='The Contract total T in effect when granted (contract source only).')
 
     class Meta:
+        # Idempotency for contract grants (one per earned_contract+job+tier). Rows with a
+        # null earned_contract (quests/events) are unconstrained here -- those sources own
+        # their own idempotency.
         unique_together = ['earned_contract', 'job', 'tier']
         indexes = [
             models.Index(fields=['profile', 'job'], name='xpgrant_profile_job_idx'),
         ]
 
     def __str__(self):
-        return f"{self.profile.display_psn_username} {self.job.slug} {self.tier} +{self.amount}"
+        what = self.tier if self.source == 'contract' else self.source
+        return f"{self.profile.display_psn_username} {self.job.slug} {what} +{self.amount}"
 
 
 class ProfileJobXP(models.Model):
