@@ -20,11 +20,11 @@
                         {% endif %}
                     </div>
                     <div class="min-w-0">
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
-                            <span class="lab-rank lab-rank--{{ hero.pursuer_rank.key }}">{{ hero.pursuer_rank.label }}</span>
-                        </div>
-                        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold truncate">{{ hero.pursuer_name }}</h1>
+                        <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                        <h1 class="text-xl md:text-2xl lg:text-3xl font-bold flex items-baseline gap-1.5 min-w-0">
+                            <span class="truncate">{{ hero.pursuer_name }}</span>
+                            <span class="lab-rankline lab-rankline--{{ hero.pursuer_rank.key }}"><span class="lab-rankline__sep">·</span>{{ hero.pursuer_rank.label }}</span>
+                        </h1>
                         {% if hero.active_title %}
                             <p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>
                         {% else %}

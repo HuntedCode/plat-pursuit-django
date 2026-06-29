@@ -77,9 +77,13 @@
 .lab-dna-legend__name { white-space: nowrap; }
 .lab-dna-legend__val { font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 
-/* ---- Pursuer rank badge (account-wide standing, in the Lab hero identity) ---- */
-.lab-rank { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text); background: var(--pp-bg-2); border: 1px solid var(--pp-border); white-space: nowrap; }
-.lab-rank--luminary, .lab-rank--ascendant { color: var(--pp-primary); border-color: color-mix(in oklab, var(--pp-primary) 50%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 22%, transparent); }
+/* ---- Pursuer rank, inline beside the name ("Pursuer1 · Warden III") ----
+   Tier-keyed (--<key>) so the top ranks glow now and tiers can carry per-rank display
+   flair later. Sized in em so it tracks the responsive name heading; flex-none + the
+   name's own truncate means a long username clips while the rank stays put. */
+.lab-rankline { flex: none; font-size: 0.62em; font-weight: 700; letter-spacing: 0.02em; color: var(--pp-text-dim); white-space: nowrap; }
+.lab-rankline__sep { margin-right: 0.45em; color: var(--pp-text-mute); font-weight: 400; }
+.lab-rankline--luminary, .lab-rankline--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
 
 
 /* ---- Atom glyph ---- */
