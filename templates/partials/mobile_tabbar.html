@@ -3,7 +3,7 @@
 {% comment %}
 Mobile bottom tab bar — the 4-hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (Dashboard / Browse / Community /
+Mirrors the desktop navbar's hub buttons (Home / Browse / Community /
 My Pursuit) at the bottom of the viewport so mobile users have one-tap
 access to every hub at all scroll positions. The desktop navbar's hub
 buttons are hidden on <lg: precisely because this bar takes over.
@@ -15,26 +15,22 @@ redundant once the bottom tab bar surfaced the 4 hubs directly. The hubs'
 sub-pages are reachable via the hub_subnav strip pinned at top-16.
 
 Active state: each tab compares hub_section (from the hub_subnav context
-processor) and renders with text-primary when active. The Dashboard tab
-is also active when hub_section is None (e.g. settings, notifications)
-because tapping the Dashboard tab on a non-hub page should always feel
-correct — settings is "your account" which conceptually belongs under
-Dashboard.
+processor) and renders with text-primary when active. The Home tab is
+active on the root (hub_section='home'); non-hub pages (settings, auth,
+notifications) leave no tab highlighted.
 
 See docs/architecture/ia-and-subnav.md for the design rationale.
 {% endcomment %}
 
 <nav class="mobile-tabbar lg:hidden" role="navigation" aria-label="Mobile navigation">
     <div class="mobile-tabbar-inner">
-        <!-- Dashboard -->
-        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'dashboard' %}active{% endif %}" aria-label="Dashboard">
+        <!-- Home -->
+        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'home' %}active{% endif %}" aria-label="Home">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="9"/>
-                <rect x="14" y="3" width="7" height="5"/>
-                <rect x="14" y="12" width="7" height="9"/>
-                <rect x="3" y="16" width="7" height="5"/>
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            <span>Dashboard</span>
+            <span>Home</span>
         </a>
 
         <!-- Browse -->

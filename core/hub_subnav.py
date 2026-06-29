@@ -1,8 +1,8 @@
 """
 Hub-of-Hubs IA: sub-navigation infrastructure.
 
-PlatPursuit's IA is structured as four hubs (Dashboard, Browse, Community,
-My Pursuit). The global navbar contains direct links to each hub. A
+PlatPursuit's IA is structured around the Home root plus three hubs (Browse,
+Community, My Pursuit). The global navbar contains direct links to each. A
 persistent sub-navigation strip below the main navbar surfaces each hub's
 sub-pages on every URL in that hub's family, URL-prefix matched.
 
@@ -15,10 +15,10 @@ This module defines:
    that don't belong to any hub.
 
 Matching strategy: longest-prefix-wins. The matcher iterates the configured
-prefixes in order of length descending and returns the first match. The
-Dashboard hub's bare ``/`` prefix is special-cased: it only matches when
+prefixes in order of length descending and returns the first match. The bare
+``/`` root is special-cased to the items-less Home hub: it only matches when
 ``request.path == '/'`` exactly, so paths like ``/community/...`` correctly
-match the Community hub instead of falling through to the Dashboard catchall.
+match their own hub instead of falling through to a root catchall.
 
 Pages that don't match any hub (settings, auth flows, error pages, staff
 admin pages) get ``None`` and the sub-nav strip is hidden via the template
@@ -83,21 +83,18 @@ class HubSubnavConfig:
 # they continue to resolve correctly across any future rename without
 # touching this file.
 
-DASHBOARD_HUB = HubSubnavConfig(
-    key='dashboard',
-    label='Dashboard',
-    icon='layout-dashboard',
-    # The bare '/' prefix is checked separately as an exact-equality match
-    # in resolve_hub_subnav so it doesn't shadow other hubs. The /dashboard/
-    # prefix here covers /dashboard/stats/, /dashboard/shareables/,
-    # /dashboard/recap/, plus their nested children.
-    prefixes=('/dashboard/',),
-    items=(
-        HubSubnavItem('home', 'Dashboard', 'home', 'home', auth_required=True),
-        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True),
-        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True),
-        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True),
-    ),
+# The Dashboard hub was dissolved when the legacy dashboard retired (the gamification Home
+# replaced it). HOME marks the root for the navbar's Home button but carries NO sub-nav
+# items -- the Home page's own launcher cards do the routing, so the strip stays hidden (the
+# template guards on `hub_subnav_items`). Matched only by the exact '/' special-case in
+# resolve_hub_subnav. Its former items (Stats / Shareables / Recap + the dynamic Fundraiser)
+# moved to MY_PURSUIT_HUB; the orphaned /dashboard/* URLs now resolve under that hub.
+HOME_HUB = HubSubnavConfig(
+    key='home',
+    label='Home',
+    icon='home',
+    prefixes=(),
+    items=(),
 )
 
 
@@ -149,13 +146,19 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     key='my_pursuit',
     label='My Pursuit',
     icon='trophy',
-    prefixes=('/my-pursuit/',),
+    # '/dashboard/' is inherited from the dissolved Dashboard hub so the (not-yet-moved)
+    # /dashboard/stats|shareables|recap/* URLs highlight under My Pursuit. The bare
+    # '/dashboard/' path 301-redirects to '/', so only the sub-paths resolve here.
+    prefixes=('/my-pursuit/', '/dashboard/'),
     items=(
         HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True),
         HubSubnavItem('lab', 'The Lab', 'lab', 'flask', auth_required=True),
         HubSubnavItem('research-panel', 'Research Panel', 'research_panel', 'beaker'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
+        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True),
+        HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True),
+        HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True),
     ),
 )
 
@@ -167,7 +170,6 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
     COMMUNITY_HUB,
     MY_PURSUIT_HUB,
     BROWSE_HUB,
-    DASHBOARD_HUB,
 )
 
 
@@ -218,19 +220,19 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'genre_challenge_edit': ('community', 'challenges'),
     'badge_leaderboards': ('community', 'leaderboards'),
     # (badge_detail now highlights the Browse > Badges tab -- see the Browse block above.)
-    # Dashboard: nested sub-pages. The shareables sub-pages all live under
-    # /dashboard/shareables/* and should highlight the Shareables sub-nav
-    # item; the platinum_grid wizard is one of those nested children.
-    'my_shareables_platinums': ('dashboard', 'shareables'),
-    'my_shareables_profile_card': ('dashboard', 'shareables'),
-    'my_shareables_challenges': ('dashboard', 'shareables'),
-    'platinum_grid': ('dashboard', 'shareables'),
-    'recap_view': ('dashboard', 'recap'),
-    # Fundraiser: lives at /fundraiser/<slug>/ but conceptually belongs to
-    # the Dashboard hub while a campaign is active. The context processor
-    # appends the Fundraiser tab dynamically when one is live.
-    'fundraiser': ('dashboard', 'fundraiser'),
-    'fundraiser_success': ('dashboard', 'fundraiser'),
+    # My Pursuit: nested sub-pages of the moved items. The shareables sub-pages
+    # all live under /dashboard/shareables/* and should highlight the Shareables
+    # sub-nav item; the platinum_grid wizard is one of those nested children.
+    'my_shareables_platinums': ('my_pursuit', 'shareables'),
+    'my_shareables_profile_card': ('my_pursuit', 'shareables'),
+    'my_shareables_challenges': ('my_pursuit', 'shareables'),
+    'platinum_grid': ('my_pursuit', 'shareables'),
+    'recap_view': ('my_pursuit', 'recap'),
+    # Fundraiser: lives at /fundraiser/<slug>/ but conceptually belongs to the
+    # My Pursuit hub while a campaign is active. The context processor appends
+    # the Fundraiser tab dynamically when one is live.
+    'fundraiser': ('my_pursuit', 'fundraiser'),
+    'fundraiser_success': ('my_pursuit', 'fundraiser'),
 }
 
 
@@ -272,10 +274,12 @@ def resolve_hub_subnav(request) -> dict | None:
             if hub is not None:
                 return {'hub': hub, 'active_slug': slug}
 
-    # 2. Bare-root match for the Dashboard hub. Only the exact '/' path
-    #    triggers this — '/community/...' etc. fall through.
+    # 2. Bare-root match for the Home hub (the gamification landing). Only the
+    #    exact '/' path triggers this — '/community/...' etc. fall through.
+    #    HOME_HUB has no items, so the strip stays hidden; this just sets
+    #    hub_section='home' for the navbar's Home button.
     if path == '/':
-        return {'hub': DASHBOARD_HUB, 'active_slug': 'home'}
+        return {'hub': HOME_HUB, 'active_slug': None}
 
     # 3. Longest-prefix-wins across all configured prefixes.
     best_match: tuple[HubSubnavConfig, str] | None = None

@@ -1,8 +1,10 @@
 # Information Architecture and Sub-Navigation
 
-PlatPursuit uses a **hub-of-hubs IA**: the global navbar contains exactly three direct-link hub destinations (Browse, Community, My Pursuit) plus the Dashboard logo, with zero dropdowns at the global-nav level. Each of the four hubs has a dedicated landing page and a persistent sub-navigation strip that surfaces its sub-pages on every URL in the hub's family. This doc describes the design, the URL prefix matching rules, the sub-nav infrastructure, and the rationale behind the decisions.
+PlatPursuit uses a **hub-of-hubs IA**: the global navbar contains direct-link hub destinations plus the brand logo, with zero dropdowns at the global-nav level. Each hub has a dedicated landing page and a persistent sub-navigation strip that surfaces its sub-pages on every URL in the hub's family. This doc describes the design, the URL prefix matching rules, the sub-nav infrastructure, and the rationale behind the decisions.
 
 > **Status**: Implemented. Shipped in the Community Hub initiative.
+>
+> **Update (gamification Home, 2026-06):** the **Dashboard hub was dissolved** when the legacy modular dashboard retired and the gamification **Home** (`/`, `trophies/home.html`) replaced it. The navbar/tabbar button is now **Home** (`hub_section='home'`), backed by an **items-less `HOME_HUB`** — so it highlights the button but renders **no sub-nav strip** on `/` (the Home page's own launcher cards do the routing). Its former sub-nav items (**My Stats / My Shareables / Recap** + the dynamic **Fundraiser**) **moved into My Pursuit**, and the orphaned `/dashboard/*` URLs (unchanged for now) resolve under My Pursuit via an inherited `/dashboard/` prefix. The Dashboard-specific sections below are historical; this note governs where they conflict.
 
 ## Why this design
 

@@ -1252,14 +1252,14 @@ class HomeView(ProfileHotbarMixin, TemplateView):
     - Logged in, no Profile               -> home/link_psn.html (link your PSN)
     - Logged in, Profile exists, !linked  -> home/link_psn.html
     - Linked, sync_status == 'syncing'    -> home/syncing.html (in-progress page)
-    - Linked, sync_status == 'synced'     -> trophies/dashboard.html (full dashboard)
+    - Linked, sync_status == 'synced'     -> trophies/home.html (the gamification Home)
     - Linked, sync_status == 'error'      -> home/syncing.html (we surface the
-        error in-page rather than throwing the user into a half-empty dashboard)
+        error in-page rather than throwing the user into a half-empty home)
 
     The hotbar polls /api/profile-sync-status/ every 2s while syncing; the
     syncing page listens for a 'platpursuit:sync-status-changed' CustomEvent
     dispatched by hotbar.js and reloads the page when sync transitions to
-    'synced', so users automatically advance to the dashboard.
+    'synced', so users automatically advance to the home.
     """
     # template_name is set per-state in get_template_names below.
 

@@ -186,7 +186,7 @@ def hub_subnav(request):
 
     Dynamic items: when a fundraiser is active (``banner_active=True`` and
     within its start/end window), a Fundraiser tab is appended to the
-    Dashboard hub's items. Reuses the ``fundraiser:active_banner`` cache key
+    My Pursuit hub's items. Reuses the ``fundraiser:active_banner`` cache key
     populated by ``active_fundraiser`` so there's no extra DB hit on the
     hot path.
 
@@ -208,7 +208,7 @@ def hub_subnav(request):
         is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
 
         extras: tuple[RenderedSubnavItem, ...] = ()
-        if hub.key == 'dashboard' and _viewer_has_linked_profile(request):
+        if hub.key == 'my_pursuit' and _viewer_has_linked_profile(request):
             extras = _fundraiser_subnav_extras()
 
         items = build_rendered_items(hub, is_authenticated=is_auth, extras=extras)
@@ -227,7 +227,7 @@ def hub_subnav(request):
 
 def _fundraiser_subnav_extras():
     """
-    Build the dynamic Fundraiser sub-nav item for the Dashboard hub, or an
+    Build the dynamic Fundraiser sub-nav item for the My Pursuit hub, or an
     empty tuple if no campaign is currently active.
 
     Shares the ``fundraiser:active_banner`` cache key with
