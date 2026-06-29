@@ -33,6 +33,18 @@ def test_fresh_profile_builds_every_zone():
     assert all({'symbol', 'level', 'disc_slug', 'name', 'shape'} <= set(e) for e in ctx['elements'])
 
 
+def test_sync_zone_reports_last_and_next():
+    """The trophy card's sync status: a last_synced and either ready-now or a next-update time."""
+    profile = ProfileFactory()
+
+    sync = home_service.build_home_context(profile)['sync']
+
+    assert sync is not None
+    assert sync['last_synced'] is not None
+    assert isinstance(sync['ready'], bool)
+    assert sync['ready'] or sync['next_sync_time'] is not None
+
+
 def test_launchers_resolve_and_carry_in_hand_stats():
     profile = ProfileFactory()
 

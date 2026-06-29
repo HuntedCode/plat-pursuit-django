@@ -18,8 +18,10 @@ providers are the same ones the dashboard used, and the glances are counts / sin
 denormalized Profile fields -- nothing iterates a whale's trophy set (the whale-OOM rule).
 """
 import logging
+from datetime import timedelta
 
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 
 from trophies.services import contract_service, dashboard_service, lab_service
 
@@ -84,6 +86,17 @@ _LAUNCHERS = [
 ]
 
 
+def _build_sync(profile):
+    """Sync status for the trophy card: when the library last updated, and when the next
+    automatic update is due (the cadence -- 12h for Discord-verified, else 24h)."""
+    info = {'last_synced': getattr(profile, 'last_synced', None), 'next_sync_time': None, 'ready': True}
+    secs = profile.get_seconds_to_next_sync()
+    if secs and secs > 0:
+        info['ready'] = False
+        info['next_sync_time'] = timezone.now() + timedelta(seconds=secs)
+    return info
+
+
 def _build_launchers(profile, hero, glances):
     """Launcher cards into the functional pages. A quick-stat is attached only when it's
     already in hand (no extra queries): the Lab shows the Pursuer Level, the Research Panel
@@ -133,6 +146,7 @@ def build_home_context(profile):
         'hero': hero,
         'elements': _build_elements((lab_ctx or {}).get('lab')),
         'glances': glances,
+        'sync': _safe('sync', profile, lambda: _build_sync(profile), None),
         'recent': _safe(
             'recent', profile,
             lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})
