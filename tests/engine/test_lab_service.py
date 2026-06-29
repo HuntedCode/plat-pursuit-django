@@ -78,7 +78,7 @@ def test_hero_carries_pursuer_rank():
 
     rank = build_lab_context(profile)['hero']['pursuer_rank']
 
-    assert rank['key'] == 'newbie'          # ~25 total level is under the Recruit floor (40)
+    assert rank['key'] == 'newbie'          # ~25 total level is under the Recruit floor (35)
     assert rank['label'] == 'Newbie' and rank['division'] is None
 
 

@@ -314,6 +314,10 @@ def test_pursuer_rank_for_level():
     assert pr(59)['label'] == 'Recruit I' and pr(59)['division'] == 1
     assert pr(59)['next_label'] == 'Seeker'            # the top division promotes to the next tier
     assert pr(65)['label'] == 'Seeker V'               # crossing the floor is a promotion
+    # Last divisioned tier promotes to the divisionless apex (not "<name> <numeral>").
+    luminary_top = pr(2024)
+    assert luminary_top['label'] == 'Luminary I' and luminary_top['next_label'] == 'Ascendant'
+    assert luminary_top['levels_to_next'] == 1         # 2025 - 2024
     # Ascendant: the open-ended, divisionless apex -- no next, the number just flexes on.
     top = pr(2025)
     assert top['key'] == 'ascendant' and top['division'] is None and top['label'] == 'Ascendant'
