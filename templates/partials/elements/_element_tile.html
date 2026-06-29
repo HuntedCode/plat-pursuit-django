@@ -1,22 +1,22 @@
 {% comment %}
 Element tile (periodic cell). Level is the hero number; the atom glyph is the identity
 mark (shape + symbol + family color). Expects `card`: number, name, disc_slug, shape,
-symbol, level, progress (0-100), xp_current, xp_next, state ('active'|'mastered'),
-description. Description rides in the title tooltip.
+symbol, level, progress (0-100), xp_current, xp_next, tier, tier_key, description.
+The curve is cap-less, so the prestige tier is the label (no "maxed" state).
 {% endcomment %}
-<div class="job job--{{ card.state }}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
+<div class="job job--tier-{{ card.tier_key }}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
     <div class="job__top">
         <span class="job__mark">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
         <span class="job__no">{{ card.number }}</span>
     </div>
     <div class="job__lvbox">
         <span class="job__lv-num pp-tally">{{ card.level }}</span>
-        <span class="job__lv-cap">{% if card.state == 'mastered' %}Max{% else %}Level{% endif %}</span>
+        <span class="job__lv-cap">{{ card.tier }}</span>
     </div>
     <div class="job__name">{{ card.name }}</div>
     <div class="job__foot">
         <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 5px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
-        <div class="job__xp">{% if card.state == 'mastered' %}Maxed{% else %}{{ card.xp_current }} / {{ card.xp_next }} XP{% endif %}</div>
+        <div class="job__xp">{{ card.xp_current }} / {{ card.xp_next }} XP</div>
     </div>
     <svg class="job__expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
 </div>

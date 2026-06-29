@@ -128,3 +128,20 @@ def test_broken_lab_zone_degrades_without_500(monkeypatch):
     assert ctx['total_xp_compact'] == '0'
     assert ctx['hero']['pursuer_level'] == 0   # hero still builds, zeroed
     assert ctx['hero']['ring'] == []
+
+
+def test_element_tile_carries_prestige_tier():
+    """Cap-less: an element's tile exposes its prestige tier (replacing the old cap-based
+    'mastered' state), and is always progressing toward the next level."""
+    from trophies.util_modules.leveling import xp_for_level
+    profile = ProfileFactory()
+    job = Job.objects.get(slug='mage')
+    ProfileJobXP.objects.create(profile=profile, job=job, total_xp=xp_for_level(99), level=99)
+
+    elements = element_render.build_profile_elements(profile)
+    tile = next(t for d in elements['disciplines'] for t in d['jobs'] if t['slug'] == 'mage')
+
+    assert tile['level'] == 99
+    assert tile['tier'] == 'Master' and tile['tier_key'] == 'master'
+    assert 'state' not in tile          # the old cap-based state is gone
+    assert tile['progress'] == 0        # exactly at level 99, no XP into the next

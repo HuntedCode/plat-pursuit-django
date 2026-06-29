@@ -1,9 +1,9 @@
 {% comment %}
 Element detail (opens from a tile in The Lab). Level + XP are the focal point.
 Expects `card`: a tile dict (number, name, disc_slug, shape, symbol, level, progress,
-xp_current, xp_next, xp_total, description, state).
+xp_current, xp_next, xp_total, tier, tier_key, description).
 {% endcomment %}
-<div class="edetail" style="--disc: var(--disc-{{ card.disc_slug }});">
+<div class="edetail edetail--tier-{{ card.tier_key }}" style="--disc: var(--disc-{{ card.disc_slug }});">
     <div class="edetail__head">
         <span class="edetail__glyph">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
         <div>
@@ -14,12 +14,12 @@ xp_current, xp_next, xp_total, description, state).
     <div class="edetail__levelrow">
         <div class="edetail__level">
             <span class="edetail__level-num pp-tally">{{ card.level }}</span>
-            <span class="edetail__level-cap">Level</span>
+            <span class="edetail__level-cap">{{ card.tier }}</span>
         </div>
         <div class="edetail__xp">
             <div class="edetail__xp-top">
-                <span>{% if card.state == 'mastered' %}Maxed out{% else %}{{ card.xp_current }} / {{ card.xp_next }} XP{% endif %}</span>
-                {% if card.state == 'active' %}<span class="edetail__xp-next">to Lv {{ card.level|add:1 }}</span>{% endif %}
+                <span>{{ card.xp_current }} / {{ card.xp_next }} XP</span>
+                <span class="edetail__xp-next">to Lv {{ card.level|add:1 }}</span>
             </div>
             <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 9px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
             <div class="edetail__total">{{ card.xp_total }} total XP earned</div>

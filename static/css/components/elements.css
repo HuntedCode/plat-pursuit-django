@@ -96,8 +96,10 @@
 .job__foot { margin-top: auto; padding-top: 12px; }
 /* job bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent, --horizon-h: 5px) */
 .job__xp { margin-top: 5px; font-size: 10px; color: var(--pp-text-mute); text-align: center; font-variant-numeric: tabular-nums; }
-.job--mastered { border-color: color-mix(in oklab, var(--disc) 78%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1)); animation: jobPulse 3.4s ease-in-out infinite; }
-.job--mastered .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
+/* Prestige glow for the top tiers (cap-less: there is no "mastered", so Master + Legend
+   carry the marquee treatment the old cap state used to). */
+.job--tier-master, .job--tier-legend { border-color: color-mix(in oklab, var(--disc) 78%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 22%, var(--pp-bg-1)), var(--pp-bg-1)); animation: jobPulse 3.4s ease-in-out infinite; }
+.job--tier-master .job__lv-num, .job--tier-legend .job__lv-num { text-shadow: 0 0 30px color-mix(in oklab, var(--disc) 75%, transparent); }
 @keyframes jobPulse {
     0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 35%, transparent), 0 6px 22px color-mix(in oklab, var(--disc) 16%, transparent); }
     50%      { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 62%, transparent), 0 10px 34px color-mix(in oklab, var(--disc) 36%, transparent); }

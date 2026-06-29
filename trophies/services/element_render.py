@@ -18,8 +18,7 @@ import math
 import random
 
 from trophies.models import Job, ProfileJobXP
-from trophies.util_modules.constants import JOB_LEVEL_CAP
-from trophies.util_modules.leveling import xp_for_level
+from trophies.util_modules.leveling import xp_for_level, tier_for_level
 
 # The 5 disciplines (families), in canonical radar/seed order.
 DISCIPLINE_LABELS = {
@@ -104,21 +103,17 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
     """Build one element tile from a job + the viewer's real level/XP for it.
 
     `atomic` is the running 1..N periodic number; `slot_index` is the job's slot within
-    its family (drives the atom shape). XP fields use the real leveling curve. Every
-    element is at least level 1 (the floor), so there is no "locked" state.
+    its family (drives the atom shape). The curve is FLAT + cap-less, so every element is
+    always climbing toward the next level -- there is no "locked" or "maxed" state; the
+    prestige TIER (Initiate..Legend) is the milestone label instead.
     """
     level = max(1, level)
-    if level >= JOB_LEVEL_CAP:
-        state = 'mastered'
-        progress, xp_current, xp_next = 100, 0, 0
-    else:
-        state = 'active'
-        floor = xp_for_level(level)
-        ceil = xp_for_level(level + 1)
-        into = max(0, total_xp - floor)
-        span = max(1, ceil - floor)
-        progress = min(100, round(into / span * 100))
-        xp_current, xp_next = into, span
+    floor = xp_for_level(level)
+    ceil = xp_for_level(level + 1)
+    into = max(0, total_xp - floor)
+    span = max(1, ceil - floor)
+    progress = min(100, round(into / span * 100))
+    tier = tier_for_level(level)
 
     return {
         'number': atomic,
@@ -129,10 +124,11 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
         'symbol': SYMBOLS.get(job.slug, job.name[:2]),
         'level': level,
         'progress': progress,
-        'xp_current': f"{xp_current:,}",
-        'xp_next': f"{xp_next:,}",
+        'xp_current': f"{into:,}",
+        'xp_next': f"{span:,}",
         'xp_total': f"{total_xp:,}",
-        'state': state,
+        'tier': tier['name'],
+        'tier_key': tier['key'],
         'description': job.description or DESCRIPTIONS.get(job.slug, ''),
         'criteria': CRITERIA.get(job.slug, ''),
     }
@@ -181,7 +177,7 @@ def build_profile_elements(profile):
     return {
         'disciplines': disciplines,
         # Aggregates the eye can't read off the grid (varies per user, unlike a
-        # "mastered/started" count that is ~0 or ~everything for most of the userbase).
+        # top-tier/started count that is ~0 or ~everything for most of the userbase).
         'avg_level': round(total_level / atomic, 1) if atomic else 0,
         'highest_level': max((t['level'] for t in all_tiles), default=1),
         'radar_labels_json': json.dumps(list(DISCIPLINE_LABELS.values())),
