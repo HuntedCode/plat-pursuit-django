@@ -143,5 +143,6 @@ def test_element_tile_carries_prestige_tier():
 
     assert tile['level'] == 99
     assert tile['tier'] == 'Master' and tile['tier_key'] == 'master'
+    assert tile['next_tier'] == 'Grandmaster' and tile['levels_to_next_tier'] == 51  # 150 - 99
     assert 'state' not in tile          # the old cap-based state is gone
     assert tile['progress'] == 0        # exactly at level 99, no XP into the next

@@ -7,17 +7,14 @@ xp_current, xp_next, xp_total, tier, tier_key, description).
     <div class="edetail__head">
         <span class="edetail__glyph">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
         <div>
-            <div class="edetail__name-row">
-                <span class="edetail__name">{{ card.name }}</span>
-                <span class="edetail__tier edetail__tier--{{ card.tier_key }}">{{ card.tier }}</span>
-            </div>
+            <div class="edetail__name">{{ card.name }}</div>
             <div class="edetail__fam">{{ card.disc_slug|capfirst }} family &middot; No. {{ card.number }}</div>
         </div>
     </div>
     <div class="edetail__levelrow">
-        <div class="edetail__level">
+        <div class="edetail__level edetail__level--{{ card.tier_key }}">
             <span class="edetail__level-num pp-tally">{{ card.level }}</span>
-            <span class="edetail__level-cap">Level</span>
+            <span class="edetail__rank">{{ card.tier }}</span>
         </div>
         <div class="edetail__xp">
             <div class="edetail__xp-top">
@@ -25,7 +22,7 @@ xp_current, xp_next, xp_total, tier, tier_key, description).
                 <span class="edetail__xp-next">to Lv {{ card.level|add:1 }}</span>
             </div>
             <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 9px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
-            <div class="edetail__total">{{ card.xp_total }} total XP earned</div>
+            <div class="edetail__total">{{ card.xp_total }} total XP earned{% if card.next_tier %} &middot; <span class="edetail__nexttier">{{ card.levels_to_next_tier }} to {{ card.next_tier }}</span>{% endif %}</div>
         </div>
     </div>
     {% if card.description %}<div class="edetail__flavor">{{ card.description }}</div>{% endif %}

@@ -118,16 +118,16 @@
 /* ---- Element detail (level/XP first-class) ---- */
 .edetail__head { display: flex; align-items: center; gap: 14px; }
 .edetail__glyph { width: 50px; height: 50px; flex: none; }
-.edetail__name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .edetail__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 20px; }
 .edetail__fam { font-size: 12px; color: var(--pp-text-mute); margin-top: 2px; }
-/* Prestige tier badge (cap-less showcase): family-coloured pill; the top tiers glow. */
-.edetail__tier { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; color: var(--disc); background: color-mix(in oklab, var(--disc) 15%, transparent); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); }
-.edetail__tier--master, .edetail__tier--legend { background: color-mix(in oklab, var(--disc) 24%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--disc) 42%, transparent); }
 .edetail__levelrow { display: flex; align-items: center; gap: 18px; margin-top: 22px; }
-.edetail__level { flex: none; text-align: center; min-width: 78px; }
+/* The level plate: the number + its tier RANK as one unit (the rank IS what the level
+   means). The top tiers light the plate up -- the cap-less prestige cue. */
+.edetail__level { flex: none; text-align: center; min-width: 86px; }
 .edetail__level-num { display: block; font-size: 54px; line-height: 0.9; color: var(--disc); text-shadow: 0 0 24px color-mix(in oklab, var(--disc) 40%, transparent); }  /* face via shared .pp-tally */
-.edetail__level-cap { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); }
+.edetail__rank { display: block; margin-top: 3px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--disc); }
+.edetail__level--master .edetail__level-num, .edetail__level--legend .edetail__level-num { text-shadow: 0 0 34px color-mix(in oklab, var(--disc) 62%, transparent); }
+.edetail__nexttier { color: color-mix(in oklab, var(--disc) 72%, var(--pp-text-mute)); font-weight: 600; }
 .edetail__xp { flex: 1; }
 .edetail__xp-top { display: flex; justify-content: space-between; font-size: 12px; color: var(--pp-text-dim); margin-bottom: 7px; font-variant-numeric: tabular-nums; }
 .edetail__xp-next { color: var(--pp-text-mute); }

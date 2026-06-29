@@ -114,6 +114,7 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
     span = max(1, ceil - floor)
     progress = min(100, round(into / span * 100))
     tier = tier_for_level(level)
+    next_at = tier['next_level']  # level the next tier unlocks at (None at the top, Legend)
 
     return {
         'number': atomic,
@@ -129,6 +130,8 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
         'xp_total': f"{total_xp:,}",
         'tier': tier['name'],
         'tier_key': tier['key'],
+        'next_tier': tier_for_level(next_at)['name'] if next_at else '',
+        'levels_to_next_tier': (next_at - level) if next_at else 0,
         'description': job.description or DESCRIPTIONS.get(job.slug, ''),
         'criteria': CRITERIA.get(job.slug, ''),
     }
