@@ -47,6 +47,7 @@ These are already on the `main`/production path and can/should happen before cut
 |---|------|--------|------|------|
 | A | **Art Reveal self-heal** — auto-completes already-revealed funder claims (attribution + email) via an event-wide sweep | Merge the self-heal PR to `main`, redeploy | Now | ☐ |
 | B | **Retire deprecated milestones** — hides the dead checklist/review criteria-types (`checklist_upvotes`, `review_count`, `review_helpful_count`) from the milestones page and stops awarding them, and removes the titles they granted (earned `UserMilestone` records are preserved). Destructive on `UserTitle` rows; idempotent (re-runs are no-ops). Requires migration `0254_milestone_is_active` applied. | Dry-run first to review counts: `python manage.py retire_milestones checklist_upvotes review_count review_helpful_count` — then commit: `... --apply` | Now | ☐ |
+| C | **Recompute job XP under the flat curve** — the XP-economy engine PR switches per-job leveling from the old escalating capped curve to flat cap-less (K=3,000) + T=6,000. Ledger amounts (`ContractXPGrant`) are immutable; only the level *derivation* changes, so every `ProfileJobXP.level` must be re-derived. Idempotent (rebuilds from the ledger). Run AFTER migration `0255_*` is applied. | `python manage.py recompute_job_xp --all` | Now (with the economy PR deploy) | ☐ |
 
 ---
 

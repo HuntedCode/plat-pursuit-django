@@ -1,7 +1,9 @@
 # Job Board & Contracts — Gamification Data Model
 
-> **Status:** Design proposal (not built). The organizational spine for jobs + job XP,
-> decoupled from badges. Numbers/curves are deferred to a later "XP side" pass.
+> **Status:** Built. The organizational spine for jobs + job XP, decoupled from badges.
+> The **XP side** (T, the flat cap-less curve, K, prestige tiers, source-agnostic grants)
+> is specified in **[xp-economy.md](xp-economy.md)**; this doc covers the engine mechanics
+> (the reached/accepted gates, the T split, curation).
 
 ## Why this exists
 
@@ -130,7 +132,9 @@ double-authoring.
 
 ## Deferred / open
 
-- **XP numbers**: global `T`, `platinum_frac` / `full_frac`, level curve — the "XP side" pass.
+- **XP numbers + curve + tiers**: DONE — see [xp-economy.md](xp-economy.md) (T=6,000, flat
+  cap-less K=3,000, prestige tiers). Exact-number *calibration* remains an open thread.
+- **Pursuer rank** (profile-wide, distinct from element tiers) — data-calibrated fast-follow.
 - **"Badge XP" rename** (Renown / Prestige / Acclaim) — pending the team.
 - **Card & Board job name** — one word (Gambit / Knave / …).
 - **Even split only** for v1; dominance-weighting is a possible later refinement.
