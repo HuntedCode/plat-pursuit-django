@@ -85,11 +85,29 @@
 .lab-rankline__sep { margin-right: 0.45em; color: var(--pp-text-mute); font-weight: 400; }
 .lab-rankline--luminary, .lab-rankline--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
 
-/* ---- Compact element chip for the Home "your elements" strip (symbol + level) ---- */
-.home-elem { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 44px; flex: none; }
-.home-elem__cell { width: 44px; height: 44px; border-radius: 10px; display: grid; place-content: center; font-weight: 800; font-size: 15px; color: var(--disc); background: color-mix(in oklab, var(--disc) 14%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: border-color 0.15s; }
-.home-elem:hover .home-elem__cell { border-color: var(--disc); }
+/* ---- Compact element chip for the Home "your elements" strip ----
+   The cell hosts the shared atom glyph (family shape + symbol + family color); the chip just
+   sizes it and adds the level beneath. */
+.home-elem { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 44px; flex: none; }
+.home-elem__cell { width: 44px; height: 44px; transition: transform 0.15s; }
+.home-elem:hover .home-elem__cell { transform: scale(1.09); }
 .home-elem__lv { font-size: 11px; font-weight: 700; color: var(--pp-text-dim); }
+
+/* ---- Home recent-platinums marquee (auto-scroll, seamless loop) ----
+   The track holds the covers twice; translating it half its width (minus half the gap) loops
+   seamlessly. Pauses on hover so a cover can be clicked; reduced-motion falls back to a plain
+   scroll strip with the duplicate set hidden. */
+.home-marquee { overflow: hidden; }
+.home-marquee__track { display: flex; gap: 12px; width: max-content; animation: homeMarquee 60s linear infinite; }
+.home-marquee:hover .home-marquee__track { animation-play-state: paused; }
+.home-marquee__item { flex: none; width: 64px; }
+@keyframes homeMarquee { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 6px)); } }
+@media (min-width: 768px) { .home-marquee__item { width: 80px; } }
+@media (prefers-reduced-motion: reduce) {
+    .home-marquee { overflow-x: auto; }
+    .home-marquee__track { animation: none; }
+    .home-marquee__item[aria-hidden="true"] { display: none; }
+}
 
 
 /* ---- Atom glyph ---- */

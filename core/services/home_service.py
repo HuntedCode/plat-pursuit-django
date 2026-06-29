@@ -26,6 +26,12 @@ from trophies.services import contract_service, dashboard_service, lab_service
 logger = logging.getLogger(__name__)
 
 
+# How many recent platinums feed the auto-scrolling marquee. Each is a game-cover image
+# (lazy-loaded + duplicated for the seamless loop), so this is a deliberate balance between
+# "show off a big library" and image load on the busiest page -- tune here.
+RECENT_LIMIT = 20
+
+
 def _safe(zone, profile, fn, default):
     """Run a zone builder, degrading to `default` (and logging) on any failure so one broken
     section never blanks the whole page."""
@@ -34,6 +40,19 @@ def _safe(zone, profile, fn, default):
     except Exception:
         logger.exception("Home %s build failed for profile %s", zone, getattr(profile, 'id', '?'))
         return default
+
+
+def _unique_series(badges):
+    """Keep one entry per badge series -- the closest-to-next-tier one. `badges` arrives
+    sorted by completion desc, so the first occurrence of each series is its nearest tier."""
+    seen, out = set(), []
+    for b in badges:
+        slug = b.get('series_slug')
+        if slug in seen:
+            continue
+        seen.add(slug)
+        out.append(b)
+    return out
 
 
 def _build_glances(profile):
@@ -46,8 +65,8 @@ def _build_glances(profile):
             lambda: contract_service.claimable_contracts(profile).count(), 0),
         'almost_badges': _safe(
             'almost_badges', profile,
-            lambda: dashboard_service.provide_badge_progress(profile, {'limit': 3})
-            .get('badges_in_progress', []), []),
+            lambda: _unique_series(dashboard_service.provide_badge_progress(profile, {'limit': 12})
+                                   .get('badges_in_progress', []))[:3], []),
         'snapshot': _safe(
             'snapshot', profile,
             lambda: dashboard_service.provide_trophy_snapshot(profile), None),
@@ -97,8 +116,8 @@ def _build_elements(lab):
     tiles = [t for d in lab.get('disciplines', []) for t in d.get('jobs', [])]
     tiles.sort(key=lambda t: (-t.get('level', 0), t.get('name', '')))
     return [
-        {'symbol': t.get('symbol'), 'level': t.get('level'),
-         'disc_slug': t.get('disc_slug'), 'name': t.get('name')}
+        {'symbol': t.get('symbol'), 'level': t.get('level'), 'disc_slug': t.get('disc_slug'),
+         'name': t.get('name'), 'shape': t.get('shape')}
         for t in tiles
     ]
 
@@ -116,7 +135,7 @@ def build_home_context(profile):
         'glances': glances,
         'recent': _safe(
             'recent', profile,
-            lambda: dashboard_service.provide_recent_platinums(profile, {'limit': 18})
+            lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})
             .get('platinums', []), []),
         'launchers': _build_launchers(profile, hero, glances),
     }

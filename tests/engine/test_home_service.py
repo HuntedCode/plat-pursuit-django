@@ -28,7 +28,7 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['recent'] == []
     # Elements strip: every element is present (a fresh account floors them all to level 1).
     assert len(ctx['elements']) > 0
-    assert all({'symbol', 'level', 'disc_slug', 'name'} <= set(e) for e in ctx['elements'])
+    assert all({'symbol', 'level', 'disc_slug', 'name', 'shape'} <= set(e) for e in ctx['elements'])
 
 
 def test_launchers_resolve_and_carry_in_hand_stats():
@@ -46,11 +46,23 @@ def test_launchers_resolve_and_carry_in_hand_stats():
     assert by_label['Research Panel']['stat'] is None
 
 
-def test_home_template_parses():
-    """Catch syntax errors in the hand-written home template (malformed tags, the launcher
-    icon if-chain) without needing a request/render."""
+def test_unique_series_keeps_closest_per_series():
+    """Almost There shows one entry per badge series -- the nearest tier (the list arrives
+    sorted by completion, so the first occurrence of a series wins)."""
+    rows = [
+        {'series_slug': 'a', 'pct': 90},
+        {'series_slug': 'a', 'pct': 40},   # same series, further off -> dropped
+        {'series_slug': 'b', 'pct': 70},
+    ]
+    assert [r['series_slug'] for r in home_service._unique_series(rows)] == ['a', 'b']
+
+
+def test_home_templates_parse():
+    """Catch syntax errors in the hand-written home templates (the launcher icon if-chain,
+    the marquee cover partial) without needing a request/render."""
     from django.template.loader import get_template
     get_template('trophies/home.html')
+    get_template('trophies/partials/home/_recent_cover.html')
 
 
 def test_broken_hero_zone_degrades_without_500(monkeypatch):

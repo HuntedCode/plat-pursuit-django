@@ -105,7 +105,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
         <div class="flex gap-2 overflow-x-auto pb-1">
             {% for e in elements %}
             <a href="{% url 'lab' %}" class="home-elem" style="--disc: var(--disc-{{ e.disc_slug }});" title="{{ e.name }} &middot; Level {{ e.level }}">
-                <span class="home-elem__cell">{{ e.symbol }}</span>
+                <span class="home-elem__cell">{% include 'partials/elements/_atom.html' with shape=e.shape symbol=e.symbol %}</span>
                 <span class="home-elem__lv pp-tally">{{ e.level }}</span>
             </a>
             {% endfor %}
@@ -119,17 +119,11 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
     <div class="card-body p-4 md:p-5">
         <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-3">Recent platinums</div>
-        <div class="flex gap-3 overflow-x-auto pb-1">
-            {% for p in recent %}
-            {% if p.np_communication_id %}
-            <a href="{% url 'game_detail' p.np_communication_id %}" class="shrink-0 w-16 md:w-20 group">
-                <div class="aspect-[3/4] rounded-lg overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary/50 transition-all">
-                    {% if p.icon_url %}<img src="{{ p.icon_url }}" alt="{{ p.game_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform">{% endif %}
-                </div>
-                <div class="text-[0.65rem] text-base-content/60 mt-1 truncate group-hover:text-base-content" title="{{ p.game_name }}">{{ p.game_name }}</div>
-            </a>
-            {% endif %}
-            {% endfor %}
+        <div class="home-marquee">
+            <div class="home-marquee__track">
+                {% for p in recent %}{% include 'trophies/partials/home/_recent_cover.html' %}{% endfor %}
+                {% for p in recent %}{% include 'trophies/partials/home/_recent_cover.html' with dupe=True %}{% endfor %}
+            </div>
         </div>
     </div>
 </section>

@@ -1,0 +1,11 @@
+{% comment %}
+One recent-platinum cover for the Home marquee. `p` is the platinum dict; `dupe` marks the
+second (seamless-loop) copy -- hidden from assistive tech + the tab order.
+{% endcomment %}
+{% if p.np_communication_id %}
+<a href="{% url 'game_detail' p.np_communication_id %}" class="home-marquee__item group" title="{{ p.game_name }}"{% if dupe %} tabindex="-1" aria-hidden="true"{% endif %}>
+    <div class="aspect-[3/4] rounded-lg overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary/50 transition-all">
+        {% if p.icon_url %}<img src="{{ p.icon_url }}" alt="{{ p.game_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform" loading="lazy">{% endif %}
+    </div>
+</a>
+{% endif %}
