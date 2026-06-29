@@ -26,6 +26,8 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['glances']['almost_badges'] == []
     assert ctx['glances']['snapshot'] is not None
     assert ctx['recent'] == []
+    # The trophy-snapshot card's bridge to the profile resolves (reverse-guarded).
+    assert ctx['profile_url']
     # Elements strip: every element is present (a fresh account floors them all to level 1).
     assert len(ctx['elements']) > 0
     assert all({'symbol', 'level', 'disc_slug', 'name', 'shape'} <= set(e) for e in ctx['elements'])

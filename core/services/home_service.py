@@ -138,4 +138,8 @@ def build_home_context(profile):
             lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})
             .get('platinums', []), []),
         'launchers': _build_launchers(profile, hero, glances),
+        # The trophy-snapshot card bridges gamification-first home -> trophy-data profile.
+        'profile_url': _safe(
+            'profile_url', profile,
+            lambda: reverse('profile_detail', args=[profile.psn_username]), None),
     }
