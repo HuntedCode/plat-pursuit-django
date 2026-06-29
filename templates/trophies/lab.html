@@ -42,7 +42,9 @@
                             </g>
                         </svg>
                         <div class="lab-dna__center">
-                            <span class="lab-dna__level pp-tally">{{ hero.pursuer_level|intcomma }}</span>
+                            {% with digits=hero.pursuer_level|stringformat:"d"|length %}
+                            <span class="lab-dna__level pp-tally lab-dna__level--d{{ digits }}">{{ hero.pursuer_level|intcomma }}</span>
+                            {% endwith %}
                             <span class="lab-dna__cap">Level</span>
                         </div>
                     </div>

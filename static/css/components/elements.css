@@ -54,7 +54,18 @@
 .lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); }
 .lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease both; }
 .lab-dna__level { display: block; font-size: 28px; line-height: 1; color: var(--pp-text); text-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 28%, transparent); }  /* face via shared .pp-tally */
-@media (min-width: 1024px) { .lab-dna__level { font-size: 32px; } }
+/* Digit-responsive: the Pursuer Level is uncapped, so step the font down per extra digit
+   so the number always nests inside the ring (inner d ~65px / ~74px) instead of spilling
+   onto the family arcs. d1-d3 use the base size. */
+.lab-dna__level--d4 { font-size: 22px; }
+.lab-dna__level--d5 { font-size: 18px; }
+.lab-dna__level--d6 { font-size: 15px; }
+@media (min-width: 1024px) {
+    .lab-dna__level { font-size: 32px; }
+    .lab-dna__level--d4 { font-size: 25px; }
+    .lab-dna__level--d5 { font-size: 20px; }
+    .lab-dna__level--d6 { font-size: 16px; }
+}
 .lab-dna__cap { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; }
 @keyframes labDnaIn { from { transform: scale(0.55) rotate(-110deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes labDnaCenter { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
