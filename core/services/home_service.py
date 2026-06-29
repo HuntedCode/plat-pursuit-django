@@ -89,17 +89,34 @@ def _build_launchers(profile, hero, glances):
     return launchers
 
 
+def _build_elements(lab):
+    """A compact, strongest-first strip of the Pursuer's elements (symbol + level + family),
+    flattened from the Lab build the hero already computed -- no extra query."""
+    if not lab:
+        return []
+    tiles = [t for d in lab.get('disciplines', []) for t in d.get('jobs', [])]
+    tiles.sort(key=lambda t: (-t.get('level', 0), t.get('name', '')))
+    return [
+        {'symbol': t.get('symbol'), 'level': t.get('level'),
+         'disc_slug': t.get('disc_slug'), 'name': t.get('name')}
+        for t in tiles
+    ]
+
+
 def build_home_context(profile):
     """Assemble the synced Home context for `profile`. Each zone is isolated so a single
     failure degrades to a missing section rather than a 500."""
-    hero = _safe('hero', profile, lambda: lab_service.build_lab_context(profile).get('hero'), None)
+    # One Lab build feeds both the identity hero and the elements strip (no double work).
+    lab_ctx = _safe('lab', profile, lambda: lab_service.build_lab_context(profile), {})
+    hero = (lab_ctx or {}).get('hero')
     glances = _build_glances(profile)
-    recent = _safe(
-        'recent', profile,
-        lambda: dashboard_service.provide_recent_platinums(profile, {'limit': 5}).get('platinums', []), [])
     return {
         'hero': hero,
+        'elements': _build_elements((lab_ctx or {}).get('lab')),
         'glances': glances,
-        'recent': recent,
+        'recent': _safe(
+            'recent', profile,
+            lambda: dashboard_service.provide_recent_platinums(profile, {'limit': 18})
+            .get('platinums', []), []),
         'launchers': _build_launchers(profile, hero, glances),
     }

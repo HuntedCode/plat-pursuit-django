@@ -26,6 +26,9 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['glances']['almost_badges'] == []
     assert ctx['glances']['snapshot'] is not None
     assert ctx['recent'] == []
+    # Elements strip: every element is present (a fresh account floors them all to level 1).
+    assert len(ctx['elements']) > 0
+    assert all({'symbol', 'level', 'disc_slug', 'name'} <= set(e) for e in ctx['elements'])
 
 
 def test_launchers_resolve_and_carry_in_hand_stats():
@@ -65,3 +68,18 @@ def test_broken_hero_zone_degrades_without_500(monkeypatch):
     assert ctx['glances']['snapshot'] is not None     # other zones still build
     assert [l['label'] for l in ctx['launchers']]      # launchers still resolve
     assert ctx['launchers'][0]['stat'] != 'Level None'  # missing level -> no bogus stat
+    assert ctx['elements'] == []                        # elements come from the same Lab build
+
+
+def test_elements_strip_is_strongest_first():
+    """The elements strip flattens the Lab and sorts by level descending, so a boosted
+    element leads the strip."""
+    from trophies.models import Job, ProfileJobXP
+    from trophies.util_modules.leveling import xp_for_level
+    profile = ProfileFactory()
+    ProfileJobXP.objects.create(
+        profile=profile, job=Job.objects.get(slug='mage'), total_xp=xp_for_level(20), level=20)
+
+    elements = home_service.build_home_context(profile)['elements']
+
+    assert elements[0]['name'] == 'Mage' and elements[0]['level'] == 20

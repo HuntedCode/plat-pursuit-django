@@ -79,11 +79,12 @@ pages (it does not re-implement them). Context from core/services/home_service.p
     <a href="{% url 'badge_collection' %}" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:border-primary/40 transition-colors">
         <div class="card-body p-4 md:p-5">
             <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-2">Almost there</div>
-            <ul class="space-y-1.5">
+            <ul class="space-y-2">
                 {% for b in glances.almost_badges %}
-                <li class="flex items-center justify-between gap-2 text-sm">
-                    <span class="truncate">{{ b.series_name }}</span>
-                    <span class="shrink-0 text-base-content/60 tabular-nums">{{ b.completed }}/{{ b.required }} &middot; {{ b.tier_name }}</span>
+                <li class="flex items-center gap-2.5 text-sm">
+                    <span class="w-9 h-9 shrink-0">{% include 'partials/badge.html' with layers=b.layers %}</span>
+                    <span class="truncate flex-1 min-w-0">{{ b.series_name }}</span>
+                    <span class="shrink-0 text-base-content/60 tabular-nums text-xs">{{ b.completed }}/{{ b.required }} &middot; {{ b.tier_name }}</span>
                 </li>
                 {% endfor %}
             </ul>
@@ -93,6 +94,26 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 </div>
 {% endif %}
 
+{# ── Your elements: a compact, strongest-first strip of the Pursuer's job levels ── #}
+{% if elements %}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-4 md:p-5">
+        <a href="{% url 'lab' %}" class="flex items-center justify-between mb-3 group">
+            <span class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">Your elements</span>
+            <span class="text-xs text-primary font-semibold inline-flex items-center gap-1">The Lab <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
+        </a>
+        <div class="flex gap-2 overflow-x-auto pb-1">
+            {% for e in elements %}
+            <a href="{% url 'lab' %}" class="home-elem" style="--disc: var(--disc-{{ e.disc_slug }});" title="{{ e.name }} &middot; Level {{ e.level }}">
+                <span class="home-elem__cell">{{ e.symbol }}</span>
+                <span class="home-elem__lv pp-tally">{{ e.level }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
 {# ── Recent platinums strip ── #}
 {% if recent %}
 <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
@@ -100,12 +121,14 @@ pages (it does not re-implement them). Context from core/services/home_service.p
         <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-3">Recent platinums</div>
         <div class="flex gap-3 overflow-x-auto pb-1">
             {% for p in recent %}
-            <div class="shrink-0 w-16 md:w-20">
-                <div class="aspect-[3/4] rounded-lg overflow-hidden bg-base-300 ring-1 ring-base-300">
-                    {% if p.icon_url %}<img src="{{ p.icon_url }}" alt="{{ p.game_name }}" class="w-full h-full object-cover object-top">{% endif %}
+            {% if p.np_communication_id %}
+            <a href="{% url 'game_detail' p.np_communication_id %}" class="shrink-0 w-16 md:w-20 group">
+                <div class="aspect-[3/4] rounded-lg overflow-hidden bg-base-300 ring-1 ring-base-300 group-hover:ring-primary/50 transition-all">
+                    {% if p.icon_url %}<img src="{{ p.icon_url }}" alt="{{ p.game_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform">{% endif %}
                 </div>
-                <div class="text-[0.65rem] text-base-content/60 mt-1 truncate" title="{{ p.game_name }}">{{ p.game_name }}</div>
-            </div>
+                <div class="text-[0.65rem] text-base-content/60 mt-1 truncate group-hover:text-base-content" title="{{ p.game_name }}">{{ p.game_name }}</div>
+            </a>
+            {% endif %}
             {% endfor %}
         </div>
     </div>
