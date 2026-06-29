@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% load humanize static %}
+{% block title %}Home{% endblock %}
+
+{% comment %}
+The synced Home: a glanceable Pursuer landing that ROUTES into the functional My Pursuit
+pages (it does not re-implement them). Context from core/services/home_service.py:
+  hero      -- Pursuer identity (reused from the Lab)
+  glances   -- {claimable_count, almost_badges, snapshot}
+  recent    -- recent platinums strip
+  launchers -- cards into Lab / Collection / Research / Milestones / Titles
+{% endcomment %}
+
+{% block content %}
+
+{# ── Pursuer hero: identity + headline numbers ── #}
+{% if hero %}
+<section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-4 md:p-6 lg:p-7">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+            {# Identity (same treatment as the Lab hero) #}
+            <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
+                <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
+                    {% if hero.avatar_url %}
+                        <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
+                    {% else %}
+                        <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|first|upper }}</div>
+                    {% endif %}
+                </div>
+                <div class="min-w-0">
+                    <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
+                    <h1 class="text-xl md:text-2xl lg:text-3xl font-bold flex items-baseline gap-1.5 min-w-0">
+                        <span class="truncate">{{ hero.pursuer_name }}</span>
+                        <span class="lab-rankline lab-rankline--{{ hero.pursuer_rank.key }}"><span class="lab-rankline__sep">·</span>{{ hero.pursuer_rank.label }}</span>
+                    </h1>
+                    {% if hero.active_title %}<p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>{% endif %}
+                </div>
+            </div>
+            {# Headline numbers (replaces the Lab's DNA ring on the lighter home hero) #}
+            {% if glances.snapshot %}
+            <div class="grid grid-cols-3 gap-2 md:gap-3 shrink-0">
+                <div class="scard text-center">
+                    <div class="scard__label">Pursuer Lvl</div>
+                    <div class="scard__value pp-tally text-primary">{{ hero.pursuer_level|intcomma }}</div>
+                </div>
+                <div class="scard text-center">
+                    <div class="scard__label">Platinums</div>
+                    <div class="scard__value pp-tally">{{ glances.snapshot.total_plats|intcomma }}</div>
+                </div>
+                <div class="scard text-center">
+                    <div class="scard__label">Trophies</div>
+                    <div class="scard__value pp-tally">{{ glances.snapshot.total_earned|intcomma }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ── Status glances: claimable rewards + almost-there badges ── #}
+{% if glances.claimable_count or glances.almost_badges %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+    {% if glances.claimable_count %}
+    <a href="{% url 'research_panel' %}" class="card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral hover:border-primary transition-colors group">
+        <div class="card-body p-4 md:p-5 flex-row items-center gap-3 md:gap-4">
+            <span class="shrink-0 text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7 md:w-8 md:h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
+            </span>
+            <div class="min-w-0 flex-1">
+                <div class="text-base md:text-lg font-bold">{{ glances.claimable_count }} reward{{ glances.claimable_count|pluralize }} ready</div>
+                <div class="text-xs md:text-sm text-base-content/60">Claim your pending XP on the Research Panel</div>
+            </div>
+            <span class="shrink-0 text-primary text-xl group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span>
+        </div>
+    </a>
+    {% endif %}
+    {% if glances.almost_badges %}
+    <a href="{% url 'badge_collection' %}" class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral hover:border-primary/40 transition-colors">
+        <div class="card-body p-4 md:p-5">
+            <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-2">Almost there</div>
+            <ul class="space-y-1.5">
+                {% for b in glances.almost_badges %}
+                <li class="flex items-center justify-between gap-2 text-sm">
+                    <span class="truncate">{{ b.series_name }}</span>
+                    <span class="shrink-0 text-base-content/60 tabular-nums">{{ b.completed }}/{{ b.required }} &middot; {{ b.tier_name }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ── Recent platinums strip ── #}
+{% if recent %}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+    <div class="card-body p-4 md:p-5">
+        <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-3">Recent platinums</div>
+        <div class="flex gap-3 overflow-x-auto pb-1">
+            {% for p in recent %}
+            <div class="shrink-0 w-16 md:w-20">
+                <div class="aspect-[3/4] rounded-lg overflow-hidden bg-base-300 ring-1 ring-base-300">
+                    {% if p.icon_url %}<img src="{{ p.icon_url }}" alt="{{ p.game_name }}" class="w-full h-full object-cover object-top">{% endif %}
+                </div>
+                <div class="text-[0.65rem] text-base-content/60 mt-1 truncate" title="{{ p.game_name }}">{{ p.game_name }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ── Launchers: the page's real job, getting you to the functionality ── #}
+{% if launchers %}
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+    <div class="card-body p-4 md:p-5">
+        <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-3">Your Pursuit</div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {% for l in launchers %}
+            <a href="{{ l.url }}" class="group rounded-xl border-2 border-base-300 bg-base-100/40 p-3 md:p-4 hover:border-primary/50 hover:bg-base-100/70 transition-colors flex flex-col gap-1.5">
+                <span class="text-primary">
+                    {% if l.icon == 'flask' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.58 16.5h12.85"/></svg>
+                    {% elif l.icon == 'award' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+                    {% elif l.icon == 'beaker' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 3h15"/><path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3"/><path d="M6 14h12"/></svg>
+                    {% elif l.icon == 'flag' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>
+                    {% elif l.icon == 'crown' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><path d="M5 20h14"/></svg>
+                    {% endif %}
+                </span>
+                <span class="font-bold text-sm md:text-base">{{ l.label }}</span>
+                <span class="text-xs text-base-content/55 leading-snug">{{ l.desc }}</span>
+                {% if l.stat %}<span class="text-xs font-semibold text-primary mt-auto pt-1 truncate">{{ l.stat }}</span>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}

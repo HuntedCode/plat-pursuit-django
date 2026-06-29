@@ -43,6 +43,13 @@ def test_launchers_resolve_and_carry_in_hand_stats():
     assert by_label['Research Panel']['stat'] is None
 
 
+def test_home_template_parses():
+    """Catch syntax errors in the hand-written home template (malformed tags, the launcher
+    icon if-chain) without needing a request/render."""
+    from django.template.loader import get_template
+    get_template('trophies/home.html')
+
+
 def test_broken_hero_zone_degrades_without_500(monkeypatch):
     """A failure in the hero (Lab) build leaves hero=None but the rest of the page still
     assembles, rather than raising."""

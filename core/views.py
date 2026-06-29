@@ -17,7 +17,8 @@ from core.services.analytics_service import get_dashboard_data as get_analytics_
 from core.services.community_hub_service import build_community_hub_context
 from trophies.mixins import ProfileHotbarMixin, StaffRequiredMixin
 from trophies.util_modules.cache import redis_client
-from trophies.views.dashboard_views import build_dashboard_context, _get_site_heartbeat
+from trophies.views.dashboard_views import _get_site_heartbeat
+from core.services import home_service
 
 logger = logging.getLogger('psn_api')
 
@@ -1268,7 +1269,7 @@ class HomeView(ProfileHotbarMixin, TemplateView):
             'anonymous': 'home/landing.html',
             'no_psn':    'home/link_psn.html',
             'syncing':   'home/syncing.html',
-            'synced':    'trophies/dashboard.html',
+            'synced':    'trophies/home.html',
         }[state]
 
     def _resolve_state(self):
@@ -1293,11 +1294,11 @@ class HomeView(ProfileHotbarMixin, TemplateView):
         context['home_state'] = state
 
         if state == 'synced':
-            # Render the dashboard exactly as DashboardView would.
+            # The gamification Home: a glanceable Pursuer landing that routes into the
+            # functional My Pursuit pages (replaces the retired dashboard).
             profile = self.request.user.profile
-            context.update(build_dashboard_context(self.request, profile))
-            # Welcome Tour: auto-show once for users who haven't completed it
-            context['show_welcome_tour'] = getattr(profile, 'tour_completed_at', None) is None
+            context['profile'] = profile
+            context.update(home_service.build_home_context(profile))
             return context
 
         # All non-dashboard states share the cached site heartbeat for their
