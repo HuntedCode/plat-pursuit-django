@@ -22,7 +22,7 @@ XP is recalculated and denormalized onto `ProfileGamification` via Django signal
 |------|---------|
 | `trophies/services/xp_service.py` | Central XP calculation and update logic (342 lines) |
 | `trophies/signals.py` | Signal handlers for gamification updates (172 lines) |
-| `trophies/util_modules/constants.py` | XP constants: `BRONZE_STAGE_XP=250`, `SILVER_STAGE_XP=75`, `GOLD_STAGE_XP=250`, `PLAT_STAGE_XP=75`, `BADGE_TIER_XP=3000`; Contract: `CONTRACT_XP_TOTAL=6000`, `CONTRACT_PLATINUM_FRAC=0.70`, `JOB_LEVEL_BASE=600`, `JOB_LEVEL_CAP=50` |
+| `trophies/util_modules/constants.py` | XP constants: `BRONZE_STAGE_XP=250`, `SILVER_STAGE_XP=75`, `GOLD_STAGE_XP=250`, `PLAT_STAGE_XP=75`, `BADGE_TIER_XP=3000`; Contract: `CONTRACT_XP_TOTAL=6000`, `CONTRACT_PLATINUM_FRAC=0.70`, `JOB_XP_PER_LEVEL=3000` (flat, cap-less) |
 | `trophies/models.py` | `ProfileGamification`, `StatType`, `StageStatValue`; Contract engine: `EarnedContract`, `ContractXPGrant`, `ProfileJobXP` |
 | `trophies/services/contract_service.py` | Contract XP engine: detection (`mark_contract_reached` / `check_profile_contracts`), acceptance (`accept_contract` / `accept_contracts`), `claimable_contracts`, `recompute_profile_job_xp` |
 | `trophies/util_modules/leveling.py` | Per-job leveling curve (`xp_for_level` / `level_for_xp`) |
@@ -121,7 +121,7 @@ Two tiers per Contract: **Platinum** (`PLATINUM_FRAC = 0.70`, the bulk) and **10
 
 ### Leveling
 
-`trophies/util_modules/leveling.py`: the curve is **1-based** (level 1 = 0 XP, the floor every job starts at). Cumulative XP to reach level L (L>=1) = `JOB_LEVEL_BASE * (L-1)*L/2` (`JOB_LEVEL_BASE = 600`), capped at `JOB_LEVEL_CAP = 50`. `xp_for_level(L)` / `level_for_xp(xp)` round-trip; `level_for_xp` always returns >= 1 and is cap-guarded. Pursuer Level = sum of every job's level (min 1 each).
+`trophies/util_modules/leveling.py`: the curve is **flat + cap-less**, 1-based (level 1 = 0 XP, the floor every job starts at). `xp_for_level(L) = JOB_XP_PER_LEVEL * (L-1)` and `level_for_xp(xp) = xp // JOB_XP_PER_LEVEL + 1` (`JOB_XP_PER_LEVEL = 3000`); always >= 1, never clamps. Prestige tiers (`JOB_TIERS` + `tier_for_level`) carry the milestone journey on top of the open-ended number. Pursuer Level = sum of every job's level (min 1 each). Full rationale: [../design/rebuild/xp-economy.md](../design/rebuild/xp-economy.md).
 
 ### Sync seam
 

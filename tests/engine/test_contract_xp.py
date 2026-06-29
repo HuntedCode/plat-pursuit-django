@@ -290,13 +290,34 @@ def test_leveling_curve_is_flat_and_capless():
 
 def test_tier_for_level():
     assert leveling.tier_for_level(1)['key'] == 'initiate'
+    assert leveling.tier_for_level(1)['next_level'] == 10    # the floor reports its next threshold
     assert leveling.tier_for_level(9)['key'] == 'initiate'
     assert leveling.tier_for_level(10)['key'] == 'apprentice'
     assert leveling.tier_for_level(10)['next_level'] == 25   # reports the next threshold
+    between = leveling.tier_for_level(26)                    # between adept(25) and expert(50)
+    assert between['key'] == 'adept' and between['next_level'] == 50
     assert leveling.tier_for_level(99)['name'] == 'Master'
     top = leveling.tier_for_level(250)                       # Legend is the open-ended top
     assert top['key'] == 'legend' and top['next_level'] is None
     assert leveling.tier_for_level(9999)['key'] == 'legend'  # number keeps climbing past it
+
+
+def test_contract_grant_unique_together_blocks_duplicate():
+    """The DB constraint is the second line of defense behind the accepted-timestamp guard:
+    a duplicate (earned_contract, job, tier) contract grant must raise IntegrityError."""
+    from django.db import IntegrityError
+    profile = ProfileFactory()
+    contract = _contract('c-uniq', ['gunslinger'])
+    _concept, game, plat = _platinum_member(contract)
+    _earn_platinum(profile, game, plat)
+    contract_service.mark_contract_reached(profile, contract)
+    ec = EarnedContract.objects.get(profile=profile, contract=contract)
+    job = Job.objects.get(slug='gunslinger')
+
+    ContractXPGrant.objects.create(profile=profile, job=job, amount=100, tier='platinum', earned_contract=ec, base_t=6000)
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():  # isolate the failure so the outer test transaction survives
+            ContractXPGrant.objects.create(profile=profile, job=job, amount=100, tier='platinum', earned_contract=ec, base_t=6000)
 
 
 def test_grant_job_xp_is_source_agnostic():

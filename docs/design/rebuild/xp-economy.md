@@ -79,9 +79,10 @@ A profile-wide rank off the **total** level is wanted, but it's a **separate lad
 
 ## Gotchas and Pitfalls
 
-- **Doc is ahead of rebuild's code (temporarily).** The flat engine ships on the `main` PR; rebuild gets it when `main` flows down. Until then rebuild's `leveling.py` is still the old escalating curve.
 - **Niche elements never reach high tiers.** Flat + cap-less honestly reflects "you don't play card games" — Card-Shark may sit at Initiate forever. If that feels bad, the fix is a per-genre XP weighting (breaks the clean "6,000 splits evenly"), not a cap. Decide with the imbalance report.
 - **`recompute_job_xp --all` is mandatory after deploy** — skipping it leaves levels computed under the old curve.
 - **Tiers carry prestige, not the curve.** Don't be tempted to re-add curve escalation "to make high levels feel earned" — that breaks modifier fungibility. Use tier spacing instead.
+- **The ledger is append-only; the cache is `Sum(ledger)`.** Any future "remove / decay / expire XP" feature MUST delete or write a negating ledger row, **never** just decrement `ProfileJobXP` — `recompute_job_xp` rebuilds from the ledger and would resurrect the removed XP.
+- **`grant_job_xp` has NO built-in idempotency for non-contract sources.** Contracts are guarded by `unique_together(earned_contract, job, tier)` + the accepted timestamps. Quests/events (null `earned_contract`) are unconstrained — the first quest/event integration must own idempotency (e.g. `get_or_create` on `(profile, job, source, source_id)` or a partial unique index), or it will double-pay into the permanent ledger.
 - **The model is named `ContractXPGrant` but is source-agnostic.** A rename to `JobXPGrant` is optional polish; the `source` field is what matters.
-- **Lab "mastered" state is gone.** The old cap-based "MAX" state has no meaning cap-less; the Lab shows the current **tier** instead (rebuild display follow-up).
+- **Lab display:** the cap-based "mastered" state is gone — the Lab shows the element's prestige **tier** (rank on the tile/detail + a "N to <next tier>" goal). Done.
