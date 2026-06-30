@@ -17,6 +17,7 @@ def test_fresh_profile_has_identity_and_empty_showcase():
     assert card['rank']['key'] == 'newbie'      # a fresh account floors to Newbie
     assert card['showcase'] == {'rarest': [], 'recent': []} and card['rarest_pct'] is None
     assert card['platinums'] == 0
+    assert card['top_elements']                 # every element floored to level 1 -> top N present
 
 
 def test_showcase_is_rarest_first():
@@ -35,12 +36,19 @@ def test_showcase_is_rarest_first():
     assert rarest[0]['elements'] == []          # these games aren't in a Contract
 
 
-def test_hero_passthrough_is_used_verbatim():
-    """Passing a pre-built Lab hero avoids a second Lab build (the Home already has one)."""
-    fake_hero = {'pursuer_name': 'Nightfall', 'avatar_url': None, 'pursuer_level': 999,
-                 'pursuer_rank': {'key': 'ascendant', 'label': 'Ascendant'}, 'active_title': 'Sovereign'}
+def test_lab_ctx_passthrough_is_used_verbatim():
+    """Passing a pre-built Lab context avoids a second Lab build (the Home already has one)."""
+    fake = {'hero': {'pursuer_name': 'Nightfall', 'avatar_url': None, 'pursuer_level': 999,
+                     'pursuer_rank': {'key': 'ascendant', 'label': 'Ascendant'}, 'active_title': 'Sovereign'},
+            'lab': None}
 
-    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), hero=fake_hero)
+    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx=fake)
 
     assert card['name'] == 'Nightfall' and card['level'] == 999
     assert card['rank']['key'] == 'ascendant' and card['active_title'] == 'Sovereign'
+    assert card['top_elements'] == []           # no lab -> no elements
+
+
+def test_no_identity_returns_none():
+    """A degraded Lab build (no usable hero/rank) yields no card so the surface hides it."""
+    assert pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx={}) is None

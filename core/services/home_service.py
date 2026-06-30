@@ -172,9 +172,9 @@ def build_home_context(profile):
     glances = _build_glances(profile)
     return {
         'hero': hero,
-        # The identity signature; reuses the already-built hero (no second Lab build).
+        # The identity signature; reuses the already-built Lab context (no second build).
         'pursuer_card': _safe('pursuer_card', profile,
-                              lambda: pursuer_card_service.build_pursuer_card(profile, hero=hero), None),
+                              lambda: pursuer_card_service.build_pursuer_card(profile, lab_ctx=lab_ctx), None),
         'elements': _build_elements((lab_ctx or {}).get('lab')),
         'glances': glances,
         'sync': _safe('sync', profile, lambda: _build_sync(profile), None),

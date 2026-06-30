@@ -39,6 +39,17 @@ profile header, and share images alike.
             <div class="pursuer-card__cap">Trophies</div>
         </div>
     </div>
+    {% if card.top_elements %}
+    <div class="pursuer-card__shelflabel" style="margin:0 2px 6px">Strongest elements</div>
+    <div class="pursuer-card__els">
+        {% for e in card.top_elements %}
+        <span class="pursuer-card__els-item" style="--disc: var(--disc-{{ e.disc_slug }});" title="{{ e.name }} &middot; Level {{ e.level }}">
+            <span class="pursuer-card__els-glyph">{% include 'partials/elements/_atom.html' with shape=e.shape symbol=e.symbol %}</span>
+            <span class="pursuer-card__els-lv pp-tally">{{ e.level }}</span>
+        </span>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% if card.showcase.rarest or card.showcase.recent %}
     <div class="pursuer-card__showcase" data-pursuer-card-switch>
         <div class="pursuer-card__shelfhead">
