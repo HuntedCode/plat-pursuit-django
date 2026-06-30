@@ -38,7 +38,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
             </div>
             {# Headline numbers (replaces the Lab's DNA ring on the lighter home hero) #}
             {% if glances.snapshot %}
-            <div class="grid grid-cols-3 gap-2 md:gap-3 shrink-0">
+            <div class="home-herostats grid grid-cols-3 gap-2 md:gap-3 shrink-0">
                 <div class="scard text-center">
                     <div class="scard__label">Pursuer Lvl</div>
                     <div class="scard__value pp-tally text-primary">{{ hero.pursuer_level|intcomma }}</div>

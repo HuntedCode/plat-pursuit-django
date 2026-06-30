@@ -85,6 +85,17 @@
 .lab-rankline__sep { margin-right: 0.45em; color: var(--pp-text-mute); font-weight: 400; }
 .lab-rankline--luminary, .lab-rankline--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
 
+/* ---- Home hero headline numbers (3-up .scard grid) ----
+   The hero packs three stat cells in one row; a whale's 6-7 digit Trophies count overflows
+   the default 24px .scard__value + 18px padding at 375px. Tighten both on mobile so the row
+   never scrolls, then restore the full treatment from md+ where the cells are wide. */
+.home-herostats .scard { padding: 12px 8px; }
+.home-herostats .scard__value { font-size: 18px; }
+@media (min-width: 768px) {
+    .home-herostats .scard { padding: 18px; }
+    .home-herostats .scard__value { font-size: 24px; }
+}
+
 /* ---- Compact element chip for the Home "your elements" strip ----
    The cell hosts the shared atom glyph (family shape + symbol + family color); the chip just
    sizes it and adds the level beneath. */

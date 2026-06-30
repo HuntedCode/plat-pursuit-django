@@ -28,7 +28,7 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['recent'] == []
     # The trophy-snapshot card's bridge to the profile resolves (reverse-guarded).
     assert ctx['profile_url']
-    assert 'community' in ctx          # present (None until the heartbeat cache is warm)
+    assert ctx['community'] is None    # cold heartbeat cache in tests -> the section hides (degrades)
     # Elements strip: every element is present (a fresh account floors them all to level 1).
     assert len(ctx['elements']) > 0
     assert all({'symbol', 'level', 'disc_slug', 'name', 'shape'} <= set(e) for e in ctx['elements'])

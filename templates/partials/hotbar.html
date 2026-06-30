@@ -1,8 +1,8 @@
 {% load custom_filters %}
 {% load static %}
 {% load humanize %}
-{# The Tailwind sticky offsets here (top-[7.25rem] inside a hub, top-[4.5rem]    #}
-{# on non-hub pages) are good first guesses but `alignStickyChrome()` in         #}
+{# The Tailwind sticky offsets here (top-[7.25rem] when a sub-nav strip renders,  #}
+{# top-[4.5rem] otherwise) are good first guesses but `alignStickyChrome()` in    #}
 {# main.js measures the actual rendered navbar + sub-nav heights on load and     #}
 {# inline-styles `top:` to match exactly, insulating the layout from font        #}
 {# metrics, avatar size, and DPI rounding. The function also drops the 8px gap   #}
@@ -12,7 +12,7 @@
 {# and the sub-nav (z-40) so they layer correctly when scrolled. Note: hotbar.js #}
 {# MUST NOT set `wrapper.style.top` inline — that overrides the JS-managed       #}
 {# offset and jams the toggle behind the navbar/sub-nav.                         #}
-<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section %}top-[7.25rem]{% else %}top-[4.5rem]{% endif %} z-30 transition-all duration-300 ease-in-out">
+<div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section and hub_subnav_items %}top-[7.25rem]{% else %}top-[4.5rem]{% endif %} z-30 transition-all duration-300 ease-in-out">
     <div id="hotbar-container"
          class="hotbar-loading bg-base-200/95 backdrop-blur-md border-2 border-primary rounded-box shadow-lg shadow-primary/25 w-full overflow-hidden transition-all duration-300 ease-in-out"
          data-url-sync="{% url 'profile_sync_status' %}"

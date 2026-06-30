@@ -1,6 +1,8 @@
 # Navigation & Site Organization
 
-PlatPursuit's navigation uses a **hub-of-hubs IA**: 4 direct-link hub destinations in the global navbar (Dashboard, Browse, Community, My Pursuit), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over, exposing the same 4 hubs at all scroll positions. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
+PlatPursuit's navigation uses a **hub-of-hubs IA**: direct-link hub destinations in the global navbar (Home, Browse, Community, My Pursuit), with a persistent sub-navigation strip below the main navbar that surfaces hub sub-pages on every URL in a hub's family. On mobile, the desktop hub buttons hide and a sticky bottom tab bar takes over. This doc covers the navigation chrome (navbar, mobile tab bar, footer, sub-nav, profile tabs) and the cross-linking inventory between feature pages.
+
+> **Update (gamification Home, 2026-06):** the **Dashboard hub was dissolved** when the legacy dashboard retired and the gamification **Home** (`/`) replaced it. The navbar/tabbar button is now **Home** (`hub_section == 'home'`), backed by an items-less hub, so `/` highlights the button but renders **no sub-nav strip** (the Home page's own launcher cards route). Its former sub-nav items (**My Stats / My Shareables / Recap** + the dynamic **Fundraiser**) moved into **My Pursuit**; the orphaned `/dashboard/*` URLs resolve there via an inherited prefix. Sections below that describe a "Dashboard" hub or its `hub_section == 'dashboard'` active state are historical — this note governs. See [../architecture/ia-and-subnav.md](../architecture/ia-and-subnav.md).
 
 ## Architecture Overview
 

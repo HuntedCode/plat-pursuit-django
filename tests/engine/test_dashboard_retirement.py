@@ -33,6 +33,15 @@ def test_dashboard_urls_rehome_under_my_pursuit():
     assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'shareables'
 
 
+def test_community_not_shadowed_and_fundraiser_rehomed():
+    """The inherited /dashboard/ prefix must NOT shadow other hubs, and the Fundraiser page
+    (a url-name override) resolves under My Pursuit now."""
+    m = resolve_hub_subnav(_Req('/community/lists/', 'lists_browse'))
+    assert m['hub'].key == 'community'          # not stolen by /dashboard/ or the bare-root case
+    m = resolve_hub_subnav(_Req('/fundraiser/spring/', 'fundraiser'))
+    assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'fundraiser'
+
+
 def test_my_pursuit_carries_the_moved_items():
     slugs = {i.slug for i in MY_PURSUIT_HUB.items}
     assert {'stats', 'shareables', 'recap'} <= slugs          # moved in
