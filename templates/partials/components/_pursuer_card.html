@@ -39,36 +39,42 @@ profile header, and share images alike.
             <div class="pursuer-card__cap">Trophies</div>
         </div>
     </div>
-    {% if card.top_elements %}
-    <div class="pursuer-card__shelflabel" style="margin:0 2px 6px">Strongest elements</div>
-    <div class="pursuer-card__els">
-        {% for e in card.top_elements %}
-        <span class="pursuer-card__els-item" style="--disc: var(--disc-{{ e.disc_slug }});" title="{{ e.name }} &middot; Level {{ e.level }}">
-            <span class="pursuer-card__els-glyph">{% include 'partials/elements/_atom.html' with shape=e.shape symbol=e.symbol %}</span>
-            <span class="pursuer-card__els-lv pp-tally">{{ e.level }}</span>
-        </span>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% if card.showcase.rarest or card.showcase.recent %}
-    <div class="pursuer-card__showcase" data-pursuer-card-switch>
-        <div class="pursuer-card__shelfhead">
-            <span class="pursuer-card__shelflabel">Platinums</span>
-            {% if card.showcase.rarest and card.showcase.recent %}
-            <div class="pursuer-card__toggle">
-                <button type="button" class="pursuer-card__tab is-active" data-shelf="rarest">Rarest</button>
-                <button type="button" class="pursuer-card__tab" data-shelf="recent">Recent</button>
+    {% if card.families or card.showcase.rarest or card.showcase.recent %}
+    <div class="pursuer-card__lower">
+        {% if card.families %}
+        <div class="pursuer-card__fams">
+            <div class="pursuer-card__shelflabel">Disciplines</div>
+            <div class="pursuer-card__fam-grid">
+                {% for f in card.families %}
+                <div class="pursuer-card__fam" style="--disc: var(--disc-{{ f.slug }});" title="{{ f.label }} &middot; avg level {{ f.avg|floatformat:0 }}">
+                    <span class="pursuer-card__fam-n pp-tally">{{ f.avg|floatformat:0 }}</span>
+                    <span class="pursuer-card__fam-l">{{ f.label }}</span>
+                </div>
+                {% endfor %}
             </div>
-            {% endif %}
-        </div>
-        {% if card.showcase.rarest %}
-        <div class="pursuer-card__shelf" data-shelf="rarest">
-            {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
         </div>
         {% endif %}
-        {% if card.showcase.recent %}
-        <div class="pursuer-card__shelf" data-shelf="recent"{% if card.showcase.rarest %} hidden{% endif %}>
-            {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+        {% if card.showcase.rarest or card.showcase.recent %}
+        <div class="pursuer-card__showcase" data-pursuer-card-switch>
+            <div class="pursuer-card__shelfhead">
+                <span class="pursuer-card__shelflabel">Platinums</span>
+                {% if card.showcase.rarest and card.showcase.recent %}
+                <div class="pursuer-card__toggle">
+                    <button type="button" class="pursuer-card__tab is-active" data-shelf="rarest">Rarest</button>
+                    <button type="button" class="pursuer-card__tab" data-shelf="recent">Recent</button>
+                </div>
+                {% endif %}
+            </div>
+            {% if card.showcase.rarest %}
+            <div class="pursuer-card__shelf" data-shelf="rarest">
+                {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+            </div>
+            {% endif %}
+            {% if card.showcase.recent %}
+            <div class="pursuer-card__shelf" data-shelf="recent"{% if card.showcase.rarest %} hidden{% endif %}>
+                {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+            </div>
+            {% endif %}
         </div>
         {% endif %}
     </div>

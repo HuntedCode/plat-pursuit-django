@@ -17,7 +17,7 @@ def test_fresh_profile_has_identity_and_empty_showcase():
     assert card['rank']['key'] == 'newbie'      # a fresh account floors to Newbie
     assert card['showcase'] == {'rarest': [], 'recent': []} and card['rarest_pct'] is None
     assert card['platinums'] == 0
-    assert card['top_elements']                 # every element floored to level 1 -> top N present
+    assert len(card['families']) == 5           # the 5 disciplines (from the DNA-ring data)
 
 
 def test_showcase_is_rarest_first():
@@ -46,7 +46,7 @@ def test_lab_ctx_passthrough_is_used_verbatim():
 
     assert card['name'] == 'Nightfall' and card['level'] == 999
     assert card['rank']['key'] == 'ascendant' and card['active_title'] == 'Sovereign'
-    assert card['top_elements'] == []           # no lab -> no elements
+    assert card['families'] == []               # the passed hero carries no ring
 
 
 def test_no_identity_returns_none():

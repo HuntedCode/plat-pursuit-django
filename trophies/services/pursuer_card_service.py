@@ -69,24 +69,14 @@ def _platinums(profile, limit, *, recent):
     return showcase
 
 
-def _top_elements(lab, limit):
-    """The Pursuer's strongest elements (their signature "classes") -- compact, for the card.
-    Flattened from the Lab build the hero already produced; no extra query."""
-    if not lab:
-        return []
-    tiles = [t for d in lab.get('disciplines', []) for t in d.get('jobs', [])]
-    tiles.sort(key=lambda t: (-t.get('level', 0), t.get('name', '')))
-    return [{'symbol': t.get('symbol'), 'disc_slug': t.get('disc_slug'), 'level': t.get('level'),
-             'name': t.get('name'), 'shape': t.get('shape')} for t in tiles[:limit]]
-
-
-def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5, top_elements_limit=5):
+def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
     """Assemble the Pursuer Card for `profile`.
 
     `lab_ctx` (the full Lab context) may be passed in to avoid a second Lab build when the
-    caller already has one (the Home). Returns identity + headline stats + the strongest
-    elements + a toggleable platinum showcase ({rarest, recent}). Returns None when the Lab
-    build yields no usable identity (degraded) so the surface hides the card.
+    caller already has one (the Home). Returns identity + headline stats + the family makeup
+    (the 5 disciplines, from the DNA-ring data) + a toggleable platinum showcase ({rarest,
+    recent}). Returns None when the Lab build yields no usable identity (degraded) so the
+    surface hides the card.
     """
     if lab_ctx is None:
         lab_ctx = lab_service.build_lab_context(profile)
@@ -105,7 +95,7 @@ def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5, top_elements_
         'platinums': snap.get('total_plats', 0),
         'avg_completion': snap.get('avg_progress'),
         'total_trophies': snap.get('total_earned', 0),
-        'top_elements': _top_elements((lab_ctx or {}).get('lab'), top_elements_limit),
+        'families': hero.get('ring') or [],        # [{label, slug, avg, ...}] -- the 5 disciplines
         'rarest_pct': rarest[0]['earn_rate'] if rarest else None,
         'showcase': {'rarest': rarest, 'recent': recent},
     }

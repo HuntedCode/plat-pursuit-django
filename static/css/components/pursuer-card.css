@@ -70,12 +70,22 @@
 .pursuer-card__stat-n small { font-size: 14px; }
 .pursuer-card__stat-n.is-accent { color: var(--pp-primary); }
 
-/* strongest elements (the Pursuer's signature classes) -- atom glyph + level */
-.pursuer-card__els { display: flex; gap: 10px; margin: 0 2px 14px; }
-.pursuer-card__els-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.pursuer-card__els-glyph { width: 30px; height: 30px; }
-@media (min-width: 768px) { .pursuer-card__els-glyph { width: 34px; height: 34px; } }
-.pursuer-card__els-lv { font-size: 11px; font-weight: 700; color: var(--pp-text-dim); }
+/* lower half: the disciplines beside the platinums (two columns on wider screens, so the
+   horizontal space is used instead of stacking) */
+.pursuer-card__lower { display: flex; flex-direction: column; gap: 16px; }
+.pursuer-card__fams { flex: none; }
+.pursuer-card__showcase { flex: 1; min-width: 0; }
+.pursuer-card__fam-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+@media (min-width: 768px) {
+    .pursuer-card__lower { flex-direction: row; align-items: flex-start; gap: 18px; }
+    .pursuer-card__fams { width: 156px; }
+    .pursuer-card__fam-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* family square: one per discipline, family-tinted, avg level + label */
+.pursuer-card__fam { aspect-ratio: 1; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--disc); background: color-mix(in oklab, var(--disc) 13%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 36%, transparent); }
+.pursuer-card__fam-n { font-size: 19px; line-height: 1; }
+@media (min-width: 768px) { .pursuer-card__fam-n { font-size: 22px; } }
+.pursuer-card__fam-l { font-size: 8px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-dim); text-align: center; }
 
 /* the shelf: platinums under glass (Rarest / Recent toggle) */
 .pursuer-card__shelfhead { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 8px; }
