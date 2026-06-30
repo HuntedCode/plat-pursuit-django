@@ -14,14 +14,19 @@
         linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%),
         linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
     box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+    /* corner-diamond gem treatment -- a cut notch at rest, escalated per rank below */
+    --pc-notch-bg: var(--pp-bg-1); --pc-notch-bd: var(--pp-border); --pc-notch-glow: transparent;
 }
 @media (min-width: 768px) { .pursuer-card { padding: 22px; } }
 
-/* Frame brand mark: diamond corner notches */
+/* Frame brand mark: diamond corner notches (drive them via --pc-notch-* so each rank band
+   can turn them from a cut notch into a glowing gem) */
 .pursuer-card::before, .pursuer-card::after,
 .pursuer-card > .pursuer-card__nbl, .pursuer-card > .pursuer-card__nbr {
-    content: ''; position: absolute; width: 7px; height: 7px;
-    background: var(--pp-bg-1); border: 1px solid var(--pp-border); transform: rotate(45deg);
+    content: ''; position: absolute; width: 7px; height: 7px; transform: rotate(45deg);
+    background: var(--pc-notch-bg); border: 1px solid var(--pc-notch-bd);
+    box-shadow: 0 0 7px var(--pc-notch-glow);
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 .pursuer-card::before { top: -3px; left: -3px; }
 .pursuer-card::after  { top: -3px; right: -3px; }
@@ -33,12 +38,15 @@
    mid, cyan at the apex) into the border, glow, rank label + the diamond notches. */
 .pursuer-card--seeker, .pursuer-card--hunter {
     border-color: color-mix(in oklab, var(--pp-text) 12%, var(--pp-border));
+    /* the notches pick up a faint neutral fill -- the first hint of the gem */
+    --pc-notch-bg: color-mix(in oklab, var(--pp-text) 14%, var(--pp-bg-1));
+    --pc-notch-bd: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border));
 }
 .pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal { --pc-tier: var(--pp-secondary, rgb(168,140,232)); }
 .pursuer-card--vanquisher, .pursuer-card--paragon,
 .pursuer-card--luminary, .pursuer-card--ascendant { --pc-tier: var(--pp-primary); }
 
-/* mid + high standing: tinted material + a soft glow */
+/* mid + high standing: tinted material + a soft glow, and the corner diamonds become tinted gems */
 .pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal,
 .pursuer-card--vanquisher, .pursuer-card--paragon {
     border-color: color-mix(in oklab, var(--pc-tier) 44%, var(--pp-border));
@@ -46,22 +54,21 @@
         linear-gradient(180deg, color-mix(in oklab, var(--pc-tier) 12%, transparent), transparent 26%),
         linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
     box-shadow: 0 16px 44px rgba(0,0,0,0.52), 0 0 32px color-mix(in oklab, var(--pc-tier) 16%, transparent);
+    --pc-notch-bg: color-mix(in oklab, var(--pc-tier) 32%, var(--pp-bg-1));
+    --pc-notch-bd: color-mix(in oklab, var(--pc-tier) 55%, var(--pp-border));
+    --pc-notch-glow: color-mix(in oklab, var(--pc-tier) 28%, transparent);
 }
-/* the apex: radiant glass -- a stronger glow, a brighter top-edge light catch, a harder border */
+/* the apex: radiant glass -- a stronger glow, a brighter top-edge light catch, a harder border,
+   and the diamonds become bright glowing gems */
 .pursuer-card--luminary, .pursuer-card--ascendant {
     border-color: color-mix(in oklab, var(--pc-tier) 60%, var(--pp-border));
     background:
         linear-gradient(180deg, color-mix(in oklab, var(--pc-tier) 18%, transparent), transparent 32%),
         linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
     box-shadow: 0 20px 56px rgba(0,0,0,0.55), 0 0 56px color-mix(in oklab, var(--pc-tier) 26%, transparent), inset 0 1px 0 color-mix(in oklab, var(--pc-tier) 38%, transparent);
-}
-/* the apex's diamond notches catch the light too */
-.pursuer-card--luminary::before, .pursuer-card--luminary::after,
-.pursuer-card--luminary > .pursuer-card__nbl, .pursuer-card--luminary > .pursuer-card__nbr,
-.pursuer-card--ascendant::before, .pursuer-card--ascendant::after,
-.pursuer-card--ascendant > .pursuer-card__nbl, .pursuer-card--ascendant > .pursuer-card__nbr {
-    border-color: color-mix(in oklab, var(--pc-tier) 62%, var(--pp-border));
-    box-shadow: 0 0 8px color-mix(in oklab, var(--pc-tier) 55%, transparent);
+    --pc-notch-bg: color-mix(in oklab, var(--pc-tier) 58%, var(--pp-bg-1));
+    --pc-notch-bd: color-mix(in oklab, var(--pc-tier) 70%, var(--pp-border));
+    --pc-notch-glow: color-mix(in oklab, var(--pc-tier) 62%, transparent);
 }
 
 /* head: identity + the platinum hero */
