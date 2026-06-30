@@ -379,6 +379,7 @@ urlpatterns = [
     path('design/pursuer-card/', PursuerCardPreviewView.as_view(), name='design_pursuer_card_preview'),
     path('design/pursuer-card-customization/', PursuerCardCustomizationPreviewView.as_view(), name='design_pursuer_card_customization_preview'),
     path('design/pursuer-card-v2/', TemplateView.as_view(template_name='design/pursuer_card_workshop.html'), name='design_pursuer_card_workshop'),
+    path('design/pursuer-card-spectral/', TemplateView.as_view(template_name='design/pursuer_card_spectral.html'), name='design_pursuer_card_spectral'),
     path('design/style-guide/', TemplateView.as_view(template_name='design/style_guide_preview.html'), name='design_style_guide_preview'),
     path('design/jobs/', JobsWorkshopView.as_view(), name='design_jobs_preview'),
     path('design/lab/', LabWorkshopView.as_view(), name='design_lab_preview'),

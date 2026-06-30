@@ -1,0 +1,224 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pursuer Card — Spectral Identity (Direction B deep-dive)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+    <style>
+    /* =====================================================================
+     * DIRECTION B DEEP-DIVE — SPECTRAL IDENTITY
+     * The card's face IS your element emission-line fingerprint: each line is
+     * an element, positioned by family across the width, its HEIGHT + GLOW set
+     * by your level in it. Unique per Pursuer, ownable, no competitor has it.
+     * ===================================================================== */
+    :root {
+        --bg-deep: rgb(7,9,12); --bg: rgb(12,15,20); --panel: rgb(18,22,29);
+        --line: rgba(255,255,255,0.09); --line-hi: rgba(255,255,255,0.16);
+        --text: rgba(255,255,255,0.92); --soft: rgba(255,255,255,0.55); --mute: rgba(255,255,255,0.34);
+        --cyan: rgb(120,205,232); --violet: rgb(168,140,232); --plat: rgb(214,236,247);
+        --combat: rgb(232,96,96); --explore: rgb(92,200,142); --mind: rgb(96,162,232);
+        --heart: rgb(200,112,212); --finesse: rgb(236,192,92);
+        --face: 'Bricolage Grotesque','Inter',sans-serif; --body: 'Inter',system-ui,sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body { background: radial-gradient(120% 80% at 50% -10%, var(--bg) 0%, var(--bg-deep) 70%); color: var(--text); font-family: var(--body); padding: 40px 20px 120px; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { font-family: var(--face); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; }
+    h2 { font-family: var(--face); font-weight: 800; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan); margin: 56px 0 16px; }
+    .lede { color: var(--soft); font-size: 15px; line-height: 1.6; margin: 12px 0; max-width: 760px; }
+    .note { color: var(--mute); font-size: 13px; line-height: 1.6; max-width: 720px; }
+    .tally { font-family: var(--face); font-weight: 800; line-height: 0.9; font-variant-numeric: tabular-nums; }
+    .avatar { border-radius: 999px; background: conic-gradient(from 210deg, var(--violet), var(--cyan), var(--violet)); display: grid; place-content: center; font-family: var(--face); font-weight: 800; color: rgba(0,0,0,0.55); flex: none; }
+    .rankpill { font-family: var(--face); font-weight: 800; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cyan); text-shadow: 0 0 12px rgba(120,205,232,0.45); }
+    .statcap { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); margin-top: 2px; }
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--soft); }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 9px; height: 9px; border-radius: 2px; box-shadow: 0 0 6px currentColor; }
+    .spec { display: block; width: 100%; height: auto; }
+    .pair { display: flex; gap: 28px; flex-wrap: wrap; }
+    .pair > div { flex: 1 1 360px; min-width: 320px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    .who { font-family: var(--face); font-weight: 800; font-size: 15px; margin-bottom: 4px; }
+    .cards { display: flex; gap: 36px; flex-wrap: wrap; align-items: flex-start; }
+    .stage { padding: 26px; border-radius: 16px; background: var(--bg-deep); border: 1px solid var(--line); display: inline-block; }
+    /* notches = Frame brand mark */
+    .notched { position: relative; }
+    .notched::before, .notched::after, .notched .nbl, .notched .nbr { content:''; position:absolute; width:7px; height:7px; background: var(--bg-deep); border:1px solid var(--line-hi); transform: rotate(45deg); }
+    .notched::before { top:-3px; left:-3px; } .notched::after { top:-3px; right:-3px; } .notched .nbl { bottom:-3px; left:-3px; } .notched .nbr { bottom:-3px; right:-3px; }
+    .prestige { border: 2px solid color-mix(in oklab, var(--cyan) 42%, var(--line-hi)); box-shadow: 0 18px 50px rgba(0,0,0,0.55), 0 0 40px rgba(120,205,232,0.10); }
+
+    /* B1 — spectrum as the top hero band */
+    .b1 { width: 380px; border-radius: 14px; overflow: hidden; background: var(--panel); }
+    .b1 .band { position: relative; }
+    .b1 .band .cap { position: absolute; left: 14px; top: 12px; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.7); }
+    .b1 .body { display: flex; align-items: center; gap: 14px; padding: 16px; }
+    .b1 .avatar { width: 54px; height: 54px; font-size: 21px; margin-top: -42px; z-index: 2; position: relative; box-shadow: 0 0 0 3px var(--panel); }
+    .b1 .lvl { font-size: 32px; }
+
+    /* B2 — the whole card IS the spectrum (immersive) */
+    .b2 { width: 380px; height: 200px; border-radius: 14px; overflow: hidden; position: relative; background: var(--bg-deep); }
+    .b2 .specbg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .b2 .scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,10,14,0.15) 0%, rgba(8,10,14,0.45) 45%, rgba(8,10,14,0.88) 100%); }
+    .b2 .content { position: absolute; inset: 0; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; }
+    .b2 .top { display: flex; align-items: center; gap: 12px; }
+    .b2 .avatar { width: 46px; height: 46px; font-size: 18px; box-shadow: 0 0 0 2px rgba(255,255,255,0.25); }
+    .b2 .nm { font-family: var(--face); font-weight: 800; font-size: 20px; text-shadow: 0 1px 10px rgba(0,0,0,0.9); }
+    .b2 .stats { display: flex; gap: 22px; align-items: flex-end; }
+    .b2 .lvl { font-size: 34px; text-shadow: 0 2px 14px rgba(0,0,0,0.9); }
+    .b2 .plat { font-size: 34px; color: var(--plat); text-shadow: 0 0 18px rgba(214,236,247,0.4), 0 2px 14px rgba(0,0,0,0.9); }
+
+    /* compact chip (leaderboard / comment) — spectrum survives as a thin strip */
+    .chip { display: inline-flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+    .chip .avatar { width: 30px; height: 30px; font-size: 13px; }
+    .chip .nm { font-weight: 700; font-size: 14px; }
+    .chip .mr { font-size: 11px; color: var(--cyan); }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Spectral Identity &mdash; what the fingerprint can be</h1>
+    <p class="lede">Direction B leads with the one visual no competitor has: your <b>element emission spectrum</b>. Each line is an element, grouped by family across the width (Combat &middot; Exploration &middot; Mind &middot; Heart &middot; Finesse); its height and glow are your level in it. The result is a literal fingerprint &mdash; calm dark substrate, reward energy carried only by the bright peaks.</p>
+    <div class="legend">
+        <span><i style="background:var(--combat);color:var(--combat)"></i>Combat</span>
+        <span><i style="background:var(--explore);color:var(--explore)"></i>Exploration</span>
+        <span><i style="background:var(--mind);color:var(--mind)"></i>Mind</span>
+        <span><i style="background:var(--heart);color:var(--heart)"></i>Heart</span>
+        <span><i style="background:var(--finesse);color:var(--finesse)"></i>Finesse</span>
+    </div>
+
+    <h2>The signature, full size</h2>
+    <div class="panel">
+        <div class="who">Nightfall &mdash; a Combat / Heart hunter</div>
+        <svg class="spec" viewBox="0 0 300 70" preserveAspectRatio="none">
+            <defs><filter id="g1" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="1.1"/></filter></defs>
+            <rect x="0" y="0" width="300" height="70" fill="#06080c"/>
+            <line x1="0" y1="62" x2="300" y2="62" stroke="rgba(255,255,255,0.06)"/>
+            <g filter="url(#g1)">
+                <!-- Combat (tall, bright) -->
+                <rect x="16" y="16" width="2" height="46" fill="var(--combat)"/><rect x="25" y="22" width="2" height="40" fill="var(--combat)" opacity="0.9"/><rect x="34" y="10" width="2" height="52" fill="var(--combat)"/><rect x="43" y="30" width="2" height="32" fill="var(--combat)" opacity="0.8"/><rect x="52" y="20" width="2" height="42" fill="var(--combat)" opacity="0.95"/><rect x="61" y="34" width="2" height="28" fill="var(--combat)" opacity="0.75"/>
+                <!-- Exploration (short, dim) -->
+                <rect x="82" y="49" width="2" height="13" fill="var(--explore)" opacity="0.55"/><rect x="92" y="53" width="2" height="9" fill="var(--explore)" opacity="0.45"/><rect x="104" y="47" width="2" height="15" fill="var(--explore)" opacity="0.6"/><rect x="115" y="51" width="2" height="11" fill="var(--explore)" opacity="0.5"/>
+                <!-- Mind (medium) -->
+                <rect x="138" y="38" width="2" height="24" fill="var(--mind)" opacity="0.8"/><rect x="149" y="42" width="2" height="20" fill="var(--mind)" opacity="0.7"/><rect x="161" y="34" width="2" height="28" fill="var(--mind)" opacity="0.85"/><rect x="173" y="44" width="2" height="18" fill="var(--mind)" opacity="0.65"/>
+                <!-- Heart (tall, bright) -->
+                <rect x="196" y="14" width="2" height="48" fill="var(--heart)"/><rect x="205" y="20" width="2" height="42" fill="var(--heart)" opacity="0.92"/><rect x="216" y="8" width="2" height="54" fill="var(--heart)"/><rect x="227" y="26" width="2" height="36" fill="var(--heart)" opacity="0.85"/>
+                <!-- Finesse (short-med) -->
+                <rect x="250" y="44" width="2" height="18" fill="var(--finesse)" opacity="0.6"/><rect x="262" y="38" width="2" height="24" fill="var(--finesse)" opacity="0.7"/><rect x="276" y="48" width="2" height="14" fill="var(--finesse)" opacity="0.5"/>
+            </g>
+        </svg>
+        <p class="note" style="margin-top:10px">Read it like a barcode of a person: this Pursuer lives in Combat and Heart, dabbles in Mind, barely touches Exploration and Finesse.</p>
+    </div>
+
+    <h2>It is unique to every hunter</h2>
+    <div class="pair">
+        <div class="panel">
+            <div class="who">Nightfall &mdash; Combat / Heart</div>
+            <svg class="spec" viewBox="0 0 300 70" preserveAspectRatio="none">
+                <rect x="0" y="0" width="300" height="70" fill="#06080c"/><line x1="0" y1="62" x2="300" y2="62" stroke="rgba(255,255,255,0.06)"/>
+                <g filter="url(#g1)">
+                    <rect x="16" y="16" width="2" height="46" fill="var(--combat)"/><rect x="25" y="22" width="2" height="40" fill="var(--combat)" opacity="0.9"/><rect x="34" y="10" width="2" height="52" fill="var(--combat)"/><rect x="43" y="30" width="2" height="32" fill="var(--combat)" opacity="0.8"/><rect x="52" y="20" width="2" height="42" fill="var(--combat)" opacity="0.95"/>
+                    <rect x="82" y="49" width="2" height="13" fill="var(--explore)" opacity="0.5"/><rect x="104" y="51" width="2" height="11" fill="var(--explore)" opacity="0.5"/>
+                    <rect x="138" y="40" width="2" height="22" fill="var(--mind)" opacity="0.75"/><rect x="161" y="36" width="2" height="26" fill="var(--mind)" opacity="0.8"/>
+                    <rect x="196" y="14" width="2" height="48" fill="var(--heart)"/><rect x="216" y="8" width="2" height="54" fill="var(--heart)"/><rect x="227" y="26" width="2" height="36" fill="var(--heart)" opacity="0.85"/>
+                    <rect x="262" y="50" width="2" height="12" fill="var(--finesse)" opacity="0.5"/>
+                </g>
+            </svg>
+        </div>
+        <div class="panel">
+            <div class="who">Cartograph &mdash; Mind / Exploration</div>
+            <svg class="spec" viewBox="0 0 300 70" preserveAspectRatio="none">
+                <rect x="0" y="0" width="300" height="70" fill="#06080c"/><line x1="0" y1="62" x2="300" y2="62" stroke="rgba(255,255,255,0.06)"/>
+                <g filter="url(#g1)">
+                    <rect x="25" y="50" width="2" height="12" fill="var(--combat)" opacity="0.5"/><rect x="52" y="52" width="2" height="10" fill="var(--combat)" opacity="0.45"/>
+                    <rect x="82" y="16" width="2" height="46" fill="var(--explore)"/><rect x="92" y="24" width="2" height="38" fill="var(--explore)" opacity="0.9"/><rect x="104" y="12" width="2" height="50" fill="var(--explore)"/><rect x="115" y="28" width="2" height="34" fill="var(--explore)" opacity="0.85"/>
+                    <rect x="138" y="14" width="2" height="48" fill="var(--mind)"/><rect x="149" y="10" width="2" height="52" fill="var(--mind)"/><rect x="161" y="22" width="2" height="40" fill="var(--mind)" opacity="0.92"/><rect x="173" y="30" width="2" height="32" fill="var(--mind)" opacity="0.8"/>
+                    <rect x="205" y="48" width="2" height="14" fill="var(--heart)" opacity="0.55"/>
+                    <rect x="250" y="40" width="2" height="22" fill="var(--finesse)" opacity="0.7"/><rect x="276" y="44" width="2" height="18" fill="var(--finesse)" opacity="0.6"/>
+                </g>
+            </svg>
+        </div>
+    </div>
+    <p class="note" style="margin-top:14px">Two hunters, two unmistakably different cards &mdash; without a single cosmetic purchase. The identity is <i>earned</i>, which is exactly the premium read we want.</p>
+
+    <h2>On the card</h2>
+    <div class="cards">
+        <div>
+            <div class="stage">
+                <div class="b1 notched prestige"><span class="nbl"></span><span class="nbr"></span>
+                    <div class="band">
+                        <span class="cap">Platinum DNA</span>
+                        <svg class="spec" viewBox="0 0 300 70" preserveAspectRatio="none" style="height:84px">
+                            <rect x="0" y="0" width="300" height="70" fill="#06080c"/>
+                            <g filter="url(#g1)">
+                                <rect x="16" y="16" width="2" height="46" fill="var(--combat)"/><rect x="34" y="10" width="2" height="52" fill="var(--combat)"/><rect x="52" y="20" width="2" height="42" fill="var(--combat)" opacity="0.95"/>
+                                <rect x="104" y="47" width="2" height="15" fill="var(--explore)" opacity="0.6"/>
+                                <rect x="138" y="38" width="2" height="24" fill="var(--mind)" opacity="0.8"/><rect x="161" y="34" width="2" height="28" fill="var(--mind)" opacity="0.85"/>
+                                <rect x="196" y="14" width="2" height="48" fill="var(--heart)"/><rect x="216" y="8" width="2" height="54" fill="var(--heart)"/>
+                                <rect x="262" y="38" width="2" height="24" fill="var(--finesse)" opacity="0.7"/>
+                            </g>
+                        </svg>
+                    </div>
+                    <div class="body">
+                        <div class="avatar">N</div>
+                        <div style="flex:1">
+                            <div class="rankpill">Luminary V</div>
+                            <div style="display:flex;gap:22px;margin-top:8px">
+                                <div><div class="lvl tally">1,406</div><div class="statcap">Pursuer Level</div></div>
+                                <div><div class="lvl tally" style="color:var(--plat)">287</div><div class="statcap">Platinums</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="note" style="margin-top:12px"><b>B1 &mdash; spectrum as the face.</b> You see the fingerprint first, identity reads below. Safe, legible, scales down.</p>
+        </div>
+        <div>
+            <div class="stage">
+                <div class="b2 notched prestige"><span class="nbl"></span><span class="nbr"></span>
+                    <svg class="specbg" viewBox="0 0 300 200" preserveAspectRatio="none">
+                        <rect x="0" y="0" width="300" height="200" fill="#06080c"/>
+                        <g filter="url(#g1)" transform="translate(0,70) scale(1,2.2)">
+                            <rect x="16" y="16" width="2" height="46" fill="var(--combat)"/><rect x="25" y="22" width="2" height="40" fill="var(--combat)" opacity="0.9"/><rect x="34" y="10" width="2" height="52" fill="var(--combat)"/><rect x="52" y="20" width="2" height="42" fill="var(--combat)" opacity="0.95"/>
+                            <rect x="104" y="47" width="2" height="15" fill="var(--explore)" opacity="0.6"/><rect x="115" y="51" width="2" height="11" fill="var(--explore)" opacity="0.5"/>
+                            <rect x="138" y="38" width="2" height="24" fill="var(--mind)" opacity="0.8"/><rect x="161" y="34" width="2" height="28" fill="var(--mind)" opacity="0.85"/>
+                            <rect x="196" y="14" width="2" height="48" fill="var(--heart)"/><rect x="216" y="8" width="2" height="54" fill="var(--heart)"/><rect x="227" y="26" width="2" height="36" fill="var(--heart)" opacity="0.85"/>
+                            <rect x="262" y="38" width="2" height="24" fill="var(--finesse)" opacity="0.7"/>
+                        </g>
+                    </svg>
+                    <div class="scrim"></div>
+                    <div class="content">
+                        <div class="top">
+                            <div class="avatar">N</div>
+                            <div><div class="nm">Nightfall</div><div class="rankpill">Luminary V</div></div>
+                        </div>
+                        <div class="stats">
+                            <div><div class="lvl tally">1,406</div><div class="statcap">Pursuer Level</div></div>
+                            <div><div class="plat tally">287</div><div class="statcap">Platinums</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="note" style="margin-top:12px"><b>B2 &mdash; the card IS your DNA.</b> The whole surface is your fingerprint; identity floats on top. Boldest and most ownable; needs the scrim for legibility.</p>
+        </div>
+    </div>
+
+    <h2>It still works small</h2>
+    <span class="chip">
+        <span class="avatar">N</span>
+        <svg class="spec" viewBox="0 0 300 70" preserveAspectRatio="none" style="width:70px;height:24px">
+            <rect x="0" y="0" width="300" height="70" fill="#06080c"/>
+            <g filter="url(#g1)"><rect x="16" y="16" width="3" height="46" fill="var(--combat)"/><rect x="34" y="10" width="3" height="52" fill="var(--combat)"/><rect x="138" y="38" width="3" height="24" fill="var(--mind)"/><rect x="196" y="14" width="3" height="48" fill="var(--heart)"/><rect x="216" y="8" width="3" height="54" fill="var(--heart)"/></svg>
+        </svg>
+        <span><span class="nm">Nightfall</span> <span class="mr">&middot; Luminary V</span></span>
+    </span>
+    <p class="note" style="margin-top:12px">Even a 70px strip keeps the fingerprint legible (the dominant peaks survive), so the spectral identity scales to leaderboard rows and comment chips &mdash; the one weakness we flagged for B.</p>
+
+    <h2>Where it goes next</h2>
+    <p class="note">If B is the direction, the production version makes the spectrum <b>real data</b> (line per element, height = level, glow = recent activity), adds a one-time gentle left-to-right "scan" shimmer as a signature motion (reduced-motion safe), and we decide B1 vs B2 as the home hero. My lean: <b>B2 for the hero/share sizes</b> (the wow), <b>B1 for in-page</b> (legibility), the thin strip for mini.</p>
+</div>
+</body>
+</html>
