@@ -1,0 +1,249 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pursuer Card v2 — Premium Exploration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+    <style>
+    /* =====================================================================
+     * PURSUER CARD v2 — PREMIUM EXPLORATION
+     *
+     * Reconciled with the locked gamification: rank ladder (not Bronze/Silver/
+     * Gold/Platinum brackets), the inline rank label, Pursuer Level = sum of
+     * element levels, Horizon -> next rank, element/DNA identity, platinum
+     * celebrated, NO customization. Three directions to compare, each at a high
+     * rank (Luminary) so the prestige chrome shows its best.
+     * ===================================================================== */
+    :root {
+        --bg-deep: rgb(8,10,14); --bg: rgb(13,16,21); --panel: rgb(19,23,30);
+        --line: rgba(255,255,255,0.09); --line-hi: rgba(255,255,255,0.16);
+        --text: rgba(255,255,255,0.92); --soft: rgba(255,255,255,0.55); --mute: rgba(255,255,255,0.34);
+        --cyan: rgb(120,205,232); --violet: rgb(168,140,232); --plat: rgb(214,236,247); --gold: rgb(240,200,96);
+        --face: 'Bricolage Grotesque','Inter',sans-serif; --body: 'Inter',system-ui,sans-serif;
+        /* element family palette (mock; production reads --disc-<slug>) */
+        --combat: rgb(232,96,96); --explore: rgb(92,200,142); --mind: rgb(96,162,232);
+        --heart: rgb(200,112,212); --finesse: rgb(236,192,92);
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body { background: radial-gradient(120% 80% at 50% -10%, var(--bg) 0%, var(--bg-deep) 70%); color: var(--text); font-family: var(--body); padding: 40px 20px 120px; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1180px; margin: 0 auto; }
+    h1 { font-family: var(--face); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; }
+    .lede { color: var(--soft); font-size: 15px; line-height: 1.6; margin: 12px 0 6px; max-width: 760px; }
+    .note { color: var(--mute); font-size: 13px; line-height: 1.6; max-width: 760px; }
+    .row { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-top: 40px; }
+    .col { flex: 1 1 320px; min-width: 300px; }
+    .dirhead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+    .dirtag { font-family: var(--face); font-weight: 800; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--cyan); }
+    .dirname { font-family: var(--face); font-weight: 800; font-size: 19px; }
+    .dirblurb { color: var(--soft); font-size: 13px; line-height: 1.55; margin: 6px 0 22px; }
+    .stage { display: flex; justify-content: center; padding: 26px; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--bg-deep); border: 1px solid var(--line); }
+
+    /* ---- shared kit ---------------------------------------------------- */
+    .tally { font-family: var(--face); font-weight: 800; line-height: 0.9; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+    .avatar { border-radius: 999px; background: conic-gradient(from 210deg, var(--violet), var(--cyan), var(--violet)); display: grid; place-content: center; font-family: var(--face); font-weight: 800; color: rgba(0,0,0,0.55); flex: none; }
+    .horizon { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .horizon > i { display: block; height: 100%; width: var(--p,62%); border-radius: 999px; background: linear-gradient(90deg, rgba(110,180,210,0.8), var(--gold)); box-shadow: 0 0 10px rgba(240,200,96,0.45); }
+    /* diamond corner notches = the Frame's brand mark */
+    .notched { position: relative; }
+    .notched::before, .notched::after, .notched .nbl, .notched .nbr { content:''; position: absolute; width: 7px; height: 7px; background: var(--bg-deep); border: 1px solid var(--line-hi); transform: rotate(45deg); }
+    .notched::before { top:-3px; left:-3px; } .notched::after { top:-3px; right:-3px; }
+    .notched .nbl { bottom:-3px; left:-3px; } .notched .nbr { bottom:-3px; right:-3px; }
+    /* prestige chrome (Luminary): radiant top-edge light-catch + faint inner gradient */
+    .prestige { border: 2px solid color-mix(in oklab, var(--cyan) 45%, var(--line-hi)); box-shadow: 0 0 0 1px rgba(0,0,0,0.4), 0 18px 50px rgba(0,0,0,0.55), 0 0 40px rgba(120,205,232,0.12); background:
+        linear-gradient(180deg, rgba(120,205,232,0.10), transparent 30%),
+        linear-gradient(180deg, var(--panel), var(--bg)); }
+    .rankpill { font-family: var(--face); font-weight: 800; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cyan); text-shadow: 0 0 12px rgba(120,205,232,0.4); }
+    .platchip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px; border: 1px solid color-mix(in oklab, var(--plat) 35%, transparent); background: color-mix(in oklab, var(--plat) 8%, transparent); color: var(--plat); font-weight: 700; font-size: 13px; }
+    .platchip b { font-family: var(--face); font-weight: 800; }
+    .dot { width: 8px; height: 8px; border-radius: 999px; box-shadow: 0 0 7px currentColor; }
+
+    /* spectral band: emission lines colored by family, brightness ~ level */
+    .spectral { position: relative; border-radius: 8px; overflow: hidden; background: linear-gradient(90deg, #06080c, #0a0e14 50%, #06080c); }
+    .spectral::after { content:''; position:absolute; inset:0; background:
+        repeating-linear-gradient(90deg, transparent 0 5px, rgba(255,255,255,0.015) 5px 6px),
+        linear-gradient(90deg, var(--combat) 0 2px, transparent 2px) 8% 0/100% 100% no-repeat,
+        linear-gradient(90deg, var(--combat) 0 1px, transparent 1px) 13% 0/100% 100% no-repeat,
+        linear-gradient(90deg, var(--mind) 0 2px, transparent 2px) 30% 0/100% 100% no-repeat,
+        linear-gradient(90deg, var(--heart) 0 2px, transparent 2px) 52% 0/100% 100% no-repeat,
+        linear-gradient(90deg, var(--heart) 0 1px, transparent 1px) 57% 0/100% 100% no-repeat,
+        linear-gradient(90deg, var(--explore) 0 1px, transparent 1px) 72% 0/100% 100% no-repeat,
+        linear-gradient(90deg, var(--finesse) 0 2px, transparent 2px) 88% 0/100% 100% no-repeat;
+        filter: drop-shadow(0 0 4px rgba(255,255,255,0.25)); }
+
+    /* mini DNA ring (family composition donut) */
+    .dna { transform: rotate(-90deg); }
+    .dna circle { fill: none; stroke-width: 7; }
+
+    /* ======= DIRECTION A — The Artifact (portrait trading card) ======= */
+    .cardA { width: 264px; padding: 18px; border-radius: 14px; }
+    .cardA .top { display: flex; align-items: center; gap: 12px; }
+    .cardA .avatar { width: 52px; height: 52px; font-size: 20px; box-shadow: 0 0 0 2px rgba(120,205,232,0.5), 0 0 0 4px var(--bg); }
+    .cardA .name { font-family: var(--face); font-weight: 800; font-size: 17px; }
+    .cardA .lvlwrap { text-align: center; margin: 18px 0 6px; }
+    .cardA .lvl { font-size: 60px; color: var(--text); text-shadow: 0 0 26px rgba(120,205,232,0.3); }
+    .cardA .lvlcap { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--mute); }
+    .cardA .ringrow { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 6px 0 14px; }
+    .cardA .meta { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--soft); margin-top: 4px; }
+    .cardA .peek { display: flex; gap: 7px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+    .cardA .peek i { width: 26px; height: 30px; clip-path: polygon(50% 0, 100% 28%, 100% 100%, 0 100%, 0 28%); display: block; }
+
+    /* ======= DIRECTION B — Spectral Identity (element-forward) ======= */
+    .cardB { width: 380px; border-radius: 14px; overflow: hidden; }
+    .cardB .band { height: 92px; position: relative; display: flex; align-items: flex-end; padding: 12px 16px; }
+    .cardB .band .spectral { position: absolute; inset: 0; border-radius: 0; }
+    .cardB .band .bandtext { position: relative; z-index: 1; }
+    .cardB .band .bl { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(255,255,255,0.7); }
+    .cardB .band .bn { font-family: var(--face); font-weight: 800; font-size: 20px; text-shadow: 0 1px 8px rgba(0,0,0,0.8); }
+    .cardB .body { display: flex; align-items: center; gap: 16px; padding: 16px; }
+    .cardB .avatar { width: 56px; height: 56px; font-size: 22px; margin-top: -40px; position: relative; z-index: 2; box-shadow: 0 0 0 3px var(--panel); }
+    .cardB .lvl { font-size: 34px; }
+    .cardB .statcap { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); }
+
+    /* ======= DIRECTION C — Prestige Plate (rank + platinum forward) ======= */
+    .cardC { width: 380px; border-radius: 14px; padding: 18px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+    .cardC .plate { }
+    .cardC .crest { font-family: var(--face); font-weight: 800; font-size: 30px; letter-spacing: 0.02em; line-height: 1; color: var(--text); text-shadow: 0 0 30px rgba(120,205,232,0.35); }
+    .cardC .div { color: var(--cyan); }
+    .cardC .who { display: flex; align-items: center; gap: 9px; margin-top: 12px; }
+    .cardC .who .avatar { width: 30px; height: 30px; font-size: 13px; }
+    .cardC .who .nm { font-weight: 700; font-size: 14px; }
+    .cardC .sub { font-size: 11px; color: var(--soft); margin-top: 10px; }
+    .cardC .plat { text-align: center; padding: 14px 18px; border-radius: 12px; border: 1px solid color-mix(in oklab, var(--plat) 30%, transparent); background: radial-gradient(120% 90% at 50% 0, color-mix(in oklab, var(--plat) 14%, transparent), transparent 70%); }
+    .cardC .plat .pn { font-family: var(--face); font-weight: 800; font-size: 40px; color: var(--plat); text-shadow: 0 0 22px color-mix(in oklab, var(--plat) 55%, transparent); line-height: 0.9; }
+    .cardC .plat .pl { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: color-mix(in oklab, var(--plat) 70%, var(--mute)); margin-top: 5px; }
+
+    /* rank-chrome escalation demo */
+    .esc { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 18px; }
+    .esc .mini { width: 150px; border-radius: 10px; padding: 12px; }
+    .esc .mini .ml { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); }
+    .esc .mini .mr { font-family: var(--face); font-weight: 800; font-size: 14px; margin-top: 3px; }
+    .esc .mini .mn { font-family: var(--face); font-weight: 800; font-size: 26px; margin-top: 6px; }
+    .m-newbie { border: 1px solid var(--line); background: var(--panel); }
+    .m-newbie .mr { color: var(--soft); }
+    .m-warden { border: 1px solid color-mix(in oklab, var(--violet) 30%, var(--line)); background: linear-gradient(180deg, color-mix(in oklab, var(--violet) 6%, transparent), transparent), var(--panel); }
+    .m-warden .mr { color: var(--violet); }
+    .m-lumin { border: 2px solid color-mix(in oklab, var(--cyan) 45%, var(--line-hi)); background: linear-gradient(180deg, rgba(120,205,232,0.10), transparent 40%), var(--panel); box-shadow: 0 0 26px rgba(120,205,232,0.12); }
+    .m-lumin .mr { color: var(--cyan); text-shadow: 0 0 12px rgba(120,205,232,0.4); }
+
+    .rubric { margin-top: 56px; padding: 24px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+    .rubric h3 { font-family: var(--face); font-size: 16px; margin-bottom: 12px; }
+    .rubric li { color: var(--soft); font-size: 13px; line-height: 1.7; margin-left: 18px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Pursuer Card v2 — premium exploration</h1>
+    <p class="lede">Three genuinely different takes on the identity signature, all reconciled with the locked gamification (rank ladder, Pursuer Level, Horizon-to-next-rank, element identity, platinum presence, no customization). Mock Pursuer: <b>Nightfall</b>, Pursuer Level 1,406, rank Luminary V, 287 platinums.</p>
+    <p class="note">Each is shown at a high rank so the prestige chrome reads its best. The card's "metal" escalates with rank (matte Newbie &rarr; radiant Ascendant) instead of the retired Bronze/Silver/Gold/Platinum brackets — see the escalation strip under Direction A.</p>
+
+    <div class="row">
+        <!-- ============ A: The Artifact ============ -->
+        <div class="col">
+            <div class="dirhead"><span class="dirtag">Direction A</span><span class="dirname">The Artifact</span></div>
+            <p class="dirblurb">Evolves the workshop's trading-card. Leads with <b>who you are</b>: a matted, rank-tinted card with the Frame's diamond notches, the Pursuer Level as the hero number, a compact DNA ring, and a badge peek. Platinum is a featured chip. The card itself ranks up.</p>
+            <div class="stage">
+                <div class="cardA prestige notched"><span class="nbl"></span><span class="nbr"></span>
+                    <div class="top">
+                        <div class="avatar">N</div>
+                        <div><div class="name">Nightfall</div><div class="rankpill">Luminary V</div></div>
+                    </div>
+                    <div class="lvlwrap">
+                        <div class="lvl tally">1,406</div>
+                        <div class="lvlcap">Pursuer Level</div>
+                    </div>
+                    <div class="ringrow">
+                        <svg class="dna" width="46" height="46" viewBox="0 0 40 40">
+                            <circle cx="20" cy="20" r="16" stroke="rgba(255,255,255,0.08)"/>
+                            <circle cx="20" cy="20" r="16" stroke="var(--combat)" stroke-dasharray="35 100" stroke-dashoffset="0"/>
+                            <circle cx="20" cy="20" r="16" stroke="var(--mind)" stroke-dasharray="20 100" stroke-dashoffset="-35"/>
+                            <circle cx="20" cy="20" r="16" stroke="var(--heart)" stroke-dasharray="22 100" stroke-dashoffset="-55"/>
+                            <circle cx="20" cy="20" r="16" stroke="var(--explore)" stroke-dasharray="13 100" stroke-dashoffset="-77"/>
+                            <circle cx="20" cy="20" r="16" stroke="var(--finesse)" stroke-dasharray="10 100" stroke-dashoffset="-90"/>
+                        </svg>
+                        <div style="flex:1">
+                            <div class="horizon" style="--p:48%"><i></i></div>
+                            <div class="meta"><span>42 to Luminary IV</span><span style="color:var(--soft)">The Completionist</span></div>
+                        </div>
+                    </div>
+                    <div class="meta"><span class="platchip"><span class="dot" style="color:var(--plat)"></span><b>287</b> Platinums</span><span style="color:var(--mute)">Top: Mage 84</span></div>
+                    <div class="peek">
+                        <i style="background:linear-gradient(160deg,#e0c060,#8a5a20)"></i>
+                        <i style="background:linear-gradient(160deg,#cdd0d4,#8c9098)"></i>
+                        <i style="background:linear-gradient(160deg,#dcf0fa,#87afc3)"></i>
+                        <i style="background:linear-gradient(160deg,#c87a3b,#824e24)"></i>
+                        <i style="background:linear-gradient(160deg,#e0c060,#8a5a20)"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="esc">
+                <div class="mini m-newbie"><div class="ml">Pursuer Level 25</div><div class="mr">Newbie</div><div class="mn tally" style="color:var(--soft)">25</div></div>
+                <div class="mini m-warden"><div class="ml">Pursuer Level 760</div><div class="mr">Warden III</div><div class="mn tally" style="color:var(--violet)">760</div></div>
+                <div class="mini m-lumin"><div class="ml">Pursuer Level 1,406</div><div class="mr">Luminary V</div><div class="mn tally" style="color:var(--cyan)">1,406</div></div>
+            </div>
+        </div>
+
+        <!-- ============ B: Spectral Identity ============ -->
+        <div class="col">
+            <div class="dirhead"><span class="dirtag">Direction B</span><span class="dirname">Spectral Identity</span></div>
+            <p class="dirblurb">Leads with <b>what you're made of</b>. The card's face IS your spectral signature — the emission-line fingerprint of your element composition, a visual no competitor has. Identity + rank ride on top; level and platinum are the supporting stats.</p>
+            <div class="stage">
+                <div class="cardB prestige notched"><span class="nbl"></span><span class="nbr"></span>
+                    <div class="band">
+                        <div class="spectral"></div>
+                        <div class="bandtext"><div class="bl">Platinum DNA</div><div class="bn">Nightfall</div></div>
+                    </div>
+                    <div class="body">
+                        <div class="avatar">N</div>
+                        <div style="flex:1">
+                            <div class="rankpill">Luminary V</div>
+                            <div style="display:flex;gap:20px;margin-top:8px">
+                                <div><div class="lvl tally">1,406</div><div class="statcap">Pursuer Level</div></div>
+                                <div><div class="lvl tally" style="color:var(--plat)">287</div><div class="statcap">Platinums</div></div>
+                            </div>
+                            <div class="horizon" style="--p:48%;margin-top:10px"><i></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="note" style="margin-top:14px">The spectral band is the most ownable, screenshot-worthy face we have. It also gives every Pursuer a literally unique card.</p>
+        </div>
+
+        <!-- ============ C: Prestige Plate ============ -->
+        <div class="col">
+            <div class="dirhead"><span class="dirtag">Direction C</span><span class="dirname">Prestige Plate</span></div>
+            <p class="dirblurb">Leads with <b>the flex</b>. The rank is the hero, and the platinum count — the crown jewel of the whole hobby — gets its own pedestal. Most "trophy hunter standing." Identity and elements are secondary chrome.</p>
+            <div class="stage">
+                <div class="cardC prestige notched"><span class="nbl"></span><span class="nbr"></span>
+                    <div class="plate">
+                        <div class="crest">Luminary <span class="div">V</span></div>
+                        <div class="who"><div class="avatar">N</div><span class="nm">Nightfall</span></div>
+                        <div class="sub">Pursuer Level 1,406 &middot; The Completionist</div>
+                        <div class="horizon" style="--p:48%;margin-top:12px;max-width:180px"><i></i></div>
+                    </div>
+                    <div class="plat">
+                        <div class="pn tally">287</div>
+                        <div class="pl">Platinums</div>
+                    </div>
+                </div>
+            </div>
+            <p class="note" style="margin-top:14px">Hits the platinum hunter hardest in the gut, but leans less on the element identity that differentiates us.</p>
+        </div>
+    </div>
+
+    <div class="rubric">
+        <h3>How to choose</h3>
+        <ul>
+            <li><b>Most distinctive / no-competitor-has-it:</b> B (spectral) &gt; A &gt; C.</li>
+            <li><b>Most "premium identity artifact you'd screenshot":</b> A &gt; B &gt; C.</li>
+            <li><b>Hits the trophy-hunter ego hardest:</b> C &gt; A &gt; B.</li>
+            <li><b>Scales to the small sizes</b> (comment chip, leaderboard row): A &gt; C &gt; B (the spectral band needs width).</li>
+            <li><b>My lean:</b> A as the base artifact, with B's spectral band woven in as the backdrop — the artifact frame + the ownable face. C's platinum pedestal becomes a feature within it, not the whole card.</li>
+        </ul>
+    </div>
+</div>
+</body>
+</html>
