@@ -13,48 +13,10 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {% block content %}
 
-{# ── Pursuer hero: identity + headline numbers ── #}
-{% if hero %}
-<section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-    <div class="card-body p-4 md:p-6 lg:p-7">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
-            {# Identity (same treatment as the Lab hero) #}
-            <div class="flex items-center gap-3 md:gap-4 min-w-0 flex-1">
-                <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 shrink-0 rounded-full ring-2 ring-primary/60 ring-offset-2 ring-offset-base-200 overflow-hidden bg-base-300">
-                    {% if hero.avatar_url %}
-                        <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
-                    {% else %}
-                        <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|first|upper }}</div>
-                    {% endif %}
-                </div>
-                <div class="min-w-0">
-                    <p class="text-[0.65rem] md:text-xs uppercase tracking-[0.2em] text-primary/70 font-semibold">Pursuer</p>
-                    <h1 class="text-xl md:text-2xl lg:text-3xl font-bold flex items-baseline gap-1.5 min-w-0">
-                        <span class="truncate">{{ hero.pursuer_name }}</span>
-                        <span class="lab-rankline lab-rankline--{{ hero.pursuer_rank.key }}"><span class="lab-rankline__sep">·</span>{{ hero.pursuer_rank.label }}</span>
-                    </h1>
-                    {% if hero.active_title %}<p class="text-sm md:text-base text-secondary italic pr-1 truncate">{{ hero.active_title }}</p>{% endif %}
-                </div>
-            </div>
-            {# Headline numbers (replaces the Lab's DNA ring on the lighter home hero) #}
-            {% if glances.snapshot %}
-            <div class="home-herostats grid grid-cols-3 gap-2 md:gap-3 shrink-0">
-                <div class="scard text-center">
-                    <div class="scard__label">Pursuer Lvl</div>
-                    <div class="scard__value pp-tally text-primary">{{ hero.pursuer_level|intcomma }}</div>
-                </div>
-                <div class="scard text-center">
-                    <div class="scard__label">Platinums</div>
-                    <div class="scard__value pp-tally">{{ glances.snapshot.total_plats|intcomma }}</div>
-                </div>
-                <div class="scard text-center">
-                    <div class="scard__label">Trophies</div>
-                    <div class="scard__value pp-tally">{{ glances.snapshot.total_earned|intcomma }}</div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
+{# ── Pursuer Card: the identity signature (real accomplishments) ── #}
+{% if pursuer_card %}
+<section class="mb-3">
+    {% include 'partials/components/_pursuer_card.html' with card=pursuer_card %}
 </section>
 {% endif %}
 

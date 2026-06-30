@@ -24,7 +24,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from core.services.site_heartbeat import get_cached_heartbeat
-from trophies.services import contract_service, dashboard_service, lab_service
+from trophies.services import contract_service, dashboard_service, lab_service, pursuer_card_service
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +172,9 @@ def build_home_context(profile):
     glances = _build_glances(profile)
     return {
         'hero': hero,
+        # The identity signature; reuses the already-built hero (no second Lab build).
+        'pursuer_card': _safe('pursuer_card', profile,
+                              lambda: pursuer_card_service.build_pursuer_card(profile, hero=hero), None),
         'elements': _build_elements((lab_ctx or {}).get('lab')),
         'glances': glances,
         'sync': _safe('sync', profile, lambda: _build_sync(profile), None),

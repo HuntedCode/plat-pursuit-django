@@ -1,0 +1,55 @@
+{% load humanize %}
+{% comment %}
+Pursuer Card -- the identity signature. Expects `card` from
+trophies/services/pursuer_card_service.build_pursuer_card:
+{name, avatar_url, rank{key,label}, level, active_title, platinums, avg_completion,
+ total_trophies, rarest_pct, showcase[{game_name, cover_url, earn_rate, np_communication_id}]}.
+Self-contained (component CSS only, no utility classes) so it can mount on the home, the
+profile header, and share images alike.
+{% endcomment %}
+<div class="pursuer-card pursuer-card--{{ card.rank.key }}">
+    <span class="pursuer-card__nbl"></span><span class="pursuer-card__nbr"></span>
+    <div class="pursuer-card__top">
+        <div class="pursuer-card__avatar">
+            {% if card.avatar_url %}<img src="{{ card.avatar_url }}" alt="{{ card.name }}">{% else %}<div class="pursuer-card__avatar-fb">{{ card.name|first|upper }}</div>{% endif %}
+        </div>
+        <div class="pursuer-card__id">
+            <div class="pursuer-card__name">{{ card.name }}</div>
+            <div class="pursuer-card__rank">{{ card.rank.label }}</div>
+            {% if card.active_title %}<div class="pursuer-card__title">{{ card.active_title }}</div>{% endif %}
+        </div>
+        <div class="pursuer-card__platwrap">
+            <span class="pursuer-card__plat pp-tally">{{ card.platinums|intcomma }}</span>
+            <span class="pursuer-card__cap">Platinums</span>
+        </div>
+    </div>
+    <div class="pursuer-card__stats">
+        <div>
+            <div class="pursuer-card__stat-n pp-tally">{{ card.avg_completion|floatformat:1 }}<small>%</small></div>
+            <div class="pursuer-card__cap">Avg completion</div>
+        </div>
+        {% if card.rarest_pct %}
+        <div>
+            <div class="pursuer-card__stat-n pp-tally is-accent">{{ card.rarest_pct|floatformat:1 }}<small>%</small></div>
+            <div class="pursuer-card__cap">Rarest platinum</div>
+        </div>
+        {% endif %}
+        <div>
+            <div class="pursuer-card__stat-n pp-tally">{{ card.total_trophies|intcomma }}</div>
+            <div class="pursuer-card__cap">Trophies</div>
+        </div>
+    </div>
+    {% if card.showcase %}
+    <div class="pursuer-card__shelflabel">Rarest platinums</div>
+    <div class="pursuer-card__shelf">
+        {% for p in card.showcase %}
+        {% if p.np_communication_id %}<a href="{% url 'game_detail' p.np_communication_id %}" class="pursuer-card__cover" title="{{ p.game_name }} &middot; {{ p.earn_rate|floatformat:1 }}%">{% else %}<div class="pursuer-card__cover">{% endif %}
+            {% if p.cover_url %}<img src="{{ p.cover_url }}" alt="{{ p.game_name }}">{% endif %}
+            <span class="pursuer-card__cover-pb"></span>
+            <span class="pursuer-card__cover-rare">{{ p.earn_rate|floatformat:1 }}%</span>
+            <span class="pursuer-card__cover-name">{{ p.game_name }}</span>
+        {% if p.np_communication_id %}</a>{% else %}</div>{% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>

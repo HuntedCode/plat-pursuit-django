@@ -1,0 +1,86 @@
+/* ============================================================================
+ * PURSUER CARD -- the identity signature (home hero, profile header, share).
+ * "Trophy Case": platinum count is the hero, the rarest platinums sit under
+ * glass, rank tints the chrome (earned standing). Bespoke --pp foundation; the
+ * premium is craft on real content, not a metaphor. Frame-language notches.
+ * ========================================================================== */
+.pursuer-card {
+    position: relative;
+    padding: 16px;
+    border-radius: var(--pp-radius-lg, 12px);
+    border: 2px solid var(--pp-border);
+    /* material over drop-shadow: a faint top-edge light catch + workbench gradient */
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%),
+        linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+}
+@media (min-width: 768px) { .pursuer-card { padding: 22px; } }
+
+/* Frame brand mark: diamond corner notches */
+.pursuer-card::before, .pursuer-card::after,
+.pursuer-card > .pursuer-card__nbl, .pursuer-card > .pursuer-card__nbr {
+    content: ''; position: absolute; width: 7px; height: 7px;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border); transform: rotate(45deg);
+}
+.pursuer-card::before { top: -3px; left: -3px; }
+.pursuer-card::after  { top: -3px; right: -3px; }
+.pursuer-card__nbl { bottom: -3px; left: -3px; }
+.pursuer-card__nbr { bottom: -3px; right: -3px; }
+
+/* Rank-tinted chrome (escalating). Resting ranks stay matte; the prize accent is
+   earned by standing -- mid ranks get a quiet violet, the apex ranks a cyan glow. */
+.pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal {
+    border-color: color-mix(in oklab, var(--pp-secondary, rgb(168,140,232)) 26%, var(--pp-border));
+}
+.pursuer-card--vanquisher, .pursuer-card--paragon {
+    border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
+}
+.pursuer-card--luminary, .pursuer-card--ascendant {
+    border-color: color-mix(in oklab, var(--pp-primary) 42%, var(--pp-border));
+    box-shadow: 0 14px 40px rgba(0,0,0,0.5), 0 0 38px color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 9%, transparent), transparent 26%),
+        linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+}
+
+/* head: identity + the platinum hero */
+.pursuer-card__top { display: flex; align-items: center; gap: 12px; }
+.pursuer-card__avatar {
+    width: 48px; height: 48px; flex: none; border-radius: 999px; overflow: hidden;
+    background: var(--pp-bg-3, var(--pp-bg-1)); box-shadow: 0 0 0 2px color-mix(in oklab, var(--pp-primary) 50%, transparent);
+}
+@media (min-width: 768px) { .pursuer-card__avatar { width: 60px; height: 60px; } }
+.pursuer-card__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pursuer-card__avatar-fb { width: 100%; height: 100%; display: grid; place-content: center; font-family: var(--pp-font-display); font-weight: 800; font-size: 20px; color: var(--pp-text-mute); }
+.pursuer-card__id { min-width: 0; flex: 1; }
+.pursuer-card__name, .pursuer-card__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pursuer-card__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; line-height: 1.1; color: var(--pp-text); }
+@media (min-width: 768px) { .pursuer-card__name { font-size: 22px; } }
+.pursuer-card__rank { font-family: var(--pp-font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-primary); text-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 40%, transparent); }
+.pursuer-card__title { font-size: 12px; font-style: italic; color: var(--pp-text-dim); padding-right: 1px; }
+.pursuer-card__platwrap { margin-left: auto; text-align: right; }
+.pursuer-card__plat { display: block; font-size: 36px; color: var(--pp-primary); text-shadow: 0 0 24px color-mix(in oklab, var(--pp-primary) 38%, transparent); }
+@media (min-width: 768px) { .pursuer-card__plat { font-size: 46px; } }
+.pursuer-card__cap { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
+
+/* stats row */
+.pursuer-card__stats { display: flex; gap: 22px; margin: 14px 2px 12px; }
+.pursuer-card__stat-n { font-size: 22px; color: var(--pp-text); }
+.pursuer-card__stat-n small { font-size: 14px; }
+.pursuer-card__stat-n.is-accent { color: var(--pp-primary); }
+
+/* the shelf: rarest platinums under glass */
+.pursuer-card__shelflabel { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-dim); margin: 6px 2px 8px; }
+.pursuer-card__shelf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.pursuer-card__cover {
+    position: relative; aspect-ratio: 3/4; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--pp-border); background: var(--pp-bg-3, var(--pp-bg-1));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 14px rgba(0,0,0,0.5);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.pursuer-card__cover:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 8px 20px rgba(0,0,0,0.6), 0 0 16px color-mix(in oklab, var(--pp-primary) 22%, transparent); }
+.pursuer-card__cover img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.pursuer-card__cover-name { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 5px 4px; font-size: 8px; font-weight: 700; line-height: 1.1; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+.pursuer-card__cover-pb { position: absolute; top: 4px; right: 4px; width: 11px; height: 11px; border-radius: 999px; background: radial-gradient(circle at 35% 30%, #fff, var(--pp-primary) 60%, color-mix(in oklab, var(--pp-primary) 50%, #000)); box-shadow: 0 0 7px color-mix(in oklab, var(--pp-primary) 70%, transparent); }
+.pursuer-card__cover-rare { position: absolute; top: 4px; left: 4px; font-size: 7px; font-weight: 800; color: var(--pp-primary); background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 4px; }
