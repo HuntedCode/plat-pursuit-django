@@ -23,58 +23,53 @@ profile header, and share images alike.
             <span class="pursuer-card__cap">Platinums</span>
         </div>
     </div>
-    <div class="pursuer-card__stats">
-        <div>
-            <div class="pursuer-card__stat-n pp-tally">{{ card.avg_completion|floatformat:1 }}<small>%</small></div>
-            <div class="pursuer-card__cap">Avg completion</div>
+    <div class="pursuer-card__mid">
+        <div class="pursuer-card__stats">
+            <div>
+                <div class="pursuer-card__stat-n pp-tally">{{ card.avg_completion|floatformat:1 }}<small>%</small></div>
+                <div class="pursuer-card__cap">Avg completion</div>
+            </div>
+            {% if card.rarest_pct %}
+            <div>
+                <div class="pursuer-card__stat-n pp-tally is-accent">{{ card.rarest_pct|floatformat:1 }}<small>%</small></div>
+                <div class="pursuer-card__cap">Rarest platinum</div>
+            </div>
+            {% endif %}
+            <div>
+                <div class="pursuer-card__stat-n pp-tally">{{ card.total_trophies|intcomma }}</div>
+                <div class="pursuer-card__cap">Trophies</div>
+            </div>
         </div>
-        {% if card.rarest_pct %}
-        <div>
-            <div class="pursuer-card__stat-n pp-tally is-accent">{{ card.rarest_pct|floatformat:1 }}<small>%</small></div>
-            <div class="pursuer-card__cap">Rarest platinum</div>
-        </div>
-        {% endif %}
-        <div>
-            <div class="pursuer-card__stat-n pp-tally">{{ card.total_trophies|intcomma }}</div>
-            <div class="pursuer-card__cap">Trophies</div>
-        </div>
-    </div>
-    {% if card.families or card.showcase.rarest or card.showcase.recent %}
-    <div class="pursuer-card__lower">
         {% if card.families %}
-        <div class="pursuer-card__fams">
-            <div class="pursuer-card__shelflabel">Disciplines</div>
-            <div class="pursuer-card__fam-grid">
-                {% for f in card.families %}
-                <div class="pursuer-card__fam" style="--disc: var(--disc-{{ f.slug }});" title="{{ f.label }} &middot; avg level {{ f.avg|floatformat:0 }}">
-                    <span class="pursuer-card__fam-n pp-tally">{{ f.avg|floatformat:0 }}</span>
-                    <span class="pursuer-card__fam-l">{{ f.label }}</span>
-                </div>
-                {% endfor %}
+        <div class="pursuer-card__fam-grid">
+            {% for f in card.families %}
+            <div class="pursuer-card__fam" style="--disc: var(--disc-{{ f.slug }});" title="{{ f.label }} &middot; avg level {{ f.avg|floatformat:0 }}">
+                <span class="pursuer-card__fam-n pp-tally">{{ f.avg|floatformat:0 }}</span>
+                <span class="pursuer-card__fam-l">{{ f.label }}</span>
             </div>
+            {% endfor %}
         </div>
         {% endif %}
-        {% if card.showcase.rarest or card.showcase.recent %}
-        <div class="pursuer-card__showcase" data-pursuer-card-switch>
-            <div class="pursuer-card__shelfhead">
-                <span class="pursuer-card__shelflabel">Platinums</span>
-                {% if card.showcase.rarest and card.showcase.recent %}
-                <div class="pursuer-card__toggle">
-                    <button type="button" class="pursuer-card__tab is-active" data-shelf="rarest">Rarest</button>
-                    <button type="button" class="pursuer-card__tab" data-shelf="recent">Recent</button>
-                </div>
-                {% endif %}
-            </div>
-            {% if card.showcase.rarest %}
-            <div class="pursuer-card__shelf" data-shelf="rarest">
-                {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+    </div>
+    {% if card.showcase.rarest or card.showcase.recent %}
+    <div class="pursuer-card__showcase" data-pursuer-card-switch>
+        <div class="pursuer-card__shelfhead">
+            <span class="pursuer-card__shelflabel">Platinums</span>
+            {% if card.showcase.rarest and card.showcase.recent %}
+            <div class="pursuer-card__toggle">
+                <button type="button" class="pursuer-card__tab is-active" data-shelf="rarest">Rarest</button>
+                <button type="button" class="pursuer-card__tab" data-shelf="recent">Recent</button>
             </div>
             {% endif %}
-            {% if card.showcase.recent %}
-            <div class="pursuer-card__shelf" data-shelf="recent"{% if card.showcase.rarest %} hidden{% endif %}>
-                {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
-            </div>
-            {% endif %}
+        </div>
+        {% if card.showcase.rarest %}
+        <div class="pursuer-card__shelf" data-shelf="rarest">
+            {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+        </div>
+        {% endif %}
+        {% if card.showcase.recent %}
+        <div class="pursuer-card__shelf" data-shelf="recent"{% if card.showcase.rarest %} hidden{% endif %}>
+            {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
         </div>
         {% endif %}
     </div>
