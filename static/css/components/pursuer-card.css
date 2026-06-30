@@ -28,20 +28,40 @@
 .pursuer-card__nbl { bottom: -3px; left: -3px; }
 .pursuer-card__nbr { bottom: -3px; right: -3px; }
 
-/* Rank-tinted chrome (escalating). Resting ranks stay matte; the prize accent is
-   earned by standing -- mid ranks get a quiet violet, the apex ranks a cyan glow. */
-.pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal {
-    border-color: color-mix(in oklab, var(--pp-secondary, rgb(168,140,232)) 26%, var(--pp-border));
+/* Rank-tinted chrome -- the card visibly upgrades as you climb. Resting ranks stay matte
+   (the accent is earned by standing); --pc-tier carries the band accent (a quiet violet at
+   mid, cyan at the apex) into the border, glow, rank label + the diamond notches. */
+.pursuer-card--seeker, .pursuer-card--hunter {
+    border-color: color-mix(in oklab, var(--pp-text) 12%, var(--pp-border));
 }
+.pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal { --pc-tier: var(--pp-secondary, rgb(168,140,232)); }
+.pursuer-card--vanquisher, .pursuer-card--paragon,
+.pursuer-card--luminary, .pursuer-card--ascendant { --pc-tier: var(--pp-primary); }
+
+/* mid + high standing: tinted material + a soft glow */
+.pursuer-card--ranger, .pursuer-card--warden, .pursuer-card--marshal,
 .pursuer-card--vanquisher, .pursuer-card--paragon {
-    border-color: color-mix(in oklab, var(--pp-primary) 30%, var(--pp-border));
-}
-.pursuer-card--luminary, .pursuer-card--ascendant {
-    border-color: color-mix(in oklab, var(--pp-primary) 42%, var(--pp-border));
-    box-shadow: 0 14px 40px rgba(0,0,0,0.5), 0 0 38px color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border-color: color-mix(in oklab, var(--pc-tier) 44%, var(--pp-border));
     background:
-        linear-gradient(180deg, color-mix(in oklab, var(--pp-primary) 9%, transparent), transparent 26%),
+        linear-gradient(180deg, color-mix(in oklab, var(--pc-tier) 12%, transparent), transparent 26%),
         linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    box-shadow: 0 16px 44px rgba(0,0,0,0.52), 0 0 32px color-mix(in oklab, var(--pc-tier) 16%, transparent);
+}
+/* the apex: radiant glass -- a stronger glow, a brighter top-edge light catch, a harder border */
+.pursuer-card--luminary, .pursuer-card--ascendant {
+    border-color: color-mix(in oklab, var(--pc-tier) 60%, var(--pp-border));
+    background:
+        linear-gradient(180deg, color-mix(in oklab, var(--pc-tier) 18%, transparent), transparent 32%),
+        linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
+    box-shadow: 0 20px 56px rgba(0,0,0,0.55), 0 0 56px color-mix(in oklab, var(--pc-tier) 26%, transparent), inset 0 1px 0 color-mix(in oklab, var(--pc-tier) 38%, transparent);
+}
+/* the apex's diamond notches catch the light too */
+.pursuer-card--luminary::before, .pursuer-card--luminary::after,
+.pursuer-card--luminary > .pursuer-card__nbl, .pursuer-card--luminary > .pursuer-card__nbr,
+.pursuer-card--ascendant::before, .pursuer-card--ascendant::after,
+.pursuer-card--ascendant > .pursuer-card__nbl, .pursuer-card--ascendant > .pursuer-card__nbr {
+    border-color: color-mix(in oklab, var(--pc-tier) 62%, var(--pp-border));
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pc-tier) 55%, transparent);
 }
 
 /* head: identity + the platinum hero */
@@ -57,7 +77,7 @@
 .pursuer-card__name, .pursuer-card__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pursuer-card__name { font-family: var(--pp-font-display); font-weight: 800; font-size: 18px; line-height: 1.1; color: var(--pp-text); }
 @media (min-width: 768px) { .pursuer-card__name { font-size: 22px; } }
-.pursuer-card__rank { font-family: var(--pp-font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-primary); text-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 40%, transparent); }
+.pursuer-card__rank { font-family: var(--pp-font-display); font-weight: 800; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pc-tier, var(--pp-primary)); text-shadow: 0 0 12px color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 42%, transparent); }
 .pursuer-card__title { font-size: 12px; font-style: italic; color: var(--pp-text-dim); padding-right: 1px; }
 .pursuer-card__platwrap { margin-left: auto; text-align: right; }
 .pursuer-card__plat { display: block; font-size: 36px; color: var(--pp-primary); text-shadow: 0 0 24px color-mix(in oklab, var(--pp-primary) 38%, transparent); }

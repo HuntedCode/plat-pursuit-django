@@ -581,6 +581,46 @@ class BadgeCollectionListView(BinderPreviewView):
         return ctx
 
 
+class PursuerCardRanksPreviewView(TemplateView):
+    """Preview the *production* Pursuer Card at every rank tier (/design/pursuer-card-ranks/).
+
+    The live card's chrome is driven by the viewer's real rank, so the high tiers are hard to
+    see in normal use. This renders the real component partial with mock data, one card per
+    rank, so the rank-chrome escalation can be eyeballed end to end.
+    """
+    template_name = 'design/pursuer_card_ranks.html'
+
+    def get_context_data(self, **kwargs):
+        from trophies.util_modules.leveling import PURSUER_RANKS, pursuer_rank_for_level
+        ctx = super().get_context_data(**kwargs)
+        families = [
+            {'label': 'Combat', 'slug': 'combat', 'avg': 48, 'bar_pct': 100},
+            {'label': 'Heart', 'slug': 'heart', 'avg': 41, 'bar_pct': 85},
+            {'label': 'Mind', 'slug': 'mind', 'avg': 35, 'bar_pct': 73},
+            {'label': 'Exploration', 'slug': 'exploration', 'avg': 22, 'bar_pct': 46},
+            {'label': 'Finesse', 'slug': 'finesse', 'avg': 18, 'bar_pct': 38},
+        ]
+        showcase = [
+            {'game_name': name, 'cover_url': '', 'has_cover': False, 'earn_rate': rate,
+             'np_communication_id': None, 'elements': []}
+            for name, rate in [('Elden Ring', 0.8), ('Bloodborne', 1.1), ('Sekiro', 1.4),
+                               ('Returnal', 2.1), ('Hollow Knight', 2.6)]
+        ]
+        cards = []
+        for min_level, key, name, has_div in PURSUER_RANKS:
+            rank = pursuer_rank_for_level(min_level)
+            cards.append({
+                'name': 'Nightfall', 'avatar_url': None,
+                'rank': {'key': rank['key'], 'label': rank['label']},
+                'level': min_level, 'active_title': 'The Completionist',
+                'platinums': 287, 'avg_completion': 94.2, 'total_trophies': 18402,
+                'rarest_pct': 0.8, 'families': families,
+                'showcase': {'rarest': showcase, 'recent': showcase},
+            })
+        ctx['rank_cards'] = cards
+        return ctx
+
+
 class PursuerCardPreviewView(TemplateView):
     """Workshop page for the Pursuer Card primitive at /design/pursuer-card/.
 

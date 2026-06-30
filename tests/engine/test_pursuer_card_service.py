@@ -52,3 +52,17 @@ def test_lab_ctx_passthrough_is_used_verbatim():
 def test_no_identity_returns_none():
     """A degraded Lab build (no usable hero/rank) yields no card so the surface hides it."""
     assert pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx={}) is None
+
+
+def test_card_partial_applies_rank_chrome_class():
+    """The component partial renders and stamps the rank key as the chrome class -- the hook the
+    escalating rank styling targets (matte at the floor, radiant cyan at the apex)."""
+    from django.template.loader import render_to_string
+    base = {'name': 'Nightfall', 'avatar_url': None, 'level': 120, 'active_title': 'The X',
+            'platinums': 287, 'avg_completion': 94.2, 'total_trophies': 18402, 'rarest_pct': 0.8,
+            'families': [{'label': 'Combat', 'slug': 'combat', 'avg': 48, 'bar_pct': 100}],
+            'showcase': {'rarest': [], 'recent': []}}
+    for key in ('newbie', 'warden', 'ascendant'):
+        html = render_to_string('partials/components/_pursuer_card.html',
+                                {'card': {**base, 'rank': {'key': key, 'label': key.title()}}})
+        assert f'pursuer-card--{key}' in html

@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, PursuerCardPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap, RoadmapSitemap,
@@ -377,6 +377,7 @@ urlpatterns = [
     path('design/tally/', TemplateView.as_view(template_name='design/tally_preview.html'), name='design_tally_preview'),
     path('design/horizon/', TemplateView.as_view(template_name='design/horizon_preview.html'), name='design_horizon_preview'),
     path('design/pursuer-card/', PursuerCardPreviewView.as_view(), name='design_pursuer_card_preview'),
+    path('design/pursuer-card-ranks/', PursuerCardRanksPreviewView.as_view(), name='design_pursuer_card_ranks_preview'),
     path('design/pursuer-card-customization/', PursuerCardCustomizationPreviewView.as_view(), name='design_pursuer_card_customization_preview'),
     path('design/pursuer-card-v2/', TemplateView.as_view(template_name='design/pursuer_card_workshop.html'), name='design_pursuer_card_workshop'),
     path('design/pursuer-card-spectral/', TemplateView.as_view(template_name='design/pursuer_card_spectral.html'), name='design_pursuer_card_spectral'),
