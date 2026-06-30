@@ -1,0 +1,10 @@
+{% comment %}One showcase platinum cover for the Pursuer Card. `p` = a showcase item
+(game_name, cover_url, earn_rate, np_communication_id, elements[]). Inherits `p` from the
+enclosing {% for %}.{% endcomment %}
+{% if p.np_communication_id %}<a href="{% url 'game_detail' p.np_communication_id %}" class="pursuer-card__cover" title="{{ p.game_name }} &middot; {{ p.earn_rate|floatformat:1 }}%">{% else %}<div class="pursuer-card__cover">{% endif %}
+    {% if p.cover_url %}<img src="{{ p.cover_url }}" alt="{{ p.game_name }}">{% endif %}
+    <span class="pursuer-card__cover-pb"></span>
+    <span class="pursuer-card__cover-rare">{{ p.earn_rate|floatformat:1 }}%</span>
+    {% if p.elements %}<span class="pursuer-card__cover-els">{% for e in p.elements|slice:":3" %}<span class="pursuer-card__el" style="--disc: var(--disc-{{ e.disc_slug }});" title="{{ e.name }}">{{ e.symbol }}</span>{% endfor %}</span>{% endif %}
+    <span class="pursuer-card__cover-name">{{ p.game_name }}</span>
+{% if p.np_communication_id %}</a>{% else %}</div>{% endif %}

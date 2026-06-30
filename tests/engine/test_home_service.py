@@ -23,7 +23,8 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['hero']['pursuer_rank']['key'] == 'newbie'
     # The Pursuer Card identity signature (built from the same hero, no second Lab build).
     assert ctx['pursuer_card'] is not None
-    assert ctx['pursuer_card']['rank']['key'] == 'newbie' and ctx['pursuer_card']['showcase'] == []
+    assert ctx['pursuer_card']['rank']['key'] == 'newbie'
+    assert ctx['pursuer_card']['showcase'] == {'rarest': [], 'recent': []}
     # Glances: nothing pending, no in-progress badges, but the (zero-query) snapshot is present.
     assert ctx['glances']['claimable_count'] == 0
     assert ctx['glances']['almost_badges'] == []
@@ -103,6 +104,7 @@ def test_home_templates_parse():
     get_template('trophies/home.html')
     get_template('trophies/partials/home/_recent_cover.html')
     get_template('partials/components/_pursuer_card.html')
+    get_template('partials/components/_pursuer_card_cover.html')
 
 
 def test_broken_hero_zone_degrades_without_500(monkeypatch):

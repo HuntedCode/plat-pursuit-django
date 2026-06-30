@@ -15,7 +15,7 @@ def test_fresh_profile_has_identity_and_empty_showcase():
     card = pursuer_card_service.build_pursuer_card(ProfileFactory())
 
     assert card['rank']['key'] == 'newbie'      # a fresh account floors to Newbie
-    assert card['showcase'] == [] and card['rarest_pct'] is None
+    assert card['showcase'] == {'rarest': [], 'recent': []} and card['rarest_pct'] is None
     assert card['platinums'] == 0
 
 
@@ -27,10 +27,12 @@ def test_showcase_is_rarest_first():
 
     card = pursuer_card_service.build_pursuer_card(profile)
 
-    assert [s['earn_rate'] for s in card['showcase']] == [1.2, 8.5, 30.0]   # rarest first
+    rarest = card['showcase']['rarest']
+    assert [s['earn_rate'] for s in rarest] == [1.2, 8.5, 30.0]   # rarest first
     assert card['rarest_pct'] == 1.2
-    assert all({'game_name', 'cover_url', 'earn_rate', 'np_communication_id'} <= set(s)
-               for s in card['showcase'])
+    assert all({'game_name', 'cover_url', 'earn_rate', 'np_communication_id', 'elements'} <= set(s)
+               for s in rarest)
+    assert rarest[0]['elements'] == []          # these games aren't in a Contract
 
 
 def test_hero_passthrough_is_used_verbatim():
