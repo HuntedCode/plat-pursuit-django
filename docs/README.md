@@ -37,7 +37,9 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | [Binder Surface](design/binder-surface.md) | The Binder: first Surface (branded container, not a primitive). Six views, 3D page-flip Spread mode, locked design + technical learnings from the workshop at `/design/binder/`. Code extraction deferred. |
 | [Gamification Plan](design/gamification-plan.md) | Layered Phase 1 to 4+ rollout for the Pursuer + Job system. Phase 1 ships the core loop; later phases earn their place through engagement data. |
 | [Dashboard Module Catalog](design/dashboard-module-catalog.md) | 28-module roadmap with priority tiers, data sources, and implementation status |
-| [Platinum Journey](design/platinum-journey.md) | Premium "patient companion" feature: synthesis layer that knows the user and helps plan their next pursuits |
+| [Data Intelligence](design/data-intelligence.md) | The flagship premium *value* arc: one per-profile insight engine, three interfaces (insight engine → My Stats drill-down → conversational companion). Whale-safe via materialized pre-compute. |
+| [Premium = Membership](design/rebuild/premium-proposal.md) | Premium direction: support-led membership (not a paywall), four buckets, v1 = positioning/storefront/flair, value flagships on a published roadmap. |
+| [Platinum Journey](design/platinum-journey.md) | Premium "patient companion": **Phase C of the Data Intelligence arc** — the insight engine spoken rather than charted; knows the user, helps plan their next pursuits |
 | [Stats Page](design/stats-page.md) | Premium `/my-stats/` page: video game stats screen with 100+ trophy hunting stats |
 | [Tutorial System](design/tutorial-system.md) | 3-tour onboarding: Welcome Tour (hub navigation), Game Detail Tour (community features), Badge Detail Tour (progression system) |
 

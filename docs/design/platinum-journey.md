@@ -1,6 +1,8 @@
 # Platinum Journey, Design Document
 
 > **Status:** Vision document. Not implemented. Shelved until after the current site redesign branch ships as its own headline update.
+>
+> **Reconciled 2026-06-30:** Platinum Journey is confirmed as **Phase C (the conversational interface) of the [Data Intelligence](data-intelligence.md) arc** — the premium "abstract between the stats" engine, *spoken* rather than charted. It shares the per-profile **insight engine** (the materialized layer in data-intelligence.md) as its Context Builder. Important refinement: the *heavy* Context Builder reads should come from that **materialized** insight layer, not a live per-request build (whale-safety — see data-intelligence.md). Premium model: **included in the membership**, not a separate tier (resolves open question #4 below).
 
 ## Context
 
@@ -438,7 +440,7 @@ These are the things still TBD that need to be resolved before or during Phase 1
 1. **Character design.** Form, visual style, animation potential. Requires artist collaboration. Working name is F.R.I.E.N.D. (Fully Responsive Interactive Entertainment Navigation Device); final name pending artist input.
 2. **Voice tone exact calibration.** The "humorous, aloof, never therapist" line is clear in principle but needs example dialogue to lock in. Some sample greetings, observations, and follow-ups should be written before the voice service is built.
 3. **Free tier exact boundaries.** How many free observations? Does the free user keep the same companion forever or does the companion forget them between visits? (Leaning toward: free users always meet a fresh companion who remembers nothing, premium unlocks the relationship.)
-4. **Premium price point implications.** Does Journey justify a higher tier than current premium, or is it included in the existing premium? Probably the latter for simplicity, but worth revisiting closer to launch.
+4. **Premium price point implications.** ~~Does Journey justify a higher tier than current premium, or is it included in the existing premium?~~ **Resolved 2026-06-30: included in the membership; no separate tier** (keep it simple) — see [premium-proposal.md](rebuild/premium-proposal.md).
 5. **Chapters/seasons (optional).** Some users may want their journey to feel episodic ("my JRPG summer", "my horror October"). This could be opt-in chapter framing or skipped entirely. Decide during Phase 2.
 6. **Custom goals limits.** Should custom user-stated goals have any structure (deadlines, metrics) or be free-text only? Lean toward free-text in v1, structured in v2.
 7. **Notebook compaction strategy.** If the infinite notebook eventually becomes a real database problem, what does compaction look like? Probably summarize-and-archive monthly observations after a year. Defer decision until it's a real problem.
@@ -488,6 +490,8 @@ These are the things still TBD that need to be resolved before or during Phase 1
 
 ## Related Docs
 
+- [Data Intelligence](data-intelligence.md): the arc this companion is **Phase C** of; the shared per-profile insight engine that becomes the Context Builder
+- [Premium Membership](rebuild/premium-proposal.md): the membership model this is the flagship value within
 - [Stats Page](stats-page.md): the source of truth for the kinds of stats the Context Builder will surface
 - [Gamification Vision](gamification-vision.md): a future system the Journey will eventually read from
 - [Dashboard Module Catalog](dashboard-module-catalog.md): where the Journey teaser module will live
