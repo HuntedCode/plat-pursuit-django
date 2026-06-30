@@ -1,0 +1,140 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pursuer Card — Real Accomplishments</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..900&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+    <style>
+    /* =====================================================================
+     * PURSUER CARD — REAL ACCOMPLISHMENTS
+     * Grounds identity in what a hunter actually cares about + would screenshot:
+     * platinum count, standout platinums (real cover art, "trophies under glass"),
+     * completion/rarity, rank as standing. The abstraction is gone; the premium
+     * is the CRAFT on real content. Rank still tints the chrome (earned standing).
+     * ===================================================================== */
+    :root {
+        --bg-deep: rgb(7,9,12); --bg: rgb(12,15,20); --panel: rgb(18,22,29); --panel-hi: rgb(24,29,38);
+        --line: rgba(255,255,255,0.09); --line-hi: rgba(255,255,255,0.16);
+        --text: rgba(255,255,255,0.92); --soft: rgba(255,255,255,0.55); --mute: rgba(255,255,255,0.34);
+        --cyan: rgb(120,205,232); --violet: rgb(168,140,232); --plat: rgb(216,238,248); --gold: rgb(240,200,96);
+        --face: 'Bricolage Grotesque','Inter',sans-serif; --body: 'Inter',system-ui,sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body { background: radial-gradient(120% 80% at 50% -10%, var(--bg) 0%, var(--bg-deep) 70%); color: var(--text); font-family: var(--body); padding: 40px 20px 120px; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1080px; margin: 0 auto; }
+    h1 { font-family: var(--face); font-weight: 800; font-size: 30px; letter-spacing: -0.01em; }
+    h2 { font-family: var(--face); font-weight: 800; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan); margin: 52px 0 8px; }
+    .lede { color: var(--soft); font-size: 15px; line-height: 1.6; margin: 12px 0; max-width: 780px; }
+    .note { color: var(--mute); font-size: 13px; line-height: 1.6; max-width: 740px; margin-top: 12px; }
+    .tally { font-family: var(--face); font-weight: 800; line-height: 0.9; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+    .avatar { border-radius: 999px; background: conic-gradient(from 210deg, var(--violet), var(--cyan), var(--violet)); display: grid; place-content: center; font-family: var(--face); font-weight: 800; color: rgba(0,0,0,0.55); flex: none; }
+    .rankpill { font-family: var(--face); font-weight: 800; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cyan); text-shadow: 0 0 12px rgba(120,205,232,0.45); }
+    .stage { padding: 30px; border-radius: 16px; background: var(--bg-deep); border: 1px solid var(--line); display: inline-block; }
+    /* Frame brand mark: diamond corner notches + rank-tinted prestige chrome */
+    .notched { position: relative; }
+    .notched::before, .notched::after, .notched .nbl, .notched .nbr { content:''; position:absolute; width:7px; height:7px; background: var(--bg-deep); border:1px solid var(--line-hi); transform: rotate(45deg); z-index: 5; }
+    .notched::before { top:-3px; left:-3px; } .notched::after { top:-3px; right:-3px; } .notched .nbl { bottom:-3px; left:-3px; } .notched .nbr { bottom:-3px; right:-3px; }
+    .card { background: linear-gradient(180deg, rgba(120,205,232,0.06), transparent 26%), linear-gradient(180deg, var(--panel-hi), var(--panel)); border: 2px solid color-mix(in oklab, var(--cyan) 38%, var(--line-hi)); border-radius: 14px; box-shadow: 0 20px 54px rgba(0,0,0,0.6), 0 0 38px rgba(120,205,232,0.10); }
+
+    .stat-n { font-size: 30px; color: var(--text); }
+    .stat-l { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mute); margin-top: 3px; }
+    .plat-n { color: var(--plat); text-shadow: 0 0 22px rgba(216,238,248,0.4); }
+
+    /* a platinum game cover, presented like a piece under glass */
+    .cover { position: relative; aspect-ratio: 3/4; border-radius: 6px; overflow: hidden; border: 1px solid var(--line-hi); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 14px rgba(0,0,0,0.55); }
+    .cover .art { position: absolute; inset: 0; }
+    .cover .ttl { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 6px 4px; font-size: 8px; font-weight: 700; line-height: 1.1; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+    .cover .pb { position: absolute; top: 4px; right: 4px; width: 11px; height: 11px; border-radius: 999px; background: radial-gradient(circle at 35% 30%, #fff, var(--plat) 55%, #7fa6bb); box-shadow: 0 0 7px rgba(216,238,248,0.7); }
+    .cover .rare { position: absolute; top: 4px; left: 4px; font-size: 7px; font-weight: 800; color: var(--cyan); background: rgba(0,0,0,0.6); padding: 1px 4px; border-radius: 4px; }
+
+    /* ===== A — The Trophy Case ===== */
+    .caseA { width: 440px; padding: 18px; }
+    .caseA .head { display: flex; align-items: center; gap: 12px; }
+    .caseA .avatar { width: 48px; height: 48px; font-size: 19px; box-shadow: 0 0 0 2px rgba(120,205,232,0.5), 0 0 0 4px var(--panel); }
+    .caseA .name { font-family: var(--face); font-weight: 800; font-size: 17px; }
+    .caseA .hero { margin-left: auto; text-align: right; }
+    .caseA .hero .n { font-size: 40px; }
+    .caseA .stats { display: flex; gap: 22px; margin: 16px 2px 14px; }
+    .caseA .sectlabel { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--soft); margin: 4px 2px 8px; }
+    .caseA .shelf { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+
+    /* ===== B — The Plaque (one featured platinum) ===== */
+    .plaque { width: 440px; padding: 18px; display: grid; grid-template-columns: 1fr 118px; gap: 18px; }
+    .plaque .name { font-family: var(--face); font-weight: 800; font-size: 17px; }
+    .plaque .big { margin: 12px 0 14px; }
+    .plaque .big .n { font-size: 52px; }
+    .plaque .substat { display: flex; gap: 18px; }
+    .plaque .feat { display: flex; flex-direction: column; }
+    .plaque .feat .flabel { font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan); margin-bottom: 6px; }
+    .plaque .feat .cover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 8px 22px rgba(0,0,0,0.6), 0 0 18px rgba(120,205,232,0.12); }
+    .plaque .feat .fname { font-size: 11px; font-weight: 700; margin-top: 7px; }
+    .plaque .feat .frate { font-size: 10px; color: var(--cyan); }
+
+    .cards { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Pursuer Card &mdash; the real flex</h1>
+    <p class="lede">Grounded in what a hunter actually cares about and would post: the platinum count, the standout platinums (real cover art, shown like trophies under glass), completion and rarity, and rank as earned standing. No invented abstraction. The premium is the <b>craft on real content</b> &mdash; PSNProfiles shows your platinum count as a plain number; this makes it feel like a case. Rank still tints the chrome.</p>
+    <p class="note">Mock Pursuer: Nightfall, Luminary V, 287 platinums, 94.2% avg completion, rarest platinum 1.2%. (Covers are placeholders; production pulls real game art + your actual rarest/showcase platinums.)</p>
+
+    <h2>A &mdash; The Trophy Case</h2>
+    <p class="note" style="margin-bottom:18px">Platinum count is the hero; your rarest platinums are the centerpiece. Reads instantly: "287 plats, and look at <i>these</i>."</p>
+    <div class="stage">
+        <div class="caseA card notched"><span class="nbl"></span><span class="nbr"></span>
+            <div class="head">
+                <div class="avatar">N</div>
+                <div><div class="name">Nightfall</div><div class="rankpill">Luminary V</div></div>
+                <div class="hero"><div class="n tally plat-n">287</div><div class="stat-l">Platinums</div></div>
+            </div>
+            <div class="stats">
+                <div><div class="stat-n tally">94.2<span style="font-size:16px">%</span></div><div class="stat-l">Avg completion</div></div>
+                <div><div class="stat-n tally" style="color:var(--cyan)">1.2<span style="font-size:16px">%</span></div><div class="stat-l">Rarest platinum</div></div>
+                <div><div class="stat-n tally">18,402</div><div class="stat-l">Trophies</div></div>
+            </div>
+            <div class="sectlabel">Rarest platinums</div>
+            <div class="shelf">
+                <div class="cover"><div class="art" style="background:linear-gradient(150deg,#caa24a,#3a2c10)"></div><span class="pb"></span><span class="rare">0.8%</span><div class="ttl">Elden Ring</div></div>
+                <div class="cover"><div class="art" style="background:linear-gradient(150deg,#7a1820,#120608)"></div><span class="pb"></span><span class="rare">1.1%</span><div class="ttl">Bloodborne</div></div>
+                <div class="cover"><div class="art" style="background:linear-gradient(150deg,#9a3a2a,#23120c)"></div><span class="pb"></span><span class="rare">1.4%</span><div class="ttl">Sekiro</div></div>
+                <div class="cover"><div class="art" style="background:linear-gradient(150deg,#5a2a8a,#180a2a)"></div><span class="pb"></span><span class="rare">2.0%</span><div class="ttl">Returnal</div></div>
+                <div class="cover"><div class="art" style="background:linear-gradient(150deg,#1c5a66,#08171c)"></div><span class="pb"></span><span class="rare">2.3%</span><div class="ttl">Hollow Knight</div></div>
+            </div>
+        </div>
+    </div>
+
+    <h2>B &mdash; The Plaque</h2>
+    <p class="note" style="margin-bottom:18px">Leads with the number, then features one platinum &mdash; your latest conquest or your rarest. Cleaner; better when one game is the story.</p>
+    <div class="stage">
+        <div class="plaque card notched"><span class="nbl"></span><span class="nbr"></span>
+            <div>
+                <div style="display:flex;align-items:center;gap:11px">
+                    <div class="avatar" style="width:42px;height:42px;font-size:16px">N</div>
+                    <div><div class="name">Nightfall</div><div class="rankpill">Luminary V</div></div>
+                </div>
+                <div class="big"><span class="n tally plat-n">287</span> <span style="font-family:var(--face);font-weight:800;font-size:18px;color:var(--soft)">Platinums</span></div>
+                <div class="substat">
+                    <div><div class="stat-n tally" style="font-size:22px">94.2<span style="font-size:13px">%</span></div><div class="stat-l">Avg completion</div></div>
+                    <div><div class="stat-n tally" style="font-size:22px">18,402</div><div class="stat-l">Trophies</div></div>
+                    <div><div class="stat-n tally" style="font-size:22px;color:var(--cyan)">1.2<span style="font-size:13px">%</span></div><div class="stat-l">Rarest</div></div>
+                </div>
+            </div>
+            <div class="feat">
+                <div class="flabel">Latest platinum</div>
+                <div class="cover"><div class="art" style="background:linear-gradient(150deg,#caa24a,#3a2c10)"></div><span class="pb"></span><div class="ttl">Elden Ring</div></div>
+                <div class="fname">Elden Ring</div>
+                <div class="frate">0.8% &middot; earned 3d ago</div>
+            </div>
+        </div>
+    </div>
+
+    <h2>Why this is the right turn</h2>
+    <p class="note">Both are things a hunter would actually screenshot, because they show the thing they're proud of. The differentiation isn't a metaphor nobody asked for; it's that we present real platinums with reverence (the Frame chrome, the under-glass covers, the Tally numbers, the rank standing) instead of a flat table. My lean: <b>A as the hero/share card</b> (the case is the flex), <b>B as the compact/profile-header</b>. The element rank stays as the standing line; the Lab is where the gamification depth lives for those who want it.</p>
+</div>
+</body>
+</html>
