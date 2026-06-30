@@ -86,6 +86,12 @@ def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
     snap = dashboard_service.provide_trophy_snapshot(profile)
     rarest = _platinums(profile, showcase_limit, recent=False)
     recent = _platinums(profile, showcase_limit, recent=True)
+    # The 5 disciplines (from the DNA-ring data) + a bar relative to your strongest family,
+    # so the band reads as "what you're made of" at a glance.
+    families = hero.get('ring') or []
+    if families:
+        strongest = max((f.get('avg') or 0 for f in families), default=0) or 1
+        families = [{**f, 'bar_pct': round((f.get('avg') or 0) / strongest * 100)} for f in families]
     return {
         'name': hero.get('pursuer_name'),
         'avatar_url': hero.get('avatar_url'),
@@ -95,7 +101,7 @@ def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
         'platinums': snap.get('total_plats', 0),
         'avg_completion': snap.get('avg_progress'),
         'total_trophies': snap.get('total_earned', 0),
-        'families': hero.get('ring') or [],        # [{label, slug, avg, ...}] -- the 5 disciplines
+        'families': families,                       # [{label, slug, avg, bar_pct, ...}] -- 5 disciplines
         'rarest_pct': rarest[0]['earn_rate'] if rarest else None,
         'showcase': {'rarest': rarest, 'recent': recent},
     }

@@ -64,20 +64,23 @@
 @media (min-width: 768px) { .pursuer-card__plat { font-size: 46px; } }
 .pursuer-card__cap { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--pp-text-mute); }
 
-/* mid band: the stats + the family squares on one horizontal level (uses the width) */
-.pursuer-card__mid { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 20px; margin: 14px 2px 16px; }
-.pursuer-card__stats { display: flex; gap: 22px; }
+/* stats line */
+.pursuer-card__stats { display: flex; gap: 22px; margin: 14px 2px 16px; }
 .pursuer-card__stat-n { font-size: 22px; color: var(--pp-text); }
 .pursuer-card__stat-n small { font-size: 14px; }
 .pursuer-card__stat-n.is-accent { color: var(--pp-primary); }
 
-/* family squares (the 5 disciplines) -- a horizontal strip on the stats line */
-.pursuer-card__fam-grid { display: flex; gap: 6px; }
-.pursuer-card__fam { width: 48px; height: 48px; flex: none; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; color: var(--disc); background: color-mix(in oklab, var(--disc) 13%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 36%, transparent); }
-.pursuer-card__fam-n { font-size: 18px; line-height: 1; }
-.pursuer-card__fam-l { font-size: 7px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--pp-text-dim); max-width: 44px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* disciplines: a featured full-width band of 5 family tiles (avg level + name + a bar
+   relative to your strongest family, so it reads as "what you're made of") */
+.pursuer-card__fams { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0 2px 16px; }
+.pursuer-card__fam { padding: 12px 8px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 15%, transparent), transparent 72%), var(--pp-bg-2); border: 1px solid color-mix(in oklab, var(--disc) 40%, transparent); }
+.pursuer-card__fam-n { font-size: 28px; line-height: 1; text-shadow: 0 0 14px color-mix(in oklab, var(--disc) 38%, transparent); }
+@media (min-width: 768px) { .pursuer-card__fam-n { font-size: 34px; } }
+.pursuer-card__fam-l { max-width: 100%; font-size: 9px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--pp-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pursuer-card__fam-bar { width: 100%; max-width: 72px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.09); overflow: hidden; margin-top: 1px; }
+.pursuer-card__fam-bar i { display: block; height: 100%; background: var(--disc); border-radius: 999px; box-shadow: 0 0 8px color-mix(in oklab, var(--disc) 55%, transparent); }
 
-/* showcase: full width below the mid band */
+/* showcase: full width below */
 .pursuer-card__showcase { min-width: 0; }
 
 /* the shelf: platinums under glass (Rarest / Recent toggle) */

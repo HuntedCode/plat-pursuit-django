@@ -23,34 +23,34 @@ profile header, and share images alike.
             <span class="pursuer-card__cap">Platinums</span>
         </div>
     </div>
-    <div class="pursuer-card__mid">
-        <div class="pursuer-card__stats">
-            <div>
-                <div class="pursuer-card__stat-n pp-tally">{{ card.avg_completion|floatformat:1 }}<small>%</small></div>
-                <div class="pursuer-card__cap">Avg completion</div>
-            </div>
-            {% if card.rarest_pct %}
-            <div>
-                <div class="pursuer-card__stat-n pp-tally is-accent">{{ card.rarest_pct|floatformat:1 }}<small>%</small></div>
-                <div class="pursuer-card__cap">Rarest platinum</div>
-            </div>
-            {% endif %}
-            <div>
-                <div class="pursuer-card__stat-n pp-tally">{{ card.total_trophies|intcomma }}</div>
-                <div class="pursuer-card__cap">Trophies</div>
-            </div>
+    <div class="pursuer-card__stats">
+        <div>
+            <div class="pursuer-card__stat-n pp-tally">{{ card.avg_completion|floatformat:1 }}<small>%</small></div>
+            <div class="pursuer-card__cap">Avg completion</div>
         </div>
-        {% if card.families %}
-        <div class="pursuer-card__fam-grid">
-            {% for f in card.families %}
-            <div class="pursuer-card__fam" style="--disc: var(--disc-{{ f.slug }});" title="{{ f.label }} &middot; avg level {{ f.avg|floatformat:0 }}">
-                <span class="pursuer-card__fam-n pp-tally">{{ f.avg|floatformat:0 }}</span>
-                <span class="pursuer-card__fam-l">{{ f.label }}</span>
-            </div>
-            {% endfor %}
+        {% if card.rarest_pct %}
+        <div>
+            <div class="pursuer-card__stat-n pp-tally is-accent">{{ card.rarest_pct|floatformat:1 }}<small>%</small></div>
+            <div class="pursuer-card__cap">Rarest platinum</div>
         </div>
         {% endif %}
+        <div>
+            <div class="pursuer-card__stat-n pp-tally">{{ card.total_trophies|intcomma }}</div>
+            <div class="pursuer-card__cap">Trophies</div>
+        </div>
     </div>
+    {% if card.families %}
+    <div class="pursuer-card__shelflabel" style="margin:0 2px 8px">Disciplines</div>
+    <div class="pursuer-card__fams">
+        {% for f in card.families %}
+        <div class="pursuer-card__fam" style="--disc: var(--disc-{{ f.slug }});" title="{{ f.label }} &middot; avg level {{ f.avg|floatformat:0 }}">
+            <span class="pursuer-card__fam-n pp-tally">{{ f.avg|floatformat:0 }}</span>
+            <span class="pursuer-card__fam-l">{{ f.label }}</span>
+            <span class="pursuer-card__fam-bar"><i style="width:{{ f.bar_pct }}%"></i></span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% if card.showcase.rarest or card.showcase.recent %}
     <div class="pursuer-card__showcase" data-pursuer-card-switch>
         <div class="pursuer-card__shelfhead">
