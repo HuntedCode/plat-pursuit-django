@@ -601,7 +601,7 @@ class PursuerCardRanksPreviewView(TemplateView):
             {'label': 'Finesse', 'slug': 'finesse', 'avg': 18, 'bar_pct': 38},
         ]
         showcase = [
-            {'game_name': name, 'cover_url': '', 'has_cover': False, 'earn_rate': rate,
+            {'game_name': name, 'cover_url': '', 'earn_rate': rate,
              'np_communication_id': None, 'elements': []}
             for name, rate in [('Elden Ring', 0.8), ('Bloodborne', 1.1), ('Sekiro', 1.4),
                                ('Returnal', 2.1), ('Hollow Knight', 2.6)]

@@ -54,6 +54,21 @@ def test_no_identity_returns_none():
     assert pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx={}) is None
 
 
+def test_families_bar_pct_scales_to_strongest():
+    """Each discipline's bar fills relative to the strongest family (strongest = 100%), so the
+    band reads as a composition; a zero-level family floors to an empty bar without dividing by
+    zero."""
+    fake = {'hero': {'pursuer_rank': {'key': 'warden', 'label': 'Warden'}, 'pursuer_name': 'N',
+                     'ring': [{'label': 'Combat', 'slug': 'combat', 'avg': 40},
+                              {'label': 'Mind', 'slug': 'mind', 'avg': 10},
+                              {'label': 'Heart', 'slug': 'heart', 'avg': 0}]},
+            'lab': None}
+
+    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx=fake)
+
+    assert {f['slug']: f['bar_pct'] for f in card['families']} == {'combat': 100, 'mind': 25, 'heart': 0}
+
+
 def test_card_partial_applies_rank_chrome_class():
     """The component partial renders and stamps the rank key as the chrome class -- the hook the
     escalating rank styling targets (matte at the floor, radiant cyan at the apex)."""

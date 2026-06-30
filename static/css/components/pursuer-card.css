@@ -99,7 +99,8 @@
 
 /* disciplines: a featured full-width band of 5 family tiles (avg level + name + a bar
    relative to your strongest family, so it reads as "what you're made of") */
-.pursuer-card__fams { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0 2px 16px; }
+.pursuer-card__fams { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 2px 16px; }
+@media (min-width: 768px) { .pursuer-card__fams { grid-template-columns: repeat(5, 1fr); } }
 .pursuer-card__fam { padding: 12px 8px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 15%, transparent), transparent 72%), var(--pp-bg-2); border: 1px solid color-mix(in oklab, var(--disc) 40%, transparent); }
 .pursuer-card__fam-n { font-size: 28px; line-height: 1; text-shadow: 0 0 14px color-mix(in oklab, var(--disc) 38%, transparent); }
 @media (min-width: 768px) { .pursuer-card__fam-n { font-size: 34px; } }

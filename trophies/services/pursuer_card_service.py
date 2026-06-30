@@ -61,10 +61,9 @@ def _platinums(profile, limit, *, recent):
         showcase.append({
             'game_name': concept.unified_title if concept else (game.title_name if game else 'Unknown'),
             'cover_url': game.display_image_url if game else '',
-            'has_cover': bool(game.has_cover_art) if game else False,
             'earn_rate': et.trophy.trophy_earn_rate,
             'np_communication_id': game.np_communication_id if game else None,
-            'elements': elements_by_concept.get(getattr(concept, 'id', None), []),
+            'elements': elements_by_concept.get(concept.id if concept else None, []),
         })
     return showcase
 
