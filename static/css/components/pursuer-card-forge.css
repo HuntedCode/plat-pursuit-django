@@ -47,20 +47,35 @@
     box-shadow: 0 0 6px 1px rgba(255, 170, 80, 0.8);
 }
 
-/* The newly-arrived platinum. Two parts: a one-time arrival flash (a brightness spike on the
-   cover as it lands) plus a PERSISTENT primary ring that marks the cover as new until the user
-   hovers/taps it for the first time (the JS clears the class). The ring lives on a ::after ABOVE
-   the image -- an inset box-shadow on the cover itself was painted UNDER the full-bleed <img> and
-   never showed. Inset, so the shelf clip can't cut it. */
-.pursuer-card__cover--new { animation: pcCoverArrive 0.7s ease; }
+/* The newly-arrived platinum: no flash. A thick primary ring DRAWS itself clockwise from the top
+   as the cover lands (a conic fill masked to a border, so it traces the rounded edge), then
+   breathes until the user hovers/taps to acknowledge it (the JS clears the class). Lives on a
+   ::after ABOVE the image -- an inset shadow on the cover itself sits under the full-bleed <img>.
+   Inset ring, so the shelf clip can't cut it; a soft drop-shadow glows the stroke. */
+@property --pc-head { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@property --pc-tail { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .pursuer-card__cover--new::after {
     content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit;
-    box-shadow: inset 0 0 0 2px var(--pp-primary), inset 0 0 16px color-mix(in oklab, var(--pp-primary) 42%, transparent);
+    padding: 3px;
+    background: conic-gradient(from -90deg,
+        transparent var(--pc-tail),
+        var(--pp-primary) var(--pc-tail),
+        var(--pp-primary) var(--pc-head),
+        transparent var(--pc-head));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask-composite: exclude;
+    filter: drop-shadow(0 0 3px color-mix(in oklab, var(--pp-primary) 55%, transparent));
+    animation: pcRingCycle 2.6s ease-in-out infinite;
 }
-@keyframes pcCoverArrive {
-    0%   { filter: brightness(1); }
-    35%  { filter: brightness(1.55) saturate(1.2); }
-    100% { filter: brightness(1); }
+/* Idle "keeps drawing itself": the head sweeps the ring in clockwise, it holds whole, then the
+   tail erases it the same way, and repeat. Both angles rest at 360deg (empty) across the loop
+   wrap, so there's no snap. */
+@keyframes pcRingCycle {
+    0%,  4%   { --pc-tail: 0deg;   --pc-head: 0deg; }
+    46%, 54%  { --pc-tail: 0deg;   --pc-head: 360deg; }
+    96%, 100% { --pc-tail: 360deg; --pc-head: 360deg; }
 }
 
 /* Reduced-motion: no forge at all -- the card is simply present. */
@@ -70,6 +85,6 @@
     .pursuer-card--forging > .pursuer-card__shelflabel,
     .pursuer-card--forging .pursuer-card__fams, .pursuer-card--forging .pursuer-card__showcase,
     .pursuer-card--forging .pursuer-card__forge-scan { animation: none !important; }
-    .pursuer-card__cover--new { animation: none; }   /* ring ::after stays; the flash is dropped */
+    .pursuer-card__cover--new::after { animation: none; --pc-head: 360deg; --pc-tail: 0deg; }  /* static full ring */
     .pursuer-card__forge-scan { display: none; }
 }

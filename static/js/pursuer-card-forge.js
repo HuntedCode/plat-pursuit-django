@@ -107,7 +107,7 @@
             [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
             { duration: DUR, delay: DELAY, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
         );
-        // As it settles: an arrival flash + a persistent "new" ring that stays until the user
+        // As it settles: a "new" ring that keeps drawing itself (CSS idle loop) until the user
         // hovers/taps the cover for the first time.
         setTimeout(function () {
             hero.classList.add('pursuer-card__cover--new');
