@@ -10,13 +10,11 @@
  * guard below is belt-and-suspenders.
  * ========================================================================== */
 
-/* Chrome ignite: the border glow blooms from cold to the card's rank tint, then settles. */
-.pursuer-card--forging { animation: pcForgeIgnite 1.3s ease both; }
-@keyframes pcForgeIgnite {
-    0%   { box-shadow: 0 14px 40px rgba(0,0,0,0.45); border-color: color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 18%, var(--pp-border)); }
-    55%  { box-shadow: 0 14px 40px rgba(0,0,0,0.45), 0 0 36px color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 48%, transparent); }
-    100% { box-shadow: 0 14px 40px rgba(0,0,0,0.45); }
-}
+/* NOTE: the card chrome (border-color + rank-glow box-shadow) is deliberately NOT animated
+ * during the forge. Those carry rank-specific *resting* values, so animating them to fixed
+ * keyframes made the glow fade out mid-forge and pop back when the class dropped (transitioning
+ * out of a filled animation is unreliable). The rank glow now stays constant throughout -- a
+ * stable vessel -- and the forge's energy comes from the scan-beam, sparks, and content reveal. */
 
 /* Content resolves in a staggered rise-and-focus, in the scan-beam's wake. */
 .pursuer-card--forging .pursuer-card__top          { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.55s both; }
