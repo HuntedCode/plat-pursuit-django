@@ -100,6 +100,7 @@ from .community_stats_views import (
 )
 from .youtube_views import YouTubeAttributionLookupView
 from .contract_views import AcceptContractView
+from .pursuer_card_views import PursuerCardRefreshView
 
 app_name = 'api'
 
@@ -286,6 +287,9 @@ urlpatterns = [
 
     # Title endpoints
     path('equip-title/', EquipTitleAPIView.as_view(), name='equip-title'),
+
+    # Pursuer Card (fresh re-fetch for the post-sync forge)
+    path('pursuer-card/', PursuerCardRefreshView.as_view(), name='pursuer-card'),
 
     # User settings endpoints
     path('user/timezone/', UpdateTimezoneAPIView.as_view(), name='user-timezone-update'),

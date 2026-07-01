@@ -56,7 +56,39 @@
         for (var i = 0; i < fams.length; i++) tickUp(fams[i], 850);
     }
 
-    function forge(card) {
+    // Recent-shelf covers whose platinum we've never seen before -> genuinely new this sync.
+    // localStorage 'pp_seen_plats' is the union of every plat np-id we've shown, so each plat
+    // slots in exactly once. First-ever call (no record) just seeds the set, slotting nothing.
+    function newPlatCovers(card) {
+        var KEY = 'pp_seen_plats';
+        var covers = card.querySelectorAll('.pursuer-card__shelf[data-shelf="recent"] .pursuer-card__cover[data-np-id]');
+        var ids = [], byId = {};
+        for (var i = 0; i < covers.length; i++) {
+            var id = covers[i].dataset.npId;
+            if (id) { ids.push(id); byId[id] = covers[i]; }
+        }
+        var seen = null;
+        try { seen = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
+        var out = [];
+        if (Array.isArray(seen)) {
+            var set = {};
+            seen.forEach(function (id) { set[id] = 1; });
+            ids.forEach(function (id) { if (!set[id]) out.push(byId[id]); });
+        }
+        var union = {};
+        (Array.isArray(seen) ? seen : []).forEach(function (id) { union[id] = 1; });
+        ids.forEach(function (id) { union[id] = 1; });
+        try { localStorage.setItem(KEY, JSON.stringify(Object.keys(union))); } catch (_) {}
+        return out;
+    }
+
+    // Preview: force the first Recent cover to slot in, so the beat is watchable via ?forge=slot.
+    function previewSlotCover(card) {
+        var c = card.querySelector('.pursuer-card__shelf[data-shelf="recent"] .pursuer-card__cover');
+        return c ? [c] : [];
+    }
+
+    function forge(card, previewSlot) {
         if (!card || card.dataset.forging === '1' || reduce) return;
         card.dataset.forging = '1';
         var scan = document.createElement('div');
@@ -66,11 +98,15 @@
         card.classList.remove('pursuer-card--forging');
         void card.offsetWidth;
         card.classList.add('pursuer-card--forging');
+        // A newly-earned platinum builds into the (default) Recent shelf mid-forge.
+        var slotting = previewSlot ? previewSlotCover(card) : newPlatCovers(card);
+        slotting.forEach(function (c) { c.classList.add('pursuer-card__cover--slotting'); });
         setTimeout(function () { spawnSparks(card, 32); }, 340);
         setTimeout(function () { tickUp(card.querySelector('.pursuer-card__plat'), 1000); }, 700);
         setTimeout(function () { tickFamilies(card); }, 1150);
         setTimeout(function () {
             card.classList.remove('pursuer-card--forging');
+            slotting.forEach(function (c) { c.classList.remove('pursuer-card__cover--slotting'); });
             scan.remove();
             card.dataset.forging = '';
         }, 2600);
@@ -109,7 +145,8 @@
             markSeen(syncedAt);
         }
 
-        // Preview: any ?forge= value replays it (double-forge is guarded internally).
-        if (/[?&]forge=/.test(window.location.search)) forgeVisibleCard();
+        // Preview: ?forge=1 replays the forge; ?forge=slot also demos a platinum slotting in.
+        var pv = /[?&]forge=(\w+)/.exec(window.location.search);
+        if (pv) { var pc = document.querySelector('.pursuer-card'); if (pc) forge(pc, pv[1] === 'slot'); }
     });
 })();
