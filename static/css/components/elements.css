@@ -158,6 +158,7 @@
     0%, 100% { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 35%, transparent), 0 6px 22px color-mix(in oklab, var(--disc) 16%, transparent); }
     50%      { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 62%, transparent), 0 10px 34px color-mix(in oklab, var(--disc) 36%, transparent); }
 }
+@media (prefers-reduced-motion: reduce) { .job--tier-master, .job--tier-legend { animation: none; } }
 
 /* ---- Tile -> detail interaction ---- */
 .ptile { cursor: pointer; border-radius: var(--pp-radius-lg); }

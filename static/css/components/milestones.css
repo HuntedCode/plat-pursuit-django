@@ -133,6 +133,7 @@
 .ms-tier.is-locked  .ms-tier__art img { filter: grayscale(0.8); opacity: 0.7; }
 .ms-tier.is-preview .ms-tier__body:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
 @keyframes ms-pulse { 0%, 100% { box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 50%, transparent); } 50% { box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 75%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .ms-tier.is-active .ms-tier__dot { animation: none; } }
 
 /* ---- Calendar month grid ---- */
 .ms-cal__intro { font-size: 0.78rem; color: var(--pp-text-dim); margin-bottom: 12px; }
