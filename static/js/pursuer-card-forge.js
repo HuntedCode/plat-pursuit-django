@@ -86,7 +86,7 @@
     // through the reveal, then slides right so the new platinum enters at the front and the oldest
     // (the extra cover the server rendered) slides off the end. Returns the hero cover (the new
     // one) so its flare class can be cleared on cleanup, or null when there's no beat to play.
-    function runShift(card, previewSlot) {
+    function runShift(card, previewSlot, flow) {
         var shelf = card.querySelector('.pursuer-card__shelf[data-shelf="recent"]');
         var strip = shelf && shelf.querySelector('.pursuer-card__strip');
         if (!strip) return null;
@@ -111,14 +111,15 @@
         // the user hovers/taps the cover for the first time.
         setTimeout(function () {
             hero.classList.add('pursuer-card__cover--new');
+            if (flow) hero.classList.add('pursuer-card__cover--flow');   // ?forge=flow comparison
             hero.addEventListener('pointerenter', function () {
-                hero.classList.remove('pursuer-card__cover--new');
+                hero.classList.remove('pursuer-card__cover--new', 'pursuer-card__cover--flow');
             }, { once: true });
         }, DELAY + DUR - 40);
         return hero;
     }
 
-    function forge(card, previewSlot) {
+    function forge(card, previewSlot, flow) {
         if (!card || card.dataset.forging === '1' || reduce) return;
         card.dataset.forging = '1';
         var scan = document.createElement('div');
@@ -128,7 +129,7 @@
         card.classList.remove('pursuer-card--forging');
         void card.offsetWidth;
         card.classList.add('pursuer-card--forging');
-        var hero = runShift(card, previewSlot);
+        var hero = runShift(card, previewSlot, flow);
         setTimeout(function () { spawnSparks(card, 32); }, 340);
         setTimeout(function () { tickUp(card.querySelector('.pursuer-card__plat'), 1000); }, 700);
         setTimeout(function () { tickFamilies(card); }, 1150);
@@ -174,8 +175,12 @@
             markSeen(syncedAt);
         }
 
-        // Preview: ?forge=1 replays the forge; ?forge=slot also demos a platinum slotting in.
+        // Preview: ?forge=1 replays the forge; ?forge=slot demos the slot-in (comet marker);
+        // ?forge=flow demos the slot-in with the alternative "flowing edge" marker.
         var pv = /[?&]forge=(\w+)/.exec(window.location.search);
-        if (pv) { var pc = document.querySelector('.pursuer-card'); if (pc) forge(pc, pv[1] === 'slot'); }
+        if (pv) {
+            var pc = document.querySelector('.pursuer-card'), mode = pv[1];
+            if (pc) forge(pc, mode === 'slot' || mode === 'flow', mode === 'flow');
+        }
     });
 })();

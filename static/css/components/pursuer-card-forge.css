@@ -83,6 +83,21 @@
 @keyframes pcRingIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pcRingOrbit { to { --pc-angle: 360deg; } }
 
+/* Alternative marker (preview via ?forge=flow): the "flowing edge". Instead of one comet, several
+   soft highlights of primary/white flow around the whole lit border at once, slightly blurred --
+   richer + more diffuse. Same orbit + base ring; only the ::after gradient + blur differ. */
+.pursuer-card__cover--flow::after {
+    background: conic-gradient(from var(--pc-angle),
+        transparent 0deg,
+        color-mix(in oklab, #ffffff 60%, var(--pp-primary)) 60deg,
+        transparent 130deg,
+        var(--pp-primary) 210deg,
+        transparent 285deg,
+        color-mix(in oklab, #ffffff 55%, var(--pp-primary)) 330deg,
+        transparent 360deg);
+    filter: blur(0.6px) drop-shadow(0 0 5px color-mix(in oklab, var(--pp-primary) 55%, transparent));
+}
+
 /* Reduced-motion: no forge at all -- the card is simply present. */
 @media (prefers-reduced-motion: reduce) {
     .pursuer-card--forging,
