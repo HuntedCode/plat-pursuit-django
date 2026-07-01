@@ -96,6 +96,12 @@ A "Premium" / "Membership" **storefront** page (an elevation of `/users/subscrib
 the story and sells belonging, plus the flair shown **in-context** where it lives. NOT a siloed,
 gated feature-hub tab (those get skipped; in-context converts at the moment of desire).
 
+**Where it lives (IA, decided 2026-06-30):** the storefront's home is a new top-level **Support**
+hub, sharing it with the always-on badge-art **fundraiser** — the two "support us" asks are one
+coherent story. Premium *features* stay in the personal hub with locked previews that deep-link to
+Support (moment-of-desire conversion). See [ia-and-subnav.md](../../architecture/ia-and-subnav.md)
+§"Planned evolution".
+
 ## Gotchas & pitfalls
 
 - **Don't accidentally re-gate something already free during the rebuild.** Prefer gating *net-new*

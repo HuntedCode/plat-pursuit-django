@@ -6,6 +6,58 @@ PlatPursuit uses a **hub-of-hubs IA**: the global navbar contains direct-link hu
 >
 > **Update (gamification Home, 2026-06):** the **Dashboard hub was dissolved** when the legacy modular dashboard retired and the gamification **Home** (`/`, `trophies/home.html`) replaced it. The navbar/tabbar button is now **Home** (`hub_section='home'`), backed by an **items-less `HOME_HUB`** — so it highlights the button but renders **no sub-nav strip** on `/` (the Home page's own launcher cards do the routing). Its former sub-nav items (**My Stats / My Shareables / Recap** + the dynamic **Fundraiser**) **moved into My Pursuit**, and the orphaned `/dashboard/*` URLs (unchanged for now) resolve under My Pursuit via an inherited `/dashboard/` prefix. The Dashboard-specific sections below are historical; this note governs where they conflict.
 
+## Planned evolution: the "Your Space" personal hub + a Support hub (2026-06-30)
+
+> **Status: DIRECTION** (agreed, not yet built) — part of the gamification-rebuild polish pass.
+> **Where this section and the shipped-state sections below conflict, this governs.** The body
+> below still documents the currently-shipped 4-hub model (Home / Browse / Community / My
+> Pursuit); it gets rewritten when this lands.
+
+The rebuild re-centers the site on personal, login-gated surfaces, which yields a cleaner
+organizing principle and a new 4-hub target.
+
+**Organizing principle — "login-gated + mine."** A surface belongs to the personal hub if it is
+personal AND login-gated. That test sorts everything: Browse/list pages → Browse; community
+surfaces → Community; personal surfaces → the personal hub; the two "support us" surfaces → Support.
+
+**The personal hub (working name "Your Space"; today "My Pursuit") — FULL UNIFY.** The Home (`/`)
+becomes the hub's **Overview**, and the sub-nav strip now renders on it with Overview as the first
+tab (reversing the earlier items-less Home). Members (10):
+`Overview · Collection · The Lab · Research Panel · Milestones · Titles · My Stats · My Shareables ·
+Profile · Recap`.
+- **Grouped 6 + 4** so the strip reads as structure, not a flat wall: a gamification *core*
+  (Overview, Collection, Lab, Research, Milestones, Titles) and personal *tools/outputs* (My Stats,
+  Shareables, Profile, Recap), with a subtle divider between.
+- **OPEN DESIGN ITEM:** a compact mobile treatment for a 10-item strip that doesn't eat screen
+  space — needs a dedicated brainstorm.
+- **Logged-out landing = hero, NO strip.** Every strip item is login-gated, so the strip is
+  pointless for anonymous visitors; hiding it is *correct* and banks a lower-chrome,
+  discovery-focused first impression. The strip on `/` is therefore auth-gated.
+- The navbar keeps a personal-hub button even though the logo also enters the hub (redundant but
+  harmless — nav space isn't tight).
+
+**Profile re-home (ownership-aware chrome).** Profile joins the personal hub, but its **URL stays
+identical for every user** (so sharing works). The *chrome* is conditional on ownership: viewing
+YOUR profile renders the personal-hub strip; viewing someone else's renders Community chrome. This
+is an IA re-home + a resolver "is-this-me?" tweak, **not** a profile redesign.
+
+**New hub: Support (store + fundraiser).** The membership **store** and the **always-on**
+badge-art **fundraiser** are the same kind of surface ("support PlatPursuit, get something back"),
+so they share one top-level **Support** hub. This gives the fundraiser its permanent home (it's
+persistent, not a campaign), gives the premium store a discoverable front door, and keeps the two
+asks a single coherent "ways to support" story. **Consistent with**
+[premium-proposal.md](../design/rebuild/premium-proposal.md): Support is the *storefront*, NOT a
+gated feature-hub — premium features stay in-context in the personal hub, where free users hit
+locked previews that deep-link to Support (moment-of-desire conversion). "Support" is a placeholder
+name (room for PlatPursuit charm).
+
+**Net: 4 hubs** — **Your Space** (mine) · **Browse** (find) · **Community** (everyone) · **Support**
+(support us). Still within the doc's 4-mental-mode budget.
+
+**Parked:** an optional dedicated "sync page" (sync my account / search + sync others) — pending a
+clear use case + a cost/abuse review; self-sync is likely covered by the hotbar and freshness by
+the scout system.
+
 ## Why this design
 
 The legacy navbar had four dropdown menus with 25 total items spread across them. Two menus were over the 5-7 item comfort zone (Community had 8, My Pursuit had 8). The dashboard and Community Hub were supposed to be wayfinders, but the menus duplicated their job and won by default because they were loaded on every page. The hubs were redundant, and the menus were overwhelming.
