@@ -1,21 +1,17 @@
 /* ============================================================================
- * PURSUER CARD -- the Forge. The card is MADE, not faded in: on sync-complete
- * (+ first-sync birth / rank-up) it re-materializes, drawing on the Frame's
+ * PURSUER CARD -- the Forge. The card is MADE, not faded in: on a fresh sync
+ * completion (and a ?forge preview) it re-materializes, drawing on the Frame's
  * fabrication vocabulary (chrome ignite, scan-beam reveal, hot arcing sparks,
- * tier settle). pursuer-card-forge.js adds the state class, inserts the
- * scan-beam + sparks, ticks the platinum number, and cleans up; this file is
- * the choreography.
+ * tier settle). One variant (~2.6s) -- quick + rare enough to use everywhere.
+ * pursuer-card-forge.js adds the state class, inserts the scan-beam + sparks,
+ * and ticks the numbers; this file is the choreography.
  *
- *   .pursuer-card--forging        full ~2.6s (first-sync birth)
- *   .pursuer-card--forging-quick  snappy ~1.4s (routine sync re-forge)
- *
- * Reduced-motion: the whole forge is skipped -- the card just appears, all
- * content visible, no scan/sparks.
+ * Reduced-motion: the JS skips the whole forge (the card just appears); the
+ * guard below is belt-and-suspenders.
  * ========================================================================== */
 
 /* Chrome ignite: the border glow blooms from cold to the card's rank tint, then settles. */
 .pursuer-card--forging { animation: pcForgeIgnite 1.3s ease both; }
-.pursuer-card--forging-quick { animation: pcForgeIgnite 0.75s ease both; }
 @keyframes pcForgeIgnite {
     0%   { box-shadow: 0 14px 40px rgba(0,0,0,0.45); border-color: color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 18%, var(--pp-border)); }
     55%  { box-shadow: 0 14px 40px rgba(0,0,0,0.45), 0 0 36px color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 48%, transparent); }
@@ -23,14 +19,11 @@
 }
 
 /* Content resolves in a staggered rise-and-focus, in the scan-beam's wake. */
-.pursuer-card--forging .pursuer-card__top      { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.55s both; }
-.pursuer-card--forging .pursuer-card__stats    { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.85s both; }
-.pursuer-card--forging .pursuer-card__fams     { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 1.05s both; }
-.pursuer-card--forging .pursuer-card__showcase { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 1.25s both; }
-.pursuer-card--forging-quick .pursuer-card__top      { animation: pcForgeReveal 0.4s cubic-bezier(0.2,0.8,0.2,1) 0.12s both; }
-.pursuer-card--forging-quick .pursuer-card__stats    { animation: pcForgeReveal 0.4s cubic-bezier(0.2,0.8,0.2,1) 0.24s both; }
-.pursuer-card--forging-quick .pursuer-card__fams     { animation: pcForgeReveal 0.4s cubic-bezier(0.2,0.8,0.2,1) 0.36s both; }
-.pursuer-card--forging-quick .pursuer-card__showcase { animation: pcForgeReveal 0.4s cubic-bezier(0.2,0.8,0.2,1) 0.48s both; }
+.pursuer-card--forging .pursuer-card__top          { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.55s both; }
+.pursuer-card--forging .pursuer-card__stats        { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.85s both; }
+.pursuer-card--forging > .pursuer-card__shelflabel { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 0.95s both; }
+.pursuer-card--forging .pursuer-card__fams         { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 1.05s both; }
+.pursuer-card--forging .pursuer-card__showcase     { animation: pcForgeReveal 0.55s cubic-bezier(0.2,0.8,0.2,1) 1.25s both; }
 @keyframes pcForgeReveal { from { opacity: 0; transform: translateY(9px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
 
 /* The scan-beam (JS-inserted) sweeps down the card once, hot-white at the leading edge. */
@@ -39,7 +32,6 @@
     background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 16%, transparent) 62%, color-mix(in oklab, var(--pp-primary) 72%, #fff) 100%);
 }
 .pursuer-card--forging .pursuer-card__forge-scan { animation: pcForgeScan 1.0s ease-in 0.35s both; }
-.pursuer-card--forging-quick .pursuer-card__forge-scan { animation: pcForgeScan 0.68s ease-in 0.04s both; }
 @keyframes pcForgeScan { 0% { opacity: 0; transform: translateY(-100%); } 14% { opacity: 1; } 86% { opacity: 1; } 100% { opacity: 0; transform: translateY(280%); } }
 
 /* Hot sparks (JS-inserted, JS-animated with individual arcing/gravity trajectories). */
@@ -51,11 +43,10 @@
 
 /* Reduced-motion: no forge at all -- the card is simply present. */
 @media (prefers-reduced-motion: reduce) {
-    .pursuer-card--forging, .pursuer-card--forging-quick,
+    .pursuer-card--forging,
     .pursuer-card--forging .pursuer-card__top, .pursuer-card--forging .pursuer-card__stats,
+    .pursuer-card--forging > .pursuer-card__shelflabel,
     .pursuer-card--forging .pursuer-card__fams, .pursuer-card--forging .pursuer-card__showcase,
-    .pursuer-card--forging-quick .pursuer-card__top, .pursuer-card--forging-quick .pursuer-card__stats,
-    .pursuer-card--forging-quick .pursuer-card__fams, .pursuer-card--forging-quick .pursuer-card__showcase,
-    .pursuer-card--forging .pursuer-card__forge-scan, .pursuer-card--forging-quick .pursuer-card__forge-scan { animation: none !important; }
+    .pursuer-card--forging .pursuer-card__forge-scan { animation: none !important; }
     .pursuer-card__forge-scan { display: none; }
 }

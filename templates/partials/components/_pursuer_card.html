@@ -57,19 +57,19 @@ profile header, and share images alike.
             <span class="pursuer-card__shelflabel">Platinums</span>
             {% if card.showcase.rarest and card.showcase.recent %}
             <div class="pursuer-card__toggle">
-                <button type="button" class="pursuer-card__tab is-active" data-shelf="rarest">Rarest</button>
-                <button type="button" class="pursuer-card__tab" data-shelf="recent">Recent</button>
+                <button type="button" class="pursuer-card__tab is-active" data-shelf="recent">Recent</button>
+                <button type="button" class="pursuer-card__tab" data-shelf="rarest">Rarest</button>
             </div>
             {% endif %}
         </div>
-        {% if card.showcase.rarest %}
-        <div class="pursuer-card__shelf" data-shelf="rarest">
-            {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+        {% if card.showcase.recent %}
+        <div class="pursuer-card__shelf" data-shelf="recent">
+            {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
         </div>
         {% endif %}
-        {% if card.showcase.recent %}
-        <div class="pursuer-card__shelf" data-shelf="recent"{% if card.showcase.rarest %} hidden{% endif %}>
-            {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+        {% if card.showcase.rarest %}
+        <div class="pursuer-card__shelf" data-shelf="rarest"{% if card.showcase.recent %} hidden{% endif %}>
+            {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
         </div>
         {% endif %}
     </div>
