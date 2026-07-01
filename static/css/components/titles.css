@@ -51,6 +51,7 @@
 .tt-hero__unequip { display: none; align-items: center; gap: 5px; margin-top: 10px; padding: 5px 11px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; cursor: pointer; transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .tt-hero__unequip svg { width: 13px; height: 13px; }
 .tt-hero__unequip:hover { color: var(--pp-error); border-color: color-mix(in oklab, var(--pp-error) 45%, var(--pp-border)); }
+.tt-hero__unequip:active { transform: scale(0.96); }
 .tt-hero.is-equipped .tt-hero__unequip { display: inline-flex; }
 .tt-hero:not(.is-equipped) .tt-hero__sparkle { display: none; }
 .tt-hero__strip { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px; padding: 9px 14px; border-top: 1px solid var(--pp-divider); background: color-mix(in oklab, var(--pp-text) 2%, transparent); }
@@ -84,6 +85,8 @@
 .tt-seg__btn { font: inherit; cursor: pointer; padding: 5px 13px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; color: var(--pp-text-dim); background: transparent; border: none; transition: color var(--pp-dur-fast) var(--pp-ease), background var(--pp-dur-fast) var(--pp-ease); }
 .tt-seg__btn:hover { color: var(--pp-text); }
 .tt-seg__btn.is-active { color: var(--tt-accent); background: color-mix(in oklab, var(--tt-accent) 16%, var(--pp-bg-1)); }
+.tt-seg__btn:active { transform: scale(0.95); }
+.tt-seg__btn:focus-visible { outline: 2px solid color-mix(in oklab, var(--tt-accent) 60%, transparent); outline-offset: 2px; }
 .tt-sort { font: inherit; font-size: 0.76rem; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 28px 6px 12px; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a0b4' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 9px center; background-size: 13px; }
 .tt-sort:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--tt-accent) 45%, var(--pp-border)); }
 
@@ -144,6 +147,7 @@
 /* ---- Equip affordance (shared; CSS-swapped by .is-equipped) ---- */
 .tt-equip { font: inherit; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; font-size: 0.72rem; font-weight: 700; color: var(--pp-bg-0); background: var(--tt-accent); border: none; border-radius: 999px; transition: filter var(--pp-dur-fast) var(--pp-ease); }
 .tt-equip:hover { filter: brightness(1.12); }
+.tt-equip:active { transform: scale(0.96); }
 .tt-equipped-mark { flex-shrink: 0; display: none; align-items: center; gap: 4px; font-size: 0.7rem; font-weight: 700; color: var(--tt-accent); }
 .tt-equipped-mark svg { width: 13px; height: 13px; }
 .is-equipped .tt-equip { display: none; }

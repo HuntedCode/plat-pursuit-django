@@ -41,6 +41,8 @@
 }
 .ms-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border)); }
 .ms-tab.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
+.ms-tab:active { transform: scale(0.97); }
+.ms-tab:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--pp-bg-1), 0 0 0 4px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
 .ms-tab__icon { width: 17px; height: 17px; flex-shrink: 0; }
 .ms-tab__count { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--pp-text-mute); padding: 1px 7px; border-radius: 999px; background: color-mix(in oklab, var(--pp-text) 8%, transparent); }
 .ms-tab.is-active .ms-tab__count { color: color-mix(in oklab, var(--pp-primary) 75%, var(--pp-text)); }

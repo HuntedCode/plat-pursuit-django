@@ -118,10 +118,14 @@
 .pursuer-card__tab { font-family: var(--body, inherit); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); padding: 3px 9px; border-radius: 6px; background: transparent; border: none; cursor: pointer; transition: color 0.15s, background 0.15s; }
 .pursuer-card__tab:hover { color: var(--pp-text-dim); }
 .pursuer-card__tab.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
+.pursuer-card__tab:active { transform: scale(0.96); }
 /* contract elements this platinum levels (family-colored symbol chips on the cover) */
 .pursuer-card__cover-els { position: absolute; left: 3px; bottom: 13px; display: flex; gap: 2px; }
 .pursuer-card__el { font-size: 7px; font-weight: 800; line-height: 1; min-width: 13px; padding: 2px; text-align: center; border-radius: 3px; color: var(--disc); background: color-mix(in oklab, var(--disc) 22%, rgba(0,0,0,0.72)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
 .pursuer-card__shelf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.pursuer-card__shelf:not([hidden]) { animation: pcShelfIn 0.22s ease; }  /* soft fade on the Rarest/Recent swap */
+@keyframes pcShelfIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pursuer-card__shelf:not([hidden]) { animation: none; } }
 .pursuer-card__cover {
     position: relative; aspect-ratio: 3/4; border-radius: 6px; overflow: hidden;
     border: 1px solid var(--pp-border); background: var(--pp-bg-3, var(--pp-bg-1));

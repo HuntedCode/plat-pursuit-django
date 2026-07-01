@@ -162,6 +162,12 @@
 .emodal__dialog { position: relative; z-index: 1; width: min(440px, 100%); max-height: 88vh; overflow: auto; background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); padding: 26px 24px 24px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
 .emodal__close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--pp-text-mute); font-size: 26px; line-height: 1; cursor: pointer; }
 .emodal__close:hover { color: var(--pp-text); }
+/* entrance: backdrop fades, dialog scales in (exit stays instant -- can't transition to display:none) */
+.emodal:not([hidden]) .emodal__backdrop { animation: emodalBackdropIn 0.18s ease; }
+.emodal:not([hidden]) .emodal__dialog { animation: emodalDialogIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes emodalBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes emodalDialogIn { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .emodal:not([hidden]) .emodal__backdrop, .emodal:not([hidden]) .emodal__dialog { animation: none; } }
 
 /* ---- Element detail (level/XP first-class) ---- */
 .edetail__head { display: flex; align-items: center; gap: 14px; }
