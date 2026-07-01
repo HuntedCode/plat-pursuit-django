@@ -254,6 +254,7 @@
    the JS only flips that one class (no styling/markup rebuilding in the script). */
 .rp-row--accepted .rp-badge { background-color: var(--pp-success); color: var(--pp-bg-0); border-color: var(--pp-success); }
 .rp-cta__done { display: none; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 700; color: var(--pp-success); }
-.rp-cta__pct { font-size: 0.75rem; font-weight: 600; color: var(--pp-primary); }
+.rp-cta__prog { width: 84px; display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+.rp-cta__pct { font-size: 0.75rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); text-align: right; }
 .rp-row--accepted .rp-accept { display: none; }
 .rp-row--accepted .rp-cta__done { display: inline-flex; }

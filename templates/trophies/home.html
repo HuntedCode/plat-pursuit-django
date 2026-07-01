@@ -50,7 +50,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
                 <span>Average completion</span>
                 <span class="font-bold text-base-content pp-tally">{{ glances.snapshot.avg_progress|floatformat:2 }}%</span>
             </div>
-            <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--pp-primary); --horizon-h: 8px; --horizon-progress: {{ glances.snapshot.avg_progress|floatformat:0 }}%;"><div class="pp-horizon__fill"></div></div>
+            {% include 'components/horizon.html' with progress=glances.snapshot.avg_progress tone='band' height='8px' %}
         </div>
         <div class="grid grid-cols-3 lg:grid-cols-6 gap-x-3 gap-y-3 mt-4 pt-4 border-t border-base-content/10 text-center">
             <div><div class="text-sm md:text-base font-bold pp-tally text-success">{{ glances.snapshot.total_earned|intcomma }}</div><div class="text-[0.7rem] text-base-content/50 mt-0.5">Earned</div></div>

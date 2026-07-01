@@ -44,7 +44,7 @@ below. Expects `p` (a project dict from research_panel_service),
                         <button type="button" class="btn btn-xs md:btn-sm btn-primary rp-accept" data-slug="{{ p.slug }}">Accept</button>
                         <span class="rp-cta__done">Accepted &check;</span>
                     {% elif p.status == 'pursuing' %}
-                        <span class="rp-cta__pct">{{ p.progress }}%</span>
+                        <span class="rp-cta__prog">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}<span class="rp-cta__pct">{{ p.progress }}%</span></span>
                     {% endif %}
                 </span>
             </div>
