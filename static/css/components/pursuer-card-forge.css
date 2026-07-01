@@ -55,9 +55,9 @@
 @property --pc-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 /* The newly-arrived platinum's marker. What made a plain self-drawing stroke feel cheap: a hard
    flat line drawn at uneven (angular, not arc-length) speed, looping forever. The professional
-   move is a soft traveling LIGHT. A faint steady ring keeps the cover marked (::before); a glowing
-   comet of primary light -- bright head, fading tail -- orbits the border continuously (::after),
-   so it reads as ambient life, not a redraw (and the diffuse glow hides the angular-speed
+   move is a soft flowing LIGHT. A faint steady ring keeps the cover marked (::before); several
+   soft highlights of primary/white light flow around the whole lit border (::after), slightly
+   blurred, so it reads as ambient life, not a redraw (and the diffuse glow hides the angular-speed
    unevenness). Both are masked borders drawn ABOVE the image -- an inset shadow sits under the
    full-bleed <img>. Clears on first hover/tap. */
 .pursuer-card__cover--new::before,
@@ -73,21 +73,6 @@
 .pursuer-card__cover--new::before { background: color-mix(in oklab, var(--pp-primary) 34%, transparent); }
 .pursuer-card__cover--new::after {
     background: conic-gradient(from var(--pc-angle),
-        transparent 0deg 250deg,
-        color-mix(in oklab, var(--pp-primary) 45%, transparent) 315deg,
-        var(--pp-primary) 351deg,
-        color-mix(in oklab, #ffffff 65%, var(--pp-primary)) 360deg);
-    filter: drop-shadow(0 0 4px color-mix(in oklab, var(--pp-primary) 65%, transparent));
-    animation: pcRingIn 0.45s ease both, pcRingOrbit 3s linear infinite;
-}
-@keyframes pcRingIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pcRingOrbit { to { --pc-angle: 360deg; } }
-
-/* Alternative marker (preview via ?forge=flow): the "flowing edge". Instead of one comet, several
-   soft highlights of primary/white flow around the whole lit border at once, slightly blurred --
-   richer + more diffuse. Same orbit + base ring; only the ::after gradient + blur differ. */
-.pursuer-card__cover--flow::after {
-    background: conic-gradient(from var(--pc-angle),
         transparent 0deg,
         color-mix(in oklab, #ffffff 60%, var(--pp-primary)) 60deg,
         transparent 130deg,
@@ -96,7 +81,10 @@
         color-mix(in oklab, #ffffff 55%, var(--pp-primary)) 330deg,
         transparent 360deg);
     filter: blur(0.6px) drop-shadow(0 0 5px color-mix(in oklab, var(--pp-primary) 55%, transparent));
+    animation: pcRingIn 0.45s ease both, pcRingOrbit 3s linear infinite;
 }
+@keyframes pcRingIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pcRingOrbit { to { --pc-angle: 360deg; } }
 
 /* Reduced-motion: no forge at all -- the card is simply present. */
 @media (prefers-reduced-motion: reduce) {
