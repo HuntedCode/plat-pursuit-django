@@ -101,7 +101,7 @@
    The track holds the covers twice; translating it half its width (minus half the gap) loops
    seamlessly. Pauses on hover so a cover can be clicked; reduced-motion falls back to a plain
    scroll strip with the duplicate set hidden. */
-.home-marquee { overflow: hidden; }
+.home-marquee { overflow: hidden; padding-block: 5px; }  /* vertical room so a hovered cover's ring isn't clipped at the top/bottom edge */
 .home-marquee__track { display: flex; gap: 12px; width: max-content; animation: homeMarquee 60s linear infinite; }
 .home-marquee:hover .home-marquee__track { animation-play-state: paused; }
 .home-marquee__item { flex: none; width: 64px; }
