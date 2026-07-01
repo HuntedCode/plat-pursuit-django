@@ -117,7 +117,8 @@
             API.post('/api/v1/equip-title/', { title_id: titleId }).then(function (data) {
                 if (!data || !data.success) return;
                 self._markEquipped(titleId);
-                self._setHero(titleId, data.title_name);
+                var card = document.querySelector('[data-title-id="' + titleId + '"]');
+                self._setHero(titleId, data.title_name, !!(card && card.classList.contains('is-legendary')));
                 self._flash(titleId);
                 if (Toast) Toast.show('Title equipped: ' + data.title_name, 'success');
             }).catch(function (err) { self._error(err, 'Failed to equip title.'); });
@@ -128,7 +129,7 @@
             API.post('/api/v1/equip-title/', { title_id: null }).then(function (data) {
                 if (!data || !data.success) return;
                 self._markEquipped(null);
-                self._setHero(null, null);
+                self._setHero(null, null, false);
                 if (Toast) Toast.show('Title removed.', 'success');
             }).catch(function (err) { self._error(err, 'Failed to remove title.'); });
         },
@@ -139,13 +140,22 @@
             });
         },
 
-        _setHero: function (titleId, name) {
+        _setHero: function (titleId, name, isLegendary) {
             if (!this._hero) return;
             var on = titleId !== null && name;
             this._hero.classList.toggle('is-equipped', !!on);
             if (this._heroName) {
-                this._heroName.textContent = on ? name : 'No title equipped';
-                this._heroName.classList.toggle('is-empty', !on);
+                var n = this._heroName;
+                n.textContent = on ? name : 'No title equipped';
+                n.classList.toggle('is-empty', !on);
+                n.classList.toggle('is-legendary', !!(on && isLegendary));
+                if (on) {
+                    // one-time equip beat: restart the animation via reflow, then self-clear
+                    n.classList.remove('is-just-equipped');
+                    void n.offsetWidth;
+                    n.classList.add('is-just-equipped');
+                    n.addEventListener('animationend', function h() { n.classList.remove('is-just-equipped'); n.removeEventListener('animationend', h); });
+                }
             }
             if (this._heroFlavor) {
                 this._heroFlavor.textContent = on ? 'Your legend, your identity.' : 'Every legend needs a name. Equip one below.';
