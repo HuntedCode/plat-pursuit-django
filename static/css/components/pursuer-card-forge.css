@@ -26,11 +26,14 @@
 
 /* The scan-beam (JS-inserted) sweeps down the card once, hot-white at the leading edge. */
 .pursuer-card__forge-scan {
-    position: absolute; left: 0; right: 0; top: 0; height: 42%; pointer-events: none; z-index: 5; opacity: 0;
-    background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 16%, transparent) 62%, color-mix(in oklab, var(--pp-primary) 72%, #fff) 100%);
+    position: absolute; left: 0; right: 0; top: 0; height: 16%; pointer-events: none; z-index: 5; opacity: 0;
+    background: linear-gradient(180deg, transparent, color-mix(in oklab, var(--pc-tier, var(--pp-primary)) 24%, transparent) 55%, color-mix(in oklab, var(--pp-primary) 75%, #fff) 100%);
 }
 .pursuer-card--forging .pursuer-card__forge-scan { animation: pcForgeScan 1.0s ease-in 0.35s both; }
-@keyframes pcForgeScan { 0% { opacity: 0; transform: translateY(-100%); } 14% { opacity: 1; } 86% { opacity: 1; } 100% { opacity: 0; transform: translateY(280%); } }
+/* Sweeps from the top edge to near the bottom, staying WITHIN the card (starts at translateY(0),
+   not above it; ends before the bottom, not below) so it reads as a scan through the card, not a
+   screen wipe. Thin beam, hot at its leading edge; fades in/out at the extremes. */
+@keyframes pcForgeScan { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(520%); } }
 
 /* Hot sparks (JS-inserted, JS-animated with individual arcing/gravity trajectories). */
 .pursuer-card__forge-spark {
