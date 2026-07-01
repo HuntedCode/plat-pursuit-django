@@ -48,13 +48,23 @@
 }
 
 /* The newly-arrived platinum: the forge JS shifts the Recent strip so this cover slides in at
-   the front (the oldest slides off the end), then this flare punctuates the landing -- a hard
-   brightness spike + a solid primary ring. Kept INSET (no outer glow) + no scale so the shelf
-   clip can't cut it. The JS adds this class at the landing moment, so the flare needs no delay. */
-.pursuer-card__cover--hero { animation: pcCoverFlare 0.7s ease both; }
-@keyframes pcCoverFlare {
-    0%, 100% { filter: brightness(1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 14px rgba(0,0,0,0.5); }
-    35%      { filter: brightness(1.6) saturate(1.2); box-shadow: inset 0 0 0 3px var(--pp-primary), inset 0 0 26px color-mix(in oklab, var(--pp-primary) 65%, transparent), 0 5px 14px rgba(0,0,0,0.5); }
+   the front (the oldest slides off the end), then this flare punctuates the landing. The JS adds
+   the class at the landing moment, so no delay. Two layers: a brightness spike on the cover (lifts
+   the image itself) + a ring/glow/wash on a ::after ABOVE the image -- inset box-shadows on the
+   cover were painted UNDER the full-bleed <img> and never showed (why the flare looked absent).
+   The ::after is inset (no outer glow), so the shelf clip can't cut it. */
+.pursuer-card__cover--hero { animation: pcCoverFlareLift 0.7s ease both; }
+.pursuer-card__cover--hero::after {
+    content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit;
+    animation: pcCoverFlareRing 0.7s ease both;
+}
+@keyframes pcCoverFlareLift {
+    0%, 100% { filter: brightness(1); }
+    35%      { filter: brightness(1.5) saturate(1.15); }
+}
+@keyframes pcCoverFlareRing {
+    0%, 100% { box-shadow: inset 0 0 0 0 transparent; background: transparent; }
+    35%      { box-shadow: inset 0 0 0 3px var(--pp-primary), inset 0 0 20px color-mix(in oklab, var(--pp-primary) 55%, transparent); background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
 }
 
 /* Reduced-motion: no forge at all -- the card is simply present. */
@@ -64,6 +74,6 @@
     .pursuer-card--forging > .pursuer-card__shelflabel,
     .pursuer-card--forging .pursuer-card__fams, .pursuer-card--forging .pursuer-card__showcase,
     .pursuer-card--forging .pursuer-card__forge-scan { animation: none !important; }
-    .pursuer-card__cover--hero { animation: none; }
+    .pursuer-card__cover--hero, .pursuer-card__cover--hero::after { animation: none; }
     .pursuer-card__forge-scan { display: none; }
 }
