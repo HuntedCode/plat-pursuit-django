@@ -11,7 +11,7 @@ profile header, and share images alike.
     <span class="pursuer-card__nbl"></span><span class="pursuer-card__nbr"></span>
     <div class="pursuer-card__top">
         <div class="pursuer-card__avatar">
-            {% if card.avatar_url %}<img src="{{ card.avatar_url }}" alt="{{ card.name }}">{% else %}<div class="pursuer-card__avatar-fb">{{ card.name|first|upper }}</div>{% endif %}
+            {% if card.avatar_url %}<img src="{{ card.avatar_url }}" alt="{{ card.name }}">{% else %}<div class="pursuer-card__avatar-fb">{{ card.name|default:'?'|first|upper }}</div>{% endif %}
         </div>
         <div class="pursuer-card__id">
             <div class="pursuer-card__name">{{ card.name }}</div>

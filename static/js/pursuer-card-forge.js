@@ -82,40 +82,37 @@
         return out;
     }
 
-    // The slot-in shift: the Recent strip holds one slot to the left (showing the previous top-5)
-    // through the reveal, then slides right so the new platinum enters at the front and the oldest
-    // (the extra cover the server rendered) slides off the end. Returns the hero cover (the new
-    // one) so its flare class can be cleared on cleanup, or null when there's no beat to play.
-    function runShift(card, previewSlot) {
-        var shelf = card.querySelector('.pursuer-card__shelf[data-shelf="recent"]');
-        var strip = shelf && shelf.querySelector('.pursuer-card__strip');
-        if (!strip) return null;
-        var covers = strip.querySelectorAll('.pursuer-card__cover');
-        if (covers.length < 2) return null;                 // nothing to shift in/out
-        var hero = covers[0];                               // Recent is newest-first -> new = front
+    // Mark a Recent cover as newly earned: a persistent flowing ring that clears on first
+    // hover/tap. EVERY genuinely-new platinum gets one, however many arrived (one sync or several
+    // missed visits), so none goes silently unacknowledged.
+    function markNew(cover) {
+        if (!cover) return;
+        cover.classList.add('pursuer-card__cover--new');
+        cover.addEventListener('pointerenter', function () {
+            cover.classList.remove('pursuer-card__cover--new');
+        }, { once: true });
+    }
+
+    // Plan the slot-in: which VISIBLE Recent covers are newly earned, and whether to play the
+    // single-platinum conveyor. The conveyor (slide the previous top-5 over, new one in at the
+    // front) only reads right for exactly one new platinum entering at the front; 2+ (a batch, or
+    // a long absence) just get marked in place. previewSlot forces the front for ?forge=slot.
+    function planSlotIn(card, previewSlot) {
+        var strip = card.querySelector('.pursuer-card__shelf[data-shelf="recent"] .pursuer-card__strip');
+        var covers = strip ? strip.querySelectorAll('.pursuer-card__cover') : [];
+        if (!covers.length) return { strip: null, covers: covers, news: [], shift: false };
+        var news;
         if (previewSlot) {
-            newPlatCovers(card);                            // record seen, but force the beat
-        } else if (newPlatCovers(card).indexOf(hero) === -1) {
-            return null;                                    // the front cover isn't a new platinum
+            newPlatCovers(card);                            // record seen so the preview is idempotent
+            news = [covers[0]];                             // force the newest for the demo
+        } else {
+            news = newPlatCovers(card);                     // genuinely-new covers (also records seen)
         }
-        var slot = hero.offsetWidth + 8;                    // cover width + strip gap
-        if (slot < 20) return null;                         // shelf hidden/unmeasurable -> skip
-        // Hold the previous top-5 a beat after they've settled (reveal lands ~1.8s), so they
-        // register, then slide slowly enough to actually follow.
-        var DELAY = 2300, DUR = 780;
-        strip.animate(
-            [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
-            { duration: DUR, delay: DELAY, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
-        );
-        // As it settles: a "new" marker (steady ring + a light orbiting it, CSS) that stays until
-        // the user hovers/taps the cover for the first time.
-        setTimeout(function () {
-            hero.classList.add('pursuer-card__cover--new');
-            hero.addEventListener('pointerenter', function () {
-                hero.classList.remove('pursuer-card__cover--new');
-            }, { once: true });
-        }, DELAY + DUR - 40);
-        return hero;
+        // Only the top-5 are visible; index 5 is the offscreen outgoing cover, never marked.
+        var arr = Array.prototype.slice.call(covers);
+        news = news.filter(function (c) { var i = arr.indexOf(c); return i > -1 && i < 5; });
+        var shift = news.length === 1 && covers.length >= 2 && news[0] === covers[0];
+        return { strip: strip, covers: covers, news: news, shift: shift };
     }
 
     function forge(card, previewSlot) {
@@ -128,14 +125,35 @@
         card.classList.remove('pursuer-card--forging');
         void card.offsetWidth;
         card.classList.add('pursuer-card--forging');
-        var hero = runShift(card, previewSlot);
+
+        var plan = planSlotIn(card, previewSlot);
+        if (plan.shift) {
+            var slot = plan.covers[0].offsetWidth + 8;      // cover width + strip gap
+            if (slot < 20) {                                // shelf hidden/unmeasurable
+                plan.shift = false;
+            } else {
+                // Hold the previous top-5 a beat after they settle, then slide the new one in at
+                // the front (the oldest slides off the end); mark it as it lands.
+                var DELAY = 2300, DUR = 780;
+                plan.strip.animate(
+                    [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
+                    { duration: DUR, delay: DELAY, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
+                );
+                setTimeout(function () { markNew(plan.news[0]); }, DELAY + DUR - 40);
+            }
+        }
+        if (!plan.shift) {
+            // No conveyor -> mark every new cover once the showcase has revealed.
+            setTimeout(function () { plan.news.forEach(markNew); }, 1500);
+        }
+
         setTimeout(function () { spawnSparks(card, 32); }, 340);
         setTimeout(function () { tickUp(card.querySelector('.pursuer-card__plat'), 1000); }, 700);
         setTimeout(function () { tickFamilies(card); }, 1150);
-        // The shift+flare run to ~3.8s; an ordinary forge (no slot-in) settles by 2.6s.
-        var endMs = hero ? 3850 : 2600;
+        // The conveyor runs to ~3.8s; otherwise the forge settles by 2.6s. (--new rings persist.)
+        var endMs = plan.shift ? 3850 : 2600;
         setTimeout(function () {
-            card.classList.remove('pursuer-card--forging');   // the --new ring persists until hovered
+            card.classList.remove('pursuer-card--forging');
             scan.remove();
             card.dataset.forging = '';
         }, endMs);
@@ -144,6 +162,26 @@
     function forgeVisibleCard() {
         var card = document.querySelector('.pursuer-card');
         if (card) forge(card);
+    }
+
+    // Live sync completion: the on-page card is still pre-sync, so fetch a freshly-built one, swap
+    // it in, then forge (detection runs on the fresh covers, so new platinums actually appear +
+    // slot in). Falls back to forging the current card if the fetch fails.
+    function refreshAndForge() {
+        if (!document.querySelector('.pursuer-card')) return;
+        fetch('/api/v1/pursuer-card/', { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+            .then(function (r) { return (r.ok && r.status !== 204) ? r.text() : null; })
+            .then(function (html) {
+                var target = document.querySelector('.pursuer-card');
+                if (html && target) {
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = html.trim();
+                    var fresh = tmp.querySelector('.pursuer-card');
+                    if (fresh) { target.replaceWith(fresh); target = fresh; }
+                }
+                if (target) forge(target);
+            })
+            .catch(function () { forgeVisibleCard(); });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -159,7 +197,7 @@
             if (status === 'syncing') {
                 wasSyncing = true;
             } else if (status === 'synced') {
-                if (wasSyncing) { forgeVisibleCard(); markSeen(Math.floor(Date.now() / 1000)); }
+                if (wasSyncing) { refreshAndForge(); markSeen(Math.floor(Date.now() / 1000)); }
                 wasSyncing = false;
             }
         });
