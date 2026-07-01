@@ -48,13 +48,13 @@
 }
 
 /* The newly-arrived platinum: the forge JS shifts the Recent strip so this cover slides in at
-   the front (the oldest slides off the end), then this flare punctuates the landing -- an inner
-   brightness + primary ring pulse. Kept INSET (no outer glow) + no scale, so the shelf's
-   overflow:hidden can't clip it. Delay lines up with the strip shift landing (JS: 1500 + 720). */
-.pursuer-card__cover--hero { animation: pcCoverFlare 0.6s ease 2.2s both; }
+   the front (the oldest slides off the end), then this flare punctuates the landing -- a hard
+   brightness spike + a solid primary ring. Kept INSET (no outer glow) + no scale so the shelf
+   clip can't cut it. The JS adds this class at the landing moment, so the flare needs no delay. */
+.pursuer-card__cover--hero { animation: pcCoverFlare 0.7s ease both; }
 @keyframes pcCoverFlare {
     0%, 100% { filter: brightness(1); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 5px 14px rgba(0,0,0,0.5); }
-    45%      { filter: brightness(1.32); box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-primary) 85%, transparent), inset 0 0 20px color-mix(in oklab, var(--pp-primary) 45%, transparent), 0 5px 14px rgba(0,0,0,0.5); }
+    35%      { filter: brightness(1.6) saturate(1.2); box-shadow: inset 0 0 0 3px var(--pp-primary), inset 0 0 26px color-mix(in oklab, var(--pp-primary) 65%, transparent), 0 5px 14px rgba(0,0,0,0.5); }
 }
 
 /* Reduced-motion: no forge at all -- the card is simply present. */

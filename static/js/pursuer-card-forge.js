@@ -100,11 +100,15 @@
         }
         var slot = hero.offsetWidth + 8;                    // cover width + strip gap
         if (slot < 20) return null;                         // shelf hidden/unmeasurable -> skip
+        // Hold the previous top-5 a beat after they've settled (reveal lands ~1.8s), so they
+        // register, then slide slowly enough to actually follow.
+        var DELAY = 2300, DUR = 780;
         strip.animate(
             [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
-            { duration: 720, delay: 1500, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
+            { duration: DUR, delay: DELAY, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
         );
-        hero.classList.add('pursuer-card__cover--hero');    // CSS flares it as the shift lands
+        // Flare the new cover exactly as it settles (class added at land time; CSS flare, no delay).
+        setTimeout(function () { hero.classList.add('pursuer-card__cover--hero'); }, DELAY + DUR - 40);
         return hero;
     }
 
@@ -122,12 +126,14 @@
         setTimeout(function () { spawnSparks(card, 32); }, 340);
         setTimeout(function () { tickUp(card.querySelector('.pursuer-card__plat'), 1000); }, 700);
         setTimeout(function () { tickFamilies(card); }, 1150);
+        // The shift+flare run to ~3.8s; an ordinary forge (no slot-in) settles by 2.6s.
+        var endMs = hero ? 3850 : 2600;
         setTimeout(function () {
             card.classList.remove('pursuer-card--forging');
             if (hero) hero.classList.remove('pursuer-card__cover--hero');
             scan.remove();
             card.dataset.forging = '';
-        }, 2850);
+        }, endMs);
     }
 
     function forgeVisibleCard() {
