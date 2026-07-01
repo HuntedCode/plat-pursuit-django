@@ -107,8 +107,8 @@
             [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
             { duration: DUR, delay: DELAY, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
         );
-        // As it settles: a "new" ring that keeps drawing itself (CSS idle loop) until the user
-        // hovers/taps the cover for the first time.
+        // As it settles: a "new" marker (steady ring + a light orbiting it, CSS) that stays until
+        // the user hovers/taps the cover for the first time.
         setTimeout(function () {
             hero.classList.add('pursuer-card__cover--new');
             hero.addEventListener('pointerenter', function () {
