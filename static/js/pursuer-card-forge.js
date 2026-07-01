@@ -82,18 +82,34 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        // Fresh sync completion -> re-forge (only on a real syncing -> synced transition).
+        var SEEN_KEY = 'pp_forge_seen';
+        function markSeen(v) { try { localStorage.setItem(SEEN_KEY, String(v)); } catch (_) {} }
+        function getSeen() { try { return parseInt(localStorage.getItem(SEEN_KEY) || '0', 10) || 0; } catch (_) { return 0; } }
+
+        // Live: a fresh sync completes while the card is on screen -> forge immediately. Stamp
+        // "seen" with now so the catch-up below won't re-forge for this same sync on the next load.
         var wasSyncing = false;
         document.addEventListener('platpursuit:sync-status-changed', function (e) {
             var status = e && e.detail && e.detail.status;
             if (status === 'syncing') {
                 wasSyncing = true;
             } else if (status === 'synced') {
-                if (wasSyncing) forgeVisibleCard();
+                if (wasSyncing) { forgeVisibleCard(); markSeen(Math.floor(Date.now() / 1000)); }
                 wasSyncing = false;
             }
         });
-        // Preview: any ?forge= value replays it.
+
+        // Catch-up: a sync that finished while you were away/elsewhere -> forge on this view (the
+        // page rendered with the now-fresh data). Fire if the card's last-synced is newer than
+        // the last sync we forged for.
+        var card = document.querySelector('.pursuer-card');
+        var syncedAt = card ? (parseInt(card.dataset.syncedAt || '0', 10) || 0) : 0;
+        if (card && syncedAt > getSeen()) {
+            forge(card);
+            markSeen(syncedAt);
+        }
+
+        // Preview: any ?forge= value replays it (double-forge is guarded internally).
         if (/[?&]forge=/.test(window.location.search)) forgeVisibleCard();
     });
 })();

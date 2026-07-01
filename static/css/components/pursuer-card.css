@@ -14,6 +14,7 @@
         linear-gradient(180deg, rgba(255,255,255,0.04), transparent 22%),
         linear-gradient(180deg, var(--pp-bg-2), var(--pp-bg-1));
     box-shadow: 0 14px 40px rgba(0,0,0,0.45);
+    transition: box-shadow 0.45s ease;  /* forge/settle: the rank glow eases in, never pops */
     /* corner-diamond gem treatment -- a cut notch at rest, escalated per rank below */
     --pc-notch-bg: var(--pp-bg-1); --pc-notch-bd: var(--pp-border); --pc-notch-glow: transparent;
 }

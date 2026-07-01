@@ -103,4 +103,7 @@ def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
         'families': families,                       # [{label, slug, avg, bar_pct, ...}] -- 5 disciplines
         'rarest_pct': rarest[0]['earn_rate'] if rarest else None,
         'showcase': {'rarest': rarest, 'recent': recent},
+        # Epoch of the last sync, so the forge can fire on the next card view after a sync that
+        # completed while the user was away/elsewhere (client compares vs the last it forged for).
+        'synced_at': int(profile.last_synced.timestamp()) if getattr(profile, 'last_synced', None) else 0,
     }

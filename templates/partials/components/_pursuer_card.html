@@ -7,7 +7,7 @@ trophies/services/pursuer_card_service.build_pursuer_card:
 Self-contained (component CSS only, no utility classes) so it can mount on the home, the
 profile header, and share images alike.
 {% endcomment %}
-<div class="pursuer-card pursuer-card--{{ card.rank.key }}">
+<div class="pursuer-card pursuer-card--{{ card.rank.key }}" data-synced-at="{{ card.synced_at }}">
     <span class="pursuer-card__nbl"></span><span class="pursuer-card__nbr"></span>
     <div class="pursuer-card__top">
         <div class="pursuer-card__avatar">
