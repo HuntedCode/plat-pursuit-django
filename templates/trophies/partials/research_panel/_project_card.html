@@ -29,7 +29,7 @@ below. Expects `p` (a project dict from research_panel_service),
                     <span class="rp-el" style="--disc: var(--disc-{{ el.disc_slug }});">
                         <span class="rp-el__chip">{% include 'partials/elements/_atom.html' with shape=el.shape symbol=el.symbol %}</span>
                         <span class="rp-el__name">{{ el.name }}</span>
-                        <span class="rp-el__xp">+{{ p.xp_each|intcomma }}</span>
+                        <span class="rp-el__xp pp-tally">+{{ p.xp_each|intcomma }}</span>
                     </span>
                     {% endfor %}
                 </div>

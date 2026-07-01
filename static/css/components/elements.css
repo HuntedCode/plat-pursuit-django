@@ -57,7 +57,7 @@
 .lab-dna__track { fill: none; stroke: var(--pp-bg-3); stroke-width: 12; }
 .lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); }
 .lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease both; }
-.lab-dna__level { display: block; font-size: 26px; line-height: 1; color: var(--pp-text); text-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 28%, transparent); }  /* face via shared .pp-tally */
+.lab-dna__level { display: block; font-size: 26px; line-height: 1; color: var(--pp-text); }  /* face via shared .pp-tally; resting = calm (the ring is the flourish, not the number) */
 /* Digit-responsive: the Pursuer Level is uncapped, so step the font down per extra digit
    so the number always nests comfortably inside the ring (inner d ~70px / ~79px) instead
    of crowding the family arcs. d1-d3 use the base size. */
@@ -137,7 +137,7 @@
 .job:hover .job__expand, .ptile:focus-visible .job__expand { opacity: 0.9; }
 .job__mark { width: 27px; height: 27px; flex: none; }
 .job__lvbox { text-align: center; margin: 9px 0 4px; }
-.job__lv-num { display: block; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); text-shadow: 0 0 18px color-mix(in oklab, var(--disc) 38%, transparent); }  /* face via shared .pp-tally */
+.job__lv-num { display: block; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); }  /* face via shared .pp-tally; resting = calm, glow only on master/legend below */
 .job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
 .job__name { font-weight: 700; font-size: 13px; text-align: center; color: var(--pp-text); }
 .job__foot { margin-top: auto; padding-top: 12px; }
@@ -172,7 +172,7 @@
 /* The level plate: the number + its tier RANK as one unit (the rank IS what the level
    means). The top tiers light the plate up -- the cap-less prestige cue. */
 .edetail__level { flex: none; text-align: center; min-width: 86px; }
-.edetail__level-num { display: block; font-size: 54px; line-height: 0.9; color: var(--disc); text-shadow: 0 0 24px color-mix(in oklab, var(--disc) 40%, transparent); }  /* face via shared .pp-tally */
+.edetail__level-num { display: block; font-size: 54px; line-height: 0.9; color: var(--disc); }  /* face via shared .pp-tally; resting = calm, glow only on master/legend below */
 .edetail__rank { display: block; margin-top: 3px; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: var(--disc); }
 .edetail__level--master .edetail__level-num, .edetail__level--legend .edetail__level-num { text-shadow: 0 0 34px color-mix(in oklab, var(--disc) 62%, transparent); }
 .edetail__nexttier { color: color-mix(in oklab, var(--disc) 72%, var(--pp-text-mute)); font-weight: 600; }
@@ -210,7 +210,7 @@
 }
 .rp-el__chip { width: 24px; height: 24px; flex: none; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--disc) 55%, transparent)); }
 .rp-el__name { font-size: 13px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
-.rp-el__xp { font-size: 12px; font-weight: 800; color: var(--disc); font-variant-numeric: tabular-nums; text-shadow: 0 0 10px color-mix(in oklab, var(--disc) 35%, transparent); }
+.rp-el__xp { font-size: 12px; color: var(--disc); }  /* face (weight + tabular) via shared .pp-tally; resting = calm */
 /* Row hover lights up its elements -- the "this game feeds these stats" beat. */
 .rp-row:hover .rp-el { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 22%, transparent); }
 
