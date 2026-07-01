@@ -84,7 +84,10 @@ def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
         return None
     snap = dashboard_service.provide_trophy_snapshot(profile)
     rarest = _platinums(profile, showcase_limit, recent=False)
-    recent = _platinums(profile, showcase_limit, recent=True)
+    # One extra recent platinum beyond what's shown: the forge's slot-in beat renders the previous
+    # top-5, then shifts them right (this +1 slides off the end) as the new platinum enters at the
+    # front. The card's shelf strip clips to `showcase_limit`, so normal renders still show 5.
+    recent = _platinums(profile, showcase_limit + 1, recent=True)
     # The 5 disciplines (from the DNA-ring data) + a bar relative to your strongest family,
     # so the band reads as "what you're made of" at a glance.
     families = hero.get('ring') or []

@@ -64,12 +64,12 @@ profile header, and share images alike.
         </div>
         {% if card.showcase.recent %}
         <div class="pursuer-card__shelf" data-shelf="recent">
-            {% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+            <div class="pursuer-card__strip">{% for p in card.showcase.recent %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}</div>
         </div>
         {% endif %}
         {% if card.showcase.rarest %}
         <div class="pursuer-card__shelf" data-shelf="rarest"{% if card.showcase.recent %} hidden{% endif %}>
-            {% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}
+            <div class="pursuer-card__strip">{% for p in card.showcase.rarest %}{% include 'partials/components/_pursuer_card_cover.html' %}{% endfor %}</div>
         </div>
         {% endif %}
     </div>

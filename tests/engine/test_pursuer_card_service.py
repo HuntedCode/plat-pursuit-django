@@ -36,6 +36,20 @@ def test_showcase_is_rarest_first():
     assert rarest[0]['elements'] == []          # these games aren't in a Contract
 
 
+def test_recent_renders_one_extra_for_the_slot_in_shift():
+    """Recent renders showcase_limit + 1: the extra (oldest shown) is the outgoing cover the
+    forge's slot-in shift slides off the end as a new platinum enters. Rarest stays at the limit."""
+    profile = ProfileFactory()
+    for rate in (5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0):      # 7 platinums, more than the limit
+        EarnedTrophyFactory(profile=profile,
+                            trophy=TrophyFactory(trophy_type='platinum', trophy_earn_rate=rate))
+
+    card = pursuer_card_service.build_pursuer_card(profile)  # default showcase_limit=5
+
+    assert len(card['showcase']['recent']) == 6             # 5 shown + 1 outgoing
+    assert len(card['showcase']['rarest']) == 5             # no extra needed
+
+
 def test_lab_ctx_passthrough_is_used_verbatim():
     """Passing a pre-built Lab context avoids a second Lab build (the Home already has one)."""
     fake = {'hero': {'pursuer_name': 'Nightfall', 'avatar_url': None, 'pursuer_level': 999,

@@ -122,7 +122,13 @@
 /* contract elements this platinum levels (family-colored symbol chips on the cover) */
 .pursuer-card__cover-els { position: absolute; left: 3px; bottom: 13px; display: flex; gap: 2px; }
 .pursuer-card__el { font-size: 7px; font-weight: 800; line-height: 1; min-width: 13px; padding: 2px; text-align: center; border-radius: 3px; color: var(--disc); background: color-mix(in oklab, var(--disc) 22%, rgba(0,0,0,0.72)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
-.pursuer-card__shelf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+/* Clip the strip to 5 slots horizontally (hides the 6th/outgoing cover + the shift's off-card
+   travel) while leaving vertical breathing room so covers' hover lift + glow aren't clipped. */
+.pursuer-card__shelf { clip-path: inset(-14px 0 -14px 0); }
+/* The strip lays the covers out in a single row, each 1/5 of the shelf. When a 6th (outgoing)
+   cover is rendered it sits clipped just past the right edge -- ready for the forge to shift the
+   strip right, sliding the new platinum in at the front and the oldest off the end. */
+.pursuer-card__strip { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 32px) / 5); gap: 8px; }
 .pursuer-card__shelf:not([hidden]) { animation: pcShelfIn 0.22s ease; }  /* soft fade on the Rarest/Recent swap */
 @keyframes pcShelfIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pursuer-card__shelf:not([hidden]) { animation: none; } }

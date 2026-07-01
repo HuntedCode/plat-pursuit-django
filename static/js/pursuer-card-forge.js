@@ -82,10 +82,30 @@
         return out;
     }
 
-    // Preview: force the first Recent cover to slot in, so the beat is watchable via ?forge=slot.
-    function previewSlotCover(card) {
-        var c = card.querySelector('.pursuer-card__shelf[data-shelf="recent"] .pursuer-card__cover');
-        return c ? [c] : [];
+    // The slot-in shift: the Recent strip holds one slot to the left (showing the previous top-5)
+    // through the reveal, then slides right so the new platinum enters at the front and the oldest
+    // (the extra cover the server rendered) slides off the end. Returns the hero cover (the new
+    // one) so its flare class can be cleared on cleanup, or null when there's no beat to play.
+    function runShift(card, previewSlot) {
+        var shelf = card.querySelector('.pursuer-card__shelf[data-shelf="recent"]');
+        var strip = shelf && shelf.querySelector('.pursuer-card__strip');
+        if (!strip) return null;
+        var covers = strip.querySelectorAll('.pursuer-card__cover');
+        if (covers.length < 2) return null;                 // nothing to shift in/out
+        var hero = covers[0];                               // Recent is newest-first -> new = front
+        if (previewSlot) {
+            newPlatCovers(card);                            // record seen, but force the beat
+        } else if (newPlatCovers(card).indexOf(hero) === -1) {
+            return null;                                    // the front cover isn't a new platinum
+        }
+        var slot = hero.offsetWidth + 8;                    // cover width + strip gap
+        if (slot < 20) return null;                         // shelf hidden/unmeasurable -> skip
+        strip.animate(
+            [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
+            { duration: 720, delay: 1500, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
+        );
+        hero.classList.add('pursuer-card__cover--hero');    // CSS flares it as the shift lands
+        return hero;
     }
 
     function forge(card, previewSlot) {
@@ -98,18 +118,16 @@
         card.classList.remove('pursuer-card--forging');
         void card.offsetWidth;
         card.classList.add('pursuer-card--forging');
-        // A newly-earned platinum builds into the (default) Recent shelf mid-forge.
-        var slotting = previewSlot ? previewSlotCover(card) : newPlatCovers(card);
-        slotting.forEach(function (c) { c.classList.add('pursuer-card__cover--slotting'); });
+        var hero = runShift(card, previewSlot);
         setTimeout(function () { spawnSparks(card, 32); }, 340);
         setTimeout(function () { tickUp(card.querySelector('.pursuer-card__plat'), 1000); }, 700);
         setTimeout(function () { tickFamilies(card); }, 1150);
         setTimeout(function () {
             card.classList.remove('pursuer-card--forging');
-            slotting.forEach(function (c) { c.classList.remove('pursuer-card__cover--slotting'); });
+            if (hero) hero.classList.remove('pursuer-card__cover--hero');
             scan.remove();
             card.dataset.forging = '';
-        }, 2600);
+        }, 2850);
     }
 
     function forgeVisibleCard() {
