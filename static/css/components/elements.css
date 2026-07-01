@@ -23,10 +23,14 @@
 .lab-view[hidden] { display: none; }
 
 /* ---- Summary stat cards ---- */
-.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 18px; }
+/* Stat cell (Home hero + Lab). Mobile-first: a whale's 6-7 digit count overflows the full
+   24px value + 18px padding at 375px, so tighten on mobile and restore the full treatment
+   from md+ where the cells are wide. */
+.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 12px 8px; }
 .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
-.scard__value { font-size: 24px; line-height: 1; }  /* face via shared .pp-tally */
+.scard__value { font-size: 18px; line-height: 1; }  /* face via shared .pp-tally */
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }
+@media (min-width: 768px) { .scard { padding: 18px; } .scard__value { font-size: 24px; } }
 
 /* ---- Radar ---- */
 .radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; }
@@ -84,17 +88,6 @@
 .lab-rankline { flex: none; font-size: 0.62em; font-weight: 700; letter-spacing: 0.02em; color: var(--pp-text-dim); white-space: nowrap; }
 .lab-rankline__sep { margin-right: 0.45em; color: var(--pp-text-mute); font-weight: 400; }
 .lab-rankline--luminary, .lab-rankline--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
-
-/* ---- Home hero headline numbers (3-up .scard grid) ----
-   The hero packs three stat cells in one row; a whale's 6-7 digit Trophies count overflows
-   the default 24px .scard__value + 18px padding at 375px. Tighten both on mobile so the row
-   never scrolls, then restore the full treatment from md+ where the cells are wide. */
-.home-herostats .scard { padding: 12px 8px; }
-.home-herostats .scard__value { font-size: 18px; }
-@media (min-width: 768px) {
-    .home-herostats .scard { padding: 18px; }
-    .home-herostats .scard__value { font-size: 24px; }
-}
 
 /* ---- Compact element chip for the Home "your elements" strip ----
    The cell hosts the shared atom glyph (family shape + symbol + family color); the chip just
