@@ -195,8 +195,9 @@
 
 /* ---- Research Panel (Project list) ---- */
 .rp-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
-.rp-chip:hover { color: var(--pp-text); }
+.rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.18s cubic-bezier(0.34, 1.3, 0.64, 1); }
+.rp-chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border)); transform: translateY(-1px); }
+.rp-chip:active { transform: scale(0.96); }
 .rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
 /* Reward band: the elements a Project levels are a co-focus, not a footnote.
    Each chip = glowing family atom + name + the XP it actually banks. */
@@ -256,5 +257,6 @@
 .rp-cta__done { display: none; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 700; color: var(--pp-success); }
 .rp-cta__prog { width: 84px; display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
 .rp-cta__pct { font-size: 0.75rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); text-align: right; }
+.rp-accept:active { transform: scale(0.96); }
 .rp-row--accepted .rp-accept { display: none; }
 .rp-row--accepted .rp-cta__done { display: inline-flex; }

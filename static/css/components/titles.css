@@ -46,8 +46,7 @@
 @keyframes tt-twinkle { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.18); } }
 .tt-hero__name { font-family: var(--pp-font-display); font-weight: 800; font-style: italic; font-size: clamp(1.4rem, 5vw, 2.4rem); line-height: 1.05; letter-spacing: -0.01em; color: var(--tt-accent); min-width: 0; padding-right: 0.12em; }
 .tt-hero__name.is-empty { color: var(--pp-text-mute); font-weight: 600; font-size: clamp(1.1rem, 3.5vw, 1.6rem); }
-.tt-hero__name.is-legendary { color: transparent; background: linear-gradient(100deg, var(--pp-secondary), var(--pp-primary), var(--pp-accent)); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; animation: tt-legendary 6s linear infinite; }
-@keyframes tt-legendary { to { background-position: 200% center; } }
+.tt-hero__name.is-legendary { color: transparent; background: linear-gradient(100deg, var(--pp-secondary), var(--pp-primary), var(--pp-accent)); -webkit-background-clip: text; background-clip: text; }  /* static legend gradient (matches the cards/rows); the shimmer returns as a one-time equip beat, not a resting loop */
 .tt-hero__flavor { font-size: 0.72rem; color: var(--pp-text-mute); font-style: italic; margin-top: 4px; }
 .tt-hero__unequip { display: none; align-items: center; gap: 5px; margin-top: 10px; padding: 5px 11px; font-size: 0.72rem; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; cursor: pointer; transition: color var(--pp-dur-fast) var(--pp-ease), border-color var(--pp-dur-fast) var(--pp-ease); }
 .tt-hero__unequip svg { width: 13px; height: 13px; }
@@ -164,4 +163,4 @@
 /* ---- Equip flash (the "it's mine" beat) ---- */
 .tt-flash { animation: tt-flash 0.6s var(--pp-ease); }
 @keyframes tt-flash { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--tt-accent) 65%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
-@media (prefers-reduced-motion: reduce) { .tt-flash, .tt-hero__sparkle, .tt-hero__name.is-legendary { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .tt-flash, .tt-hero__sparkle { animation: none; } }
