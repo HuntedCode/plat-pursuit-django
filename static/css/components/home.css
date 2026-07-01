@@ -1,0 +1,24 @@
+/* ============================================================================
+ * HOME -- premium motion touches for the synced landing.
+ *   - Entrance settle: the sections below the Pursuer Card rise + fade in, staggered.
+ *   - Hover glows: element atoms + launcher icons warm to a soft glow on hover.
+ * Count-ups on the headline numbers are handled in static/js/home-motion.js.
+ * ========================================================================== */
+
+/* Each section below the hero settles in on load. Pure CSS: the `both` fill applies the hidden
+   `from` state from the first paint (no FOUC, no JS needed), and the per-section stagger (--rev)
+   reads as the page assembling itself. Reduced-motion opts out (content is simply present). */
+.home-reveal { animation: homeSettle 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--rev, 0) * 0.07s); }
+@keyframes homeSettle { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* Premium micro-touch: the element tile's atom and the launcher icons warm to a soft glow on hover.
+   (The full transition is redeclared here -- loaded after elements.css -- to add `filter` without
+   dropping the existing transform ease.) */
+.home-elem__cell { transition: transform 0.15s ease, filter 0.18s ease; }
+.home-elem:hover .home-elem__cell { filter: drop-shadow(0 0 7px color-mix(in oklab, var(--disc) 60%, transparent)); }
+.home-launch__icon { transition: filter 0.18s ease; }
+.home-launch:hover .home-launch__icon { filter: drop-shadow(0 0 7px color-mix(in oklab, var(--pp-primary) 55%, transparent)); }
+
+@media (prefers-reduced-motion: reduce) {
+    .home-reveal { animation: none; }
+}

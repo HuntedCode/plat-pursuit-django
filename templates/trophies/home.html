@@ -22,7 +22,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {# Trophy collection: at-a-glance stats + sync status + bridge to the full profile #}
 {% if glances.snapshot %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 0">
     <div class="card-body p-4 md:p-5 lg:p-6">
         <div class="flex items-center justify-between gap-2 mb-3">
             <div class="flex items-center gap-2 flex-wrap">
@@ -40,10 +40,10 @@ pages (it does not re-implement them). Context from core/services/home_service.p
         </div>
         {% endif %}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <div class="scard text-center" style="--scard-accent: var(--color-trophy-platinum);"><div class="scard__label">Platinums</div><div class="scard__value pp-tally text-primary">{{ glances.snapshot.total_plats|intcomma }}</div></div>
-            <div class="scard text-center" style="--scard-accent: var(--color-trophy-gold);"><div class="scard__label">Golds</div><div class="scard__value pp-tally text-warning">{{ glances.snapshot.total_golds|intcomma }}</div></div>
-            <div class="scard text-center" style="--scard-accent: var(--color-trophy-silver);"><div class="scard__label">Silvers</div><div class="scard__value pp-tally text-base-content/70">{{ glances.snapshot.total_silvers|intcomma }}</div></div>
-            <div class="scard text-center" style="--scard-accent: var(--color-trophy-bronze);"><div class="scard__label">Bronzes</div><div class="scard__value pp-tally text-amber-700">{{ glances.snapshot.total_bronzes|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-platinum);"><div class="scard__label">Platinums</div><div class="scard__value pp-tally text-primary" data-countup>{{ glances.snapshot.total_plats|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-gold);"><div class="scard__label">Golds</div><div class="scard__value pp-tally text-warning" data-countup>{{ glances.snapshot.total_golds|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-silver);"><div class="scard__label">Silvers</div><div class="scard__value pp-tally text-base-content/70" data-countup>{{ glances.snapshot.total_silvers|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-bronze);"><div class="scard__label">Bronzes</div><div class="scard__value pp-tally text-amber-700" data-countup>{{ glances.snapshot.total_bronzes|intcomma }}</div></div>
         </div>
         <div class="mt-4">
             <div class="flex items-center justify-between text-xs text-base-content/50 mb-1.5">
@@ -66,7 +66,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {# Community pulse: the cached site heartbeat (free to read) -> the Community hub #}
 {% if community %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 1">
     <div class="card-body p-4 md:p-5">
         <a href="{% url 'community_hub' %}" class="flex items-center justify-between mb-3 group">
             <span class="text-xs uppercase tracking-[0.15em] text-base-content/50 font-semibold">Community pulse</span>
@@ -87,7 +87,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {# ── Status glances: claimable rewards + almost-there badges ── #}
 {% if glances.claimable_count or glances.almost_badges %}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3 home-reveal" style="--rev: 2">
     {% if glances.claimable_count %}
     <a href="{% url 'research_panel' %}" class="card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral hover:border-primary transition-colors group">
         <div class="card-body p-4 md:p-5 flex-row items-center gap-3 md:gap-4">
@@ -123,7 +123,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {# ── Your elements: a compact, strongest-first strip of the Pursuer's job levels ── #}
 {% if elements %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 3">
     <div class="card-body p-4 md:p-5">
         <a href="{% url 'lab' %}" class="flex items-center justify-between mb-3 group">
             <span class="text-xs uppercase tracking-wider text-base-content/50 font-semibold">Your elements</span>
@@ -133,7 +133,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
             {% for e in elements %}
             <a href="{% url 'lab' %}" class="home-elem" style="--disc: var(--disc-{{ e.disc_slug }});" title="{{ e.name }} &middot; Level {{ e.level }}">
                 <span class="home-elem__cell">{% include 'partials/elements/_atom.html' with shape=e.shape symbol=e.symbol %}</span>
-                <span class="home-elem__lv pp-tally">{{ e.level }}</span>
+                <span class="home-elem__lv pp-tally" data-countup>{{ e.level }}</span>
             </a>
             {% endfor %}
         </div>
@@ -143,7 +143,7 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {# ── Recent platinums strip ── #}
 {% if recent %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3 home-reveal" style="--rev: 4">
     <div class="card-body p-4 md:p-5">
         <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-3">Recent platinums</div>
         <div class="home-marquee">
@@ -158,13 +158,13 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 
 {# ── Launchers: the page's real job, getting you to the functionality ── #}
 {% if launchers %}
-<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
+<section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral home-reveal" style="--rev: 5">
     <div class="card-body p-4 md:p-5">
         <div class="text-xs uppercase tracking-wider text-base-content/50 font-semibold mb-3">Your Pursuit</div>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {% for l in launchers %}
-            <a href="{{ l.url }}" class="group rounded-xl border-2 border-base-300 bg-base-100/40 p-3 md:p-4 hover:border-primary/50 hover:bg-base-100/70 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/10 active:translate-y-0 transition-all duration-200 flex flex-col gap-1.5">
-                <span class="text-primary">
+            <a href="{{ l.url }}" class="group home-launch rounded-xl border-2 border-base-300 bg-base-100/40 p-3 md:p-4 hover:border-primary/50 hover:bg-base-100/70 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/10 active:translate-y-0 transition-all duration-200 flex flex-col gap-1.5">
+                <span class="text-primary home-launch__icon">
                     {% if l.icon == 'flask' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.58 16.5h12.85"/></svg>
                     {% elif l.icon == 'award' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
                     {% elif l.icon == 'beaker' %}<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 3h15"/><path d="M6 3v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V3"/><path d="M6 14h12"/></svg>
@@ -182,4 +182,8 @@ pages (it does not re-implement them). Context from core/services/home_service.p
 </section>
 {% endif %}
 
+{% endblock %}
+
+{% block js_scripts %}
+<script src="{% static 'js/home-motion.js' %}"></script>
 {% endblock %}

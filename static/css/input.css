@@ -13,6 +13,7 @@
 @import "./components/collection-list.css";
 @import "./components/milestones.css";
 @import "./components/titles.css";
+@import "./components/home.css";
 @plugin "daisyui";
 
 @theme {
