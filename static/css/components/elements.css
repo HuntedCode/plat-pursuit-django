@@ -26,7 +26,7 @@
 /* Stat cell (Home hero + Lab). Mobile-first: a whale's 6-7 digit count overflows the full
    24px value + 18px padding at 375px, so tighten on mobile and restore the full treatment
    from md+ where the cells are wide. */
-.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 12px 8px; }
+.scard { border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); background: linear-gradient(90deg, color-mix(in oklab, var(--scard-accent, transparent) 7%, transparent), transparent 55%), var(--pp-bg-1); padding: 12px 8px; box-shadow: inset 2px 0 0 var(--scard-accent, transparent); }  /* --scard-accent (default transparent): tier-tint the trophy cells; neutral everywhere else */
 .scard__label { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
 .scard__value { font-size: 18px; line-height: 1; }  /* face via shared .pp-tally */
 .scard__sub { font-size: 12px; color: var(--pp-text-dim); margin-top: 7px; }

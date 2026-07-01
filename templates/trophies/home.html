@@ -40,10 +40,10 @@ pages (it does not re-implement them). Context from core/services/home_service.p
         </div>
         {% endif %}
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
-            <div class="scard text-center"><div class="scard__label">Platinums</div><div class="scard__value pp-tally text-primary">{{ glances.snapshot.total_plats|intcomma }}</div></div>
-            <div class="scard text-center"><div class="scard__label">Golds</div><div class="scard__value pp-tally text-warning">{{ glances.snapshot.total_golds|intcomma }}</div></div>
-            <div class="scard text-center"><div class="scard__label">Silvers</div><div class="scard__value pp-tally text-base-content/70">{{ glances.snapshot.total_silvers|intcomma }}</div></div>
-            <div class="scard text-center"><div class="scard__label">Bronzes</div><div class="scard__value pp-tally text-amber-700">{{ glances.snapshot.total_bronzes|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-platinum);"><div class="scard__label">Platinums</div><div class="scard__value pp-tally text-primary">{{ glances.snapshot.total_plats|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-gold);"><div class="scard__label">Golds</div><div class="scard__value pp-tally text-warning">{{ glances.snapshot.total_golds|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-silver);"><div class="scard__label">Silvers</div><div class="scard__value pp-tally text-base-content/70">{{ glances.snapshot.total_silvers|intcomma }}</div></div>
+            <div class="scard text-center" style="--scard-accent: var(--color-trophy-bronze);"><div class="scard__label">Bronzes</div><div class="scard__value pp-tally text-amber-700">{{ glances.snapshot.total_bronzes|intcomma }}</div></div>
         </div>
         <div class="mt-4">
             <div class="flex items-center justify-between text-xs text-base-content/50 mb-1.5">
