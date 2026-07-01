@@ -108,7 +108,7 @@ The four primitives share a motion and particle language that the Frame prototyp
 - **Scan beams** — bright horizontal or vertical sweeps used to indicate transformative passes (the uncloak, the back-face reveal, future level-ups). Always hot orange-white at the leading edge.
 - Trajectories arc and fall under gravity. Never straight-line. Never confetti-style explosion.
 
-**Where it appears today.** Frame's Earn Moment uses the full vocabulary. **Where it appears next.** Tally's level-up beat, Horizon's progression milestones, Pursuer Card unlock moments — all should draw from this vocabulary, not invent local one-offs.
+**Where it appears today.** Frame's Earn Moment uses the full vocabulary; the **Pursuer Card forge** (sync reveal + new-platinum slot-in) now ships it too. **Where it appears next.** Tally's level-up beat, Horizon's progression milestones — all should draw from this vocabulary, not invent local one-offs. For the *implementation* craft — the CSS recipes + gotchas that make motion read premium rather than cheap (traveling light vs drawn line, fade-don't-pop, glow-above-image, no-FOUC reveals, clip breathing room, restraint) — see [Premium Motion Patterns](../reference/motion-patterns.md).
 
 **Anti-patterns for motion + particles.** Confetti bursts on routine actions. Sparkles on hover states. Frantic counters. "Achievement Unlocked!" pop-ups. Generic mobile-game gamification (see anti-ref #4). The vocabulary is reserved for *meaningful* moments; everywhere else, the kit breathes.
 

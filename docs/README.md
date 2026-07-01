@@ -97,6 +97,7 @@ Quick-lookup tables for mid-task reference.
 |-----|-------------|
 | [API Endpoints](reference/api-endpoints.md) | All routes, authentication, request/response shapes |
 | [Design System](reference/design-system.md) | Site-wide styling tokens, responsive patterns, grid rules, color/contrast reference |
+| [Premium Motion Patterns](reference/motion-patterns.md) | How premium motion reads premium: principles (traveling light, restraint) + CSS recipes/gotchas (fade-don't-pop, glow-above-image, no-FOUC reveals, clip breathing room, count-ups) |
 | [Frame Component](reference/frame-component.md) | Badge chrome primitive: partial, CSS, JS controller, Earn Moment, sizes / states / tiers, reduced-motion |
 | [JS Utilities](reference/js-utilities.md) | utils.js shared library (API, ToastManager, InfiniteScroller, etc.) |
 | [Template Architecture](reference/template-architecture.md) | base.html, zoom wrapper, templatetags, context processors, mixins, themes |
