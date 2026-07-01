@@ -92,6 +92,11 @@
         if (vial) { vial.classList.remove('rp-vial--claimable'); vial.classList.add('rp-vial--accepted'); }
         var badge = card.querySelector('.rp-badge');
         if (badge) badge.textContent = 'Accepted';
+        // one-time reward beat: restart via reflow, self-clear on the CARD's own animation end
+        card.classList.remove('rp-row--just-accepted');
+        void card.offsetWidth;
+        card.classList.add('rp-row--just-accepted');
+        card.addEventListener('animationend', function h(e) { if (e.target !== card) return; card.classList.remove('rp-row--just-accepted'); card.removeEventListener('animationend', h); });
     }
     function refreshAcceptAll(count) {
         var btn = document.getElementById('rp-accept-all');

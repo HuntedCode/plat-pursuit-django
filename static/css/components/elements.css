@@ -266,3 +266,9 @@
 .rp-accept:active { transform: scale(0.96); }
 .rp-row--accepted .rp-accept { display: none; }
 .rp-row--accepted .rp-cta__done { display: inline-flex; }
+/* accept reward beat (one-time, on the fresh accept -- page-load accepted rows don't animate) */
+.rp-row--just-accepted { animation: rpAcceptFlash 0.7s ease; }
+.rp-row--just-accepted .rp-cta__done { animation: rpDoneIn 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.08s both; }
+@keyframes rpAcceptFlash { 0%, 100% { box-shadow: inset 0 0 0 0 transparent; } 30% { box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--pp-success) 55%, transparent), inset 0 0 30px color-mix(in oklab, var(--pp-success) 22%, transparent); } }
+@keyframes rpDoneIn { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .rp-row--just-accepted, .rp-row--just-accepted .rp-cta__done { animation: none; } }
