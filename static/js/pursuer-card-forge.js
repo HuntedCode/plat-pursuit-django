@@ -13,6 +13,8 @@
 (function () {
     'use strict';
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var SPARK_COUNT = 32;   // hot sparks per forge
+    var SEEN_CAP = 250;     // max platinum np-ids retained in the seen set (bounds localStorage)
 
     // Hot sparks along the full top edge: an upward-ish spread that arcs over and falls.
     function spawnSparks(card, n) {
@@ -75,10 +77,15 @@
             seen.forEach(function (id) { set[id] = 1; });
             ids.forEach(function (id) { if (!set[id]) out.push(byId[id]); });
         }
-        var union = {};
-        (Array.isArray(seen) ? seen : []).forEach(function (id) { union[id] = 1; });
-        ids.forEach(function (id) { union[id] = 1; });
-        try { localStorage.setItem(KEY, JSON.stringify(Object.keys(union))); } catch (_) {}
+        // Persist the seen set, bounded: current shelf ids first + a capped tail of older ones.
+        // The current shelf is always retained (never false-"new"); older ids beyond the cap drop
+        // off safely -- a platinum never re-enters the recent shelf once newer ones push it down.
+        var merged = ids.slice();
+        (Array.isArray(seen) ? seen : []).forEach(function (id) {
+            if (merged.indexOf(id) === -1) merged.push(id);
+        });
+        if (merged.length > SEEN_CAP) merged.length = SEEN_CAP;
+        try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch (_) {}
         return out;
     }
 
@@ -147,7 +154,7 @@
             setTimeout(function () { plan.news.forEach(markNew); }, 1500);
         }
 
-        setTimeout(function () { spawnSparks(card, 32); }, 340);
+        setTimeout(function () { spawnSparks(card, SPARK_COUNT); }, 340);
         setTimeout(function () { tickUp(card.querySelector('.pursuer-card__plat'), 1000); }, 700);
         setTimeout(function () { tickFamilies(card); }, 1150);
         // The conveyor runs to ~3.8s; otherwise the forge settles by 2.6s. (--new rings persist.)
@@ -166,7 +173,10 @@
 
     // Live sync completion: the on-page card is still pre-sync, so fetch a freshly-built one, swap
     // it in, then forge (detection runs on the fresh covers, so new platinums actually appear +
-    // slot in). Falls back to forging the current card if the fetch fails.
+    // slot in). Falls back to forging the current card if the fetch fails. Assumes the sync's data
+    // (counts, last_synced, new plats) is committed server-side by the time 'synced' fires; if the
+    // fetch raced ahead and returned pre-sync data, detection finds nothing new and the forge just
+    // plays without a slot-in -- a benign degradation.
     function refreshAndForge() {
         if (!document.querySelector('.pursuer-card')) return;
         fetch('/api/v1/pursuer-card/', { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })

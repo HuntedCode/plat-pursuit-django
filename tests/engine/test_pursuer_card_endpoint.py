@@ -27,6 +27,7 @@ def test_profile_gets_rendered_card_html():
 
     assert resp.status_code == 200
     assert b'pursuer-card' in resp.content
+    assert b'data-synced-at' in resp.content   # the attribute the forge's catch-up path reads
 
 
 def test_no_profile_degrades_to_204():
