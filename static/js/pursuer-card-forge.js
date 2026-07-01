@@ -107,8 +107,14 @@
             [{ transform: 'translateX(-' + slot + 'px)' }, { transform: 'translateX(0)' }],
             { duration: DUR, delay: DELAY, easing: 'cubic-bezier(0.3,0.85,0.25,1)', fill: 'backwards' }
         );
-        // Flare the new cover exactly as it settles (class added at land time; CSS flare, no delay).
-        setTimeout(function () { hero.classList.add('pursuer-card__cover--hero'); }, DELAY + DUR - 40);
+        // As it settles: an arrival flash + a persistent "new" ring that stays until the user
+        // hovers/taps the cover for the first time.
+        setTimeout(function () {
+            hero.classList.add('pursuer-card__cover--new');
+            hero.addEventListener('pointerenter', function () {
+                hero.classList.remove('pursuer-card__cover--new');
+            }, { once: true });
+        }, DELAY + DUR - 40);
         return hero;
     }
 
@@ -129,8 +135,7 @@
         // The shift+flare run to ~3.8s; an ordinary forge (no slot-in) settles by 2.6s.
         var endMs = hero ? 3850 : 2600;
         setTimeout(function () {
-            card.classList.remove('pursuer-card--forging');
-            if (hero) hero.classList.remove('pursuer-card__cover--hero');
+            card.classList.remove('pursuer-card--forging');   // the --new ring persists until hovered
             scan.remove();
             card.dataset.forging = '';
         }, endMs);
