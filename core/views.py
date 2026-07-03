@@ -1282,6 +1282,19 @@ class AnalyticsReportView(StaffRequiredMixin, View):
         return response
 
 
+class SupportHubView(ProfileHotbarMixin, TemplateView):
+    """The Support hub landing: the always-on badge-art fundraiser + (coming) the membership
+    store. Public -- unlike the site banner (gated to linked viewers), anyone can land here to
+    support PlatPursuit."""
+    template_name = 'support/support_hub.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        from fundraiser.models import get_active_fundraiser
+        context['support_fundraiser'] = get_active_fundraiser()
+        return context
+
+
 class HomeView(ProfileHotbarMixin, TemplateView):
     """
     Site home page router.

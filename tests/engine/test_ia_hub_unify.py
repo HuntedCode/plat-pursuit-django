@@ -62,6 +62,26 @@ def test_public_hubs_still_render_for_anon():
     assert hub_subnav(_req('/community/challenges/'))['hub_section'] == 'community'
 
 
+# --- Support hub (phase 2) ---
+
+def test_support_hub_resolves_incl_fundraiser():
+    assert resolve_hub_subnav(_req('/support/'))['hub'].key == 'support'
+    m = resolve_hub_subnav(_req('/fundraiser/spring-drive/'))   # re-homed to Support
+    assert m['hub'].key == 'support' and m['active_slug'] is None
+
+
+def test_support_hub_has_no_strip_items():
+    # Support is landing-focused: hub_section set (navbar highlights) but no strip.
+    ctx = hub_subnav(_req('/support/'))
+    assert ctx['hub_section'] == 'support' and ctx['hub_subnav_items'] == ()
+
+
+def test_support_landing_renders(client):
+    resp = client.get('/support/')
+    assert resp.status_code == 200
+    assert b'Support Platinum Pursuit' in resp.content
+
+
 def test_strip_shown_for_authed_home_with_overview_profile_and_divider():
     profile = ProfileFactory(is_linked=True)   # Profile item needs a linked PSN profile
     ctx = hub_subnav(_req('/', user=profile.user))

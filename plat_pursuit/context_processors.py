@@ -86,36 +86,8 @@ def active_fundraiser(request):
     fundraiser" to distinguish from a cache miss. The cache is shared
     across all users; the per-user gate lives at render time.
     """
-    if not _viewer_has_linked_profile(request):
-        return {}
-
-    try:
-        from django.core.cache import cache
-        from fundraiser.models import Fundraiser
-        from django.utils import timezone
-
-        def _fetch_id():
-            from django.db.models import Q
-            now = timezone.now()
-            fundraiser = (
-                Fundraiser.objects
-                .filter(banner_active=True, start_date__lte=now)
-                .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
-                .first()
-            )
-            return fundraiser.pk if fundraiser else 0
-
-        fundraiser_id = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
-        if fundraiser_id:
-            fundraiser = Fundraiser.objects.filter(pk=fundraiser_id).first()
-            if fundraiser:
-                return {'active_fundraiser': fundraiser}
-    except ImportError:
-        logger.warning("Fundraiser app not available", exc_info=True)
-    except Exception:
-        logger.warning("Failed to check active fundraiser", exc_info=True)
-
-    return {}
+    fundraiser = _active_fundraiser_or_none(request)
+    return {'active_fundraiser': fundraiser} if fundraiser else {}
 
 
 def _viewer_has_linked_profile(request):
@@ -215,8 +187,9 @@ def hub_subnav(request):
 
         extras: tuple[RenderedSubnavItem, ...] = ()
         if hub.key == 'my_pursuit' and _viewer_has_linked_profile(request):
-            # Profile (its URL needs the viewer's own username), then the Fundraiser tab if live.
-            extras = _profile_subnav_extra(request) + _fundraiser_subnav_extras()
+            # Profile (its URL needs the viewer's own username). The fundraiser lives in the
+            # Support hub now, not as a personal-strip item.
+            extras = _profile_subnav_extra(request)
 
         items = build_rendered_items(hub, is_authenticated=is_auth, extras=extras)
 
@@ -250,54 +223,15 @@ def _profile_subnav_extra(request):
     return (RenderedSubnavItem(slug='profile', label='Profile', url=url, icon='user'),)
 
 
-def _fundraiser_subnav_extras():
-    """
-    Build the dynamic Fundraiser sub-nav item for the My Pursuit hub, or an
-    empty tuple if no campaign is currently active.
-
-    Shares the ``fundraiser:active_banner`` cache key with
-    ``active_fundraiser`` (60s TTL, PK-only value) so this is a cache
-    GET on the hot path. Uses ``get_or_set`` so the lookup works
-    regardless of whether ``active_fundraiser`` has run yet on this
-    request; subsequent processors then hit the primed cache.
-    """
-    from django.core.cache import cache
-    from django.db.models import Q
-    from django.urls import NoReverseMatch, reverse
-    from django.utils import timezone
-
-    from core.hub_subnav import RenderedSubnavItem
-
-    def _fetch_id():
-        try:
-            from fundraiser.models import Fundraiser
-        except ImportError:
-            return 0
-        now = timezone.now()
-        fundraiser = (
-            Fundraiser.objects
-            .filter(banner_active=True, start_date__lte=now)
-            .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
-            .first()
-        )
-        return fundraiser.pk if fundraiser else 0
-
-    fundraiser_id = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
-    if not fundraiser_id:
-        return ()
-
+def _active_fundraiser_or_none(request=None):
+    """The currently-live, banner-active Fundraiser (or None), gated to viewers with a linked
+    profile (matches the site-wide banner audience). Shares the ``fundraiser:active_banner`` cache
+    key (60s, PK-only) so it's a cache GET on the hot path."""
+    if request is not None and not _viewer_has_linked_profile(request):
+        return None
     try:
-        from fundraiser.models import Fundraiser
-        fundraiser = Fundraiser.objects.filter(pk=fundraiser_id).only('slug').first()
+        from fundraiser.models import get_active_fundraiser
+        return get_active_fundraiser()
     except Exception:
-        return ()
-
-    if not fundraiser:
-        return ()
-
-    try:
-        url = reverse('fundraiser', args=[fundraiser.slug])
-    except NoReverseMatch:
-        return ()
-
-    return (RenderedSubnavItem(slug='fundraiser', label='Fundraiser', url=url, icon='heart'),)
+        logger.debug("Failed to resolve active fundraiser", exc_info=True)
+        return None

@@ -82,6 +82,25 @@ class Fundraiser(models.Model):
         return self.banner_active and self.is_live()
 
 
+def get_active_fundraiser():
+    """The currently-live, banner-active Fundraiser (or None). Caches the PK for 60s (model
+    instances aren't JSON-serializable; a cached 0 means 'none'). Shared by the site-wide banner
+    context processor and the Support hub landing."""
+    from django.core.cache import cache
+    from django.db.models import Q
+
+    def _fetch_id():
+        now = timezone.now()
+        f = (Fundraiser.objects
+             .filter(banner_active=True, start_date__lte=now)
+             .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
+             .first())
+        return f.pk if f else 0
+
+    pk = cache.get_or_set('fundraiser:active_banner', _fetch_id, 60)
+    return Fundraiser.objects.filter(pk=pk).first() if pk else None
+
+
 class Donation(models.Model):
     """A one-time donation to a fundraiser campaign."""
     PROVIDER_CHOICES = [

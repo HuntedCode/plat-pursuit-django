@@ -25,13 +25,13 @@ def test_root_personal_pages_resolve_under_my_pursuit():
     assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'shareables'
 
 
-def test_community_not_shadowed_and_fundraiser_rehomed():
-    """Other hubs aren't stolen by the personal hub, and the Fundraiser page (a url-name override)
-    resolves under My Pursuit (until the Support hub lands in phase 2)."""
+def test_community_not_shadowed_and_fundraiser_in_support():
+    """Other hubs aren't stolen by the personal hub, and the Fundraiser page now resolves under
+    the Support hub (via its /fundraiser/ prefix)."""
     m = resolve_hub_subnav(_Req('/community/lists/', 'lists_browse'))
     assert m['hub'].key == 'community'
     m = resolve_hub_subnav(_Req('/fundraiser/spring/', 'fundraiser'))
-    assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'fundraiser'
+    assert m['hub'].key == 'support'
 
 
 def test_my_pursuit_carries_the_expected_items():

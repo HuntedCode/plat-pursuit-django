@@ -22,7 +22,7 @@ from django.contrib.auth.views import LogoutView
 from django.contrib.sitemaps.views import sitemap, index as sitemap_index
 from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
-from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
+from core.views import AdsTxtView, RobotsTxtView, PrivacyPolicyView, TermsOfServiceView, AboutView, ContactView, HomeView, CommunityHubView, SupportHubView, AnalyticsDashboardView, AnalyticsReportView, FrameComponentTestView, BinderPreviewView, BadgeCollectionListView, PursuerCardPreviewView, PursuerCardRanksPreviewView, PursuerCardCustomizationPreviewView, JobsWorkshopView, LabWorkshopView, ResearchPanelView as DesignResearchPanelView, csp_report_ingest, CspViolationsView, CspViolationsClearView
 from core.sitemaps import (
     StaticViewSitemap, GameSitemap, ProfileSitemap,
     BadgeSitemap, GameListSitemap, ChallengeSitemap, RoadmapSitemap,
@@ -71,6 +71,7 @@ urlpatterns = [
     # `{% url %}` and `reverse()` calls in templates and Python code
     # continue to resolve to the right place without changes.
     path('community/', CommunityHubView.as_view(), name='community_hub'),
+    path('support/', SupportHubView.as_view(), name='support_hub'),
 
     path('games/', GamesListView.as_view(), name='games_list'),
     path('games/lucky/', RandomGameView.as_view(), name='random_game'),

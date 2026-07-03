@@ -163,6 +163,19 @@ MY_PURSUIT_HUB = HubSubnavConfig(
 )
 
 
+# The Support hub: the always-on badge-art fundraiser + (coming) the membership store. It's
+# landing-focused, so it carries NO sub-nav items -- the /support/ page features the fundraiser +
+# store instead. The /fundraiser/ prefix maps the campaign page here too. ("Support" is a
+# placeholder name, room for PlatPursuit charm.)
+SUPPORT_HUB = HubSubnavConfig(
+    key='support',
+    label='Support',
+    icon='heart',
+    prefixes=('/support/', '/fundraiser/'),
+    items=(),
+)
+
+
 # Order matters for matching: hubs are checked in this order. Within each
 # hub, prefixes are tried longest-first. Bare '/' is handled separately as
 # an exact-equality check below.
@@ -170,6 +183,7 @@ HUB_SUBNAV_CONFIG: tuple[HubSubnavConfig, ...] = (
     COMMUNITY_HUB,
     MY_PURSUIT_HUB,
     BROWSE_HUB,
+    SUPPORT_HUB,
 )
 
 
@@ -228,11 +242,8 @@ _URL_NAME_TO_SLUG_OVERRIDES: dict[str, tuple[str, str]] = {
     'my_shareables_challenges': ('my_pursuit', 'shareables'),
     'platinum_grid': ('my_pursuit', 'shareables'),
     'recap_view': ('my_pursuit', 'recap'),
-    # Fundraiser: lives at /fundraiser/<slug>/ but conceptually belongs to the
-    # My Pursuit hub while a campaign is active. The context processor appends
-    # the Fundraiser tab dynamically when one is live.
-    'fundraiser': ('my_pursuit', 'fundraiser'),
-    'fundraiser_success': ('my_pursuit', 'fundraiser'),
+    # (The fundraiser + fundraiser_success pages resolve to the Support hub via its /fundraiser/
+    # prefix -- no override needed. Support has no sub-nav items, so no active slug.)
 }
 
 
