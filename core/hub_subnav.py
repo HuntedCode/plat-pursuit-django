@@ -41,6 +41,7 @@ class HubSubnavItem:
     url_name: str
     icon: str | None = None
     auth_required: bool = False
+    divider_before: bool = False  # render a group divider before this item (e.g. tools vs core)
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,7 @@ class RenderedSubnavItem:
     label: str
     url: str
     icon: str | None = None
+    divider_before: bool = False
 
 
 @dataclass(frozen=True)
@@ -83,19 +85,9 @@ class HubSubnavConfig:
 # they continue to resolve correctly across any future rename without
 # touching this file.
 
-# The Dashboard hub was dissolved when the legacy dashboard retired (the gamification Home
-# replaced it). HOME marks the root for the navbar's Home button but carries NO sub-nav
-# items -- the Home page's own launcher cards do the routing, so the strip stays hidden (the
-# template guards on `hub_subnav_items`). Matched only by the exact '/' special-case in
-# resolve_hub_subnav. Its former items (Stats / Shareables / Recap + the dynamic Fundraiser)
-# moved to MY_PURSUIT_HUB; the orphaned /dashboard/* URLs now resolve under that hub.
-HOME_HUB = HubSubnavConfig(
-    key='home',
-    label='Home',
-    icon='home',
-    prefixes=(),
-    items=(),
-)
+# The Home hub was merged into MY_PURSUIT_HUB in the personal-hub unify: the logged-in Home (/)
+# is now the personal hub's Overview tab (see MY_PURSUIT_HUB + the exact-'/' branch in
+# resolve_hub_subnav). No standalone HOME_HUB remains.
 
 
 BROWSE_HUB = HubSubnavConfig(
@@ -142,21 +134,29 @@ COMMUNITY_HUB = HubSubnavConfig(
 )
 
 
+# The personal hub is rooted at the logged-in Home (/): the Overview tab IS the Home, and the
+# other personal surfaces now live at ROOT paths (moved from /my-pursuit/* and /dashboard/* in
+# the unify). Profile is appended dynamically by the context processor (its URL needs the viewer's
+# own username). The strip renders for AUTHENTICATED viewers only (the context processor gates it)
+# -- anon sees a hero Home with no strip. Grouped: a gamification core (6) + personal tools.
 MY_PURSUIT_HUB = HubSubnavConfig(
     key='my_pursuit',
     label='My Pursuit',
     icon='trophy',
-    # '/dashboard/' is inherited from the dissolved Dashboard hub so the (not-yet-moved)
-    # /dashboard/stats|shareables|recap/* URLs highlight under My Pursuit. The bare
-    # '/dashboard/' path 301-redirects to '/', so only the sub-paths resolve here.
-    prefixes=('/my-pursuit/', '/dashboard/'),
+    prefixes=(
+        '/collection/', '/lab/', '/research-panel/', '/milestones/', '/titles/',
+        '/profile-editor/', '/stats/', '/shareables/', '/recap/',
+    ),
     items=(
+        # Core: the gamification progression surfaces.
+        HubSubnavItem('overview', 'Overview', 'home', 'home'),
         HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True),
         HubSubnavItem('lab', 'The Lab', 'lab', 'flask', auth_required=True),
         HubSubnavItem('research-panel', 'Research Panel', 'research_panel', 'beaker'),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
-        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True),
+        # Tools/outputs (divider before). Profile is appended after these as a dynamic extra.
+        HubSubnavItem('stats', 'My Stats', 'my_stats', 'bar-chart-3', auth_required=True, divider_before=True),
         HubSubnavItem('shareables', 'My Shareables', 'my_shareables', 'image', auth_required=True),
         HubSubnavItem('recap', 'Recap', 'recap_index', 'calendar', auth_required=True),
     ),
@@ -274,12 +274,11 @@ def resolve_hub_subnav(request) -> dict | None:
             if hub is not None:
                 return {'hub': hub, 'active_slug': slug}
 
-    # 2. Bare-root match for the Home hub (the gamification landing). Only the
-    #    exact '/' path triggers this — '/community/...' etc. fall through.
-    #    HOME_HUB has no items, so the strip stays hidden; this just sets
-    #    hub_section='home' for the navbar's Home button.
+    # 2. Bare-root match: the logged-in Home (/) is the personal hub's Overview. Only the exact
+    #    '/' path triggers this — '/community/...' etc. fall through. Anon gets a hero with no
+    #    strip; the context processor gates the personal strip to authenticated viewers.
     if path == '/':
-        return {'hub': HOME_HUB, 'active_slug': None}
+        return {'hub': MY_PURSUIT_HUB, 'active_slug': 'overview'}
 
     # 3. Longest-prefix-wins across all configured prefixes.
     best_match: tuple[HubSubnavConfig, str] | None = None
@@ -336,6 +335,7 @@ def build_rendered_items(
             url = reverse(item.url_name)
         except NoReverseMatch:
             continue
-        rendered.append(RenderedSubnavItem(slug=item.slug, label=item.label, url=url))
+        rendered.append(RenderedSubnavItem(
+            slug=item.slug, label=item.label, url=url, divider_before=item.divider_before))
     rendered.extend(extras)
     return tuple(rendered)

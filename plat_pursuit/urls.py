@@ -125,14 +125,24 @@ urlpatterns = [
     # sub-nav strip handles wayfinding to The Lab, Milestones, Titles, etc.). My Pursuit
     # deliberately has no separate landing page; the Collection IS the landing, mirroring how
     # /games/ is the Browse hub landing rather than a dedicated Browse landing page.
-    path('my-pursuit/', RedirectView.as_view(pattern_name='badge_collection', permanent=True), name='my_pursuit_hub'),
-    path('my-pursuit/milestones/', MilestoneListView.as_view(), name='milestones_list'),
-    path('my-pursuit/titles/', MyTitlesView.as_view(), name='my_titles'),
-    path('my-pursuit/lab/', LabView.as_view(), name='lab'),
+    # Personal-hub unify: the personal Pursuer surfaces now live at ROOT paths. The logged-in
+    # Home (/) is the hub Overview; the sub-nav strip does wayfinding to these. Old /my-pursuit/*
+    # paths 301 to them (below), and the bare /my-pursuit/ now points at Home.
+    path('collection/', CollectionView.as_view(), name='badge_collection'),
+    path('lab/', LabView.as_view(), name='lab'),
+    path('research-panel/', ResearchPanelView.as_view(), name='research_panel'),
+    path('milestones/', MilestoneListView.as_view(), name='milestones_list'),
+    path('titles/', MyTitlesView.as_view(), name='my_titles'),
+    path('profile-editor/', ProfileEditorView.as_view(), name='profile_editor'),
+    # Old /my-pursuit/* → new root canonicals (301). Bare hub path + logbook alias kept by name.
+    path('my-pursuit/', RedirectView.as_view(pattern_name='home', permanent=True), name='my_pursuit_hub'),
+    path('my-pursuit/collection/', RedirectView.as_view(pattern_name='badge_collection', permanent=True, query_string=True)),
+    path('my-pursuit/lab/', RedirectView.as_view(pattern_name='lab', permanent=True, query_string=True)),
     path('my-pursuit/logbook/', RedirectView.as_view(pattern_name='lab', permanent=True), name='logbook'),
-    path('my-pursuit/collection/', CollectionView.as_view(), name='badge_collection'),
-    path('my-pursuit/research-panel/', ResearchPanelView.as_view(), name='research_panel'),
-    path('my-pursuit/profile-editor/', ProfileEditorView.as_view(), name='profile_editor'),
+    path('my-pursuit/research-panel/', RedirectView.as_view(pattern_name='research_panel', permanent=True, query_string=True)),
+    path('my-pursuit/milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
+    path('my-pursuit/titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
+    path('my-pursuit/profile-editor/', RedirectView.as_view(pattern_name='profile_editor', permanent=True, query_string=True)),
 
     # Dashboard hub: personal-utility pages live under /dashboard/.
     # The original Phase 10 commit put these under /tools/. The Phase 10a
@@ -140,14 +150,21 @@ urlpatterns = [
     # features that belong in the Dashboard hub (see ia-and-subnav.md). The
     # Platinum Grid wizard lives nested inside Shareables since it generates
     # one of the shareable image types.
-    path('dashboard/stats/', MyStatsView.as_view(), name='my_stats'),
-    # Shareables hub: landing page + dedicated sub-pages for each share type.
+    path('stats/', MyStatsView.as_view(), name='my_stats'),
+    # Shareables: landing + dedicated sub-pages for each share type (moved from /dashboard/).
     # See trophies/views/shareables_views.py for the per-view docstrings.
-    path('dashboard/shareables/', MyShareablesView.as_view(), name='my_shareables'),
-    path('dashboard/shareables/platinums/', MyPlatinumSharesView.as_view(), name='my_shareables_platinums'),
-    path('dashboard/shareables/profile-card/', MyProfileCardView.as_view(), name='my_shareables_profile_card'),
-    path('dashboard/shareables/challenges/', MyChallengeSharesView.as_view(), name='my_shareables_challenges'),
-    path('dashboard/shareables/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
+    path('shareables/', MyShareablesView.as_view(), name='my_shareables'),
+    path('shareables/platinums/', MyPlatinumSharesView.as_view(), name='my_shareables_platinums'),
+    path('shareables/profile-card/', MyProfileCardView.as_view(), name='my_shareables_profile_card'),
+    path('shareables/challenges/', MyChallengeSharesView.as_view(), name='my_shareables_challenges'),
+    path('shareables/platinum-grid/', PlatinumGridView.as_view(), name='platinum_grid'),
+    # Old /dashboard/stats|shareables/* → new root canonicals (301).
+    path('dashboard/stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
+    path('dashboard/shareables/', RedirectView.as_view(pattern_name='my_shareables', permanent=True, query_string=True)),
+    path('dashboard/shareables/platinums/', RedirectView.as_view(pattern_name='my_shareables_platinums', permanent=True, query_string=True)),
+    path('dashboard/shareables/profile-card/', RedirectView.as_view(pattern_name='my_shareables_profile_card', permanent=True, query_string=True)),
+    path('dashboard/shareables/challenges/', RedirectView.as_view(pattern_name='my_shareables_challenges', permanent=True, query_string=True)),
+    path('dashboard/shareables/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
 
     path('notifications/', NotificationInboxView.as_view(), name='notification_inbox'),
 
@@ -199,11 +216,11 @@ urlpatterns = [
     # `reviews_landing` takes no slug → NoReverseMatch → 500 (the archival bug).
     path('community/reviews/<slug:slug>/', RedirectView.as_view(url='/community/reviews/', permanent=False, query_string=True), name='review_hub'),
 
-    # Monthly Recap URLs (canonical paths under /dashboard/recap/)
-    # Recap is a Dashboard hub citizen — see docs/architecture/ia-and-subnav.md.
-    # Legacy /recap/ paths redirect here via the redirect block below.
-    path('dashboard/recap/', RecapIndexView.as_view(), name='recap_index'),
-    path('dashboard/recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
+    # Monthly Recap (canonical ROOT paths, moved from /dashboard/recap/).
+    path('recap/', RecapIndexView.as_view(), name='recap_index'),
+    path('recap/<int:year>/<int:month>/', RecapSlideView.as_view(), name='recap_view'),
+    path('dashboard/recap/', RedirectView.as_view(pattern_name='recap_index', permanent=True, query_string=True)),
+    path('dashboard/recap/<int:year>/<int:month>/', RedirectView.as_view(pattern_name='recap_view', permanent=True, query_string=True)),
 
     path('toggle-selection/', ToggleSelectionView.as_view(), name='toggle-selection'),
 
@@ -237,7 +254,6 @@ urlpatterns = [
     path('my-pursuit/badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
     path('my-pursuit/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
     path('my-pursuit/badges/<str:series_slug>/<str:psn_username>/', RedirectView.as_view(pattern_name='badge_detail_with_profile', permanent=True, query_string=True)),
-    path('milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
     path('my-titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),
     path('achievements/badges/', RedirectView.as_view(pattern_name='badges_list', permanent=True, query_string=True)),
     path('achievements/badges/<str:series_slug>/', RedirectView.as_view(pattern_name='badge_detail', permanent=True, query_string=True)),
@@ -252,8 +268,6 @@ urlpatterns = [
     path('staff/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
     path('tools/stats/', RedirectView.as_view(pattern_name='my_stats', permanent=True, query_string=True)),
     path('tools/platinum-grid/', RedirectView.as_view(pattern_name='platinum_grid', permanent=True, query_string=True)),
-    path('recap/', RedirectView.as_view(pattern_name='recap_index', permanent=True, query_string=True)),
-    path('recap/<int:year>/<int:month>/', RedirectView.as_view(pattern_name='recap_view', permanent=True, query_string=True)),
 
     # Leaderboards
     path('leaderboard/badges/', RedirectView.as_view(pattern_name='overall_badge_leaderboards', permanent=True, query_string=True)),

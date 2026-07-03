@@ -207,9 +207,16 @@ def hub_subnav(request):
         hub = match['hub']
         is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
 
+        # The personal ("My Pursuit") strip is a login-gated wayfinder: hide it entirely for
+        # anonymous viewers so the Home (/) reads as a hero and public members (e.g. /milestones/)
+        # don't sprout a personal strip.
+        if hub.key == 'my_pursuit' and not is_auth:
+            return {'hub_section': None}
+
         extras: tuple[RenderedSubnavItem, ...] = ()
         if hub.key == 'my_pursuit' and _viewer_has_linked_profile(request):
-            extras = _fundraiser_subnav_extras()
+            # Profile (its URL needs the viewer's own username), then the Fundraiser tab if live.
+            extras = _profile_subnav_extra(request) + _fundraiser_subnav_extras()
 
         items = build_rendered_items(hub, is_authenticated=is_auth, extras=extras)
 
@@ -223,6 +230,24 @@ def hub_subnav(request):
     except Exception:
         logger.debug("Failed to resolve hub_subnav for path %s", request.path, exc_info=True)
         return {'hub_section': None}
+
+
+def _profile_subnav_extra(request):
+    """The viewer's own Profile as a dynamic sub-nav item -- its URL needs their username, so it
+    can't be a static config item. Part of the personal hub's tools group (appended after Recap).
+    Returns an empty tuple if the viewer has no reversible profile URL."""
+    from django.urls import NoReverseMatch, reverse
+
+    from core.hub_subnav import RenderedSubnavItem
+
+    profile = getattr(getattr(request, 'user', None), 'profile', None)
+    if not profile or not getattr(profile, 'psn_username', None):
+        return ()
+    try:
+        url = reverse('profile_detail', kwargs={'psn_username': profile.psn_username})
+    except NoReverseMatch:
+        return ()
+    return (RenderedSubnavItem(slug='profile', label='Profile', url=url, icon='user'),)
 
 
 def _fundraiser_subnav_extras():

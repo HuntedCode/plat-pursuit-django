@@ -26,11 +26,11 @@ def test_legacy_my_pursuit_badge_paths_redirect_to_browse(client):
     assert r.status_code == 301 and r['Location'] == '/badges/resident-evil/'
 
 
-def test_my_pursuit_root_now_lands_on_the_collection(client):
-    """/my-pursuit/ used to 301 to the badge list; with the catalog gone it lands on the
-    Collection (the personal album, which is the hub's sub-nav landing item)."""
+def test_my_pursuit_root_now_redirects_home(client):
+    """/my-pursuit/ used to 301 to the Collection; in the personal-hub unify the Overview lives at
+    the Home (/), so the bare hub path redirects there."""
     r = client.get('/my-pursuit/')
-    assert r.status_code == 301 and r['Location'] == reverse('badge_collection')
+    assert r.status_code == 301 and r['Location'] == reverse('home')
 
 
 def test_badges_is_a_browse_subnav_item():

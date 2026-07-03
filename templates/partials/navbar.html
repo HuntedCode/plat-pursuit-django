@@ -32,9 +32,10 @@
     <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1 gap-1">
             <li>
+                {# Personal hub: the logged-in Home (/) is its Overview. Logo also enters it. #}
                 <a href="{% url 'home' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'home' %}btn-primary{% else %}btn-ghost{% endif %}">
-                    Home
+                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
+                    My Pursuit
                 </a>
             </li>
             <li>
@@ -47,16 +48,6 @@
                 <a href="{% url 'community_hub' %}"
                    class="btn btn-sm font-semibold {% if hub_section == 'community' %}btn-primary{% else %}btn-ghost{% endif %}">
                     Community
-                </a>
-            </li>
-            <li>
-                {# /my-pursuit/ 301s to the Collection (/my-pursuit/collection/), the hub  #}
-                {# landing. It's personal + login-gated, so anonymous visitors are sent to #}
-                {# sign-in (next=collection). The badge CATALOG moved to Browse (/badges/). #}
-                {# The upcoming navbar rebuild drops this button for anonymous users.       #}
-                <a href="{% url 'my_pursuit_hub' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
-                    My Pursuit
                 </a>
             </li>
         </ul>
