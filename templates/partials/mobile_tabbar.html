@@ -3,9 +3,9 @@
 {% comment %}
 Mobile bottom tab bar — the 4-hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (Home / Browse / Community /
-My Pursuit) at the bottom of the viewport so mobile users have one-tap
-access to every hub at all scroll positions. The desktop navbar's hub
+Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Community;
+Support is added in IA phase 2) at the bottom of the viewport so mobile users
+have one-tap access to every hub at all scroll positions. The desktop navbar's hub
 buttons are hidden on <lg: precisely because this bar takes over.
 
 The previous mobile chrome (search button + overlay, More drawer) was
@@ -15,9 +15,9 @@ redundant once the bottom tab bar surfaced the 4 hubs directly. The hubs'
 sub-pages are reachable via the hub_subnav strip pinned at top-16.
 
 Active state: each tab compares hub_section (from the hub_subnav context
-processor) and renders with text-primary when active. The Home tab is
-active on the root (hub_section='home'); non-hub pages (settings, auth,
-notifications) leave no tab highlighted.
+processor) and renders with text-primary when active. The My Pursuit tab is
+active on the personal hub (hub_section='my_pursuit', which owns the root /);
+non-hub pages (settings, auth, notifications) leave no tab highlighted.
 
 See docs/architecture/ia-and-subnav.md for the design rationale.
 {% endcomment %}

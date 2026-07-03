@@ -56,6 +56,12 @@ def test_strip_hidden_for_anon_on_public_member():
     assert hub_subnav(_req('/milestones/'))['hub_section'] is None
 
 
+def test_public_hubs_still_render_for_anon():
+    # The anon gate is My-Pursuit-specific -- Browse/Community strips must still show.
+    assert hub_subnav(_req('/games/'))['hub_section'] == 'browse'
+    assert hub_subnav(_req('/community/challenges/'))['hub_section'] == 'community'
+
+
 def test_strip_shown_for_authed_home_with_overview_profile_and_divider():
     profile = ProfileFactory(is_linked=True)   # Profile item needs a linked PSN profile
     ctx = hub_subnav(_req('/', user=profile.user))

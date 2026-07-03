@@ -716,8 +716,8 @@ class NotificationInboxManager {
     renderShareCardCta(metadata) {
         const earnedTrophyId = metadata?.earned_trophy_id;
         const shareUrl = earnedTrophyId
-            ? `/dashboard/shareables/platinums/?et=${encodeURIComponent(earnedTrophyId)}`
-            : '/dashboard/shareables/platinums/';
+            ? `/shareables/platinums/?et=${encodeURIComponent(earnedTrophyId)}`
+            : '/shareables/platinums/';
 
         return `
             <a href="${shareUrl}"
