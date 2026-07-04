@@ -2,7 +2,7 @@
 import pytest
 
 from trophies.models import Job
-from trophies.services.element_render import DISCIPLINE_ICON
+from trophies.services.job_render import DISCIPLINE_ICON
 from trophies.templatetags.job_icons import _ICONS, job_icon
 
 pytestmark = pytest.mark.django_db

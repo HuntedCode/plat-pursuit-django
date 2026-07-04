@@ -2,7 +2,7 @@
 Contract card (vertical tile, laid out in a grid): the newest member game's art banners the top;
 below sit the identity, the jobs it levels (wrapping chips), a job-split ring with the
 split count in its center + the status action, and the member-games grid in a collapsed <details>.
-Expects `p` (a project dict from research_panel_service) and `profile` (viewer, for game-card links).
+Expects `p` (a contract dict from contracts_service) and `profile` (viewer, for game-card links).
 {% endcomment %}
 {% load humanize job_icons %}
 <div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">

@@ -1,22 +1,21 @@
-"""Research Panel page context builder.
+"""Contracts board context builder.
 
-The Research Panel (`/my-pursuit/research-panel/`) lists live Contracts as "Projects" to
-pursue. Following the badge-stage model, each Project foregrounds its GAMES (the member
-Concepts) -- cover + title + the viewer's per-game completion -- as the main draw; the
-elements it levels, the fixed-T XP reward, and the Compound are the supporting "what you
-get for it".
+The Contracts board (Career's Contracts tab) lists live Contracts to pursue. Following the
+badge-stage model, each contract foregrounds its GAMES (the member Concepts) -- cover + title +
+the viewer's per-game completion -- as the main draw; the jobs it levels and the fixed-T XP
+reward are the supporting "what you get for it".
 
-Read-only + whale-safe. Status is derived from EXISTING `EarnedContract` rows (created by
-the sync's `mark_contract_reached`, never on this render path) plus a single bounded
-`ProfileGame` progress aggregate. The member-concept set is the curated live-Contract pool
-(bounded), never the user's whole library, so there is no whale-OOM risk.
+Read-only + whale-safe. Status is derived from EXISTING `EarnedContract` rows (created by the
+sync's `mark_contract_reached`, never on this render path) plus a single bounded `ProfileGame`
+progress aggregate. The member-concept set is the curated live-Contract pool (bounded), never
+the user's whole library, so there is no whale-OOM risk.
 """
 import logging
 
 from django.db.models import Prefetch
 
 from trophies.models import Contract, ContractMembership, EarnedContract, Game, ProfileGame
-from trophies.services import element_render
+from trophies.services import job_render
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ def _ring_gradient(elements):
     return "conic-gradient(" + ", ".join(stops) + ")"
 
 
-def _build_projects(profile):
+def _build_contracts(profile):
     # Each member Concept's GAMES are the focal point (the badge-stage model: show exactly
     # what's available). Prefetch concept.games; cover-art OOM rule -> select_related the
     # game's concept + IGDB match and defer the ~30KB raw_response blob cover templates
@@ -128,7 +127,7 @@ def _build_projects(profile):
         _dated = [g for g in contract_games if g.concept.release_date]
         contract_games = (sorted(_dated, key=lambda g: g.concept.release_date, reverse=True)
                           + [g for g in contract_games if not g.concept.release_date])
-        elements = [element_render.job_atom(j) for j in jobs]
+        elements = [job_render.job_atom(j) for j in jobs]
         n = len(jobs)
         t = contract.xp_total_override or CONTRACT_XP_TOTAL
 
@@ -192,14 +191,14 @@ def _family_styles(elements):
     return f"linear-gradient(180deg, {stops})", color
 
 
-def build_research_panel_context(profile):
-    """Assemble the Research Panel context. Read-only + whale-safe (see module docstring)."""
+def build_contracts_context(profile):
+    """Assemble the Contracts board context. Read-only + whale-safe (see module docstring)."""
     context = {}
     try:
-        projects = _build_projects(profile)
+        contracts = _build_contracts(profile)
     except Exception:
-        logger.exception("Research Panel projects build failed for profile %s", getattr(profile, 'id', '?'))
-        projects = []
-    context['projects'] = projects
-    context['claimable_count'] = sum(1 for p in projects if p['status'] == 'claimable')
+        logger.exception("Contracts board build failed for profile %s", getattr(profile, 'id', '?'))
+        contracts = []
+    context['contracts'] = contracts
+    context['claimable_count'] = sum(1 for p in contracts if p['status'] == 'claimable')
     return context

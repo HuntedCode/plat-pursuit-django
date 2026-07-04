@@ -1,15 +1,15 @@
-"""Tests for lab_service.build_lab_context (The Lab -- the Pursuer's element identity).
+"""Tests for career_service.build_career_context (Career -- the Pursuer's job identity).
 
-Pins the page contract: totals sourced from real ProfileJobXP (Pursuer Level = sum of every
-floored element level; Total XP = sum of element XP), the compact Total-XP label, and the DNA
-composition ring (one arc per family, shares summing to the whole, cumulative offsets). All
+Pins the page contract: totals sourced from real ProfileJobXP (Career Level = sum of every
+floored job level; Total XP = sum of job XP), the compact Total-XP label, and the disciplines
+composition ring (one arc per discipline, shares summing to the whole, cumulative offsets). All
 bounded by the ~25-row Job catalog.
 """
 import pytest
 
 from trophies.models import Job, ProfileJobXP, Title, UserTitle
-from trophies.services import element_render
-from trophies.services.lab_service import _compact, build_lab_context
+from trophies.services import job_render
+from trophies.services.career_service import _compact, build_career_context
 from tests.factories import ProfileFactory
 
 pytestmark = pytest.mark.django_db
@@ -25,14 +25,14 @@ def test_compact_label_boundaries(value, label):
 
 def _family_job_count():
     """Jobs that land in one of the 5 canonical families (what the Lab actually counts)."""
-    return Job.objects.filter(discipline__in=element_render.DISCIPLINE_LABELS.keys()).count()
+    return Job.objects.filter(discipline__in=job_render.DISCIPLINE_LABELS.keys()).count()
 
 
 def test_empty_profile_floors_every_element_to_level_one():
     profile = ProfileFactory()
 
-    ctx = build_lab_context(profile)
-    lab = ctx['lab']
+    ctx = build_career_context(profile)
+    lab = ctx['career']
 
     n = _family_job_count()
     assert lab['total_xp'] == 0
@@ -47,8 +47,8 @@ def test_totals_reflect_profile_job_xp():
     job = Job.objects.get(slug='gunslinger')
     ProfileJobXP.objects.create(profile=profile, job=job, total_xp=12300, level=5)
 
-    ctx = build_lab_context(profile)
-    lab = ctx['lab']
+    ctx = build_career_context(profile)
+    lab = ctx['career']
 
     n = _family_job_count()
     assert lab['total_xp'] == 12300                     # only this element has XP
@@ -63,7 +63,7 @@ def test_discipline_headers_carry_icon_played_and_fill():
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='gunslinger'), total_xp=12300, level=5)
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='slayer'), total_xp=500, level=2)
 
-    disciplines = build_lab_context(profile)['lab']['disciplines']
+    disciplines = build_career_context(profile)['career']['disciplines']
     by_slug = {d['slug']: d for d in disciplines}
 
     combat = by_slug['combat']
@@ -83,13 +83,13 @@ def test_hero_mirrors_lab_totals():
     profile = ProfileFactory(display_psn_username='Pursuer1')
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=4000, level=4)
 
-    ctx = build_lab_context(profile)
-    hero, lab = ctx['hero'], ctx['lab']
+    ctx = build_career_context(profile)
+    hero, lab = ctx['hero'], ctx['career']
 
     assert hero['pursuer_name'] == 'Pursuer1'
     assert hero['pursuer_level'] == lab['total_level']
     assert hero['total_job_xp'] == lab['total_xp']
-    assert hero['element_count'] == lab['total']
+    assert hero['job_count'] == lab['total']
     assert hero['active_title'] is None     # no displayed UserTitle
 
 
@@ -98,7 +98,7 @@ def test_hero_carries_pursuer_rank():
     DNA ring label. A fresh profile floors every element to level 1, so it sits at Newbie."""
     profile = ProfileFactory()
 
-    rank = build_lab_context(profile)['hero']['pursuer_rank']
+    rank = build_career_context(profile)['hero']['pursuer_rank']
 
     assert rank['key'] == 'newbie'          # ~25 total level is under the Recruit floor (35)
     assert rank['label'] == 'Newbie' and rank['division'] is None
@@ -110,12 +110,12 @@ def test_dna_ring_arcs_sum_to_the_whole():
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='gunslinger'), total_xp=9000, level=8)
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=3000, level=3)
 
-    hero = build_lab_context(profile)['hero']
+    hero = build_career_context(profile)['hero']
     ring = hero['ring']
 
-    assert len(ring) == len(element_render.DISCIPLINE_LABELS)   # one arc per family
+    assert len(ring) == len(job_render.DISCIPLINE_LABELS)   # one arc per family
     # Dash segments are each family's share of the total level; together they fill the circle.
-    from trophies.services.lab_service import _RING_C
+    from trophies.services.career_service import _RING_C
     assert abs(sum(seg['dash'] for seg in ring) - _RING_C) < 0.5
     assert abs(sum(seg['share_pct'] for seg in ring) - 100) <= 2   # 5-way rounding tolerance
     # Offsets are the running cumulative start of each arc (first starts at 0); each arc
@@ -130,7 +130,7 @@ def test_empty_profile_ring_splits_into_equal_family_arcs():
     families holds the same share of the total level -> 5 equal arcs at 20% each."""
     profile = ProfileFactory()
 
-    ring = build_lab_context(profile)['hero']['ring']
+    ring = build_career_context(profile)['hero']['ring']
 
     assert len(ring) == 5
     assert all(seg['share_pct'] == 20 for seg in ring)
@@ -141,7 +141,7 @@ def test_active_title_surfaces_displayed_user_title():
     title = Title.objects.create(name='Platinum Sovereign')
     UserTitle.objects.create(profile=profile, title=title, source_type='badge', is_displayed=True)
 
-    hero = build_lab_context(profile)['hero']
+    hero = build_career_context(profile)['hero']
 
     assert hero['active_title'] == 'Platinum Sovereign'
 
@@ -150,14 +150,14 @@ def test_broken_lab_zone_degrades_without_500(monkeypatch):
     """A failure in the element build leaves lab=None and degrades the hero to zeros
     (still rendered) rather than raising a 500."""
     monkeypatch.setattr(
-        'trophies.services.lab_service.element_render.build_profile_elements',
+        'trophies.services.career_service.job_render.build_profile_jobs',
         lambda profile: (_ for _ in ()).throw(RuntimeError('boom')),
     )
     profile = ProfileFactory()
 
-    ctx = build_lab_context(profile)
+    ctx = build_career_context(profile)
 
-    assert ctx['lab'] is None
+    assert ctx['career'] is None
     assert ctx['total_xp_compact'] == '0'
     assert ctx['hero']['pursuer_level'] == 0   # hero still builds, zeroed
     assert ctx['hero']['ring'] == []
@@ -171,7 +171,7 @@ def test_element_tile_carries_prestige_tier():
     job = Job.objects.get(slug='mage')
     ProfileJobXP.objects.create(profile=profile, job=job, total_xp=xp_for_level(99), level=99)
 
-    elements = element_render.build_profile_elements(profile)
+    elements = job_render.build_profile_jobs(profile)
     tile = next(t for d in elements['disciplines'] for t in d['jobs'] if t['slug'] == 'mage')
 
     assert tile['level'] == 99

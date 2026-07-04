@@ -50,13 +50,13 @@ def test_recent_renders_one_extra_for_the_slot_in_shift():
     assert len(card['showcase']['rarest']) == 6             # no extra needed
 
 
-def test_lab_ctx_passthrough_is_used_verbatim():
+def test_career_ctx_passthrough_is_used_verbatim():
     """Passing a pre-built Lab context avoids a second Lab build (the Home already has one)."""
     fake = {'hero': {'pursuer_name': 'Nightfall', 'avatar_url': None, 'pursuer_level': 999,
                      'pursuer_rank': {'key': 'ascendant', 'label': 'Ascendant'}, 'active_title': 'Sovereign'},
-            'lab': None}
+            'career': None}
 
-    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx=fake)
+    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), career_ctx=fake)
 
     assert card['name'] == 'Nightfall' and card['level'] == 999
     assert card['rank']['key'] == 'ascendant' and card['active_title'] == 'Sovereign'
@@ -65,7 +65,7 @@ def test_lab_ctx_passthrough_is_used_verbatim():
 
 def test_no_identity_returns_none():
     """A degraded Lab build (no usable hero/rank) yields no card so the surface hides it."""
-    assert pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx={}) is None
+    assert pursuer_card_service.build_pursuer_card(ProfileFactory(), career_ctx={}) is None
 
 
 def test_families_bar_pct_scales_to_strongest():
@@ -76,9 +76,9 @@ def test_families_bar_pct_scales_to_strongest():
                      'ring': [{'label': 'Combat', 'slug': 'combat', 'avg': 40},
                               {'label': 'Mind', 'slug': 'mind', 'avg': 10},
                               {'label': 'Heart', 'slug': 'heart', 'avg': 0}]},
-            'lab': None}
+            'career': None}
 
-    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), lab_ctx=fake)
+    card = pursuer_card_service.build_pursuer_card(ProfileFactory(), career_ctx=fake)
 
     assert {f['slug']: f['bar_pct'] for f in card['families']} == {'combat': 100, 'mind': 25, 'heart': 0}
 

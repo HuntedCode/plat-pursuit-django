@@ -6,7 +6,7 @@ reward loop (accept a Contract -> its jobs level up) lives on one surface. Linke
 gated (the whole surface is personal).
 
 Zones: the Pursuer hero + the jobs experience + the Contracts browse + the pending-rewards rail.
-Page data: `lab_service.build_lab_context` + `research_panel_service.build_research_panel_context`.
+Page data: `career_service.build_career_context` + `contracts_service.build_contracts_context`.
 """
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -15,8 +15,8 @@ from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
-from trophies.services.lab_service import build_lab_context
-from trophies.services.research_panel_service import build_research_panel_context
+from trophies.services.career_service import build_career_context
+from trophies.services.contracts_service import build_contracts_context
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 
 # The internal tabs a `?view=` query may deep-link to (match the template's data-view values).
@@ -40,19 +40,19 @@ class CareerView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         profile = self.request.user.profile
         # The job identity (hero + skills grid + radar).
-        context.update(build_lab_context(profile))
-        # The Contracts browse, folded in as the Contracts tab (linked viewer -> real per-contract status).
-        research = build_research_panel_context(profile)
-        context.update(research)
+        context.update(build_career_context(profile))
+        # The Contracts board, folded in as the Contracts tab (linked viewer -> real per-contract status).
+        contracts_ctx = build_contracts_context(profile)
+        context.update(contracts_ctx)
         context['profile'] = profile
         context['viewer_has_linked_profile'] = True
         context['xp_total'] = CONTRACT_XP_TOTAL
         # Pending-rewards rail: derived from the SAME contracts the tab renders, so the rail's count
         # can never disagree with the Contracts tab's "Accept all (N)" / the visible claimable cards.
-        claimable_projects = [p for p in research.get('projects', []) if p.get('status') == 'claimable']
+        claimable_contracts = [p for p in contracts_ctx.get('contracts', []) if p.get('status') == 'claimable']
         context['claimable'] = {
-            'count': len(claimable_projects),
-            'total_xp': sum(p.get('xp_total', 0) for p in claimable_projects),
+            'count': len(claimable_contracts),
+            'total_xp': sum(p.get('xp_total', 0) for p in claimable_contracts),
         }
         # Active tab on load: ?view=contracts deep-links the Contracts board.
         requested = self.request.GET.get('view')

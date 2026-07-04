@@ -2,14 +2,14 @@
 
 Grounds identity in what a hunter actually cares about + would screenshot: platinum count,
 their standout platinums in real cover art (toggleable Rarest / Recent), completion/rarity,
-rank as standing, and -- where a platinum's game is a curated Contract -- the elements that
+rank as standing, and -- where a platinum's game is a curated Contract -- the jobs that
 platinum levels. The premium is craft on real content; this builder assembles the real data.
-Reuses the Lab identity + the trophy snapshot; the platinum reads are bounded slices (whale-
-safe) and the contract elements are resolved in one batched query.
+Reuses the Career identity + the trophy snapshot; the platinum reads are bounded slices (whale-
+safe) and the contract jobs are resolved in one batched query.
 """
 import logging
 
-from trophies.services import dashboard_service, lab_service
+from trophies.services import career_service, dashboard_service
 
 logger = logging.getLogger(__name__)
 
@@ -67,18 +67,18 @@ def _platinums(profile, limit, *, recent):
     return showcase
 
 
-def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=6):
+def build_pursuer_card(profile, *, career_ctx=None, showcase_limit=6):
     """Assemble the Pursuer Card for `profile`.
 
-    `lab_ctx` (the full Lab context) may be passed in to avoid a second Lab build when the
-    caller already has one (the Home). Returns identity + headline stats + the family makeup
-    (the 5 disciplines, from the DNA-ring data) + a toggleable platinum showcase ({rarest,
-    recent}). Returns None when the Lab build yields no usable identity (degraded) so the
-    surface hides the card.
+    `career_ctx` (the full Career context) may be passed in to avoid a second build when the
+    caller already has one (the Home). Returns identity + headline stats + the discipline makeup
+    (the 5 disciplines, from the ring data) + a toggleable platinum showcase ({rarest, recent}).
+    Returns None when the Career build yields no usable identity (degraded) so the surface hides
+    the card.
     """
-    if lab_ctx is None:
-        lab_ctx = lab_service.build_lab_context(profile)
-    hero = (lab_ctx or {}).get('hero') or {}
+    if career_ctx is None:
+        career_ctx = career_service.build_career_context(profile)
+    hero = (career_ctx or {}).get('hero') or {}
     if not hero.get('pursuer_rank'):
         return None
     snap = dashboard_service.provide_trophy_snapshot(profile)

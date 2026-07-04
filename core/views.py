@@ -792,10 +792,10 @@ class JobsWorkshopView(TemplateView):
 
     @staticmethod
     def _build_compound(atoms, seed):
-        """Workshop delegate to the productionized generator in element_render
+        """Workshop delegate to the productionized generator in job_render
         (single source). Kept so the /design/jobs/ sandbox + its call sites are unchanged.
         """
-        from trophies.services.element_render import build_compound
+        from trophies.services.job_render import build_compound
         return build_compound(atoms, seed)
 
     @staticmethod

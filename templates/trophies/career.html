@@ -30,7 +30,7 @@
                         {% else %}
                             <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
                         {% endif %}
-                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} jobs leveled</p>
+                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.job_count }} jobs leveled</p>
                     </div>
                 </div>
 
@@ -90,7 +90,7 @@
     </a>
     {% endif %}
 
-    {% if lab %}
+    {% if career %}
     {# ── Career: one card, your jobs (Jobs / Radar) + the Contracts board via tabs ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6">
@@ -101,29 +101,29 @@
                 <h2 class="text-lg md:text-xl lg:text-2xl font-bold">Career</h2>
             </div>
             <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-4">
-                The {{ lab.total }} jobs that make up how you play, across five disciplines.
+                The {{ career.total }} jobs that make up how you play, across five disciplines.
             </p>
 
             {# Summary stats (aggregates you can't read off the grid) #}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
                 <div class="scard">
                     <div class="scard__label">Career Level</div>
-                    <div class="scard__value pp-tally text-primary">{{ lab.total_level|intcomma }}</div>
+                    <div class="scard__value pp-tally text-primary">{{ career.total_level|intcomma }}</div>
                     <div class="scard__sub">sum of every job</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Total XP</div>
-                    <div class="scard__value pp-tally" title="{{ lab.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
+                    <div class="scard__value pp-tally" title="{{ career.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
                     <div class="scard__sub">earned across all jobs</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Average level</div>
-                    <div class="scard__value pp-tally">{{ lab.avg_level }}</div>
-                    <div class="scard__sub">across all {{ lab.total }} jobs</div>
+                    <div class="scard__value pp-tally">{{ career.avg_level }}</div>
+                    <div class="scard__sub">across all {{ career.total }} jobs</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Highest level</div>
-                    <div class="scard__value pp-tally">{{ lab.highest_level }}</div>
+                    <div class="scard__value pp-tally">{{ career.highest_level }}</div>
                     <div class="scard__sub">your single best job</div>
                 </div>
             </div>
@@ -150,7 +150,7 @@
 
                 {# Dossier: each discipline a banded chapter (icon + avg + fill + played), jobs beneath #}
                 <div class="jobs-layout jdoss" data-layout="dossier">
-                    {% for d in lab.disciplines %}
+                    {% for d in career.disciplines %}
                     <div class="jdoss__band" style="--disc: var(--disc-{{ d.slug }});">
                         <div class="jdoss__head">
                             <span class="jdoss__ic">{% job_icon d.icon '' %}</span>
@@ -162,7 +162,7 @@
                             <span class="jdoss__played">{{ d.played }}/5 played</span>
                         </div>
                         <div class="jdoss__grid">
-                            {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/elements/_element_tile.html' with card=job %}</div>{% endfor %}
+                            {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}
                         </div>
                     </div>
                     {% endfor %}
@@ -170,14 +170,14 @@
 
                 {# Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) #}
                 <div class="jobs-layout jsheet" data-layout="sheet" hidden>
-                    {% for d in lab.disciplines %}
+                    {% for d in career.disciplines %}
                     <div class="jsheet__disc" style="--disc: var(--disc-{{ d.slug }});">
                         <div class="jsheet__head">
                             <span class="jsheet__head-ic">{% job_icon d.icon '' %}</span>
                             <span class="jsheet__head-name">{{ d.label }}</span>
                             <span class="jsheet__head-avg">avg Lv {{ d.avg }}</span>
                         </div>
-                        {% for job in d.jobs %}{% include 'partials/elements/_job_sheet_row.html' with card=job %}{% endfor %}
+                        {% for job in d.jobs %}{% include 'partials/jobs/_job_sheet_row.html' with card=job %}{% endfor %}
                     </div>
                     {% endfor %}
                 </div>
@@ -189,7 +189,7 @@
                 <div class="radar-card">
                     <div class="radar-tabs">
                         <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
-                        {% for d in lab.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
+                        {% for d in career.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
                     </div>
                     <div class="radar-body">
                         <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
@@ -216,8 +216,8 @@
                     <button type="button" class="rp-chip" data-filter="accepted">Accepted</button>
                 </div>
                 <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-start">
-                    {% for p in projects %}
-                    {% include 'trophies/partials/research_panel/_project_card.html' with p=p %}
+                    {% for p in contracts %}
+                    {% include 'trophies/partials/contracts/_contract_card.html' with p=p %}
                     {% empty %}
                     <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral col-span-full">
                         <div class="card-body items-center text-center py-10 text-base-content/50">
@@ -234,7 +234,7 @@
 
     {# Hidden per-job detail panels + the modal shell (populated on tile tap). #}
     <div id="element-details" hidden>
-        {% for d in lab.disciplines %}{% for job in d.jobs %}<div data-slug="{{ job.slug }}">{% include 'partials/elements/_element_detail.html' with card=job %}</div>{% endfor %}{% endfor %}
+        {% for d in career.disciplines %}{% for job in d.jobs %}<div data-slug="{{ job.slug }}">{% include 'partials/jobs/_job_detail.html' with card=job %}</div>{% endfor %}{% endfor %}
     </div>
     <div class="emodal" id="emodal" hidden>
         <div class="emodal__backdrop" data-close></div>
@@ -247,7 +247,7 @@
 {% endblock %}
 
 {% block js_scripts %}
-{% if lab %}
+{% if career %}
 <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
 <script>
 // Career: discipline radar (overview + per-discipline drill-down) and tile -> detail modal.
@@ -260,10 +260,10 @@
         var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
         var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
         var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
-        var RMAX = {{ lab.radar_max }};
+        var RMAX = {{ career.radar_max }};
 
-        var DATA = { overview: { labels: {{ lab.radar_labels_json|safe }}, values: {{ lab.radar_data_json|safe }} } };
-        {% for d in lab.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
+        var DATA = { overview: { labels: {{ career.radar_labels_json|safe }}, values: {{ career.radar_data_json|safe }} } };
+        {% for d in career.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
         {% endfor %}
 
         chart = new Chart(canvas, {

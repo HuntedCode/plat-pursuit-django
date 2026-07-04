@@ -1,17 +1,14 @@
-"""Element presentation foundation (the user-facing "Element" skin over Jobs).
+"""Job presentation foundation.
 
-One source of truth for turning a profile's `ProfileJobXP` into the element tiles,
-families, and summary the Lab and Research Panel render. The backend models stay
-`Job` / `Contract`; this layer maps them to Elements / Families for display.
+One source of truth for turning a profile's `ProfileJobXP` into the job tiles, disciplines,
+and summary the Career surface + Contracts board render. Maps the `Job` / `Contract` models
+to their display shape (tiles grouped by the 5 disciplines).
 
-Presentation data that isn't on the model lives here as constants: the periodic-table
-SYMBOLS (a designed 2-char mark per job), the family taglines, and the atom SHAPES
-cycle (shape = slot within family; color = family). Flavor copy prefers the seeded
-`Job.description`, falling back to DESCRIPTIONS.
-
-Harvested from the `/design/lab/` workshop; the XP math here uses the REAL leveling
-helpers + real `ProfileJobXP` rather than the workshop's sample numbers. All assembly
-is bounded by the ~25-row Job catalog, so Python iteration is safe (no whale risk).
+Presentation data that isn't on the model lives here as constants: the discipline taglines +
+header icons, and the flavor/criteria copy (flavor prefers the seeded `Job.description`,
+falling back to DESCRIPTIONS). SYMBOLS / SHAPES are legacy marks still read by the `/design/*`
+workshops. The XP math uses the REAL leveling helpers + real `ProfileJobXP`. All assembly is
+bounded by the ~25-row Job catalog, so Python iteration is safe (no whale risk).
 """
 import json
 import math
@@ -104,13 +101,13 @@ CRITERIA = {
 }
 
 
-def element_dict(job, level, total_xp, *, atomic, slot_index):
-    """Build one element tile from a job + the viewer's real level/XP for it.
+def job_dict(job, level, total_xp, *, atomic, slot_index):
+    """Build one job tile from a job + the viewer's real level/XP for it.
 
-    `atomic` is the running 1..N periodic number; `slot_index` is the job's slot within
-    its family (drives the atom shape). The curve is FLAT + cap-less, so every element is
-    always climbing toward the next level -- there is no "locked" or "maxed" state; the
-    prestige TIER (Initiate..Legend) is the milestone label instead.
+    `slot_index` is the job's slot within its discipline (`atomic` is a legacy running index the
+    workshops still read). The curve is FLAT + cap-less, so every job is always climbing toward
+    the next level -- there is no "locked" or "maxed" state; the prestige TIER (Initiate..Legend)
+    is the milestone label instead.
     """
     level = max(1, level)
     floor = xp_for_level(level)
@@ -144,12 +141,12 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
     }
 
 
-def build_profile_elements(profile):
-    """Assemble the full element/family view for a profile from real `ProfileJobXP`.
+def build_profile_jobs(profile):
+    """Assemble the full jobs/disciplines view for a profile from real `ProfileJobXP`.
 
-    Returns the `disciplines` list (each family with its element tiles + average level
-    + per-family radar JSON), the overall radar series, the dominant family, the top
-    element, and totals. Bounded by the Job catalog (~25 rows); safe to iterate.
+    Returns the `disciplines` list (each discipline with its job tiles + average level, header
+    icon, played count, fill + per-discipline radar JSON), the overall radar series, and totals.
+    Bounded by the Job catalog (~25 rows); safe to iterate.
     """
     rows = {
         r['job_id']: (r['level'], r['total_xp'])
@@ -168,7 +165,7 @@ def build_profile_elements(profile):
         for i, job in enumerate(by_disc.get(slug, [])):
             atomic += 1
             level, txp = rows.get(job.slug, (0, 0))
-            tile = element_dict(job, level, txp, atomic=atomic, slot_index=i)
+            tile = job_dict(job, level, txp, atomic=atomic, slot_index=i)
             tiles.append(tile)
             total_level += tile['level']  # floored (>= 1), so Pursuer Level counts every job
             total_xp += txp
@@ -213,7 +210,7 @@ def build_profile_elements(profile):
 
 def job_atom(job):
     """The atom identity for a job/element inside a Compound: 2-char symbol, family-slot
-    shape, family color. (Distinct from the leveled `element_dict` tile.)"""
+    shape, family color. (Distinct from the leveled `job_dict` tile.)"""
     return {
         'slug': job.slug,
         'icon': job.icon,

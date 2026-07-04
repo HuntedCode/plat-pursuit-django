@@ -128,7 +128,7 @@ def test_broken_hero_zone_degrades_without_500(monkeypatch):
     """A failure in the hero (Lab) build leaves hero=None but the rest of the page still
     assembles, rather than raising."""
     monkeypatch.setattr(
-        'core.services.home_service.lab_service.build_lab_context',
+        'core.services.home_service.career_service.build_career_context',
         lambda profile: (_ for _ in ()).throw(RuntimeError('boom')),
     )
     profile = ProfileFactory()
