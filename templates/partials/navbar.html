@@ -9,7 +9,7 @@
         </a>
     </div>
 
-    <!-- navbar-center: Mobile logo (md:hidden) + Desktop mega menus (lg:flex) -->
+    <!-- navbar-center: Mobile logo (md:hidden). Desktop hub buttons are the block below (lg:flex). -->
     <div class="navbar-center flex md:hidden">
         <a href="/" class="btn btn-ghost flex items-center text-lg font-logo" aria-label="Platinum Pursuit Home">
             <img src="{% static 'images/logo.png' %}" alt="Platinum Pursuit Logo" class="h-8 w-8 mr-2 rounded-full" loading="eager" decoding="async" />
@@ -18,7 +18,7 @@
     </div>
 
     {# ── Hub-of-Hubs navigation: 4 direct-link hub destinations ──                          #}
-    {# 4 buttons: Dashboard / Browse / Community / My Pursuit. Each has its own sub-nav     #}
+    {# 4 buttons: My Pursuit / Browse / Community / Support. Each has its own sub-nav       #}
     {# strip rendered globally below this navbar (templates/partials/hub_subnav.html) which #}
     {# surfaces sub-pages on every URL in the hub's family. Customization is killed —       #}
     {# Settings (avatar dropdown) + the dashboard's Edit Layout controls cover all the      #}
@@ -36,26 +36,30 @@
                 {# Personal hub: the logged-in Home (/) is its Overview. Anon-hidden -- for logged-out #}
                 {# visitors it's just the hero (the logo already goes there) and has no pursuit to show. #}
                 <a href="{% url 'home' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
+                   class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}"
+                   {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %}>
                     My Pursuit
                 </a>
             </li>
             {% endif %}
             <li>
                 <a href="{% url 'games_list' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'browse' %}btn-primary{% else %}btn-ghost{% endif %}">
+                   class="btn btn-sm font-semibold {% if hub_section == 'browse' %}btn-primary{% else %}btn-ghost{% endif %}"
+                   {% if hub_section == 'browse' %}aria-current="page"{% endif %}>
                     Browse
                 </a>
             </li>
             <li>
                 <a href="{% url 'community_hub' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'community' %}btn-primary{% else %}btn-ghost{% endif %}">
+                   class="btn btn-sm font-semibold {% if hub_section == 'community' %}btn-primary{% else %}btn-ghost{% endif %}"
+                   {% if hub_section == 'community' %}aria-current="page"{% endif %}>
                     Community
                 </a>
             </li>
             <li>
                 <a href="{% url 'support_hub' %}"
-                   class="btn btn-sm font-semibold {% if hub_section == 'support' %}btn-primary{% else %}btn-ghost{% endif %}">
+                   class="btn btn-sm font-semibold {% if hub_section == 'support' %}btn-primary{% else %}btn-ghost{% endif %}"
+                   {% if hub_section == 'support' %}aria-current="page"{% endif %}>
                     Support
                 </a>
             </li>

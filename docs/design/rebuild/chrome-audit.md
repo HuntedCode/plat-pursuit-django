@@ -30,16 +30,16 @@ chrome — provided the deviations are intentional and consistent, not accidenta
 | Piece | Verdict | Headline |
 |---|---|---|
 | Sub-nav strip | ✅ Exemplary | The a11y model the others should match (visibility+aria-hidden collapse, Escape, aria-current). |
-| Navbar + mobile tabbar | ✅ Rebuild-quality | Small polish only (see piece 3). |
+| Navbar + mobile tabbar | ✅ Done (2026-07) | Was rebuild-quality; polished (aria-current, focus rings, stale comments) -- see piece 3. |
 | Hotbar | ✅ Done (2026-07) | Was pre-rebuild responsive + a11y debt; aligned (see piece 2). |
 | Footer | ✅ Done (2026-07) | Was pre-IA structure; restructured to the 4-hub model. |
 
-## Cross-cutting fixes (hit more than one piece)
+## Cross-cutting fixes (hit more than one piece) — all ✅ resolved
 
-1. **`:focus-visible` rings** — missing on tabbar items, sub-nav pills, hotbar toggle (the standard calls out focus indicators in Polish).
-2. **`aria-current` parity** — navbar + tabbar active states are visual-only; the sub-nav does it right.
-3. **`prefers-reduced-motion`** — the hotbar's infinite collapsed-state pulse escapes the reduced-motion block.
-4. **Verify:** confirm no hub page runs `ZoomScaler.init()` — all top pieces + the fixed tabbar live inside `#zoom-wrapper`, and a scaled ancestor silently breaks `position: sticky/fixed`.
+1. ✅ **`:focus-visible` rings** — added to tabbar items, sub-nav pills (desktop + mobile), and the hotbar toggle.
+2. ✅ **`aria-current` parity** — added to navbar hub buttons + mobile tabs (the sub-nav already had it).
+3. ✅ **`prefers-reduced-motion`** — the hotbar's infinite pulse + collapse transition now stop under RM.
+4. ✅ **Verified:** the only `ZoomScaler.init()` caller is `minigames/stellar-circuit.html` (not a hub page), so the sticky/fixed chrome is safe.
 
 ## Work sequence + status
 
@@ -65,17 +65,18 @@ Files: `templates/partials/hotbar.html`, `static/js/hotbar.js`, `static/css/inpu
 
 **Broken + inconsistent default-avatar asset.** The avatar fallback is split across ~7 templates in two forms — `/static/default-avatar.png` (hotbar, `settings.html`, `home/syncing.html`, `my_titles.html`) and `/static/images/default_avatar.png` (`donor_wall.html`, `game_list_detail.html`, `game_list_card.html`), plus `{% static 'default-avatar.png' %}` in `leaderboard_user_cell.html` — and **neither PNG exists under `static/`** (a glob for `*avatar*.png` finds nothing). So the fallback is a guaranteed 404 whenever a profile lacks `avatar_url`. Left untouched here (converting the hotbar's string alone wouldn't fix the missing asset); wants its own fix: add one canonical default-avatar asset + unify every fallback to `{% static %}` pointing at it.
 
-### Piece 3 — Top-chrome polish sweep (TODO)
+### Piece 3 — Top-chrome polish sweep ✅ DONE (2026-07)
 
-Files: `templates/partials/navbar.html`, `mobile_tabbar.html`, `hub_subnav.html`, `static/js/main.js`, `static/css/input.css`.
+Files: `templates/partials/navbar.html`, `mobile_tabbar.html`, `hub_subnav.html`, `static/css/input.css`.
 
-- Add `aria-current="page"` to the active navbar hub button + active mobile-tabbar tab (sub-nav already does this).
-- Add `:focus-visible` rings to `.mobile-tabbar-item` + the sub-nav pills.
-- Fix stale comments: `navbar.html:12` ("mega menus") and `navbar.html:21` ("Dashboard / … / My Pursuit" enumeration) — the actual set is My Pursuit / Browse / Community / Support.
-- Add a `heart` branch (or a fallback) to the desktop sub-nav icon switch (`hub_subnav.html`) so Support renders if it ever gains sub-nav items (latent).
-- Verify `w-15` on the avatar wrapper (`navbar.html`) resolves to a real utility; snap to `w-14`/`w-16` if not.
-- Verify no hub page runs `ZoomScaler.init()` (cross-cutting #4).
-- Optional: extract shared hub SVGs into an icon partial (tabbar ↔ sub-nav duplication).
+- ✅ `aria-current="page"` on the active navbar hub button + active mobile-tabbar tab (all four hubs), matching the sub-nav.
+- ✅ `:focus-visible` rings on `.mobile-tabbar-item` (ring-inset) + the sub-nav pills (desktop row + mobile grid).
+- ✅ Fixed the stale comments: `navbar.html` "mega menus" → "hub buttons"; the "Dashboard / … / My Pursuit" enumeration → "My Pursuit / Browse / Community / Support".
+- ✅ Added the `heart` branch to the desktop sub-nav icon switch (all 4 hub icons now covered) so Support renders if it ever gains items.
+- ✅ **Verified `w-15`** resolves — Tailwind v4 dynamic spacing generates it (`3.75rem`, present in `output.css`). No change needed.
+- ✅ **Verified `ZoomScaler.init()`** runs only on `templates/minigames/stellar-circuit.html` — no hub page, so the sticky/fixed chrome is safe.
+- Deferred (optional): extract shared hub SVGs into an icon partial (tabbar ↔ sub-nav duplication) — cosmetic, low value.
+- Tests: `tests/engine/test_chrome.py` `test_navbar_and_tabbar_mark_active_hub_with_aria_current` (anchored on `/support/`, which has no sub-nav items, so the assertion isolates the navbar + tab).
 
 ## Gotchas and Pitfalls
 

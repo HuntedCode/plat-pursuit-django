@@ -414,6 +414,9 @@
   .mobile-tabbar-item.active {
     @apply text-primary;
   }
+  .mobile-tabbar-item:focus-visible {
+    @apply outline-none text-primary ring-2 ring-primary ring-inset rounded-md;
+  }
   .mobile-tabbar-item svg {
     @apply w-5 h-5;
   }

@@ -29,7 +29,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         {% if user.is_authenticated %}
         <!-- My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the personal hub is -->
         <!-- login-gated, so for logged-out visitors it's just the hero the logo already reaches. -->
-        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" aria-label="My Pursuit">
+        <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" {% if hub_section == 'my_pursuit' %}aria-current="page"{% endif %} aria-label="My Pursuit">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
                 <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
@@ -43,7 +43,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         {% endif %}
 
         <!-- Browse -->
-        <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" aria-label="Browse">
+        <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" {% if hub_section == 'browse' %}aria-current="page"{% endif %} aria-label="Browse">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
                 <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
@@ -52,7 +52,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         </a>
 
         <!-- Community -->
-        <a href="{% url 'community_hub' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" aria-label="Community">
+        <a href="{% url 'community_hub' %}" class="mobile-tabbar-item {% if hub_section == 'community' %}active{% endif %}" {% if hub_section == 'community' %}aria-current="page"{% endif %} aria-label="Community">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>
@@ -63,7 +63,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
         </a>
 
         <!-- Support -->
-        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item {% if hub_section == 'support' %}active{% endif %}" aria-label="Support">
+        <a href="{% url 'support_hub' %}" class="mobile-tabbar-item {% if hub_section == 'support' %}active{% endif %}" {% if hub_section == 'support' %}aria-current="page"{% endif %} aria-label="Support">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>

@@ -35,6 +35,8 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 {% elif hub_subnav_icon == 'trophy' %}
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+                {% elif hub_subnav_icon == 'heart' %}
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                 {% endif %}
                 <span>{{ hub_subnav_label }}</span>
             </div>
@@ -44,7 +46,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                     {% if item.divider_before %}<li aria-hidden="true" class="shrink-0 w-px h-5 bg-base-content/15 mx-0.5"></li>{% endif %}
                     <li class="shrink-0">
                         <a href="{{ item.url }}"
-                           class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium whitespace-nowrap transition-all {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30 shadow-sm{% else %}text-base-content/70 hover:text-primary hover:bg-base-300/60 border border-transparent{% endif %}"
+                           class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-base-200 {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30 shadow-sm{% else %}text-base-content/70 hover:text-primary hover:bg-base-300/60 border border-transparent{% endif %}"
                            {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}</a>
                     </li>
                 {% endfor %}
@@ -70,7 +72,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
                 {% for item in hub_subnav_items %}
                     {% if item.divider_before %}<div aria-hidden="true" class="col-span-3 h-px bg-base-content/15 my-1"></div>{% endif %}
                     <a href="{{ item.url }}"
-                       class="px-2 py-2 rounded-md text-xs font-medium text-center transition-all {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30{% else %}text-base-content/70 border border-transparent active:bg-base-300/60{% endif %}"
+                       class="px-2 py-2 rounded-md text-xs font-medium text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-base-200 {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30{% else %}text-base-content/70 border border-transparent active:bg-base-300/60{% endif %}"
                        {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}</a>
                 {% endfor %}
             </div>

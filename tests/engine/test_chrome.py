@@ -41,3 +41,12 @@ def test_footer_hides_personal_cockpit_from_anon(client):
     resp = client.get('/support/')
     assert b'>The Lab</a>' not in resp.content
     assert b'>My Shareables</a>' not in resp.content
+
+
+# --- Top chrome: aria-current parity (navbar hub button + mobile tab) ---
+
+def test_navbar_and_tabbar_mark_active_hub_with_aria_current(client):
+    # Support carries no sub-nav items, so any aria-current on /support/ must come from the navbar
+    # hub button + the mobile tab bar (not the sub-nav strip) -- a precise guard for both.
+    resp = client.get('/support/')
+    assert resp.content.count(b'aria-current="page"') >= 2
