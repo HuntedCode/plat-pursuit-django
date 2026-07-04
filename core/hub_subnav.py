@@ -1,10 +1,11 @@
 """
 Hub-of-Hubs IA: sub-navigation infrastructure.
 
-PlatPursuit's IA is structured around the Home root plus three hubs (Browse,
-Community, My Pursuit). The global navbar contains direct links to each. A
+PlatPursuit's IA is a personal My Pursuit hub (rooted at the logged-in Home /)
+plus Browse, Community, and Support. The global navbar links to each. A
 persistent sub-navigation strip below the main navbar surfaces each hub's
-sub-pages on every URL in that hub's family, URL-prefix matched.
+sub-pages on every URL in that hub's family, URL-prefix matched (the personal
+strip is auth-gated).
 
 This module defines:
 
@@ -50,9 +51,9 @@ class RenderedSubnavItem:
     A sub-nav item with its URL already resolved.
 
     The template consumes these instead of HubSubnavItem so that dynamic
-    items whose URL requires kwargs (e.g., the Fundraiser tab, which takes
-    a slug) can coexist with static items that reverse from a url_name
-    alone. The resolver lives in the context processor so NoReverseMatch
+    items whose URL requires kwargs (e.g., the Profile tab, which takes the
+    viewer's username) can coexist with static items that reverse from a
+    url_name alone. The resolver lives in the context processor so NoReverseMatch
     failures degrade to "skip this item" rather than 500.
 
     ``icon`` is an optional Lucide-style icon name. The template renders
@@ -268,8 +269,8 @@ def resolve_hub_subnav(request) -> dict | None:
 
     The matcher uses longest-prefix-wins ordering across all configured
     prefixes from all hubs. The bare ``/`` route is special-cased to match
-    only when ``request.path == '/'`` exactly, so child paths under hubs
-    don't fall through to the Dashboard catchall.
+    only when ``request.path == '/'`` exactly (the personal hub's Overview), so
+    child paths under other hubs don't fall through to it.
     """
     path = request.path
 

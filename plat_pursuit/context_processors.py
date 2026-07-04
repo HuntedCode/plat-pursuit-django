@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def ads(request):
     enabled = settings.ADSENSE_ENABLED
 
-    no_ad_prefixes = ['/accounts/', '/staff/', '/api/', '/admin/', '/fundraiser/']
+    no_ad_prefixes = ['/accounts/', '/staff/', '/api/', '/admin/', '/fundraiser/', '/support/']
     if any(request.path.startswith(p) for p in no_ad_prefixes):
         enabled = False
 
@@ -156,11 +156,10 @@ def hub_subnav(request):
     ``hub_section=None`` so the ``hub_subnav.html`` template short-circuits
     and renders nothing.
 
-    Dynamic items: when a fundraiser is active (``banner_active=True`` and
-    within its start/end window), a Fundraiser tab is appended to the
-    My Pursuit hub's items. Reuses the ``fundraiser:active_banner`` cache key
-    populated by ``active_fundraiser`` so there's no extra DB hit on the
-    hot path.
+    Dynamic behavior: the personal (My Pursuit) hub appends the viewer's Profile
+    as a dynamic item (its URL needs their username), and the personal strip is
+    auth-gated (hidden for anon). Viewing your OWN profile swaps that page's
+    Community chrome for the personal strip.
 
     See ``docs/architecture/ia-and-subnav.md`` for the design rationale and
     the URL prefix matching algorithm.
@@ -234,15 +233,19 @@ def _profile_subnav_extra(request):
 
 
 def _is_own_profile_page(request):
-    """True when the request is the viewer's OWN profile (detail or trophy-case) page -- used to
-    swap the profile chrome from Community to the personal My Pursuit strip. Cheap: reads the
-    resolver kwargs + the already-loaded profile, no query. Anon can't own a profile -> False."""
+    """True when the request is the viewer's OWN, LINKED profile (detail or trophy-case) page --
+    used to swap the profile chrome from Community to the personal My Pursuit strip. Gated on
+    is_linked so it agrees with the Profile strip-item (which also needs a linked profile), so an
+    unlinked-own viewer degrades cleanly to Community chrome rather than getting a strip with no
+    Profile tab. Cheap: reads resolver kwargs + the already-loaded profile, no query."""
     rm = getattr(request, 'resolver_match', None)
     if rm is None or rm.url_name not in ('profile_detail', 'trophy_case'):
         return False
-    viewed = (rm.kwargs or {}).get('psn_username')
     profile = getattr(getattr(request, 'user', None), 'profile', None)
-    own = getattr(profile, 'psn_username', None) if profile else None
+    if not profile or not getattr(profile, 'is_linked', False):
+        return False
+    viewed = (rm.kwargs or {}).get('psn_username')
+    own = getattr(profile, 'psn_username', None)
     return bool(viewed and own) and viewed.lower() == own.lower()
 
 
