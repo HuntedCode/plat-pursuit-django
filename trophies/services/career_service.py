@@ -66,6 +66,11 @@ def _build_hero(profile, jobs):
             })
             cumulative += dash
     pursuer_level = jobs['total_level'] if jobs else 0
+    # Dominant discipline (highest average level) tints the hero's ambient glow -- the surface takes
+    # on your identity. Only once you've earned some XP, so a fresh Pursuer stays neutral.
+    dominant_disc = None
+    if jobs and jobs.get('total_xp') and jobs.get('disciplines'):
+        dominant_disc = max(jobs['disciplines'], key=lambda d: d['avg'])['slug']
     return {
         'pursuer_name': profile.display_psn_username,
         'avatar_url': profile.avatar_url,
@@ -74,6 +79,7 @@ def _build_hero(profile, jobs):
         'total_job_xp': jobs['total_xp'] if jobs else 0,
         'job_count': jobs['total'] if jobs else 0,
         'active_title': active.title.name if active else None,
+        'dominant_disc': dominant_disc,
         'ring': ring,
     }
 

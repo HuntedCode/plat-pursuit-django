@@ -80,6 +80,16 @@ def test_discipline_headers_carry_icon_played_and_xp():
     assert all(not j['started'] for j in heart['jobs'])
 
 
+def test_hero_dominant_discipline_tints_only_when_earned():
+    # Fresh Pursuer (all jobs level 1, no XP) -> no dominant discipline, so the hero stays neutral.
+    assert build_career_context(ProfileFactory())['hero']['dominant_disc'] is None
+
+    profile = ProfileFactory()
+    ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='slayer'), total_xp=9000, level=10)
+    # Slayer is a combat job, so combat leads by average -> it drives the ambient tint.
+    assert build_career_context(profile)['hero']['dominant_disc'] == 'combat'
+
+
 def test_hero_mirrors_lab_totals():
     profile = ProfileFactory(display_psn_username='Pursuer1')
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=4000, level=4)
