@@ -32,12 +32,15 @@
 .pursuer-card--forging .pursuer-card__forge-scan { animation: pcForgeScan 1.0s ease-in 0.35s both; }
 /* The beam's hot leading edge (its bottom) sweeps from the card's TOP edge to its BOTTOM edge.
    The transparent tail starts just above the top (invisible -> no bleed), and the edge reaches
-   the bottom at full opacity before fading -- so the scan covers the whole card. */
+   the bottom at full opacity, then fades IN PLACE -- so the scan covers the whole card without
+   sliding past it. translateY is in units of the beam's own height (16% of the card): 525% lands
+   the leading edge exactly on the bottom (16% + 525%*16% = 100%). The card is NOT overflow-clipped
+   (cover hover-lift + corner notches must not be cut), so the beam must never travel past 525%. */
 @keyframes pcForgeScan {
     0%   { opacity: 0; transform: translateY(-100%); }
     5%   { opacity: 1; }
-    88%  { opacity: 1; transform: translateY(525%); }
-    100% { opacity: 0; transform: translateY(560%); }
+    90%  { opacity: 1; transform: translateY(525%); }
+    100% { opacity: 0; transform: translateY(525%); }
 }
 
 /* Hot sparks (JS-inserted, JS-animated with individual arcing/gravity trajectories). */
