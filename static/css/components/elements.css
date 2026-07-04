@@ -163,9 +163,11 @@
 .job--dormant:hover { opacity: 1; }
 /* Hover tactility: the identity chip lifts + brightens, and its icon redraws stroke-by-stroke. */
 .job:hover .job__mark { transform: translateY(-1px) scale(1.08); border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 4px 12px color-mix(in oklab, var(--disc) 30%, transparent); }
-.job__mark svg * { stroke-dasharray: 1000; }   /* 1000 >> any 24px icon path, so it reads as fully drawn at rest */
-.job:hover .job__mark svg * { animation: iconDraw 0.7s ease; }
-@keyframes iconDraw { from { stroke-dashoffset: 1000; } to { stroke-dashoffset: 0; } }
+/* pathLength="1" (injected by the job_icon tag) normalizes each shape, so dasharray:1 = fully drawn
+   at rest and the hover redraw spans the whole animation instead of blinking. */
+.job__mark svg * { stroke-dasharray: 1; }
+.job:hover .job__mark svg * { animation: iconDraw 0.8s ease; }
+@keyframes iconDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 /* Progress bars sweep in (0 -> value) when a band scrolls into view (JS sets --horizon-progress). */
 .job__bar .pp-horizon__fill { transition: width 0.85s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @media (prefers-reduced-motion: reduce) { .job:hover .job__mark svg * { animation: none; } .job__bar .pp-horizon__fill { transition: none; } }

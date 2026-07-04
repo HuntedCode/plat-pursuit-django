@@ -25,5 +25,6 @@ def test_every_discipline_icon_is_registered():
 def test_job_icon_tag_renders_and_degrades():
     svg = job_icon('swords', 'w-6 h-6')
     assert svg.startswith('<svg') and 'w-6 h-6' in svg and 'viewBox="0 0 24 24"' in svg
+    assert 'pathLength="1"' in svg                          # shapes normalized for the stroke-draw
     assert job_icon('') == ''                               # blank -> nothing
     assert job_icon('nonexistent') == ''                   # unknown -> nothing

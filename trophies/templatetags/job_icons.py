@@ -2,11 +2,18 @@
 no external assets). `Job.icon` stores the Lucide name; `{% job_icon job.icon 'w-5 h-5' %}`
 renders it. Icon names match lucide.dev, so a mismatched/updated glyph can be re-copied verbatim.
 """
+import re
+
 from django import template
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 register = template.Library()
+
+# Normalize every shape's path length to 1 so a stroke-draw animation (stroke-dasharray/offset)
+# spans the full duration regardless of the shape's real length. Inert unless a dasharray is set,
+# so it's harmless on the non-animated icon usages.
+_SHAPE_RE = re.compile(r'<(path|circle|ellipse|line|polyline|polygon|rect)\b')
 
 # Lucide name -> inner SVG markup (24x24 viewBox, stroke=currentColor). One per job.
 _ICONS = {
@@ -53,6 +60,7 @@ def job_icon(name, css_class='w-5 h-5'):
     inner = _ICONS.get(name or '')
     if not inner:
         return ''
+    inner = _SHAPE_RE.sub(r'<\1 pathLength="1"', inner)  # normalize lengths for the stroke-draw animation
     css_class = escape(css_class)  # defense in depth: today all callers pass a static literal
     return mark_safe(
         f'<svg xmlns="http://www.w3.org/2000/svg" class="{css_class}" viewBox="0 0 24 24" '
