@@ -205,7 +205,7 @@
 /* Entrance (JS observer-driven): each band is hidden until it scrolls in, then slides up; its
    content follows (see the band-reveal script). */
 .jdoss--js .jdoss__band { opacity: 0; transform: translateY(12px); }
-.jdoss--js .jdoss__band.is-revealed { opacity: 1; transform: none; transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.jdoss--js .jdoss__band.is-revealed { opacity: 1; transform: none; transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @media (prefers-reduced-motion: reduce) { .jdoss--js .jdoss__band { opacity: 1; transform: none; } }
 .jdoss__head { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; }
 .jdoss__ic { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); color: var(--disc); }

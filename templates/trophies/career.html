@@ -652,7 +652,7 @@ function ppCountUp(el, dur) {
             var band = e.target;
             setTimeout(function () {   // stagger bands that appear together (on load)
                 band.classList.add('is-revealed');
-                setTimeout(function () { revealContent(band); }, 300);   // content waits for the band's slide
+                setTimeout(function () { revealContent(band); }, 110);   // content follows closely -- no dead beat
             }, i * 90);
         });
     }, { threshold: 0.2 });
