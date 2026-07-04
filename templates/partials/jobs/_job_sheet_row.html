@@ -10,5 +10,5 @@ Character-sheet job row (compact): icon | name + tier | level | progress. Clicka
         <span class="jsheet__tier">{{ card.tier }}</span>
     </span>
     <span class="jsheet__lv pp-tally">{{ card.level }}</span>
-    <span class="jsheet__bar pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 6px; --horizon-progress: {{ card.progress }}%;"><span class="pp-horizon__fill"></span></span>
+    <span class="jsheet__bar pp-horizon pp-horizon__track" data-fill="{{ card.progress }}%" style="--horizon-accent: var(--disc); --horizon-h: 6px; --horizon-progress: {{ card.progress }}%;"><span class="pp-horizon__fill"></span></span>
 </div>

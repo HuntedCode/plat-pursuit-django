@@ -172,10 +172,10 @@
                 {# Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) #}
                 <div class="jobs-layout jsheet" data-layout="sheet" hidden>
                     {% for d in career.disciplines %}
-                    <div class="jsheet__disc" style="--disc: var(--disc-{{ d.slug }});">
+                    <div class="jsheet__disc{% if d.slug == hero.dominant_disc %} jsheet__disc--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
                         <div class="jsheet__head">
                             <span class="jsheet__head-ic">{% job_icon d.icon '' %}</span>
-                            <span class="jsheet__head-name">{{ d.label }}</span>
+                            <span class="jsheet__head-name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jsheet__head-top" title="Your strongest discipline">Top</span>{% endif %}</span>
                             <span class="jsheet__head-avg">avg Lv {{ d.avg }}</span>
                         </div>
                         {% for job in d.jobs %}{% include 'partials/jobs/_job_sheet_row.html' with card=job %}{% endfor %}
@@ -371,6 +371,33 @@
     var layouts = document.querySelectorAll('.jobs-layout');
     if (!btns.length) return;
     var KEY = 'pp-jobs-layout';
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var sheetRevealed = false;
+    // The character sheet assembles on its first reveal: sections cascade in, bars fill, levels tick up.
+    function revealSheet() {
+        var sheet = document.querySelector('.jsheet');
+        if (sheetRevealed || reduce || !sheet) return;
+        sheetRevealed = true;
+        sheet.classList.add('jsheet--revealing');
+        var bars = sheet.querySelectorAll('.jsheet__bar[data-fill]');
+        bars.forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });
+        requestAnimationFrame(function () { requestAnimationFrame(function () {
+            bars.forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
+        }); });
+        sheet.querySelectorAll('.jsheet__lv').forEach(function (lvl) {
+            var target = parseInt((lvl.textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
+            if (target <= 1) return;
+            lvl.textContent = '0';
+            var dur = 650, start = null;
+            var step = function (ts) {
+                if (start === null) start = ts;
+                var p = Math.min(1, (ts - start) / dur);
+                lvl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+                if (p < 1) requestAnimationFrame(step); else lvl.textContent = target;
+            };
+            requestAnimationFrame(step);
+        });
+    }
     function show(name) {
         layouts.forEach(function (l) { l.hidden = (l.dataset.layout !== name); });
         btns.forEach(function (b) {
@@ -378,6 +405,7 @@
             b.classList.toggle('is-active', on);
             b.setAttribute('aria-selected', on ? 'true' : 'false');
         });
+        if (name === 'sheet') revealSheet();
         try { localStorage.setItem(KEY, name); } catch (e) {}
     }
     var saved = null;

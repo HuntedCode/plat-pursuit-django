@@ -230,8 +230,10 @@
 .jsheet__head-ic svg { width: 20px; height: 20px; }
 .jsheet__head-name { flex: 1; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 13.5px; color: var(--disc); letter-spacing: 0.02em; }
 .jsheet__head-avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.jsheet__row { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; cursor: pointer; transition: background 0.12s ease, opacity 0.12s ease; }
-.jsheet__row:hover { background: color-mix(in oklab, var(--disc) 13%, transparent); }
+.jsheet__row { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; cursor: pointer; transition: background 0.12s ease, opacity 0.12s ease, transform 0.15s ease; }
+.jsheet__row:hover { background: color-mix(in oklab, var(--disc) 13%, transparent); transform: translateX(3px); }   /* tactile indent */
+.jsheet__row:hover .jsheet__ic svg { animation: iconPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.jsheet__row:hover .jsheet__bar .pp-horizon__fill { box-shadow: 0 0 12px color-mix(in oklab, var(--disc) 55%, transparent); }
 .jsheet__row--dormant { opacity: 0.5; }
 .jsheet__row--dormant:hover { opacity: 1; }
 .jsheet__ic { width: 27px; height: 27px; flex: none; display: grid; place-items: center; border-radius: 7px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); color: var(--disc); }
@@ -241,6 +243,23 @@
 .jsheet__tier { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); }
 .jsheet__lv { flex: none; min-width: 24px; text-align: right; font-size: 18px; color: var(--disc); }
 .jsheet__bar { width: 60px; flex: none; }
+.jsheet__bar .pp-horizon__fill { transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* Top discipline: the strongest section is quietly featured (stronger rule + a Top chip). */
+.jsheet__disc--top .jsheet__head { border-bottom-color: color-mix(in oklab, var(--disc) 70%, transparent); }
+.jsheet__head-top { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 8.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; vertical-align: middle; color: var(--disc); background: color-mix(in oklab, var(--disc) 20%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
+/* Reveal choreography: switching to the sheet cascades the discipline sections in (JS adds the class;
+   the bars fill + levels count up via JS at the same moment). */
+.jsheet--revealing .jsheet__disc { animation: sheetIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.jsheet--revealing .jsheet__disc:nth-child(2) { animation-delay: 0.07s; }
+.jsheet--revealing .jsheet__disc:nth-child(3) { animation-delay: 0.14s; }
+.jsheet--revealing .jsheet__disc:nth-child(4) { animation-delay: 0.21s; }
+.jsheet--revealing .jsheet__disc:nth-child(5) { animation-delay: 0.28s; }
+@keyframes sheetIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+    .jsheet--revealing .jsheet__disc { animation: none; }
+    .jsheet__row:hover .jsheet__ic svg { animation: none; }
+    .jsheet__bar .pp-horizon__fill { transition: none; }
+}
 
 /* ---- Tile -> detail interaction ---- */
 .ptile { cursor: pointer; border-radius: var(--pp-radius-lg); }
