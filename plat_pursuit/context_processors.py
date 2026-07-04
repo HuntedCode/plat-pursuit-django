@@ -167,6 +167,7 @@ def hub_subnav(request):
     """
     try:
         from core.hub_subnav import (
+            MY_PURSUIT_HUB,
             RenderedSubnavItem,
             build_rendered_items,
             resolve_hub_subnav,
@@ -177,6 +178,15 @@ def hub_subnav(request):
             return {'hub_section': None}
 
         hub = match['hub']
+        active_slug = match['active_slug']
+
+        # Ownership-aware Profile chrome: viewing your OWN profile swaps the page's chrome from
+        # Community to the personal My Pursuit strip (Profile active); anyone else's profile keeps
+        # the Community chrome the resolver returned. Same shared URL either way.
+        if _is_own_profile_page(request):
+            hub = MY_PURSUIT_HUB
+            active_slug = 'profile'
+
         is_auth = bool(getattr(request, 'user', None) and request.user.is_authenticated)
 
         # The personal ("My Pursuit") strip is a login-gated wayfinder: hide it entirely for
@@ -198,7 +208,7 @@ def hub_subnav(request):
             'hub_subnav_label': hub.label,
             'hub_subnav_icon': hub.icon,
             'hub_subnav_items': items,
-            'hub_subnav_active_slug': match['active_slug'],
+            'hub_subnav_active_slug': active_slug,
         }
     except Exception:
         logger.debug("Failed to resolve hub_subnav for path %s", request.path, exc_info=True)
@@ -221,6 +231,19 @@ def _profile_subnav_extra(request):
     except NoReverseMatch:
         return ()
     return (RenderedSubnavItem(slug='profile', label='Profile', url=url, icon='user'),)
+
+
+def _is_own_profile_page(request):
+    """True when the request is the viewer's OWN profile (detail or trophy-case) page -- used to
+    swap the profile chrome from Community to the personal My Pursuit strip. Cheap: reads the
+    resolver kwargs + the already-loaded profile, no query. Anon can't own a profile -> False."""
+    rm = getattr(request, 'resolver_match', None)
+    if rm is None or rm.url_name not in ('profile_detail', 'trophy_case'):
+        return False
+    viewed = (rm.kwargs or {}).get('psn_username')
+    profile = getattr(getattr(request, 'user', None), 'profile', None)
+    own = getattr(profile, 'psn_username', None) if profile else None
+    return bool(viewed and own) and viewed.lower() == own.lower()
 
 
 def _active_fundraiser_or_none(request=None):

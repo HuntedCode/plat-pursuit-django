@@ -82,6 +82,28 @@ def test_support_landing_renders(client):
     assert b'Support Platinum Pursuit' in resp.content
 
 
+# --- Profile ownership-aware chrome (phase 3) ---
+
+def test_own_profile_shows_my_pursuit_chrome():
+    me = ProfileFactory(is_linked=True)
+    ctx = hub_subnav(_req(f'/community/profiles/{me.psn_username}/', user=me.user))
+    assert ctx['hub_section'] == 'my_pursuit'
+    assert ctx['hub_subnav_active_slug'] == 'profile'
+
+
+def test_other_profile_shows_community_chrome():
+    me = ProfileFactory(is_linked=True)
+    them = ProfileFactory(is_linked=True)
+    ctx = hub_subnav(_req(f'/community/profiles/{them.psn_username}/', user=me.user))
+    assert ctx['hub_section'] == 'community'
+
+
+def test_anon_on_profile_shows_community_chrome():
+    them = ProfileFactory(is_linked=True)
+    ctx = hub_subnav(_req(f'/community/profiles/{them.psn_username}/'))   # anonymous viewer
+    assert ctx['hub_section'] == 'community'
+
+
 def test_strip_shown_for_authed_home_with_overview_profile_and_divider():
     profile = ProfileFactory(is_linked=True)   # Profile item needs a linked PSN profile
     ctx = hub_subnav(_req('/', user=profile.user))
