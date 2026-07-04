@@ -41,7 +41,9 @@
                         <svg class="lab-dna__ring" viewBox="0 0 120 120" aria-hidden="true">
                             <circle class="lab-dna__track" cx="60" cy="60" r="42"></circle>
                             <g transform="rotate(-90 60 60)">
-                                {% for f in hero.ring %}<circle class="lab-dna__arc" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}
+                                <g class="lab-dna__arcs">
+                                    {% for f in hero.ring %}<circle class="lab-dna__arc" cx="60" cy="60" r="42" style="--disc: var(--disc-{{ f.slug }}); stroke-dasharray: {{ f.dash }} 999; stroke-dashoffset: {{ f.offset }};"></circle>{% endfor %}
+                                </g>
                             </g>
                         </svg>
                         <div class="lab-dna__center">
@@ -56,7 +58,7 @@
                         <li style="--disc: var(--disc-{{ f.slug }});">
                             <span class="lab-dna-legend__dot"></span>
                             <span class="lab-dna-legend__name">{{ f.label }}</span>
-                            <span class="lab-dna-legend__val">{{ f.avg }}</span>
+                            <span class="lab-dna-legend__val">{{ f.total }}</span>
                         </li>
                         {% endfor %}
                     </ul>

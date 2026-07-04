@@ -61,7 +61,7 @@ def _build_hero(profile, jobs):
             share = (disc_total / total) if total else (1.0 / n)
             dash = round(share * _RING_C, 2)
             ring.append({
-                'label': d['label'], 'slug': d['slug'], 'avg': d['avg'],
+                'label': d['label'], 'slug': d['slug'], 'avg': d['avg'], 'total': disc_total,
                 'share_pct': round(share * 100), 'dash': dash, 'offset': round(-cumulative, 2),
             })
             cumulative += dash
