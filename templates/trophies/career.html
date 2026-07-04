@@ -373,29 +373,32 @@
     var KEY = 'pp-jobs-layout';
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var sheetRevealed = false;
-    // The character sheet assembles on its first reveal: sections cascade in, bars fill, levels tick up.
+    function countUp(lvl) {
+        var target = parseInt((lvl.textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
+        if (target <= 1) return;
+        lvl.textContent = '0';
+        var dur = 650, start = null;
+        var step = function (ts) {
+            if (start === null) start = ts;
+            var p = Math.min(1, (ts - start) / dur);
+            lvl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+            if (p < 1) requestAnimationFrame(step); else lvl.textContent = target;
+        };
+        requestAnimationFrame(step);
+    }
+    // The character sheet assembles on its first reveal: sections cascade in, and each section's bars
+    // fill + levels tick up AS it reveals (delay matched to the CSS section stagger, not all at once).
     function revealSheet() {
         var sheet = document.querySelector('.jsheet');
         if (sheetRevealed || reduce || !sheet) return;
         sheetRevealed = true;
         sheet.classList.add('jsheet--revealing');
-        var bars = sheet.querySelectorAll('.jsheet__bar[data-fill]');
-        bars.forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });
-        requestAnimationFrame(function () { requestAnimationFrame(function () {
-            bars.forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
-        }); });
-        sheet.querySelectorAll('.jsheet__lv').forEach(function (lvl) {
-            var target = parseInt((lvl.textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
-            if (target <= 1) return;
-            lvl.textContent = '0';
-            var dur = 650, start = null;
-            var step = function (ts) {
-                if (start === null) start = ts;
-                var p = Math.min(1, (ts - start) / dur);
-                lvl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-                if (p < 1) requestAnimationFrame(step); else lvl.textContent = target;
-            };
-            requestAnimationFrame(step);
+        sheet.querySelectorAll('.jsheet__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });
+        sheet.querySelectorAll('.jsheet__disc').forEach(function (sec, i) {
+            setTimeout(function () {   // matches the 0.07s-per-section CSS cascade
+                sec.querySelectorAll('.jsheet__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
+                sec.querySelectorAll('.jsheet__lv').forEach(countUp);
+            }, i * 70 + 40);
         });
     }
     function show(name) {
