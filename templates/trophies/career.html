@@ -551,6 +551,25 @@
     bars.forEach(function (b) { io.observe(b); });
 })();
 
+// Premium: each dossier job icon draws itself in once as its tile scrolls into view.
+(function () {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !('IntersectionObserver' in window)) return;
+    var tiles = document.querySelectorAll('.jdoss .job');
+    if (!tiles.length) return;
+    tiles.forEach(function (t) { t.classList.add('job--predraw'); });   // hide the strokes until revealed
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+            if (e.isIntersecting) {
+                e.target.classList.remove('job--predraw');
+                e.target.classList.add('job--drawing');
+                io.unobserve(e.target);
+            }
+        });
+    }, { threshold: 0.4 });
+    tiles.forEach(function (t) { io.observe(t); });
+})();
+
 // Premium: cursor-tracking 3D tilt on the dossier job tiles (hover-capable, motion-OK devices only).
 (function () {
     var canHover = window.matchMedia && window.matchMedia('(hover: hover)').matches;

@@ -161,28 +161,30 @@
 /* Untouched jobs (0 XP) rest dormant so your real, leveled career shows through; they light on hover. */
 .job--dormant { opacity: 0.5; }
 .job--dormant:hover { opacity: 1; }
-/* Hover tactility: the identity chip lifts + brightens, and its icon redraws stroke-by-stroke. */
-.job:hover .job__mark { transform: translateY(-1px) scale(1.08); border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 4px 12px color-mix(in oklab, var(--disc) 30%, transparent); }
-/* pathLength="1" (injected by the job_icon tag) normalizes each shape, so dasharray:1 = fully drawn
-   at rest and the hover redraw spans the whole animation instead of blinking. Each stroke is
-   staggered (fill-mode both holds later strokes hidden until their turn) so the glyph traces one
-   line after the next rather than all at once -- clean for the multi-line icons. */
+/* Hover tactility: the identity chip lifts + brightens (the glyph pops separately, below). */
+.job:hover .job__mark { transform: translateY(-1px); border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 4px 12px color-mix(in oklab, var(--disc) 30%, transparent); }
+/* pathLength="1" (injected by the job_icon tag) normalizes each shape so the stroke-draw math is
+   uniform. The glyph draws itself in ONCE as its tile is revealed (JS toggles the classes below);
+   strokes stagger so multi-line icons trace line-by-line. Pre-hidden off-screen so there's no flash. */
 .job__mark svg * { stroke-dasharray: 1; }
-.job:hover .job__mark svg * { animation: iconDraw 0.55s ease both; }
-.job:hover .job__mark svg *:nth-child(2) { animation-delay: 0.13s; }
-.job:hover .job__mark svg *:nth-child(3) { animation-delay: 0.26s; }
-.job:hover .job__mark svg *:nth-child(4) { animation-delay: 0.39s; }
-.job:hover .job__mark svg *:nth-child(5) { animation-delay: 0.52s; }
-.job:hover .job__mark svg *:nth-child(6) { animation-delay: 0.65s; }
-.job:hover .job__mark svg *:nth-child(7) { animation-delay: 0.78s; }
-.job:hover .job__mark svg *:nth-child(8) { animation-delay: 0.91s; }
-.job:hover .job__mark svg *:nth-child(9) { animation-delay: 1.04s; }
-.job:hover .job__mark svg *:nth-child(n+10) { animation-delay: 1.17s; }
-/* Start drawn, retract, then draw back -- no flash to blank. */
-@keyframes iconDraw { 0% { stroke-dashoffset: 0; } 45% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }
+.job--predraw .job__mark svg * { stroke-dashoffset: 1; }
+.job--drawing .job__mark svg * { animation: iconDrawIn 0.4s ease both; }
+.job--drawing .job__mark svg *:nth-child(2) { animation-delay: 0.10s; }
+.job--drawing .job__mark svg *:nth-child(3) { animation-delay: 0.20s; }
+.job--drawing .job__mark svg *:nth-child(4) { animation-delay: 0.30s; }
+.job--drawing .job__mark svg *:nth-child(5) { animation-delay: 0.40s; }
+.job--drawing .job__mark svg *:nth-child(6) { animation-delay: 0.50s; }
+.job--drawing .job__mark svg *:nth-child(7) { animation-delay: 0.60s; }
+.job--drawing .job__mark svg *:nth-child(8) { animation-delay: 0.70s; }
+.job--drawing .job__mark svg *:nth-child(9) { animation-delay: 0.80s; }
+.job--drawing .job__mark svg *:nth-child(n+10) { animation-delay: 0.90s; }
+@keyframes iconDrawIn { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+/* Hover: a quick springy pop on the glyph -- clean on every icon regardless of stroke count. */
+.job:hover .job__mark svg { animation: iconPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes iconPop { 0% { transform: scale(1); } 45% { transform: scale(1.18); } 100% { transform: scale(1); } }
 /* Progress bars sweep in (0 -> value) when a band scrolls into view (JS sets --horizon-progress). */
 .job__bar .pp-horizon__fill { transition: width 0.85s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@media (prefers-reduced-motion: reduce) { .job:hover .job__mark svg * { animation: none; } .job__bar .pp-horizon__fill { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .job--drawing .job__mark svg *, .job:hover .job__mark svg { animation: none; } .job--predraw .job__mark svg * { stroke-dashoffset: 0; } .job__bar .pp-horizon__fill { transition: none; } }
 
 /* ---- Jobs surface: layout toggle (Dossier <-> Character sheet) ---- */
 .jlayout { display: inline-flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--pp-bg-2); border: 1px solid var(--pp-divider); margin-bottom: 16px; }
