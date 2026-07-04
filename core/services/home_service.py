@@ -59,13 +59,14 @@ def _unique_series(badges):
 
 
 def _build_glances(profile):
-    """The thin status row -- each a cheap read (a COUNT, a few rows, denormalized fields):
-    pending contract rewards (count only; the claim itself lives on the Research Panel),
-    the badges closest to their next tier, and the headline trophy snapshot."""
+    """The thin status row -- each a cheap read (a bounded summary, a few rows, denormalized
+    fields): pending contract rewards (count + total XP waiting + a peek; the claim itself lives
+    on the Research Panel), the badges closest to their next tier, and the headline trophy snapshot."""
     return {
-        'claimable_count': _safe(
+        'claimable': _safe(
             'claimable', profile,
-            lambda: contract_service.claimable_contracts(profile).count(), 0),
+            lambda: contract_service.claimable_summary(profile),
+            {'count': 0, 'total_xp': 0, 'items': [], 'more': 0}),
         'almost_badges': _safe(
             'almost_badges', profile,
             lambda: _unique_series(dashboard_service.provide_badge_progress(profile, {'limit': 12})
@@ -130,7 +131,7 @@ def _build_launchers(profile, hero, glances):
     already in hand (no extra queries): the Lab shows the Pursuer Level, the Research Panel
     the claimable count, Titles the equipped title. A route that doesn't resolve is dropped."""
     level = (hero or {}).get('pursuer_level')
-    claimable = (glances or {}).get('claimable_count') or 0
+    claimable = ((glances or {}).get('claimable') or {}).get('count') or 0
     stats = {
         'lab': f"Level {level}" if level else None,
         'research_panel': f"{claimable} to claim" if claimable else None,

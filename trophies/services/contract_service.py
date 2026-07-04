@@ -177,6 +177,34 @@ def check_profile_contracts(profile, concepts=None):
 
 # --- gate 2: acceptance (user action) -------------------------------------
 
+_ACCEPTED_FIELD = {'platinum': 'platinum_accepted_at', 'full': 'full_accepted_at'}
+
+
+def _pending_tiers(ec, contract):
+    """(tiers, t, multiplier) for an EarnedContract, where tiers is the reached-but-unaccepted
+    [(tier, tier_total_xp), ...].
+
+    The pure XP computation shared by accept_contract (which then grants + stamps the accepted
+    fields) and claimable_summary (which totals + previews) -- no side effects, no queries. The
+    100% tier is (grand total - platinum tier), NOT its fraction rounded independently, so
+    platinum + full always sum to exactly the grand total even at a .5 rounding boundary. Games
+    with no platinum pay the FULL T at 100%. has_platinum is the value frozen on the
+    EarnedContract at first reach (see model + audit B1). Returns the `t` + `multiplier` it used
+    so the caller stamps the grant ledger with the SAME multiplier that sized the tiers -- the two
+    must not diverge (a future dynamic `_active_multiplier` could otherwise size a tier under one
+    value and record another across an event boundary)."""
+    t = contract.xp_total_override or CONTRACT_XP_TOTAL
+    multiplier = _active_multiplier()
+    grand_total = _tier_total(1.0, t, multiplier)
+    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if ec.has_platinum else 0
+    tiers = []
+    if ec.has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
+        tiers.append(('platinum', platinum_total))
+    if ec.full_reached_at and ec.full_accepted_at is None:
+        tiers.append(('full', (grand_total - platinum_total) if ec.has_platinum else grand_total))
+    return tiers, t, multiplier
+
+
 @transaction.atomic
 def accept_contract(profile, contract):
     """User action: bank ALL of this Contract's claimable tiers at once (Platinum + 100%
@@ -189,37 +217,22 @@ def accept_contract(profile, contract):
     if not jobs:
         return 0
 
-    has_platinum = ec.has_platinum  # frozen at first reach (see model + audit B1)
-    t = contract.xp_total_override or CONTRACT_XP_TOTAL
-    multiplier = _active_multiplier()
-    now = timezone.now()
-
-    # Compute the 100% tier as (grand total - platinum tier) rather than rounding its
-    # fraction independently, so platinum + full always sum to exactly the grand total
-    # even when xp_total_override or the multiplier produce a .5 rounding boundary.
-    grand_total = _tier_total(1.0, t, multiplier)
-    platinum_total = _tier_total(CONTRACT_PLATINUM_FRAC, t, multiplier) if has_platinum else 0
-
-    tiers = []  # (tier, tier_total, accepted_field)
-    if has_platinum and ec.platinum_reached_at and ec.platinum_accepted_at is None:
-        tiers.append(('platinum', platinum_total, 'platinum_accepted_at'))
-    if ec.full_reached_at and ec.full_accepted_at is None:
-        # No-platinum games pay the full T at 100%; otherwise the remainder bonus.
-        full_total = (grand_total - platinum_total) if has_platinum else grand_total
-        tiers.append(('full', full_total, 'full_accepted_at'))
+    tiers, t, multiplier = _pending_tiers(ec, contract)   # reached-but-unaccepted + the T/mult used
     if not tiers:
         return 0
+
+    now = timezone.now()
 
     # All grants go through the shared primitive (ledger row + row-locked cache bump),
     # so contracts/quests/events stay consistent and ProfileJobXP = Sum(all grants).
     granted = 0
-    for tier, tier_total, field in tiers:
+    for tier, tier_total in tiers:
         for job, amount in zip(jobs, _split(tier_total, len(jobs))):
             granted += grant_job_xp(
                 profile, job, amount, source='contract', tier=tier,
                 base_t=t, multiplier=multiplier, earned_contract=ec,
             )
-        setattr(ec, field, now)
+        setattr(ec, _ACCEPTED_FIELD[tier], now)
 
     ec.save(update_fields=['platinum_accepted_at', 'full_accepted_at'])
     return granted
@@ -235,6 +248,30 @@ def claimable_contracts(profile):
         )
         .select_related('contract')
     )
+
+
+def claimable_summary(profile, peek=3):
+    """Cheap Home-glance summary of a profile's pending Contract rewards: the count, the total XP
+    waiting, a highest-XP-first peek, and how many more sit beyond the peek. Bounded by the curated
+    Contract catalog (dozens at most, never trophy-scale), so the per-row loop is whale-safe -- it
+    costs one select_related query + Decimal arithmetic, no per-row queries (_pending_tiers is pure
+    and `contract` is already joined)."""
+    rows = []
+    total = 0
+    for ec in claimable_contracts(profile):
+        tiers, _t, _mult = _pending_tiers(ec, ec.contract)
+        xp = sum(amount for _tier, amount in tiers)
+        if xp <= 0:
+            continue
+        total += xp
+        rows.append({'name': ec.contract.name, 'xp': xp})
+    rows.sort(key=lambda r: -r['xp'])
+    return {
+        'count': len(rows),
+        'total_xp': total,
+        'items': rows[:peek],
+        'more': max(0, len(rows) - peek),
+    }
 
 
 @transaction.atomic

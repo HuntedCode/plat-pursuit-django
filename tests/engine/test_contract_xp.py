@@ -64,6 +64,58 @@ def test_reached_makes_claimable_but_grants_no_xp():
     assert not ProfileJobXP.objects.filter(profile=profile).exists()  # no XP until accepted
 
 
+def test_claimable_summary_totals_and_peeks_pending_rewards():
+    profile = ProfileFactory()
+    # Two fully-completed contracts (platinum + 100% both reached) -> each pays the full T.
+    for slug in ('summary-a', 'summary-b'):
+        contract = _contract(slug, ['gunslinger'])
+        _c, game, plat = _platinum_member(contract)
+        _earn_platinum(profile, game, plat)
+        contract_service.mark_contract_reached(profile, contract)
+
+    summary = contract_service.claimable_summary(profile)
+
+    assert summary['count'] == 2
+    assert summary['total_xp'] == 2 * CONTRACT_XP_TOTAL       # each contract pays the full T
+    assert summary['more'] == 0
+    assert {item['name'] for item in summary['items']} == {'summary-a', 'summary-b'}
+    assert all(item['xp'] == CONTRACT_XP_TOTAL for item in summary['items'])
+
+
+def test_claimable_summary_peek_caps_and_counts_remainder():
+    profile = ProfileFactory()
+    for i in range(5):
+        contract = _contract(f'peek-{i}', ['gunslinger'])
+        _c, game, plat = _platinum_member(contract)
+        _earn_platinum(profile, game, plat)
+        contract_service.mark_contract_reached(profile, contract)
+
+    summary = contract_service.claimable_summary(profile, peek=3)
+
+    assert summary['count'] == 5
+    assert len(summary['items']) == 3            # peek is capped
+    assert summary['more'] == 2                  # the remainder is counted
+    assert summary['total_xp'] == 5 * CONTRACT_XP_TOTAL
+
+
+def test_claimable_summary_sorts_items_highest_xp_first():
+    profile = ProfileFactory()
+    # Distinct per-contract XP via xp_total_override (a fully-completed contract pays its whole T),
+    # so the highest-first sort has real work to do -- equal-XP contracts wouldn't exercise it.
+    for slug, total in (('sort-lo', 100), ('sort-hi', 900), ('sort-mid', 500)):
+        contract = Contract.objects.create(name=slug, slug=slug, is_live=True, xp_total_override=total)
+        contract.jobs.set(Job.objects.filter(slug='gunslinger'))
+        _c, game, plat = _platinum_member(contract)
+        _earn_platinum(profile, game, plat)
+        contract_service.mark_contract_reached(profile, contract)
+
+    summary = contract_service.claimable_summary(profile)
+
+    assert [item['xp'] for item in summary['items']] == [900, 500, 100]
+    assert [item['name'] for item in summary['items']] == ['sort-hi', 'sort-mid', 'sort-lo']
+    assert summary['total_xp'] == 1500
+
+
 def test_one_accept_banks_platinum_and_full_to_exactly_T():
     profile = ProfileFactory()
     contract = _contract('c-plat', ['gunslinger', 'slayer'])

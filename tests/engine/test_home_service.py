@@ -26,7 +26,8 @@ def test_fresh_profile_builds_every_zone():
     assert ctx['pursuer_card']['rank']['key'] == 'newbie'
     assert ctx['pursuer_card']['showcase'] == {'rarest': [], 'recent': []}
     # Glances: nothing pending, no in-progress badges, but the (zero-query) snapshot is present.
-    assert ctx['glances']['claimable_count'] == 0
+    assert ctx['glances']['claimable']['count'] == 0
+    assert ctx['glances']['claimable']['total_xp'] == 0
     assert ctx['glances']['almost_badges'] == []
     assert ctx['glances']['snapshot'] is not None
     assert ctx['recent'] == []
