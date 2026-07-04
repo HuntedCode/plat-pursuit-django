@@ -50,14 +50,14 @@ The navbar is sticky at `top-0 z-50` so users can hub-jump at any scroll depth. 
 | Element | Behavior |
 |---------|----------|
 | **Logo** | Always visible. Direct link to `/` (the personal hub's Overview). |
-| **My Pursuit** | `hidden lg:flex`. Direct link to `/`. Active when `hub_section == 'my_pursuit'`. |
+| **My Pursuit** | `hidden lg:flex`, **login-gated** (`{% if user.is_authenticated %}`). Direct link to `/`. Active when `hub_section == 'my_pursuit'`. |
 | **Browse** | `hidden lg:flex`. Direct link to `/games/`. Active when `hub_section == 'browse'`. |
 | **Community** | `hidden lg:flex`. Direct link to `/community/`. Active when `hub_section == 'community'`. |
 | **Support** | `hidden lg:flex`. Direct link to `/support/`. Active when `hub_section == 'support'`. |
 | **Notification bell** | Existing dropdown, unchanged. Visible at all breakpoints. |
 | **Avatar dropdown** | Theme · Profile · My Premium · Settings · Staff items · Logout |
 
-That's it. 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/` (redundant but harmless). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
+That's it — up to 5 direct-link buttons (logo + 4 hubs), zero dropdowns at the global nav level. The logo and the My Pursuit button both point at `/`, but the **My Pursuit button is hidden for logged-out visitors**: the logo already reaches `/` for them, and anon has no pursuit to show (the entry would be redundant and mislabeled, and wouldn't highlight anyway since the anon strip is gated off). So anon sees 4 buttons (logo + Browse/Community/Support). On `<lg:` viewports the hub buttons hide and the bottom tab bar takes over hub navigation.
 
 The "Customization" item that lived in the legacy My Pursuit dropdown is killed entirely — it pointed to `settings`, which the avatar dropdown's Settings link already covers, AND the dashboard already has in-page "Edit Layout" controls for module customization. The site-wide search bar was also dropped during this consolidation: the IA wayfinding (hubs + sub-nav + browse pages with HTMX filters) handles content discovery, so a global search box was redundant chrome.
 
@@ -85,7 +85,7 @@ See [IA and Sub-Nav](../architecture/ia-and-subnav.md) for the prefix matching a
 
 ## Mobile Bottom Tab Bar
 
-`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The 4 tabs (My Pursuit / Browse / Community / Support) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor.
+`templates/partials/mobile_tabbar.html` is the `<lg:` counterpart of the desktop navbar's hub buttons. It is sticky at `bottom-0` so users can hub-jump from any scroll position the same way desktop users can. The tabs (My Pursuit / Browse / Community / Support) mirror the desktop hub buttons exactly, with the same active-state logic driven by `hub_section` from the `hub_subnav` context processor. Like the desktop button, the **My Pursuit tab is login-gated**, so logged-out visitors see 3 tabs; the inner's flex `justify-around` distributes 3 or 4 evenly with no CSS change.
 
 Active state details:
 - Each tab compares `hub_section` against its target value (`my_pursuit`, `browse`, `community`, `support`)

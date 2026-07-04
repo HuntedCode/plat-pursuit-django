@@ -116,6 +116,28 @@ def test_strip_shown_for_authed_home_with_overview_profile_and_divider():
     assert stats.divider_before is True                         # the 6+4 group divider
 
 
+# --- My Pursuit nav button + mobile tab are login-gated ---
+# Anon has no pursuit to show and the logo already reaches /, so the personal-hub nav
+# entry is hidden for logged-out visitors. Anchor on the mobile tab's aria-label -- it's
+# unique to the gated element (the footer sitemap also carries the text "My Pursuit").
+
+_MY_PURSUIT_TAB = b'aria-label="My Pursuit"'
+
+
+def test_my_pursuit_nav_hidden_for_anon(client):
+    resp = client.get('/support/')
+    assert resp.status_code == 200
+    assert _MY_PURSUIT_TAB not in resp.content
+
+
+def test_my_pursuit_nav_shown_for_authed(client):
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    resp = client.get('/support/')
+    assert resp.status_code == 200
+    assert _MY_PURSUIT_TAB in resp.content
+
+
 @pytest.mark.parametrize('old,new', [
     ('/my-pursuit/collection/', '/collection/'),
     ('/my-pursuit/lab/', '/lab/'),

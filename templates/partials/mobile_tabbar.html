@@ -1,12 +1,14 @@
 {% load static %}
 
 {% comment %}
-Mobile bottom tab bar — the 4-hub navigation for <lg: viewports.
+Mobile bottom tab bar — the hub navigation for <lg: viewports.
 
-Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Community;
-Support is added in IA phase 2) at the bottom of the viewport so mobile users
-have one-tap access to every hub at all scroll positions. The desktop navbar's hub
-buttons are hidden on <lg: precisely because this bar takes over.
+Mirrors the desktop navbar's hub buttons (My Pursuit / Browse / Community /
+Support) at the bottom of the viewport so mobile users have one-tap access to
+every hub at all scroll positions. The desktop navbar's hub buttons are hidden
+on <lg: precisely because this bar takes over. My Pursuit is login-gated (the
+personal hub is), so logged-out visitors see 3 tabs; the flex `justify-around`
+inner distributes 3 or 4 evenly.
 
 The previous mobile chrome (search button + overlay, More drawer) was
 removed in the navbar consolidation: search was dropped site-wide because
@@ -24,7 +26,9 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
 
 <nav class="mobile-tabbar lg:hidden" role="navigation" aria-label="Mobile navigation">
     <div class="mobile-tabbar-inner">
-        <!-- My Pursuit (the logged-in Home / Overview lives at /) -->
+        {% if user.is_authenticated %}
+        <!-- My Pursuit (the logged-in Home / Overview lives at /). Anon-hidden: the personal hub is -->
+        <!-- login-gated, so for logged-out visitors it's just the hero the logo already reaches. -->
         <a href="{% url 'home' %}" class="mobile-tabbar-item {% if hub_section == 'my_pursuit' %}active{% endif %}" aria-label="My Pursuit">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
@@ -36,6 +40,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
             </svg>
             <span>My Pursuit</span>
         </a>
+        {% endif %}
 
         <!-- Browse -->
         <a href="{% url 'games_list' %}" class="mobile-tabbar-item {% if hub_section == 'browse' %}active{% endif %}" aria-label="Browse">

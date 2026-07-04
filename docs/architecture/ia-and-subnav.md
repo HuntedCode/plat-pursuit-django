@@ -36,6 +36,11 @@ The logged-in Home (`/`) IS the personal hub's **Overview** and carries the 10-i
 - **Auth-gated strip.** The personal strip is a login-gated wayfinder. For anonymous viewers the
   context processor returns `hub_section=None`, so `/` reads as a hero with no strip (and public
   members like `/milestones/` / `/research-panel/` show no personal strip either).
+- **Anon-hidden nav entry.** The My Pursuit navbar button and its mobile tab are wrapped in
+  `{% if user.is_authenticated %}` — a logged-out visitor has no pursuit to show and the logo already
+  reaches `/`, so the entry would be redundant *and* mislabeled (and it wouldn't even highlight,
+  since the anon strip is gated off). Anon therefore sees 3 mobile tabs (Browse / Community /
+  Support); the tab bar's `justify-around` inner distributes 3 or 4 evenly, no CSS change needed.
 - **Profile is a dynamic item.** Its URL needs the viewer's own username, so it can't be a static
   config item — the context processor appends it for linked viewers (the tools group's 4th).
 - **Ownership-aware Profile chrome.** The profile page keeps its shared

@@ -31,13 +31,16 @@
     {# See docs/architecture/ia-and-subnav.md for the design rationale.                      #}
     <div class="navbar-center hidden lg:flex">
         <ul class="menu menu-horizontal px-1 gap-1">
+            {% if user.is_authenticated %}
             <li>
-                {# Personal hub: the logged-in Home (/) is its Overview. Logo also enters it. #}
+                {# Personal hub: the logged-in Home (/) is its Overview. Anon-hidden -- for logged-out #}
+                {# visitors it's just the hero (the logo already goes there) and has no pursuit to show. #}
                 <a href="{% url 'home' %}"
                    class="btn btn-sm font-semibold {% if hub_section == 'my_pursuit' %}btn-primary{% else %}btn-ghost{% endif %}">
                     My Pursuit
                 </a>
             </li>
+            {% endif %}
             <li>
                 <a href="{% url 'games_list' %}"
                    class="btn btn-sm font-semibold {% if hub_section == 'browse' %}btn-primary{% else %}btn-ghost{% endif %}">
