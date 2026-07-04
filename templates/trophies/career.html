@@ -189,6 +189,7 @@
                 <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your play, mapped across the five disciplines.</p>
                 <div class="radar-card">
                     <div class="radar-tabs">
+                        <span class="radar-tabs__slider" aria-hidden="true"></span>
                         <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
                         {% for d in career.disciplines %}<button type="button" class="radar-tab" data-mode="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
                     </div>
@@ -283,39 +284,83 @@ function ppCountUp(el, dur) {
         var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
         var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
         var RMAX = {{ career.radar_max }};
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var detail = document.getElementById('radar-detail');
+        var basePR = 5, bigPR = 9;
 
         var DATA = { overview: { labels: {{ career.radar_labels_json|safe }}, values: {{ career.radar_data_json|safe }} } };
         {% for d in career.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
         {% endfor %}
 
+        // #3 Soft glow around the radar line/fill/points (Chart.js has no native glow).
+        var glowPlugin = { id: 'radarGlow',
+            beforeDatasetDraw: function (c, a) { c.ctx.save(); c.ctx.shadowColor = c.data.datasets[a.index].borderColor; c.ctx.shadowBlur = 9; },
+            afterDatasetDraw: function (c) { c.ctx.restore(); } };
         chart = new Chart(canvas, {
             type: 'radar',
-            data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: 5, pointHoverRadius: 7 }] },
+            data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: basePR, pointHoverRadius: bigPR }] },
             options: {
-                responsive: true, maintainAspectRatio: true, animation: { duration: 350 },
+                responsive: true, maintainAspectRatio: true,
+                animation: reduce ? false : { duration: 550, easing: 'easeOutQuart' },   // #3 smoother morph
                 plugins: { legend: { display: false } },
+                onHover: function (e, els) {   // #2 hovering a radar point highlights its detail row
+                    if (!detail) return;
+                    var idx = els.length ? els[0].index : -1;
+                    detail.querySelectorAll('.rd-row').forEach(function (r) { r.classList.toggle('is-active', (+r.dataset.i) === idx); });
+                },
                 scales: { r: { beginAtZero: true, suggestedMax: RMAX, grid: { color: 'rgba(255,255,255,0.08)' }, angleLines: { color: 'rgba(255,255,255,0.08)' }, pointLabels: { color: '#cdd2da', font: { size: 13, weight: '600' } }, ticks: { display: false } } },
             },
+            plugins: [glowPlugin],
         });
 
         var LABELS = {};
         document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
-        var detail = document.getElementById('radar-detail');
         var radarPainted = false;
         var currentMode = 'overview';
 
+        function highlightPoint(i, on) {   // #2 enlarge one point without re-animating the whole chart
+            var ds = chart.data.datasets[0];
+            ds.pointRadius = ds.data.map(function (_, idx) { return (on && idx === i) ? bigPR : basePR; });
+            chart.update('none');
+        }
+
+        // #1 detail rows render empty (bar 0, Lv 0), then each fills + counts up as it staggers in.
         var renderPanel = function (labels, values, colorOf, title) {
             if (!detail) return;
             var rows = labels.map(function (label, i) {
                 var pct = Math.max(0, Math.min(100, (values[i] / RMAX) * 100));
-                return '<li class="rd-row">'
+                var c = colorOf(i);
+                return '<li class="rd-row" data-i="' + i + '" style="--rd: ' + c + ';">'
                     + '<span class="rd-row__label">' + label + '</span>'
-                    + '<span class="pp-horizon pp-horizon__track" style="--horizon-accent: ' + colorOf(i) + '; --horizon-h: 8px; --horizon-progress: ' + pct + '%;"><span class="pp-horizon__fill"></span></span>'
-                    + '<span class="rd-row__val">Lv ' + values[i] + '</span></li>';
+                    + '<span class="pp-horizon pp-horizon__track rd-row__bar" data-fill="' + pct + '%" style="--horizon-accent: ' + c + '; --horizon-h: 8px; --horizon-progress: ' + (reduce ? pct : 0) + '%;"><span class="pp-horizon__fill"></span></span>'
+                    + '<span class="rd-row__val">Lv <b data-countup="' + values[i] + '">' + (reduce ? values[i] : 0) + '</b></span></li>';
             }).join('');
-            detail.innerHTML = '<div class="radar-detail__title">' + title + '</div>'
-                + '<ul class="radar-detail__list">' + rows + '</ul>';
+            detail.innerHTML = '<div class="radar-detail__title">' + title + '</div><ul class="radar-detail__list">' + rows + '</ul>';
+            if (reduce) return;
+            detail.querySelectorAll('.rd-row').forEach(function (row, i) {   // each row's content follows its stagger
+                setTimeout(function () {
+                    var bar = row.querySelector('.rd-row__bar');
+                    if (bar) bar.style.setProperty('--horizon-progress', bar.dataset.fill);
+                    var v = row.querySelector('b[data-countup]');
+                    if (v) ppCountUp(v, 550);
+                }, i * 60 + 40);
+            });
         };
+
+        // #2 hovering a detail row highlights its radar point (delegated; rows re-render each paint).
+        if (detail) {
+            var hoveredI = -1;
+            detail.addEventListener('mouseover', function (e) {
+                var r = e.target.closest('.rd-row'); if (!r) return;
+                var i = +r.dataset.i; if (i === hoveredI) return;
+                hoveredI = i; highlightPoint(i, true);
+                detail.querySelectorAll('.rd-row').forEach(function (x) { x.classList.toggle('is-active', x === r); });
+            });
+            detail.addEventListener('mouseleave', function () {
+                hoveredI = -1; highlightPoint(-1, false);
+                detail.querySelectorAll('.rd-row').forEach(function (x) { x.classList.remove('is-active'); });
+            });
+        }
 
         var paint = function (mode) {
             currentMode = mode;
@@ -338,14 +383,29 @@ function ppCountUp(el, dur) {
                 ds.pointBorderColor = color;
                 renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' jobs');
             }
+            ds.pointRadius = basePR;   // clear any hover-enlarged point
             chart.update();
         };
 
-        // Paint the radar the first time it's actually on screen (a Chart drawn while its tab is
-        // display:none animates on a 0-size canvas -> finishes invisibly -> "pops" on reveal).
+        // #4 Sliding tab indicator: a pill that glides to the active tab, carrying its disc color.
+        var tabsWrap = document.querySelector('.radar-tabs');
+        var slider = tabsWrap && tabsWrap.querySelector('.radar-tabs__slider');
+        function activeTab() { return tabsWrap && tabsWrap.querySelector('.radar-tab.is-active'); }
+        function moveSlider(tab) {
+            if (!slider || !tab || !tab.offsetWidth) return;
+            slider.style.setProperty('--disc', getComputedStyle(tab).getPropertyValue('--disc'));
+            slider.style.width = tab.offsetWidth + 'px';
+            slider.style.height = tab.offsetHeight + 'px';
+            slider.style.transform = 'translate(' + tab.offsetLeft + 'px,' + tab.offsetTop + 'px)';
+            slider.style.opacity = '1';
+        }
+
+        // Paint + position the slider the first time the radar tab is actually on screen (a Chart drawn
+        // while its tab is display:none animates on a 0-size canvas -> finishes invisibly -> "pops").
         revealRadar = function () {
             chart.resize();                                                  // canvas was 0-size while hidden
             if (!radarPainted) { radarPainted = true; paint(currentMode); }  // first reveal: animate in
+            requestAnimationFrame(function () { moveSlider(activeTab()); });
         };
         var radarView = document.querySelector('.lab-view[data-view="radar"]');
         if (radarView && !radarView.hidden) revealRadar();                   // deep-linked ?view=radar
@@ -354,9 +414,11 @@ function ppCountUp(el, dur) {
             tab.addEventListener('click', function () {
                 document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
                 tab.classList.add('is-active');
+                moveSlider(tab);
                 paint(tab.dataset.mode);
             });
         });
+        window.addEventListener('resize', function () { moveSlider(activeTab()); });
     }
 
     // Career view toggle: Jobs (default) / Radar / Contracts.

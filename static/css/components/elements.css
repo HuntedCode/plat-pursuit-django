@@ -34,21 +34,32 @@
 
 /* ---- Radar ---- */
 .radar-card { border: var(--pp-border-w) solid var(--pp-border); border-radius: var(--pp-radius-lg); background: var(--pp-bg-1); padding: 24px 28px 30px; }
-.radar-tabs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
-.radar-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
+.radar-tabs { position: relative; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
+/* Sliding indicator: a tinted pill that glides behind the active tab (JS positions it + sets --disc). */
+.radar-tabs__slider { position: absolute; top: 0; left: 0; border-radius: 999px; background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-2)); border: 1px solid var(--disc, var(--pp-primary)); box-shadow: 0 0 14px color-mix(in oklab, var(--disc, var(--pp-primary)) 32%, transparent); pointer-events: none; opacity: 0; z-index: 0; transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.3s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
+.radar-tab { position: relative; z-index: 1; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: transparent; border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px; transition: color 0.2s ease, border-color 0.2s ease; }
 .radar-tab[data-mode="overview"] { --disc: var(--pp-primary); }
-.radar-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc) 60%, var(--pp-border)); }
-.radar-tab.is-active { color: var(--disc); border-color: var(--disc); background: color-mix(in oklab, var(--disc) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 30%, transparent); }
+.radar-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc) 55%, var(--pp-border)); }
+.radar-tab.is-active { color: var(--disc); border-color: transparent; }
 .radar-body { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: 40px; align-items: center; }
 @media (max-width: 780px) { .radar-body { grid-template-columns: 1fr; gap: 28px; } }
 .radar-stage { display: grid; place-items: center; }
 .radar-stage canvas { max-width: 440px; width: 100%; height: auto; }
 .radar-detail__title { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 16px; }
 .radar-detail__list { list-style: none; margin: 0; padding: 0; }
-.rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 12px 0; }
+/* Rows stagger in on each paint; hovering one (or its radar point) highlights it. */
+.rd-row { display: grid; grid-template-columns: 116px 1fr 46px; align-items: center; gap: 14px; margin: 4px 0; padding: 6px 8px; border-radius: 8px; transition: background 0.15s ease; animation: rdRowIn 0.35s ease both; }
+.radar-detail__list .rd-row:nth-child(2) { animation-delay: 0.06s; }
+.radar-detail__list .rd-row:nth-child(3) { animation-delay: 0.12s; }
+.radar-detail__list .rd-row:nth-child(4) { animation-delay: 0.18s; }
+.radar-detail__list .rd-row:nth-child(5) { animation-delay: 0.24s; }
+@keyframes rdRowIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.rd-row.is-active { background: color-mix(in oklab, var(--rd, var(--pp-primary)) 14%, transparent); }
+.rd-row__bar .pp-horizon__fill { transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .rd-row__label { font-size: 13px; font-weight: 600; color: var(--pp-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* rd-row bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent) */
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .rd-row { animation: none; } .rd-row__bar .pp-horizon__fill { transition: none; } .radar-tabs__slider { transition: none; } }
 
 /* ---- Career hero: ambient glow tinted by the Pursuer's strongest discipline (--dominant) ---- */
 .career-hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0; background: radial-gradient(125% 95% at 10% -12%, color-mix(in oklab, var(--dominant, transparent) 32%, transparent), transparent 62%); }
