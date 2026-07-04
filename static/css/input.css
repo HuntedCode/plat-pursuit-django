@@ -419,8 +419,12 @@
   }
 
   /* ===== Personal-hub mobile sub-nav (collapse-to-grid) ===== */
-  .hub-subnav-panel { max-height: 0; overflow: hidden; transition: max-height 0.28s ease; }
-  .hub-subnav-panel.is-open { max-height: 420px; }
+  /* visibility:hidden (not just max-height:0) drops the collapsed grid's links from the tab order
+     + AT tree; the delayed visibility transition keeps the collapse animation visible first. */
+  .hub-subnav-panel { max-height: 0; overflow: hidden; visibility: hidden;
+    transition: max-height 0.28s ease, visibility 0s linear 0.28s; }
+  .hub-subnav-panel.is-open { max-height: 420px; overflow-y: auto; visibility: visible;
+    transition: max-height 0.28s ease, visibility 0s; }
   .hub-subnav-chev { transition: transform 0.2s ease; }
   .hub-subnav-chev.is-open { transform: rotate(180deg); }
 
@@ -2861,6 +2865,10 @@ details[open]::details-content {
   .shimmer-sweep::after {
     animation: none;
     display: none;
+  }
+  /* Mobile sub-nav collapse: instant (the visibility flip must not lag the height under RM). */
+  .hub-subnav-panel, .hub-subnav-chev {
+    transition: none;
   }
 }
 

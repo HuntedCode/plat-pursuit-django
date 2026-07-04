@@ -93,22 +93,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ===== Personal-hub mobile sub-nav (collapse-to-grid) =====
     // The panel is absolute (drops over content), so opening it doesn't reflow the sticky chrome.
-    document.addEventListener('click', function(e) {
-        const panel = document.getElementById('hub-subnav-panel');
-        if (!panel) return;
-        const chev = document.querySelector('.hub-subnav-chev');
-        const btn = e.target.closest('[data-hub-subnav-toggle]');
-        if (btn) {
-            const open = panel.classList.toggle('is-open');
-            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    (function() {
+        function setPanel(open) {
+            const panel = document.getElementById('hub-subnav-panel');
+            if (!panel) return;
+            const btn = document.querySelector('[data-hub-subnav-toggle]');
+            const chev = document.querySelector('.hub-subnav-chev');
+            panel.classList.toggle('is-open', open);
+            panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+            if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
             if (chev) chev.classList.toggle('is-open', open);
-        } else if (panel.classList.contains('is-open') && !panel.contains(e.target)) {
-            panel.classList.remove('is-open');
-            const t = document.querySelector('[data-hub-subnav-toggle]');
-            if (t) t.setAttribute('aria-expanded', 'false');
-            if (chev) chev.classList.remove('is-open');
         }
-    });
+        document.addEventListener('click', function(e) {
+            const panel = document.getElementById('hub-subnav-panel');
+            if (!panel) return;
+            if (e.target.closest('[data-hub-subnav-toggle]')) {
+                setPanel(!panel.classList.contains('is-open'));
+            } else if (panel.classList.contains('is-open') && !panel.contains(e.target)) {
+                setPanel(false);
+            }
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'Escape') return;
+            const panel = document.getElementById('hub-subnav-panel');
+            if (!panel || !panel.classList.contains('is-open')) return;
+            setPanel(false);
+            const btn = document.querySelector('[data-hub-subnav-toggle]');
+            if (btn) btn.focus();
+        });
+    })();
 
     // ===== Back to top button =====
     const backToTop = document.getElementById('back-to-top');

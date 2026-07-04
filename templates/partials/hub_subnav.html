@@ -64,7 +64,7 @@ See docs/architecture/ia-and-subnav.md for the design rationale.
     </div>
 
     {# Mobile (<lg): the grid overlay drops below the bar (absolute -> no sticky reflow on expand). #}
-    <div id="hub-subnav-panel" class="lg:hidden hub-subnav-panel absolute left-0 right-0 top-full bg-base-200 border-b-2 border-primary/30 shadow-xl z-40">
+    <div id="hub-subnav-panel" aria-hidden="true" class="lg:hidden hub-subnav-panel absolute left-0 right-0 top-full bg-base-200 border-b-2 border-primary/30 shadow-xl z-40">
         <div class="container mx-auto px-2 md:px-4">
             <div class="grid grid-cols-3 gap-1.5 py-2.5">
                 {% for item in hub_subnav_items %}
