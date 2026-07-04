@@ -2870,6 +2870,13 @@ details[open]::details-content {
   .hub-subnav-panel, .hub-subnav-chev {
     transition: none;
   }
+  /* Hotbar: kill the infinite collapsed-state pulse + make collapse/expand instant under RM. */
+  .hotbar-toggle-pulse {
+    animation: none;
+  }
+  #hotbar-wrapper, #hotbar-container, #toggle-icon {
+    transition: none;
+  }
 }
 
 /* ── Dual-range slider thumbs ─────────────────────────────────────────── */

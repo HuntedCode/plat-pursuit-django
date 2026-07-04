@@ -12,6 +12,10 @@
 {# and the sub-nav (z-40) so they layer correctly when scrolled. Note: hotbar.js #}
 {# MUST NOT set `wrapper.style.top` inline — that overrides the JS-managed       #}
 {# offset and jams the toggle behind the navbar/sub-nav.                         #}
+{# Chrome tokens (border-primary + shadow-primary/25) are intentional: the       #}
+{# hotbar IS the live-sync surface, so a primary-tinted frame reads as the       #}
+{# active-status element rather than a resting content card. Responsive steps    #}
+{# base -> md -> lg per the rebuild standard (lg is the desktop target).         #}
 <div id="hotbar-wrapper" class="xl:w-3/4 mx-auto sticky {% if hub_section and hub_subnav_items %}top-[7.25rem]{% else %}top-[4.5rem]{% endif %} z-30 transition-all duration-300 ease-in-out">
     <div id="hotbar-container"
          class="hotbar-loading bg-base-200/95 backdrop-blur-md border-2 border-primary rounded-box shadow-lg shadow-primary/25 w-full overflow-hidden transition-all duration-300 ease-in-out"
@@ -20,16 +24,16 @@
          data-csrf="{{ csrf_token }}"
          data-sync-status="{{ hotbar.sync_status }}"
          data-seconds="{{ hotbar.seconds_to_next_sync }}">
-        <div class="px-2 py-1.5 md:px-3 md:py-2 xl:px-6 xl:py-2">
+        <div class="px-2 py-1.5 md:px-3 md:py-2 lg:px-6 lg:py-2">
             {# flex-wrap is a safety net: even after moving search to the navbar, a long  #}
             {# countdown label + long PSN username + finalize-phase badge can still       #}
             {# squeeze the row. Wrapping is preferred over Safari's overlap-on-overflow.  #}
-            <div class="flex flex-row flex-wrap items-center justify-between gap-x-2 gap-y-1 md:gap-x-3 xl:gap-x-4">
+            <div class="flex flex-row flex-wrap items-center justify-between gap-x-2 gap-y-1 md:gap-x-3 lg:gap-x-4">
                 <!-- Left: Profile info -->
-                <div class="flex flex-row items-center gap-1.5 md:gap-2 xl:gap-3 min-w-0">
+                <div class="flex flex-row items-center gap-1.5 md:gap-2 lg:gap-3 min-w-0">
                     {% if hotbar.profile %}
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar shrink-0">
-                            <div class="w-5 md:w-7 xl:w-8 rounded-full ring-1 md:ring-2 ring-primary">
+                            <div class="w-5 md:w-7 lg:w-8 rounded-full ring-1 md:ring-2 ring-primary">
                                 <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
                             </div>
                         </a>
@@ -39,7 +43,7 @@
                             <span id="sync-badge" class="badge badge-xs md:badge-sm {% if hotbar.sync_status == 'synced' %}badge-success{% elif hotbar.sync_status == 'syncing' %}badge-warning{% else %}badge-error{% endif %} font-bold shrink-0" role="status">{{ hotbar.sync_status|sync_status_display }}</span>
                         </a>
                         <div id="sync-progress-div" class="flex items-center gap-1 {% if not hotbar.sync_status == 'syncing' %}hidden{% endif %}">
-                            <progress id="sync-progress-bar" class="progress progress-primary w-14 md:w-16 xl:w-24 h-2" value="{{ hotbar.progress_percentage|floatformat:0|default:0 }}" max="100"></progress>
+                            <progress id="sync-progress-bar" class="progress progress-primary w-14 md:w-16 lg:w-24 h-2" value="{{ hotbar.progress_percentage|floatformat:0|default:0 }}" max="100"></progress>
                             <span id="sync-progress-percent" class="text-xs text-base-content/70">{{ hotbar.progress_percentage|floatformat:0|default:0 }}%</span>
                             <span id="sync-queue-position" class="text-xs text-base-content/50 {% if not hotbar.queue_position or hotbar.queue_position == 0 %}hidden{% endif %}">~{{ hotbar.queue_position|default:0 }} ahead</span>
                             <span class="loading loading-spinner loading-sm"></span>
@@ -53,7 +57,7 @@
                     {% endif %}
                 </div>
                 {% if hotbar.profile %}
-                    <!-- Center: Stats (large screens only) -->
+                    <!-- Center: Stats (desktop only) -->
                     <div class="hidden lg:flex items-center gap-3 text-xs text-base-content/70 shrink-0">
                         <span>Synced {{ hotbar.profile.last_synced|naturaltime }}</span>
                         <span class="text-base-content/30">|</span>
@@ -68,8 +72,8 @@
     </div>
     <!-- Toggle button: inside wrapper so it moves with the hotbar -->
     <button id="hotbar-toggle"
-            class="block mx-auto bg-base-300 border-2 border-primary border-t-0 rounded-b-lg px-4 py-1 shadow-md shadow-primary/25 cursor-pointer transition-all duration-300 hover:bg-base-200 hover:shadow-primary/40 group"
-            aria-label="Toggle hotbar">
+            class="block mx-auto bg-base-300 border-2 border-primary border-t-0 rounded-b-lg px-6 py-1.5 shadow-md shadow-primary/25 cursor-pointer transition-all duration-300 hover:bg-base-200 hover:shadow-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-base-100"
+            aria-label="Toggle hotbar" aria-expanded="true" aria-controls="hotbar-container">
         <svg id="toggle-icon" class="w-5 h-5 text-primary rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" role="img" aria-labelledby="hotbar-toggle-icon">
             <title id="hotbar-toggle-icon">Toggle hotbar visibility</title>
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7" />

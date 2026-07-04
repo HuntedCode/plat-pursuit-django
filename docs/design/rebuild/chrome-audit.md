@@ -31,7 +31,7 @@ chrome — provided the deviations are intentional and consistent, not accidenta
 |---|---|---|
 | Sub-nav strip | ✅ Exemplary | The a11y model the others should match (visibility+aria-hidden collapse, Escape, aria-current). |
 | Navbar + mobile tabbar | ✅ Rebuild-quality | Small polish only (see piece 3). |
-| Hotbar | ⚠️ Partial | Carries pre-rebuild responsive + a11y debt (see piece 2). |
+| Hotbar | ✅ Done (2026-07) | Was pre-rebuild responsive + a11y debt; aligned (see piece 2). |
 | Footer | ✅ Done (2026-07) | Was pre-IA structure; restructured to the 4-hub model. |
 
 ## Cross-cutting fixes (hit more than one piece)
@@ -51,15 +51,19 @@ chrome — provided the deviations are intentional and consistent, not accidenta
 - Tests: `tests/engine/test_chrome.py` (Support column present, Dashboard column gone, merged cockpit for authed, cockpit hidden from anon).
 - Deferred (low priority): the easter-egg footer logo isn't keyboard-operable.
 
-### Piece 2 — Hotbar rebuild-alignment (TODO)
+### Piece 2 — Hotbar rebuild-alignment ✅ DONE (2026-07)
 
-Files: `templates/partials/hotbar.html`, `static/js/hotbar.js`, `static/css/input.css` (`.hotbar-*`, ~238-255 + reduced-motion block), coupling in `static/js/main.js` `alignStickyChrome()`.
+Files: `templates/partials/hotbar.html`, `static/js/hotbar.js`, `static/css/input.css` (`.hotbar-*` ~238-255 + reduced-motion block), coupling in `static/js/main.js` `alignStickyChrome()`.
 
-- **P1 a11y/correctness:** add `.hotbar-toggle-pulse { animation: none }` (and disable the collapse transition) to the `prefers-reduced-motion` block; add `aria-expanded` to `#hotbar-toggle`; add a `:focus-visible` ring to the toggle + `sync-now-btn`; enlarge the toggle to a ≥44px target.
-- **P2 responsive:** convert the `base→md→xl` progression to `base→md→lg` so the 1024 desktop target gets its intended chrome (padding, avatar, gaps, ring, progress width); align the center-stats `lg:flex` gate with the rest.
-- **P2 tokens:** make the container's deviations from the card standard intentional/consistent (`bg-base-200/95`, `border-primary`, `shadow-primary/25`) — kept as bespoke chrome, but normalized.
-- **P3 cleanup:** remove the dead `group` class; swap the hardcoded `/static/default-avatar.png` for `{% static %}`; refactor the init block to reuse `collapse/expandHotbar()`; dedupe the repeated `marginBottom` assignments.
-- **P4 decoupling (optional):** single shared constant for `'hotbar_hidden'` + the hotbar element IDs (duplicated across `hotbar.js` + `main.js`); tie the 500ms safety timeout to the real transition duration; replace the comment-only "must not set `wrapper.style.top`" invariant with a code-level guard.
+- **P1 a11y** ✅ — `.hotbar-toggle-pulse { animation: none }` + `#hotbar-wrapper/#hotbar-container/#toggle-icon { transition: none }` in the `prefers-reduced-motion` block (the infinite pulse now stops for RM users); `aria-expanded` on `#hotbar-toggle` (default `true`, flipped by `collapse/expandHotbar()` + both init branches) + `aria-controls="hotbar-container"`; `:focus-visible` ring on the toggle. Toggle hit target widened to `px-6 py-1.5`.
+- **P2 responsive** ✅ — converted `base→md→xl` to `base→md→lg` (padding, avatar, row/cluster gaps, progress width) so the 1024 desktop target gets its chrome; `xl:w-3/4` kept as a legit large-desktop centering refinement. The center-stats `hidden lg:flex` now agrees with the rest.
+- **P2 tokens** — kept the container's `border-primary` + `shadow-primary/25` + `bg-base-200/95` as **intentional** bespoke chrome (the hotbar IS the live-sync surface, so a primary-tinted frame reads as active-status, not a resting card), now documented in a template comment. No churn.
+- **Accepted exception:** the toggle's *height* stays a slim ~30px tab (a secondary collapse handle, the design-system "secondary controls" exception), widened horizontally instead of forced to 44px, which would make it a chunky bar.
+- **Deferred (not standard-alignment):** P3 init-block dedup (the duplication is justified — init is instant, `collapseHotbar` animates); P4 JS decoupling (shared `'hotbar_hidden'` constant + element IDs across `hotbar.js`/`main.js`, timeout↔duration coupling, the comment-only "don't set `wrapper.style.top`" invariant) — robustness refactors touching the fragile sticky coupling, low reward.
+
+### Discovered adjacent issue (own fix, NOT chrome scope)
+
+**Broken + inconsistent default-avatar asset.** The avatar fallback is split across ~7 templates in two forms — `/static/default-avatar.png` (hotbar, `settings.html`, `home/syncing.html`, `my_titles.html`) and `/static/images/default_avatar.png` (`donor_wall.html`, `game_list_detail.html`, `game_list_card.html`), plus `{% static 'default-avatar.png' %}` in `leaderboard_user_cell.html` — and **neither PNG exists under `static/`** (a glob for `*avatar*.png` finds nothing). So the fallback is a guaranteed 404 whenever a profile lacks `avatar_url`. Left untouched here (converting the hotbar's string alone wouldn't fix the missing asset); wants its own fix: add one canonical default-avatar asset + unify every fallback to `{% static %}` pointing at it.
 
 ### Piece 3 — Top-chrome polish sweep (TODO)
 

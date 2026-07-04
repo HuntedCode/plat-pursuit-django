@@ -356,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleIcon?.classList.remove('rotate-180');
         toggleBtn?.classList.add('hotbar-toggle-pulse');
         toggleBtn?.setAttribute('aria-label', 'Show hotbar');
+        toggleBtn?.setAttribute('aria-expanded', 'false');
     }
 
     function expandHotbar() {
@@ -367,6 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleIcon?.classList.add('rotate-180');
         toggleBtn?.classList.remove('hotbar-toggle-pulse');
         toggleBtn?.setAttribute('aria-label', 'Hide hotbar');
+        toggleBtn?.setAttribute('aria-expanded', 'true');
         // After transition, set to 'none' so content can reflow naturally
         container.addEventListener('transitionend', function handler() {
             if (!isHotbarHidden()) {
@@ -398,11 +400,13 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleIcon?.classList.remove('rotate-180');
         toggleBtn?.classList.add('hotbar-toggle-pulse');
         toggleBtn?.setAttribute('aria-label', 'Show hotbar');
+        toggleBtn?.setAttribute('aria-expanded', 'false');
     } else {
         container.style.maxHeight = 'none';
         wrapper.style.marginBottom = '0.5rem';
         toggleIcon?.classList.add('rotate-180');
         toggleBtn?.setAttribute('aria-label', 'Hide hotbar');
+        toggleBtn?.setAttribute('aria-expanded', 'true');
     }
     if (localStorage.getItem(STORAGE_KEY) === null) {
         setHotbarHidden(false);
