@@ -121,7 +121,7 @@
 .ptable__avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 
 /* ---- Job tile (skills-screen cell) ---- */
-.job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; display: flex; flex-direction: column; }
+.job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; display: flex; flex-direction: column; }
 .job:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 75%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent); }
 .job__top { display: flex; align-items: center; gap: 7px; }
 .job__expand { position: absolute; top: 9px; right: 9px; width: 13px; height: 13px; color: color-mix(in oklab, var(--disc) 55%, var(--pp-text-mute)); opacity: 0.22; transition: opacity 0.15s ease; pointer-events: none; }
@@ -146,14 +146,15 @@
 }
 @media (prefers-reduced-motion: reduce) { .job--tier-master, .job--tier-legend { animation: none; } }
 /* Untouched jobs (0 XP) rest dormant so your real, leveled career shows through; they light on hover. */
-.job--dormant { opacity: 0.4; }
-.job--dormant:hover { opacity: 0.92; }
+.job--dormant { opacity: 0.5; }
+.job--dormant:hover { opacity: 1; }
 
 /* ---- Jobs surface: layout toggle (Dossier <-> Character sheet) ---- */
 .jlayout { display: inline-flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--pp-bg-2); border: 1px solid var(--pp-divider); margin-bottom: 16px; }
 .jlayout__btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--pp-text-mute); background: transparent; border: none; cursor: pointer; transition: color 0.15s ease, background 0.15s ease; }
 .jlayout__btn svg { width: 15px; height: 15px; }
 .jlayout__btn:hover { color: var(--pp-text); }
+.jlayout__btn:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .jlayout__btn.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, transparent); }
 .jobs-layout[hidden] { display: none; }
 
@@ -181,10 +182,10 @@
 .jsheet__head-ic svg { width: 20px; height: 20px; }
 .jsheet__head-name { flex: 1; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 13.5px; color: var(--disc); letter-spacing: 0.02em; }
 .jsheet__head-avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
-.jsheet__row { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; cursor: pointer; transition: background 0.12s ease; }
+.jsheet__row { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; cursor: pointer; transition: background 0.12s ease, opacity 0.12s ease; }
 .jsheet__row:hover { background: color-mix(in oklab, var(--disc) 13%, transparent); }
-.jsheet__row--dormant { opacity: 0.42; }
-.jsheet__row--dormant:hover { opacity: 0.85; }
+.jsheet__row--dormant { opacity: 0.5; }
+.jsheet__row--dormant:hover { opacity: 1; }
 .jsheet__ic { width: 27px; height: 27px; flex: none; display: grid; place-items: center; border-radius: 7px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); color: var(--disc); }
 .jsheet__ic svg { width: 16px; height: 16px; }
 .jsheet__namecol { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
