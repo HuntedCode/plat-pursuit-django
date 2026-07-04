@@ -16,7 +16,7 @@
                         {% if hero.avatar_url %}
                             <img src="{{ hero.avatar_url }}" alt="{{ hero.pursuer_name }}" class="w-full h-full object-cover">
                         {% else %}
-                            <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|first|upper }}</div>
+                            <div class="w-full h-full flex items-center justify-center text-2xl md:text-3xl font-bold text-base-content/40">{{ hero.pursuer_name|default:'?'|first|upper }}</div>
                         {% endif %}
                     </div>
                     <div class="min-w-0">
@@ -74,8 +74,24 @@
         </section>
     {% endif %}
 
+    {# ── Pending rewards rail: the claim CTA co-located with the elements it levels ── #}
+    {% if claimable.count %}
+    <a href="?view=projects" data-lab-goto="projects" class="card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral hover:border-primary hover:shadow-primary/20 transition-all group mb-3">
+        <div class="card-body p-3 md:p-4 flex-row items-center gap-3 md:gap-4">
+            <span class="shrink-0 text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 md:w-9 md:h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
+            </span>
+            <div class="min-w-0 flex-1">
+                <div class="font-bold text-sm md:text-base"><span class="text-primary">{{ claimable.count }}</span> Project{{ claimable.count|pluralize }} ready to claim</div>
+                <div class="text-xs md:text-sm text-base-content/60"><span class="pp-tally text-primary font-semibold">+{{ claimable.total_xp|intcomma }}</span> XP waiting to level your elements</div>
+            </div>
+            <span class="shrink-0 text-xs md:text-sm text-primary font-semibold inline-flex items-center gap-1">Review &amp; accept <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
+        </div>
+    </a>
+    {% endif %}
+
     {% if lab %}
-    {# ── The Lab: one card, three element views via a toggle (Table is the default) ── #}
+    {# ── The Lab: one card, element views (Elements / Radar) + the Projects browse via tabs ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6">
             <div class="flex items-center gap-2 flex-wrap">
@@ -112,14 +128,15 @@
                 </div>
             </div>
 
-            {# View toggle: Table (default) / Radar #}
+            {# View toggle: Elements / Radar / Projects (the merged Research browse) #}
             <div class="lab-views" role="tablist" aria-label="Lab view">
-                <button type="button" class="lab-view-tab is-active" data-view="table" role="tab" aria-selected="true">Table</button>
-                <button type="button" class="lab-view-tab" data-view="radar" role="tab" aria-selected="false">Radar</button>
+                <button type="button" class="lab-view-tab {% if active_view == 'table' %}is-active{% endif %}" data-view="table" role="tab" aria-selected="{% if active_view == 'table' %}true{% else %}false{% endif %}">Elements</button>
+                <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
+                <button type="button" class="lab-view-tab {% if active_view == 'projects' %}is-active{% endif %}" data-view="projects" role="tab" aria-selected="{% if active_view == 'projects' %}true{% else %}false{% endif %}">Projects{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
             </div>
 
-            {# Table view (default) #}
-            <div class="lab-view" data-view="table">
+            {# Elements (periodic table) #}
+            <div class="lab-view" data-view="table" {% if active_view != 'table' %}hidden{% endif %}>
                 <div class="ptable">
                     {% for d in lab.disciplines %}
                     <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
@@ -133,8 +150,8 @@
                 </div>
             </div>
 
-            {# Radar view #}
-            <div class="lab-view" data-view="radar" hidden>
+            {# Radar #}
+            <div class="lab-view" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
                 <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your Platinum DNA, mapped across the five families.</p>
                 <div class="radar-card">
                     <div class="radar-tabs">
@@ -145,6 +162,37 @@
                         <div class="radar-stage"><canvas id="disc-radar" width="440" height="440"></canvas></div>
                         <div class="radar-detail" id="radar-detail"></div>
                     </div>
+                </div>
+            </div>
+
+            {# Projects: the merged Research browse -- Projects you can pursue + accept to level elements #}
+            <div class="lab-view" data-view="projects" {% if active_view != 'projects' %}hidden{% endif %}>
+                <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+                    <p class="text-xs md:text-sm text-base-content/50 italic pr-1 min-w-0">
+                        Projects on the bench: complete a game to level its elements. Each Project's XP is split evenly among the elements it feeds.
+                    </p>
+                    {% if claimable_count %}
+                    <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Accept all ({{ claimable_count }})</button>
+                    {% endif %}
+                </div>
+                <div class="rp-filters mb-3">
+                    <button type="button" class="rp-chip is-active" data-filter="all">All</button>
+                    <button type="button" class="rp-chip" data-filter="available">Available</button>
+                    <button type="button" class="rp-chip" data-filter="pursuing">Pursuing</button>
+                    <button type="button" class="rp-chip" data-filter="claimable">Claimable</button>
+                    <button type="button" class="rp-chip" data-filter="accepted">Accepted</button>
+                </div>
+                <div id="rp-list" class="space-y-3">
+                    {% for p in projects %}
+                    {% include 'trophies/partials/research_panel/_project_card.html' with p=p cid=forloop.counter %}
+                    {% empty %}
+                    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral">
+                        <div class="card-body items-center text-center py-10 text-base-content/50">
+                            <p class="text-base font-semibold">No Projects on the bench yet</p>
+                            <p class="text-sm">Projects are curated games that level your elements. Check back soon.</p>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
 
@@ -259,6 +307,16 @@
         if (name === 'radar' && chart) { chart.resize(); }
     }
     viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
+
+    // Rail / deep-link jumps to a specific Lab view without a reload.
+    document.querySelectorAll('[data-lab-goto]').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            showView(el.dataset.labGoto);
+            var tabs = document.querySelector('.lab-views');
+            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    });
 })();
 
 (function () {
@@ -280,6 +338,90 @@
     });
     modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeEl(); });
+})();
+
+// Projects tab (merged Research): status filter + Accept (the acceptance gate that banks XP).
+(function () {
+    var list = document.getElementById('rp-list');
+    if (!list) return;
+    var bar = document.querySelector('.rp-filters');
+    var PP = window.PlatPursuit || {};
+    var API = PP.API, Toast = PP.ToastManager;
+
+    function applyFilter(f) {
+        list.querySelectorAll('.rp-row').forEach(function (row) {
+            row.style.display = (f === 'all' || row.dataset.status === f) ? '' : 'none';
+        });
+    }
+    function activeFilter() {
+        var a = bar && bar.querySelector('.rp-chip.is-active');
+        return a ? a.dataset.filter : 'all';
+    }
+
+    if (bar) {
+        bar.querySelectorAll('.rp-chip').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                bar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
+                chip.classList.add('is-active');
+                applyFilter(chip.dataset.filter);
+            });
+        });
+    }
+
+    // Accept flow: flip semantic state classes + the badge label; CSS does the rest.
+    function markAccepted(card) {
+        card.dataset.status = 'accepted';
+        card.classList.remove('rp-row--claimable');
+        card.classList.add('rp-row--accepted');
+        var vial = card.querySelector('.rp-vial');
+        if (vial) { vial.classList.remove('rp-vial--claimable'); vial.classList.add('rp-vial--accepted'); }
+        var badge = card.querySelector('.rp-badge');
+        if (badge) badge.textContent = 'Accepted';
+        card.classList.remove('rp-row--just-accepted');
+        void card.offsetWidth;
+        card.classList.add('rp-row--just-accepted');
+        card.addEventListener('animationend', function h(e) { if (e.target !== card) return; card.classList.remove('rp-row--just-accepted'); card.removeEventListener('animationend', h); });
+    }
+    function refreshAcceptAll(count) {
+        var btn = document.getElementById('rp-accept-all');
+        if (!btn) return;
+        if (count > 0) { btn.textContent = 'Accept all (' + count + ')'; btn.disabled = false; }
+        else { btn.remove(); }
+    }
+    function applyResult(res) {
+        (res.accepted || []).forEach(function (slug) {
+            var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+            var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
+            if (card) markAccepted(card);
+        });
+        refreshAcceptAll(res.claimable_count || 0);
+        applyFilter(activeFilter());
+        if (Toast && res.granted) {
+            Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+        }
+    }
+    async function accept(payload, btn) {
+        if (!API) return;
+        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
+        try {
+            applyResult(await API.post('/api/v1/projects/accept/', payload));
+        } catch (err) {
+            var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
+            if (Toast) Toast.show((data && data.error) || 'Could not accept the Project.', 'error');
+            if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
+        }
+    }
+
+    list.addEventListener('click', function (e) {
+        var btn = e.target.closest('.rp-accept');
+        if (!btn) return;
+        e.preventDefault();
+        accept({ slug: btn.dataset.slug }, btn);
+    });
+    var allBtn = document.getElementById('rp-accept-all');
+    if (allBtn) {
+        allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
+    }
 })();
 </script>
 {% endif %}

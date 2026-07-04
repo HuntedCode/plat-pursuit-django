@@ -165,6 +165,9 @@ def _build_launchers(profile, hero, glances, elements):
             url = reverse(url_name)
         except NoReverseMatch:
             continue
+        # Research merged into the Lab: land its tile on the Lab's Projects tab (skip the redirect).
+        if url_name == 'research_panel':
+            url = reverse('lab') + '?view=projects'
         launchers.append({
             'url': url, 'label': label, 'icon': icon,
             'desc': desc, 'stat': stats.get(url_name),

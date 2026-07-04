@@ -33,7 +33,6 @@ from .roadmap_views import RoadmapDetailView, RoadmapEditorView
 from .shareables_views import MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView
 from .lab_views import LabView
 from .collection_views import CollectionView
-from .research_panel_views import ResearchPanelView
 from .stats_views import MyStatsView
 from .company_views import CompanyListView, CompanyDetailView
 from .franchise_views import FranchiseListView, FranchiseDetailView
@@ -82,7 +81,6 @@ __all__ = [
     'LabView',
     # Collection album view
     'CollectionView',
-    'ResearchPanelView',
     # Stats views
     'MyStatsView',
     # Company views

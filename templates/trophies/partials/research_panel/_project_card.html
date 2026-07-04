@@ -1,20 +1,21 @@
 {% comment %}
-Project card: the reagent vial is a small accent in the header, games as the focal grid
-below. Expects `p` (a project dict from research_panel_service),
-`profile` (viewer, for the game-card links), and `cid` (page-unique id for the vial clip).
+Project card (two-tier): a compact, scannable header row (identity + the elements it levels +
+reward + CTA), with the member-games grid tucked into a collapsed <details> disclosure -- so the
+Projects list reads as a tidy column and depth is one click away. Expects `p` (a project dict from
+research_panel_service), `profile` (viewer, for the game-card links), and `cid` (page-unique id for
+the vial clip).
 {% endcomment %}
 {% load humanize %}
 <div class="rp-row card relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
     <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
     <div class="card-body p-3 md:p-4">
 
-        {# ── Project header: identity + the elements it levels + reward ── #}
+        {# ── Tier 1: compact header -- identity + the elements it levels + reward + CTA ── #}
         <div class="flex items-start gap-3 md:gap-4">
 
             {# Reagent vial: equal family bands = this Project's even XP split #}
             <div class="rp-vial rp-vial--{{ p.status }} hidden sm:block">{% include 'partials/elements/_vial.html' with vial_bands=p.vial_bands cid=cid %}</div>
 
-            {# Identity + reward band #}
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="font-bold text-base md:text-lg line-clamp-1 pr-1">{{ p.name }}</span>
@@ -23,8 +24,7 @@ below. Expects `p` (a project dict from research_panel_service),
                     {% elif p.status == 'pursuing' %}<span class="rp-badge badge badge-xs badge-ghost text-primary shrink-0">Pursuing</span>
                     {% else %}<span class="rp-badge badge badge-xs badge-ghost shrink-0">Available</span>{% endif %}
                 </div>
-                <p class="text-[0.7rem] uppercase font-bold tracking-wider text-base-content/40 mt-1.5 mb-1">Finish any game below to level</p>
-                <div class="rp-reward">
+                <div class="rp-reward mt-1.5">
                     {% for el in p.elements %}
                     <span class="rp-el" style="--disc: var(--disc-{{ el.disc_slug }});">
                         <span class="rp-el__chip">{% include 'partials/elements/_atom.html' with shape=el.shape symbol=el.symbol %}</span>
@@ -50,18 +50,20 @@ below. Expects `p` (a project dict from research_panel_service),
             </div>
         </div>
 
-        <p class="text-xs text-base-content/50 mt-2.5 mb-0.5 italic pr-1">
-            Complete any one of these {{ p.game_count }} game{{ p.game_count|pluralize }} to finish the Project.
-        </p>
-
-        {# ── Games (the focal point): every game that satisfies the Project ── #}
-        <div class="bd-stage__grid mt-1 !px-0 !py-0">
-            {% for g in p.games %}
-                {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
-                    {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                {% endwith %}
-            {% endfor %}
-        </div>
+        {# ── Tier 2: member games, collapsed by default (scan the list; expand for depth) ── #}
+        <details class="rp-games mt-2.5">
+            <summary class="rp-games__summary">
+                <svg class="rp-games__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                <span>Complete any of <span class="font-semibold text-base-content/70">{{ p.game_count }}</span> game{{ p.game_count|pluralize }} to finish this Project</span>
+            </summary>
+            <div class="bd-stage__grid mt-2 !px-0 !py-0">
+                {% for g in p.games %}
+                    {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
+                        {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
+                    {% endwith %}
+                {% endfor %}
+            </div>
+        </details>
 
     </div>
 </div>
