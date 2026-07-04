@@ -10,12 +10,12 @@ The curve is cap-less, so the prestige tier is the label (no "maxed" state).
         <span class="job__mark">{% job_icon card.icon '' %}</span>
     </div>
     <div class="job__lvbox">
-        <span class="job__lv-num pp-tally">{{ card.level }}</span>
+        <span class="job__lv-num pp-tally" data-countup="{{ card.level }}">{{ card.level }}</span>
         <span class="job__lv-cap">{{ card.tier }}</span>
     </div>
     <div class="job__name">{{ card.name }}</div>
     <div class="job__foot">
-        <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 5px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
+        <div class="pp-horizon pp-horizon__track job__bar" data-fill="{{ card.progress }}%" style="--horizon-accent: var(--disc); --horizon-h: 5px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
         <div class="job__xp">{{ card.xp_current }} / {{ card.xp_next }} XP</div>
     </div>
     <svg class="job__expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>

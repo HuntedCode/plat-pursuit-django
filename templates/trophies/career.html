@@ -153,11 +153,11 @@
                 {# Dossier: each discipline a banded chapter (icon + name + active/XP stats + avg), jobs beneath #}
                 <div class="jobs-layout jdoss" data-layout="dossier">
                     {% for d in career.disciplines %}
-                    <div class="jdoss__band" style="--disc: var(--disc-{{ d.slug }});">
+                    <div class="jdoss__band{% if d.slug == hero.dominant_disc %} jdoss__band--top{% endif %}" style="--disc: var(--disc-{{ d.slug }});">
                         <div class="jdoss__head">
                             <span class="jdoss__ic">{% job_icon d.icon '' %}</span>
                             <div class="jdoss__titles">
-                                <div class="jdoss__name">{{ d.label }}</div>
+                                <div class="jdoss__name">{{ d.label }}{% if d.slug == hero.dominant_disc %}<span class="jdoss__top" title="Your strongest discipline">Top</span>{% endif %}</div>
                                 <div class="jdoss__stats">{{ d.played }}/5 active &middot; <span class="pp-tally">{{ d.xp_total|intcomma }}</span> XP</div>
                             </div>
                             <span class="jdoss__avg">avg Lv <b class="pp-tally">{{ d.avg }}</b></span>
@@ -533,6 +533,41 @@
     arcs.forEach(function (a) {
         a.addEventListener('mouseenter', function () { focusDisc(a.dataset.disc); });
         a.addEventListener('mouseleave', clearDisc);
+    });
+})();
+
+// Premium: job progress bars sweep 0 -> value as their band scrolls into view (CSS transitions width).
+(function () {
+    var bars = document.querySelectorAll('.job__bar[data-fill]');
+    if (!bars.length) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || !('IntersectionObserver' in window)) return;   // leave the server-rendered fill
+    bars.forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });   // reset for the sweep
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.style.setProperty('--horizon-progress', e.target.dataset.fill); io.unobserve(e.target); }
+        });
+    }, { threshold: 0.35 });
+    bars.forEach(function (b) { io.observe(b); });
+})();
+
+// Premium: cursor-tracking 3D tilt on the dossier job tiles (hover-capable, motion-OK devices only).
+(function () {
+    var canHover = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!canHover || reduce) return;
+    var MAX = 6;   // max tilt degrees
+    document.querySelectorAll('.jdoss .job').forEach(function (tile) {
+        var r = null;   // base (untilted) rect, cached on enter so the tilt can't feed back on itself
+        tile.addEventListener('mouseenter', function () { r = tile.getBoundingClientRect(); });
+        tile.addEventListener('mousemove', function (e) {
+            if (!r) r = tile.getBoundingClientRect();
+            var px = (e.clientX - r.left) / r.width - 0.5;
+            var py = (e.clientY - r.top) / r.height - 0.5;
+            tile.style.transition = 'transform 0.08s ease';
+            tile.style.transform = 'perspective(600px) rotateX(' + (-py * MAX).toFixed(2) + 'deg) rotateY(' + (px * MAX).toFixed(2) + 'deg) translateY(-3px) scale(1.02)';
+        });
+        tile.addEventListener('mouseleave', function () { r = null; tile.style.transition = 'transform 0.3s ease'; tile.style.transform = ''; });
     });
 })();
 
