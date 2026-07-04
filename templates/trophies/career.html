@@ -251,6 +251,26 @@
 {% if career %}
 <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
 <script>
+// Shared: count a number up from 0 to its target (data-countup attr, or the element's text),
+// easeOutCubic. Used by the hero/stats, the dossier tiles, the sheet rows, and the modal.
+function ppCountUp(el, dur) {
+    var dec = parseInt(el.dataset.countupDecimals || '0', 10);
+    var raw = (el.dataset.countup != null ? el.dataset.countup : (el.textContent || '').replace(/,/g, ''));
+    var target = parseFloat(raw);
+    if (isNaN(target)) return;
+    function fmt(v) { return dec ? v.toFixed(dec) : Math.round(v).toLocaleString(); }
+    el.textContent = fmt(0);
+    if (target === 0) return;
+    var d = dur || 750, start = null;
+    function step(ts) {
+        if (start === null) start = ts;
+        var p = Math.min(1, (ts - start) / d);
+        el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step); else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(step);
+}
+
 // Career: discipline radar (overview + per-discipline drill-down) and tile -> detail modal.
 (function () {
     var css = getComputedStyle(document.documentElement);
@@ -373,19 +393,6 @@
     var KEY = 'pp-jobs-layout';
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var sheetRevealed = false;
-    function countUp(lvl) {
-        var target = parseInt((lvl.textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
-        if (target <= 1) return;
-        lvl.textContent = '0';
-        var dur = 650, start = null;
-        var step = function (ts) {
-            if (start === null) start = ts;
-            var p = Math.min(1, (ts - start) / dur);
-            lvl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-            if (p < 1) requestAnimationFrame(step); else lvl.textContent = target;
-        };
-        requestAnimationFrame(step);
-    }
     // The character sheet assembles on its first reveal: sections cascade in, and each section's bars
     // fill + levels tick up AS it reveals (delay matched to the CSS section stagger, not all at once).
     function revealSheet() {
@@ -397,7 +404,7 @@
         sheet.querySelectorAll('.jsheet__disc').forEach(function (sec, i) {
             setTimeout(function () {   // matches the 0.07s-per-section CSS cascade
                 sec.querySelectorAll('.jsheet__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
-                sec.querySelectorAll('.jsheet__lv').forEach(countUp);
+                sec.querySelectorAll('.jsheet__lv').forEach(function (l) { ppCountUp(l, 650); });
             }, i * 70 + 40);
         });
     }
@@ -458,20 +465,7 @@
     function animateContent() {
         if (reduce) return;
         var lvl = panel.querySelector('.edetail__level-num');
-        if (lvl) {
-            var target = parseInt((lvl.textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
-            if (target > 1) {
-                lvl.textContent = '0';
-                var dur = 700, start = null;
-                var step = function (ts) {
-                    if (start === null) start = ts;
-                    var p = Math.min(1, (ts - start) / dur);
-                    lvl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
-                    if (p < 1) requestAnimationFrame(step); else lvl.textContent = target;
-                };
-                requestAnimationFrame(step);
-            }
-        }
+        if (lvl) ppCountUp(lvl, 700);
         var bar = panel.querySelector('.edetail__bar[data-fill]');
         if (bar) {
             bar.style.setProperty('--horizon-progress', '0%');
@@ -502,7 +496,7 @@
         if (zoom && !reduce) zoom.classList.add('pp-receded');   // the page pushes back
         lastTrigger = trigger || null;
         if (!reduce && trigger) flip(trigger.getBoundingClientRect(), true);   // grow from the tile
-        animateContent();
+        setTimeout(animateContent, 340);   // content waits for the dialog to grow (matches the section stagger)
         (dialog.querySelector('.emodal__close') || dialog).focus();   // move focus into the dialog
     }
     function closeEl() {
@@ -575,8 +569,10 @@
 })();
 
 // Premium: count numbers up (Career Level, discipline totals, stat cards) as they scroll into view.
+// The dossier tile levels are excluded here -- the band reveal drives those in sync with each band.
 (function () {
-    var els = document.querySelectorAll('[data-countup]');
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-countup]'))
+        .filter(function (el) { return !el.closest('.jdoss'); });
     if (!els.length) return;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     function fmt(v, dec) { return dec ? v.toFixed(dec) : Math.round(v).toLocaleString(); }
@@ -631,38 +627,36 @@
     });
 })();
 
-// Premium: job progress bars sweep 0 -> value as their band scrolls into view (CSS transitions width).
+// Premium: each dossier band reveals on scroll-in (slides up); its content THEN follows -- the icons
+// draw, the bars fill, the levels count up -- so nothing animates while the band is still sliding in.
 (function () {
-    var bars = document.querySelectorAll('.job__bar[data-fill]');
-    if (!bars.length) return;
+    var jdoss = document.querySelector('.jdoss');
+    if (!jdoss) return;
+    var bands = Array.prototype.slice.call(jdoss.querySelectorAll('.jdoss__band'));
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce || !('IntersectionObserver' in window)) return;   // leave the server-rendered fill
-    bars.forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });   // reset for the sweep
+    if (reduce || !('IntersectionObserver' in window) || !bands.length) return;   // static: renders final
+    jdoss.classList.add('jdoss--js');
+    bands.forEach(function (band) {   // pre-hide the content until the band reveals
+        band.querySelectorAll('.job__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', '0%'); });
+        band.querySelectorAll('.job').forEach(function (t) { t.classList.add('job--predraw'); });
+        band.querySelectorAll('.job__lv-num[data-countup]').forEach(function (l) { l.textContent = '0'; });
+    });
+    function revealContent(band) {
+        band.querySelectorAll('.job__bar[data-fill]').forEach(function (b) { b.style.setProperty('--horizon-progress', b.dataset.fill); });
+        band.querySelectorAll('.job').forEach(function (t) { t.classList.remove('job--predraw'); t.classList.add('job--drawing'); });
+        band.querySelectorAll('.job__lv-num[data-countup]').forEach(function (l) { ppCountUp(l, 650); });
+    }
     var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-            if (e.isIntersecting) { e.target.style.setProperty('--horizon-progress', e.target.dataset.fill); io.unobserve(e.target); }
+        entries.filter(function (e) { return e.isIntersecting; }).forEach(function (e, i) {
+            io.unobserve(e.target);
+            var band = e.target;
+            setTimeout(function () {   // stagger bands that appear together (on load)
+                band.classList.add('is-revealed');
+                setTimeout(function () { revealContent(band); }, 300);   // content waits for the band's slide
+            }, i * 90);
         });
-    }, { threshold: 0.35 });
-    bars.forEach(function (b) { io.observe(b); });
-})();
-
-// Premium: each dossier job icon draws itself in once as its tile scrolls into view.
-(function () {
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce || !('IntersectionObserver' in window)) return;
-    var tiles = document.querySelectorAll('.jdoss .job');
-    if (!tiles.length) return;
-    tiles.forEach(function (t) { t.classList.add('job--predraw'); });   // hide the strokes until revealed
-    var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) {
-            if (e.isIntersecting) {
-                e.target.classList.remove('job--predraw');
-                e.target.classList.add('job--drawing');
-                io.unobserve(e.target);
-            }
-        });
-    }, { threshold: 0.4 });
-    tiles.forEach(function (t) { io.observe(t); });
+    }, { threshold: 0.2 });
+    bands.forEach(function (b) { io.observe(b); });
 })();
 
 // Premium: cursor-tracking 3D tilt on the dossier job tiles (hover-capable, motion-OK devices only).
