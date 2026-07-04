@@ -1,12 +1,9 @@
 {# Reusable user cell for leaderboard table rows #}
 {# Usage: {% include 'trophies/partials/leaderboard_user_cell.html' with entry=entry %} #}
-{% load static %}
 <a href="{% url 'profile_detail' entry.psn_username %}" class="flex items-center gap-2 transition-all duration-200 hover:opacity-80">
     <div class="avatar">
         <div class="w-6 md:w-7 lg:w-8 rounded-full ring-2 {% if entry.is_premium %}ring-warning{% else %}ring-primary{% endif %}">
-            {% with entry.avatar_url as avatar %}
-                <img src="{% if avatar %}{{ avatar }}{% else %}{% static 'default-avatar.png' %}{% endif %}" alt="User avatar" loading="lazy" />
-            {% endwith %}
+            {% include 'partials/_avatar.html' with url=entry.avatar_url alt='User avatar' %}
         </div>
     </div>
     <div class="flex flex-col min-w-0">

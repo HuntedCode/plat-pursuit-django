@@ -58,9 +58,7 @@
         {% if show_author != False %}
         <div class="flex items-center gap-1.5 text-xs text-base-content/50 mt-0.5">
             <div class="w-5 h-5 rounded-full overflow-hidden ring-1 ring-base-content/10 shrink-0">
-                <img src="{{ game_list.profile.avatar_url|default:'/static/images/default_avatar.png' }}"
-                     alt="{{ game_list.profile.psn_username }}"
-                     class="w-full h-full object-cover" loading="lazy" />
+                {% include 'partials/_avatar.html' with url=game_list.profile.avatar_url alt=game_list.profile.psn_username %}
             </div>
             <span class="truncate">
                 <span class="font-medium {% if game_list.profile.user_is_premium %}legendary-title{% else %}text-secondary{% endif %}">{{ game_list.profile.display_psn_username|default:game_list.profile.psn_username }}</span>

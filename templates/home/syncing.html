@@ -19,9 +19,7 @@
                 {# Avatar with spinner ring while syncing #}
                 <div class="avatar shrink-0">
                     <div class="w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-full ring-2 {% if psn_outage %}ring-info{% elif profile.sync_status == 'error' %}ring-error{% else %}ring-warning animate-pulse{% endif %}">
-                        <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}"
-                             alt="{{ profile.display_psn_username|default:profile.psn_username }}"
-                             class="object-cover" loading="eager" />
+                        {% include 'partials/_avatar.html' with url=profile.avatar_url alt=profile.display_psn_username|default:profile.psn_username eager=True %}
                     </div>
                 </div>
 

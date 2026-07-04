@@ -27,9 +27,7 @@
                         {# Avatar #}
                         <div class="avatar shrink-0">
                             <div class="{% if forloop.first %}w-12 h-12 ring-2 ring-warning{% else %}w-8 h-8 ring-2 ring-primary{% endif %} rounded-full">
-                                <img src="{{ donor.profile.avatar_url|default:'/static/images/default_avatar.png' }}"
-                                     alt="{{ donor.profile.display_psn_username }}"
-                                     loading="lazy" decoding="async" />
+                                {% include 'partials/_avatar.html' with url=donor.profile.avatar_url alt=donor.profile.display_psn_username %}
                             </div>
                         </div>
 

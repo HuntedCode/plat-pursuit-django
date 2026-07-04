@@ -23,7 +23,7 @@
     <div class="tt-card tt-hero{% if displayed_title_id %} is-equipped{% endif %}" id="tt-hero">
         <div class="tt-hero__main">
             <a href="{% url 'profile_detail' profile.psn_username %}" class="tt-hero__avatar">
-                <img src="{{ profile.avatar_url|default:'/static/default-avatar.png' }}" alt="{{ profile.display_psn_username }}">
+                {% include 'partials/_avatar.html' with url=profile.avatar_url alt=profile.display_psn_username %}
             </a>
             <div class="tt-hero__plate">
                 <span class="tt-hero__cap">

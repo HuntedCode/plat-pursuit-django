@@ -5,6 +5,7 @@ would otherwise miss: the footer's 4-hub restructure (the pre-unify My Pursuit +
 merged into one hub sitemap, a Support column added), and its auth-gated visibility.
 """
 import pytest
+from django.template.loader import render_to_string
 
 from tests.factories import ProfileFactory
 
@@ -50,3 +51,21 @@ def test_navbar_and_tabbar_mark_active_hub_with_aria_current(client):
     # hub button + the mobile tab bar (not the sub-nav strip) -- a precise guard for both.
     resp = client.get('/support/')
     assert resp.content.count(b'aria-current="page"') >= 2
+
+
+# --- Avatar partial: safe fallback (no more broken default-avatar 404) ---
+
+def test_avatar_partial_renders_image_when_url_present():
+    html = render_to_string('partials/_avatar.html', {'url': 'https://cdn.example/a.png', 'alt': 'Zed'})
+    assert '<img' in html
+    assert 'https://cdn.example/a.png' in html
+    assert '<svg' not in html
+
+
+def test_avatar_partial_falls_back_to_glyph_without_url():
+    html = render_to_string('partials/_avatar.html', {'url': '', 'alt': 'Nobody'})
+    assert '<svg' in html            # the person glyph, not an <img>
+    assert '<img' not in html
+    # the fix's whole point: never emit the non-existent default-avatar asset path
+    assert 'default-avatar' not in html
+    assert 'default_avatar' not in html

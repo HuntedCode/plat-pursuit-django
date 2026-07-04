@@ -34,7 +34,7 @@
                     {% if hotbar.profile %}
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="avatar shrink-0">
                             <div class="w-5 md:w-7 lg:w-8 rounded-full ring-1 md:ring-2 ring-primary">
-                                <img src="{{ hotbar.profile.avatar_url|default:'/static/default-avatar.png' }}" alt="Profile Avatar" />
+                                {% include 'partials/_avatar.html' with url=hotbar.profile.avatar_url alt=hotbar.profile.display_psn_username %}
                             </div>
                         </a>
                         <a href="{% url 'profile_detail' hotbar.profile.psn_username %}" class="flex items-center gap-2 min-w-0">
