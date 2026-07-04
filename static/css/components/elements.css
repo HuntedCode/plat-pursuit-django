@@ -51,7 +51,7 @@
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---- Career hero: ambient glow tinted by the Pursuer's strongest discipline (--dominant) ---- */
-.career-hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0; background: radial-gradient(115% 90% at 10% -12%, color-mix(in oklab, var(--dominant, transparent) 20%, transparent), transparent 55%); }
+.career-hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0; background: radial-gradient(125% 95% at 10% -12%, color-mix(in oklab, var(--dominant, transparent) 32%, transparent), transparent 62%); }
 .career-hero > * { position: relative; z-index: 1; }
 
 /* ---- Career hero: disciplines composition ring (Career Level framed by discipline shares) ---- */

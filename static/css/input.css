@@ -1477,6 +1477,10 @@
 /* Smooth Scrolling */
 html {
   scroll-behavior: smooth;
+  /* Reserve the scrollbar gutter permanently so opening a modal (which sets
+     body { overflow: hidden }) doesn't remove the scrollbar and shift the whole
+     page + fixed chrome sideways. No-op on mobile overlay scrollbars. */
+  scrollbar-gutter: stable;
   /*
    * Reserve room at the top of the viewport for the sticky navbar + hub
    * sub-nav so anchor jumps and Element.scrollIntoView() don't drop the
