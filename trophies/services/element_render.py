@@ -217,7 +217,7 @@ def job_atom(job):
     return {
         'slug': job.slug,
         'icon': job.icon,
-        'symbol': SYMBOLS.get(job.slug) or job.icon or job.name[:2],
+        'symbol': SYMBOLS.get(job.slug) or job.name[:2],
         'shape': SHAPES[job.display_order % len(SHAPES)],
         'disc_slug': job.discipline,
         'name': job.name,

@@ -119,9 +119,10 @@
 .pursuer-card__tab:hover { color: var(--pp-text-dim); }
 .pursuer-card__tab.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, transparent); }
 .pursuer-card__tab:active { transform: scale(0.96); }
-/* contract elements this platinum levels (family-colored symbol chips on the cover) */
+/* contract jobs this platinum levels (discipline-colored icon chips on the cover) */
 .pursuer-card__cover-els { position: absolute; left: 3px; bottom: 13px; display: flex; gap: 2px; }
-.pursuer-card__el { font-size: 7px; font-weight: 800; line-height: 1; min-width: 13px; padding: 2px; text-align: center; border-radius: 3px; color: var(--disc); background: color-mix(in oklab, var(--disc) 22%, rgba(0,0,0,0.72)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
+.pursuer-card__el { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 3px; color: var(--disc); background: color-mix(in oklab, var(--disc) 22%, rgba(0,0,0,0.72)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
+.pursuer-card__el svg { width: 10px; height: 10px; }
 /* The strip lays the covers out in a single row, each 1/6 of the shelf. At REST exactly 6 show and
    the shelf is UNCLIPPED, so covers' hover lift + glow (and a new cover's marker) are never cut.
    The 7th (outgoing) cover is hidden until the forge needs it; the forge then reveals it and clips

@@ -167,7 +167,10 @@ def _build_launchers(profile, hero, glances, elements):
             continue
         # Contracts merged into Career: land its tile on Career's Contracts tab (skip the redirect).
         if url_name == 'research_panel':
-            url = reverse('career') + '?view=contracts'
+            try:
+                url = reverse('career') + '?view=contracts'
+            except NoReverseMatch:
+                continue
         launchers.append({
             'url': url, 'label': label, 'icon': icon,
             'desc': desc, 'stat': stats.get(url_name),

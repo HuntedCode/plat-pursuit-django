@@ -1,8 +1,9 @@
 """Job icons: one Lucide (MIT) stroke icon per job specialization, rendered inline (CSP-safe,
-no external assets). `Job.icon` stores the Lucide name; `{% job_icon job.icon class="w-5 h-5" %}`
+no external assets). `Job.icon` stores the Lucide name; `{% job_icon job.icon 'w-5 h-5' %}`
 renders it. Icon names match lucide.dev, so a mismatched/updated glyph can be re-copied verbatim.
 """
 from django import template
+from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
 register = template.Library()
@@ -52,6 +53,7 @@ def job_icon(name, css_class='w-5 h-5'):
     inner = _ICONS.get(name or '')
     if not inner:
         return ''
+    css_class = escape(css_class)  # defense in depth: today all callers pass a static literal
     return mark_safe(
         f'<svg xmlns="http://www.w3.org/2000/svg" class="{css_class}" viewBox="0 0 24 24" '
         f'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '

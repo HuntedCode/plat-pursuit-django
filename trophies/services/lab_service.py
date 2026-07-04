@@ -34,9 +34,9 @@ def _compact(n):
     return str(int(n))
 
 
-# Circumference of the DNA ring's arc circle (r=42 in the 120x120 viewBox). The hero
-# ring's family arcs are stroke-dash segments summing to this; keep it in sync with
-# `_vial`-style geometry constants and the r=42 in lab.html.
+# Circumference of the disciplines ring's arc circle (r=42 in the 120x120 viewBox). The hero
+# ring's discipline arcs are stroke-dash segments summing to this; keep in sync with the r=42
+# in career.html.
 _RING_C = 263.89
 
 

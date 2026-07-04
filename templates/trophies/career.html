@@ -217,7 +217,7 @@
                 </div>
                 <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-start">
                     {% for p in projects %}
-                    {% include 'trophies/partials/research_panel/_project_card.html' with p=p cid=forloop.counter %}
+                    {% include 'trophies/partials/research_panel/_project_card.html' with p=p %}
                     {% empty %}
                     <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral col-span-full">
                         <div class="card-body items-center text-center py-10 text-base-content/50">
@@ -238,7 +238,7 @@
     </div>
     <div class="emodal" id="emodal" hidden>
         <div class="emodal__backdrop" data-close></div>
-        <div class="emodal__dialog">
+        <div class="emodal__dialog" role="dialog" aria-modal="true" aria-label="Job detail" tabindex="-1">
             <button class="emodal__close" data-close aria-label="Close">&times;</button>
             <div id="emodal-panel"></div>
         </div>
@@ -377,21 +377,44 @@
     var details = document.getElementById('element-details');
     var modal = document.getElementById('emodal');
     var panel = document.getElementById('emodal-panel');
-    if (!details || !modal || !panel) return;
-    function openEl(slug) {
+    var dialog = modal ? modal.querySelector('.emodal__dialog') : null;
+    if (!details || !modal || !panel || !dialog) return;
+    var lastTrigger = null;
+    var FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function openEl(slug, trigger) {
         var src = details.querySelector('[data-slug="' + slug + '"]');
         if (!src) return;
         panel.innerHTML = src.innerHTML;
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
+        lastTrigger = trigger || null;
+        (dialog.querySelector('.emodal__close') || dialog).focus();   // move focus into the dialog
     }
-    function closeEl() { modal.hidden = true; panel.innerHTML = ''; document.body.style.overflow = ''; }
+    function closeEl() {
+        modal.hidden = true;
+        panel.innerHTML = '';
+        document.body.style.overflow = '';
+        if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus();   // restore focus to the tile
+        lastTrigger = null;
+    }
     document.querySelectorAll('.ptile').forEach(function (t) {
-        t.addEventListener('click', function () { openEl(t.dataset.slug); });
-        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug); } });
+        t.addEventListener('click', function () { openEl(t.dataset.slug, t); });
+        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug, t); } });
     });
     modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeEl(); });
+    document.addEventListener('keydown', function (e) {
+        if (modal.hidden) return;
+        if (e.key === 'Escape') { closeEl(); return; }
+        if (e.key === 'Tab') {   // trap Tab within the dialog
+            var f = Array.prototype.slice.call(dialog.querySelectorAll(FOCUSABLE))
+                .filter(function (el) { return el.offsetParent !== null; });
+            if (!f.length) { e.preventDefault(); dialog.focus(); return; }
+            var first = f[0], last = f[f.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    });
 })();
 
 // Contracts tab (merged board): status filter + Accept (the acceptance gate that banks XP).

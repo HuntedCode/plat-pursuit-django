@@ -20,7 +20,6 @@ def _contract_elements_for_concepts(concept_ids):
     if not concept_ids:
         return {}
     from trophies.models import ContractMembership
-    from trophies.services.element_render import SYMBOLS
     out = {}
     memberships = (
         ContractMembership.objects.filter(concept_id__in=concept_ids)
@@ -28,7 +27,7 @@ def _contract_elements_for_concepts(concept_ids):
     )
     for m in memberships:
         out[m.concept_id] = [
-            {'symbol': SYMBOLS.get(j.slug, (j.name or '')[:2]), 'disc_slug': j.discipline, 'name': j.name}
+            {'icon': j.icon, 'disc_slug': j.discipline, 'name': j.name}
             for j in m.contract.jobs.all()
         ]
     return out

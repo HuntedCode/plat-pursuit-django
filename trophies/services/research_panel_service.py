@@ -192,22 +192,6 @@ def _family_styles(elements):
     return f"linear-gradient(180deg, {stops})", color
 
 
-def _vial_bands(elements, top=22.0, bottom=104.0):
-    """The reagent vial's liquid bands: one equal-height band per element, colored by its
-    family -- a direct picture of the Project's even XP split (every element gets T/N).
-    Returns [{slug, y, h}] in element order (first element = top band), with the draw
-    height overlapped a hair so adjacent bands leave no seam. Geometry matches _vial.html's
-    viewBox/clip."""
-    n = len(elements)
-    if n == 0:
-        return []
-    seg = (bottom - top) / n
-    return [
-        {'slug': el['disc_slug'], 'y': round(top + i * seg, 2), 'h': round(seg + 0.8, 2)}
-        for i, el in enumerate(elements)
-    ]
-
-
 def build_research_panel_context(profile):
     """Assemble the Research Panel context. Read-only + whale-safe (see module docstring)."""
     context = {}

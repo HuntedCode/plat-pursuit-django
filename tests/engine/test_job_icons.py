@@ -2,6 +2,7 @@
 import pytest
 
 from trophies.models import Job
+from trophies.services.element_render import DISCIPLINE_ICON
 from trophies.templatetags.job_icons import _ICONS, job_icon
 
 pytestmark = pytest.mark.django_db
@@ -13,6 +14,12 @@ def test_every_job_has_a_registered_icon():
     for job in jobs:
         assert job.icon, f"{job.slug} has no icon assigned"
         assert job.icon in _ICONS, f"{job.slug}'s icon '{job.icon}' is not in the registry"
+
+
+def test_every_discipline_icon_is_registered():
+    # The dossier / character-sheet section headers resolve through the same registry.
+    for slug, icon in DISCIPLINE_ICON.items():
+        assert icon in _ICONS, f"discipline {slug}'s icon '{icon}' is not in the registry"
 
 
 def test_job_icon_tag_renders_and_degrades():
