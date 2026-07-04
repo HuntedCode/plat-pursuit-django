@@ -43,7 +43,8 @@ def test_lists_live_project_with_games_elements_and_split():
     assert len(p['elements']) == 2
     assert p['xp_total'] == CONTRACT_XP_TOTAL
     assert p['xp_each'] == CONTRACT_XP_TOTAL // 2
-    assert len(p['vial_bands']) == 2        # one equal band per element (the even split)
+    assert p['ring_gradient'].startswith('conic-gradient(')   # the element-split ring
+    assert p['ring_gradient'].count('var(--disc-') == 2       # one arc per element (the even split)
     assert p['family_color'].startswith('var(--disc-')
     # gunslinger + mage are different families -> the accent bar is a multi-family gradient.
     assert p['family_gradient'].startswith('linear-gradient')

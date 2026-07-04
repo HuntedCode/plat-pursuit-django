@@ -120,14 +120,15 @@
 .ptable__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 14px; color: var(--disc); letter-spacing: 0.02em; }
 .ptable__avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 
-/* ---- Element tile (periodic cell) ---- */
+/* ---- Job tile (skills-screen cell) ---- */
 .job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; display: flex; flex-direction: column; }
 .job:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 75%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent); }
 .job__top { display: flex; align-items: center; gap: 7px; }
-.job__no { font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; color: color-mix(in oklab, var(--disc) 65%, var(--pp-text-mute)); }
 .job__expand { position: absolute; top: 9px; right: 9px; width: 13px; height: 13px; color: color-mix(in oklab, var(--disc) 55%, var(--pp-text-mute)); opacity: 0.22; transition: opacity 0.15s ease; pointer-events: none; }
 .job:hover .job__expand, .ptile:focus-visible .job__expand { opacity: 0.9; }
-.job__mark { width: 27px; height: 27px; flex: none; }
+/* Job identity mark: the Lucide line glyph in a discipline-tinted chip (inherits --disc as currentColor). */
+.job__mark { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 11px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 42%, transparent); color: var(--disc); }
+.job__mark svg { width: 22px; height: 22px; }
 .job__lvbox { text-align: center; margin: 9px 0 4px; }
 .job__lv-num { display: block; font-size: 44px; line-height: 0.85; letter-spacing: -0.01em; color: var(--disc); }  /* face via shared .pp-tally; resting = calm, glow only on master/legend below */
 .job__lv-cap { font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--pp-text-mute); }
@@ -163,7 +164,8 @@
 
 /* ---- Element detail (level/XP first-class) ---- */
 .edetail__head { display: flex; align-items: center; gap: 14px; }
-.edetail__glyph { width: 50px; height: 50px; flex: none; }
+.edetail__glyph { width: 54px; height: 54px; flex: none; display: grid; place-items: center; border-radius: 13px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); color: var(--disc); }
+.edetail__glyph svg { width: 30px; height: 30px; }
 .edetail__name { font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 20px; }
 .edetail__fam { font-size: 12px; color: var(--pp-text-mute); margin-top: 2px; }
 .edetail__levelrow { display: flex; align-items: center; gap: 18px; margin-top: 22px; }
@@ -207,7 +209,8 @@
     border: 1px solid color-mix(in oklab, var(--disc) 42%, transparent);
     transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
-.rp-el__chip { width: 24px; height: 24px; flex: none; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--disc) 55%, transparent)); }
+.rp-el__chip { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 7px; background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2)); color: var(--disc); }
+.rp-el__chip svg { width: 15px; height: 15px; }
 .rp-el__name { font-size: 13px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
 .rp-el__xp { font-size: 12px; color: var(--disc); }  /* face (weight + tabular) via shared .pp-tally; resting = calm */
 /* Row hover lights up its elements -- the "this game feeds these stats" beat. */
@@ -243,6 +246,22 @@
    full family gradient. Status (claimable/accepted) is signalled by an inset ring so it
    coexists with the family frame instead of fighting it. */
 .rp-row__accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; pointer-events: none; z-index: 1; box-shadow: 0 0 12px color-mix(in oklab, var(--rp-fam) 40%, transparent); }
+/* Cover banner fronting the tile: the newest member game's art (bg hero if it has one, else box
+   art), with a bottom fade into the card body and the status badge pinned top-left. */
+.rp-tile__art { position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--pp-bg-3, var(--pp-bg-1)); }
+.rp-tile__art img { width: 100%; height: 100%; }
+.rp-tile__art-fade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklab, var(--pp-bg-2) 92%, transparent), transparent 55%); pointer-events: none; }
+.rp-tile__badge { position: absolute; top: 8px; left: 8px; z-index: 2; }
+
+/* Element-split ring: a conic-gradient donut (one family-colored arc per element it levels, the
+   even XP split) with the XP total in the center -- the Project-scale echo of the hero DNA ring. */
+.rp-ring-wrap { position: relative; width: 58px; height: 58px; flex: none; }
+@media (min-width: 768px) { .rp-ring-wrap { width: 66px; height: 66px; } }
+.rp-ring { position: absolute; inset: 0; border-radius: 999px; background-image: var(--ring-grad); filter: drop-shadow(0 0 2px color-mix(in oklab, var(--rp-fam) 45%, transparent)); -webkit-mask: radial-gradient(farthest-side, transparent 76%, #000 78%); mask: radial-gradient(farthest-side, transparent 76%, #000 78%); }
+.rp-ring__xp { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.05; pointer-events: none; }
+.rp-ring__xp .pp-tally { font-size: 12px; color: var(--pp-text); }
+@media (min-width: 768px) { .rp-ring__xp .pp-tally { font-size: 14px; } }
+.rp-ring__xp-cap { display: block; font-size: 7px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 1px; }
 .rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 42%, var(--pp-border)); }
 .rp-row::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; }
 .rp-row--claimable::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
@@ -254,7 +273,7 @@
 .rp-row--accepted .rp-badge { background-color: var(--pp-success); color: var(--pp-bg-0); border-color: var(--pp-success); }
 .rp-cta__done { display: none; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 700; color: var(--pp-success); }
 .rp-cta__prog { width: 84px; display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
-.rp-cta__pct { font-size: 0.75rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); text-align: right; }
+.rp-cta__pct { font-size: 0.7rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); text-align: center; }
 .rp-accept:active { transform: scale(0.96); }
 .rp-row--accepted .rp-accept { display: none; }
 .rp-row--accepted .rp-cta__done { display: inline-flex; }
@@ -273,6 +292,7 @@
 .rp-games__summary:hover { color: var(--pp-text); }
 .rp-games__chev { width: 15px; height: 15px; flex: none; transition: transform 0.2s ease; }
 .rp-games[open] .rp-games__chev { transform: rotate(180deg); }
+.rp-games__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 @media (prefers-reduced-motion: reduce) { .rp-games__chev { transition: none; } }
 
 /* Claimable count on the Projects tab (draws the eye to what's ready to accept). */

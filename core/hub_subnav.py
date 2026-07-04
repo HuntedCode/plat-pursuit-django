@@ -145,15 +145,14 @@ MY_PURSUIT_HUB = HubSubnavConfig(
     label='My Pursuit',
     icon='trophy',
     prefixes=(
-        '/collection/', '/lab/', '/research-panel/', '/milestones/', '/titles/',
+        '/collection/', '/career/', '/milestones/', '/titles/',
         '/profile-editor/', '/stats/', '/shareables/', '/recap/',
     ),
     items=(
-        # Core: the gamification progression surfaces.
+        # Core: the gamification progression surfaces. Career merges the old Lab + Research Panel.
         HubSubnavItem('overview', 'Overview', 'home', 'home'),
         HubSubnavItem('collection', 'Collection', 'badge_collection', 'award', auth_required=True),
-        HubSubnavItem('lab', 'The Lab', 'lab', 'flask', auth_required=True),
-        HubSubnavItem('research-panel', 'Research Panel', 'research_panel', 'beaker'),
+        HubSubnavItem('career', 'Career', 'career', 'briefcase', auth_required=True),
         HubSubnavItem('milestones', 'Milestones', 'milestones_list', 'flag'),
         HubSubnavItem('titles', 'Titles', 'my_titles', 'crown', auth_required=True),
         # Tools/outputs (divider before). Profile is appended after these as a dynamic extra.

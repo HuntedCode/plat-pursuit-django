@@ -95,12 +95,12 @@ def test_launchers_resolve_and_carry_in_hand_stats():
 
     by_label = {l['label']: l for l in launchers}
     # All five functional-page launchers resolve (validates the url names).
-    assert set(by_label) == {'The Lab', 'Collection', 'Research Panel', 'Milestones', 'Titles'}
+    assert set(by_label) == {'Career', 'Collection', 'Contracts', 'Milestones', 'Titles'}
     assert all(l['url'] and l['icon'] and l['desc'] for l in launchers)
-    # Quick-stats reuse data already in hand -- the Lab shows your strongest element (name + level)...
-    assert 'Lv' in by_label['The Lab']['stat']
-    # ...and with nothing claimable, the Research Panel carries no stat.
-    assert by_label['Research Panel']['stat'] is None
+    # Quick-stats reuse data already in hand -- Career shows your strongest job (name + level)...
+    assert 'Lv' in by_label['Career']['stat']
+    # ...and with nothing claimable, Contracts carries no stat.
+    assert by_label['Contracts']['stat'] is None
 
 
 def test_unique_series_keeps_closest_per_series():
@@ -142,9 +142,9 @@ def test_broken_hero_zone_degrades_without_500(monkeypatch):
     assert ctx['launchers'][0]['stat'] != 'Level None'  # missing level -> no bogus stat
 
 
-def test_lab_launcher_stat_shows_strongest_element():
-    """The Lab navigator tile surfaces your strongest element (the Lab build is flattened and
-    sorted by level desc), so a boosted element leads the tile's live stat."""
+def test_career_launcher_stat_shows_strongest_job():
+    """The Career navigator tile surfaces your strongest job (the build is flattened and
+    sorted by level desc), so a boosted job leads the tile's live stat."""
     from trophies.models import Job, ProfileJobXP
     from trophies.util_modules.leveling import xp_for_level
     profile = ProfileFactory()
@@ -152,9 +152,9 @@ def test_lab_launcher_stat_shows_strongest_element():
         profile=profile, job=Job.objects.get(slug='mage'), total_xp=xp_for_level(20), level=20)
 
     launchers = home_service.build_home_context(profile)['launchers']
-    lab = next(l for l in launchers if l['label'] == 'The Lab')
+    career = next(l for l in launchers if l['label'] == 'Career')
 
-    assert lab['stat'] == 'Mage · Lv 20'
+    assert career['stat'] == 'Mage · Lv 20'
 
 
 def test_milestones_launcher_shows_earned_over_active_total():

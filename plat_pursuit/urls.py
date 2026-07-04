@@ -37,7 +37,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView, LegacyChecklistListView, LegacyChecklistDetailView, LabView, CollectionView
+from trophies.views import GamesListView, GameDetailView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, CollectionView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -130,17 +130,17 @@ urlpatterns = [
     # Home (/) is the hub Overview; the sub-nav strip does wayfinding to these. Old /my-pursuit/*
     # paths 301 to them (below), and the bare /my-pursuit/ now points at Home.
     path('collection/', CollectionView.as_view(), name='badge_collection'),
-    path('lab/', LabView.as_view(), name='lab'),
-    # Merged into the Lab: /research-panel/ 301s to the Lab's Projects tab (one surface, one URL).
-    path('research-panel/', RedirectView.as_view(url='/lab/?view=projects', permanent=True), name='research_panel'),
+    path('career/', CareerView.as_view(), name='career'),
+    # Merged into Career: /research-panel/ 301s to Career's Contracts tab (one surface, one URL).
+    path('research-panel/', RedirectView.as_view(url='/career/?view=contracts', permanent=True), name='research_panel'),
     path('milestones/', MilestoneListView.as_view(), name='milestones_list'),
     path('titles/', MyTitlesView.as_view(), name='my_titles'),
     path('profile-editor/', ProfileEditorView.as_view(), name='profile_editor'),
     # Old /my-pursuit/* → new root canonicals (301). Bare hub path + logbook alias kept by name.
     path('my-pursuit/', RedirectView.as_view(pattern_name='home', permanent=True), name='my_pursuit_hub'),
     path('my-pursuit/collection/', RedirectView.as_view(pattern_name='badge_collection', permanent=True, query_string=True)),
-    path('my-pursuit/lab/', RedirectView.as_view(pattern_name='lab', permanent=True, query_string=True)),
-    path('my-pursuit/logbook/', RedirectView.as_view(pattern_name='lab', permanent=True), name='logbook'),
+    path('my-pursuit/lab/', RedirectView.as_view(pattern_name='career', permanent=True, query_string=True)),
+    path('my-pursuit/logbook/', RedirectView.as_view(pattern_name='career', permanent=True), name='logbook'),
     path('my-pursuit/research-panel/', RedirectView.as_view(pattern_name='research_panel', permanent=True, query_string=True)),
     path('my-pursuit/milestones/', RedirectView.as_view(pattern_name='milestones_list', permanent=True, query_string=True)),
     path('my-pursuit/titles/', RedirectView.as_view(pattern_name='my_titles', permanent=True, query_string=True)),

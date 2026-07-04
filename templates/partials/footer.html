@@ -38,8 +38,8 @@
                     {% if user.is_authenticated and user.profile %}
                     <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Overview</a></li>
                     <li><a href="{% url 'badge_collection' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Collection</a></li>
-                    <li><a href="{% url 'lab' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">The Lab</a></li>
-                    <li><a href="{% url 'research_panel' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Research Panel</a></li>
+                    <li><a href="{% url 'career' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Career</a></li>
+                    <li><a href="{% url 'career' %}?view=contracts" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contracts</a></li>
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
                     <li><a href="{% url 'my_titles' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Titles</a></li>
@@ -52,7 +52,7 @@
                     {# Anon/no-profile: only the public catalog members of the hub. #}
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
-                    <li><a href="{% url 'research_panel' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Research Panel</a></li>
+                    <li><a href="{% url 'career' %}?view=contracts" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Contracts</a></li>
                     {% if not user.is_authenticated %}
                     <li class="pt-1.5 mt-1.5 border-t border-neutral-content/10"><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign In</a></li>
                     <li><a href="{% url 'account_signup' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign Up</a></li>

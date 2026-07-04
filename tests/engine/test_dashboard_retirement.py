@@ -36,7 +36,7 @@ def test_community_not_shadowed_and_fundraiser_in_support():
 
 def test_my_pursuit_carries_the_expected_items():
     slugs = {i.slug for i in MY_PURSUIT_HUB.items}
-    assert {'overview', 'collection', 'lab', 'research-panel', 'milestones', 'titles',
+    assert {'overview', 'collection', 'career', 'milestones', 'titles',
             'stats', 'shareables', 'recap'} <= slugs
-    m = resolve_hub_subnav(_Req('/lab/', 'lab'))
-    assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'lab'
+    m = resolve_hub_subnav(_Req('/career/', 'career'))
+    assert m['hub'].key == 'my_pursuit' and m['active_slug'] == 'career'

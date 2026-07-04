@@ -86,11 +86,11 @@ def _build_glances(profile):
 # (url_name, label, icon, description) for the launcher cards -- the page's real job: getting
 # the Pursuer to where the functionality lives. Icons mirror the My Pursuit sub-nav.
 _LAUNCHERS = [
-    ('lab',             'The Lab',        'flask',  'Your elements and Platinum DNA'),
-    ('badge_collection', 'Collection',    'award',  'Your badge binder'),
-    ('research_panel',  'Research Panel', 'beaker', 'Projects to pursue and rewards to claim'),
-    ('milestones_list', 'Milestones',     'flag',   'Career milestones'),
-    ('my_titles',       'Titles',         'crown',  'Earned and equipped titles'),
+    ('career',          'Career',      'briefcase', 'Your jobs and disciplines'),
+    ('badge_collection', 'Collection', 'award',     'Your badge binder'),
+    ('research_panel',  'Contracts',   'clipboard', 'Games to pursue and rewards to claim'),
+    ('milestones_list', 'Milestones',  'flag',      'Career milestones'),
+    ('my_titles',       'Titles',      'crown',     'Earned and equipped titles'),
 ]
 
 
@@ -141,18 +141,18 @@ def _build_sync(profile):
 
 def _build_launchers(profile, hero, glances, elements):
     """Navigator tiles into the functional pages, each carrying a live glance-stat drawn from the
-    already-built glances (no extra queries here): the Lab shows your strongest element, the Research
-    Panel the XP waiting to claim, Collection your closest badge, Milestones how many you've earned,
-    Titles the equipped title. A route that doesn't resolve is dropped."""
+    already-built glances (no extra queries here): Career shows your strongest job, Contracts the XP
+    waiting to claim, Collection your closest badge, Milestones how many you've earned, Titles the
+    equipped title. A route that doesn't resolve is dropped."""
     level = (hero or {}).get('pursuer_level')
     top_el = (elements or [None])[0]
     claim = (glances or {}).get('claimable') or {}
     almost = ((glances or {}).get('almost_badges') or [None])[0]
     ms = (glances or {}).get('milestones') or {}
     stats = {
-        'lab': (f"{top_el['name']} · Lv {top_el['level']}"
-                if top_el and top_el.get('name') and top_el.get('level')
-                else (f"Level {level}" if level else None)),
+        'career': (f"{top_el['name']} · Lv {top_el['level']}"
+                   if top_el and top_el.get('name') and top_el.get('level')
+                   else (f"Level {level}" if level else None)),
         'research_panel': f"{claim.get('total_xp'):,} XP to claim" if claim.get('total_xp') else None,
         'badge_collection': (f"{almost['completed']}/{almost['required']} · {almost['tier_name']}"
                              if almost else None),
@@ -165,9 +165,9 @@ def _build_launchers(profile, hero, glances, elements):
             url = reverse(url_name)
         except NoReverseMatch:
             continue
-        # Research merged into the Lab: land its tile on the Lab's Projects tab (skip the redirect).
+        # Contracts merged into Career: land its tile on Career's Contracts tab (skip the redirect).
         if url_name == 'research_panel':
-            url = reverse('lab') + '?view=projects'
+            url = reverse('career') + '?view=contracts'
         launchers.append({
             'url': url, 'label': label, 'icon': icon,
             'desc': desc, 'stat': stats.get(url_name),

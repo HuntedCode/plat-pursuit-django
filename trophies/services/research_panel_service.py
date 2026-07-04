@@ -50,6 +50,27 @@ def _project_status(ec, max_progress, any_plat):
     return 'available', 0
 
 
+def _ring_gradient(elements):
+    """A CSS conic-gradient for the Project's element ring: one equal, family-colored arc per
+    element it levels (the even XP split), separated by small gaps so each reads distinctly.
+    Mirrors the Lab hero's DNA ring, at the Project scale."""
+    n = len(elements)
+    if not n:
+        return ''
+    if n == 1:
+        return f"conic-gradient(var(--disc-{elements[0]['disc_slug']}) 0 360deg)"
+    step = 360.0 / n
+    half_gap = 3.0
+    stops = []
+    for i, el in enumerate(elements):
+        seg_start, seg_end = i * step + half_gap, (i + 1) * step - half_gap
+        color = f"var(--disc-{el['disc_slug']})"
+        stops.append(f"transparent {i * step:.2f}deg {seg_start:.2f}deg")
+        stops.append(f"{color} {seg_start:.2f}deg {seg_end:.2f}deg")
+        stops.append(f"transparent {seg_end:.2f}deg {(i + 1) * step:.2f}deg")
+    return "conic-gradient(" + ", ".join(stops) + ")"
+
+
 def _build_projects(profile):
     # Each member Concept's GAMES are the focal point (the badge-stage model: show exactly
     # what's available). Prefetch concept.games; cover-art OOM rule -> select_related the
@@ -102,6 +123,11 @@ def _build_projects(profile):
         if not jobs:
             continue  # a Project with no elements awards nothing -- hide it
         contract_games = games_by_contract[contract.id]
+        # Front the card with the most recent member game's art (newest release first; undated
+        # concepts trail). This also orders the Tier-2 games grid newest-first.
+        _dated = [g for g in contract_games if g.concept.release_date]
+        contract_games = (sorted(_dated, key=lambda g: g.concept.release_date, reverse=True)
+                          + [g for g in contract_games if not g.concept.release_date])
         elements = [element_render.job_atom(j) for j in jobs]
         n = len(jobs)
         t = contract.xp_total_override or CONTRACT_XP_TOTAL
@@ -131,10 +157,11 @@ def _build_projects(profile):
         projects.append({
             'name': (first_concept.unified_title if first_concept else '') or contract.name,
             'slug': contract.slug,
+            'cover_game': contract_games[0] if contract_games else None,  # newest game -> card art
             'games': game_entries,         # the focal point: every game that satisfies it
             'game_count': len(game_entries),
             'elements': elements,          # what you level
-            'vial_bands': _vial_bands(elements),  # the reagent vial: equal family bands = the even split
+            'ring_gradient': _ring_gradient(elements),  # the element-split ring (even split, family-colored)
             'family_gradient': family_gradient,  # CSS for the family accent bar (gradient if multi-family)
             'family_color': family_color,        # dominant family color var, for the hover/glow
             'xp_total': t,

@@ -27,8 +27,7 @@ def _req(path, user=None):
 @pytest.mark.parametrize('path,slug', [
     ('/', 'overview'),
     ('/collection/', 'collection'),
-    ('/lab/', 'lab'),
-    ('/research-panel/', 'research-panel'),
+    ('/career/', 'career'),
     ('/milestones/', 'milestones'),
     ('/titles/', 'titles'),
     ('/stats/', 'stats'),
@@ -140,7 +139,7 @@ def test_my_pursuit_nav_shown_for_authed(client):
 
 @pytest.mark.parametrize('old,new', [
     ('/my-pursuit/collection/', '/collection/'),
-    ('/my-pursuit/lab/', '/lab/'),
+    ('/my-pursuit/lab/', '/career/'),
     ('/my-pursuit/research-panel/', '/research-panel/'),
     ('/my-pursuit/milestones/', '/milestones/'),
     ('/my-pursuit/titles/', '/titles/'),

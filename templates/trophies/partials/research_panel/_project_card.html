@@ -1,62 +1,68 @@
 {% comment %}
-Project card (two-tier): a compact, scannable header row (identity + the elements it levels +
-reward + CTA), with the member-games grid tucked into a collapsed <details> disclosure -- so the
-Projects list reads as a tidy column and depth is one click away. Expects `p` (a project dict from
-research_panel_service), `profile` (viewer, for the game-card links), and `cid` (page-unique id for
-the vial clip).
+Contract card (vertical tile, laid out in a grid): the newest member game's art banners the top;
+below sit the identity, the jobs it levels (wrapping chips), a job-split ring with the
+split count in its center + the status action, and the member-games grid in a collapsed <details>.
+Expects `p` (a project dict from research_panel_service) and `profile` (viewer, for game-card links).
 {% endcomment %}
-{% load humanize %}
-<div class="rp-row card relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
+{% load humanize job_icons %}
+<div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
     <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
-    <div class="card-body p-3 md:p-4">
 
-        {# ── Tier 1: compact header -- identity + the elements it levels + reward + CTA ── #}
-        <div class="flex items-start gap-3 md:gap-4">
+    {# Cover banner: the newest member game's art, with the status badge #}
+    <div class="rp-tile__art">
+        {% if p.cover_game %}
+            {% if p.cover_game.concept.bg_url %}<img src="{{ p.cover_game.concept.bg_url }}" alt="" loading="lazy" class="object-cover">
+            {% elif p.cover_game.has_cover_art %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="object-cover object-top">
+            {% else %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="object-contain p-3">{% endif %}
+        {% endif %}
+        <span class="rp-tile__art-fade" aria-hidden="true"></span>
+        {% if p.status == 'claimable' %}<span class="rp-badge badge badge-sm badge-primary font-bold rp-tile__badge">Claimable</span>
+        {% elif p.status == 'accepted' %}<span class="rp-badge badge badge-sm badge-success font-bold rp-tile__badge">Accepted</span>
+        {% elif p.status == 'pursuing' %}<span class="rp-badge badge badge-sm badge-ghost text-primary rp-tile__badge">Pursuing</span>
+        {% else %}<span class="rp-badge badge badge-sm badge-ghost rp-tile__badge">Available</span>{% endif %}
+    </div>
 
-            {# Reagent vial: equal family bands = this Project's even XP split #}
-            <div class="rp-vial rp-vial--{{ p.status }} hidden sm:block">{% include 'partials/elements/_vial.html' with vial_bands=p.vial_bands cid=cid %}</div>
+    {# Content #}
+    <div class="flex-1 flex flex-col gap-2 p-3">
+        <span class="font-bold text-sm md:text-base leading-tight line-clamp-2 pr-1" title="{{ p.name }}">{{ p.name }}</span>
 
-            <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="font-bold text-base md:text-lg line-clamp-1 pr-1">{{ p.name }}</span>
-                    {% if p.status == 'claimable' %}<span class="rp-badge badge badge-xs badge-primary font-bold shrink-0">Claimable</span>
-                    {% elif p.status == 'accepted' %}<span class="rp-badge badge badge-xs badge-success font-bold shrink-0">Accepted</span>
-                    {% elif p.status == 'pursuing' %}<span class="rp-badge badge badge-xs badge-ghost text-primary shrink-0">Pursuing</span>
-                    {% else %}<span class="rp-badge badge badge-xs badge-ghost shrink-0">Available</span>{% endif %}
-                </div>
-                <div class="rp-reward mt-1.5">
-                    {% for el in p.elements %}
-                    <span class="rp-el" style="--disc: var(--disc-{{ el.disc_slug }});">
-                        <span class="rp-el__chip">{% include 'partials/elements/_atom.html' with shape=el.shape symbol=el.symbol %}</span>
-                        <span class="rp-el__name">{{ el.name }}</span>
-                        <span class="rp-el__xp pp-tally">+{{ p.xp_each|intcomma }}</span>
-                    </span>
-                    {% endfor %}
-                </div>
-            </div>
-
-            {# Reward total + CTA #}
-            <div class="shrink-0 flex flex-col items-end gap-1.5 text-right">
-                <div class="leading-none"><span class="pp-tally text-lg md:text-xl">{{ p.xp_total|intcomma }}</span> <span class="text-xs text-base-content/50">XP</span></div>
-                <span class="rp-cta">
-                    {% if p.status == 'claimable' or p.status == 'accepted' %}
-                        {# both rendered; .rp-row--accepted reveals the right one via CSS #}
-                        <button type="button" class="btn btn-xs md:btn-sm btn-primary rp-accept" data-slug="{{ p.slug }}">Accept</button>
-                        <span class="rp-cta__done">Accepted &check;</span>
-                    {% elif p.status == 'pursuing' %}
-                        <span class="rp-cta__prog">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}<span class="rp-cta__pct">{{ p.progress }}%</span></span>
-                    {% endif %}
-                </span>
-            </div>
+        <div class="rp-reward">
+            {% for el in p.elements %}
+            <span class="rp-el" style="--disc: var(--disc-{{ el.disc_slug }});">
+                <span class="rp-el__chip">{% job_icon el.icon '' %}</span>
+                <span class="rp-el__name">{{ el.name }}</span>
+                <span class="rp-el__xp pp-tally">+{{ p.xp_each|intcomma }}</span>
+            </span>
+            {% endfor %}
         </div>
 
-        {# ── Tier 2: member games, collapsed by default (scan the list; expand for depth) ── #}
-        <details class="rp-games mt-2.5">
+        {# Footer: job-split ring (the split count in its center) + the status action #}
+        <div class="mt-auto pt-1 flex items-center justify-between gap-2">
+            <div class="rp-ring-wrap" title="{{ p.xp_total|intcomma }} XP, split evenly across {{ p.elements|length }} job{{ p.elements|length|pluralize }}">
+                <div class="rp-ring" style="--ring-grad: {{ p.ring_gradient }};" aria-hidden="true"></div>
+                <div class="rp-ring__xp">
+                    <span class="pp-tally">{{ p.elements|length }}</span>
+                    <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>
+                </div>
+            </div>
+            <span class="rp-cta">
+                {% if p.status == 'claimable' or p.status == 'accepted' %}
+                    {# both rendered; .rp-row--accepted reveals the right one via CSS #}
+                    <button type="button" class="btn btn-xs md:btn-sm btn-primary rp-accept" data-slug="{{ p.slug }}">Accept</button>
+                    <span class="rp-cta__done">Accepted &check;</span>
+                {% elif p.status == 'pursuing' %}
+                    <span class="rp-cta__prog">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}<span class="rp-cta__pct">{{ p.progress }}% complete</span></span>
+                {% endif %}
+            </span>
+        </div>
+
+        {# Tier 2: member games, collapsed by default #}
+        <details class="rp-games mt-1">
             <summary class="rp-games__summary">
                 <svg class="rp-games__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                <span>Complete any of <span class="font-semibold text-base-content/70">{{ p.game_count }}</span> game{{ p.game_count|pluralize }} to finish this Project</span>
+                <span><span class="font-semibold text-base-content/70">{{ p.game_count }}</span> game{{ p.game_count|pluralize }} &middot; complete any one</span>
             </summary>
-            <div class="bd-stage__grid mt-2 !px-0 !py-0">
+            <div class="rp-games__grid mt-2">
                 {% for g in p.games %}
                     {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
                         {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
@@ -64,6 +70,5 @@ the vial clip).
                 {% endfor %}
             </div>
         </details>
-
     </div>
 </div>

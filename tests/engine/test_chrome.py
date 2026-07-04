@@ -33,14 +33,14 @@ def test_footer_pursuit_column_merged_for_authed(client):
     resp = client.get('/support/')
     # Personal-hub pages that used to live in the Dashboard column now sit under My Pursuit.
     assert b'>Overview</a>' in resp.content
-    assert b'>The Lab</a>' in resp.content
+    assert b'>Career</a>' in resp.content
     assert b'>My Shareables</a>' in resp.content
 
 
 def test_footer_hides_personal_cockpit_from_anon(client):
     # Anon sees only the public catalog members of the hub, never the login-gated cockpit links.
     resp = client.get('/support/')
-    assert b'>The Lab</a>' not in resp.content
+    assert b'>Career</a>' not in resp.content
     assert b'>My Shareables</a>' not in resp.content
 
 

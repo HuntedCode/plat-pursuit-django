@@ -1,14 +1,15 @@
 {% comment %}
-Element detail (opens from a tile in The Lab). Level + XP are the focal point.
-Expects `card`: a tile dict (number, name, disc_slug, shape, symbol, level, progress,
-xp_current, xp_next, xp_total, tier, tier_key, description).
+Job detail (opens from a tile in Career). Level + XP are the focal point.
+Expects `card`: a tile dict (name, disc_slug, icon, level, progress, xp_current, xp_next,
+xp_total, tier, tier_key, description).
 {% endcomment %}
+{% load job_icons %}
 <div class="edetail" style="--disc: var(--disc-{{ card.disc_slug }});">
     <div class="edetail__head">
-        <span class="edetail__glyph">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
+        <span class="edetail__glyph">{% job_icon card.icon '' %}</span>
         <div>
             <div class="edetail__name">{{ card.name }}</div>
-            <div class="edetail__fam">{{ card.disc_slug|capfirst }} family &middot; No. {{ card.number }}</div>
+            <div class="edetail__fam">{{ card.disc_slug|capfirst }} discipline</div>
         </div>
     </div>
     <div class="edetail__levelrow">

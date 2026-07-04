@@ -121,6 +121,7 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
         'name': job.name,
         'slug': job.slug,
         'disc_slug': job.discipline,
+        'icon': job.icon,
         'shape': SHAPES[slot_index % len(SHAPES)],
         'symbol': SYMBOLS.get(job.slug, job.name[:2]),
         'level': level,
@@ -202,6 +203,7 @@ def job_atom(job):
     shape, family color. (Distinct from the leveled `element_dict` tile.)"""
     return {
         'slug': job.slug,
+        'icon': job.icon,
         'symbol': SYMBOLS.get(job.slug) or job.icon or job.name[:2],
         'shape': SHAPES[job.display_order % len(SHAPES)],
         'disc_slug': job.discipline,

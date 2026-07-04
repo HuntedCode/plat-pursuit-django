@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% load humanize static %}
-{% block title %}The Lab{% endblock %}
+{% block title %}Career{% endblock %}
 
 {% block content %}
     {% include 'partials/breadcrumb.html' with items=breadcrumb %}
 
     {% if hero %}
-    {# ── Pursuer hero: identity + the DNA composition ring (your Platinum DNA) ── #}
+    {# ── Pursuer hero: identity + the disciplines composition ring ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-6 lg:p-7">
             <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
@@ -30,11 +30,11 @@
                         {% else %}
                             <p class="text-xs md:text-sm text-base-content/40 italic pr-1">No title equipped</p>
                         {% endif %}
-                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} elements leveled</p>
+                        <p class="text-xs text-base-content/40 mt-1 tabular-nums">{{ hero.element_count }} jobs leveled</p>
                     </div>
                 </div>
 
-                {# DNA composition ring (Pursuer Level framed by family shares) + legend #}
+                {# Disciplines ring (Career Level framed by discipline shares) + legend #}
                 {% if hero.ring %}
                 <div class="flex items-center gap-3 md:gap-4 shrink-0">
                     <div class="lab-dna">
@@ -69,21 +69,21 @@
     {% else %}
         <section class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral mb-3">
             <div class="card-body p-6 text-center text-base-content/60">
-                Your Lab is still being prepared. Check back after your next sync.
+                Your Career is still being prepared. Check back after your next sync.
             </div>
         </section>
     {% endif %}
 
-    {# ── Pending rewards rail: the claim CTA co-located with the elements it levels ── #}
+    {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
     {% if claimable.count %}
-    <a href="?view=projects" data-lab-goto="projects" class="card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral hover:border-primary hover:shadow-primary/20 transition-all group mb-3">
+    <a href="?view=contracts" data-lab-goto="contracts" class="card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral hover:border-primary hover:shadow-primary/20 transition-all group mb-3">
         <div class="card-body p-3 md:p-4 flex-row items-center gap-3 md:gap-4">
             <span class="shrink-0 text-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 md:w-9 md:h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
             </span>
             <div class="min-w-0 flex-1">
-                <div class="font-bold text-sm md:text-base"><span class="text-primary">{{ claimable.count }}</span> Project{{ claimable.count|pluralize }} ready to claim</div>
-                <div class="text-xs md:text-sm text-base-content/60"><span class="pp-tally text-primary font-semibold">+{{ claimable.total_xp|intcomma }}</span> XP waiting to level your elements</div>
+                <div class="font-bold text-sm md:text-base"><span class="text-primary">{{ claimable.count }}</span> Contract{{ claimable.count|pluralize }} ready to claim</div>
+                <div class="text-xs md:text-sm text-base-content/60"><span class="pp-tally text-primary font-semibold">+{{ claimable.total_xp|intcomma }}</span> XP waiting to level your jobs</div>
             </div>
             <span class="shrink-0 text-xs md:text-sm text-primary font-semibold inline-flex items-center gap-1">Review &amp; accept <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
         </div>
@@ -91,52 +91,52 @@
     {% endif %}
 
     {% if lab %}
-    {# ── The Lab: one card, element views (Elements / Radar) + the Projects browse via tabs ── #}
+    {# ── Career: one card, your jobs (Jobs / Radar) + the Contracts board via tabs ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
         <div class="card-body p-4 md:p-5 lg:p-6">
             <div class="flex items-center gap-2 flex-wrap">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.58 16.5h12.85"/>
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>
                 </svg>
-                <h2 class="text-lg md:text-xl lg:text-2xl font-bold">The Lab</h2>
+                <h2 class="text-lg md:text-xl lg:text-2xl font-bold">Career</h2>
             </div>
             <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1 mb-4">
-                Your Platinum DNA: the {{ lab.total }} elements that make up how you play.
+                The {{ lab.total }} jobs that make up how you play, across five disciplines.
             </p>
 
             {# Summary stats (aggregates you can't read off the grid) #}
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 mb-4">
                 <div class="scard">
-                    <div class="scard__label">Pursuer Level</div>
+                    <div class="scard__label">Career Level</div>
                     <div class="scard__value pp-tally text-primary">{{ lab.total_level|intcomma }}</div>
-                    <div class="scard__sub">sum of every element</div>
+                    <div class="scard__sub">sum of every job</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Total XP</div>
                     <div class="scard__value pp-tally" title="{{ lab.total_xp|intcomma }} XP">{{ total_xp_compact }}</div>
-                    <div class="scard__sub">earned across all elements</div>
+                    <div class="scard__sub">earned across all jobs</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Average level</div>
                     <div class="scard__value pp-tally">{{ lab.avg_level }}</div>
-                    <div class="scard__sub">across all {{ lab.total }} elements</div>
+                    <div class="scard__sub">across all {{ lab.total }} jobs</div>
                 </div>
                 <div class="scard">
                     <div class="scard__label">Highest level</div>
                     <div class="scard__value pp-tally">{{ lab.highest_level }}</div>
-                    <div class="scard__sub">your single best element</div>
+                    <div class="scard__sub">your single best job</div>
                 </div>
             </div>
 
-            {# View toggle: Elements / Radar / Projects (the merged Research browse) #}
-            <div class="lab-views" role="tablist" aria-label="Lab view">
-                <button type="button" class="lab-view-tab {% if active_view == 'table' %}is-active{% endif %}" data-view="table" role="tab" aria-selected="{% if active_view == 'table' %}true{% else %}false{% endif %}">Elements</button>
+            {# View toggle: Jobs / Radar / Contracts (the merged Contracts board) #}
+            <div class="lab-views" role="tablist" aria-label="Career view">
+                <button type="button" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">Jobs</button>
                 <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
-                <button type="button" class="lab-view-tab {% if active_view == 'projects' %}is-active{% endif %}" data-view="projects" role="tab" aria-selected="{% if active_view == 'projects' %}true{% else %}false{% endif %}">Projects{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+                <button type="button" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
             </div>
 
-            {# Elements (periodic table) #}
-            <div class="lab-view" data-view="table" {% if active_view != 'table' %}hidden{% endif %}>
+            {# Jobs (skills-screen grid, grouped by discipline) #}
+            <div class="lab-view" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
                 <div class="ptable">
                     {% for d in lab.disciplines %}
                     <div class="ptable__col" style="--disc: var(--disc-{{ d.slug }});">
@@ -152,7 +152,7 @@
 
             {# Radar #}
             <div class="lab-view" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
-                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your Platinum DNA, mapped across the five families.</p>
+                <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your play, mapped across the five disciplines.</p>
                 <div class="radar-card">
                     <div class="radar-tabs">
                         <button type="button" class="radar-tab is-active" data-mode="overview">Overview</button>
@@ -165,11 +165,11 @@
                 </div>
             </div>
 
-            {# Projects: the merged Research browse -- Projects you can pursue + accept to level elements #}
-            <div class="lab-view" data-view="projects" {% if active_view != 'projects' %}hidden{% endif %}>
+            {# Contracts: the merged board -- games you can pursue + accept to level jobs #}
+            <div class="lab-view" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
                 <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
                     <p class="text-xs md:text-sm text-base-content/50 italic pr-1 min-w-0">
-                        Projects on the bench: complete a game to level its elements. Each Project's XP is split evenly among the elements it feeds.
+                        Contracts on the board: complete a game to level its jobs. Each Contract's XP is split evenly among the jobs it feeds.
                     </p>
                     {% if claimable_count %}
                     <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Accept all ({{ claimable_count }})</button>
@@ -182,14 +182,14 @@
                     <button type="button" class="rp-chip" data-filter="claimable">Claimable</button>
                     <button type="button" class="rp-chip" data-filter="accepted">Accepted</button>
                 </div>
-                <div id="rp-list" class="space-y-3">
+                <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-start">
                     {% for p in projects %}
                     {% include 'trophies/partials/research_panel/_project_card.html' with p=p cid=forloop.counter %}
                     {% empty %}
-                    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral">
+                    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral col-span-full">
                         <div class="card-body items-center text-center py-10 text-base-content/50">
-                            <p class="text-base font-semibold">No Projects on the bench yet</p>
-                            <p class="text-sm">Projects are curated games that level your elements. Check back soon.</p>
+                            <p class="text-base font-semibold">No Contracts on the board yet</p>
+                            <p class="text-sm">Contracts are curated games that level your jobs. Check back soon.</p>
                         </div>
                     </div>
                     {% endfor %}
@@ -199,7 +199,7 @@
         </div>
     </section>
 
-    {# Hidden per-element detail panels + the modal shell (populated on tile tap). #}
+    {# Hidden per-job detail panels + the modal shell (populated on tile tap). #}
     <div id="element-details" hidden>
         {% for d in lab.disciplines %}{% for job in d.jobs %}<div data-slug="{{ job.slug }}">{% include 'partials/elements/_element_detail.html' with card=job %}</div>{% endfor %}{% endfor %}
     </div>
@@ -217,7 +217,7 @@
 {% if lab %}
 <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
 <script>
-// The Lab: discipline radar (overview + per-family drill-down) and tile -> detail modal.
+// Career: discipline radar (overview + per-discipline drill-down) and tile -> detail modal.
 (function () {
     var css = getComputedStyle(document.documentElement);
     var chart = null;
@@ -269,7 +269,7 @@
                 ds.backgroundColor = 'rgba(103, 209, 248, 0.12)';
                 ds.pointBackgroundColor = discColors;
                 ds.pointBorderColor = discColors;
-                renderPanel(DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Families');
+                renderPanel(DATA.overview.labels, DATA.overview.values, function (i) { return discColors[i]; }, 'Disciplines');
             } else {
                 var color = css.getPropertyValue('--disc-' + mode).trim();
                 chart.data.labels = DATA[mode].labels;
@@ -278,7 +278,7 @@
                 ds.backgroundColor = color.replace(')', ' / 0.16)');
                 ds.pointBackgroundColor = color;
                 ds.pointBorderColor = color;
-                renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' elements');
+                renderPanel(DATA[mode].labels, DATA[mode].values, function () { return color; }, LABELS[mode] + ' jobs');
             }
             chart.update();
         };
@@ -293,7 +293,7 @@
         });
     }
 
-    // Lab view toggle: Table (default) / Radar.
+    // Career view toggle: Jobs (default) / Radar / Contracts.
     var viewTabs = document.querySelectorAll('.lab-view-tab');
     var views = document.querySelectorAll('.lab-view');
     function showView(name) {
@@ -308,7 +308,7 @@
     }
     viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
 
-    // Rail / deep-link jumps to a specific Lab view without a reload.
+    // Rail / deep-link jumps to a specific Career view without a reload.
     document.querySelectorAll('[data-lab-goto]').forEach(function (el) {
         el.addEventListener('click', function (e) {
             e.preventDefault();
@@ -340,7 +340,7 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeEl(); });
 })();
 
-// Projects tab (merged Research): status filter + Accept (the acceptance gate that banks XP).
+// Contracts tab (merged board): status filter + Accept (the acceptance gate that banks XP).
 (function () {
     var list = document.getElementById('rp-list');
     if (!list) return;
@@ -373,8 +373,6 @@
         card.dataset.status = 'accepted';
         card.classList.remove('rp-row--claimable');
         card.classList.add('rp-row--accepted');
-        var vial = card.querySelector('.rp-vial');
-        if (vial) { vial.classList.remove('rp-vial--claimable'); vial.classList.add('rp-vial--accepted'); }
         var badge = card.querySelector('.rp-badge');
         if (badge) badge.textContent = 'Accepted';
         card.classList.remove('rp-row--just-accepted');
@@ -407,7 +405,7 @@
             applyResult(await API.post('/api/v1/projects/accept/', payload));
         } catch (err) {
             var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
-            if (Toast) Toast.show((data && data.error) || 'Could not accept the Project.', 'error');
+            if (Toast) Toast.show((data && data.error) || 'Could not accept the Contract.', 'error');
             if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
         }
     }

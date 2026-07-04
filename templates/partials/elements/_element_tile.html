@@ -1,13 +1,13 @@
 {% comment %}
-Element tile (periodic cell). Level is the hero number; the atom glyph is the identity
-mark (shape + symbol + family color). Expects `card`: number, name, disc_slug, shape,
-symbol, level, progress (0-100), xp_current, xp_next, tier, tier_key, description.
+Job tile (skills-screen cell). Level is the hero number; the job's Lucide icon is the identity
+mark (line glyph in a discipline-tinted chip). Expects `card`: name, disc_slug, icon, level,
+progress (0-100), xp_current, xp_next, tier, tier_key, description.
 The curve is cap-less, so the prestige tier is the label (no "maxed" state).
 {% endcomment %}
+{% load job_icons %}
 <div class="job job--tier-{{ card.tier_key }}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
     <div class="job__top">
-        <span class="job__mark">{% include 'partials/elements/_atom.html' with shape=card.shape symbol=card.symbol %}</span>
-        <span class="job__no">{{ card.number }}</span>
+        <span class="job__mark">{% job_icon card.icon '' %}</span>
     </div>
     <div class="job__lvbox">
         <span class="job__lv-num pp-tally">{{ card.level }}</span>
