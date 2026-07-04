@@ -162,6 +162,7 @@ def build_profile_jobs(profile):
     total_level = total_xp = atomic = 0
     for slug, label in DISCIPLINE_LABELS.items():
         tiles = []
+        disc_xp = 0
         for i, job in enumerate(by_disc.get(slug, [])):
             atomic += 1
             level, txp = rows.get(job.slug, (0, 0))
@@ -169,6 +170,7 @@ def build_profile_jobs(profile):
             tiles.append(tile)
             total_level += tile['level']  # floored (>= 1), so Pursuer Level counts every job
             total_xp += txp
+            disc_xp += txp
         all_tiles.extend(tiles)
         avg = round(sum(t['level'] for t in tiles) / len(tiles), 1) if tiles else 0
         radar_values.append(avg)
@@ -177,16 +179,13 @@ def build_profile_jobs(profile):
             'icon': DISCIPLINE_ICON.get(slug, ''),
             'jobs': tiles, 'avg': avg,
             'played': sum(1 for t in tiles if t['started']),  # jobs in this discipline you've touched
+            'xp_total': disc_xp,                              # real XP earned across this discipline
             'radar_labels_json': json.dumps([t['name'] for t in tiles]),
             'radar_data_json': json.dumps([t['level'] for t in tiles]),
         })
 
     max_avg = max(radar_values) if radar_values else 0
     radar_max = max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5)
-    # Discipline band fill: avg level against the (user-scaled) radar cap, so bands read as an
-    # absolute sense of progress -- never misleadingly full for a fresh Pursuer.
-    for d in disciplines:
-        d['fill'] = min(100, round(d['avg'] / radar_max * 100)) if radar_max else 0
 
     return {
         'disciplines': disciplines,

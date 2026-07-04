@@ -148,18 +148,17 @@
                     </button>
                 </div>
 
-                {# Dossier: each discipline a banded chapter (icon + avg + fill + played), jobs beneath #}
+                {# Dossier: each discipline a banded chapter (icon + name + active/XP stats + avg), jobs beneath #}
                 <div class="jobs-layout jdoss" data-layout="dossier">
                     {% for d in career.disciplines %}
                     <div class="jdoss__band" style="--disc: var(--disc-{{ d.slug }});">
                         <div class="jdoss__head">
                             <span class="jdoss__ic">{% job_icon d.icon '' %}</span>
-                            <span class="jdoss__name">{{ d.label }}</span>
+                            <div class="jdoss__titles">
+                                <div class="jdoss__name">{{ d.label }}</div>
+                                <div class="jdoss__stats">{{ d.played }}/5 active &middot; <span class="pp-tally">{{ d.xp_total|intcomma }}</span> XP</div>
+                            </div>
                             <span class="jdoss__avg">avg Lv <b class="pp-tally">{{ d.avg }}</b></span>
-                        </div>
-                        <div class="jdoss__progrow">
-                            <span class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc-{{ d.slug }}); --horizon-h: 6px; --horizon-progress: {{ d.fill }}%;"><span class="pp-horizon__fill"></span></span>
-                            <span class="jdoss__played">{{ d.played }}/5 played</span>
                         </div>
                         <div class="jdoss__grid">
                             {% for job in d.jobs %}<div class="ptile" data-slug="{{ job.slug }}" role="button" tabindex="0" aria-label="{{ job.name }} detail">{% include 'partials/jobs/_job_tile.html' with card=job %}</div>{% endfor %}

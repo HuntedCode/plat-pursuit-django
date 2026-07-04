@@ -57,7 +57,7 @@ def test_totals_reflect_profile_job_xp():
     assert ctx['total_xp_compact'] == '12.3K'           # compact label for the stat card
 
 
-def test_discipline_headers_carry_icon_played_and_fill():
+def test_discipline_headers_carry_icon_played_and_xp():
     profile = ProfileFactory()
     # Two combat jobs touched, the rest untouched.
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='gunslinger'), total_xp=12300, level=5)
@@ -69,13 +69,14 @@ def test_discipline_headers_carry_icon_played_and_fill():
     combat = by_slug['combat']
     assert combat['icon'] == 'swords'                       # discipline header glyph
     assert combat['played'] == 2                            # gunslinger + slayer touched
-    assert 0 <= combat['fill'] <= 100
+    assert combat['xp_total'] == 12800                      # 12300 + 500, summed across the discipline
     # The touched combat jobs are flagged started; the rest dormant.
     assert {j['slug'] for j in combat['jobs'] if j['started']} == {'gunslinger', 'slayer'}
 
-    # Untouched discipline: nothing played, every job dormant.
+    # Untouched discipline: nothing played, no XP, every job dormant.
     heart = by_slug['heart']
     assert heart['played'] == 0
+    assert heart['xp_total'] == 0
     assert all(not j['started'] for j in heart['jobs'])
 
 
