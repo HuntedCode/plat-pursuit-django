@@ -40,14 +40,14 @@ def test_recent_renders_one_extra_for_the_slot_in_shift():
     """Recent renders showcase_limit + 1: the extra (oldest shown) is the outgoing cover the
     forge's slot-in shift slides off the end as a new platinum enters. Rarest stays at the limit."""
     profile = ProfileFactory()
-    for rate in (5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0):      # 7 platinums, more than the limit
+    for rate in (4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0):  # 8 platinums, more than the limit
         EarnedTrophyFactory(profile=profile,
                             trophy=TrophyFactory(trophy_type='platinum', trophy_earn_rate=rate))
 
-    card = pursuer_card_service.build_pursuer_card(profile)  # default showcase_limit=5
+    card = pursuer_card_service.build_pursuer_card(profile)  # default showcase_limit=6
 
-    assert len(card['showcase']['recent']) == 6             # 5 shown + 1 outgoing
-    assert len(card['showcase']['rarest']) == 5             # no extra needed
+    assert len(card['showcase']['recent']) == 7             # 6 shown + 1 outgoing
+    assert len(card['showcase']['rarest']) == 6             # no extra needed
 
 
 def test_lab_ctx_passthrough_is_used_verbatim():

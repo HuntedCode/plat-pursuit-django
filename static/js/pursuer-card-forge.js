@@ -115,9 +115,10 @@
         } else {
             news = newPlatCovers(card);                     // genuinely-new covers (also records seen)
         }
-        // Only the top-5 are visible; index 5 is the offscreen outgoing cover, never marked.
+        // Only the top-6 are visible; index 6 is the offscreen outgoing cover, never marked.
+        // The 6 mirrors pursuer_card_service.showcase_limit + pursuer-card.css nth-child(7).
         var arr = Array.prototype.slice.call(covers);
-        news = news.filter(function (c) { var i = arr.indexOf(c); return i > -1 && i < 5; });
+        news = news.filter(function (c) { var i = arr.indexOf(c); return i > -1 && i < 6; });
         var shift = news.length === 1 && covers.length >= 2 && news[0] === covers[0];
         return { strip: strip, covers: covers, news: news, shift: shift };
     }

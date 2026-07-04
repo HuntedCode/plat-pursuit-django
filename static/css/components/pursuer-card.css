@@ -122,15 +122,16 @@
 /* contract elements this platinum levels (family-colored symbol chips on the cover) */
 .pursuer-card__cover-els { position: absolute; left: 3px; bottom: 13px; display: flex; gap: 2px; }
 .pursuer-card__el { font-size: 7px; font-weight: 800; line-height: 1; min-width: 13px; padding: 2px; text-align: center; border-radius: 3px; color: var(--disc); background: color-mix(in oklab, var(--disc) 22%, rgba(0,0,0,0.72)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); }
-/* The strip lays the covers out in a single row, each 1/5 of the shelf. At REST exactly 5 show and
+/* The strip lays the covers out in a single row, each 1/6 of the shelf. At REST exactly 6 show and
    the shelf is UNCLIPPED, so covers' hover lift + glow (and a new cover's marker) are never cut.
-   The 6th (outgoing) cover is hidden until the forge needs it; the forge then reveals it and clips
+   The 7th (outgoing) cover is hidden until the forge needs it; the forge then reveals it and clips
    the shelf so the slot-in shift can slide covers off-card (nothing is hovered mid-forge, so the
-   clip is harmless there). */
-.pursuer-card__strip { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 32px) / 5); gap: 8px; }
-.pursuer-card__strip > .pursuer-card__cover:nth-child(6) { display: none; }
+   clip is harmless there). Cover COUNT (6) is mirrored in pursuer_card_service.showcase_limit and
+   pursuer-card-forge.js's `i < 6` visible-index filter -- keep the three in sync. */
+.pursuer-card__strip { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - 40px) / 6); gap: 8px; }
+.pursuer-card__strip > .pursuer-card__cover:nth-child(7) { display: none; }
 .pursuer-card--forging .pursuer-card__shelf { clip-path: inset(-8px 0 -8px 0); }
-.pursuer-card--forging .pursuer-card__strip > .pursuer-card__cover:nth-child(6) { display: block; }
+.pursuer-card--forging .pursuer-card__strip > .pursuer-card__cover:nth-child(7) { display: block; }
 .pursuer-card__shelf:not([hidden]) { animation: pcShelfIn 0.22s ease; }  /* soft fade on the Rarest/Recent swap */
 @keyframes pcShelfIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .pursuer-card__shelf:not([hidden]) { animation: none; } }

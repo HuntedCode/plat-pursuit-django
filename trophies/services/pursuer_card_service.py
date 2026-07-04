@@ -68,7 +68,7 @@ def _platinums(profile, limit, *, recent):
     return showcase
 
 
-def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
+def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=6):
     """Assemble the Pursuer Card for `profile`.
 
     `lab_ctx` (the full Lab context) may be passed in to avoid a second Lab build when the
@@ -85,8 +85,10 @@ def build_pursuer_card(profile, *, lab_ctx=None, showcase_limit=5):
     snap = dashboard_service.provide_trophy_snapshot(profile)
     rarest = _platinums(profile, showcase_limit, recent=False)
     # One extra recent platinum beyond what's shown: the forge's slot-in beat renders the previous
-    # top-5, then shifts them right (this +1 slides off the end) as the new platinum enters at the
-    # front. The card's shelf strip clips to `showcase_limit`, so normal renders still show 5.
+    # top-6, then shifts them right (this +1 slides off the end) as the new platinum enters at the
+    # front. The card's shelf strip clips to `showcase_limit`, so normal renders still show 6.
+    # NOTE: showcase_limit is mirrored in pursuer-card.css (grid /6 + nth-child(7)) and
+    # pursuer-card-forge.js (the `i < 6` visible-index filter) -- keep the three in sync.
     recent = _platinums(profile, showcase_limit + 1, recent=True)
     # The 5 disciplines (from the DNA-ring data) + a bar relative to your strongest family,
     # so the band reads as "what you're made of" at a glance.
