@@ -254,6 +254,7 @@
     var css = getComputedStyle(document.documentElement);
     var chart = null;
     var canvas = document.getElementById('disc-radar');
+    var revealRadar = function () {};   // reassigned once the chart is built (bridges the if-scope)
 
     if (typeof Chart !== 'undefined' && canvas) {
         var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
@@ -278,6 +279,8 @@
         var LABELS = {};
         document.querySelectorAll('.radar-tab').forEach(function (t) { LABELS[t.dataset.mode] = t.textContent.trim(); });
         var detail = document.getElementById('radar-detail');
+        var radarPainted = false;
+        var currentMode = 'overview';
 
         var renderPanel = function (labels, values, colorOf, title) {
             if (!detail) return;
@@ -293,6 +296,7 @@
         };
 
         var paint = function (mode) {
+            currentMode = mode;
             var ds = chart.data.datasets[0];
             if (mode === 'overview') {
                 chart.data.labels = DATA.overview.labels;
@@ -315,7 +319,15 @@
             chart.update();
         };
 
-        paint('overview');
+        // Paint the radar the first time it's actually on screen (a Chart drawn while its tab is
+        // display:none animates on a 0-size canvas -> finishes invisibly -> "pops" on reveal).
+        revealRadar = function () {
+            chart.resize();                                                  // canvas was 0-size while hidden
+            if (!radarPainted) { radarPainted = true; paint(currentMode); }  // first reveal: animate in
+        };
+        var radarView = document.querySelector('.lab-view[data-view="radar"]');
+        if (radarView && !radarView.hidden) revealRadar();                   // deep-linked ?view=radar
+
         document.querySelectorAll('.radar-tab').forEach(function (tab) {
             tab.addEventListener('click', function () {
                 document.querySelectorAll('.radar-tab').forEach(function (t) { t.classList.remove('is-active'); });
@@ -335,8 +347,8 @@
             t.classList.toggle('is-active', on);
             t.setAttribute('aria-selected', on ? 'true' : 'false');
         });
-        // The radar canvas is hidden (0-size) until first revealed; resize it on show.
-        if (name === 'radar' && chart) { chart.resize(); }
+        // Animate the radar in the first time it's shown (and keep it correctly sized after).
+        if (name === 'radar') revealRadar();
     }
     viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
 
