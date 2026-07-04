@@ -56,8 +56,10 @@
 .lab-dna__ring { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: center; animation: labDnaIn 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .lab-dna__track { fill: none; stroke: var(--pp-bg-3); stroke-width: 12; }
 .lab-dna__arc { fill: none; stroke: var(--disc); stroke-width: 12; filter: drop-shadow(0 0 3px color-mix(in oklab, var(--disc) 60%, transparent)); }
-/* Gentle idle spin of the discipline arcs (the centered Level sits in a separate overlay, so it stays put). */
-.lab-dna__arcs { transform-box: fill-box; transform-origin: center; animation: labDnaSpin 24s linear infinite; }
+/* Idle spin of the discipline arcs (the centered Level sits in a separate overlay, so it stays put):
+   a slow creep for most of the cycle, then a quick eased "whoosh" full spin. Hover pauses it. */
+.lab-dna__arcs { transform-box: fill-box; transform-origin: center; animation: labDnaSpin 26s infinite; }
+.lab-dna:hover .lab-dna__arcs { animation-play-state: paused; }
 .lab-dna__center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; animation: labDnaCenter 0.45s 0.28s ease both; }
 .lab-dna__level { display: block; font-size: 26px; line-height: 1; color: var(--pp-text); }  /* face via shared .pp-tally; resting = calm (the ring is the flourish, not the number) */
 /* Digit-responsive: the Pursuer Level is uncapped, so step the font down per extra digit
@@ -75,7 +77,11 @@
 .lab-dna__cap { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 3px; }
 @keyframes labDnaIn { from { transform: scale(0.55) rotate(-110deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes labDnaCenter { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
-@keyframes labDnaSpin { to { transform: rotate(360deg); } }
+@keyframes labDnaSpin {
+    0%   { transform: rotate(0deg);   animation-timing-function: linear; }                    /* slow creep... */
+    92%  { transform: rotate(360deg); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); } /* ...then a quick whoosh */
+    100% { transform: rotate(720deg); }                                                       /* 720 === 0, seamless loop */
+}
 @media (prefers-reduced-motion: reduce) { .lab-dna__ring, .lab-dna__center, .lab-dna__arcs { animation: none; } }
 
 .lab-dna-legend { display: grid; gap: 3px; }
