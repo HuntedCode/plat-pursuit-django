@@ -17,7 +17,7 @@ ICONS = {
     'mage': 'wand-sparkles', 'champion': 'medal', 'librarian': 'library',
     'jester': 'drama', 'exorcist': 'ghost',
     # Finesse
-    'gamer': 'gamepad-2', 'driver': 'car', 'athlete': 'dumbbell',
+    'gamer': 'gamepad-2', 'driver': 'gauge', 'athlete': 'dumbbell',
     'maestro': 'music', 'freelancer': 'briefcase',
 }
 
