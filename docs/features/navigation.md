@@ -96,24 +96,22 @@ There is no More drawer, no mobile search overlay, and no mobile-specific notifi
 
 ## Footer Sitemap Grid
 
-Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`).
+Six-column grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`), one column per structural area. Post-IA-unify the columns mirror the 4 hubs (My Pursuit merges the pre-unify My Pursuit + Dashboard columns) plus Legal and Connect:
 
-> ⚠️ **Pending IA-completeness update:** `footer.html` still shows the pre-unify columns below (a
-> separate **My Pursuit** and **Dashboard**). Post-unify these should merge into one **My Pursuit**
-> column (the personal hub, root URLs) plus a **Support** column. The links still resolve (url
-> `name=`s are unchanged), but the grid structure needs updating alongside the welcome-tour rewrite.
+| Browse | Community | My Pursuit | Support | Legal | Connect |
+|--------|-----------|------------|---------|-------|---------|
+| Games | Community Hub | Overview* | Support Hub | Privacy | Social icons |
+| Trophies | Profiles | Collection* | Fundraiser† | Terms | (X, YouTube, Discord) |
+| Recently Added | Challenges | The Lab* | Membership (soon) | About | |
+| Flagged Games | Game Lists | Research Panel* | | Contact | |
+| Franchises | Leaderboards | Badges / Milestones / Titles* | | | |
+| Genres & Themes | | My Stats / Shareables / Recap* | | | |
+| Companies | | My Challenges / My Lists* | | | |
+| Engines | | | | | |
 
-| Browse | Community | My Pursuit | Dashboard | Legal | Connect |
-|--------|-----------|------------|-----------|-------|---------|
-| Games | Hub | Badges | My Profile | Privacy | Social icons |
-| Trophies | Profiles | Milestones | My Stats | Terms | (X, YouTube, Discord) |
-| Companies | Reviews | Titles* | My Shareables | About | |
-| Genres & Themes | Challenges | | Recap | Contact | |
-| Flagged Games | Lists | | | | |
-| | Leaderboards | | | | |
-
-- Titles link is auth-gated (only shown to authenticated users with a profile)
-- Dashboard column is auth-gated; guests see "Account" with Sign In / Sign Up links instead (ensures 6 grid children always)
+- **My Pursuit is auth-aware** (three states, no bogus links): authed-with-profile sees the full personal-hub sitemap (marked `*`); anon/no-profile sees only the public catalog members (Badges, Milestones, Research Panel); anon additionally gets Sign In / Sign Up (a divider separates them). This keeps a stable 6-column grid without a separate Account column.
+- **Support** (†) links the hub always; the direct Fundraiser link renders only when `active_fundraiser` is in context (banner-active + a live campaign + linked-profile viewer). Membership is a muted "coming soon" placeholder mirroring the Support landing until the store ships.
+- Column headings are `<h2>` (`font-semibold text-xs uppercase tracking-wider`) per the design-system section-header pattern.
 
 ## Cross-Linking Inventory
 

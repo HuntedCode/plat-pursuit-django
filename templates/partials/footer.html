@@ -5,7 +5,7 @@
 
             {# Browse hub — content discovery #}
             <nav aria-label="Browse pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Browse</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Browse</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'games_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Games</a></li>
                     <li><a href="{% url 'trophies_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Trophies</a></li>
@@ -20,7 +20,7 @@
 
             {# Community hub — people/social discovery. Profiles relocated here from Browse. #}
             <nav aria-label="Community pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Community</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'community_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Community Hub</a></li>
                     <li><a href="{% url 'profiles_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Profiles</a></li>
@@ -30,45 +30,52 @@
                 </ul>
             </nav>
 
-            {# My Pursuit hub — personal progression. Renamed from Achievements; #}
-            {# forward-compatible with the gamification initiative.              #}
+            {# My Pursuit hub — the personal, login-gated cockpit (rooted at / post-IA-unify). #}
+            {# Merges the pre-unify My Pursuit + Dashboard columns into one hub sitemap.        #}
             <nav aria-label="My Pursuit pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">My Pursuit</h2>
                 <ul class="space-y-1.5 text-sm">
+                    {% if user.is_authenticated and user.profile %}
+                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Overview</a></li>
+                    <li><a href="{% url 'badge_collection' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Collection</a></li>
+                    <li><a href="{% url 'lab' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">The Lab</a></li>
+                    <li><a href="{% url 'research_panel' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Research Panel</a></li>
                     <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
                     <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
-                    {% if user.is_authenticated and user.profile %}
                     <li><a href="{% url 'my_titles' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Titles</a></li>
-                    {% endif %}
-                </ul>
-            </nav>
-
-            {# Dashboard hub / Account #}
-            {% if user.is_authenticated and user.profile %}
-            <nav aria-label="Dashboard pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Dashboard</h3>
-                <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'home' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Dashboard</a></li>
                     <li><a href="{% url 'my_stats' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Stats</a></li>
                     <li><a href="{% url 'my_shareables' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Shareables</a></li>
                     <li><a href="{% url 'recap_index' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Recap</a></li>
                     <li><a href="{% url 'my_challenges' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Challenges</a></li>
                     <li><a href="{% url 'my_lists' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">My Lists</a></li>
-                </ul>
-            </nav>
-            {% else %}
-            <nav aria-label="Account pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Account</h3>
-                <ul class="space-y-1.5 text-sm">
-                    <li><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign In</a></li>
+                    {% else %}
+                    {# Anon/no-profile: only the public catalog members of the hub. #}
+                    <li><a href="{% url 'badges_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Badges</a></li>
+                    <li><a href="{% url 'milestones_list' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Milestones</a></li>
+                    <li><a href="{% url 'research_panel' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Research Panel</a></li>
+                    {% if not user.is_authenticated %}
+                    <li class="pt-1.5 mt-1.5 border-t border-neutral-content/10"><a href="{% url 'account_login' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign In</a></li>
                     <li><a href="{% url 'account_signup' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Sign Up</a></li>
+                    {% endif %}
+                    {% endif %}
                 </ul>
             </nav>
-            {% endif %}
+
+            {# Support hub — the fundraiser's home + the coming membership store. #}
+            <nav aria-label="Support pages">
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Support</h2>
+                <ul class="space-y-1.5 text-sm">
+                    <li><a href="{% url 'support_hub' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Support Hub</a></li>
+                    {% if active_fundraiser %}
+                    <li><a href="{% url 'fundraiser' active_fundraiser.slug %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Fundraiser</a></li>
+                    {% endif %}
+                    <li class="text-neutral-content/30 cursor-default">Membership <span class="text-[0.65rem] uppercase tracking-wide">&middot; soon</span></li>
+                </ul>
+            </nav>
 
             {# Legal #}
             <nav aria-label="Legal pages">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Legal</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Legal</h2>
                 <ul class="space-y-1.5 text-sm">
                     <li><a href="{% url 'privacy' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Privacy</a></li>
                     <li><a href="{% url 'terms' %}" class="text-neutral-content/50 hover:text-neutral-content transition-colors">Terms</a></li>
@@ -79,7 +86,7 @@
 
             {# Connect #}
             <nav aria-label="Social media links">
-                <h3 class="font-bold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Connect</h3>
+                <h2 class="font-semibold text-xs uppercase tracking-wider text-neutral-content/70 mb-2 md:mb-3">Connect</h2>
                 <div class="flex gap-3">
                     <a href="https://www.x.com/platpursuit" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X" class="text-neutral-content/50 hover:text-neutral-content transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
