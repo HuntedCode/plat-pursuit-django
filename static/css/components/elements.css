@@ -134,11 +134,8 @@
 .ptable__avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
 
 /* ---- Job tile (skills-screen cell) ---- */
-.job { position: relative; overflow: hidden; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; display: flex; flex-direction: column; }
+.job { position: relative; border-radius: var(--pp-radius-lg); padding: 12px; min-height: 150px; background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 12%, var(--pp-bg-1)), var(--pp-bg-1)); border: 1px solid color-mix(in oklab, var(--disc) 38%, transparent); transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease; display: flex; flex-direction: column; }
 .job:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--disc) 75%, transparent); box-shadow: 0 10px 30px color-mix(in oklab, var(--disc) 24%, transparent); }
-/* Sheen: a soft diagonal glimmer sweeps across on hover. */
-.job::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3; background: linear-gradient(115deg, transparent 38%, color-mix(in oklab, white 10%, transparent) 50%, transparent 62%); transform: translateX(-130%); transition: transform 0.6s ease; }
-.job:hover::after { transform: translateX(130%); }
 .job__top { display: flex; align-items: center; gap: 7px; }
 .job__expand { position: absolute; top: 9px; right: 9px; width: 13px; height: 13px; color: color-mix(in oklab, var(--disc) 55%, var(--pp-text-mute)); opacity: 0.22; transition: opacity 0.15s ease; pointer-events: none; }
 .job:hover .job__expand, .ptile:focus-visible .job__expand { opacity: 0.9; }
@@ -164,11 +161,14 @@
 /* Untouched jobs (0 XP) rest dormant so your real, leveled career shows through; they light on hover. */
 .job--dormant { opacity: 0.5; }
 .job--dormant:hover { opacity: 1; }
-/* Hover tactility: the identity chip lifts + brightens. */
+/* Hover tactility: the identity chip lifts + brightens, and its icon redraws stroke-by-stroke. */
 .job:hover .job__mark { transform: translateY(-1px) scale(1.08); border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 4px 12px color-mix(in oklab, var(--disc) 30%, transparent); }
+.job__mark svg * { stroke-dasharray: 1000; }   /* 1000 >> any 24px icon path, so it reads as fully drawn at rest */
+.job:hover .job__mark svg * { animation: iconDraw 0.7s ease; }
+@keyframes iconDraw { from { stroke-dashoffset: 1000; } to { stroke-dashoffset: 0; } }
 /* Progress bars sweep in (0 -> value) when a band scrolls into view (JS sets --horizon-progress). */
 .job__bar .pp-horizon__fill { transition: width 0.85s cubic-bezier(0.2, 0.8, 0.2, 1); }
-@media (prefers-reduced-motion: reduce) { .job::after { display: none; } .job__bar .pp-horizon__fill { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .job:hover .job__mark svg * { animation: none; } .job__bar .pp-horizon__fill { transition: none; } }
 
 /* ---- Jobs surface: layout toggle (Dossier <-> Character sheet) ---- */
 .jlayout { display: inline-flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--pp-bg-2); border: 1px solid var(--pp-divider); margin-bottom: 16px; }
