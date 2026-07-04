@@ -1,0 +1,14 @@
+{% comment %}
+Character-sheet job row (compact): icon | name + tier | level | progress. Clickable -> job detail
+(shares the .ptile hook + #element-details panels with the dossier tiles). Expects `card`.
+{% endcomment %}
+{% load job_icons %}
+<div class="jsheet__row ptile{% if not card.started %} jsheet__row--dormant{% endif %}" data-slug="{{ card.slug }}" role="button" tabindex="0" aria-label="{{ card.name }} detail" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
+    <span class="jsheet__ic">{% job_icon card.icon '' %}</span>
+    <span class="jsheet__namecol">
+        <span class="jsheet__name">{{ card.name }}</span>
+        <span class="jsheet__tier">{{ card.tier }}</span>
+    </span>
+    <span class="jsheet__lv pp-tally">{{ card.level }}</span>
+    <span class="jsheet__bar pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 6px; --horizon-progress: {{ card.progress }}%;"><span class="pp-horizon__fill"></span></span>
+</div>

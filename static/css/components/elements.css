@@ -145,6 +145,53 @@
     50%      { box-shadow: 0 0 0 1px color-mix(in oklab, var(--disc) 62%, transparent), 0 10px 34px color-mix(in oklab, var(--disc) 36%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) { .job--tier-master, .job--tier-legend { animation: none; } }
+/* Untouched jobs (0 XP) rest dormant so your real, leveled career shows through; they light on hover. */
+.job--dormant { opacity: 0.4; }
+.job--dormant:hover { opacity: 0.92; }
+
+/* ---- Jobs surface: layout toggle (Dossier <-> Character sheet) ---- */
+.jlayout { display: inline-flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--pp-bg-2); border: 1px solid var(--pp-divider); margin-bottom: 16px; }
+.jlayout__btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--pp-text-mute); background: transparent; border: none; cursor: pointer; transition: color 0.15s ease, background 0.15s ease; }
+.jlayout__btn svg { width: 15px; height: 15px; }
+.jlayout__btn:hover { color: var(--pp-text); }
+.jlayout__btn.is-active { color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, transparent); }
+.jobs-layout[hidden] { display: none; }
+
+/* ---- Dossier: each discipline a banded chapter, its jobs beneath ---- */
+.jdoss { display: flex; flex-direction: column; gap: 14px; }
+.jdoss__band { border-radius: var(--pp-radius-lg); padding: 14px; border: 1px solid color-mix(in oklab, var(--disc) 30%, transparent); border-left: 3px solid var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 9%, var(--pp-bg-1)), var(--pp-bg-1)); }
+.jdoss__head { display: flex; align-items: center; gap: 11px; }
+.jdoss__ic { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 10px; background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); color: var(--disc); }
+.jdoss__ic svg { width: 21px; height: 21px; }
+.jdoss__name { flex: 1; min-width: 0; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 17px; color: var(--disc); letter-spacing: 0.02em; }
+.jdoss__avg { font-size: 12px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.jdoss__avg b { color: var(--pp-text); font-weight: 800; }
+.jdoss__progrow { display: flex; align-items: center; gap: 10px; margin: 9px 0 13px; }
+.jdoss__progrow .pp-horizon { flex: 1; }
+.jdoss__played { font-size: 11px; color: var(--pp-text-mute); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.jdoss__grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+@media (max-width: 900px) { .jdoss__grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 560px) { .jdoss__grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---- Character sheet: compact skill rows, two discipline columns on desktop (screenshot-friendly) ---- */
+.jsheet { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 768px) { .jsheet { grid-template-columns: repeat(2, 1fr); gap: 16px 26px; } }
+.jsheet__head { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; margin-bottom: 5px; border-bottom: 2px solid color-mix(in oklab, var(--disc) 45%, transparent); }
+.jsheet__head-ic { width: 20px; height: 20px; flex: none; color: var(--disc); }
+.jsheet__head-ic svg { width: 20px; height: 20px; }
+.jsheet__head-name { flex: 1; font-family: var(--pp-font-display, system-ui); font-weight: 800; font-size: 13.5px; color: var(--disc); letter-spacing: 0.02em; }
+.jsheet__head-avg { font-size: 11px; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.jsheet__row { display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; cursor: pointer; transition: background 0.12s ease; }
+.jsheet__row:hover { background: color-mix(in oklab, var(--disc) 13%, transparent); }
+.jsheet__row--dormant { opacity: 0.42; }
+.jsheet__row--dormant:hover { opacity: 0.85; }
+.jsheet__ic { width: 27px; height: 27px; flex: none; display: grid; place-items: center; border-radius: 7px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); color: var(--disc); }
+.jsheet__ic svg { width: 16px; height: 16px; }
+.jsheet__namecol { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.jsheet__name { font-size: 13px; font-weight: 700; color: var(--pp-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jsheet__tier { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--pp-text-mute); }
+.jsheet__lv { flex: none; min-width: 24px; text-align: right; font-size: 18px; color: var(--disc); }
+.jsheet__bar { width: 60px; flex: none; }
 
 /* ---- Tile -> detail interaction ---- */
 .ptile { cursor: pointer; border-radius: var(--pp-radius-lg); }

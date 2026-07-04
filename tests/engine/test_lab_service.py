@@ -57,6 +57,28 @@ def test_totals_reflect_profile_job_xp():
     assert ctx['total_xp_compact'] == '12.3K'           # compact label for the stat card
 
 
+def test_discipline_headers_carry_icon_played_and_fill():
+    profile = ProfileFactory()
+    # Two combat jobs touched, the rest untouched.
+    ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='gunslinger'), total_xp=12300, level=5)
+    ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='slayer'), total_xp=500, level=2)
+
+    disciplines = build_lab_context(profile)['lab']['disciplines']
+    by_slug = {d['slug']: d for d in disciplines}
+
+    combat = by_slug['combat']
+    assert combat['icon'] == 'swords'                       # discipline header glyph
+    assert combat['played'] == 2                            # gunslinger + slayer touched
+    assert 0 <= combat['fill'] <= 100
+    # The touched combat jobs are flagged started; the rest dormant.
+    assert {j['slug'] for j in combat['jobs'] if j['started']} == {'gunslinger', 'slayer'}
+
+    # Untouched discipline: nothing played, every job dormant.
+    heart = by_slug['heart']
+    assert heart['played'] == 0
+    assert all(not j['started'] for j in heart['jobs'])
+
+
 def test_hero_mirrors_lab_totals():
     profile = ProfileFactory(display_psn_username='Pursuer1')
     ProfileJobXP.objects.create(profile=profile, job=Job.objects.get(slug='mage'), total_xp=4000, level=4)

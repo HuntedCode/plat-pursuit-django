@@ -29,6 +29,11 @@ DISCIPLINE_TAGLINE = {
     'combat': 'You fight.', 'exploration': 'You discover.', 'mind': 'You outwit.',
     'heart': 'You feel.', 'finesse': 'You perform.',
 }
+# Lucide icon per discipline (the dossier/sheet section headers). Resolved via job_icons.
+DISCIPLINE_ICON = {
+    'combat': 'swords', 'exploration': 'compass', 'mind': 'brain',
+    'heart': 'heart', 'finesse': 'sparkles',
+}
 # Atom shape per family slot: color = family, shape = slot index within the family.
 SHAPES = ['circle', 'triangle', 'square', 'pentagon', 'hexagon']
 # Curated periodic-table marks (cap + lowercase, all unique). A designed mark, not an
@@ -125,6 +130,7 @@ def element_dict(job, level, total_xp, *, atomic, slot_index):
         'shape': SHAPES[slot_index % len(SHAPES)],
         'symbol': SYMBOLS.get(job.slug, job.name[:2]),
         'level': level,
+        'started': total_xp > 0,  # untouched (0 XP) jobs render dormant, so real progress shows through
         'progress': progress,
         'xp_current': f"{into:,}",
         'xp_next': f"{span:,}",
@@ -171,12 +177,19 @@ def build_profile_elements(profile):
         radar_values.append(avg)
         disciplines.append({
             'slug': slug, 'label': label, 'tagline': DISCIPLINE_TAGLINE[slug],
+            'icon': DISCIPLINE_ICON.get(slug, ''),
             'jobs': tiles, 'avg': avg,
+            'played': sum(1 for t in tiles if t['started']),  # jobs in this discipline you've touched
             'radar_labels_json': json.dumps([t['name'] for t in tiles]),
             'radar_data_json': json.dumps([t['level'] for t in tiles]),
         })
 
     max_avg = max(radar_values) if radar_values else 0
+    radar_max = max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5)
+    # Discipline band fill: avg level against the (user-scaled) radar cap, so bands read as an
+    # absolute sense of progress -- never misleadingly full for a fresh Pursuer.
+    for d in disciplines:
+        d['fill'] = min(100, round(d['avg'] / radar_max * 100)) if radar_max else 0
 
     return {
         'disciplines': disciplines,
@@ -189,7 +202,7 @@ def build_profile_elements(profile):
         # Axis max scales to the family averages (the overview series), rounded up to a
         # "nice" value, so the overview fills well; a family's drill-down with an outlier
         # job above this just soft-extends (Chart.js suggestedMax).
-        'radar_max': max(10, int(math.ceil((max_avg + 1) / 5.0)) * 5),
+        'radar_max': radar_max,
         'total_level': total_level,
         'total_xp': total_xp,
         'total': atomic,

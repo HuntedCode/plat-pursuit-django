@@ -5,7 +5,7 @@ progress (0-100), xp_current, xp_next, tier, tier_key, description.
 The curve is cap-less, so the prestige tier is the label (no "maxed" state).
 {% endcomment %}
 {% load job_icons %}
-<div class="job job--tier-{{ card.tier_key }}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
+<div class="job job--tier-{{ card.tier_key }}{% if not card.started %} job--dormant{% endif %}" style="--disc: var(--disc-{{ card.disc_slug }});" title="{{ card.description }}">
     <div class="job__top">
         <span class="job__mark">{% job_icon card.icon '' %}</span>
     </div>
