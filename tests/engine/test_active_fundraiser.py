@@ -10,7 +10,7 @@ from django.core.cache import cache
 from django.test import RequestFactory
 from django.utils import timezone
 
-from fundraiser.models import Fundraiser, get_active_fundraiser
+from fundraiser.models import Fundraiser, get_active_fundraiser, get_live_fundraiser
 from plat_pursuit.context_processors import active_fundraiser
 from tests.factories import ProfileFactory, UserFactory
 
@@ -21,9 +21,11 @@ CACHE_KEY = 'fundraiser:active_banner'
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    cache.delete(CACHE_KEY)
+    for k in (CACHE_KEY, 'fundraiser:live'):
+        cache.delete(k)
     yield
-    cache.delete(CACHE_KEY)
+    for k in (CACHE_KEY, 'fundraiser:live'):
+        cache.delete(k)
 
 
 def _live(**over):
@@ -63,6 +65,21 @@ def test_get_active_none_when_ended():
     now = timezone.now()
     _live(start_date=now - timedelta(days=5), end_date=now - timedelta(days=1))
     assert get_active_fundraiser() is None
+
+
+# --- get_live_fundraiser (ungated + banner-independent; the Support landing uses this) ---
+
+def test_get_live_shows_campaign_even_with_banner_off():
+    """The decoupling: the Support hub shows a LIVE campaign even when the site banner is off,
+    while the banner (get_active_fundraiser) stays hidden."""
+    f = _live(banner_active=False)
+    assert get_live_fundraiser() == f
+    assert get_active_fundraiser() is None
+
+
+def test_get_live_none_when_upcoming():
+    _live(start_date=timezone.now() + timedelta(days=1))
+    assert get_live_fundraiser() is None
 
 
 # --- active_fundraiser banner processor (gated to linked viewers) ---

@@ -101,6 +101,26 @@ def get_active_fundraiser():
     return Fundraiser.objects.filter(pk=pk).first() if pk else None
 
 
+def get_live_fundraiser():
+    """The currently-live Fundraiser (start window open, not ended) REGARDLESS of banner_active --
+    for the Support hub landing, which is the fundraiser's home. The banner_active flag only gates
+    the site-wide banner (see get_active_fundraiser). Cached PK, 60s, on its own key."""
+    from django.core.cache import cache
+    from django.db.models import Q
+
+    def _fetch_id():
+        now = timezone.now()
+        f = (Fundraiser.objects
+             .filter(start_date__lte=now)
+             .filter(Q(end_date__isnull=True) | Q(end_date__gte=now))
+             .order_by('-created_at')
+             .first())
+        return f.pk if f else 0
+
+    pk = cache.get_or_set('fundraiser:live', _fetch_id, 60)
+    return Fundraiser.objects.filter(pk=pk).first() if pk else None
+
+
 class Donation(models.Model):
     """A one-time donation to a fundraiser campaign."""
     PROVIDER_CHOICES = [

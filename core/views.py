@@ -1290,8 +1290,8 @@ class SupportHubView(ProfileHotbarMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        from fundraiser.models import get_active_fundraiser
-        context['support_fundraiser'] = get_active_fundraiser()
+        from fundraiser.models import get_live_fundraiser
+        context['support_fundraiser'] = get_live_fundraiser()
         return context
 
 
