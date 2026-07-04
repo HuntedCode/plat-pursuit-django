@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Mobile Sub-nav Workshop{% endblock %}
+
+{% comment %}
+Workshop (IA phase 4): three candidate treatments for the personal-hub 10-item sub-nav strip on
+phones (<lg). Desktop keeps the single scrolling row with the 6+4 divider; this is only the mobile
+layout. Self-contained mock -- pick a winner, then it gets built into partials/hub_subnav.html.
+{% endcomment %}
+
+{% block content %}
+<style>
+  /* Phone frame so the mobile layout is visible on desktop. */
+  .msw-phone { max-width: 380px; margin: 0 auto; border: 8px solid #0b0e13; border-radius: 26px;
+               overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+  .msw-nav { height: 48px; display: flex; align-items: center; justify-content: space-between;
+             padding: 0 14px; font-weight: 800; font-size: 14px; }
+  /* Right-edge fade for the scrolling treatment. */
+  .msw-scroll { overflow-x: auto; scrollbar-width: none; -webkit-mask-image:
+               linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .msw-scroll::-webkit-scrollbar { display: none; }
+  .msw-panel { max-height: 0; overflow: hidden; transition: max-height 0.28s ease; }
+  .msw-panel.is-open { max-height: 320px; }
+  .msw-chev { transition: transform 0.2s ease; }
+  .msw-chev.is-open { transform: rotate(180deg); }
+</style>
+
+<div class="max-w-5xl mx-auto p-4 md:p-6">
+  <div class="mb-5">
+    <h1 class="text-2xl font-bold">Mobile sub-nav &mdash; 10-item strip treatments</h1>
+    <p class="text-sm text-base-content/70 mt-1 max-w-2xl">
+      The personal (My Pursuit) hub has 10 sub-nav items grouped 6 (core) + 4 (tools). On desktop
+      that's one scrolling row; below are three treatments for phones. Each frame is ~phone width &mdash;
+      tap the interactive ones. Pick a winner and I'll build it into the real strip.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    {# ============ A · Collapse to grid ============ #}
+    <section>
+      <h2 class="font-bold mb-1">A &middot; Collapse to grid <span class="text-xs font-normal text-primary">(recommended)</span></h2>
+      <p class="text-xs text-base-content/60 mb-3">One line by default (hub + current page); tap to reveal all 10 in a grid with the 6+4 divider. Most compact; best overview. One tap to reach any item.</p>
+      <div class="msw-phone bg-base-100">
+        <div class="msw-nav bg-base-200 border-b border-base-300"><span>PlatPursuit</span><span class="text-base-content/40">&#9776;</span></div>
+        <div class="bg-base-200/95 border-b-2 border-primary/30">
+          <button type="button" onclick="mswToggle('a')" class="w-full flex items-center justify-between h-11 px-3 text-sm">
+            <span class="inline-flex items-center gap-2 font-semibold">
+              <svg class="w-4 h-4 text-base-content/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              <span class="text-base-content/60 text-xs uppercase tracking-wide">My Pursuit</span>
+              <span class="text-base-content/30">&middot;</span>
+              <span class="text-primary">Overview</span>
+            </span>
+            <svg id="msw-chev-a" class="msw-chev w-4 h-4 text-base-content/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <div id="msw-panel-a" class="msw-panel">
+            <div class="grid grid-cols-3 gap-1.5 p-2.5">
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center bg-primary/15 text-primary border border-primary/30">Overview</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Collection</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">The Lab</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Research</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Milestones</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Titles</span>
+              <div class="col-span-3 h-px bg-base-content/15 my-0.5"></div>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">My Stats</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Shareables</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Recap</span>
+              <span class="px-2 py-2 rounded-md text-xs font-medium text-center text-base-content/70">Profile</span>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 text-xs text-base-content/40">page content&hellip;</div>
+      </div>
+    </section>
+
+    {# ============ B · Primary + More ============ #}
+    <section>
+      <h2 class="font-bold mb-1">B &middot; Primary + More</h2>
+      <p class="text-xs text-base-content/60 mb-3">A few primary items inline; the rest behind a &ldquo;More&rdquo; sheet. No horizontal scroll, short strip. The overflow items are one tap deeper.</p>
+      <div class="msw-phone bg-base-100">
+        <div class="msw-nav bg-base-200 border-b border-base-300"><span>PlatPursuit</span><span class="text-base-content/40">&#9776;</span></div>
+        <div class="bg-base-200/95 border-b-2 border-primary/30">
+          <div class="flex items-center gap-1.5 h-11 px-3">
+            <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-primary/15 text-primary border border-primary/30">Overview</span>
+            <span class="px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Collection</span>
+            <span class="px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">The Lab</span>
+            <button type="button" onclick="mswToggle('b')" class="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold text-base-content/70 border border-base-content/15">
+              More <svg id="msw-chev-b" class="msw-chev w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+          </div>
+          <div id="msw-panel-b" class="msw-panel">
+            <div class="grid grid-cols-2 gap-1.5 p-2.5 border-t border-base-content/10">
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">Research Panel</span>
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">Milestones</span>
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">Titles</span>
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">My Stats</span>
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">My Shareables</span>
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">Recap</span>
+              <span class="px-2.5 py-2 rounded-md text-xs font-medium text-base-content/70">Profile</span>
+            </div>
+          </div>
+        </div>
+        <div class="p-4 text-xs text-base-content/40">page content&hellip;</div>
+      </div>
+    </section>
+
+    {# ============ C · Grouped scroll ============ #}
+    <section>
+      <h2 class="font-bold mb-1">C &middot; Grouped scroll</h2>
+      <p class="text-xs text-base-content/60 mb-3">Today&rsquo;s single scrolling row, polished: the 6+4 divider, a right-edge fade signaling more, active auto-centers. Simplest; every item one swipe away.</p>
+      <div class="msw-phone bg-base-100">
+        <div class="msw-nav bg-base-200 border-b border-base-300"><span>PlatPursuit</span><span class="text-base-content/40">&#9776;</span></div>
+        <div class="bg-base-200/95 border-b-2 border-primary/30">
+          <div class="msw-scroll flex items-center gap-1.5 h-11 px-3">
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium bg-primary/15 text-primary border border-primary/30">Overview</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Collection</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">The Lab</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Research</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Milestones</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Titles</span>
+            <span class="shrink-0 w-px h-5 bg-base-content/15 mx-0.5"></span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">My Stats</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Shareables</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Recap</span>
+            <span class="shrink-0 px-2.5 py-1 rounded-md text-xs font-medium text-base-content/70">Profile</span>
+          </div>
+        </div>
+        <div class="p-4 text-xs text-base-content/40">page content&hellip; <span class="text-base-content/30">(swipe the strip &rarr;)</span></div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+  function mswToggle(id) {
+    document.getElementById('msw-panel-' + id).classList.toggle('is-open');
+    document.getElementById('msw-chev-' + id).classList.toggle('is-open');
+  }
+</script>
+{% endblock %}
