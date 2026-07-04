@@ -248,7 +248,7 @@
 .jsheet__row.ptile { border-radius: 8px; }  /* the tighter row radius wins over .ptile's card radius */
 .emodal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
 .emodal[hidden] { display: none; }
-.emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.66); backdrop-filter: blur(3px); }
+.emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.55); backdrop-filter: blur(3px); }
 .emodal__dialog { position: relative; z-index: 1; width: min(440px, 100%); max-height: 88vh; overflow: auto; background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); padding: 26px 24px 24px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
 .emodal__close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--pp-text-mute); font-size: 26px; line-height: 1; cursor: pointer; }
 .emodal__close:hover { color: var(--pp-text); }
@@ -260,6 +260,34 @@
 @media (prefers-reduced-motion: reduce) { .emodal:not([hidden]) .emodal__backdrop, .emodal:not([hidden]) .emodal__dialog { animation: none; } }
 
 /* ---- Element detail (level/XP first-class) ---- */
+/* Discipline ambient glow at the top of the dialog (the detail carries --disc). */
+.edetail { position: relative; }
+.edetail::before { content: ''; position: absolute; left: -24px; right: -24px; top: -26px; height: 130px; pointer-events: none; z-index: 0; background: radial-gradient(75% 100% at 50% 0%, color-mix(in oklab, var(--disc) 24%, transparent), transparent 72%); }
+.edetail > * { position: relative; z-index: 1; }
+/* Content choreography (replays on each open -- the panel HTML is re-injected): sections stagger in,
+   the glyph draws itself; the level count-up + bar fill are driven by JS on open. */
+.edetail__head { animation: edIn 0.4s ease 0.06s both; }
+.edetail__levelrow { animation: edIn 0.42s ease 0.14s both; }
+.edetail__flavor { animation: edIn 0.42s ease 0.22s both; }
+.edetail__sources { animation: edIn 0.42s ease 0.30s both; }
+@keyframes edIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+.edetail__glyph svg * { stroke-dasharray: 1; animation: iconDrawIn 0.45s ease 0.08s both; }
+.edetail__glyph svg *:nth-child(2) { animation-delay: 0.16s; }
+.edetail__glyph svg *:nth-child(3) { animation-delay: 0.24s; }
+.edetail__glyph svg *:nth-child(4) { animation-delay: 0.32s; }
+.edetail__glyph svg *:nth-child(5) { animation-delay: 0.40s; }
+.edetail__glyph svg *:nth-child(n+6) { animation-delay: 0.48s; }
+.edetail__bar .pp-horizon__fill { transition: width 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) {
+    .edetail__head, .edetail__levelrow, .edetail__flavor, .edetail__sources, .edetail__glyph svg * { animation: none; }
+    .edetail__bar .pp-horizon__fill { transition: none; }
+}
+/* Background recede: the page pushes back + dims while the modal floats forward (the JS portals the
+   modal to <body> so it isn't scaled with the page). */
+#zoom-container:not(.zoom-active) { transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.34s ease; }
+#zoom-container.pp-receded { transform: scale(0.95); filter: brightness(0.82); }
+@media (prefers-reduced-motion: reduce) { #zoom-container.pp-receded { transform: none; } }
+
 .edetail__head { display: flex; align-items: center; gap: 14px; }
 .edetail__glyph { width: 54px; height: 54px; flex: none; display: grid; place-items: center; border-radius: 13px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); color: var(--disc); }
 .edetail__glyph svg { width: 30px; height: 30px; }

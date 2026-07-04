@@ -391,8 +391,10 @@
     var modal = document.getElementById('emodal');
     var panel = document.getElementById('emodal-panel');
     var dialog = modal ? modal.querySelector('.emodal__dialog') : null;
+    var backdrop = modal ? modal.querySelector('.emodal__backdrop') : null;
+    var zoom = document.getElementById('zoom-container');
     if (!details || !modal || !panel || !dialog) return;
-    var lastTrigger = null;
+    var lastTrigger = null, portaled = false;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -409,30 +411,51 @@
         if (opening) {
             dialog.style.transition = 'none';
             dialog.style.transform = t;
-            dialog.style.opacity = '0.3';
-            panel.style.opacity = '0';
+            dialog.style.opacity = '0.4';
             dialog.getBoundingClientRect();   // reflow so the start state sticks
-            dialog.style.transition = 'transform 0.34s cubic-bezier(0.2,0.8,0.2,1), opacity 0.22s ease';
-            panel.style.transition = 'opacity 0.26s ease 0.08s';
+            dialog.style.transition = 'transform 0.42s cubic-bezier(0.34, 1.2, 0.64, 1), opacity 0.24s ease';   // spring overshoot
             dialog.style.transform = 'none';
             dialog.style.opacity = '1';
-            panel.style.opacity = '1';
         } else {
             dialog.style.transition = 'transform 0.26s cubic-bezier(0.4,0,1,1), opacity 0.2s ease';
-            panel.style.transition = 'opacity 0.12s ease';
             dialog.style.transform = t;
             dialog.style.opacity = '0';
-            panel.style.opacity = '0';
+        }
+    }
+    // Content choreography: count the level up + fill the XP bar once the panel is injected (the
+    // glyph draw + section stagger are CSS animations that play on injection).
+    function animateContent() {
+        if (reduce) return;
+        var lvl = panel.querySelector('.edetail__level-num');
+        if (lvl) {
+            var target = parseInt((lvl.textContent || '').replace(/[^0-9]/g, ''), 10) || 0;
+            if (target > 1) {
+                lvl.textContent = '0';
+                var dur = 700, start = null;
+                var step = function (ts) {
+                    if (start === null) start = ts;
+                    var p = Math.min(1, (ts - start) / dur);
+                    lvl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+                    if (p < 1) requestAnimationFrame(step); else lvl.textContent = target;
+                };
+                requestAnimationFrame(step);
+            }
+        }
+        var bar = panel.querySelector('.edetail__bar[data-fill]');
+        if (bar) {
+            bar.style.setProperty('--horizon-progress', '0%');
+            requestAnimationFrame(function () { requestAnimationFrame(function () { bar.style.setProperty('--horizon-progress', bar.dataset.fill); }); });
         }
     }
     function resetDialog() {
         ['animation', 'transition', 'transform', 'transformOrigin', 'opacity'].forEach(function (p) { dialog.style[p] = ''; });
-        panel.style.transition = ''; panel.style.opacity = '';
+        if (backdrop) { backdrop.style.transition = ''; backdrop.style.opacity = ''; }
     }
     function hideNow() {
         modal.hidden = true;
         panel.innerHTML = '';
         document.body.style.overflow = '';
+        if (zoom) zoom.classList.remove('pp-receded');
         resetDialog();
         if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus();   // restore focus to the tile
         lastTrigger = null;
@@ -441,14 +464,18 @@
     function openEl(slug, trigger) {
         var src = details.querySelector('[data-slug="' + slug + '"]');
         if (!src) return;
+        if (!portaled && zoom) { document.body.appendChild(modal); portaled = true; }   // out of the scaled wrapper
         panel.innerHTML = src.innerHTML;
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
+        if (zoom && !reduce) zoom.classList.add('pp-receded');   // the page pushes back
         lastTrigger = trigger || null;
         if (!reduce && trigger) flip(trigger.getBoundingClientRect(), true);   // grow from the tile
+        animateContent();
         (dialog.querySelector('.emodal__close') || dialog).focus();   // move focus into the dialog
     }
     function closeEl() {
+        if (zoom) zoom.classList.remove('pp-receded');
         if (!reduce && lastTrigger && document.contains(lastTrigger)) {
             var done = false;
             var finish = function () { if (done) return; done = true; dialog.removeEventListener('transitionend', onEnd); hideNow(); };
@@ -475,6 +502,43 @@
             var first = f[0], last = f[f.length - 1];
             if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
             else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    });
+
+    // Drag-to-dismiss (touch): flick the dialog down to close it (iOS-sheet style).
+    var dragY = null, dragged = false;
+    dialog.addEventListener('touchstart', function (e) {
+        if (modal.hidden || dialog.scrollTop > 0) { dragY = null; return; }
+        dragY = e.touches[0].clientY; dragged = false;
+    }, { passive: true });
+    dialog.addEventListener('touchmove', function (e) {
+        if (dragY === null) return;
+        var dy = e.touches[0].clientY - dragY;
+        if (dy > 0) {   // only downward
+            dragged = true;
+            e.preventDefault();
+            dialog.style.animation = 'none';
+            dialog.style.transition = 'none';
+            dialog.style.transform = 'translateY(' + dy + 'px)';
+            if (backdrop) backdrop.style.opacity = String(Math.max(0.15, 1 - dy / 450));
+        }
+    }, { passive: false });
+    dialog.addEventListener('touchend', function () {
+        if (dragY === null) return;
+        var m = /translateY\(([0-9.]+)px\)/.exec(dialog.style.transform);
+        var dy = m ? parseFloat(m[1]) : 0;
+        dragY = null;
+        if (dragged && dy > 90) {   // past the threshold -> slide off + close
+            dialog.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+            dialog.style.transform = 'translateY(100vh)';
+            dialog.style.opacity = '0';
+            if (backdrop) { backdrop.style.transition = 'opacity 0.2s ease'; backdrop.style.opacity = '0'; }
+            if (zoom) zoom.classList.remove('pp-receded');
+            setTimeout(hideNow, 200);
+        } else if (dragged) {   // snap back
+            dialog.style.transition = 'transform 0.25s ease';
+            dialog.style.transform = 'none';
+            if (backdrop) { backdrop.style.transition = 'opacity 0.25s ease'; backdrop.style.opacity = ''; }
         }
     });
 })();

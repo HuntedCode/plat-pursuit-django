@@ -22,7 +22,7 @@ xp_total, tier, tier_key, description).
                 <span>{{ card.xp_current }} / {{ card.xp_next }} XP</span>
                 <span class="edetail__xp-next">to Lv {{ card.level|add:1 }}</span>
             </div>
-            <div class="pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-h: 9px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
+            <div class="pp-horizon pp-horizon__track edetail__bar" data-fill="{{ card.progress }}%" style="--horizon-accent: var(--disc); --horizon-h: 9px; --horizon-progress: {{ card.progress }}%;"><div class="pp-horizon__fill"></div></div>
             <div class="edetail__total">{{ card.xp_total }} total XP earned{% if card.next_tier %} &middot; <span class="edetail__nexttier">{{ card.levels_to_next_tier }} to {{ card.next_tier }}</span>{% endif %}</div>
         </div>
     </div>
