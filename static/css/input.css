@@ -2880,6 +2880,10 @@ details[open]::details-content {
   #hotbar-wrapper, #hotbar-container, #toggle-icon {
     transition: none;
   }
+  /* Community "live" heartbeat dot: no perpetual ping for reduced-motion users (the dot stays). */
+  .animate-ping {
+    animation: none;
+  }
 }
 
 /* ── Dual-range slider thumbs ─────────────────────────────────────────── */

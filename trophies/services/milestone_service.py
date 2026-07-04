@@ -12,11 +12,22 @@ from collections import defaultdict
 from django.db import transaction
 from django.db.models import F
 
-from trophies.models import UserTitle
+from trophies.models import Milestone, UserMilestone, UserTitle
 from trophies.milestone_constants import ONE_OFF_TYPES
 from trophies.services.badge_service import notify_bot_role_earned
 
 logger = logging.getLogger("psn_api")
+
+
+def earned_summary(profile):
+    """Cheap {earned, total} milestone summary for the Home navigator glance. `total` is the live
+    (non-retired) milestone catalog; `earned` counts the profile's awards among those still active
+    -- earned records survive retirement, so gating to is_active keeps `earned <= total` and matches
+    what the Milestones page shows. Two bounded COUNT queries over the curated catalog (whale-safe)."""
+    return {
+        'earned': UserMilestone.objects.filter(profile=profile, milestone__is_active=True).count(),
+        'total': Milestone.objects.active().count(),
+    }
 
 
 @transaction.atomic

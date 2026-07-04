@@ -34,9 +34,6 @@ def test_fresh_profile_builds_every_zone():
     # The trophy-snapshot card's bridge to the profile resolves (reverse-guarded).
     assert ctx['profile_url']
     assert ctx['community'] is None    # cold heartbeat cache in tests -> the section hides (degrades)
-    # Elements strip: every element is present (a fresh account floors them all to level 1).
-    assert len(ctx['elements']) > 0
-    assert all({'symbol', 'level', 'disc_slug', 'name', 'shape'} <= set(e) for e in ctx['elements'])
 
 
 def test_compact_num_boundaries():
@@ -55,9 +52,28 @@ def test_community_pulse_compacts_and_curates():
         'expanded': {'platinums_total': {'value': 2_100_000, 'label': 'Platinums earned', 'sublabel': 'all-time'}},
     }
     pulse = home_service._build_community(hb)
-    assert pulse[0] == {'value': '2.1M', 'label': 'Platinums earned', 'sub': 'all-time'}
+    assert pulse[0] == {'value': '2.1M', 'label': 'Platinums earned', 'sub': 'all-time',
+                        'icon': 'platinum', 'live': False}
     assert [c['value'] for c in pulse] == ['2.1M', '12.3K', '45.2K', '1.2M']
+    # the 24h cell is the live pulse; nothing else is
+    assert pulse[1]['icon'] == 'pulse' and pulse[1]['live'] is True
+    assert all(c['live'] is False for c in pulse if c['icon'] != 'pulse')
     assert home_service._build_community(None) is None
+
+
+def test_community_pulse_degrades_on_missing_heartbeat_cells():
+    """A partial heartbeat renders fewer cells rather than erroring; survivors keep their tags,
+    and with the 24h cell absent nothing is flagged live."""
+    hb = {
+        'always': {
+            'profiles_total': {'value': 100, 'label': 'Hunters', 'sublabel': None},
+            'trophies_total': {'value': 200, 'label': 'Trophies', 'sublabel': None},
+        },
+        'expanded': {},   # no platinums_total, and no trophies_24h (the live cell) either
+    }
+    pulse = home_service._build_community(hb)
+    assert [c['icon'] for c in pulse] == ['users', 'trophy']   # only the present cells survive
+    assert all(c['live'] is False for c in pulse)              # the live cell was absent
 
 
 def test_sync_zone_reports_last_and_next():
@@ -81,8 +97,8 @@ def test_launchers_resolve_and_carry_in_hand_stats():
     # All five functional-page launchers resolve (validates the url names).
     assert set(by_label) == {'The Lab', 'Collection', 'Research Panel', 'Milestones', 'Titles'}
     assert all(l['url'] and l['icon'] and l['desc'] for l in launchers)
-    # Quick-stats reuse data already in hand -- the Lab shows the Pursuer Level...
-    assert by_label['The Lab']['stat'].startswith('Level ')
+    # Quick-stats reuse data already in hand -- the Lab shows your strongest element (name + level)...
+    assert 'Lv' in by_label['The Lab']['stat']
     # ...and with nothing claimable, the Research Panel carries no stat.
     assert by_label['Research Panel']['stat'] is None
 
@@ -124,18 +140,36 @@ def test_broken_hero_zone_degrades_without_500(monkeypatch):
     assert ctx['glances']['snapshot'] is not None     # other zones still build
     assert [l['label'] for l in ctx['launchers']]      # launchers still resolve
     assert ctx['launchers'][0]['stat'] != 'Level None'  # missing level -> no bogus stat
-    assert ctx['elements'] == []                        # elements come from the same Lab build
 
 
-def test_elements_strip_is_strongest_first():
-    """The elements strip flattens the Lab and sorts by level descending, so a boosted
-    element leads the strip."""
+def test_lab_launcher_stat_shows_strongest_element():
+    """The Lab navigator tile surfaces your strongest element (the Lab build is flattened and
+    sorted by level desc), so a boosted element leads the tile's live stat."""
     from trophies.models import Job, ProfileJobXP
     from trophies.util_modules.leveling import xp_for_level
     profile = ProfileFactory()
     ProfileJobXP.objects.create(
         profile=profile, job=Job.objects.get(slug='mage'), total_xp=xp_for_level(20), level=20)
 
-    elements = home_service.build_home_context(profile)['elements']
+    launchers = home_service.build_home_context(profile)['launchers']
+    lab = next(l for l in launchers if l['label'] == 'The Lab')
 
-    assert elements[0]['name'] == 'Mage' and elements[0]['level'] == 20
+    assert lab['stat'] == 'Mage · Lv 20'
+
+
+def test_milestones_launcher_shows_earned_over_active_total():
+    """The Milestones tile shows earned/total, counting only ACTIVE milestones on both sides
+    (earned records for retired milestones survive but must not inflate the count past total)."""
+    from trophies.models import Milestone, UserMilestone
+    Milestone.objects.all().delete()   # isolate from any migration-seeded catalog
+    profile = ProfileFactory()
+    active_earned = Milestone.objects.create(name='A', criteria_type='plat_count', criteria_details={'target': 1})
+    Milestone.objects.create(name='B', criteria_type='plat_count', criteria_details={'target': 2})
+    retired = Milestone.objects.create(name='C', criteria_type='plat_count', criteria_details={'target': 3}, is_active=False)
+    UserMilestone.objects.create(profile=profile, milestone=active_earned)   # active + earned -> counts
+    UserMilestone.objects.create(profile=profile, milestone=retired)         # retired -> excluded both sides
+
+    launchers = home_service.build_home_context(profile)['launchers']
+    milestones = next(l for l in launchers if l['label'] == 'Milestones')
+
+    assert milestones['stat'] == '1/2 earned'

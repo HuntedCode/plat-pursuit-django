@@ -89,14 +89,6 @@
 .lab-rankline__sep { margin-right: 0.45em; color: var(--pp-text-mute); font-weight: 400; }
 .lab-rankline--luminary, .lab-rankline--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
 
-/* ---- Compact element chip for the Home "your elements" strip ----
-   The cell hosts the shared atom glyph (family shape + symbol + family color); the chip just
-   sizes it and adds the level beneath. */
-.home-elem { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 44px; flex: none; }
-.home-elem__cell { width: 44px; height: 44px; transition: transform 0.15s; }
-.home-elem:hover .home-elem__cell { transform: scale(1.09); }
-.home-elem__lv { font-size: 11px; font-weight: 700; color: var(--pp-text-dim); }
-
 /* ---- Home recent-platinums marquee (auto-scroll, seamless loop) ----
    The track holds the covers twice; translating it half its width (minus half the gap) loops
    seamlessly. Pauses on hover so a cover can be clicked; reduced-motion falls back to a plain

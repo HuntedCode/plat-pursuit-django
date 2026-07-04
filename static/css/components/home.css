@@ -1,7 +1,7 @@
 /* ============================================================================
  * HOME -- premium motion touches for the synced landing.
  *   - Entrance settle: the sections below the Pursuer Card rise + fade in, staggered.
- *   - Hover glows: element atoms + launcher icons warm to a soft glow on hover.
+ *   - Hover glows: navigator (launcher) icons warm to a soft glow on hover.
  * Count-ups on the headline numbers are handled in static/js/home-motion.js.
  * ========================================================================== */
 
@@ -11,16 +11,10 @@
 .home-reveal { animation: homeSettle 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--rev, 0) * 0.07s); }
 @keyframes homeSettle { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 
-/* Premium micro-touch: the element tile's atom and the launcher icons warm to a soft glow on hover.
-   The resting state carries a ZERO-blur drop-shadow of the same colour (invisible), not `none`, so
-   the hover only grows the blur (0 -> 7px) and the glow fades in/out -- browsers can't interpolate
-   `none` -> drop-shadow, which pops. The transform ease is redeclared here (loaded after
-   elements.css) so adding `filter` doesn't drop it. */
-.home-elem__cell {
-    transition: transform 0.15s ease, filter 0.25s ease;
-    filter: drop-shadow(0 0 0 color-mix(in oklab, var(--disc) 60%, transparent));
-}
-.home-elem:hover .home-elem__cell { filter: drop-shadow(0 0 7px color-mix(in oklab, var(--disc) 60%, transparent)); }
+/* Premium micro-touch: the navigator (launcher) icons warm to a soft glow on hover. The resting
+   state carries a ZERO-blur drop-shadow of the same colour (invisible), not `none`, so the hover
+   only grows the blur (0 -> 7px) and the glow fades in/out -- browsers can't interpolate
+   `none` -> drop-shadow, which pops. */
 .home-launch__icon {
     transition: filter 0.25s ease;
     filter: drop-shadow(0 0 0 color-mix(in oklab, var(--pp-primary) 55%, transparent));

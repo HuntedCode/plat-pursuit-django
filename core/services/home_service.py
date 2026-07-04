@@ -24,7 +24,9 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from core.services.site_heartbeat import get_cached_heartbeat
-from trophies.services import contract_service, dashboard_service, lab_service, pursuer_card_service
+from trophies.services import (
+    contract_service, dashboard_service, lab_service, milestone_service, pursuer_card_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,10 @@ def _build_glances(profile):
             'almost_badges', profile,
             lambda: _unique_series(dashboard_service.provide_badge_progress(profile, {'limit': 12})
                                    .get('badges_in_progress', []))[:3], []),
+        'milestones': _safe(
+            'milestones', profile,
+            lambda: milestone_service.earned_summary(profile),
+            {'earned': 0, 'total': 0}),
         'snapshot': _safe(
             'snapshot', profile,
             lambda: dashboard_service.provide_trophy_snapshot(profile), None),
@@ -101,16 +107,23 @@ def _compact_num(n):
 
 def _build_community(heartbeat):
     """A curated community-pulse strip from the cached site heartbeat (computed hourly by
-    cron + cached -- free to read). Big totals are compacted for the small cells."""
+    cron + cached -- free to read). Big totals are compacted for the small cells; each carries an
+    icon for identity, and the 24h cell is flagged `live` (the "happening right now" pulse)."""
     if not heartbeat:
         return None
     always = heartbeat.get('always') or {}
     expanded = heartbeat.get('expanded') or {}
-    picks = [expanded.get('platinums_total'), always.get('trophies_24h'),
-             always.get('profiles_total'), always.get('trophies_total')]
+    # (heartbeat cell, icon, is_live)
+    picks = [
+        (expanded.get('platinums_total'), 'platinum', False),
+        (always.get('trophies_24h'),      'pulse',    True),
+        (always.get('profiles_total'),    'users',    False),
+        (always.get('trophies_total'),    'trophy',   False),
+    ]
     pulse = [
-        {'value': _compact_num(p.get('value')), 'label': p.get('label'), 'sub': p.get('sublabel')}
-        for p in picks if p
+        {'value': _compact_num(p.get('value')), 'label': p.get('label'), 'sub': p.get('sublabel'),
+         'icon': icon, 'live': live}
+        for p, icon, live in picks if p
     ]
     return pulse or None
 
@@ -126,15 +139,24 @@ def _build_sync(profile):
     return info
 
 
-def _build_launchers(profile, hero, glances):
-    """Launcher cards into the functional pages. A quick-stat is attached only when it's
-    already in hand (no extra queries): the Lab shows the Pursuer Level, the Research Panel
-    the claimable count, Titles the equipped title. A route that doesn't resolve is dropped."""
+def _build_launchers(profile, hero, glances, elements):
+    """Navigator tiles into the functional pages, each carrying a live glance-stat drawn from the
+    already-built glances (no extra queries here): the Lab shows your strongest element, the Research
+    Panel the XP waiting to claim, Collection your closest badge, Milestones how many you've earned,
+    Titles the equipped title. A route that doesn't resolve is dropped."""
     level = (hero or {}).get('pursuer_level')
-    claimable = ((glances or {}).get('claimable') or {}).get('count') or 0
+    top_el = (elements or [None])[0]
+    claim = (glances or {}).get('claimable') or {}
+    almost = ((glances or {}).get('almost_badges') or [None])[0]
+    ms = (glances or {}).get('milestones') or {}
     stats = {
-        'lab': f"Level {level}" if level else None,
-        'research_panel': f"{claimable} to claim" if claimable else None,
+        'lab': (f"{top_el['name']} · Lv {top_el['level']}"
+                if top_el and top_el.get('name') and top_el.get('level')
+                else (f"Level {level}" if level else None)),
+        'research_panel': f"{claim.get('total_xp'):,} XP to claim" if claim.get('total_xp') else None,
+        'badge_collection': (f"{almost['completed']}/{almost['required']} · {almost['tier_name']}"
+                             if almost else None),
+        'milestones_list': f"{ms['earned']}/{ms['total']} earned" if ms.get('total') else None,
         'my_titles': (hero or {}).get('active_title'),
     }
     launchers = []
@@ -167,16 +189,16 @@ def _build_elements(lab):
 def build_home_context(profile):
     """Assemble the synced Home context for `profile`. Each zone is isolated so a single
     failure degrades to a missing section rather than a 500."""
-    # One Lab build feeds both the identity hero and the elements strip (no double work).
+    # One Lab build feeds both the identity hero and the navigator's Lab stat (no double work).
     lab_ctx = _safe('lab', profile, lambda: lab_service.build_lab_context(profile), {})
     hero = (lab_ctx or {}).get('hero')
+    elements = _build_elements((lab_ctx or {}).get('lab'))
     glances = _build_glances(profile)
     return {
         'hero': hero,
         # The identity signature; reuses the already-built Lab context (no second build).
         'pursuer_card': _safe('pursuer_card', profile,
                               lambda: pursuer_card_service.build_pursuer_card(profile, lab_ctx=lab_ctx), None),
-        'elements': _build_elements((lab_ctx or {}).get('lab')),
         'glances': glances,
         'sync': _safe('sync', profile, lambda: _build_sync(profile), None),
         'community': _safe('community', profile, lambda: _build_community(get_cached_heartbeat()), None),
@@ -184,7 +206,7 @@ def build_home_context(profile):
             'recent', profile,
             lambda: dashboard_service.provide_recent_platinums(profile, {'limit': RECENT_LIMIT})
             .get('platinums', []), []),
-        'launchers': _build_launchers(profile, hero, glances),
+        'launchers': _build_launchers(profile, hero, glances, elements),
         # The trophy-snapshot card bridges gamification-first home -> trophy-data profile.
         'profile_url': _safe(
             'profile_url', profile,
