@@ -2,8 +2,8 @@
 Hub-of-Hubs sub-navigation strip.
 
 Renders below the main navbar on every page that belongs to one of the
-hubs (My Pursuit, Browse, Community, Support). The active hub and
-active item slug come from the hub_subnav context processor in
+hubs (My Pursuit, Browse, Community, Support). The active hub and active
+item slug come from the hub_subnav context processor in
 plat_pursuit/context_processors.py, which uses
 core.hub_subnav.resolve_hub_subnav to URL-prefix-match the request.
 
@@ -12,62 +12,68 @@ processor and the if-guard below short-circuits the entire include so
 nothing renders.
 
 Layout:
-- Sticky at all breakpoints (sits below the main navbar at top-16,
-  matching daisyUI's .navbar min-height of 4rem)
-- The main navbar is also sticky (top-0 z-50); this strip pins
-  immediately below it (top-16 z-40)
-- Horizontal scroll on mobile (one line, swipe to see more)
-- Active item: filled background + primary-color border + aria-current
+- Sticky at all breakpoints (top-16, below the main navbar).
+- Desktop (lg+): a single scrolling row -- hub label, divider, pill items.
+- Mobile (<lg): collapse-to-grid -- one line showing the hub + current page;
+  tapping it drops an overlay grid of all items (the 6+4 divider preserved).
+  The panel is absolute, so expanding it doesn't reflow the sticky chrome.
+- Active item: filled background + primary border + aria-current.
 
-See docs/architecture/ia-and-subnav.md for the design rationale and
-the stacking order documentation.
+See docs/architecture/ia-and-subnav.md for the design rationale.
 {% endcomment %}
 {% if hub_section and hub_subnav_items %}
 <nav aria-label="{{ hub_subnav_label }} sub-navigation"
      class="hub-subnav bg-base-200/95 backdrop-blur border-b-2 border-primary/30 shadow-lg sticky top-16 z-40">
     <div class="container mx-auto px-2 md:px-4">
-        <div class="flex items-center gap-2 md:gap-3 h-10 md:h-11 overflow-x-auto hub-subnav-scroll">
 
-            {# Hub label (hidden on mobile to save space) #}
-            <div class="hidden md:flex items-center gap-1.5 shrink-0 text-xs font-bold text-base-content/60 uppercase tracking-wide pr-1">
+        {# Desktop (lg+): single scrolling row -- hub label, divider, pills. #}
+        <div class="hidden lg:flex items-center gap-3 h-11 overflow-x-auto hub-subnav-scroll">
+            <div class="flex items-center gap-1.5 shrink-0 text-xs font-bold text-base-content/60 uppercase tracking-wide pr-1">
                 {% if hub_subnav_icon == 'compass' %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
                 {% elif hub_subnav_icon == 'users' %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 {% elif hub_subnav_icon == 'trophy' %}
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
                 {% endif %}
                 <span>{{ hub_subnav_label }}</span>
             </div>
-
-            {# Visual separator between label and items (desktop only) #}
-            <div class="hidden md:block w-px h-5 bg-base-content/15 shrink-0"></div>
-
-            {# Sub-nav item pills #}
-            <ul class="flex items-center gap-1 md:gap-1.5 shrink-0">
+            <div class="w-px h-5 bg-base-content/15 shrink-0"></div>
+            <ul class="flex items-center gap-1.5 shrink-0">
                 {% for item in hub_subnav_items %}
                     {% if item.divider_before %}<li aria-hidden="true" class="shrink-0 w-px h-5 bg-base-content/15 mx-0.5"></li>{% endif %}
                     <li class="shrink-0">
                         <a href="{{ item.url }}"
-                           class="inline-flex items-center gap-1.5 px-2.5 md:px-3 py-1 rounded-md text-xs md:text-sm font-medium whitespace-nowrap transition-all {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30 shadow-sm{% else %}text-base-content/70 hover:text-primary hover:bg-base-300/60 border border-transparent{% endif %}"
-                           {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>
-                            {% if item.icon == 'heart' %}
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 md:w-4 md:h-4 text-error" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                                </svg>
-                            {% endif %}
-                            {{ item.label }}
-                        </a>
+                           class="inline-flex items-center px-3 py-1 rounded-md text-sm font-medium whitespace-nowrap transition-all {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30 shadow-sm{% else %}text-base-content/70 hover:text-primary hover:bg-base-300/60 border border-transparent{% endif %}"
+                           {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}</a>
                     </li>
                 {% endfor %}
             </ul>
+        </div>
 
+        {# Mobile (<lg): collapse bar -- hub + current page + chevron; taps open the grid panel. #}
+        <button type="button" data-hub-subnav-toggle aria-expanded="false" aria-controls="hub-subnav-panel"
+                class="lg:hidden w-full flex items-center justify-between h-11 text-sm">
+            <span class="inline-flex items-center gap-2 min-w-0">
+                <svg class="w-4 h-4 text-base-content/50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                <span class="text-xs font-bold uppercase tracking-wide text-base-content/60 shrink-0">{{ hub_subnav_label }}</span>
+                {% if hub_subnav_active_label %}<span class="text-base-content/30 shrink-0" aria-hidden="true">&middot;</span><span class="text-primary font-semibold truncate">{{ hub_subnav_active_label }}</span>{% endif %}
+            </span>
+            <svg class="hub-subnav-chev w-4 h-4 text-base-content/50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+    </div>
+
+    {# Mobile (<lg): the grid overlay drops below the bar (absolute -> no sticky reflow on expand). #}
+    <div id="hub-subnav-panel" class="lg:hidden hub-subnav-panel absolute left-0 right-0 top-full bg-base-200 border-b-2 border-primary/30 shadow-xl z-40">
+        <div class="container mx-auto px-2 md:px-4">
+            <div class="grid grid-cols-3 gap-1.5 py-2.5">
+                {% for item in hub_subnav_items %}
+                    {% if item.divider_before %}<div aria-hidden="true" class="col-span-3 h-px bg-base-content/15 my-1"></div>{% endif %}
+                    <a href="{{ item.url }}"
+                       class="px-2 py-2 rounded-md text-xs font-medium text-center transition-all {% if item.slug == hub_subnav_active_slug %}bg-primary/15 text-primary border border-primary/30{% else %}text-base-content/70 border border-transparent active:bg-base-300/60{% endif %}"
+                       {% if item.slug == hub_subnav_active_slug %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </nav>

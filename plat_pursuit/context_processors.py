@@ -201,6 +201,7 @@ def hub_subnav(request):
             extras = _profile_subnav_extra(request)
 
         items = build_rendered_items(hub, is_authenticated=is_auth, extras=extras)
+        active_label = next((i.label for i in items if i.slug == active_slug), '')
 
         return {
             'hub_section': hub.key,
@@ -208,6 +209,7 @@ def hub_subnav(request):
             'hub_subnav_icon': hub.icon,
             'hub_subnav_items': items,
             'hub_subnav_active_slug': active_slug,
+            'hub_subnav_active_label': active_label,   # current page, for the mobile collapse bar
         }
     except Exception:
         logger.debug("Failed to resolve hub_subnav for path %s", request.path, exc_info=True)

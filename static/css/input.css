@@ -418,6 +418,12 @@
     @apply w-5 h-5;
   }
 
+  /* ===== Personal-hub mobile sub-nav (collapse-to-grid) ===== */
+  .hub-subnav-panel { max-height: 0; overflow: hidden; transition: max-height 0.28s ease; }
+  .hub-subnav-panel.is-open { max-height: 420px; }
+  .hub-subnav-chev { transition: transform 0.2s ease; }
+  .hub-subnav-chev.is-open { transform: rotate(180deg); }
+
   /* ===== Toast Container (clear mobile tabbar) ===== */
   #toast-container {
     bottom: 5rem;
