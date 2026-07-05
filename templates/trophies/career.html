@@ -292,10 +292,24 @@ function ppCountUp(el, dur) {
         {% for d in career.disciplines %}DATA['{{ d.slug }}'] = { labels: {{ d.radar_labels_json|safe }}, values: {{ d.radar_data_json|safe }} };
         {% endfor %}
 
-        // #3 Soft glow around the radar line/fill/points (Chart.js has no native glow).
+        // #3 Soft glow around the radar line/fill (Chart.js has no native glow). In Overview each
+        // point then re-glows in its own discipline color (the line stays the aggregate cyan).
         var glowPlugin = { id: 'radarGlow',
-            beforeDatasetDraw: function (c, a) { c.ctx.save(); c.ctx.shadowColor = c.data.datasets[a.index].borderColor; c.ctx.shadowBlur = 9; },
-            afterDatasetDraw: function (c) { c.ctx.restore(); } };
+            beforeDatasetDraw: function (c, a) { c.ctx.save(); c.ctx.shadowColor = c.data.datasets[a.index].borderColor; c.ctx.shadowBlur = 8; },
+            afterDatasetDraw: function (c) { c.ctx.restore(); },
+            afterDatasetsDraw: function (c) {
+                var ds = c.data.datasets[0];
+                if (!Array.isArray(ds.pointBackgroundColor)) return;   // per-discipline mode is already one color
+                var ctx = c.ctx;
+                c.getDatasetMeta(0).data.forEach(function (pt, i) {
+                    var r = (pt.options && pt.options.radius) || basePR;
+                    ctx.save();
+                    ctx.shadowColor = ds.pointBackgroundColor[i]; ctx.shadowBlur = 12;
+                    ctx.fillStyle = ds.pointBackgroundColor[i];
+                    ctx.beginPath(); ctx.arc(pt.x, pt.y, r, 0, 2 * Math.PI); ctx.fill();
+                    ctx.restore();
+                });
+            } };
         chart = new Chart(canvas, {
             type: 'radar',
             data: { labels: [], datasets: [{ data: [], fill: true, borderWidth: 2, pointRadius: basePR, pointHoverRadius: bigPR }] },
