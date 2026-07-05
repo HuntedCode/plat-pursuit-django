@@ -78,7 +78,7 @@
 
     {# ── Pending rewards rail: the claim CTA co-located with the jobs it levels ── #}
     {% if claimable.count %}
-    <a href="?view=contracts" data-lab-goto="contracts" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 shadow-lg shadow-neutral hover:border-primary hover:shadow-primary/20 transition-all group mb-3">
+    <a href="?view=contracts" data-lab-goto="contracts" data-goto-filter="claimable" class="claim-banner claim-banner--gold card bg-base-200/90 border-2 border-primary/40 hover:border-primary transition-all group mb-3">
         <div class="card-body p-3 md:p-4 flex-row items-center gap-3 md:gap-4">
             <span class="claim-spark shrink-0 text-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 md:w-9 md:h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
@@ -455,6 +455,8 @@ function ppCountUp(el, dur) {
         el.addEventListener('click', function (e) {
             e.preventDefault();
             showView(el.dataset.labGoto);
+            var f = el.dataset.gotoFilter;   // e.g. the claim banner lands on the Claimable filter
+            if (f) { var chip = document.querySelector('.rp-chip[data-filter="' + f + '"]'); if (chip) chip.click(); }
             var tabs = document.querySelector('.lab-views');
             if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });

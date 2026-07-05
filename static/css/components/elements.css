@@ -63,17 +63,17 @@
 
 /* ---- Contracts claim banner: a reward-pending CTA -- breathing glow, a periodic shine sweep,
    a twinkling sparkle, and (revertible) a warm reward-tray gradient. ---- */
-.claim-banner { position: relative; overflow: hidden; animation: claimGlow 3.2s ease-in-out infinite; }
+.claim-banner { position: relative; overflow: hidden; box-shadow: 0 3px 16px color-mix(in oklab, var(--pp-primary) 15%, transparent); animation: claimGlow 3s ease-in-out infinite; }
 @keyframes claimGlow {
-    0%, 100% { box-shadow: 0 4px 18px color-mix(in oklab, var(--pp-primary) 12%, transparent); }
-    50%      { box-shadow: 0 6px 26px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
+    0%, 100% { box-shadow: 0 3px 16px color-mix(in oklab, var(--pp-primary) 15%, transparent); }
+    50%      { box-shadow: 0 5px 32px color-mix(in oklab, var(--pp-primary) 45%, transparent); }
 }
 .claim-banner::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(115deg, transparent 42%, color-mix(in oklab, var(--pp-primary) 20%, rgba(255,255,255,0.10)) 50%, transparent 58%); transform: translateX(-130%); animation: claimShine 5.5s ease-in-out infinite; }
 @keyframes claimShine { 0%, 62% { transform: translateX(-130%); } 82%, 100% { transform: translateX(130%); } }
-.claim-spark { display: inline-flex; animation: claimSpark 2.6s ease-in-out infinite; transform-origin: center; }
+.claim-spark { display: inline-flex; animation: claimSpark 2.4s ease-in-out infinite; transform-origin: center; }
 @keyframes claimSpark {
-    0%, 100% { transform: scale(1) rotate(0deg); filter: none; }
-    50%      { transform: scale(1.14) rotate(12deg); filter: drop-shadow(0 0 6px color-mix(in oklab, var(--pp-primary) 70%, transparent)); }
+    0%, 100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 transparent); }
+    45%      { transform: scale(1.22) rotate(18deg); filter: drop-shadow(0 0 8px color-mix(in oklab, var(--pp-primary) 80%, transparent)); }
 }
 /* #4 reward material -- remove the .claim-banner--gold class in the template to revert. */
 .claim-banner.claim-banner--gold { background: linear-gradient(100deg, color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2)) 0%, var(--pp-bg-2) 48%, color-mix(in oklab, #c79a52 11%, var(--pp-bg-2)) 100%); }
