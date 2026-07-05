@@ -35,6 +35,22 @@ def test_career_renders_jobs_and_contracts_on_one_surface(client):
     assert b'is-active" data-view="jobs"' in resp.content
 
 
+def test_career_page_embeds_all_facet_dimensions(client):
+    # Regression: the view helper once forwarded only status/platform, dropping the popover
+    # discipline/job counts, so the dropdown counts never reached the page.
+    import json
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    _live_contract('facet-check', ('gunslinger', 'mage'))
+    resp = client.get('/career/')
+    assert resp.status_code == 200
+    marker = b'<script id="rp-facets" type="application/json">'
+    start = resp.content.index(marker) + len(marker)
+    facets = json.loads(resp.content[start:resp.content.index(b'</script>', start)])
+    assert set(facets) >= {'status', 'platform', 'discipline', 'job'}   # every dimension the toolbar consumes
+    assert facets['job']['gunslinger'] >= 1 and facets['discipline']['combat'] >= 1
+
+
 def test_view_query_activates_contracts_tab(client):
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)

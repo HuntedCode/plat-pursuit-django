@@ -405,6 +405,71 @@
 /* Discipline chips carry their family color: a dot when idle, a full tint when active. */
 .rp-chip--disc::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 999px; background: var(--disc); vertical-align: middle; }
 .rp-chip--disc.is-active { color: var(--disc); border-color: var(--disc); background: color-mix(in oklab, var(--disc) 14%, var(--pp-bg-2)); }
+/* Board toolbar v2: a primary bar (search + sort + advanced toggle), a status row with a live
+   result count, and a collapsible advanced panel (discipline->job drill-down + platform selector). */
+.rp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.rp-bar .rp-search { flex: 1 1 240px; }
+.rp-bar__end { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.rp-sort { display: flex; align-items: center; gap: 6px; }
+.rp-sort__label { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
+.rp-sort__field { position: relative; }
+.rp-sort__select { appearance: none; -webkit-appearance: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 10px; padding: 7px 30px 7px 12px; cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease; }
+.rp-sort__select:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border)); }
+.rp-sort__select:focus { outline: none; border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); }
+.rp-sort__caret { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--pp-text-mute); pointer-events: none; }
+.rp-advbtn { position: relative; display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 13px; font-weight: 600; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 10px; padding: 7px 13px; cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease; }
+.rp-advbtn svg { width: 15px; height: 15px; }
+.rp-advbtn:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border)); }
+.rp-advbtn.is-open { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2)); }
+.rp-advbtn__badge { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0, #05070a); font-size: 11px; font-weight: 700; line-height: 1; }
+.rp-statusrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.rp-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+/* Advanced panel: fades in when the Filters toggle opens it (opacity/transform only -- no color-mix in keyframes). */
+.rp-advanced { display: flex; flex-direction: column; gap: 12px; padding: 13px; border: 1px solid var(--pp-border); border-radius: 12px; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); animation: rp-adv-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes rp-adv-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+.rp-adv__group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rp-adv__label { flex: 0 0 auto; width: 74px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+.rp-discs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rp-disc { position: relative; }
+.rp-disc__trigger { display: inline-flex; align-items: center; gap: 4px; }
+.rp-disc__caret { width: 12px; height: 12px; opacity: 0.55; transition: transform 0.18s ease; }
+.rp-disc__trigger[aria-expanded="true"] .rp-disc__caret { transform: rotate(180deg); }
+.rp-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 190px; max-width: calc(100vw - 24px); max-height: 300px; overflow-y: auto; padding: 6px; border: 1px solid var(--pp-border); border-radius: 12px; background: var(--pp-bg-1); box-shadow: 0 14px 34px -12px rgba(0, 0, 0, 0.6); animation: rp-pop-in 0.16s cubic-bezier(0.22, 1, 0.36, 1); }
+.rp-pop--left { left: auto; right: 0; }   /* flipped when a left-anchored popover would overflow the viewport (JS) */
+@keyframes rp-pop-in { from { opacity: 0; transform: translateY(-5px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.rp-pop__item { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; color: var(--pp-text-dim); background: transparent; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
+.rp-pop__item:hover { background: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-2)); color: var(--pp-text); }
+.rp-pop__ico { flex: 0 0 auto; width: 17px; height: 17px; color: var(--disc); }
+.rp-pop__item--head { color: var(--disc); border-bottom: 1px solid var(--pp-border); border-radius: 8px 8px 0 0; margin-bottom: 4px; padding-bottom: 8px; }
+/* Per-job / per-discipline facet count in the popover (pushed to the right; check trails it when selected). */
+.rp-pop__n { margin-left: auto; padding-left: 8px; font-size: 11px; font-weight: 700; color: var(--pp-text-mute); font-variant-numeric: tabular-nums; }
+.rp-pop__item--empty { opacity: 0.42; }
+.rp-pop__item--empty:hover { opacity: 0.72; }
+.rp-plats { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.rp-platgrp { display: inline-flex; align-items: center; gap: 6px; }
+.rp-platgrp__tag { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pp-text-mute); }
+.rp-plat { padding: 4px 11px; font-size: 12px; }
+/* Discipline drill-down is multi-select: a count on each trigger, a check on selected popover items. */
+.rp-disc__count { display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 999px; background: var(--disc); color: var(--pp-bg-0, #05070a); font-size: 10px; font-weight: 700; line-height: 1; }
+.rp-pop__item.is-selected { background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2)); color: var(--pp-text); }
+.rp-pop__item.is-selected::after { content: '\2713'; padding-left: 8px; color: var(--disc); font-weight: 700; }
+/* Selected jobs/disciplines as removable tokens (the AND set). */
+.rp-adv__group--tokens { align-items: flex-start; }
+.rp-tokens { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.rp-token { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 600; color: var(--disc, var(--pp-text)); background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, var(--pp-border)); border-radius: 999px; padding: 3px 9px; cursor: pointer; transition: background 0.14s ease, border-color 0.14s ease; }
+.rp-token:hover { background: color-mix(in oklab, var(--disc) 26%, var(--pp-bg-2)); }
+.rp-token__x { font-size: 14px; line-height: 1; opacity: 0.7; }
+.rp-token:hover .rp-token__x { opacity: 1; }
+.rp-tokens__clear { font: inherit; font-size: 12px; font-weight: 600; color: var(--pp-text-mute); background: transparent; border: 0; padding: 3px 4px; cursor: pointer; transition: color 0.14s ease; }
+.rp-tokens__clear:hover { color: var(--pp-primary); text-decoration: underline; }
+/* Faceted counts: a live per-chip total; a chip whose facet is empty dims (but stays clickable). */
+.rp-chip__n { display: inline-flex; align-items: center; justify-content: center; margin-left: 6px; padding: 0 5px; min-width: 16px; height: 15px; border-radius: 999px; background: color-mix(in oklab, currentColor 15%, transparent); font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; opacity: 0.9; }
+.rp-chip--empty { opacity: 0.4; }
+.rp-chip--empty:hover { opacity: 0.7; }
+/* Smart empty state: the "Drop <label> to see N" relaxation suggestion. */
+.rp-relax { display: block; margin: 4px auto 10px; padding: 7px 15px; border-radius: 999px; border: 1px solid var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 10%, transparent); color: var(--pp-primary); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s ease, transform 0.18s cubic-bezier(0.34, 1.3, 0.64, 1); }
+.rp-relax:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); transform: translateY(-1px); }
+.rp-relax:active { transform: scale(0.97); }
 /* Divider under the title (echoes the games-footer rule); faded at the ends for a premium edge. */
 .rp-div { display: block; height: 1px; background: linear-gradient(90deg, transparent, var(--pp-border) 12%, var(--pp-border) 88%, transparent); }
 

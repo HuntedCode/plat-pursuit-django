@@ -1,6 +1,9 @@
 {% comment %}
 Contracts board results: just the cards for one page. Swapped into #rp-list on a filter change
 (page 1) and appended by InfiniteScroller (page N). The icon sprite + toolbar live on the page,
-so this partial stays cards-only. Expects: contracts (card dicts), disciplines (job roster), profile.
+so this partial stays cards-only. Expects: contracts (card dicts), disciplines (job roster),
+profile, and facets (chip counts + smart-empty suggestion; None on infinite-scroll appends).
+The JS reads the facet island out of the parsed fragment on replace, then discards it.
 {% endcomment %}
 {% for p in contracts %}{% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=disciplines %}{% endfor %}
+{{ facets|json_script:"rp-facets" }}

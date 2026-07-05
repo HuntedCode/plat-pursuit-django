@@ -1,6 +1,6 @@
-"""Tests for contracts_service.build_contracts_context.
+"""Tests for the Contracts board (contracts_service.contracts_page).
 
-The Contracts board lists live Contracts to pursue. Pins: the contract shape (games as
+The Contracts board lists live Contracts to pursue. Pins: the contract card shape (games as
 the focal point + jobs + fixed-T reward split), the per-viewer status machine
 (available / pursuing / claimable / accepted) derived from EXISTING EarnedContract rows
 (never written on this read path), jobless/non-live contracts hidden, and claimable_count.
@@ -10,7 +10,7 @@ import pytest
 from trophies.models import Contract, ContractMembership, Job, Trophy
 from trophies.services import contract_service
 from trophies.services.contracts_service import (
-    build_contract_modal, build_contracts_context, claimable_count, contracts_page,
+    board_facets, build_contract_modal, claimable_count, contracts_page, suggest_relaxation,
 )
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import (
@@ -35,9 +35,9 @@ def _project(ctx, slug):
 
 def test_lists_live_project_with_games_elements_and_split():
     profile = ProfileFactory()
-    _c, _concept, game = _contract('p-list', ('gunslinger', 'mage'), title='Cool Game')
+    _c, _concept, _game = _contract('p-list', ('gunslinger', 'mage'), title='Cool Game')
 
-    ctx = build_contracts_context(profile)
+    ctx = contracts_page(profile)
 
     p = _project(ctx, 'p-list')
     assert p['name'] == 'p-list'            # the contract name wins over the member concept title
@@ -51,9 +51,6 @@ def test_lists_live_project_with_games_elements_and_split():
     assert p['family_color'].startswith('var(--disc-')
     # gunslinger + mage are different families -> the accent bar is a multi-family gradient.
     assert p['family_gradient'].startswith('linear-gradient')
-    # toolbar fodder: lowercased search haystack (contract name + game title) + distinct disciplines
-    assert 'p-list' in p['search_text'] and game.title_name.lower() in p['search_text']
-    assert p['discipline_slugs'] == ['combat', 'heart']   # gunslinger=combat, mage=heart, sorted
 
 
 def test_jobless_project_is_hidden():
@@ -61,7 +58,7 @@ def test_jobless_project_is_hidden():
     _contract('p-jobless', job_slugs=())  # no elements -> awards nothing
     _contract('p-keep')                   # a control that MUST still appear
 
-    slugs = {p['slug'] for p in build_contracts_context(profile)['contracts']}
+    slugs = {p['slug'] for p in contracts_page(profile)['contracts']}
 
     assert 'p-keep' in slugs        # distinguishes "hidden" from "everything is gone"
     assert 'p-jobless' not in slugs
@@ -72,7 +69,7 @@ def test_non_live_project_is_excluded():
     _contract('p-dormant', live=False)
     _contract('p-live')             # a control that MUST still appear
 
-    slugs = {p['slug'] for p in build_contracts_context(profile)['contracts']}
+    slugs = {p['slug'] for p in contracts_page(profile)['contracts']}
 
     assert 'p-live' in slugs
     assert 'p-dormant' not in slugs
@@ -82,7 +79,7 @@ def test_status_available_when_untouched():
     profile = ProfileFactory()
     _contract('p-avail')
 
-    p = _project(build_contracts_context(profile), 'p-avail')
+    p = _project(contracts_page(profile), 'p-avail')
 
     assert p['status'] == 'available'
     assert p['progress'] == 0
@@ -94,7 +91,7 @@ def test_status_pursuing_with_partial_progress():
     _c, _concept, game = _contract2
     ProfileGameFactory(profile=profile, game=game, progress=60)
 
-    p = _project(build_contracts_context(profile), 'p-pursue')
+    p = _project(contracts_page(profile), 'p-pursue')
 
     assert p['status'] == 'pursuing'
     assert p['progress'] == 60
@@ -108,11 +105,10 @@ def test_status_pursuing_when_complete_but_reach_not_yet_stamped():
     _c, _concept, game = _contract('p-precommit')
     ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
 
-    p = _project(build_contracts_context(profile), 'p-precommit')
+    p = _project(contracts_page(profile), 'p-precommit')
 
     assert p['status'] == 'pursuing'
     assert p['progress'] == 100
-    assert p['completed'] is True
 
 
 def test_xp_total_override_drives_reward_split():
@@ -121,7 +117,7 @@ def test_xp_total_override_drives_reward_split():
     contract.xp_total_override = 1000
     contract.save(update_fields=['xp_total_override'])
 
-    p = _project(build_contracts_context(profile), 'p-override')
+    p = _project(contracts_page(profile), 'p-override')
 
     assert p['xp_total'] == 1000           # the override, not CONTRACT_XP_TOTAL
     assert p['xp_each'] == 500             # 1000 // 2 elements
@@ -135,11 +131,11 @@ def test_status_claimable_when_reached_not_accepted():
     ProfileGameFactory(profile=profile, game=game, progress=100, has_plat=True)
     contract_service.mark_contract_reached(profile, contract)  # reached, not accepted
 
-    ctx = build_contracts_context(profile)
+    ctx = contracts_page(profile)
     p = _project(ctx, 'p-claim')
 
     assert p['status'] == 'claimable'
-    assert ctx['claimable_count'] == 1
+    assert claimable_count(profile) == 1
 
 
 def test_status_accepted_after_accept():
@@ -151,17 +147,17 @@ def test_status_accepted_after_accept():
     contract_service.mark_contract_reached(profile, contract)
     contract_service.accept_contract(profile, contract)
 
-    ctx = build_contracts_context(profile)
+    ctx = contracts_page(profile)
     p = _project(ctx, 'p-accepted')
 
     assert p['status'] == 'accepted'
-    assert ctx['claimable_count'] == 0
+    assert claimable_count(profile) == 0
 
 
 def test_anonymous_viewer_sees_available_projects():
     _contract('p-anon')
 
-    ctx = build_contracts_context(None)
+    ctx = contracts_page(None)
 
     assert _project(ctx, 'p-anon')['status'] == 'available'
 
@@ -177,7 +173,7 @@ def _find(page, slug):
 
 
 def test_server_status_derived_in_sql_matches_all_states():
-    """The DB-annotated status must equal the Python _project_status for every state."""
+    """The DB-annotated status must resolve every state (available/pursuing/claimable/accepted)."""
     profile = ProfileFactory()
     _contract('s-avail')
     _c, _con, g_p = _contract('s-pursue')
@@ -215,7 +211,7 @@ def test_server_discipline_filter():
     profile = ProfileFactory()
     _contract('d-combat', ('gunslinger',))   # combat
     _contract('d-heart', ('mage',))          # heart
-    slugs = _slugs(contracts_page(profile, discipline='combat'))
+    slugs = _slugs(contracts_page(profile, disciplines=['combat']))
     assert 'd-combat' in slugs and 'd-heart' not in slugs
 
 
@@ -274,18 +270,108 @@ def test_server_job_drilldown():
     profile = ProfileFactory()
     _contract('job-gs', ('gunslinger', 'mage'))
     _contract('job-mage', ('mage',))
-    slugs = _slugs(contracts_page(profile, job='gunslinger'))
+    slugs = _slugs(contracts_page(profile, jobs=['gunslinger']))
     assert 'job-gs' in slugs and 'job-mage' not in slugs
 
 
-def test_server_sort_by_xp():
+def test_server_multi_job_is_anded():
     profile = ProfileFactory()
-    c_hi, _con, _g = _contract('sort-hi')
-    c_hi.xp_total_override = 9999
-    c_hi.save(update_fields=['xp_total_override'])
-    _contract('sort-lo')
-    slugs = _slugs(contracts_page(profile, sort='xp'))
-    assert slugs.index('sort-hi') < slugs.index('sort-lo')
+    _contract('mj-both', ('gunslinger', 'mage'))   # levels BOTH
+    _contract('mj-one', ('gunslinger',))           # only one of them
+    slugs = _slugs(contracts_page(profile, jobs=['gunslinger', 'mage']))
+    assert 'mj-both' in slugs and 'mj-one' not in slugs   # AND (a game with both), not OR
+
+
+def test_server_sort_by_job_count():
+    profile = ProfileFactory()
+    _contract('jc-many', ('gunslinger', 'mage'))   # 2 jobs
+    _contract('jc-few', ('gunslinger',))           # 1 job
+    most = _slugs(contracts_page(profile, sort='jobs'))
+    assert most.index('jc-many') < most.index('jc-few')
+    fewest = _slugs(contracts_page(profile, sort='fewest'))
+    assert fewest.index('jc-few') < fewest.index('jc-many')
+
+
+def test_server_pushing_orders_untouched_by_strong_discipline():
+    profile = ProfileFactory()
+    _contract('push-combat', ('gunslinger',))   # combat
+    _contract('push-heart', ('mage',))          # heart
+    page = contracts_page(profile, disc_levels={'combat': 10, 'heart': 0}, sort='pushing')  # strong in combat
+    slugs = _slugs(page)
+    assert slugs.index('push-combat') < slugs.index('push-heart')   # "keep pushing" = strongest first
+
+
+def test_board_facets_counts_status_and_platforms():
+    profile = ProfileFactory()
+    _contract('f-combat', ('gunslinger',))   # combat, PS5 (factory default)
+    _contract('f-heart', ('mage',))          # heart, PS5
+    facets = board_facets(profile)
+    assert facets['status']['available'] == 2 and facets['status']['all'] == 2
+    assert facets['platform']['PS5'] == 2 and facets['platform']['PS3'] == 0
+    # Status counts exclude their OWN dimension but respect the others: filtering to combat leaves 1.
+    scoped = board_facets(profile, disciplines=['combat'])
+    assert scoped['status']['all'] == 1
+    # Platform counts ignore the platform filter -- PS5's total shows even while defaulted to legacy.
+    assert board_facets(profile, platforms=['PS3'])['platform']['PS5'] == 2
+
+
+def test_board_facets_discipline_and_job_counts():
+    profile = ProfileFactory()
+    _contract('dj-a', ('gunslinger', 'mage'))   # gunslinger=combat, mage=heart
+    _contract('dj-b', ('gunslinger',))          # combat only
+    facets = board_facets(profile)
+    assert facets['job']['gunslinger'] == 2 and facets['job']['mage'] == 1
+    assert facets['discipline']['combat'] == 2 and facets['discipline']['heart'] == 1
+
+
+def test_board_facets_job_counts_refine_with_selection():
+    profile = ProfileFactory()
+    _contract('r-both', ('gunslinger', 'mage'))   # levels both
+    _contract('r-gun', ('gunslinger',))           # only gunslinger
+    # With gunslinger selected, each job count is the REFINEMENT: of the current results (both have
+    # gunslinger), how many ALSO level this job. mage narrows to the one contract that has both.
+    f = board_facets(profile, jobs=['gunslinger'])
+    assert f['job']['gunslinger'] == 2   # the selection itself: all current results have it
+    assert f['job']['mage'] == 1         # only r-both would survive adding mage
+    assert f['discipline']['heart'] == 1  # same refinement for the discipline (head) count
+
+
+def test_board_facets_status_respects_current_gen_default():
+    profile = ProfileFactory()
+    _contract('bf-ps5', ('gunslinger',))                       # PS5 (factory default)
+    _c, _con, g3 = _contract('bf-ps3', ('mage',))
+    g3.title_platform = ['PS3']
+    g3.save(update_fields=['title_platform'])
+    facets = board_facets(profile)                             # default -> current-gen (matches the board total)
+    assert facets['status']['all'] == 1                        # only the PS5 contract is on the default board
+    assert facets['platform']['PS3'] == 1                      # but the PS3 chip still shows its true total
+
+
+def test_suggest_relaxation_offers_widening_platforms():
+    profile = ProfileFactory()
+    _c, _con, g3 = _contract('sw-ps3', ('gunslinger',))
+    g3.title_platform = ['PS3']
+    g3.save(update_fields=['title_platform'])
+    # Default board is current-gen, so the lone PS3 contract yields 0. Dropping the job stays current-gen
+    # (still 0); widening platforms reveals it -> that's the suggestion.
+    s = suggest_relaxation(profile, jobs=['gunslinger'])       # platforms=None -> current-gen
+    assert s is not None and s['kind'] == 'platform' and s['count'] == 1
+
+
+def test_suggest_relaxation_picks_the_best_drop():
+    profile = ProfileFactory()
+    _contract('sug-combat', ('gunslinger',))   # levels gunslinger only
+    # Requiring BOTH gunslinger and mage returns nothing; dropping mage frees the one combat contract.
+    s = suggest_relaxation(profile, jobs=['gunslinger', 'mage'])
+    assert s is not None
+    assert s['kind'] == 'job' and s['value'] == 'mage' and s['count'] == 1
+
+
+def test_suggest_relaxation_none_when_nothing_helps():
+    profile = ProfileFactory()
+    _contract('sug-solo', ('gunslinger',))   # combat, PS5
+    # mage (no such contract) AND PS3 (none): dropping EITHER single filter still yields 0 -> no suggestion.
+    assert suggest_relaxation(profile, jobs=['mage'], platforms=['PS3']) is None
 
 
 def test_server_sort_by_progress_and_name():

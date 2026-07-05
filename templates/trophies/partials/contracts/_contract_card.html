@@ -7,7 +7,7 @@ Expects `p` (a contract dict from contracts_service), `disciplines` (the 25-job 
 per discipline with `.jobs`), and `profile` (viewer, for game-card links).
 {% endcomment %}
 {% load humanize job_icons %}
-<div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" data-search="{{ p.search_text }}" data-disciplines="{{ p.discipline_slugs|join:' ' }}" style="--rp-fam: {{ p.family_color }};">
+<div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
     <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
 
     {% comment %} Cover banner: the newest member game's landscape art. `landscape_urls` = PSN bg_url

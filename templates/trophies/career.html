@@ -210,38 +210,102 @@
                     <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
                     {% endif %}
                 </div>
-                <div class="rp-toolbar mb-3">
-                    <div class="rp-search">
-                        <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                        <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts">
-                    </div>
-                    <div class="rp-filters" role="group" aria-label="Filter by status">
-                        <button type="button" class="rp-chip is-active" data-filter="all">All</button>
-                        <button type="button" class="rp-chip" data-filter="available">Not Started</button>
-                        <button type="button" class="rp-chip" data-filter="pursuing">In Progress</button>
-                        <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim</button>
-                        <button type="button" class="rp-chip" data-filter="accepted">Claimed</button>
-                    </div>
-                    <div class="rp-filters rp-filters--disc" role="group" aria-label="Filter by discipline">
-                        <button type="button" class="rp-chip is-active" data-disc="all">All disciplines</button>
-                        {% for d in career.disciplines %}<button type="button" class="rp-chip rp-chip--disc" data-disc="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
-                    </div>
-                </div>
-                {# Icon sprite: define all job glyphs once so each card's 5x5 grid references them via <use>. #}
+                {% comment %} Icon sprite: define all job glyphs once, BEFORE the toolbar's discipline
+                popovers and the cards both reference them via <use>. {% endcomment %}
                 {% job_icon_sprite %}
-                <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch">
-                    {% for p in contracts %}
-                    {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=career.disciplines %}
-                    {% empty %}
-                    <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral col-span-full">
-                        <div class="card-body items-center text-center py-10 text-base-content/50">
-                            <p class="text-base font-semibold">No Contracts on the board yet</p>
-                            <p class="text-sm">Contracts are curated games that level your jobs. Check back soon.</p>
+                <div class="rp-toolbar mb-3">
+                    {% comment %} Primary bar: search + sort + the advanced-filters toggle. {% endcomment %}
+                    <div class="rp-bar">
+                        <div class="rp-search">
+                            <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                            <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts">
+                        </div>
+                        <div class="rp-bar__end">
+                            <div class="rp-sort">
+                                <label class="rp-sort__label hidden md:inline" for="rp-sort-select">Sort</label>
+                                <div class="rp-sort__field">
+                                    <select id="rp-sort-select" class="rp-sort__select" aria-label="Sort contracts">
+                                        <option value="relevance">Relevant to you</option>
+                                        <option value="pushing">Keep pushing</option>
+                                        <option value="jobs">Most jobs</option>
+                                        <option value="fewest">Fewest jobs</option>
+                                        <option value="progress">Closest to done</option>
+                                        <option value="newest">Newest</option>
+                                        <option value="name">A to Z</option>
+                                    </select>
+                                    <svg class="rp-sort__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </div>
+                            </div>
+                            <button type="button" id="rp-adv-toggle" class="rp-advbtn" aria-label="Filters" aria-expanded="false" aria-controls="rp-advanced">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                                <span class="hidden md:inline">Filters</span>
+                                <span id="rp-adv-count" class="rp-advbtn__badge" hidden>0</span>
+                            </button>
                         </div>
                     </div>
+                    {% comment %} Status quick-filter (always visible) + the live result count. {% endcomment %}
+                    <div class="rp-statusrow">
+                        <div class="rp-filters" role="group" aria-label="Filter by status">
+                            <button type="button" class="rp-chip is-active" data-filter="all">All<span class="rp-chip__n" hidden></span></button>
+                            <button type="button" class="rp-chip" data-filter="available">Not Started<span class="rp-chip__n" hidden></span></button>
+                            <button type="button" class="rp-chip" data-filter="pursuing">In Progress<span class="rp-chip__n" hidden></span></button>
+                            <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim<span class="rp-chip__n" hidden></span></button>
+                            <button type="button" class="rp-chip" data-filter="accepted">Claimed<span class="rp-chip__n" hidden></span></button>
+                        </div>
+                        <span id="rp-count" class="rp-count" aria-live="polite">{{ contracts_total }} contract{{ contracts_total|pluralize }}</span>
+                    </div>
+                    {% comment %} Advanced panel: discipline -> job drill-down + platform selector. {% endcomment %}
+                    <div id="rp-advanced" class="rp-advanced" hidden>
+                        <div class="rp-adv__group">
+                            <span class="rp-adv__label">Discipline</span>
+                            <div class="rp-discs" role="group" aria-label="Filter by discipline or job">
+                                <button type="button" class="rp-chip is-active" data-disc="all">All</button>
+                                {% for d in contract_disciplines %}
+                                <div class="rp-disc" style="--disc: var(--disc-{{ d.slug }});">
+                                    <button type="button" class="rp-chip rp-chip--disc rp-disc__trigger" data-disc="{{ d.slug }}" data-label="{{ d.label }}" aria-haspopup="true" aria-expanded="false"><span class="rp-disc__name">{{ d.label }}</span><span class="rp-disc__count" hidden></span><svg class="rp-disc__caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+                                    <div class="rp-pop" role="group" aria-label="{{ d.label }} jobs" hidden>
+                                        <button type="button" class="rp-pop__item rp-pop__item--head" data-disc="{{ d.slug }}" data-name="All {{ d.label }} jobs" aria-pressed="false"><span>All {{ d.label }} jobs</span><span class="rp-pop__n"></span></button>
+                                        {% for j in d.jobs %}<button type="button" class="rp-pop__item" data-job="{{ j.slug }}" data-disc="{{ d.slug }}" data-name="{{ j.name }}" aria-pressed="false">{% job_icon_use j.icon 'rp-pop__ico' %}<span>{{ j.name }}</span><span class="rp-pop__n"></span></button>{% endfor %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% comment %} Selected jobs/disciplines as removable tokens (populated by JS; ANDed together). {% endcomment %}
+                        <div class="rp-adv__group rp-adv__group--tokens" id="rp-tokens-row" hidden>
+                            <span class="rp-adv__label">Selected</span>
+                            <div class="rp-tokens" id="rp-tokens" aria-live="polite"></div>
+                            <button type="button" id="rp-tokens-clear" class="rp-tokens__clear">Clear</button>
+                        </div>
+                        <div class="rp-adv__group">
+                            <span class="rp-adv__label">Platform</span>
+                            <div class="rp-plats" role="group" aria-label="Filter by platform">
+                                <div class="rp-platgrp"><span class="rp-platgrp__tag">Current</span><button type="button" class="rp-chip rp-plat is-active" data-plat="PS5">PS5<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat is-active" data-plat="PS4">PS4<span class="rp-chip__n" hidden></span></button></div>
+                                <div class="rp-platgrp"><span class="rp-platgrp__tag">Legacy</span><button type="button" class="rp-chip rp-plat" data-plat="PS3">PS3<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVITA">PS Vita<span class="rp-chip__n" hidden></span></button></div>
+                                <div class="rp-platgrp"><span class="rp-platgrp__tag">VR</span><button type="button" class="rp-chip rp-plat" data-plat="PSVR">PSVR<span class="rp-chip__n" hidden></span></button><button type="button" class="rp-chip rp-plat" data-plat="PSVR2">PSVR2<span class="rp-chip__n" hidden></span></button></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% comment %} Facet chip counts + smart-empty suggestion for the SSR page 1 (the results
+                endpoint re-emits this island on each filter swap; the JS reads it out of the fragment). {% endcomment %}
+                {{ contracts_facets|json_script:"rp-facets" }}
+                <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch"
+                     data-results-url="{% url 'contracts_results' %}" data-has-next="{{ contracts_has_next|yesno:'1,0' }}">
+                    {% for p in contracts %}
+                    {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=contract_disciplines %}
                     {% endfor %}
                 </div>
-                <p id="rp-no-match" class="text-center text-sm text-base-content/50 py-10" hidden>No Contracts match your search or filters. <button type="button" id="rp-clear-filters" class="link link-primary">Clear</button></p>
+                {# Empty / no-match states + infinite-scroll sentinel & spinner (page 1 rendered above). #}
+                <p id="rp-empty" class="text-center text-sm text-base-content/50 py-10" {% if contracts %}hidden{% endif %}>No Contracts on the board yet. Contracts are curated games that level your jobs, check back soon.</p>
+                <div id="rp-no-match" class="text-center text-sm text-base-content/50 py-10" hidden>
+                    <p id="rp-no-match__msg">No Contracts match your search or filters.</p>
+                    {# Smart empty state: JS fills this with "Drop <label> to see N" when a filter combo is too tight. #}
+                    <button type="button" id="rp-relax" class="rp-relax" hidden></button>
+                    <button type="button" id="rp-clear-filters" class="link link-primary">Clear all filters</button>
+                </div>
+                <div id="rp-loading" class="flex justify-center py-6" hidden><span class="loading loading-spinner loading-md text-primary"></span></div>
+                <div id="rp-sentinel" aria-hidden="true"></div>
             </div>
 
         </div>
@@ -716,8 +780,10 @@ function ppCountUp(el, dur) {
         t.addEventListener('click', function () { openEl(t.dataset.slug, t); });
         t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug, t); } });
     });
-    document.querySelectorAll('.rp-tier2-btn').forEach(function (b) {   // contract card -> grow the modal from the card
-        b.addEventListener('click', function () { var card = b.closest('.rp-row'); if (card) openContract(card, b); });
+    var rpListEl = document.getElementById('rp-list');   // delegated: streamed-in cards work too
+    if (rpListEl) rpListEl.addEventListener('click', function (e) {
+        var b = e.target.closest('.rp-tier2-btn');
+        if (b) { var card = b.closest('.rp-row'); if (card) openContract(card, b); }
     });
     modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
     document.addEventListener('keydown', function (e) {
@@ -882,249 +948,129 @@ function ppCountUp(el, dur) {
     });
 })();
 
-// Contracts tab (merged board): status filter + Accept (the acceptance gate that banks XP).
+// Contracts board: server-driven filter/sort + infinite scroll. Per-card behaviors (progressive
+// image load, hover carousel, reveal choreography) are re-run for every streamed-in batch via
+// initCards(); the icon<->ring link, the claim flow, and the tier-2 trigger are delegated off #rp-list.
 (function () {
     var list = document.getElementById('rp-list');
     if (!list) return;
-    var statusBar = document.querySelector('.rp-filters:not(.rp-filters--disc)');
-    var discBar = document.querySelector('.rp-filters--disc');
-    var searchInput = document.getElementById('rp-search');
-    var noMatch = document.getElementById('rp-no-match');
     var PP = window.PlatPursuit || {};
     var API = PP.API, Toast = PP.ToastManager, debounce = PP.debounce;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var state = { status: 'all', disc: 'all', q: '' };
+    var hasIO = 'IntersectionObserver' in window;
 
-    // Combined client-side filter: a card shows only if it matches the status chip AND the discipline
-    // chip AND the search box. `stagger` re-runs the entrance animation (chip changes, not keystrokes).
-    function applyFilters(stagger) {
-        var q = state.q, shown = 0;
-        list.querySelectorAll('.rp-row').forEach(function (row) {
-            var okStatus = state.status === 'all' || row.dataset.status === state.status;
-            var okDisc = state.disc === 'all' || (row.dataset.disciplines || '').split(' ').indexOf(state.disc) !== -1;
-            var okSearch = !q || (row.dataset.search || '').indexOf(q) !== -1;
-            var show = okStatus && okDisc && okSearch;
-            row.style.display = show ? '' : 'none';
-            if (show) shown++;
+    // ---- Per-card behaviors (idempotent; data-*Init guards stop a re-init double-binding) ----
+    function initProgressiveLoad(scope) {
+        scope.querySelectorAll('.rp-tile__art').forEach(function (art) {
+            if (art.dataset.plInit) return; art.dataset.plInit = '1';
+            var img = art.querySelector('.rp-tile__cover');
+            if (!img) { art.classList.add('is-loaded'); return; }
+            if (img.complete && img.naturalWidth) { art.classList.add('is-loaded'); return; }
+            var done = function () { art.classList.add('is-loaded'); };
+            img.addEventListener('load', done, { once: true });
+            img.addEventListener('error', done, { once: true });
         });
-        if (noMatch) noMatch.hidden = shown > 0 || !list.querySelector('.rp-row');
-        if (stagger) staggerVisible();
     }
-    // (Card-B) Stagger the currently-visible cards in -- used on filter changes and the board's
-    // first reveal. Not fired on tab-switch (the panel cross-fade already reveals the block).
-    function staggerVisible() {
+
+    var CBEAT = 1500, CFADE = 560;   // carousel hold-per-frame + crossfade duration
+    function initCarousel(scope) {
         if (reduce) return;
-        var i = 0;
-        list.querySelectorAll('.rp-row').forEach(function (row) {
-            if (row.style.display === 'none') return;
-            row.classList.remove('rp-row--enter');
-            void row.offsetWidth;                              // restart the animation
-            row.style.animationDelay = Math.min(i * 40, 400) + 'ms';
-            row.classList.add('rp-row--enter');
-            row.addEventListener('animationend', function h(e) {
-                if (e.animationName !== 'rpCardIn') return;    // ignore the accept-flash animation
-                row.classList.remove('rp-row--enter');
-                row.style.animationDelay = '';
-                row.removeEventListener('animationend', h);
+        scope.querySelectorAll('.rp-tile__art').forEach(function (art) {
+            if (art.dataset.carInit) return; art.dataset.carInit = '1';
+            var cover = art.querySelector('.rp-tile__cover');
+            if (!cover) return;
+            var card = art.closest('.rp-row') || art;
+            var extra = (cover.getAttribute('data-gallery') || '').split('|').filter(Boolean);
+            if (!extra.length) return;
+            var frames = [cover.src].concat(extra);
+            var layers = null, segs = null, active = null, timer = null, hideT = null, primed = false;
+            function build() {
+                layers = [document.createElement('img'), document.createElement('img')];
+                layers.forEach(function (l) { l.className = 'rp-tile__img--fx'; l.alt = ''; art.insertBefore(l, cover.nextSibling); });
+                var prog = document.createElement('div'); prog.className = 'rp-progress';
+                segs = frames.map(function () { var s = document.createElement('span'); s.className = 'rp-progress__seg'; prog.appendChild(s); return s; });
+                art.appendChild(prog);
+            }
+            function setSeg(i) { if (segs) segs.forEach(function (s, k) { s.classList.toggle('is-on', k === i); }); }
+            function drift(el) { if (el) { el.classList.remove('rp-kb'); void el.offsetWidth; el.classList.add('rp-kb'); } }
+            function toFrame(i) {
+                setSeg(i);
+                if (i === 0) { if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); }); active = null; drift(cover); return; }
+                var incoming = (active === layers[0]) ? layers[1] : layers[0];
+                var outgoing = active;
+                incoming.src = frames[i];
+                incoming.style.zIndex = '2';
+                if (outgoing) outgoing.style.zIndex = '1';
+                void incoming.offsetWidth;
+                incoming.classList.add('is-on');
+                active = incoming;
+                drift(incoming);
+                clearTimeout(hideT);
+                if (outgoing) hideT = setTimeout(function () { outgoing.classList.remove('is-on'); }, CFADE);
+            }
+            card.addEventListener('mouseenter', function () {
+                if (!layers) build();
+                if (!primed) { primed = true; extra.forEach(function (u) { var im = new Image(); im.src = u; }); }
+                var i = 1;
+                clearInterval(timer);
+                toFrame(1);
+                timer = setInterval(function () { i = (i + 1) % frames.length; toFrame(i); }, CBEAT);
             });
-            i++;
-        });
-    }
-
-    // Single-select chip group -> sets one piece of state, then re-filters + re-staggers.
-    function bindGroup(group, key, attr) {
-        if (!group) return;
-        group.querySelectorAll('.rp-chip').forEach(function (chip) {
-            chip.addEventListener('click', function () {
-                group.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
-                chip.classList.add('is-active');
-                state[key] = chip.dataset[attr];
-                applyFilters(true);
+            card.addEventListener('mouseleave', function () {
+                clearInterval(timer); timer = null;
+                clearTimeout(hideT);
+                if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); });
+                active = null;
+                setSeg(0);
+                [cover].concat(layers || []).forEach(function (el) { if (el) el.classList.remove('rp-kb'); });
             });
         });
     }
-    bindGroup(statusBar, 'status', 'filter');
-    bindGroup(discBar, 'disc', 'disc');
-    if (searchInput) {
-        var onSearch = function () { state.q = searchInput.value.trim().toLowerCase(); applyFilters(false); };
-        searchInput.addEventListener('input', debounce ? debounce(onSearch, 120) : onSearch);
-    }
-    var clearBtn = document.getElementById('rp-clear-filters');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function () {
-            state = { status: 'all', disc: 'all', q: '' };
-            if (searchInput) searchInput.value = '';
-            [statusBar, discBar].forEach(function (g) { if (g) g.querySelectorAll('.rp-chip').forEach(function (c, idx) { c.classList.toggle('is-active', idx === 0); }); });
-            applyFilters(true);
-        });
-    }
 
-    var panel = list.closest('.lab-view');
-    if (panel && !panel.hidden) staggerVisible();   // Contracts is the landing view -> stagger on load
-    document.addEventListener('pp:contracts-shown', staggerVisible);   // ...or when the tab is opened
-
-    // Accept flow: flip semantic state classes + the badge label; CSS does the rest.
-    function markAccepted(card) {
-        card.dataset.status = 'accepted';
-        card.classList.remove('rp-row--claimable');
-        card.classList.add('rp-row--accepted');
-        var badge = card.querySelector('.rp-badge');
-        if (badge) badge.textContent = 'Claimed';
-        card.classList.remove('rp-row--just-accepted');
-        void card.offsetWidth;
-        card.classList.add('rp-row--just-accepted');
-        card.addEventListener('animationend', function h(e) { if (e.target !== card) return; card.classList.remove('rp-row--just-accepted'); card.removeEventListener('animationend', h); });
-    }
-    function refreshAcceptAll(count) {
-        var btn = document.getElementById('rp-accept-all');
-        if (!btn) return;
-        if (count > 0) { btn.textContent = 'Claim all (' + count + ')'; btn.disabled = false; }
-        else { btn.remove(); }
-    }
-    function applyResult(res) {
-        (res.accepted || []).forEach(function (slug) {
-            var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
-            var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
-            if (card) markAccepted(card);
-        });
-        refreshAcceptAll(res.claimable_count || 0);
-        applyFilters(false);   // a claimed card may drop out of the active filter
-        if (Toast && res.granted) {
-            Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
-        }
-    }
-    async function accept(payload, btn) {
-        if (!API) return;
-        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
-        try {
-            applyResult(await API.post('/api/v1/projects/accept/', payload));
-        } catch (err) {
-            var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
-            if (Toast) Toast.show((data && data.error) || 'Could not claim the Contract.', 'error');
-            if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
-        }
-    }
-
-    list.addEventListener('click', function (e) {
-        var btn = e.target.closest('.rp-accept');
-        if (!btn) return;
-        e.preventDefault();
-        accept({ slug: btn.dataset.slug }, btn);
-    });
-    var allBtn = document.getElementById('rp-accept-all');
-    if (allBtn) {
-        allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
-    }
-})();
-
-// Contracts banner progressive load: hold a shimmer until the cover image is ready, then fade it
-// in (CSS). Runs for every card, carousel or not.
-(function () {
-    document.querySelectorAll('.rp-tile__art').forEach(function (art) {
-        var img = art.querySelector('.rp-tile__cover');
-        if (!img) { art.classList.add('is-loaded'); return; }
-        if (img.complete && img.naturalWidth) { art.classList.add('is-loaded'); return; }
-        var done = function () { art.classList.add('is-loaded'); };
-        img.addEventListener('load', done, { once: true });
-        img.addEventListener('error', done, { once: true });
-    });
-})();
-
-// Contracts banner hover carousel: on hover, crossfade through the card's extra landscape images
-// (data-gallery, lazy-loaded on first hover) on a beat, then fade back to the resting cover on
-// leave. Two overlay layers ping-pong for a smooth crossfade; a segmented progress bar tracks the
-// frame. Only the hovered card animates.
-(function () {
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var BEAT = 1500;     // ms each frame holds before advancing
-    var FADE = 560;      // must match the CSS opacity transition (0.55s) + a hair
-    document.querySelectorAll('.rp-tile__art').forEach(function (art) {
-        var cover = art.querySelector('.rp-tile__cover');
-        if (!cover) return;
-        var card = art.closest('.rp-row') || art;   // hovering anywhere on the card drives the carousel
-        var extra = (cover.getAttribute('data-gallery') || '').split('|').filter(Boolean);
-        if (!extra.length) return;
-        var frames = [cover.src].concat(extra);   // frame 0 = the resting cover
-        var layers = null, segs = null, active = null, timer = null, hideT = null, primed = false;
-
-        function build() {
-            layers = [document.createElement('img'), document.createElement('img')];
-            layers.forEach(function (l) { l.className = 'rp-tile__img--fx'; l.alt = ''; art.insertBefore(l, cover.nextSibling); });
-            var prog = document.createElement('div');
-            prog.className = 'rp-progress';
-            segs = frames.map(function () { var s = document.createElement('span'); s.className = 'rp-progress__seg'; prog.appendChild(s); return s; });
-            art.appendChild(prog);
-        }
-        function setSeg(i) { if (segs) segs.forEach(function (s, k) { s.classList.toggle('is-on', k === i); }); }
-        function drift(el) { if (el) { el.classList.remove('rp-kb'); void el.offsetWidth; el.classList.add('rp-kb'); } }  // restart the Ken Burns
-        function toFrame(i) {
-            setSeg(i);
-            if (i === 0) { if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); }); active = null; drift(cover); return; }  // back to the cover (it drifts too)
-            var incoming = (active === layers[0]) ? layers[1] : layers[0];
-            var outgoing = active;
-            incoming.src = frames[i];
-            incoming.style.zIndex = '2';              // incoming rides on TOP...
-            if (outgoing) outgoing.style.zIndex = '1';// ...of the still-opaque outgoing, so no cover bleed-through
-            void incoming.offsetWidth;                // reflow so the fade restarts cleanly
-            incoming.classList.add('is-on');
-            active = incoming;
-            drift(incoming);                          // each image restarts its own drift
-            clearTimeout(hideT);
-            if (outgoing) hideT = setTimeout(function () { outgoing.classList.remove('is-on'); }, FADE);  // hide only after it's fully covered
-        }
-        card.addEventListener('mouseenter', function () {
-            if (!layers) build();
-            if (!primed) { primed = true; extra.forEach(function (u) { var im = new Image(); im.src = u; }); }  // lazy-load once
-            var i = 1;
-            clearInterval(timer);
-            toFrame(1);   // fade to the first extra image right away (skip the opening beat)
-            timer = setInterval(function () { i = (i + 1) % frames.length; toFrame(i); }, BEAT);
-        });
-        card.addEventListener('mouseleave', function () {
-            clearInterval(timer); timer = null;
-            clearTimeout(hideT);
-            if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); });   // reveal the cover
-            active = null;
-            setSeg(0);
-            [cover].concat(layers || []).forEach(function (el) { if (el) el.classList.remove('rp-kb'); });  // stop + reset the drift
-        });
-    });
-})();
-
-// Contracts card reveal choreography: when a card scrolls into view, its content awakens once --
-// lit job-cells ignite in a cascade, the total-XP counts up, the split-ring draws in, the progress
-// bar fills. Runs after the entrance (container settles, then content). Reduced motion leaves
-// everything at its final state.
-(function () {
-    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var cards = document.querySelectorAll('#rp-list .rp-row');
-    if (!cards.length || typeof IntersectionObserver === 'undefined') return;
-    function reveal(card) {
-        if (card.dataset.revealed) return;
-        card.dataset.revealed = '1';
+    var revealIO = hasIO ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { revealCard(e.target); revealIO.unobserve(e.target); } });
+    }, { threshold: 0.25 }) : null;
+    function revealCard(card) {
+        if (card.dataset.revealed) return; card.dataset.revealed = '1';
         if (reduce) return;   // final states already rendered server-side
         var xp = card.querySelector('.rp-reward-xp__val [data-countup]');
         if (xp && typeof ppCountUp === 'function') ppCountUp(xp, 900);
         var hz = card.querySelector('.rp-prog .pp-horizon'), prog = card.querySelector('.rp-prog');
         if (hz && prog) { hz.style.setProperty('--horizon-progress', '0%'); void hz.offsetWidth; hz.style.setProperty('--horizon-progress', (prog.dataset.fill || '0') + '%'); }
-        card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {   // draw each arc from 0
+        card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {
             if (!seg.dataset.dash) return;
             seg.style.strokeDasharray = '0 100'; void seg.getBoundingClientRect(); seg.style.strokeDasharray = seg.dataset.dash + ' 100';
         });
-        card.querySelectorAll('.rp-jobcell.is-lit').forEach(function (cell, i) {   // ignite cascade
+        card.querySelectorAll('.rp-jobcell.is-lit').forEach(function (cell, i) {
             setTimeout(function () { cell.classList.remove('rp-ignite'); void cell.offsetWidth; cell.classList.add('rp-ignite'); }, 120 + i * 90);
         });
     }
-    var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) { if (e.isIntersecting) { reveal(e.target); io.unobserve(e.target); } });
-    }, { threshold: 0.25 });
-    cards.forEach(function (c) { io.observe(c); });
-})();
+    function initReveal(scope) {
+        if (!revealIO) return;
+        scope.querySelectorAll('.rp-row').forEach(function (c) { if (!c.dataset.revObs) { c.dataset.revObs = '1'; revealIO.observe(c); } });
+    }
 
-// Contracts icon <-> ring link: hovering a lit job-cell (or its ring arc) highlights both.
-(function () {
-    var list = document.getElementById('rp-list');
-    if (!list) return;
+    function initCards(scope) {
+        scope = scope || list;
+        initProgressiveLoad(scope);
+        initCarousel(scope);
+        initReveal(scope);
+    }
+
+    function staggerCards(cards) {   // entrance rise for a batch (chip change / appended page / tab open)
+        if (reduce) return;
+        cards.forEach(function (row, i) {
+            row.classList.remove('rp-row--enter'); void row.offsetWidth;
+            row.style.animationDelay = Math.min(i * 40, 400) + 'ms';
+            row.classList.add('rp-row--enter');
+            row.addEventListener('animationend', function h(e) {
+                if (e.animationName !== 'rpCardIn') return;
+                row.classList.remove('rp-row--enter'); row.style.animationDelay = ''; row.removeEventListener('animationend', h);
+            });
+        });
+    }
+
+    // ---- Delegated: icon <-> ring link (survives streamed-in cards) ----
     function setLink(card, slug, on) {
         if (!card || !slug) return;
         var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
@@ -1133,12 +1079,422 @@ function ppCountUp(el, dur) {
         if (cell) cell.classList.toggle('is-linked', on);
         if (seg) seg.classList.toggle('is-linked', on);
     }
-    function slugAt(target) {
-        var el = target.closest && (target.closest('.rp-jobcell.is-lit') || target.closest('.rp-ring__seg'));
-        return el ? el.dataset.slug : null;
-    }
+    function slugAt(t) { var el = t.closest && (t.closest('.rp-jobcell.is-lit') || t.closest('.rp-ring__seg')); return el ? el.dataset.slug : null; }
     list.addEventListener('mouseover', function (e) { var s = slugAt(e.target); if (s) setLink(e.target.closest('.rp-row'), s, true); });
     list.addEventListener('mouseout', function (e) { var s = slugAt(e.target); if (s) setLink(e.target.closest('.rp-row'), s, false); });
+
+    // ---- Delegated: claim flow ----
+    function markAccepted(card) {
+        card.dataset.status = 'accepted';
+        card.classList.remove('rp-row--claimable'); card.classList.add('rp-row--accepted');
+        var badge = card.querySelector('.rp-badge'); if (badge) badge.textContent = 'Claimed';
+        card.classList.remove('rp-row--just-accepted'); void card.offsetWidth; card.classList.add('rp-row--just-accepted');
+        card.addEventListener('animationend', function h(e) { if (e.target !== card) return; card.classList.remove('rp-row--just-accepted'); card.removeEventListener('animationend', h); });
+    }
+    function refreshAcceptAll(count) {
+        var btn = document.getElementById('rp-accept-all');
+        if (!btn) return;
+        if (count > 0) { btn.textContent = 'Claim all (' + count + ')'; btn.disabled = false; } else { btn.remove(); }
+    }
+    function applyResult(res) {
+        (res.accepted || []).forEach(function (slug) {
+            var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+            var card = list.querySelector('.rp-row[data-slug="' + sel + '"]');
+            if (!card) return;
+            markAccepted(card);
+            if (state.status === 'claimable') card.remove();   // it no longer matches the active filter
+        });
+        refreshAcceptAll(res.claimable_count || 0);
+        if (Toast && res.granted) Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+    }
+    async function accept(payload, btn) {
+        if (!API) return;
+        if (btn) { btn.disabled = true; btn.classList.add('btn-disabled'); }
+        try { applyResult(await API.post('/api/v1/projects/accept/', payload)); }
+        catch (err) {
+            var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
+            if (Toast) Toast.show((data && data.error) || 'Could not claim the Contract.', 'error');
+            if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
+        }
+    }
+    list.addEventListener('click', function (e) { var b = e.target.closest('.rp-accept'); if (b) { e.preventDefault(); accept({ slug: b.dataset.slug }, b); } });
+    var allBtn = document.getElementById('rp-accept-all');
+    if (allBtn) allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
+
+    // ---- Server-driven filter/sort + infinite scroll ----
+    var RESULTS_URL = list.dataset.resultsUrl;
+    var sentinel = document.getElementById('rp-sentinel');
+    var loading = document.getElementById('rp-loading');
+    var noMatch = document.getElementById('rp-no-match');
+    var empty = document.getElementById('rp-empty');
+    var searchInput = document.getElementById('rp-search');
+    var statusBar = document.querySelector('.rp-filters');
+    var sortSel = document.getElementById('rp-sort-select');
+    var countEl = document.getElementById('rp-count');
+    var advToggle = document.getElementById('rp-adv-toggle');
+    var advPanel = document.getElementById('rp-advanced');
+    var advBadge = document.getElementById('rp-adv-count');
+    var discs = document.querySelector('.rp-discs');
+    var plats = document.querySelector('.rp-plats');
+    var tokensRow = document.getElementById('rp-tokens-row');
+    var tokensBox = document.getElementById('rp-tokens');
+    var relaxBtn = document.getElementById('rp-relax');
+    var DEFAULT_PLATS = ['PS5', 'PS4'];
+    var VALID_PLATS = plats ? Array.prototype.slice.call(plats.querySelectorAll('.rp-plat')).map(function (c) { return c.dataset.plat; }) : [];
+    var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // jobs + disciplines are multi-select, ANDed server-side (e.g. "driver + slayer game").
+    var state = { status: '', jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null };
+    var pageNo = 1, hasNext = list.dataset.hasNext === '1', busy = false;
+
+    function buildParams(n) {
+        var p = new URLSearchParams();
+        if (state.status && state.status !== 'all') p.set('status', state.status);
+        state.jobs.forEach(function (j) { p.append('job', j); });               // ANDed server-side
+        state.disciplines.forEach(function (d) { p.append('discipline', d); });
+        if (state.q) p.set('q', state.q);
+        if (state.sort && state.sort !== 'relevance') p.set('sort', state.sort);
+        if (state.platforms) state.platforms.forEach(function (pl) { p.append('platform', pl); });  // null -> server default (current-gen)
+        p.set('page', String(n));
+        return p.toString();
+    }
+    function noFilters() { return !state.status && !state.jobs.length && !state.disciplines.length && !state.q && !state.platforms; }
+
+    // Animated tally: roll the result count to its new value (Tally primitive). Skips on reduced-motion.
+    function countText(v) { return v + ' contract' + (v === 1 ? '' : 's'); }
+    var shownCount = parseInt((countEl && countEl.textContent) || '0', 10) || 0, countRAF = null;
+    function setCount(total) {
+        if (!countEl) return;
+        if (countRAF) { cancelAnimationFrame(countRAF); countRAF = null; }   // supersede any in-flight roll
+        if (prefersReduced || total === shownCount || !window.requestAnimationFrame) {
+            countEl.textContent = countText(total); shownCount = total; return;
+        }
+        var from = shownCount, start = null, dur = 420;   // `from` = last displayed value (updated each frame below)
+        function step(ts) {
+            if (start === null) start = ts;
+            var t = Math.min(1, (ts - start) / dur), eased = 1 - Math.pow(1 - t, 3);   // easeOutCubic
+            shownCount = Math.round(from + (total - from) * eased);
+            countEl.textContent = countText(shownCount);
+            if (t < 1) { countRAF = requestAnimationFrame(step); } else { shownCount = total; countRAF = null; }
+        }
+        countRAF = requestAnimationFrame(step);
+    }
+
+    // ---- Faceted chip counts + smart-empty suggestion (read from the #rp-facets JSON island) ----
+    function readFacets(scope) {
+        var el = (scope || document).querySelector('#rp-facets');
+        if (!el) return null;
+        try { return JSON.parse(el.textContent); } catch (e) { return null; }
+    }
+    function setChipN(chip, n) {
+        var span = chip.querySelector('.rp-chip__n');
+        if (!span) return;
+        span.textContent = n; span.hidden = false;
+        chip.classList.toggle('rp-chip--empty', n === 0);   // dim a facet that would return nothing
+    }
+    function setPopN(item, n) {
+        var span = item.querySelector('.rp-pop__n');
+        if (!span) return;
+        span.textContent = n;   // stays in flow (empty until loaded) so its margin-left:auto keeps the check flush-right
+        item.classList.toggle('rp-pop__item--empty', n === 0);
+    }
+    function applyFacets(f) {
+        if (!f) return;
+        if (f.status && statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
+            var n = f.status[c.dataset.filter]; setChipN(c, n == null ? 0 : n);
+        });
+        if (f.platform && plats) plats.querySelectorAll('.rp-plat').forEach(function (c) {
+            var n = f.platform[c.dataset.plat]; setChipN(c, n == null ? 0 : n);
+        });
+        if (discs) {                                          // popover job + discipline (head) counts
+            if (f.job) discs.querySelectorAll('.rp-pop__item[data-job]').forEach(function (it) {
+                var n = f.job[it.dataset.job]; setPopN(it, n == null ? 0 : n);
+            });
+            if (f.discipline) discs.querySelectorAll('.rp-pop__item--head').forEach(function (it) {
+                var n = f.discipline[it.dataset.disc]; setPopN(it, n == null ? 0 : n);
+            });
+        }
+        renderSuggest(f.suggest);
+    }
+    function renderSuggest(s) {
+        if (!relaxBtn) return;
+        if (s && s.count > 0) {
+            relaxBtn.textContent = 'Drop “' + s.label + '” to see ' + s.count + ' contract' + (s.count === 1 ? '' : 's');
+            relaxBtn.dataset.kind = s.kind; relaxBtn.dataset.value = s.value || '';
+            relaxBtn.hidden = false;
+        } else {
+            relaxBtn.hidden = true; relaxBtn.removeAttribute('data-kind'); relaxBtn.removeAttribute('data-value');
+        }
+    }
+
+    // ---- Shareable filter state in the URL (History API -- no reload, hot-swap untouched) ----
+    function syncURL() {
+        if (!window.history || !history.replaceState) return;
+        var params = new URLSearchParams(location.search);
+        ['status', 'q', 'sort', 'discipline', 'job', 'platform'].forEach(function (k) { params.delete(k); });
+        var bp = new URLSearchParams(buildParams(1)); bp.delete('page');
+        bp.forEach(function (v, k) { params.append(k, v); });          // keep any non-board params (e.g. view=contracts)
+        var qs = params.toString();
+        history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    }
+
+    function updateEmptyStates() {
+        var any = !!list.querySelector('.rp-row');
+        if (noMatch) noMatch.hidden = any || noFilters();
+        if (empty) empty.hidden = any ? true : !noFilters();
+    }
+    // Mirror each toggle chip's is-active state to aria-pressed (disc triggers use aria-expanded instead).
+    function syncAria() {
+        document.querySelectorAll('.rp-toolbar .rp-chip:not(.rp-disc__trigger)').forEach(function (c) {
+            c.setAttribute('aria-pressed', c.classList.contains('is-active') ? 'true' : 'false');
+        });
+    }
+    var reqSeq = 0, controller = null;
+    function fetchPage(n, append) {
+        if (!RESULTS_URL) return;
+        syncAria();
+        if (append && busy) return;                          // don't stack scroll-appends onto an in-flight load
+        if (!append) syncURL();                              // reflect the (just-committed) filters in the URL
+        if (!append && controller) controller.abort();      // a filter change supersedes any in-flight request
+        var myReq = ++reqSeq;                                // any later fetchPage supersedes this response
+        controller = ('AbortController' in window) ? new AbortController() : null;
+        busy = true; if (loading) loading.hidden = false;
+        fetch(RESULTS_URL + '?' + buildParams(n), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin',
+            signal: controller ? controller.signal : undefined,
+        })
+            .then(function (r) {
+                if (!r.ok) throw 0;
+                return r.text().then(function (html) {
+                    return { html: html, hasNext: r.headers.get('X-Has-Next') === '1', total: parseInt(r.headers.get('X-Total') || '0', 10) };
+                });
+            })
+            .then(function (d) {
+                if (myReq !== reqSeq) return;                // superseded: a newer request now owns busy + the grid
+                busy = false; if (loading) loading.hidden = true;
+                hasNext = d.hasNext; setCount(d.total);
+                var tmp = document.createElement('div'); tmp.innerHTML = d.html;
+                var cards = Array.prototype.slice.call(tmp.querySelectorAll('.rp-row'));
+                if (!append) { list.innerHTML = ''; applyFacets(readFacets(tmp)); }   // facets ride the page-1 swap
+                cards.forEach(function (c) { list.appendChild(c); });
+                pageNo = n;
+                initCards(list);
+                staggerCards(cards);
+                updateEmptyStates();
+                observeSentinel();
+            })
+            .catch(function (e) {
+                if ((e && e.name === 'AbortError') || myReq !== reqSeq) return;   // superseded -> the newer request owns state
+                busy = false; if (loading) loading.hidden = true;
+                if (Toast) Toast.error('Could not load Contracts. Please try again.');
+            });
+    }
+    var sentIO = hasIO ? new IntersectionObserver(function (entries) {
+        if (entries[0].isIntersecting && hasNext && !busy) fetchPage(pageNo + 1, true);
+    }, { rootMargin: '400px' }) : null;
+    function observeSentinel() {
+        if (!sentIO || !sentinel) return;
+        sentIO.unobserve(sentinel);
+        if (hasNext) sentIO.observe(sentinel);
+    }
+
+    // Filters-toggle badge: count of active advanced filters (each selected job/discipline + non-default platforms).
+    function updateAdvCount() {
+        var n = state.jobs.length + state.disciplines.length;
+        if (state.platforms) n++;
+        if (advBadge) { advBadge.textContent = String(n); advBadge.hidden = n === 0; }
+    }
+
+    // Status quick-filter (single-select).
+    if (statusBar) statusBar.addEventListener('click', function (e) {
+        var chip = e.target.closest('.rp-chip'); if (!chip) return;
+        statusBar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
+        chip.classList.add('is-active');
+        state.status = chip.dataset.filter || '';
+        fetchPage(1, false);
+    });
+
+    // Sort control.
+    if (sortSel) sortSel.addEventListener('change', function () { state.sort = sortSel.value; fetchPage(1, false); });
+
+    // Advanced panel toggle.
+    if (advToggle && advPanel) advToggle.addEventListener('click', function () {
+        var open = advPanel.hidden;
+        advPanel.hidden = !open;
+        advToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        advToggle.classList.toggle('is-open', open);
+    });
+
+    // Discipline -> job drill-down: multi-select toggles across popovers, ANDed server-side. Selected
+    // items become removable tokens; a popover stays open so several can be picked from one list.
+    function closePops() {
+        if (!discs) return;
+        discs.querySelectorAll('.rp-pop').forEach(function (p) { p.hidden = true; });
+        discs.querySelectorAll('.rp-disc__trigger').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
+    }
+    // Reflect the current selection into popover items, trigger chips (active + count), the "All"
+    // chip, and the token row.
+    function refreshDiscUI() {
+        if (!discs) return;
+        discs.querySelectorAll('.rp-pop__item[data-job]').forEach(function (it) {
+            var on = state.jobs.indexOf(it.dataset.job) !== -1;
+            it.classList.toggle('is-selected', on); it.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        discs.querySelectorAll('.rp-pop__item--head').forEach(function (it) {
+            var on = state.disciplines.indexOf(it.dataset.disc) !== -1;
+            it.classList.toggle('is-selected', on); it.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        discs.querySelectorAll('.rp-disc__trigger').forEach(function (t) {
+            var pop = t.parentElement.querySelector('.rp-pop');
+            var jobsHere = pop ? pop.querySelectorAll('.rp-pop__item[data-job].is-selected').length : 0;
+            var total = jobsHere + (state.disciplines.indexOf(t.dataset.disc) !== -1 ? 1 : 0);
+            t.classList.toggle('is-active', total > 0);
+            var badge = t.querySelector('.rp-disc__count');
+            if (badge) { badge.textContent = String(total); badge.hidden = total === 0; }
+        });
+        var allChip = discs.querySelector('[data-disc="all"]');
+        if (allChip) allChip.classList.toggle('is-active', !state.jobs.length && !state.disciplines.length);
+        renderTokens();
+    }
+    function renderTokens() {
+        if (!tokensBox) return;
+        tokensBox.textContent = '';
+        var items = state.disciplines.map(function (d) {
+            var head = discs.querySelector('.rp-pop__item--head[data-disc="' + d + '"]');
+            return { attr: 'disc', slug: d, name: head ? head.dataset.name : d, disc: d };
+        }).concat(state.jobs.map(function (j) {
+            var it = discs.querySelector('.rp-pop__item[data-job="' + j + '"]');
+            return { attr: 'job', slug: j, name: it ? it.dataset.name : j, disc: it ? it.dataset.disc : '' };
+        }));
+        items.forEach(function (f) {
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = 'rp-token';
+            b.setAttribute('data-' + f.attr, f.slug);
+            if (f.disc) b.style.setProperty('--disc', 'var(--disc-' + f.disc + ')');   // f.disc is a controlled slug
+            b.setAttribute('aria-label', 'Remove ' + f.name);
+            var label = document.createElement('span'); label.textContent = f.name;
+            var x = document.createElement('span'); x.className = 'rp-token__x'; x.setAttribute('aria-hidden', 'true'); x.textContent = '×';
+            b.appendChild(label); b.appendChild(x); tokensBox.appendChild(b);
+        });
+        if (tokensRow) tokensRow.hidden = items.length === 0;
+    }
+    function toggleFrom(list, slug) {
+        var i = list.indexOf(slug);
+        if (i === -1) list.push(slug); else list.splice(i, 1);
+        refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
+    }
+    function clearDiscJobs() {
+        state.jobs = []; state.disciplines = [];
+        refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
+    }
+    if (discs) discs.addEventListener('click', function (e) {
+        var trigger = e.target.closest('.rp-disc__trigger');
+        if (trigger) {                                   // open/close this discipline's popover (only one open at a time)
+            var pop = trigger.parentElement.querySelector('.rp-pop');
+            var isOpen = pop && !pop.hidden;
+            closePops();
+            if (pop && !isOpen) {
+                pop.classList.remove('rp-pop--left');
+                pop.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+                // Flip to the chip's right edge if a left-anchored popover would overflow the viewport (mobile).
+                if (pop.getBoundingClientRect().right > document.documentElement.clientWidth - 8) pop.classList.add('rp-pop--left');
+            }
+            return;
+        }
+        var head = e.target.closest('.rp-pop__item--head');
+        if (head) { toggleFrom(state.disciplines, head.dataset.disc); return; }   // popover stays open (multi-select)
+        var jobItem = e.target.closest('.rp-pop__item[data-job]');
+        if (jobItem) { toggleFrom(state.jobs, jobItem.dataset.job); return; }
+        if (e.target.closest('[data-disc="all"]')) { clearDiscJobs(); closePops(); }
+    });
+    document.addEventListener('click', function (e) { if (discs && !e.target.closest('.rp-disc')) closePops(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePops(); });
+
+    // Removing a token drops that job/discipline from the AND selection.
+    if (tokensBox) tokensBox.addEventListener('click', function (e) {
+        var tok = e.target.closest('.rp-token'); if (!tok) return;
+        if (tok.dataset.job) toggleFrom(state.jobs, tok.dataset.job);
+        else if (tok.dataset.disc) toggleFrom(state.disciplines, tok.dataset.disc);
+    });
+    var tokensClear = document.getElementById('rp-tokens-clear');
+    if (tokensClear) tokensClear.addEventListener('click', clearDiscJobs);
+
+    // Platform selector (multi-select; the default current-gen set sends no param -> server default).
+    function platsEqualDefault(arr) {
+        return arr.length === DEFAULT_PLATS.length && DEFAULT_PLATS.every(function (p) { return arr.indexOf(p) !== -1; });
+    }
+    if (plats) plats.addEventListener('click', function (e) {
+        var chip = e.target.closest('.rp-plat'); if (!chip) return;
+        chip.classList.toggle('is-active');
+        var active = Array.prototype.slice.call(plats.querySelectorAll('.rp-plat.is-active')).map(function (c) { return c.dataset.plat; });
+        if (!active.length) { chip.classList.add('is-active'); return; }   // never allow an empty selection
+        state.platforms = platsEqualDefault(active) ? null : active;
+        updateAdvCount(); fetchPage(1, false);
+    });
+
+    if (searchInput) {
+        var onSearch = function () { state.q = searchInput.value.trim(); fetchPage(1, false); };
+        searchInput.addEventListener('input', debounce ? debounce(onSearch, 250) : onSearch);
+    }
+
+    // Reset every control back to the default board.
+    function resetAll() {
+        state = { status: '', jobs: [], disciplines: [], q: '', sort: 'relevance', platforms: null };
+        if (searchInput) searchInput.value = '';
+        if (sortSel) sortSel.value = 'relevance';
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c, i) { c.classList.toggle('is-active', i === 0); });
+        if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', DEFAULT_PLATS.indexOf(c.dataset.plat) !== -1); });
+        refreshDiscUI(); updateAdvCount(); fetchPage(1, false);
+    }
+    var clearBtn = document.getElementById('rp-clear-filters');
+    if (clearBtn) clearBtn.addEventListener('click', resetAll);
+
+    // Smart empty state: drop the single filter the server says frees up the most results.
+    if (relaxBtn) relaxBtn.addEventListener('click', function () {
+        var kind = relaxBtn.dataset.kind, value = relaxBtn.dataset.value || '';
+        if (kind === 'job') { var i = state.jobs.indexOf(value); if (i !== -1) state.jobs.splice(i, 1); refreshDiscUI(); }
+        else if (kind === 'discipline') { var j = state.disciplines.indexOf(value); if (j !== -1) state.disciplines.splice(j, 1); refreshDiscUI(); }
+        else if (kind === 'status') { state.status = ''; if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.toggle('is-active', c.dataset.filter === 'all'); }); }
+        else if (kind === 'platform') { state.platforms = VALID_PLATS.slice(); if (plats) plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.add('is-active'); }); }   // widen to ALL platforms (matches the server count)
+        else if (kind === 'q') { state.q = ''; if (searchInput) searchInput.value = ''; }
+        updateAdvCount(); fetchPage(1, false);
+    });
+
+    // Seed the controls from the URL so a shared/reloaded link rebuilds the exact filter state. The
+    // cards are already server-rendered for these params, so this only syncs the UI -- no fetch.
+    function seedFromURL() {
+        var p = new URLSearchParams(location.search);
+        state.status = p.get('status') || '';
+        state.q = p.get('q') || '';
+        var srt = p.get('sort') || 'relevance';
+        state.sort = (sortSel && !Array.prototype.some.call(sortSel.options, function (o) { return o.value === srt; })) ? 'relevance' : srt;
+        state.jobs = p.getAll('job');
+        state.disciplines = p.getAll('discipline');
+        var pl = p.getAll('platform').filter(function (x) { return VALID_PLATS.indexOf(x) !== -1; });
+        state.platforms = pl.length ? pl : null;
+        if (searchInput) searchInput.value = state.q;
+        if (sortSel) sortSel.value = state.sort;
+        if (statusBar) statusBar.querySelectorAll('.rp-chip').forEach(function (c) {
+            c.classList.toggle('is-active', (state.status || 'all') === c.dataset.filter);
+        });
+        if (plats) { var act = state.platforms || DEFAULT_PLATS; plats.querySelectorAll('.rp-plat').forEach(function (c) { c.classList.toggle('is-active', act.indexOf(c.dataset.plat) !== -1); }); }
+        refreshDiscUI();
+    }
+
+    // Initial: seed from the URL + apply the SSR facet counts, then start infinite scroll. No fetch --
+    // the server already rendered page 1 for these exact params (shareable/reload-safe, no flash).
+    seedFromURL();
+    applyFacets(readFacets(document));
+    updateAdvCount();
+    syncAria();
+    updateEmptyStates();
+    initCards(list);
+    observeSentinel();
+    var panel = list.closest('.lab-view');
+    if (panel && !panel.hidden) staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));  // Contracts is the landing view
+    document.addEventListener('pp:contracts-shown', function () {
+        staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
+    });
 })();
 </script>
 {% endif %}
