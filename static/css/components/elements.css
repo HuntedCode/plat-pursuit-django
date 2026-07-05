@@ -61,6 +61,24 @@
 .rd-row__val { font-size: 12px; color: var(--pp-text-dim); text-align: right; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .rd-row { animation: none; } .rd-row__bar .pp-horizon__fill { transition: none; } .radar-tabs__slider { transition: none; } }
 
+/* ---- Contracts claim banner: a reward-pending CTA -- breathing glow, a periodic shine sweep,
+   a twinkling sparkle, and (revertible) a warm reward-tray gradient. ---- */
+.claim-banner { position: relative; overflow: hidden; animation: claimGlow 3.2s ease-in-out infinite; }
+@keyframes claimGlow {
+    0%, 100% { box-shadow: 0 4px 18px color-mix(in oklab, var(--pp-primary) 12%, transparent); }
+    50%      { box-shadow: 0 6px 26px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
+}
+.claim-banner::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(115deg, transparent 42%, color-mix(in oklab, var(--pp-primary) 20%, rgba(255,255,255,0.10)) 50%, transparent 58%); transform: translateX(-130%); animation: claimShine 5.5s ease-in-out infinite; }
+@keyframes claimShine { 0%, 62% { transform: translateX(-130%); } 82%, 100% { transform: translateX(130%); } }
+.claim-spark { display: inline-flex; animation: claimSpark 2.6s ease-in-out infinite; transform-origin: center; }
+@keyframes claimSpark {
+    0%, 100% { transform: scale(1) rotate(0deg); filter: none; }
+    50%      { transform: scale(1.14) rotate(12deg); filter: drop-shadow(0 0 6px color-mix(in oklab, var(--pp-primary) 70%, transparent)); }
+}
+/* #4 reward material -- remove the .claim-banner--gold class in the template to revert. */
+.claim-banner.claim-banner--gold { background: linear-gradient(100deg, color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2)) 0%, var(--pp-bg-2) 48%, color-mix(in oklab, #c79a52 11%, var(--pp-bg-2)) 100%); }
+@media (prefers-reduced-motion: reduce) { .claim-banner, .claim-spark { animation: none; } .claim-banner::after { display: none; } }
+
 /* ---- Career hero: ambient glow tinted by the Pursuer's strongest discipline (--dominant) ---- */
 .career-hero::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0; background: radial-gradient(125% 95% at 10% -12%, color-mix(in oklab, var(--dominant, transparent) 32%, transparent), transparent 62%); }
 .career-hero > * { position: relative; z-index: 1; }
