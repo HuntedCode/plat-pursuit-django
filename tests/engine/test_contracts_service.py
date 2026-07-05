@@ -245,6 +245,8 @@ def test_server_pagination():
     assert len(p1['contracts']) == 24 and p1['has_next'] and p1['total'] == 30
     p2 = contracts_page(profile, page=2)
     assert len(p2['contracts']) == 6 and not p2['has_next']
+    p_end = contracts_page(profile, page=999)   # past the end -> empty so infinite scroll stops
+    assert p_end['contracts'] == [] and not p_end['has_next']
 
 
 def test_modal_builder_has_per_game_progress():

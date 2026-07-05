@@ -37,7 +37,7 @@ sitemaps = {
     'lists': GameListSitemap,
     'challenges': ChallengeSitemap,
 }
-from trophies.views import GamesListView, GameDetailView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, CollectionView
+from trophies.views import GamesListView, GameDetailView, RandomGameView, TrophiesListView, ProfilesListView, SearchView, ProfileDetailView, ProfileEditorView, TrophyCaseView, ToggleSelectionView, BadgeListView, BadgeDetailView, ProfileSyncStatusView, TriggerSyncView, SearchSyncProfileView, AddSyncStatusView, LinkPSNView, ProfileVerifyView, TokenMonitoringView, BadgeCreationView, BadgeLeaderboardsView, OverallBadgeLeaderboardsView, MilestoneListView, CommentModerationView, ModerationActionView, ModerationLogView, BrowseListsView, GameListDetailView, GameListEditView, GameListCreateView, MyListsView, ChallengeHubView, MyChallengesView, AZChallengeCreateView, AZChallengeSetupView, AZChallengeDetailView, AZChallengeEditView, CalendarChallengeCreateView, CalendarChallengeDetailView, GenreChallengeCreateView, GenreChallengeSetupView, GenreChallengeDetailView, GenreChallengeEditView, GameFamilyManagementView, ReviewModerationView, ReviewModerationActionView, ReviewModerationLogView, MyTitlesView, ReviewHubLandingView, RateMyGamesView, ReviewHubDetailView, ReviewsArchivedView, PlatinumGridView, RoadmapDetailView, RoadmapEditorView, MyShareablesView, MyPlatinumSharesView, MyChallengeSharesView, MyProfileCardView, MyStatsView, FlaggedGamesView, RecentlyAddedView, CompanyListView, CompanyDetailView, FranchiseListView, FranchiseDetailView, GenreThemeListView, GenreDetailView, ThemeDetailView, EngineListView, EngineDetailView, LegacyChecklistListView, LegacyChecklistDetailView, CareerView, ContractsResultsView, ContractModalView, CollectionView
 from trophies.recap_views import RecapIndexView, RecapSlideView
 from users.views import CustomConfirmEmailView, stripe_webhook, paypal_webhook
 from users.subscription_admin_views import SubscriptionAdminView
@@ -131,6 +131,9 @@ urlpatterns = [
     # paths 301 to them (below), and the bare /my-pursuit/ now points at Home.
     path('collection/', CollectionView.as_view(), name='badge_collection'),
     path('career/', CareerView.as_view(), name='career'),
+    # Contracts board: cards partial (filter-swap + infinite scroll) and lazy per-contract modal.
+    path('career/contracts/results/', ContractsResultsView.as_view(), name='contracts_results'),
+    path('career/contracts/<slug:slug>/modal/', ContractModalView.as_view(), name='contract_modal'),
     # Merged into Career: /research-panel/ 301s to Career's Contracts tab (one surface, one URL).
     path('research-panel/', RedirectView.as_view(url='/career/?view=contracts', permanent=True), name='research_panel'),
     path('milestones/', MilestoneListView.as_view(), name='milestones_list'),
@@ -413,4 +416,13 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-handler404 = TemplateView.as_view(template_name='404.html')
+class NotFoundView(TemplateView):
+    """404 page that actually returns a 404 status (a plain TemplateView renders it at 200)."""
+    template_name = '404.html'
+
+    def render_to_response(self, context, **kwargs):
+        kwargs.setdefault('status', 404)
+        return super().render_to_response(context, **kwargs)
+
+
+handler404 = NotFoundView.as_view()

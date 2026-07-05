@@ -14,12 +14,14 @@ import logging
 
 from django.core.paginator import Paginator
 from django.db.models import (
-    Case, CharField, DateTimeField, Exists, F, IntegerField, OuterRef,
+    Avg, Case, CharField, DateTimeField, Exists, F, IntegerField, OuterRef,
     Prefetch, Q, Subquery, Value, When,
 )
 from django.db.models.functions import Coalesce
 
-from trophies.models import Contract, ContractMembership, EarnedContract, Game, Job, ProfileGame
+from trophies.models import (
+    Contract, ContractMembership, EarnedContract, Game, Job, ProfileGame, ProfileJobXP,
+)
 from trophies.services import job_render
 from trophies.services.job_render import DISCIPLINE_LABELS
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL, MODERN_PLATFORMS
@@ -216,6 +218,31 @@ def _family_styles(elements):
 # frontend switches to the paginated endpoints.
 # ---------------------------------------------------------------------------
 
+def discipline_levels(profile):
+    """{discipline_slug: avg job level} for the viewer -- feeds the relevance sort. Cheap grouped
+    aggregate (<=5 rows). Untouched disciplines are absent -> default 0 (weakest -> most relevant)."""
+    if profile is None:
+        return {}
+    return {
+        r['job__discipline']: r['avg']
+        for r in ProfileJobXP.objects.filter(profile=profile)
+        .values('job__discipline').annotate(avg=Avg('level'))
+    }
+
+
+def job_roster():
+    """The 25-job roster grouped by discipline (slug/icon/name only, no per-user data) for the
+    card's 5x5 job map. User-independent, so a page-render doesn't need the full career context."""
+    by_disc = {}
+    for job in Job.objects.all().order_by('display_order'):
+        by_disc.setdefault(job.discipline, []).append(job)
+    return [
+        {'slug': slug, 'label': label,
+         'jobs': [{'slug': j.slug, 'icon': j.icon, 'name': j.name} for j in by_disc.get(slug, [])]}
+        for slug, label in DISCIPLINE_LABELS.items()
+    ]
+
+
 def _disc_weights(disc_levels):
     """Discipline -> relevance weight, weakest (lowest avg level) weighted highest. Drives the
     'relevant to you' order of the untouched pool. `disc_levels` is {slug: avg_level}."""
@@ -374,12 +401,15 @@ def contracts_page(profile, disc_levels=None, page=1, q='', status='', disciplin
     qs = _filter_contracts(annotated_contracts(profile, disc_levels),
                            q=q, status=status, discipline=discipline, job=job, platforms=platforms)
     qs = _card_prefetch(qs.order_by(*_SORTS.get(sort, _ORDER)))
-    page_obj = Paginator(qs, CONTRACTS_PER_PAGE).get_page(page)
+    paginator = Paginator(qs, CONTRACTS_PER_PAGE)
+    if page > paginator.num_pages:   # past the end -> empty, so infinite scroll stops (get_page clamps)
+        return {'contracts': [], 'page': page, 'has_next': False, 'total': paginator.count}
+    page_obj = paginator.get_page(page)
     return {
         'contracts': [project_card(c) for c in page_obj],
         'page': page_obj.number,
         'has_next': page_obj.has_next(),
-        'total': page_obj.paginator.count,
+        'total': paginator.count,
     }
 
 

@@ -662,9 +662,17 @@ function ppCountUp(el, dur) {
     }
     function openContract(card, btn) {
         var tpl = card.querySelector('.rp-modal-src');
-        if (!tpl) return;
+        if (tpl) { openContractHtml(tpl.innerHTML, card, btn); return; }   // legacy in-page modal
+        var url = btn && btn.getAttribute('data-modal-url');               // server path: fetch on open
+        if (!url) return;
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.text() : null; })
+            .then(function (html) { if (html != null) openContractHtml(html, card, btn); })
+            .catch(function () {});
+    }
+    function openContractHtml(html, card, btn) {
         dialog.classList.add('emodal__dialog--wide');   // roomier dialog for the games grid
-        open(tpl.innerHTML, card, btn, animateContractContent);   // grow from the card, focus back to the button
+        open(html, card, btn, animateContractContent);   // grow from the card, focus back to the button
         var head = panel.querySelector('.rpm__head'), bar = panel.querySelector('.rpm__bar'), headImg = panel.querySelector('.rpm__head-art img');
         if (!head || !bar) return;
         if (reduce) {
