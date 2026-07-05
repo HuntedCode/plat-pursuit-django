@@ -132,12 +132,10 @@ def _build_contracts(profile):
         n = len(jobs)
         t = contract.xp_total_override or CONTRACT_XP_TOTAL
 
-        # Per-game entries matching the badge-stage card contract
-        # (badge_detail_items.html expects game / pgame / ratings / has_guide).
+        # Per-game entries consumed by _contract_game.html (the tier-2 modal cards): game / pgame / has_guide.
         game_entries = [{
             'game': g,
             'profile_game': pg_by_game.get(g.id),
-            'community_ratings': None,  # kept lean on the list view; add if needed
             'has_guide': bool(g.concept.guide_slug),
         } for g in contract_games]
 
@@ -155,7 +153,7 @@ def _build_contracts(profile):
         first_concept = contract_games[0].concept if contract_games else None
         family_gradient, family_color = _family_styles(elements)
         projects.append({
-            'name': (first_concept.unified_title if first_concept else '') or contract.name,
+            'name': contract.name or (first_concept.unified_title if first_concept else ''),
             'slug': contract.slug,
             'cover_game': contract_games[0] if contract_games else None,  # newest game -> card art
             'games': game_entries,         # the focal point: every game that satisfies it

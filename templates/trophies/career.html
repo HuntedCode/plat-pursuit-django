@@ -243,6 +243,7 @@
     <div class="emodal" id="emodal" hidden>
         <div class="emodal__backdrop" data-close></div>
         <div class="emodal__dialog" role="dialog" aria-modal="true" aria-label="Job detail" tabindex="-1">
+            <span class="emodal__grab" aria-hidden="true"></span>
             <button class="emodal__close" data-close aria-label="Close">&times;</button>
             <div id="emodal-panel"></div>
         </div>
@@ -561,7 +562,7 @@ function ppCountUp(el, dur) {
     var backdrop = modal ? modal.querySelector('.emodal__backdrop') : null;
     var zoom = document.getElementById('zoom-container');
     if (!details || !modal || !panel || !dialog) return;
-    var lastTrigger = null, portaled = false;
+    var flipEl = null, focusEl = null, afterFn = null, portaled = false, scrollFn = null;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -591,7 +592,8 @@ function ppCountUp(el, dur) {
     }
     // Content choreography: count the level up + fill the XP bar once the panel is injected (the
     // glyph draw + section stagger are CSS animations that play on injection).
-    function animateContent() {
+    // Post-inject content choreography, per source. Job detail: count the level + fill the XP bar.
+    function animateJobContent() {
         if (reduce) return;
         var lvl = panel.querySelector('.edetail__level-num');
         if (lvl) ppCountUp(lvl, 700);
@@ -601,41 +603,91 @@ function ppCountUp(el, dur) {
             requestAnimationFrame(function () { requestAnimationFrame(function () { bar.style.setProperty('--horizon-progress', bar.dataset.fill); }); });
         }
     }
+    // Contract detail: once the dialog has grown, cascade the job pills in, then the game cards.
+    function animateContractContent() {
+        if (reduce) return;   // content is visible via the reduced-motion CSS override
+        var i = 0;
+        panel.querySelectorAll('.rpm-job').forEach(function (el) { el.style.animationDelay = (i++ * 55) + 'ms'; el.classList.add('rpm-in'); });
+        panel.querySelectorAll('.rpg').forEach(function (el) {
+            var delay = i++ * 45;
+            el.style.animationDelay = delay + 'ms';
+            el.classList.add('rpm-in');
+            var fill = el.querySelector('.rpg__prog-fill');   // (D) fill the bar just after the card rises in
+            if (fill && fill.dataset.fill) { fill.style.width = '0%'; setTimeout(function () { fill.style.width = fill.dataset.fill; }, delay + 260); }
+        });
+    }
     function resetDialog() {
         ['animation', 'transition', 'transform', 'transformOrigin', 'opacity'].forEach(function (p) { dialog.style[p] = ''; });
         if (backdrop) { backdrop.style.transition = ''; backdrop.style.opacity = ''; }
     }
     function hideNow() {
         modal.hidden = true;
+        if (scrollFn) { dialog.removeEventListener('scroll', scrollFn); scrollFn = null; }
         panel.innerHTML = '';
         document.body.style.overflow = '';
         if (zoom) zoom.classList.remove('pp-receded');
+        dialog.classList.remove('emodal__dialog--wide');
         resetDialog();
-        if (lastTrigger && document.contains(lastTrigger)) lastTrigger.focus();   // restore focus to the tile
-        lastTrigger = null;
+        if (focusEl && document.contains(focusEl)) focusEl.focus();   // restore focus to the trigger
+        flipEl = focusEl = afterFn = null;
     }
 
-    function openEl(slug, trigger) {
-        var src = details.querySelector('[data-slug="' + slug + '"]');
-        if (!src) return;
+    // Generic open: inject html, grow the dialog from flipTarget's rect, restore focus to focusTarget.
+    function open(html, flipTarget, focusTarget, after) {
         if (!portaled && zoom) { document.body.appendChild(modal); portaled = true; }   // out of the scaled wrapper
-        panel.innerHTML = src.innerHTML;
+        panel.innerHTML = html;
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
         if (zoom && !reduce) zoom.classList.add('pp-receded');   // the page pushes back
-        lastTrigger = trigger || null;
-        if (!reduce && trigger) flip(trigger.getBoundingClientRect(), true);   // grow from the tile
-        setTimeout(animateContent, 340);   // content waits for the dialog to grow (matches the section stagger)
+        flipEl = flipTarget || null; focusEl = focusTarget || flipTarget || null; afterFn = after || null;
+        if (!reduce && flipEl) flip(flipEl.getBoundingClientRect(), true);   // grow from the source
+        setTimeout(function () { if (afterFn) afterFn(); }, 340);   // content waits for the dialog to grow
         (dialog.querySelector('.emodal__close') || dialog).focus();   // move focus into the dialog
+    }
+    function openEl(slug, trigger) {
+        var src = details.querySelector('[data-slug="' + slug + '"]');
+        if (!src) return;
+        open(src.innerHTML, trigger, trigger, animateJobContent);
+    }
+    function openContract(card, btn) {
+        var tpl = card.querySelector('.rp-modal-src');
+        if (!tpl) return;
+        dialog.classList.add('emodal__dialog--wide');   // roomier dialog for the games grid
+        open(tpl.innerHTML, card, btn, animateContractContent);   // grow from the card, focus back to the button
+        var head = panel.querySelector('.rpm__head'), bar = panel.querySelector('.rpm__bar'), headImg = panel.querySelector('.rpm__head-art img');
+        if (!head || !bar) return;
+        if (reduce) {
+            // Reduced motion: discrete swap, no scroll-linked transforms.
+            scrollFn = function () { bar.classList.toggle('is-stuck', dialog.scrollTop > head.offsetHeight - 46); };
+        } else {
+            bar.style.transition = 'none';   // (B) opacity is scroll-driven, so no lag  [REVERT B: remove this line]
+            var ticking = false;
+            scrollFn = function () {
+                if (ticking) return; ticking = true;
+                requestAnimationFrame(function () {
+                    ticking = false;
+                    var st = dialog.scrollTop, p = Math.min(1, st / Math.max(1, head.offsetHeight - 46));
+                    if (headImg) headImg.style.transform = 'translate3d(0,' + (p * 20).toFixed(1) + 'px,0)';   // (A) header parallax
+                    // (B) Continuous collapse: dissolve the full header into the compact bar as you scroll.
+                    //     TO REVERT B: delete the next three lines and the bar.style.transition line above,
+                    //     then use: bar.classList.toggle('is-stuck', st > head.offsetHeight - 46);
+                    head.style.opacity = (1 - Math.min(1, p * 1.3)).toFixed(3);
+                    bar.style.opacity = p.toFixed(3);
+                    bar.classList.toggle('is-stuck', p > 0.02);   // pointer-events once visible
+                });
+            };
+        }
+        dialog.addEventListener('scroll', scrollFn, { passive: true });
+        scrollFn();   // set the initial state
     }
     function closeEl() {
         if (zoom) zoom.classList.remove('pp-receded');
-        if (!reduce && lastTrigger && document.contains(lastTrigger)) {
+        if (!reduce && flipEl && document.contains(flipEl)) {
             var done = false;
             var finish = function () { if (done) return; done = true; dialog.removeEventListener('transitionend', onEnd); hideNow(); };
             var onEnd = function (e) { if (e.target === dialog && e.propertyName === 'transform') finish(); };
             dialog.addEventListener('transitionend', onEnd);
-            flip(lastTrigger.getBoundingClientRect(), false);   // shrink back to the tile
+            flip(flipEl.getBoundingClientRect(), false);   // shrink back to the source
             setTimeout(finish, 400);   // safety net if transitionend doesn't fire
         } else {
             hideNow();
@@ -644,6 +696,9 @@ function ppCountUp(el, dur) {
     document.querySelectorAll('.ptile').forEach(function (t) {
         t.addEventListener('click', function () { openEl(t.dataset.slug, t); });
         t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEl(t.dataset.slug, t); } });
+    });
+    document.querySelectorAll('.rp-tier2-btn').forEach(function (b) {   // contract card -> grow the modal from the card
+        b.addEventListener('click', function () { var card = b.closest('.rp-row'); if (card) openContract(card, b); });
     });
     modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', closeEl); });
     document.addEventListener('keydown', function (e) {

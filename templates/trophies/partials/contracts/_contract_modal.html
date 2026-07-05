@@ -1,0 +1,47 @@
+{% comment %}
+Contract modal content -- injected into the shared .emodal on open (grows from the card). Header
+(contract identity) + the tier-2 job breakdown (full pills, finally shown here) + the from-scratch
+member-games grid. Rendered inside an inert <template> in the card, so nothing loads until opened.
+Expects: p (contract dict), profile (viewer).
+{% endcomment %}
+{% load humanize job_icons %}
+<div class="rpm" style="--rp-fam: {{ p.family_color }};">
+    {% comment %} Compact bar: hidden until the full header scrolls past (JS toggles .is-stuck), so the
+    contract stays identified while the games list scrolls. {% endcomment %}
+    <div class="rpm__bar" aria-hidden="true">
+        <span class="rpm__bar-art">{% if p.cover_game %}<img src="{% if p.cover_game.concept.landscape_url %}{{ p.cover_game.concept.landscape_url }}{% else %}{{ p.cover_game.display_image_url }}{% endif %}" alt="">{% endif %}</span>
+        <span class="rpm__bar-title">{{ p.name }}</span>
+    </div>
+    <div class="rpm__head">
+        <div class="rpm__head-art">
+            {% if p.cover_game %}<img src="{% if p.cover_game.concept.landscape_url %}{{ p.cover_game.concept.landscape_url }}{% else %}{{ p.cover_game.display_image_url }}{% endif %}" alt="" class="object-cover object-center">{% endif %}
+            <span class="rpm__head-scrim" aria-hidden="true"></span>
+            <span class="rpm__head-accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
+        </div>
+        <div class="rpm__head-info">
+            <span class="rpm__eyebrow">Contract</span>
+            <h3 class="rpm__title" id="rpm-title">{{ p.name }}</h3>
+            <span class="rpm__sub">{{ p.xp_total|intcomma }} XP &middot; {{ p.elements|length }} job{{ p.elements|length|pluralize }} &middot; {{ p.game_count }} game{{ p.game_count|pluralize }}</span>
+        </div>
+    </div>
+
+    <div class="rpm__section">
+        <div class="rpm__label">Jobs this Contract levels</div>
+        <div class="rpm__jobs">
+            {% for el in p.elements %}
+            <div class="rpm-job" style="--disc: var(--disc-{{ el.disc_slug }});">
+                <span class="rpm-job__icon">{% job_icon el.icon '' %}</span>
+                <span class="rpm-job__name">{{ el.name }}</span>
+                <span class="rpm-job__xp pp-tally">+{{ p.xp_each|intcomma }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="rpm__section">
+        <div class="rpm__label">Complete any one to bank it</div>
+        <div class="rpm__games">
+            {% for g in p.games %}{% include 'trophies/partials/contracts/_contract_game.html' with game=g.game pgame=g.profile_game has_guide=g.has_guide fam=p.family_color %}{% endfor %}
+        </div>
+    </div>
+</div>

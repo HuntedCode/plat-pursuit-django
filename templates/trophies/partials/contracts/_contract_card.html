@@ -2,7 +2,7 @@
 Contract card (vertical tile, laid out in a grid). Top: the newest member game's art + status
 badge. Then title, a divider, and a two-column body: LEFT the full 5x5 job map (this contract's
 jobs lit, the rest dim), RIGHT the reward stack (split ring, total XP, progress, state line). The
-member games sit in a collapsed <details>. Every card is the same height and shows the same fields.
+member games open in the shared contract modal (tier 2). Every card is the same height and fields.
 Expects `p` (a contract dict from contracts_service), `disciplines` (the 25-job roster, one entry
 per discipline with `.jobs`), and `profile` (viewer, for game-card links).
 {% endcomment %}
@@ -45,7 +45,7 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
         dimmed context (brighten on hover to identify them). Icons come from the page's <use> sprite
         (job_icon_use), defined once, not re-inlined per cell. RIGHT = the reward stack: split ring,
         total XP (always), progress bar (always), and a state-driven line (Accept / % / Not started).
-        TODO (Contracts tier 2): full pill (icon + name + XP each) in an expanded detail surface.
+        The full job pills (icon + name + XP each) now live in the tier-2 modal (_contract_modal.html).
         {% endcomment %}
         <div class="rp-body">
             <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">
@@ -88,19 +88,13 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
             </div>
         </div>
 
-        {# Tier 2: member games, collapsed by default #}
-        <details class="rp-games mt-1">
-            <summary class="rp-games__summary">
-                <svg class="rp-games__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                <span><span class="font-semibold text-base-content/70">{{ p.game_count }}</span> game{{ p.game_count|pluralize }} &middot; complete any one</span>
-            </summary>
-            <div class="rp-games__grid mt-2">
-                {% for g in p.games %}
-                    {% with game=g.game pgame=g.profile_game ratings=g.community_ratings has_guide=g.has_guide %}
-                        {% include 'trophies/partials/badge_detail/badge_detail_items.html' %}
-                    {% endwith %}
-                {% endfor %}
-            </div>
-        </details>
+        {% comment %} Tier 2: opens the shared contract modal (grows from the card). Content lives in
+        an inert template element, so its images don't load until the modal opens. {% endcomment %}
+        <button type="button" class="rp-tier2-btn" aria-haspopup="dialog">
+            <span class="rp-tier2-btn__count">{{ p.game_count }}</span>
+            <span class="rp-tier2-btn__label">game{{ p.game_count|pluralize }} &middot; view details</span>
+            <svg class="rp-tier2-btn__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        <template class="rp-modal-src">{% include 'trophies/partials/contracts/_contract_modal.html' with p=p %}</template>
     </div>
 </div>

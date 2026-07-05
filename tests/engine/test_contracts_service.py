@@ -38,7 +38,7 @@ def test_lists_live_project_with_games_elements_and_split():
     ctx = build_contracts_context(profile)
 
     p = _project(ctx, 'p-list')
-    assert p['name'] == 'Cool Game'         # from the member concept, not the contract name
+    assert p['name'] == 'p-list'            # the contract name wins over the member concept title
     assert p['game_count'] == 1
     assert len(p['elements']) == 2
     assert p['xp_total'] == CONTRACT_XP_TOTAL
