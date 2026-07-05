@@ -95,7 +95,7 @@
     {% if career %}
     {# ── Career: one card, your jobs (Jobs / Radar) + the Contracts board via tabs ── #}
     <section class="card bg-base-200/90 border-2 border-base-300 border-l-4 border-l-primary shadow-lg shadow-neutral mb-3">
-        <div class="card-body p-4 md:p-5 lg:p-6">
+        <div class="card-body p-3 md:p-5 lg:p-7">
             <div class="flex items-center gap-2 flex-wrap">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>
@@ -132,13 +132,13 @@
 
             {# View toggle: Jobs / Radar / Contracts (the merged Contracts board) #}
             <div class="lab-views" role="tablist" aria-label="Career view">
-                <button type="button" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">Jobs</button>
-                <button type="button" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
-                <button type="button" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
+                <button type="button" id="career-tab-jobs" aria-controls="career-panel-jobs" class="lab-view-tab {% if active_view == 'jobs' %}is-active{% endif %}" data-view="jobs" role="tab" aria-selected="{% if active_view == 'jobs' %}true{% else %}false{% endif %}">Jobs</button>
+                <button type="button" id="career-tab-radar" aria-controls="career-panel-radar" class="lab-view-tab {% if active_view == 'radar' %}is-active{% endif %}" data-view="radar" role="tab" aria-selected="{% if active_view == 'radar' %}true{% else %}false{% endif %}">Radar</button>
+                <button type="button" id="career-tab-contracts" aria-controls="career-panel-contracts" class="lab-view-tab {% if active_view == 'contracts' %}is-active{% endif %}" data-view="contracts" role="tab" aria-selected="{% if active_view == 'contracts' %}true{% else %}false{% endif %}">Contracts{% if claimable_count %} <span class="lab-tab-count">{{ claimable_count }}</span>{% endif %}</button>
             </div>
 
             {# Jobs: two layouts -- Dossier (rich discipline chapters) + Character sheet (compact, shareable) #}
-            <div class="lab-view" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
+            <div class="lab-view" id="career-panel-jobs" role="tabpanel" aria-labelledby="career-tab-jobs" data-view="jobs" {% if active_view != 'jobs' %}hidden{% endif %}>
                 <div class="jlayout" role="tablist" aria-label="Jobs layout">
                     <button type="button" class="jlayout__btn is-active" data-layout="dossier" role="tab" aria-selected="true">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
@@ -185,7 +185,7 @@
             </div>
 
             {# Radar #}
-            <div class="lab-view" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
+            <div class="lab-view" id="career-panel-radar" role="tabpanel" aria-labelledby="career-tab-radar" data-view="radar" {% if active_view != 'radar' %}hidden{% endif %}>
                 <p class="text-xs md:text-sm text-base-content/50 italic pr-1 mb-4">Your play, mapped across the five disciplines.</p>
                 <div class="radar-card">
                     <div class="radar-tabs">
@@ -201,7 +201,7 @@
             </div>
 
             {# Contracts: the merged board -- games you can pursue + accept to level jobs #}
-            <div class="lab-view" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
+            <div class="lab-view" id="career-panel-contracts" role="tabpanel" aria-labelledby="career-tab-contracts" data-view="contracts" {% if active_view != 'contracts' %}hidden{% endif %}>
                 <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
                     <p class="text-xs md:text-sm text-base-content/50 italic pr-1 min-w-0">
                         Contracts on the board: complete a game to level its jobs. Each Contract's XP is split evenly among the jobs it feeds.
@@ -217,9 +217,11 @@
                     <button type="button" class="rp-chip" data-filter="claimable">Claimable</button>
                     <button type="button" class="rp-chip" data-filter="accepted">Accepted</button>
                 </div>
-                <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-start">
+                {# Icon sprite: define all job glyphs once so each card's 5x5 grid references them via <use>. #}
+                {% job_icon_sprite %}
+                <div id="rp-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 items-stretch">
                     {% for p in contracts %}
-                    {% include 'trophies/partials/contracts/_contract_card.html' with p=p %}
+                    {% include 'trophies/partials/contracts/_contract_card.html' with p=p disciplines=career.disciplines %}
                     {% empty %}
                     <div class="card bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral col-span-full">
                         <div class="card-body items-center text-center py-10 text-base-content/50">
@@ -278,13 +280,13 @@ function ppCountUp(el, dur) {
     var chart = null;
     var canvas = document.getElementById('disc-radar');
     var revealRadar = function () {};   // reassigned once the chart is built (bridges the if-scope)
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (typeof Chart !== 'undefined' && canvas) {
         var slugs = ['combat', 'exploration', 'mind', 'heart', 'finesse'];
         var discColors = slugs.map(function (s) { return css.getPropertyValue('--disc-' + s).trim(); });
         var cyan = css.getPropertyValue('--pp-primary').trim() || '#67d1f8';
         var RMAX = {{ career.radar_max }};
-        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         var detail = document.getElementById('radar-detail');
         var basePR = 5, bigPR = 9;
 
@@ -438,17 +440,64 @@ function ppCountUp(el, dur) {
     // Career view toggle: Jobs (default) / Radar / Contracts.
     var viewTabs = document.querySelectorAll('.lab-view-tab');
     var views = document.querySelectorAll('.lab-view');
+    var VIEW_ORDER = ['jobs', 'radar', 'contracts'];
+    function currentView() {
+        var cur = null;
+        views.forEach(function (v) { if (!v.hidden) cur = v.dataset.view; });
+        return cur;
+    }
     function showView(name) {
-        views.forEach(function (v) { v.hidden = (v.dataset.view !== name); });
+        var from = currentView();
+        var changed = from !== name;
+        // (A) Directional cross-fade: incoming panel slides+fades in from the side it lives on.
+        var forward = !from || VIEW_ORDER.indexOf(name) >= VIEW_ORDER.indexOf(from);
+        views.forEach(function (v) {
+            var on = v.dataset.view === name;
+            v.hidden = !on;
+            v.classList.remove('lab-view--in-right', 'lab-view--in-left');
+            if (on && changed && !reduce) {
+                void v.offsetWidth;   // restart the animation from scratch
+                v.classList.add(forward ? 'lab-view--in-right' : 'lab-view--in-left');
+            }
+        });
         viewTabs.forEach(function (t) {
             var on = t.dataset.view === name;
             t.classList.toggle('is-active', on);
             t.setAttribute('aria-selected', on ? 'true' : 'false');
+            t.tabIndex = on ? 0 : -1;   // (D) roving tabindex -- only the active tab is Tab-reachable
+            t.classList.remove('lab-view--ignite');   // clear any stale one-shot from a prior activation
+            // (B) Ignite the pill that just became active.
+            if (on && changed && !reduce) { void t.offsetWidth; t.classList.add('lab-view--ignite'); }
         });
         // Animate the radar in the first time it's shown (and keep it correctly sized after).
         if (name === 'radar') revealRadar();
     }
     viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
+
+    // (D) ARIA tablist keyboard nav: Left/Right (and Up/Down) move selection, Home/End jump.
+    var viewTabList = document.querySelector('.lab-views');
+    if (viewTabList) {
+        var STEP = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+        viewTabList.addEventListener('keydown', function (e) {
+            var list = [].slice.call(viewTabs);
+            var i = list.indexOf(document.activeElement);
+            if (i < 0) return;
+            var next;
+            if (e.key in STEP) next = list[(i + STEP[e.key] + list.length) % list.length];
+            else if (e.key === 'Home') next = list[0];
+            else if (e.key === 'End') next = list[list.length - 1];
+            else return;
+            e.preventDefault();
+            next.focus();
+            showView(next.dataset.view);
+        });
+    }
+    // Initial roving-tabindex state + a one-shot ignite so the active pill "comes alive" on load.
+    viewTabs.forEach(function (t) { t.tabIndex = t.classList.contains('is-active') ? 0 : -1; });
+    if (!reduce) {
+        var initTab = document.querySelector('.lab-view-tab.is-active');
+        if (initTab) setTimeout(function () { if (initTab.classList.contains('is-active')) initTab.classList.add('lab-view--ignite'); }, 260);
+    }
 
     // Rail / deep-link jumps to a specific Career view without a reload.
     document.querySelectorAll('[data-lab-goto]').forEach(function (el) {

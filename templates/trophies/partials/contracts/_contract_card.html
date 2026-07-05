@@ -1,8 +1,10 @@
 {% comment %}
-Contract card (vertical tile, laid out in a grid): the newest member game's art banners the top;
-below sit the identity, the jobs it levels (wrapping chips), a job-split ring with the
-split count in its center + the status action, and the member-games grid in a collapsed <details>.
-Expects `p` (a contract dict from contracts_service) and `profile` (viewer, for game-card links).
+Contract card (vertical tile, laid out in a grid). Top: the newest member game's art + status
+badge. Then title, a divider, and a two-column body: LEFT the full 5x5 job map (this contract's
+jobs lit, the rest dim), RIGHT the reward stack (split ring, total XP, progress, state line). The
+member games sit in a collapsed <details>. Every card is the same height and shows the same fields.
+Expects `p` (a contract dict from contracts_service), `disciplines` (the 25-job roster, one entry
+per discipline with `.jobs`), and `profile` (viewer, for game-card links).
 {% endcomment %}
 {% load humanize job_icons %}
 <div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
@@ -24,36 +26,58 @@ Expects `p` (a contract dict from contracts_service) and `profile` (viewer, for 
 
     {# Content #}
     <div class="flex-1 flex flex-col gap-2 p-3">
-        <span class="font-bold text-sm md:text-base leading-tight line-clamp-2 pr-1" title="{{ p.name }}">{{ p.name }}</span>
+        {% comment %} Title: clamp to 2 lines AND reserve 2 lines' height (min-h-[2.5em] = leading-tight x2)
+        so a short title occupies the same vertical space as a long one, keeping cards equal height. {% endcomment %}
+        <span class="font-bold text-sm md:text-base leading-tight line-clamp-2 min-h-[2.5em] pr-1" title="{{ p.name }}">{{ p.name }}</span>
 
-        <div class="rp-reward">
-            {% for el in p.elements %}
-            <span class="rp-el" style="--disc: var(--disc-{{ el.disc_slug }});">
-                <span class="rp-el__chip">{% job_icon el.icon '' %}</span>
-                <span class="rp-el__name">{{ el.name }}</span>
-                <span class="rp-el__xp pp-tally">+{{ p.xp_each|intcomma }}</span>
-            </span>
-            {% endfor %}
-        </div>
+        <span class="rp-div" aria-hidden="true"></span>
 
-        {# Footer: job-split ring (the split count in its center) + the status action #}
-        <div class="mt-auto pt-1 flex items-center justify-between gap-2">
-            <div class="rp-ring-wrap" title="{{ p.xp_total|intcomma }} XP, split evenly across {{ p.elements|length }} job{{ p.elements|length|pluralize }}">
-                <div class="rp-ring" style="--ring-grad: {{ p.ring_gradient }};" aria-hidden="true"></div>
-                <div class="rp-ring__xp">
-                    <span class="pp-tally">{{ p.elements|length }}</span>
-                    <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>
+        {% comment %}
+        Body (two columns, identical structure on every card so heights match no matter the status
+        or job count). LEFT = the whole 5x5 job map: all 25 jobs, one row per discipline in
+        display_order. The jobs THIS contract levels are lit in their family color; the rest are
+        dimmed context (brighten on hover to identify them). Icons come from the page's <use> sprite
+        (job_icon_use), defined once, not re-inlined per cell. RIGHT = the reward stack: split ring,
+        total XP (always), progress bar (always), and a state-driven line (Accept / % / Not started).
+        TODO (Contracts tier 2): full pill (icon + name + XP each) in an expanded detail surface.
+        {% endcomment %}
+        <div class="rp-body">
+            <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">
+                {% for d in disciplines %}{% for job in d.jobs %}
+                <span class="rp-jobcell{% if job.slug in p.element_slugs %} is-lit{% endif %}" style="--disc: var(--disc-{{ d.slug }});" title="{{ job.name }}{% if job.slug in p.element_slugs %} &middot; +{{ p.xp_each|intcomma }} XP{% endif %}">
+                    {% job_icon_use job.icon '' %}
+                    {% if job.slug in p.element_slugs %}<span class="sr-only">{{ job.name }}, +{{ p.xp_each|intcomma }} XP</span>{% endif %}
+                </span>
+                {% endfor %}{% endfor %}
+            </div>
+
+            <span class="rp-vdiv" aria-hidden="true"></span>
+
+            <div class="rp-side">
+                <div class="rp-ring-wrap" title="{{ p.xp_total|intcomma }} XP, split evenly across {{ p.elements|length }} job{{ p.elements|length|pluralize }}">
+                    <div class="rp-ring" style="--ring-grad: {{ p.ring_gradient }};" aria-hidden="true"></div>
+                    <div class="rp-ring__xp">
+                        <span class="pp-tally">{{ p.elements|length }}</span>
+                        <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>
+                    </div>
+                </div>
+                <div class="rp-reward-xp" title="Total reward: {{ p.xp_total|intcomma }} XP">
+                    <span class="rp-reward-xp__val pp-tally">+{{ p.xp_total|intcomma }}</span>
+                    <span class="rp-reward-xp__cap">total XP</span>
+                </div>
+                <div class="rp-prog">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}</div>
+                <div class="rp-status">
+                    {% if p.status == 'claimable' or p.status == 'accepted' %}
+                        {# both rendered; .rp-row--accepted reveals the right one via CSS #}
+                        <button type="button" class="btn btn-xs btn-primary rp-accept" data-slug="{{ p.slug }}">Accept</button>
+                        <span class="rp-cta__done">Accepted &check;</span>
+                    {% elif p.status == 'pursuing' %}
+                        <span class="rp-status__pct">{{ p.progress }}% complete</span>
+                    {% else %}
+                        <span class="rp-status__idle">Not yet started</span>
+                    {% endif %}
                 </div>
             </div>
-            <span class="rp-cta">
-                {% if p.status == 'claimable' or p.status == 'accepted' %}
-                    {# both rendered; .rp-row--accepted reveals the right one via CSS #}
-                    <button type="button" class="btn btn-xs md:btn-sm btn-primary rp-accept" data-slug="{{ p.slug }}">Accept</button>
-                    <span class="rp-cta__done">Accepted &check;</span>
-                {% elif p.status == 'pursuing' %}
-                    <span class="rp-cta__prog">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}<span class="rp-cta__pct">{{ p.progress }}% complete</span></span>
-                {% endif %}
-            </span>
         </div>
 
         {# Tier 2: member games, collapsed by default #}

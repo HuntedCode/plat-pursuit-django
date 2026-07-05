@@ -16,11 +16,31 @@
 }
 
 /* ---- Lab view toggle (Table / Radar) ---- */
+/* Primary view switcher (Jobs / Radar / Contracts). Deliberately heftier than the radar
+   sub-tabs below it -- it's the dominant control, so it out-ranks the segmented slider. */
 .lab-views { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-.lab-view-tab { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 7px 18px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease; }
-.lab-view-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
-.lab-view-tab.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 30%, transparent); }
+.lab-view-tab { font: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 9px 22px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease; }
+.lab-view-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2)); }
+.lab-view-tab:active { transform: translateY(1px); }
+.lab-view-tab.is-active { color: var(--pp-primary); font-weight: 700; border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, var(--pp-bg-2)); box-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 30%, transparent), inset 0 1px 0 color-mix(in oklab, var(--pp-primary) 22%, transparent); }
+.lab-view-tab:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* (B) Ignite: the pill that just became active blooms its glow once, then settles into .is-active.
+   No fill-mode -- when the animation ends it hands back to the .is-active box-shadow above.
+   Keyframes use rgba, never color-mix (lightningcss strips color-mix from @keyframes). */
+.lab-view-tab.lab-view--ignite { animation: labTabIgnite 0.5s ease-out; }
+@keyframes labTabIgnite {
+    0%   { box-shadow: 0 0 4px 0 rgba(103, 209, 248, 0.35), inset 0 1px 0 rgba(103, 209, 248, 0.22); }
+    40%  { box-shadow: 0 0 24px 4px rgba(103, 209, 248, 0.6), inset 0 1px 0 rgba(103, 209, 248, 0.32); }
+    100% { box-shadow: 0 0 16px 0 rgba(103, 209, 248, 0.3), inset 0 1px 0 rgba(103, 209, 248, 0.22); }
+}
+
 .lab-view[hidden] { display: none; }
+/* (A) Panel cross-fade: the incoming Career view slides + fades in from the side it lives on
+   (Material "shared axis" -- direction follows tab order). Transform/opacity only, no color-mix. */
+.lab-view--in-right { animation: labViewInRight 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.lab-view--in-left { animation: labViewInLeft 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes labViewInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes labViewInLeft { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
 
 /* ---- Summary stat cards ---- */
 /* Stat cell (Home hero + Lab). Mobile-first: a whale's 6-7 digit count overflows the full
@@ -375,22 +395,31 @@
 .rp-chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border)); transform: translateY(-1px); }
 .rp-chip:active { transform: scale(0.96); }
 .rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
-/* Reward band: the elements a Project levels are a co-focus, not a footnote.
-   Each chip = glowing family atom + name + the XP it actually banks. */
-.rp-reward { display: flex; flex-wrap: wrap; gap: 7px; }
-.rp-el {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 4px 11px 4px 5px; border-radius: 999px;
-    background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 15%, var(--pp-bg-1)), var(--pp-bg-1));
-    border: 1px solid color-mix(in oklab, var(--disc) 42%, transparent);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-}
-.rp-el__chip { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 7px; background: color-mix(in oklab, var(--disc) 18%, var(--pp-bg-2)); color: var(--disc); }
-.rp-el__chip svg { width: 15px; height: 15px; }
-.rp-el__name { font-size: 13px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
-.rp-el__xp { font-size: 12px; color: var(--disc); }  /* face (weight + tabular) via shared .pp-tally; resting = calm */
-/* Row hover lights up its elements -- the "this game feeds these stats" beat. */
-.rp-row:hover .rp-el { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 22%, transparent); }
+/* Divider under the title (echoes the games-footer rule); faded at the ends for a premium edge. */
+.rp-div { display: block; height: 1px; background: linear-gradient(90deg, transparent, var(--pp-border) 12%, var(--pp-border) 88%, transparent); }
+
+/* Two-column body: LEFT the 5x5 job map, a faded vertical rule, RIGHT the reward stack. Fixed
+   right column so the ring stack width is stable; the grid takes the rest. Identical on every
+   card -> equal heights. */
+.rp-body { display: grid; grid-template-columns: minmax(0, 1fr) 1px 84px; gap: 10px; align-items: center; }
+.rp-vdiv { align-self: stretch; background: linear-gradient(180deg, transparent, var(--pp-border) 12%, var(--pp-border) 88%, transparent); }
+
+/* Job map: all 25 jobs (one row per discipline, display_order). Lit = this contract's jobs in
+   family color; the rest are dimmed context that brightens on hover so any job is identifiable.
+   Icons are <use> refs into the page sprite, so 25 cells x N cards stays light. */
+.rp-jobgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.rp-jobcell { display: grid; place-items: center; aspect-ratio: 1; border-radius: 6px; border: 1px solid transparent; background: var(--pp-bg-1); color: var(--disc); opacity: 0.34; transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.rp-jobcell svg { width: 64%; height: 64%; }
+.rp-jobcell:hover { opacity: 0.72; }
+.rp-jobcell.is-lit { opacity: 1; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--disc) 45%, transparent); }
+.rp-row:hover .rp-jobcell.is-lit { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--disc) 24%, transparent); }
+
+/* Reward stack (right column): ring, total XP, progress bar, state line -- all always present. */
+.rp-side { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.rp-prog { width: 100%; }
+.rp-status { min-height: 20px; display: flex; align-items: center; justify-content: center; text-align: center; }
+.rp-status__pct { font-size: 0.7rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); }
+.rp-status__idle { font-size: 0.7rem; font-weight: 600; color: var(--pp-text-mute); }
 
 /* Family identity woven into the card frame: premium dark substrate, family seasoning.
    --rp-fam (dominant family color) is set per-card inline; the accent bar carries the
@@ -413,6 +442,12 @@
 .rp-ring__xp .pp-tally { font-size: 12px; color: var(--pp-text); }
 @media (min-width: 768px) { .rp-ring__xp .pp-tally { font-size: 14px; } }
 .rp-ring__xp-cap { display: block; font-size: 7px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 1px; }
+/* Total-XP reward, shown on every card under the ring. Family-colored, echoing the ring's
+   number+caption rhythm so the reward stack reads as one unit. */
+.rp-reward-xp { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.05; text-align: center; }
+.rp-reward-xp__val { font-size: 18px; color: var(--rp-fam, var(--pp-primary)); }
+.rp-reward-xp__cap { font-size: 8px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 2px; }
+@media (min-width: 768px) { .rp-reward-xp__val { font-size: 20px; } }
 .rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 42%, var(--pp-border)); }
 .rp-row::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; }
 .rp-row--claimable::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
@@ -423,8 +458,6 @@
    the JS only flips that one class (no styling/markup rebuilding in the script). */
 .rp-row--accepted .rp-badge { background-color: var(--pp-success); color: var(--pp-bg-0); border-color: var(--pp-success); }
 .rp-cta__done { display: none; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 700; color: var(--pp-success); }
-.rp-cta__prog { width: 84px; display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
-.rp-cta__pct { font-size: 0.7rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); text-align: center; }
 .rp-accept:active { transform: scale(0.96); }
 .rp-row--accepted .rp-accept { display: none; }
 .rp-row--accepted .rp-cta__done { display: inline-flex; }
@@ -448,3 +481,17 @@
 
 /* Claimable count on the Projects tab (draws the eye to what's ready to accept). */
 .lab-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 4px; margin-left: 2px; font-size: 10px; font-weight: 800; line-height: 1; border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0); vertical-align: middle; }
+/* (C) Claimable badge: a slow, restrained breathe to pull the eye toward waiting rewards.
+   Only present when claimable_count > 0, so its mere existence already signals "act". rgba, not color-mix. */
+.lab-tab-count { animation: labBadgeBreath 2.6s ease-in-out infinite; }
+@keyframes labBadgeBreath {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(103, 209, 248, 0); }
+    50%      { box-shadow: 0 0 9px 1px rgba(103, 209, 248, 0.55); }
+}
+
+/* Reduced-motion: the four Career-chrome premium touches all collapse to their static states. */
+@media (prefers-reduced-motion: reduce) {
+    .lab-view--in-right, .lab-view--in-left,
+    .lab-view-tab.lab-view--ignite,
+    .lab-tab-count { animation: none; }
+}

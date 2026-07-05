@@ -67,3 +67,34 @@ def job_icon(name, css_class='w-5 h-5'):
         f'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" '
         f'stroke-linejoin="round" aria-hidden="true">{inner}</svg>'
     )
+
+
+@register.simple_tag
+def job_icon_sprite():
+    """Emit every icon ONCE as an off-screen <symbol> library so a page that repeats the same
+    glyphs many times (e.g. a Contracts board where each card draws all 25 jobs) references them
+    via <use> (see `job_icon_use`) instead of re-inlining every path. Include once per page,
+    before the first `job_icon_use`. Symbols carry geometry only; stroke/fill presentation lives
+    on the referencing <svg> and cascades in. No pathLength here -- sprite glyphs are static."""
+    symbols = ''.join(
+        f'<symbol id="jobicon-{name}" viewBox="0 0 24 24">{inner}</symbol>'
+        for name, inner in _ICONS.items()
+    )
+    return mark_safe(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true" '
+        f'style="position:absolute;width:0;height:0;overflow:hidden">{symbols}</svg>'
+    )
+
+
+@register.simple_tag
+def job_icon_use(name, css_class='w-5 h-5'):
+    """Reference a sprite glyph (from `job_icon_sprite`) via <use>. Cheap to repeat; the
+    presentation attrs here cascade into the referenced symbol's shapes."""
+    if (name or '') not in _ICONS:
+        return ''
+    css_class = escape(css_class)
+    return mark_safe(
+        f'<svg class="{css_class}" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        f'<use href="#jobicon-{name}"/></svg>'
+    )

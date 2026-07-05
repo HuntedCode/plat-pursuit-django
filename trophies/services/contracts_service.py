@@ -160,6 +160,7 @@ def _build_contracts(profile):
             'games': game_entries,         # the focal point: every game that satisfies it
             'game_count': len(game_entries),
             'elements': elements,          # what you level
+            'element_slugs': [el['slug'] for el in elements],  # for the 5x5 job-grid "lit" lookup
             'ring_gradient': _ring_gradient(elements),  # the element-split ring (even split, family-colored)
             'family_gradient': family_gradient,  # CSS for the family accent bar (gradient if multi-family)
             'family_color': family_color,        # dominant family color var, for the hover/glow
