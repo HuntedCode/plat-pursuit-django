@@ -151,8 +151,8 @@
  * (the Frame is otherwise a fixed width with no max). Spread mode caps at its 128px token. */
 .pp-binder__sleeve .pp-frame { width: 100%; max-width: var(--pp-frame-w); min-width: 0; }
 
-.pp-binder__sleeve:target { animation: ppSleevePulse 2.2s ease-out 1; }
-@keyframes ppSleevePulse { 0% { box-shadow: 0 0 0 2px var(--pp-primary), inset 0 0 0 1px var(--pp-primary); } 100% { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 8%, transparent), inset 0 2px 8px rgba(0, 0, 0, 0.22); } }
+.pp-binder__sleeve:target { --psp-end: inset 0 0 0 1px color-mix(in oklab, var(--pp-text) 8%, transparent), inset 0 2px 8px rgba(0, 0, 0, 0.22); animation: ppSleevePulse 2.2s ease-out 1; }
+@keyframes ppSleevePulse { 0% { box-shadow: 0 0 0 2px var(--pp-primary), inset 0 0 0 1px var(--pp-primary); } 100% { box-shadow: var(--psp-end); } }
 @media (prefers-reduced-motion: reduce) { .pp-binder__sleeve:target { animation: none; } }
 
 /* ---- Series group: a thin container per row of four tiers ----

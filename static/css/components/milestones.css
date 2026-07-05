@@ -129,12 +129,12 @@
 /* tier states */
 .ms-tier.is-earned  .ms-tier__dot { background: var(--pp-success); border-color: var(--pp-success); color: var(--pp-bg-0); }
 .ms-tier.is-earned  .ms-tier__body { border-color: color-mix(in oklab, var(--pp-success) 45%, var(--pp-border)); }
-.ms-tier.is-active  .ms-tier__dot { background: var(--pp-primary); border-color: var(--pp-primary); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 55%, transparent); animation: ms-pulse 2.4s ease-in-out infinite; }
+.ms-tier.is-active  .ms-tier__dot { background: var(--pp-primary); border-color: var(--pp-primary); box-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 55%, transparent); --msp-a: 0 0 8px color-mix(in oklab, var(--pp-primary) 50%, transparent); --msp-b: 0 0 14px color-mix(in oklab, var(--pp-primary) 75%, transparent); animation: ms-pulse 2.4s ease-in-out infinite; }
 .ms-tier.is-active  .ms-tier__body { border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); }
 .ms-tier.is-locked  .ms-tier__body { opacity: 0.55; }
 .ms-tier.is-locked  .ms-tier__art img { filter: grayscale(0.8); opacity: 0.7; }
 .ms-tier.is-preview .ms-tier__body:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
-@keyframes ms-pulse { 0%, 100% { box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 50%, transparent); } 50% { box-shadow: 0 0 14px color-mix(in oklab, var(--pp-primary) 75%, transparent); } }
+@keyframes ms-pulse { 0%, 100% { box-shadow: var(--msp-a); } 50% { box-shadow: var(--msp-b); } }
 @media (prefers-reduced-motion: reduce) { .ms-tier.is-active .ms-tier__dot { animation: none; } }
 
 /* ---- Calendar month grid ---- */

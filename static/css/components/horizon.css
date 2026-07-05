@@ -43,10 +43,10 @@
     transition: width 0.35s var(--pp-ease, ease);
 }
 /* Near-complete nudge: a gentle pulse on the leading-edge glow ("go finish it"). */
-.pp-horizon[data-horizon-band="hot"] .pp-horizon__fill { animation: pp-horizon-pulse 2.4s ease-in-out infinite; }
+.pp-horizon[data-horizon-band="hot"] .pp-horizon__fill { --hp-a: 0 0 10px color-mix(in oklab, var(--horizon-to) 50%, transparent); --hp-b: 0 0 16px color-mix(in oklab, var(--horizon-to) 70%, transparent); animation: pp-horizon-pulse 2.4s ease-in-out infinite; }
 @keyframes pp-horizon-pulse {
-    0%, 100% { box-shadow: 0 0 10px color-mix(in oklab, var(--horizon-to) 50%, transparent); }
-    50%      { box-shadow: 0 0 16px color-mix(in oklab, var(--horizon-to) 70%, transparent); }
+    0%, 100% { box-shadow: var(--hp-a); }
+    50%      { box-shadow: var(--hp-b); }
 }
 
 /* ---- Segmented (discrete tiers / steps) ---- */
