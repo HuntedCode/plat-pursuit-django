@@ -515,9 +515,8 @@
 .rp-jobcell.is-lit.is-linked { border-color: color-mix(in oklab, var(--disc) 90%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 45%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 32%, var(--pp-bg-1)), var(--pp-bg-1)); }
 @media (prefers-reduced-motion: reduce) { .rp-jobcell.rp-ignite { animation: none; } }
 
-/* Reward stack (right column): ring, total XP, progress bar, state line -- all always present. */
+/* Reward stack (right column): ring, total XP, state line -- all always present. */
 .rp-side { display: flex; flex-direction: column; align-items: center; gap: 7px; }
-.rp-prog { width: 100%; }
 .rp-status { min-height: 20px; display: flex; align-items: center; justify-content: center; text-align: center; }
 .rp-status__pct { font-size: 0.7rem; font-weight: 600; color: var(--rp-fam, var(--pp-primary)); }
 .rp-status__idle { font-size: 0.7rem; font-weight: 600; color: var(--pp-text-mute); }
@@ -587,7 +586,11 @@
 .rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 55%, var(--pp-border)); box-shadow: 0 10px 28px -8px color-mix(in oklab, var(--pp-bg-0) 72%, transparent), 0 0 22px color-mix(in oklab, var(--rp-fam) 20%, transparent); }
 .rp-row__accent { transition: box-shadow 0.25s ease; }
 .rp-row:hover .rp-row__accent { box-shadow: 0 0 18px color-mix(in oklab, var(--rp-fam) 70%, transparent); }
-.rp-ring { transition: filter 0.25s ease; }
+/* Animate only the BLUR (0 -> 6px), keeping the shadow COLOR constant. Base is a 0-blur shadow of the
+   FULL glow colour (occluded behind the ring strokes, so invisible at rest); on hover the blur grows
+   into a halo. Animating the colour up from `transparent` instead made the alpha ramp late -> the glow
+   read as a delayed pop-in; and `filter` can't transition from `none` at all. */
+.rp-ring { filter: drop-shadow(0 0 0 color-mix(in oklab, var(--rp-fam) 60%, transparent)); transition: filter 0.25s ease; }
 .rp-row:hover .rp-ring { filter: drop-shadow(0 0 6px color-mix(in oklab, var(--rp-fam) 60%, transparent)); }
 /* (Card-B) Staggered entrance: cards fade+rise in on first reveal and on filter changes. JS adds
    .rp-row--enter with a per-card animation-delay, then clears it on animationend. */
@@ -612,6 +615,24 @@
 @keyframes rpAcceptFlash { 0%, 100% { box-shadow: inset 0 0 0 0 transparent; } 30% { box-shadow: var(--rpf-glow); } }
 @keyframes rpDoneIn { from { opacity: 0; transform: scale(0.7); } to { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .rp-row--just-accepted, .rp-row--just-accepted .rp-cta__done { animation: none; } }
+
+/* Reward-tier strip: two progress bars (plat, then 100%) that fill like the circle's progress, XP
+   beneath each, split by a dot. A single centered bar shows when the games have no platinum. Always
+   one row (equal card heights). */
+.rp-tiers { display: flex; align-items: flex-start; justify-content: center; gap: 8px; margin-top: 2px; padding: 6px 10px; border-radius: 8px; background: color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 6%, transparent); border: 1px solid color-mix(in oklab, var(--rp-fam, var(--pp-primary)) 16%, var(--pp-border)); }
+.rp-tier { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rp-tiers--single { justify-content: center; }
+.rp-tiers--single .rp-tier { flex: 0 1 auto; min-width: 55%; max-width: 70%; }
+.rp-tier__bar { width: 100%; }
+.rp-tier__lbl { font-size: 10px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+.rp-tier__lbl b { font-weight: 800; color: var(--rp-fam, var(--pp-primary)); font-variant-numeric: tabular-nums; }
+.rp-tiers__dot { flex: none; align-self: flex-start; width: 4px; height: 4px; margin-top: 1px; border-radius: 999px; background: var(--pp-text-mute); }   /* plat -> 100% separator, aligned to the bars */
+/* Depth: a glossy top-light over the fill + a recessed track, so the bars read dimensional like the
+   ring instead of flat. The glow lifts on card hover (mirrors the ring's hover drop-shadow). */
+/* overflow:visible lets the fill's glow escape the track (the track normally clips it away). */
+.rp-tiers .pp-horizon__track { overflow: visible; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.38); }
+.rp-tiers .pp-horizon__fill { background: linear-gradient(180deg, rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0.05) 48%, rgba(0, 0, 0, 0.14)), linear-gradient(90deg, var(--horizon-from), var(--horizon-to)); box-shadow: 0 0 4px color-mix(in oklab, var(--horizon-to) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35); transition: width 0.35s var(--pp-ease, ease), box-shadow 0.25s ease; }
+.rp-row:hover .rp-tiers .pp-horizon__fill { box-shadow: 0 0 12px color-mix(in oklab, var(--horizon-to) 75%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
 
 /* ---- Contract tier-2 modal ---- */
 /* Trigger row (replaces the old inline <details>): opens the shared .emodal, which grows from the card. */

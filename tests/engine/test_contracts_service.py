@@ -255,6 +255,47 @@ def test_modal_builder_has_per_game_progress():
     assert build_contract_modal(profile, 'nope') is None
 
 
+def test_project_card_tier_split_gates_on_platinum():
+    profile = ProfileFactory()
+    _contract('tier-noplat')                                   # no platinum trophy on the member game
+    _c, _con, g = _contract('tier-plat')
+    Trophy.objects.create(game=g, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
+    cards = {c['slug']: c for c in contracts_page(profile)['contracts']}
+    np = cards['tier-noplat']
+    assert np['has_plat'] is False and np['plat_xp'] == 0
+    assert np['bonus_xp'] == np['xp_total']                    # full T at 100% when there's no plat
+    pl = cards['tier-plat']
+    assert pl['has_plat'] is True
+    assert pl['plat_xp'] == round(pl['xp_total'] * 0.70)       # 70% on the platinum tier
+    assert pl['plat_xp'] + pl['bonus_xp'] == pl['xp_total']    # the two tiers sum to T
+
+
+def test_project_card_tier_bar_fills():
+    profile = ProfileFactory()
+    # Plat contract, member game 60% done, plat not earned -> plat bar creeps, 100% bar stays locked.
+    _c, _con, g = _contract('bar-mid')
+    Trophy.objects.create(game=g, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
+    ProfileGameFactory(profile=profile, game=g, progress=60)
+    # No-plat contract, 40% done -> single bar creeps straight toward 100%.
+    _c2, _con2, g2 = _contract('bar-noplat')
+    ProfileGameFactory(profile=profile, game=g2, progress=40)
+    cards = {c['slug']: c for c in contracts_page(profile)['contracts']}
+    assert cards['bar-mid']['plat_fill'] == 60 and cards['bar-mid']['full_fill'] == 0
+    assert cards['bar-noplat']['plat_fill'] == 0 and cards['bar-noplat']['full_fill'] == 40
+
+
+def test_project_card_claim_tiers_labeled():
+    profile = ProfileFactory()
+    c, _con, g = _contract('claim-plat')
+    plat = Trophy.objects.create(game=g, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
+    EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
+    ProfileGameFactory(profile=profile, game=g, progress=90, has_plat=True)   # plat earned, 90% (not 100)
+    contract_service.mark_contract_reached(profile, c)                        # stamps platinum reach only
+    card = _find(contracts_page(profile), 'claim-plat')
+    assert card['status'] == 'claimable'
+    assert card['claim_plat'] is True and card['claim_full'] is False   # only the platinum tier is claimable
+
+
 def test_server_platform_default_is_modern():
     profile = ProfileFactory()
     _contract('plat-ps5')                                   # PS5 (factory default)

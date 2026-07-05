@@ -584,8 +584,11 @@ function ppCountUp(el, dur) {
             showView(el.dataset.labGoto);
             var f = el.dataset.gotoFilter;   // e.g. the claim banner lands on the Claimable filter
             if (f) { var chip = document.querySelector('.rp-chip[data-filter="' + f + '"]'); if (chip) chip.click(); }
+            // Scroll the Career view up under the sticky chrome (scroll-padding-top handles the offset)
+            // so the toolbar + the now-filtered board come into view -- 'nearest' barely moved since the
+            // banner sits right above the tabs.
             var tabs = document.querySelector('.lab-views');
-            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
 })();
@@ -1035,8 +1038,11 @@ function ppCountUp(el, dur) {
         if (reduce) return;   // final states already rendered server-side
         var xp = card.querySelector('.rp-reward-xp__val [data-countup]');
         if (xp && typeof ppCountUp === 'function') ppCountUp(xp, 900);
-        var hz = card.querySelector('.rp-prog .pp-horizon'), prog = card.querySelector('.rp-prog');
-        if (hz && prog) { hz.style.setProperty('--horizon-progress', '0%'); void hz.offsetWidth; hz.style.setProperty('--horizon-progress', (prog.dataset.fill || '0') + '%'); }
+        // The two reward-tier bars fill from 0 to their data-fill%.
+        card.querySelectorAll('.rp-tier__bar').forEach(function (w) {
+            var hz = w.querySelector('.pp-horizon');
+            if (hz) { hz.style.setProperty('--horizon-progress', '0%'); void hz.offsetWidth; hz.style.setProperty('--horizon-progress', (w.dataset.fill || '0') + '%'); }
+        });
         card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {
             if (!seg.dataset.dash) return;
             seg.style.strokeDasharray = '0 100'; void seg.getBoundingClientRect(); seg.style.strokeDasharray = seg.dataset.dash + ' 100';

@@ -1,8 +1,8 @@
 {% comment %}
 Contract card (vertical tile, laid out in a grid). Top: the newest member game's art + status
-badge. Then title, a divider, and a two-column body: LEFT the full 5x5 job map (this contract's
-jobs lit, the rest dim), RIGHT the reward stack (split ring, total XP, progress, state line). The
-member games open in the shared contract modal (tier 2). Every card is the same height and fields.
+badge. Then title, a divider, a two-column body (LEFT the full 5x5 job map, RIGHT the reward stack:
+split ring, total XP, state line), then the full-width reward-tier bars. The member games open in
+the shared contract modal (tier 2). Every card is the same height and fields.
 Expects `p` (a contract dict from contracts_service), `disciplines` (the 25-job roster, one entry
 per discipline with `.jobs`), and `profile` (viewer, for game-card links).
 {% endcomment %}
@@ -44,8 +44,9 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
         display_order. The jobs THIS contract levels are lit in their family color; the rest are
         dimmed context (brighten on hover to identify them). Icons come from the page's <use> sprite
         (job_icon_use), defined once, not re-inlined per cell. RIGHT = the reward stack: split ring,
-        total XP (always), progress bar (always), and a state-driven line (Claim / % / Not started).
-        The full job pills (icon + name + XP each) now live in the tier-2 modal (_contract_modal.html).
+        total XP, and a state-driven line (Claim / % / Not started). Per-tier progress lives in the
+        full-width tier bars below the body. The full job pills (icon + name + XP each) live in the
+        tier-2 modal (_contract_modal.html).
         {% endcomment %}
         <div class="rp-body">
             <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">
@@ -73,11 +74,11 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
                     <span class="rp-reward-xp__val pp-tally">+<span data-countup="{{ p.xp_total }}">{{ p.xp_total|intcomma }}</span></span>
                     <span class="rp-reward-xp__cap">total XP</span>
                 </div>
-                <div class="rp-prog" data-fill="{{ p.progress }}">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}</div>
                 <div class="rp-status">
                     {% if p.status == 'claimable' or p.status == 'accepted' %}
-                        {# both rendered; .rp-row--accepted reveals the right one via CSS #}
-                        <button type="button" class="btn btn-xs btn-primary rp-accept" data-slug="{{ p.slug }}">Claim</button>
+                        {% comment %} Both rendered; .rp-row--accepted reveals the right one via CSS. The label
+                        names which tier(s) an accept will bank (plat / 100% / both). {% endcomment %}
+                        <button type="button" class="btn btn-xs btn-primary rp-accept" data-slug="{{ p.slug }}" title="{% if p.claim_plat and p.claim_full %}Claim both tiers, +{{ p.xp_total|intcomma }} XP{% elif p.claim_plat %}Claim the platinum tier, +{{ p.plat_xp|intcomma }} XP{% elif p.claim_full %}Claim the 100% tier, +{{ p.bonus_xp|intcomma }} XP{% else %}Claim your reward{% endif %}">Claim{% if p.claim_plat and p.claim_full %} both{% elif p.claim_plat %} plat{% elif p.claim_full and p.has_plat %} 100%{% endif %}</button>
                         <span class="rp-cta__done">Claimed &check;</span>
                     {% elif p.status == 'pursuing' %}
                         <span class="rp-status__pct">{{ p.progress }}% complete</span>
@@ -85,6 +86,24 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
                         <span class="rp-status__idle">Not started</span>
                     {% endif %}
                 </div>
+            </div>
+        </div>
+
+        {% comment %} Reward tiers: two progress bars (drawn like the circle's) for the platinum then
+        100% tiers, each with its XP beneath. The plat bar fills toward the platinum, the 100% bar
+        toward full completion. Contracts whose games have no plat show a single 100% bar. Always one
+        row so every card stays the same height. {% endcomment %}
+        <div class="rp-tiers{% if not p.has_plat %} rp-tiers--single{% endif %}"{% if p.has_plat %} title="Platinum tier +{{ p.plat_xp|intcomma }} XP, then +{{ p.bonus_xp|intcomma }} XP at 100%"{% else %} title="Full {{ p.bonus_xp|intcomma }} XP at 100%"{% endif %}>
+            {% if p.has_plat %}
+            <div class="rp-tier">
+                <div class="rp-tier__bar" data-fill="{{ p.plat_fill }}">{% include 'components/horizon.html' with progress=p.plat_fill accent='var(--pp-primary)' height='6px' %}</div>
+                <span class="rp-tier__lbl"><b>+{{ p.plat_xp|intcomma }}</b> plat</span>
+            </div>
+            <span class="rp-tiers__dot" aria-hidden="true"></span>
+            {% endif %}
+            <div class="rp-tier">
+                <div class="rp-tier__bar" data-fill="{{ p.full_fill }}">{% include 'components/horizon.html' with progress=p.full_fill accent='var(--rp-fam)' height='6px' %}</div>
+                <span class="rp-tier__lbl"><b>+{{ p.bonus_xp|intcomma }}</b> at 100%</span>
             </div>
         </div>
 

@@ -18,11 +18,13 @@ from django.db.models import (
 from django.db.models.functions import Coalesce
 
 from trophies.models import (
-    Contract, ContractMembership, EarnedContract, Game, Job, ProfileGame, ProfileJobXP,
+    Contract, ContractMembership, EarnedContract, Game, Job, ProfileGame, ProfileJobXP, Trophy,
 )
 from trophies.services import job_render
 from trophies.services.job_render import DISCIPLINE_LABELS
-from trophies.util_modules.constants import ALL_PLATFORMS, CONTRACT_XP_TOTAL, MODERN_PLATFORMS
+from trophies.util_modules.constants import (
+    ALL_PLATFORMS, CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL, MODERN_PLATFORMS,
+)
 
 CONTRACTS_PER_PAGE = 24
 
@@ -159,6 +161,10 @@ def annotated_contracts(profile, disc_levels=None):
         Contract.objects.filter(is_live=True)
         .annotate(
             has_jobs=Exists(Job.objects.filter(contracts=OuterRef('pk'))),   # jobless -> awards nothing
+            # Do the member games DEFINE a platinum? (mirrors contract_service._has_platinum) -- drives
+            # the card's tier split; games with no plat pay the full T at 100% instead.
+            defines_plat=Exists(Trophy.objects.filter(
+                trophy_type='platinum', game__concept__contract_membership__contract=OuterRef('pk'))),
             max_progress=max_progress, any_plat=any_plat,
             plat_reached=plat_reached, plat_accepted=plat_accepted,
             full_reached=full_reached, full_accepted=full_accepted,
@@ -259,6 +265,28 @@ def project_card(c):
     status = c.status
     progress = 100 if status in ('claimable', 'accepted') else (c.max_progress if status == 'pursuing' else 0)
     t = c.xp_total_override or CONTRACT_XP_TOTAL
+    # Tier split for the card strip. Plat-bearing contracts pay CONTRACT_PLATINUM_FRAC of T on the
+    # platinum tier and the rest at 100%; contracts whose games have no plat pay the full T at 100%.
+    has_plat = bool(getattr(c, 'defines_plat', False))
+    plat_xp = round(t * CONTRACT_PLATINUM_FRAC) if has_plat else 0
+    bonus_xp = t - plat_xp   # the "at 100%" amount (== T when there's no plat tier)
+    # Per-tier bar fills (drawn like the circle's progress). Plat bar creeps with the member game's
+    # completion and snaps full when the platinum is earned; the 100% bar stays locked until the plat
+    # is done, then creeps to 100. No-plat contracts have a single bar creeping straight to 100%.
+    plat_reached = bool(getattr(c, 'plat_reached', None))
+    full_reached = bool(getattr(c, 'full_reached', None))
+    mp = getattr(c, 'max_progress', 0) or 0
+    if has_plat:
+        plat_fill = 100 if plat_reached else mp
+        full_fill = 100 if full_reached else (mp if plat_reached else 0)
+    else:
+        plat_fill = 0
+        full_fill = 100 if full_reached else mp
+    # Which tier(s) are claimable right now (reached but not yet accepted) -- labels the Claim button.
+    plat_accepted = bool(getattr(c, 'plat_accepted', None))
+    full_accepted = bool(getattr(c, 'full_accepted', None))
+    claim_plat = has_plat and plat_reached and not plat_accepted
+    claim_full = full_reached and not full_accepted
     return {
         'name': c.name or (first_concept.unified_title if first_concept else ''),
         'slug': c.slug,
@@ -271,6 +299,13 @@ def project_card(c):
         'family_color': family_color,
         'xp_total': t,
         'xp_each': t // n,
+        'has_plat': has_plat,
+        'plat_xp': plat_xp,
+        'bonus_xp': bonus_xp,
+        'plat_fill': plat_fill,
+        'full_fill': full_fill,
+        'claim_plat': claim_plat,
+        'claim_full': claim_full,
         'status': status,
         'progress': progress,
     }
