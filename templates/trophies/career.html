@@ -87,7 +87,7 @@
                 <div class="font-bold text-sm md:text-base"><span class="text-primary" data-countup="{{ claimable.count }}">{{ claimable.count }}</span> Contract{{ claimable.count|pluralize }} ready to claim</div>
                 <div class="text-xs md:text-sm text-base-content/60"><span class="pp-tally text-primary font-semibold">+<b data-countup="{{ claimable.total_xp }}">{{ claimable.total_xp|intcomma }}</b></span> XP waiting to level your jobs</div>
             </div>
-            <span class="shrink-0 text-xs md:text-sm text-primary font-semibold inline-flex items-center gap-1">Review &amp; accept <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
+            <span class="shrink-0 text-xs md:text-sm text-primary font-semibold inline-flex items-center gap-1">Review &amp; claim <span class="group-hover:translate-x-0.5 transition-transform" aria-hidden="true">&rarr;</span></span>
         </div>
     </a>
     {% endif %}
@@ -207,15 +207,25 @@
                         Contracts on the board: complete a game to level its jobs. Each Contract's XP is split evenly among the jobs it feeds.
                     </p>
                     {% if claimable_count %}
-                    <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Accept all ({{ claimable_count }})</button>
+                    <button type="button" id="rp-accept-all" class="btn btn-sm btn-primary shrink-0">Claim all ({{ claimable_count }})</button>
                     {% endif %}
                 </div>
-                <div class="rp-filters mb-3">
-                    <button type="button" class="rp-chip is-active" data-filter="all">All</button>
-                    <button type="button" class="rp-chip" data-filter="available">Available</button>
-                    <button type="button" class="rp-chip" data-filter="pursuing">Pursuing</button>
-                    <button type="button" class="rp-chip" data-filter="claimable">Claimable</button>
-                    <button type="button" class="rp-chip" data-filter="accepted">Accepted</button>
+                <div class="rp-toolbar mb-3">
+                    <div class="rp-search">
+                        <svg class="rp-search__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="search" id="rp-search" class="rp-search__input" placeholder="Search games or contracts..." aria-label="Search contracts">
+                    </div>
+                    <div class="rp-filters" role="group" aria-label="Filter by status">
+                        <button type="button" class="rp-chip is-active" data-filter="all">All</button>
+                        <button type="button" class="rp-chip" data-filter="available">Not Started</button>
+                        <button type="button" class="rp-chip" data-filter="pursuing">In Progress</button>
+                        <button type="button" class="rp-chip" data-filter="claimable">Ready to Claim</button>
+                        <button type="button" class="rp-chip" data-filter="accepted">Claimed</button>
+                    </div>
+                    <div class="rp-filters rp-filters--disc" role="group" aria-label="Filter by discipline">
+                        <button type="button" class="rp-chip is-active" data-disc="all">All disciplines</button>
+                        {% for d in career.disciplines %}<button type="button" class="rp-chip rp-chip--disc" data-disc="{{ d.slug }}" style="--disc: var(--disc-{{ d.slug }});">{{ d.label }}</button>{% endfor %}
+                    </div>
                 </div>
                 {# Icon sprite: define all job glyphs once so each card's 5x5 grid references them via <use>. #}
                 {% job_icon_sprite %}
@@ -231,6 +241,7 @@
                     </div>
                     {% endfor %}
                 </div>
+                <p id="rp-no-match" class="text-center text-sm text-base-content/50 py-10" hidden>No Contracts match your search or filters. <button type="button" id="rp-clear-filters" class="link link-primary">Clear</button></p>
             </div>
 
         </div>
@@ -867,19 +878,29 @@ function ppCountUp(el, dur) {
 (function () {
     var list = document.getElementById('rp-list');
     if (!list) return;
-    var bar = document.querySelector('.rp-filters');
+    var statusBar = document.querySelector('.rp-filters:not(.rp-filters--disc)');
+    var discBar = document.querySelector('.rp-filters--disc');
+    var searchInput = document.getElementById('rp-search');
+    var noMatch = document.getElementById('rp-no-match');
     var PP = window.PlatPursuit || {};
-    var API = PP.API, Toast = PP.ToastManager;
+    var API = PP.API, Toast = PP.ToastManager, debounce = PP.debounce;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var state = { status: 'all', disc: 'all', q: '' };
 
-    function applyFilter(f) {
+    // Combined client-side filter: a card shows only if it matches the status chip AND the discipline
+    // chip AND the search box. `stagger` re-runs the entrance animation (chip changes, not keystrokes).
+    function applyFilters(stagger) {
+        var q = state.q, shown = 0;
         list.querySelectorAll('.rp-row').forEach(function (row) {
-            row.style.display = (f === 'all' || row.dataset.status === f) ? '' : 'none';
+            var okStatus = state.status === 'all' || row.dataset.status === state.status;
+            var okDisc = state.disc === 'all' || (row.dataset.disciplines || '').split(' ').indexOf(state.disc) !== -1;
+            var okSearch = !q || (row.dataset.search || '').indexOf(q) !== -1;
+            var show = okStatus && okDisc && okSearch;
+            row.style.display = show ? '' : 'none';
+            if (show) shown++;
         });
-    }
-    function activeFilter() {
-        var a = bar && bar.querySelector('.rp-chip.is-active');
-        return a ? a.dataset.filter : 'all';
+        if (noMatch) noMatch.hidden = shown > 0 || !list.querySelector('.rp-row');
+        if (stagger) staggerVisible();
     }
     // (Card-B) Stagger the currently-visible cards in -- used on filter changes and the board's
     // first reveal. Not fired on tab-switch (the panel cross-fade already reveals the block).
@@ -902,16 +923,34 @@ function ppCountUp(el, dur) {
         });
     }
 
-    if (bar) {
-        bar.querySelectorAll('.rp-chip').forEach(function (chip) {
+    // Single-select chip group -> sets one piece of state, then re-filters + re-staggers.
+    function bindGroup(group, key, attr) {
+        if (!group) return;
+        group.querySelectorAll('.rp-chip').forEach(function (chip) {
             chip.addEventListener('click', function () {
-                bar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
+                group.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
                 chip.classList.add('is-active');
-                applyFilter(chip.dataset.filter);
-                staggerVisible();
+                state[key] = chip.dataset[attr];
+                applyFilters(true);
             });
         });
     }
+    bindGroup(statusBar, 'status', 'filter');
+    bindGroup(discBar, 'disc', 'disc');
+    if (searchInput) {
+        var onSearch = function () { state.q = searchInput.value.trim().toLowerCase(); applyFilters(false); };
+        searchInput.addEventListener('input', debounce ? debounce(onSearch, 120) : onSearch);
+    }
+    var clearBtn = document.getElementById('rp-clear-filters');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+            state = { status: 'all', disc: 'all', q: '' };
+            if (searchInput) searchInput.value = '';
+            [statusBar, discBar].forEach(function (g) { if (g) g.querySelectorAll('.rp-chip').forEach(function (c, idx) { c.classList.toggle('is-active', idx === 0); }); });
+            applyFilters(true);
+        });
+    }
+
     var panel = list.closest('.lab-view');
     if (panel && !panel.hidden) staggerVisible();   // Contracts is the landing view -> stagger on load
     document.addEventListener('pp:contracts-shown', staggerVisible);   // ...or when the tab is opened
@@ -922,7 +961,7 @@ function ppCountUp(el, dur) {
         card.classList.remove('rp-row--claimable');
         card.classList.add('rp-row--accepted');
         var badge = card.querySelector('.rp-badge');
-        if (badge) badge.textContent = 'Accepted';
+        if (badge) badge.textContent = 'Claimed';
         card.classList.remove('rp-row--just-accepted');
         void card.offsetWidth;
         card.classList.add('rp-row--just-accepted');
@@ -931,7 +970,7 @@ function ppCountUp(el, dur) {
     function refreshAcceptAll(count) {
         var btn = document.getElementById('rp-accept-all');
         if (!btn) return;
-        if (count > 0) { btn.textContent = 'Accept all (' + count + ')'; btn.disabled = false; }
+        if (count > 0) { btn.textContent = 'Claim all (' + count + ')'; btn.disabled = false; }
         else { btn.remove(); }
     }
     function applyResult(res) {
@@ -941,7 +980,7 @@ function ppCountUp(el, dur) {
             if (card) markAccepted(card);
         });
         refreshAcceptAll(res.claimable_count || 0);
-        applyFilter(activeFilter());
+        applyFilters(false);   // a claimed card may drop out of the active filter
         if (Toast && res.granted) {
             Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
         }
@@ -953,7 +992,7 @@ function ppCountUp(el, dur) {
             applyResult(await API.post('/api/v1/projects/accept/', payload));
         } catch (err) {
             var data = err.response ? await err.response.json().catch(function () { return null; }) : null;
-            if (Toast) Toast.show((data && data.error) || 'Could not accept the Contract.', 'error');
+            if (Toast) Toast.show((data && data.error) || 'Could not claim the Contract.', 'error');
             if (btn) { btn.disabled = false; btn.classList.remove('btn-disabled'); }
         }
     }

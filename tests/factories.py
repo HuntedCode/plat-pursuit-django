@@ -222,6 +222,7 @@ class GameFactory(factory.django.DjangoModelFactory):
     title_name = factory.Sequence(lambda n: f"Game {n}")
     np_communication_id = factory.Sequence(lambda n: f"NPWR{n:05d}_00")
     concept = factory.SubFactory(ConceptFactory)
+    title_platform = factory.LazyFunction(lambda: ['PS5'])   # current-gen by default; fresh list per instance
 
 
 class ProfileGameFactory(factory.django.DjangoModelFactory):

@@ -9,7 +9,9 @@ import pytest
 
 from trophies.models import Contract, ContractMembership, Job, Trophy
 from trophies.services import contract_service
-from trophies.services.contracts_service import build_contracts_context
+from trophies.services.contracts_service import (
+    build_contract_modal, build_contracts_context, claimable_count, contracts_page,
+)
 from trophies.util_modules.constants import CONTRACT_XP_TOTAL
 from tests.factories import (
     ConceptFactory, EarnedTrophyFactory, GameFactory, ProfileFactory, ProfileGameFactory,
@@ -33,7 +35,7 @@ def _project(ctx, slug):
 
 def test_lists_live_project_with_games_elements_and_split():
     profile = ProfileFactory()
-    _contract('p-list', ('gunslinger', 'mage'), title='Cool Game')
+    _c, _concept, game = _contract('p-list', ('gunslinger', 'mage'), title='Cool Game')
 
     ctx = build_contracts_context(profile)
 
@@ -49,6 +51,9 @@ def test_lists_live_project_with_games_elements_and_split():
     assert p['family_color'].startswith('var(--disc-')
     # gunslinger + mage are different families -> the accent bar is a multi-family gradient.
     assert p['family_gradient'].startswith('linear-gradient')
+    # toolbar fodder: lowercased search haystack (contract name + game title) + distinct disciplines
+    assert 'p-list' in p['search_text'] and game.title_name.lower() in p['search_text']
+    assert p['discipline_slugs'] == ['combat', 'heart']   # gunslinger=combat, mage=heart, sorted
 
 
 def test_jobless_project_is_hidden():
@@ -159,3 +164,137 @@ def test_anonymous_viewer_sees_available_projects():
     ctx = build_contracts_context(None)
 
     assert _project(ctx, 'p-anon')['status'] == 'available'
+
+
+# --- Server-side board (annotate/filter/sort/paginate in the DB) ----------------------
+
+def _slugs(page):
+    return [c['slug'] for c in page['contracts']]
+
+
+def _find(page, slug):
+    return next((c for c in page['contracts'] if c['slug'] == slug), None)
+
+
+def test_server_status_derived_in_sql_matches_all_states():
+    """The DB-annotated status must equal the Python _project_status for every state."""
+    profile = ProfileFactory()
+    _contract('s-avail')
+    _c, _con, g_p = _contract('s-pursue')
+    ProfileGameFactory(profile=profile, game=g_p, progress=60)
+    c_cl, _con2, g_cl = _contract('s-claim')
+    plat = Trophy.objects.create(game=g_cl, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
+    EarnedTrophyFactory(profile=profile, trophy=plat, earned=True)
+    ProfileGameFactory(profile=profile, game=g_cl, progress=100, has_plat=True)
+    contract_service.mark_contract_reached(profile, c_cl)
+    c_ac, _con3, g_ac = _contract('s-acc')
+    plat2 = Trophy.objects.create(game=g_ac, trophy_id=1, trophy_type='platinum', trophy_name='Plat')
+    EarnedTrophyFactory(profile=profile, trophy=plat2, earned=True)
+    ProfileGameFactory(profile=profile, game=g_ac, progress=100, has_plat=True)
+    contract_service.mark_contract_reached(profile, c_ac)
+    contract_service.accept_contract(profile, c_ac)
+
+    page = contracts_page(profile)
+    assert _find(page, 's-avail')['status'] == 'available'
+    assert _find(page, 's-pursue')['status'] == 'pursuing' and _find(page, 's-pursue')['progress'] == 60
+    assert _find(page, 's-claim')['status'] == 'claimable'
+    assert _find(page, 's-acc')['status'] == 'accepted'
+    assert claimable_count(profile) == 1
+
+
+def test_server_status_filter():
+    profile = ProfileFactory()
+    _contract('f-avail')
+    _c, _con, g = _contract('f-pursue')
+    ProfileGameFactory(profile=profile, game=g, progress=40)
+    slugs = _slugs(contracts_page(profile, status='pursuing'))
+    assert 'f-pursue' in slugs and 'f-avail' not in slugs
+
+
+def test_server_discipline_filter():
+    profile = ProfileFactory()
+    _contract('d-combat', ('gunslinger',))   # combat
+    _contract('d-heart', ('mage',))          # heart
+    slugs = _slugs(contracts_page(profile, discipline='combat'))
+    assert 'd-combat' in slugs and 'd-heart' not in slugs
+
+
+def test_server_search_by_name_and_game_title():
+    profile = ProfileFactory()
+    _c, _con, game = _contract('srch-a', title='Zelda Quest')
+    _contract('srch-b', title='Other')
+    assert 'srch-a' in _slugs(contracts_page(profile, q='srch-a'))                  # by contract name
+    assert 'srch-a' in _slugs(contracts_page(profile, q=game.title_name.lower()))   # by member game title
+    assert 'srch-b' not in _slugs(contracts_page(profile, q='srch-a'))
+
+
+def test_server_relevance_orders_untouched_by_weak_discipline():
+    profile = ProfileFactory()
+    _contract('rel-combat', ('gunslinger',))   # combat
+    _contract('rel-heart', ('mage',))          # heart
+    page = contracts_page(profile, disc_levels={'combat': 10, 'heart': 0})   # weak in heart
+    slugs = _slugs(page)
+    assert slugs.index('rel-heart') < slugs.index('rel-combat')
+
+
+def test_server_pagination():
+    profile = ProfileFactory()
+    for i in range(30):
+        _contract('pg-%02d' % i)
+    p1 = contracts_page(profile, page=1)
+    assert len(p1['contracts']) == 24 and p1['has_next'] and p1['total'] == 30
+    p2 = contracts_page(profile, page=2)
+    assert len(p2['contracts']) == 6 and not p2['has_next']
+
+
+def test_modal_builder_has_per_game_progress():
+    profile = ProfileFactory()
+    _c, _con, game = _contract('m-1', ('gunslinger', 'mage'), title='Modal Game')
+    ProfileGameFactory(profile=profile, game=game, progress=50)
+    modal = build_contract_modal(profile, 'm-1')
+    assert modal['name'] == 'm-1' and modal['game_count'] == 1 and len(modal['elements']) == 2
+    assert modal['games'][0]['profile_game'].progress == 50
+    assert build_contract_modal(profile, 'nope') is None
+
+
+def test_server_platform_default_is_modern():
+    profile = ProfileFactory()
+    _contract('plat-ps5')                                   # PS5 (factory default)
+    _c, _con, g_ps3 = _contract('plat-ps3')
+    g_ps3.title_platform = ['PS3']
+    g_ps3.save(update_fields=['title_platform'])
+    slugs = _slugs(contracts_page(profile))                 # default = current-gen
+    assert 'plat-ps5' in slugs and 'plat-ps3' not in slugs
+    assert 'plat-ps3' in _slugs(contracts_page(profile, platforms=['PS3']))   # opt-in to legacy
+
+
+def test_server_job_drilldown():
+    profile = ProfileFactory()
+    _contract('job-gs', ('gunslinger', 'mage'))
+    _contract('job-mage', ('mage',))
+    slugs = _slugs(contracts_page(profile, job='gunslinger'))
+    assert 'job-gs' in slugs and 'job-mage' not in slugs
+
+
+def test_server_sort_by_xp():
+    profile = ProfileFactory()
+    c_hi, _con, _g = _contract('sort-hi')
+    c_hi.xp_total_override = 9999
+    c_hi.save(update_fields=['xp_total_override'])
+    _contract('sort-lo')
+    slugs = _slugs(contracts_page(profile, sort='xp'))
+    assert slugs.index('sort-hi') < slugs.index('sort-lo')
+
+
+def test_server_sort_by_progress_and_name():
+    profile = ProfileFactory()
+    _c, _con, g_hi = _contract('prog-hi')
+    ProfileGameFactory(profile=profile, game=g_hi, progress=80)
+    _c2, _con2, g_lo = _contract('prog-lo')
+    ProfileGameFactory(profile=profile, game=g_lo, progress=20)
+    prog = _slugs(contracts_page(profile, sort='progress'))
+    assert prog.index('prog-hi') < prog.index('prog-lo')
+    _contract('zzz-last')
+    _contract('aaa-first')
+    names = _slugs(contracts_page(profile, sort='name'))
+    assert names.index('aaa-first') < names.index('zzz-last')
