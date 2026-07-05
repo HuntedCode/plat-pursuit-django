@@ -19,7 +19,7 @@
 /* Primary view switcher (Jobs / Radar / Contracts). Deliberately heftier than the radar
    sub-tabs below it -- it's the dominant control, so it out-ranks the segmented slider. */
 .lab-views { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-.lab-view-tab { font: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 9px 22px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease; }
+.lab-view-tab { font: inherit; font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 8px 16px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease; }
 .lab-view-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-primary) 50%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 6%, var(--pp-bg-2)); }
 .lab-view-tab:active { transform: translateY(1px); }
 .lab-view-tab.is-active { color: var(--pp-primary); font-weight: 700; border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 16%, var(--pp-bg-2)); box-shadow: 0 0 16px color-mix(in oklab, var(--pp-primary) 30%, transparent), inset 0 1px 0 color-mix(in oklab, var(--pp-primary) 22%, transparent); }
@@ -59,6 +59,8 @@
 .radar-tabs__slider { position: absolute; top: 0; left: 0; border-radius: 999px; background: color-mix(in oklab, var(--disc, var(--pp-primary)) 16%, var(--pp-bg-2)); border: 1px solid var(--disc, var(--pp-primary)); box-shadow: 0 0 14px color-mix(in oklab, var(--disc, var(--pp-primary)) 32%, transparent); pointer-events: none; opacity: 0; z-index: 0; transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.3s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
 .radar-tab { position: relative; z-index: 1; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: transparent; border: 1px solid var(--pp-border); border-radius: 999px; padding: 6px 15px; transition: color 0.2s ease, border-color 0.2s ease; }
 .radar-tab[data-mode="overview"] { --disc: var(--pp-primary); }
+/* Discipline tabs carry their family color dot (matches the Contracts filter chips); Overview stays dotless. */
+.radar-tab:not([data-mode="overview"])::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 999px; background: var(--disc); vertical-align: middle; }
 .radar-tab:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--disc) 55%, var(--pp-border)); }
 .radar-tab.is-active { color: var(--disc); border-color: transparent; }
 .radar-body { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: 40px; align-items: center; }
@@ -390,8 +392,9 @@
 .compound .atom__sym { fill: color-mix(in oklab, var(--disc) 85%, white); }
 
 /* ---- Research Panel (Project list) ---- */
-.rp-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.rp-chip { font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.18s cubic-bezier(0.34, 1.3, 0.64, 1); }
+.rp-filters { display: flex; flex-wrap: nowrap; align-items: center; overflow-x: auto; gap: 8px; padding: 4px 0; scrollbar-width: none; }   /* mobile: one swipeable row; padding keeps overflow-x:auto from clipping the chip tops (md: wraps) */
+.rp-filters::-webkit-scrollbar { display: none; }
+.rp-chip { flex: 0 0 auto; white-space: nowrap; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--pp-text-dim); background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 999px; padding: 5px 14px; transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.18s cubic-bezier(0.34, 1.3, 0.64, 1); }
 .rp-chip:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border)); transform: translateY(-1px); }
 .rp-chip:active { transform: scale(0.96); }
 .rp-chip.is-active { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2)); }
@@ -408,8 +411,11 @@
 /* Board toolbar v2: a primary bar (search + sort + advanced toggle), a status row with a live
    result count, and a collapsible advanced panel (discipline->job drill-down + platform selector). */
 .rp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.rp-bar .rp-search { flex: 1 1 240px; }
-.rp-bar__end { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+/* Mobile: search + the sort/filters group each take a full row (no auto-push gap). md: inline, right-aligned. */
+.rp-bar .rp-search { flex: 1 1 100%; }
+.rp-bar__end { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; }
+.rp-bar__end .rp-sort, .rp-bar__end .rp-sort__field { flex: 1 1 auto; }
+.rp-bar__end .rp-sort__select { width: 100%; }
 .rp-sort { display: flex; align-items: center; gap: 6px; }
 .rp-sort__label { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); }
 .rp-sort__field { position: relative; }
@@ -422,13 +428,26 @@
 .rp-advbtn:hover { color: var(--pp-text); border-color: color-mix(in oklab, var(--pp-text) 22%, var(--pp-border)); }
 .rp-advbtn.is-open { color: var(--pp-primary); border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-2)); }
 .rp-advbtn__badge { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: var(--pp-primary); color: var(--pp-bg-0, #05070a); font-size: 11px; font-weight: 700; line-height: 1; }
-.rp-statusrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.rp-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+.rp-statusrow { display: flex; flex-direction: column; gap: 8px; }   /* mobile: chips row (scrolls) + count below (md: one row) */
+.rp-count { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; text-align: right; }
 /* Advanced panel: fades in when the Filters toggle opens it (opacity/transform only -- no color-mix in keyframes). */
 .rp-advanced { display: flex; flex-direction: column; gap: 12px; padding: 13px; border: 1px solid var(--pp-border); border-radius: 12px; background: color-mix(in oklab, var(--pp-bg-2) 60%, transparent); animation: rp-adv-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 @keyframes rp-adv-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 .rp-adv__group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rp-adv__label { flex: 0 0 auto; width: 74px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+/* Mobile: the group label is a full-width header above its wrapping chips (md: a 74px inline gutter). */
+.rp-adv__label { flex: 0 0 100%; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pp-text-mute); }
+/* Desktop restores the inline toolbar layout. */
+@media (min-width: 768px) {
+    .lab-view-tab { padding: 9px 22px; }
+    .rp-bar .rp-search { flex: 1 1 240px; }
+    .rp-bar__end { flex: 0 0 auto; margin-left: auto; }
+    .rp-bar__end .rp-sort, .rp-bar__end .rp-sort__field { flex: 0 0 auto; }
+    .rp-bar__end .rp-sort__select { width: auto; }
+    .rp-filters { flex-wrap: wrap; overflow-x: visible; padding: 0; }
+    .rp-statusrow { flex-direction: row; align-items: center; gap: 10px; }
+    .rp-count { margin-left: auto; text-align: left; }
+    .rp-adv__label { flex: 0 0 auto; width: 74px; }
+}
 .rp-discs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .rp-disc { position: relative; }
 .rp-disc__trigger { display: inline-flex; align-items: center; gap: 4px; }
