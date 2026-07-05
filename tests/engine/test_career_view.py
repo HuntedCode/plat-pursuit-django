@@ -51,6 +51,14 @@ def test_career_page_embeds_all_facet_dimensions(client):
     assert facets['job']['gunslinger'] >= 1 and facets['discipline']['combat'] >= 1
 
 
+def test_career_hero_shows_rank_ladder(client):
+    profile = ProfileFactory(is_linked=True)
+    client.force_login(profile.user)
+    resp = client.get('/career/')
+    assert resp.status_code == 200
+    assert b'pgl--rank' in resp.content   # the Pursuer rank ladder renders in the hero
+
+
 def test_view_query_activates_contracts_tab(client):
     profile = ProfileFactory(is_linked=True)
     client.force_login(profile.user)

@@ -147,13 +147,10 @@
 .lab-dna-legend__name { white-space: nowrap; }
 .lab-dna-legend__val { font-weight: 700; color: var(--pp-text); font-variant-numeric: tabular-nums; }
 
-/* ---- Pursuer rank, inline beside the name ("Pursuer1 · Warden III") ----
-   Tier-keyed (--<key>) so the top ranks glow now and tiers can carry per-rank display
-   flair later. Sized in em so it tracks the responsive name heading; flex-none + the
-   name's own truncate means a long username clips while the rank stays put. */
-.lab-rankline { flex: none; font-size: 0.62em; font-weight: 700; letter-spacing: 0.02em; color: var(--pp-text-dim); white-space: nowrap; }
-.lab-rankline__sep { margin-right: 0.45em; color: var(--pp-text-mute); font-weight: 400; }
-.lab-rankline--luminary, .lab-rankline--ascendant { color: var(--pp-primary); text-shadow: 0 0 10px color-mix(in oklab, var(--pp-primary) 35%, transparent); }
+/* ---- Hero identity chip: your strongest discipline. Pays off the ambient hero glow (which is
+   tinted by the same discipline) with a label; disc-coloured dot echoes the filter chips + radar. */
+.hero-disc-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 11px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: var(--disc); background: color-mix(in oklab, var(--disc) 12%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 35%, var(--pp-border)); }
+.hero-disc-chip__dot { flex: none; width: 7px; height: 7px; border-radius: 999px; background: var(--disc); box-shadow: 0 0 6px color-mix(in oklab, var(--disc) 55%, transparent); }
 
 /* ---- Home recent-platinums marquee (auto-scroll, seamless loop) ----
    The track holds the covers twice; translating it half its width (minus half the gap) loops
@@ -380,6 +377,47 @@
 /* edetail bar retrofitted to the shared Horizon primitive (.pp-horizon themed, --disc accent, --horizon-h: 9px) */
 .edetail__total { font-size: 11px; color: var(--pp-text-mute); margin-top: 8px; font-variant-numeric: tabular-nums; }
 .edetail__flavor { margin-top: 20px; font-style: italic; color: var(--pp-text-dim); font-size: 14px; line-height: 1.5; padding-right: 1px; }
+
+/* Progression ladder (.pgl): the segmented tier/rank stepper. Reached rungs fill in the accent, the
+   current rung fills partway + glows, upcoming rungs stay dim. Used for the Pursuer rank ladder (hero,
+   platinum accent) and each job's prestige tier ladder (detail modal, discipline accent). */
+.pgl { --pgl-accent: var(--disc, var(--pp-primary)); display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
+.pgl--rank { --pgl-accent: var(--pp-primary); }
+.pgl__track { display: flex; gap: 4px; align-items: stretch; }
+.pgl__rung { flex: 1 1 0; min-width: 0; height: 7px; border-radius: 999px; background: var(--pp-bg-3); position: relative; overflow: hidden; isolation: isolate; transition: flex-grow 0.3s var(--pp-ease, ease); }
+.pgl__rung::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; width: var(--f, 0%); border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--pgl-accent) 45%, var(--pp-bg-3)), var(--pgl-accent)); transition: width 0.45s var(--pp-ease, ease); }
+/* The current rung widens (a subtle "you are here" focus) + glows. */
+.pgl__rung.is-current { flex-grow: 2.2; box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--pgl-accent) 75%, transparent), 0 0 9px color-mix(in oklab, var(--pgl-accent) 45%, transparent); }
+/* Division ticks (Pursuer rank only): split the current rung into its 5 V..I divisions; the fill
+   lands in the current one. Above the fill (z-index) so it reads across filled + unfilled. */
+.pgl__divs { position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none; background-image: repeating-linear-gradient(90deg, transparent 0 calc(20% - 1px), rgba(255, 255, 255, 0.32) calc(20% - 1px) 20%); }
+.pgl__foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pgl__cur { font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: var(--pgl-accent); }
+.pgl__next { font-size: 11px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+/* Premium reveal (both ladders): on mount -- the hero ladder on page load (joining the ring/level
+   entrance), the job ladder on modal inject -- each rung draws itself left-to-right up to the current
+   tier, the current rung blooms once, and (rank ladder) the division ticks fade in last to spotlight
+   which sub-tier you're in. Glow is pre-mixed into custom props -- color-mix can't live in a keyframe. */
+/* Reached/upcoming rungs: a quick staggered cascade fills the earned rungs left-to-right. */
+.pgl__rung::after { animation: pglDraw 0.5s var(--pp-ease, ease) both; animation-delay: calc(0.22s + var(--i, 0) * 55ms); }
+@keyframes pglDraw { from { width: 0; } }
+/* The current rung is deliberate: it holds a beat until the earlier rungs have fully filled, then
+   CREEPS slowly to its final spot, and only after it settles do the bloom + division ticks resolve.
+   --cstart = when that creep begins (past the reached cascade). Glow pre-mixed (no color-mix in a keyframe). */
+.pgl__rung.is-current {
+    --cstart: calc(0.22s + (var(--i, 0) - 1) * 55ms + 0.75s);
+    --pglg-a: 0 0 0 1.5px color-mix(in oklab, var(--pgl-accent) 75%, transparent), 0 0 9px color-mix(in oklab, var(--pgl-accent) 45%, transparent);
+    --pglg-b: 0 0 0 1.5px color-mix(in oklab, var(--pgl-accent) 95%, transparent), 0 0 20px color-mix(in oklab, var(--pgl-accent) 72%, transparent);
+    animation: pglBloom 0.7s ease both; animation-delay: calc(var(--cstart) + 0.7s);
+}
+.pgl__rung.is-current::after { animation-duration: 1s; animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); animation-delay: var(--cstart); }
+@keyframes pglBloom { 0% { box-shadow: var(--pglg-a); } 55% { box-shadow: var(--pglg-b); } 100% { box-shadow: var(--pglg-a); } }
+/* Division ticks fade + settle in only once the current rung has crept into place. */
+.pgl__divs { animation: pglTicks 0.45s ease both; animation-delay: calc(var(--cstart) + 1s); }
+@keyframes pglTicks { from { opacity: 0; transform: scaleX(0.94); } to { opacity: 1; transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) {
+    .pgl__rung::after, .pgl__rung.is-current, .pgl__divs { animation: none; }
+}
 .edetail__sources { margin-top: 22px; border-top: 1px solid var(--pp-divider); padding-top: 16px; }
 .edetail__sources-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }
 .edetail__sources-note { font-size: 12.5px; color: var(--pp-text-dim); line-height: 1.5; margin: 0; }

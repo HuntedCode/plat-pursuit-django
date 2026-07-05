@@ -2623,6 +2623,47 @@ class ProfileJobXP(models.Model):
         return f"{self.profile.display_psn_username} {self.job.slug} Lv{self.level}"
 
 
+class ProgressionMilestone(models.Model):
+    """A logged achievement moment: when a Pursuer crosses a job prestige tier (Initiate..Legend)
+    or an account Pursuer rank (Newbie..Ascendant). Written at ACCEPT time (the earning moment),
+    forward-only -- there is no backfill, because XP does not exist until it is banked. Feeds the
+    Career ladders (each reached rung shows its date) and the future 'your journey' view.
+
+    Only the ~19 tier/rank crossings are logged, never the V..I rank divisions, so the journey stays
+    meaningful. `from_first_claim` flags the onboarding catch-up burst (the first accept, when the
+    profile had 0 banked XP) so it can be grouped/celebrated later."""
+    JOB_TIER = 'job_tier'
+    PURSUER_RANK = 'pursuer_rank'
+    KIND_CHOICES = [(JOB_TIER, 'Job tier'), (PURSUER_RANK, 'Pursuer rank')]
+
+    profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='milestones')
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES)
+    key = models.CharField(max_length=32)    # tier/rank key, e.g. 'adept' / 'warden'
+    name = models.CharField(max_length=48)   # display name, e.g. 'Adept' / 'Warden'
+    level_at = models.PositiveIntegerField()  # the job level / Pursuer Level at which the rung was reached
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, null=True, blank=True, related_name='milestones')  # job_tier only
+    from_first_claim = models.BooleanField(default=False)
+    reached_at = models.DateTimeField(default=timezone.now)   # settable (not auto_now_add) so the seed command can vary dates
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['profile', 'reached_at'], name='milestone_profile_time_idx'),
+            models.Index(fields=['profile', 'kind'], name='milestone_profile_kind_idx'),
+        ]
+        constraints = [
+            # A profile reaches each per-job tier once (job not null).
+            models.UniqueConstraint(fields=['profile', 'kind', 'key', 'job'], name='uniq_milestone_job'),
+            # Rank rows have job=NULL, and NULLs are distinct in the constraint above -- a partial unique
+            # index enforces one-per-rank so concurrent accepts can't double-log the same crossing.
+            models.UniqueConstraint(fields=['profile', 'kind', 'key'], condition=models.Q(job__isnull=True),
+                                    name='uniq_milestone_rank'),
+        ]
+
+    def __str__(self):
+        who = self.job.slug if self.job_id else 'pursuer'
+        return f"{self.profile.display_psn_username} {who} -> {self.name}"
+
+
 class Stage(models.Model):
     series_slug = models.SlugField(max_length=100, db_index=True, help_text="Series slug this stage applies to.")
     stage_number = models.IntegerField(validators=[MinValueValidator(0)], help_text="Stage number (0 for optional/tangential concepts.)")

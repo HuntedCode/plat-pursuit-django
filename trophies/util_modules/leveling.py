@@ -137,3 +137,60 @@ def pursuer_rank_for_level(level: int) -> dict:
         'min_level': min_level, 'next_level': next_boundary, 'next_label': next_label,
         'levels_to_next': max(0, next_boundary - level),
     }
+
+
+# --- Milestone crossings (logged when XP is banked) -------------------------------
+
+def tiers_crossed(old_level, new_level):
+    """The JOB_TIERS newly reached when a job climbs old_level -> new_level (a jump can cross
+    several at once). Returns [(min_level, key, name), ...] ascending; the Initiate floor is never
+    'crossed'. Empty if no boundary was passed."""
+    if new_level <= old_level:
+        return []
+    return [t for t in JOB_TIERS if old_level < t[0] <= new_level]
+
+
+def ranks_crossed(old_level, new_level):
+    """The PURSUER_RANKS newly reached when the Pursuer Level climbs old -> new (V..I divisions are
+    NOT milestones). Returns [(min_level, key, name, has_div), ...] ascending; Newbie is the floor."""
+    if new_level <= old_level:
+        return []
+    return [r for r in PURSUER_RANKS if old_level < r[0] <= new_level]
+
+
+# --- Ladders (the full rung list + current position, for the Career displays) -----
+
+def job_tier_ladder(level):
+    """The 8-rung job prestige ladder for a job at `level`. Each rung: {key, name, min_level,
+    reached, current}. `fill` = % through the CURRENT tier toward the next (100 at Legend, the top)."""
+    cur = tier_for_level(level)
+    nxt = cur['next_level']
+    rungs = [
+        {'key': key, 'name': name, 'min_level': min_lvl,
+         'reached': level >= min_lvl, 'current': key == cur['key']}
+        for min_lvl, key, name in JOB_TIERS
+    ]
+    fill = 100 if not nxt else round((level - cur['min_level']) / (nxt - cur['min_level']) * 100)
+    return {
+        'rungs': rungs, 'fill': max(0, min(100, fill)),
+        'current_key': cur['key'], 'current_name': cur['name'],
+        'next_name': tier_for_level(nxt)['name'] if nxt else None,
+        'levels_to_next': (nxt - level) if nxt else 0,
+    }
+
+
+def pursuer_rank_ladder(level):
+    """The 11-rung Pursuer rank ladder for a Pursuer Level. Each rung: {key, name, min_level,
+    reached, current}. `fill` = % through the current TIER toward the next; `current` is the full
+    rank dict (label with division, next_label, levels_to_next)."""
+    cur = pursuer_rank_for_level(level)
+    rungs = [
+        {'key': key, 'name': name, 'min_level': min_lvl,
+         'reached': level >= min_lvl, 'current': key == cur['key']}
+        for min_lvl, key, name, _has_div in PURSUER_RANKS
+    ]
+    idx = next(i for i, r in enumerate(PURSUER_RANKS) if r[1] == cur['key'])
+    tier_min = PURSUER_RANKS[idx][0]
+    tier_next = PURSUER_RANKS[idx + 1][0] if idx + 1 < len(PURSUER_RANKS) else None
+    fill = 100 if tier_next is None else round((level - tier_min) / (tier_next - tier_min) * 100)
+    return {'rungs': rungs, 'fill': max(0, min(100, fill)), 'current': cur}

@@ -98,3 +98,15 @@ def job_icon_use(name, css_class='w-5 h-5'):
         f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
         f'<use href="#jobicon-{name}"/></svg>'
     )
+
+
+@register.simple_tag(takes_context=True)
+def job_tier_ladder(context, level, job_slug):
+    """The 8-rung job prestige ladder for a job at `level`, with each reached rung's date merged in
+    from the `job_tier_dates` context map (built once in career_service -- no per-job query here)."""
+    from trophies.util_modules.leveling import job_tier_ladder as _ladder
+    ladder = _ladder(level)
+    dates = (context.get('job_tier_dates') or {}).get(job_slug, {})
+    for rung in ladder['rungs']:
+        rung['reached_at'] = dates.get(rung['key'])
+    return ladder

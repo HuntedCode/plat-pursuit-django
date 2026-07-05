@@ -19,15 +19,15 @@ recomputed from current config). Per-job totals always aggregate in the DB (whal
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from trophies.models import (
-    Contract, ContractMembership, ContractXPGrant, EarnedContract, EarnedTrophy, ProfileGame,
-    ProfileJobXP, Trophy,
+    Contract, ContractMembership, ContractXPGrant, EarnedContract, EarnedTrophy, Job, ProfileGame,
+    ProfileJobXP, ProgressionMilestone, Trophy,
 )
 from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
-from trophies.util_modules.leveling import level_for_xp
+from trophies.util_modules.leveling import level_for_xp, ranks_crossed, tiers_crossed
 
 
 # --- helpers ---------------------------------------------------------------
@@ -62,12 +62,45 @@ def _has_platinum(member_ids):
     return Trophy.objects.filter(game__concept_id__in=member_ids, trophy_type='platinum').exists()
 
 
+def _has_any_job_xp(profile):
+    """Has this profile ever banked job XP? The first accept from 0 XP is the onboarding claim, so
+    its milestones get `from_first_claim` (the catch-up burst we can group/celebrate later)."""
+    return ProfileJobXP.objects.filter(profile=profile, total_xp__gt=0).exists()
+
+
+def _pursuer_level(profile):
+    """Pursuer Level = sum of every job's level (level-1 floor for untouched jobs), matching
+    job_render.build_profile_jobs' total_level so a logged rank crossing lines up with the display."""
+    n_jobs = Job.objects.count()
+    agg = ProfileJobXP.objects.filter(profile=profile).aggregate(s=Sum('level'), c=Count('id'))
+    return (agg['s'] or 0) + (n_jobs - (agg['c'] or 0))
+
+
+def _log_job_tier_milestones(profile, job, old_level, new_level, first_claim):
+    """Log a ProgressionMilestone for each job prestige tier crossed old -> new (idempotent)."""
+    for min_lvl, key, name in tiers_crossed(old_level, new_level):
+        ProgressionMilestone.objects.get_or_create(
+            profile=profile, kind=ProgressionMilestone.JOB_TIER, key=key, job=job,
+            defaults={'name': name, 'level_at': min_lvl, 'from_first_claim': first_claim},
+        )
+
+
+def _log_rank_milestones(profile, old_level, new_level, first_claim):
+    """Log a ProgressionMilestone for each Pursuer rank crossed old -> new (idempotent; no divisions)."""
+    for min_lvl, key, name, _has_div in ranks_crossed(old_level, new_level):
+        ProgressionMilestone.objects.get_or_create(
+            profile=profile, kind=ProgressionMilestone.PURSUER_RANK, key=key, job=None,
+            defaults={'name': name, 'level_at': min_lvl, 'from_first_claim': first_claim},
+        )
+
+
 def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
-                 tier=None, base_t=None, multiplier=None, earned_contract=None):
+                 tier=None, base_t=None, multiplier=None, earned_contract=None, first_claim=False):
     """The SINGLE job-XP grant primitive: write one immutable ledger row + bump the
     ProfileJobXP cache (re-leveling under the flat curve). Used by contract accepts AND any
     future source (quests, double-XP events, manual). Keeping all XP flowing through here
-    is what makes ProfileJobXP = Sum(all grants) hold for every source.
+    is what makes ProfileJobXP = Sum(all grants) hold for every source -- and the single place
+    every job prestige-tier crossing is logged.
 
     Caller owns idempotency + the surrounding transaction. ProfileJobXP is row-locked here
     because it's shared across all of a profile's grants. Returns the amount (0 if <= 0).
@@ -83,9 +116,12 @@ def grant_job_xp(profile, job, amount, *, source='contract', source_id=None,
     )
     ProfileJobXP.objects.get_or_create(profile=profile, job=job)  # race-safe create
     pjx = ProfileJobXP.objects.select_for_update().get(profile=profile, job=job)
+    old_level = level_for_xp(pjx.total_xp)   # logical level before this grant (floor 1; never logs Initiate)
     pjx.total_xp += amount
     pjx.level = level_for_xp(pjx.total_xp)
     pjx.save(update_fields=['total_xp', 'level', 'updated_at'])
+    if pjx.level > old_level:
+        _log_job_tier_milestones(profile, job, old_level, pjx.level, first_claim)
     return amount
 
 
@@ -206,10 +242,14 @@ def _pending_tiers(ec, contract):
 
 
 @transaction.atomic
-def accept_contract(profile, contract):
+def accept_contract(profile, contract, *, first_claim=None):
     """User action: bank ALL of this Contract's claimable tiers at once (Platinum + 100%
     together when both are reached). Writes the ledger + bumps the cache. Idempotent --
-    already-accepted tiers are skipped. Returns total XP granted."""
+    already-accepted tiers are skipped. Returns total XP granted.
+
+    Logs any Pursuer-rank crossing this accept causes (job-tier crossings are logged inside
+    grant_job_xp). `first_claim` is passed by a bulk accept so the whole onboarding claim-all is
+    flagged consistently; call-alone leaves it None and it's derived (prior XP == 0)."""
     ec = EarnedContract.objects.select_for_update().filter(profile=profile, contract=contract).first()
     if ec is None:
         return 0
@@ -222,19 +262,23 @@ def accept_contract(profile, contract):
         return 0
 
     now = timezone.now()
+    if first_claim is None:
+        first_claim = not _has_any_job_xp(profile)
+    old_pursuer_level = _pursuer_level(profile)
 
-    # All grants go through the shared primitive (ledger row + row-locked cache bump),
-    # so contracts/quests/events stay consistent and ProfileJobXP = Sum(all grants).
+    # All grants go through the shared primitive (ledger row + row-locked cache bump + job-tier
+    # milestone logging), so contracts/quests/events stay consistent and ProfileJobXP = Sum(all grants).
     granted = 0
     for tier, tier_total in tiers:
         for job, amount in zip(jobs, _split(tier_total, len(jobs))):
             granted += grant_job_xp(
                 profile, job, amount, source='contract', tier=tier,
-                base_t=t, multiplier=multiplier, earned_contract=ec,
+                base_t=t, multiplier=multiplier, earned_contract=ec, first_claim=first_claim,
             )
         setattr(ec, _ACCEPTED_FIELD[tier], now)
 
     ec.save(update_fields=['platinum_accepted_at', 'full_accepted_at'])
+    _log_rank_milestones(profile, old_pursuer_level, _pursuer_level(profile), first_claim)
     return granted
 
 
@@ -282,7 +326,10 @@ def accept_contracts(profile, contracts=None):
     if contracts is None:
         contracts = [ec.contract for ec in claimable_contracts(profile)]
     contracts = sorted(contracts, key=lambda c: c.pk)
-    return sum(accept_contract(profile, c) for c in contracts)
+    # Decide first-claim ONCE for the whole bulk (prior XP == 0), so every contract in the onboarding
+    # claim-all flags its milestones the same way -- not just the first before XP starts landing.
+    first_claim = not _has_any_job_xp(profile)
+    return sum(accept_contract(profile, c, first_claim=first_claim) for c in contracts)
 
 
 # --- cache repair ----------------------------------------------------------

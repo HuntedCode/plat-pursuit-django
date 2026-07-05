@@ -26,6 +26,20 @@ xp_total, tier, tier_key, description).
             <div class="edetail__total">{{ card.xp_total }} total XP earned{% if card.next_tier %} &middot; <span class="edetail__nexttier">{{ card.levels_to_next_tier }} to {{ card.next_tier }}</span>{% endif %}</div>
         </div>
     </div>
+    {% comment %} Prestige tier ladder: the 8 rungs Initiate -> Legend, filled up to this job's
+    current tier (the current rung shows partial progress), each reached rung dated from the log. {% endcomment %}
+    {% job_tier_ladder card.level card.slug as tl %}
+    <div class="pgl" aria-label="Prestige tier ladder">
+        <div class="pgl__track">
+            {% for rung in tl.rungs %}
+            <span class="pgl__rung{% if rung.current %} is-current{% endif %}" style="--f: {% if rung.current %}{{ tl.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};" title="{{ rung.name }} &middot; Lv {{ rung.min_level }}{% if rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}"></span>
+            {% endfor %}
+        </div>
+        <div class="pgl__foot">
+            <span class="pgl__cur">{{ tl.current_name }}</span>
+            {% if tl.next_name %}<span class="pgl__next">{{ tl.levels_to_next }} to {{ tl.next_name }}</span>{% else %}<span class="pgl__next">Top tier reached</span>{% endif %}
+        </div>
+    </div>
     {% if card.description %}<div class="edetail__flavor">{{ card.description }}</div>{% endif %}
     <div class="edetail__sources">
         <div class="edetail__sources-title">Where the XP comes from</div>
