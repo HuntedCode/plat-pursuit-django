@@ -411,8 +411,15 @@
 .rp-jobcell { display: grid; place-items: center; aspect-ratio: 1; border-radius: 6px; border: 1px solid transparent; background: var(--pp-bg-1); color: var(--disc); opacity: 0.34; transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
 .rp-jobcell svg { width: 64%; height: 64%; }
 .rp-jobcell:hover { opacity: 0.72; }
-.rp-jobcell.is-lit { opacity: 1; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--disc) 45%, transparent); }
+.rp-jobcell.is-lit { opacity: 1; color: var(--disc); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 20%, var(--pp-bg-1)), var(--pp-bg-1)); border-color: color-mix(in oklab, var(--disc) 45%, transparent); --ignite-glow: color-mix(in oklab, var(--disc) 55%, transparent); }
 .rp-row:hover .rp-jobcell.is-lit { border-color: color-mix(in oklab, var(--disc) 70%, transparent); box-shadow: 0 0 12px color-mix(in oklab, var(--disc) 24%, transparent); }
+/* (Reveal #1) Lit cells ignite in a quick cascade on the card's reveal -- a glow pop; cells stay
+   bright. --ignite-glow is pre-mixed above so the keyframe can use var() (color-mix is stripped
+   from @keyframes). (Link) hovering a lit cell or its ring arc pops both. */
+.rp-jobcell.rp-ignite { animation: rpCellIgnite 0.45s ease; }
+@keyframes rpCellIgnite { 0% { box-shadow: 0 0 0 0 transparent; } 45% { box-shadow: 0 0 14px 2px var(--ignite-glow); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.rp-jobcell.is-lit.is-linked { border-color: color-mix(in oklab, var(--disc) 90%, transparent); box-shadow: 0 0 14px color-mix(in oklab, var(--disc) 45%, transparent); background: linear-gradient(180deg, color-mix(in oklab, var(--disc) 32%, var(--pp-bg-1)), var(--pp-bg-1)); }
+@media (prefers-reduced-motion: reduce) { .rp-jobcell.rp-ignite { animation: none; } }
 
 /* Reward stack (right column): ring, total XP, progress bar, state line -- all always present. */
 .rp-side { display: flex; flex-direction: column; align-items: center; gap: 7px; }
@@ -428,16 +435,48 @@
 .rp-row__accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; pointer-events: none; z-index: 1; box-shadow: 0 0 12px color-mix(in oklab, var(--rp-fam) 40%, transparent); }
 /* Cover banner fronting the tile: the newest member game's art (bg hero if it has one, else box
    art), with a bottom fade into the card body and the status badge pinned top-left. */
-.rp-tile__art { position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--pp-bg-3, var(--pp-bg-1)); }
+.rp-tile__art { position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--pp-bg-3, var(--pp-bg-1)); isolation: isolate; }
 .rp-tile__art img { width: 100%; height: 100%; }
-.rp-tile__art-fade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklab, var(--pp-bg-2) 92%, transparent), transparent 55%); pointer-events: none; }
-.rp-tile__badge { position: absolute; top: 8px; left: 8px; z-index: 2; }
+/* Hover carousel: JS layers two crossfade <img> (z-index 1/2) above the resting cover. The incoming
+   image sits on top and fades in over the still-opaque outgoing one, so the cover never bleeds
+   through mid-transition. Scrim (z 3) + badge (z 4) stay above both. Only the hovered card animates. */
+.rp-tile__img--fx { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; opacity: 0; transition: opacity 0.55s ease; pointer-events: none; }
+.rp-tile__img--fx.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .rp-tile__img--fx { transition: none; } }
+.rp-tile__art-fade { position: absolute; inset: 0; background: linear-gradient(to top, color-mix(in oklab, var(--pp-bg-2) 92%, transparent), transparent 55%); pointer-events: none; z-index: 3; }
+.rp-tile__badge { position: absolute; top: 8px; left: 8px; z-index: 4; }
+/* (Banner-C) Progressive load: a shimmer (z -1, behind the cover) holds the frame until the cover
+   image loads; then the shimmer stops and fades out behind the now-painted cover (JS toggles
+   .is-loaded on the box). Shimmer animates background-position only -- never color-mix in @keyframes. */
+.rp-tile__art::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(100deg, var(--pp-bg-2) 25%, color-mix(in oklab, var(--pp-primary) 9%, var(--pp-bg-1)) 50%, var(--pp-bg-2) 75%); background-size: 220% 100%; animation: rpShimmer 1.5s ease-in-out infinite; }
+.rp-tile__art.is-loaded::before { opacity: 0; animation: none; transition: opacity 0.4s ease; }
+@keyframes rpShimmer { from { background-position: 130% 0; } to { background-position: -130% 0; } }
+/* (Banner-A) Ken Burns: each shown image gets a fresh gentle drift. JS re-adds .rp-kb to the active
+   image on every carousel frame, so the zoom replays per image (the reset hides in the crossfade)
+   rather than running once per hover. Transform only -- never color-mix in @keyframes. */
+.rp-kb { animation: rpKenburns 3.5s linear both; }
+@keyframes rpKenburns { from { transform: scale(1.01); } to { transform: scale(1.07); } }
+/* (Banner-B) Carousel progress: a thin segmented bar on the banner's bottom edge (clear of the
+   top-left badge); JS builds one segment per frame and lights the active one. Shows on card hover. */
+.rp-progress { position: absolute; left: 8px; right: 8px; bottom: 7px; z-index: 4; display: flex; gap: 3px; opacity: 0; transition: opacity 0.25s ease; pointer-events: none; }
+.rp-row:hover .rp-progress { opacity: 1; }
+.rp-progress__seg { flex: 1; height: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.3); transition: background 0.25s ease; }
+.rp-progress__seg.is-on { background: rgba(255, 255, 255, 0.95); }
+@media (prefers-reduced-motion: reduce) {
+    .rp-tile__art::before { animation: none; }
+    .rp-kb { animation: none; }
+}
 
 /* Element-split ring: a conic-gradient donut (one family-colored arc per element it levels, the
    even XP split) with the XP total in the center -- the Project-scale echo of the hero DNA ring. */
 .rp-ring-wrap { position: relative; width: 58px; height: 58px; flex: none; }
 @media (min-width: 768px) { .rp-ring-wrap { width: 66px; height: 66px; } }
-.rp-ring { position: absolute; inset: 0; border-radius: 999px; background-image: var(--ring-grad); filter: drop-shadow(0 0 2px color-mix(in oklab, var(--rp-fam) 45%, transparent)); -webkit-mask: radial-gradient(farthest-side, transparent 76%, #000 78%); mask: radial-gradient(farthest-side, transparent 76%, #000 78%); }
+/* SVG split-ring: one stroke-dash arc per job (pathLength=100). JS draws them in on reveal by
+   animating stroke-dasharray from 0, and the arcs cross-highlight with the job grid. */
+.rp-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); transform-origin: 50% 50%; overflow: visible; }
+.rp-ring__seg { fill: none; stroke: var(--disc); stroke-width: 3.4; stroke-linecap: round; filter: drop-shadow(0 0 1.5px color-mix(in oklab, var(--disc) 40%, transparent)); transition: stroke-dasharray 0.6s var(--pp-ease, ease), stroke-width 0.2s ease, filter 0.2s ease; }
+.rp-ring__seg.is-linked { stroke-width: 5; filter: drop-shadow(0 0 4px color-mix(in oklab, var(--disc) 80%, transparent)); }
+@media (prefers-reduced-motion: reduce) { .rp-ring__seg { transition: stroke-width 0.2s ease, filter 0.2s ease; } }
 .rp-ring__xp { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.05; pointer-events: none; }
 .rp-ring__xp .pp-tally { font-size: 12px; color: var(--pp-text); }
 @media (min-width: 768px) { .rp-ring__xp .pp-tally { font-size: 14px; } }
@@ -448,7 +487,19 @@
 .rp-reward-xp__val { font-size: 18px; color: var(--rp-fam, var(--pp-primary)); }
 .rp-reward-xp__cap { font-size: 8px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pp-text-mute); margin-top: 2px; }
 @media (min-width: 768px) { .rp-reward-xp__val { font-size: 20px; } }
-.rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 42%, var(--pp-border)); }
+/* (Card A+C) Coordinated hover: the frame lifts (deepened shadow + family glow, no scale per the
+   "glow not scale" standard) while the accent bar and reward ring brighten on the same easing --
+   one beat, not three independent reactions. The lit job cells already join in (rule above). */
+.rp-row:hover { border-color: color-mix(in oklab, var(--rp-fam) 55%, var(--pp-border)); box-shadow: 0 10px 28px -8px color-mix(in oklab, var(--pp-bg-0) 72%, transparent), 0 0 22px color-mix(in oklab, var(--rp-fam) 20%, transparent); }
+.rp-row__accent { transition: box-shadow 0.25s ease; }
+.rp-row:hover .rp-row__accent { box-shadow: 0 0 18px color-mix(in oklab, var(--rp-fam) 70%, transparent); }
+.rp-ring { transition: filter 0.25s ease; }
+.rp-row:hover .rp-ring { filter: drop-shadow(0 0 6px color-mix(in oklab, var(--rp-fam) 60%, transparent)); }
+/* (Card-B) Staggered entrance: cards fade+rise in on first reveal and on filter changes. JS adds
+   .rp-row--enter with a per-card animation-delay, then clears it on animationend. */
+.rp-row--enter { animation: rpCardIn 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes rpCardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .rp-row--enter { animation: none; } }
 .rp-row::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; }
 .rp-row--claimable::after { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--pp-primary) 55%, transparent); }
 .rp-row--accepted { opacity: 0.92; }

@@ -49,25 +49,26 @@ def _project_status(ec, max_progress, any_plat):
     return 'available', 0
 
 
-def _ring_gradient(elements):
-    """A CSS conic-gradient for the Project's element ring: one equal, family-colored arc per
-    element it levels (the even XP split), separated by small gaps so each reads distinctly.
-    Mirrors the Lab hero's DNA ring, at the Project scale."""
+def _ring_segments(elements):
+    """Per-job arcs for the SVG split-ring: N equal, family-colored segments (the even XP split)
+    with a small gap between them. Each is a stroke-dash arc on a `pathLength=100` circle, so `dash`
+    is a direct percentage of the circumference and `offset` positions it. Tagged with the job slug
+    so the ring and the job grid can cross-highlight. Replaces the old conic-gradient, which was a
+    single unsegmented element that couldn't be drawn or hovered arc-by-arc."""
     n = len(elements)
     if not n:
-        return ''
-    if n == 1:
-        return f"conic-gradient(var(--disc-{elements[0]['disc_slug']}) 0 360deg)"
-    step = 360.0 / n
-    half_gap = 3.0
-    stops = []
+        return []
+    gap = 4.0 if n > 1 else 0.0
+    seg = 100.0 / n
+    out = []
     for i, el in enumerate(elements):
-        seg_start, seg_end = i * step + half_gap, (i + 1) * step - half_gap
-        color = f"var(--disc-{el['disc_slug']})"
-        stops.append(f"transparent {i * step:.2f}deg {seg_start:.2f}deg")
-        stops.append(f"{color} {seg_start:.2f}deg {seg_end:.2f}deg")
-        stops.append(f"transparent {seg_end:.2f}deg {(i + 1) * step:.2f}deg")
-    return "conic-gradient(" + ", ".join(stops) + ")"
+        out.append({
+            'slug': el['slug'],
+            'disc_slug': el['disc_slug'],
+            'dash': round(seg - gap, 3),                     # visible arc length (0-100 scale)
+            'offset': round(-(i * seg + gap / 2.0), 3),      # dashoffset positions the arc
+        })
+    return out
 
 
 def _build_contracts(profile):
@@ -161,7 +162,7 @@ def _build_contracts(profile):
             'game_count': len(game_entries),
             'elements': elements,          # what you level
             'element_slugs': [el['slug'] for el in elements],  # for the 5x5 job-grid "lit" lookup
-            'ring_gradient': _ring_gradient(elements),  # the element-split ring (even split, family-colored)
+            'ring_segments': _ring_segments(elements),  # SVG arcs for the split-ring (even split, per-job)
             'family_gradient': family_gradient,  # CSS for the family accent bar (gradient if multi-family)
             'family_color': family_color,        # dominant family color var, for the hover/glow
             'xp_total': t,

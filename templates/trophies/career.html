@@ -471,6 +471,8 @@ function ppCountUp(el, dur) {
         });
         // Animate the radar in the first time it's shown (and keep it correctly sized after).
         if (name === 'radar') revealRadar();
+        // Stagger the contract cards in on reveal (mirrors the Jobs tab's content animation).
+        if (name === 'contracts' && changed) document.dispatchEvent(new CustomEvent('pp:contracts-shown'));
     }
     viewTabs.forEach(function (tab) { tab.addEventListener('click', function () { showView(tab.dataset.view); }); });
 
@@ -813,6 +815,7 @@ function ppCountUp(el, dur) {
     var bar = document.querySelector('.rp-filters');
     var PP = window.PlatPursuit || {};
     var API = PP.API, Toast = PP.ToastManager;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function applyFilter(f) {
         list.querySelectorAll('.rp-row').forEach(function (row) {
@@ -823,6 +826,26 @@ function ppCountUp(el, dur) {
         var a = bar && bar.querySelector('.rp-chip.is-active');
         return a ? a.dataset.filter : 'all';
     }
+    // (Card-B) Stagger the currently-visible cards in -- used on filter changes and the board's
+    // first reveal. Not fired on tab-switch (the panel cross-fade already reveals the block).
+    function staggerVisible() {
+        if (reduce) return;
+        var i = 0;
+        list.querySelectorAll('.rp-row').forEach(function (row) {
+            if (row.style.display === 'none') return;
+            row.classList.remove('rp-row--enter');
+            void row.offsetWidth;                              // restart the animation
+            row.style.animationDelay = Math.min(i * 40, 400) + 'ms';
+            row.classList.add('rp-row--enter');
+            row.addEventListener('animationend', function h(e) {
+                if (e.animationName !== 'rpCardIn') return;    // ignore the accept-flash animation
+                row.classList.remove('rp-row--enter');
+                row.style.animationDelay = '';
+                row.removeEventListener('animationend', h);
+            });
+            i++;
+        });
+    }
 
     if (bar) {
         bar.querySelectorAll('.rp-chip').forEach(function (chip) {
@@ -830,9 +853,13 @@ function ppCountUp(el, dur) {
                 bar.querySelectorAll('.rp-chip').forEach(function (c) { c.classList.remove('is-active'); });
                 chip.classList.add('is-active');
                 applyFilter(chip.dataset.filter);
+                staggerVisible();
             });
         });
     }
+    var panel = list.closest('.lab-view');
+    if (panel && !panel.hidden) staggerVisible();   // Contracts is the landing view -> stagger on load
+    document.addEventListener('pp:contracts-shown', staggerVisible);   // ...or when the tab is opened
 
     // Accept flow: flip semantic state classes + the badge label; CSS does the rest.
     function markAccepted(card) {
@@ -886,6 +913,130 @@ function ppCountUp(el, dur) {
     if (allBtn) {
         allBtn.addEventListener('click', function () { accept({ all: true }, allBtn); });
     }
+})();
+
+// Contracts banner progressive load: hold a shimmer until the cover image is ready, then fade it
+// in (CSS). Runs for every card, carousel or not.
+(function () {
+    document.querySelectorAll('.rp-tile__art').forEach(function (art) {
+        var img = art.querySelector('.rp-tile__cover');
+        if (!img) { art.classList.add('is-loaded'); return; }
+        if (img.complete && img.naturalWidth) { art.classList.add('is-loaded'); return; }
+        var done = function () { art.classList.add('is-loaded'); };
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+    });
+})();
+
+// Contracts banner hover carousel: on hover, crossfade through the card's extra landscape images
+// (data-gallery, lazy-loaded on first hover) on a beat, then fade back to the resting cover on
+// leave. Two overlay layers ping-pong for a smooth crossfade; a segmented progress bar tracks the
+// frame. Only the hovered card animates.
+(function () {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var BEAT = 1500;     // ms each frame holds before advancing
+    var FADE = 560;      // must match the CSS opacity transition (0.55s) + a hair
+    document.querySelectorAll('.rp-tile__art').forEach(function (art) {
+        var cover = art.querySelector('.rp-tile__cover');
+        if (!cover) return;
+        var card = art.closest('.rp-row') || art;   // hovering anywhere on the card drives the carousel
+        var extra = (cover.getAttribute('data-gallery') || '').split('|').filter(Boolean);
+        if (!extra.length) return;
+        var frames = [cover.src].concat(extra);   // frame 0 = the resting cover
+        var layers = null, segs = null, active = null, timer = null, hideT = null, primed = false;
+
+        function build() {
+            layers = [document.createElement('img'), document.createElement('img')];
+            layers.forEach(function (l) { l.className = 'rp-tile__img--fx'; l.alt = ''; art.insertBefore(l, cover.nextSibling); });
+            var prog = document.createElement('div');
+            prog.className = 'rp-progress';
+            segs = frames.map(function () { var s = document.createElement('span'); s.className = 'rp-progress__seg'; prog.appendChild(s); return s; });
+            art.appendChild(prog);
+        }
+        function setSeg(i) { if (segs) segs.forEach(function (s, k) { s.classList.toggle('is-on', k === i); }); }
+        function drift(el) { if (el) { el.classList.remove('rp-kb'); void el.offsetWidth; el.classList.add('rp-kb'); } }  // restart the Ken Burns
+        function toFrame(i) {
+            setSeg(i);
+            if (i === 0) { if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); }); active = null; drift(cover); return; }  // back to the cover (it drifts too)
+            var incoming = (active === layers[0]) ? layers[1] : layers[0];
+            var outgoing = active;
+            incoming.src = frames[i];
+            incoming.style.zIndex = '2';              // incoming rides on TOP...
+            if (outgoing) outgoing.style.zIndex = '1';// ...of the still-opaque outgoing, so no cover bleed-through
+            void incoming.offsetWidth;                // reflow so the fade restarts cleanly
+            incoming.classList.add('is-on');
+            active = incoming;
+            drift(incoming);                          // each image restarts its own drift
+            clearTimeout(hideT);
+            if (outgoing) hideT = setTimeout(function () { outgoing.classList.remove('is-on'); }, FADE);  // hide only after it's fully covered
+        }
+        card.addEventListener('mouseenter', function () {
+            if (!layers) build();
+            if (!primed) { primed = true; extra.forEach(function (u) { var im = new Image(); im.src = u; }); }  // lazy-load once
+            var i = 1;
+            clearInterval(timer);
+            toFrame(1);   // fade to the first extra image right away (skip the opening beat)
+            timer = setInterval(function () { i = (i + 1) % frames.length; toFrame(i); }, BEAT);
+        });
+        card.addEventListener('mouseleave', function () {
+            clearInterval(timer); timer = null;
+            clearTimeout(hideT);
+            if (layers) layers.forEach(function (l) { l.classList.remove('is-on'); });   // reveal the cover
+            active = null;
+            setSeg(0);
+            [cover].concat(layers || []).forEach(function (el) { if (el) el.classList.remove('rp-kb'); });  // stop + reset the drift
+        });
+    });
+})();
+
+// Contracts card reveal choreography: when a card scrolls into view, its content awakens once --
+// lit job-cells ignite in a cascade, the total-XP counts up, the split-ring draws in, the progress
+// bar fills. Runs after the entrance (container settles, then content). Reduced motion leaves
+// everything at its final state.
+(function () {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var cards = document.querySelectorAll('#rp-list .rp-row');
+    if (!cards.length || typeof IntersectionObserver === 'undefined') return;
+    function reveal(card) {
+        if (card.dataset.revealed) return;
+        card.dataset.revealed = '1';
+        if (reduce) return;   // final states already rendered server-side
+        var xp = card.querySelector('.rp-reward-xp__val [data-countup]');
+        if (xp && typeof ppCountUp === 'function') ppCountUp(xp, 900);
+        var hz = card.querySelector('.rp-prog .pp-horizon'), prog = card.querySelector('.rp-prog');
+        if (hz && prog) { hz.style.setProperty('--horizon-progress', '0%'); void hz.offsetWidth; hz.style.setProperty('--horizon-progress', (prog.dataset.fill || '0') + '%'); }
+        card.querySelectorAll('.rp-ring__seg').forEach(function (seg) {   // draw each arc from 0
+            if (!seg.dataset.dash) return;
+            seg.style.strokeDasharray = '0 100'; void seg.getBoundingClientRect(); seg.style.strokeDasharray = seg.dataset.dash + ' 100';
+        });
+        card.querySelectorAll('.rp-jobcell.is-lit').forEach(function (cell, i) {   // ignite cascade
+            setTimeout(function () { cell.classList.remove('rp-ignite'); void cell.offsetWidth; cell.classList.add('rp-ignite'); }, 120 + i * 90);
+        });
+    }
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { reveal(e.target); io.unobserve(e.target); } });
+    }, { threshold: 0.25 });
+    cards.forEach(function (c) { io.observe(c); });
+})();
+
+// Contracts icon <-> ring link: hovering a lit job-cell (or its ring arc) highlights both.
+(function () {
+    var list = document.getElementById('rp-list');
+    if (!list) return;
+    function setLink(card, slug, on) {
+        if (!card || !slug) return;
+        var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
+        var cell = card.querySelector('.rp-jobcell.is-lit[data-slug="' + sel + '"]');
+        var seg = card.querySelector('.rp-ring__seg[data-slug="' + sel + '"]');
+        if (cell) cell.classList.toggle('is-linked', on);
+        if (seg) seg.classList.toggle('is-linked', on);
+    }
+    function slugAt(target) {
+        var el = target.closest && (target.closest('.rp-jobcell.is-lit') || target.closest('.rp-ring__seg'));
+        return el ? el.dataset.slug : null;
+    }
+    list.addEventListener('mouseover', function (e) { var s = slugAt(e.target); if (s) setLink(e.target.closest('.rp-row'), s, true); });
+    list.addEventListener('mouseout', function (e) { var s = slugAt(e.target); if (s) setLink(e.target.closest('.rp-row'), s, false); });
 })();
 </script>
 {% endif %}

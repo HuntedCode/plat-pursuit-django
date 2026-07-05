@@ -10,12 +10,18 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
 <div class="rp-row card group relative overflow-hidden bg-base-200/70 border-2 border-base-300 shadow-md shadow-neutral transition-all {% if p.status == 'claimable' %}rp-row--claimable{% elif p.status == 'accepted' %}rp-row--accepted{% endif %}" data-status="{{ p.status }}" data-slug="{{ p.slug }}" style="--rp-fam: {{ p.family_color }};">
     <span class="rp-row__accent" aria-hidden="true" style="background: {{ p.family_gradient }};"></span>
 
-    {# Cover banner: the newest member game's art, with the status badge #}
+    {% comment %} Cover banner: the newest member game's landscape art. `landscape_urls` = PSN bg_url
+    -> IGDB screenshots -> IGDB artworks (deduped, capped at 5); its first entry is the resting cover,
+    the rest ride in `data-gallery` for the hover carousel (lazy-loaded on first hover, JS below).
+    Falls back to the top-cropped portrait cover, then a contained placeholder, only when no landscape
+    image exists at all. {% endcomment %}
     <div class="rp-tile__art">
         {% if p.cover_game %}
-            {% if p.cover_game.concept.bg_url %}<img src="{{ p.cover_game.concept.bg_url }}" alt="" loading="lazy" class="object-cover">
-            {% elif p.cover_game.has_cover_art %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="object-cover object-top">
-            {% else %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="object-contain p-3">{% endif %}
+            {% with gallery=p.cover_game.concept.landscape_urls %}
+            {% if gallery %}<img src="{{ gallery.0 }}" alt="" loading="lazy" class="rp-tile__cover object-cover"{% if gallery|length > 1 %} data-gallery="{{ gallery|slice:'1:'|join:'|' }}"{% endif %}>
+            {% elif p.cover_game.has_cover_art %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="rp-tile__cover object-cover object-top">
+            {% else %}<img src="{{ p.cover_game.display_image_url }}" alt="" loading="lazy" class="rp-tile__cover object-contain p-3">{% endif %}
+            {% endwith %}
         {% endif %}
         <span class="rp-tile__art-fade" aria-hidden="true"></span>
         {% if p.status == 'claimable' %}<span class="rp-badge badge badge-sm badge-primary font-bold rp-tile__badge">Claimable</span>
@@ -44,7 +50,7 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
         <div class="rp-body">
             <div class="rp-jobgrid" role="group" aria-label="Jobs this contract levels">
                 {% for d in disciplines %}{% for job in d.jobs %}
-                <span class="rp-jobcell{% if job.slug in p.element_slugs %} is-lit{% endif %}" style="--disc: var(--disc-{{ d.slug }});" title="{{ job.name }}{% if job.slug in p.element_slugs %} &middot; +{{ p.xp_each|intcomma }} XP{% endif %}">
+                <span class="rp-jobcell{% if job.slug in p.element_slugs %} is-lit{% endif %}" data-slug="{{ job.slug }}" style="--disc: var(--disc-{{ d.slug }});" title="{{ job.name }}{% if job.slug in p.element_slugs %} &middot; +{{ p.xp_each|intcomma }} XP{% endif %}">
                     {% job_icon_use job.icon '' %}
                     {% if job.slug in p.element_slugs %}<span class="sr-only">{{ job.name }}, +{{ p.xp_each|intcomma }} XP</span>{% endif %}
                 </span>
@@ -55,17 +61,19 @@ per discipline with `.jobs`), and `profile` (viewer, for game-card links).
 
             <div class="rp-side">
                 <div class="rp-ring-wrap" title="{{ p.xp_total|intcomma }} XP, split evenly across {{ p.elements|length }} job{{ p.elements|length|pluralize }}">
-                    <div class="rp-ring" style="--ring-grad: {{ p.ring_gradient }};" aria-hidden="true"></div>
+                    <svg class="rp-ring" viewBox="0 0 36 36" aria-hidden="true">
+                        {% for s in p.ring_segments %}<circle class="rp-ring__seg" data-slug="{{ s.slug }}" data-dash="{{ s.dash }}" cx="18" cy="18" r="15.915" pathLength="100" style="--disc: var(--disc-{{ s.disc_slug }});" stroke-dasharray="{{ s.dash }} 100" stroke-dashoffset="{{ s.offset }}"/>{% endfor %}
+                    </svg>
                     <div class="rp-ring__xp">
                         <span class="pp-tally">{{ p.elements|length }}</span>
                         <span class="rp-ring__xp-cap">job{{ p.elements|length|pluralize }}</span>
                     </div>
                 </div>
                 <div class="rp-reward-xp" title="Total reward: {{ p.xp_total|intcomma }} XP">
-                    <span class="rp-reward-xp__val pp-tally">+{{ p.xp_total|intcomma }}</span>
+                    <span class="rp-reward-xp__val pp-tally">+<span data-countup="{{ p.xp_total }}">{{ p.xp_total|intcomma }}</span></span>
                     <span class="rp-reward-xp__cap">total XP</span>
                 </div>
-                <div class="rp-prog">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}</div>
+                <div class="rp-prog" data-fill="{{ p.progress }}">{% include 'components/horizon.html' with progress=p.progress accent='var(--rp-fam)' height='5px' %}</div>
                 <div class="rp-status">
                     {% if p.status == 'claimable' or p.status == 'accepted' %}
                         {# both rendered; .rp-row--accepted reveals the right one via CSS #}

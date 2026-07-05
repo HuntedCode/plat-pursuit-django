@@ -1029,6 +1029,48 @@ class Concept(models.Model):
         """Template-friendly IGDB cover URL (trusted matches only, default size)."""
         return self.get_igdb_cover_url()
 
+    def landscape_urls(self, limit=5, artwork_size='1080p', screenshot_size='screenshot_big'):
+        """Ordered, deduped landscape image URLs for a banner / hover carousel.
+
+        Priority: `bg_url` (PSN GAMEHUB art, or an IGDB artwork/screenshot the sync backfilled
+        into it) -> a trusted IGDB match's screenshots (in-game shots, preferred) -> its artworks,
+        capped at `limit`. `bg_url` is often identical to artwork[0] (the sync backfills it from
+        there), so entries dedup by URL. The live IGDB fallbacks catch concepts whose `bg_url` was
+        never populated (IGDB-anchored concepts with no PSN art that the sync backfill missed or
+        predates). Reads only the `igdb_*_image_ids` columns, never `raw_response`. Returns [] when
+        there is no landscape media at all.
+        """
+        urls = []
+        if self.bg_url:
+            urls.append(self.bg_url)
+        try:
+            match = self.igdb_match
+        except IGDBMatch.DoesNotExist:
+            match = None
+        if match and match.is_trusted:
+            urls.extend(match.screenshot_urls(size=screenshot_size))
+            urls.extend(match.artwork_urls(size=artwork_size))
+        out, seen = [], set()
+        for u in urls:
+            if u and u not in seen:
+                seen.add(u)
+                out.append(u)
+                if len(out) >= limit:
+                    break
+        return out
+
+    def get_landscape_url(self, artwork_size='1080p', screenshot_size='screenshot_big'):
+        """The single best landscape image (the first of `landscape_urls`), or None. The
+        landscape counterpart to `get_cover_url` (which is portrait-only); see `landscape_urls`
+        for the full priority chain."""
+        urls = self.landscape_urls(limit=1, artwork_size=artwork_size, screenshot_size=screenshot_size)
+        return urls[0] if urls else None
+
+    @property
+    def landscape_url(self):
+        """Template-friendly landscape banner URL (default sizes)."""
+        return self.get_landscape_url()
+
     @classmethod
     def create_default_concept(cls, game):
         """Create a stub Concept for games that couldn't be looked up via PSN API.

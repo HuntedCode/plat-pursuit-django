@@ -43,8 +43,9 @@ def test_lists_live_project_with_games_elements_and_split():
     assert len(p['elements']) == 2
     assert p['xp_total'] == CONTRACT_XP_TOTAL
     assert p['xp_each'] == CONTRACT_XP_TOTAL // 2
-    assert p['ring_gradient'].startswith('conic-gradient(')   # the element-split ring
-    assert p['ring_gradient'].count('var(--disc-') == 2       # one arc per element (the even split)
+    assert len(p['ring_segments']) == 2                       # one SVG arc per element (the even split)
+    assert {s['slug'] for s in p['ring_segments']} == {e['slug'] for e in p['elements']}  # tagged per job
+    assert all('dash' in s and 'offset' in s and 'disc_slug' in s for s in p['ring_segments'])
     assert p['family_color'].startswith('var(--disc-')
     # gunslinger + mage are different families -> the accent bar is a multi-family gradient.
     assert p['family_gradient'].startswith('linear-gradient')
