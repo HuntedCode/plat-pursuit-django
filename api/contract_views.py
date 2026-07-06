@@ -25,7 +25,8 @@ class AcceptContractView(APIView):
 
     Body: {"slug": "<contract-slug>"} to accept one Project, or {"all": true} to accept
     every claimable Project. Banks the XP for each claimable tier and returns:
-        200 {"granted": <int xp>, "accepted": [<slug>...], "claimable_count": <int>}
+        200 {"granted": <int xp>, "accepted": [<slug>...], "claimable_count": <int>,
+             "claim": {<the "what just happened" payload for the claim ceremony>}}
         403 if the user has no linked profile
         404 if the slug is not a live Project
         400 if neither slug nor all is given
@@ -43,9 +44,7 @@ class AcceptContractView(APIView):
             )
 
         if request.data.get('all'):
-            contracts = [ec.contract for ec in contract_service.claimable_contracts(profile)]
-            accepted = [c.slug for c in contracts]
-            granted = contract_service.accept_contracts(profile, contracts)
+            result = contract_service.claim(profile, all_claimable=True)
         else:
             slug = request.data.get('slug')
             if not slug:
@@ -59,11 +58,11 @@ class AcceptContractView(APIView):
                     {'error': 'Project not found.'},
                     status=http_status.HTTP_404_NOT_FOUND,
                 )
-            granted = contract_service.accept_contract(profile, contract)
-            accepted = [slug] if granted > 0 else []
+            result = contract_service.claim(profile, contract=contract)
 
         return Response({
-            'granted': granted,
-            'accepted': accepted,
+            'granted': result['xp'],          # kept for back-compat with the current claim JS
+            'accepted': result['accepted'],
             'claimable_count': contract_service.claimable_contracts(profile).count(),
+            'claim': result,                  # the full payload the ceremony animates from
         })

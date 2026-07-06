@@ -9,6 +9,7 @@ Zones: the Pursuer hero + the jobs experience + the Contracts browse + the pendi
 Page data: `career_service.build_career_context` + `contracts_service.contracts_page` (the
 Contracts board renders page 1 server-side, then the toolbar drives the results endpoint).
 """
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseNotFound
@@ -103,6 +104,9 @@ class CareerView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             {'text': 'Career'},
         ]
         context['seo_title'] = 'Career - Platinum Pursuit'
+        # DEBUG-only: the claim-ceremony replay harness (canned payloads, no DB) lives in the template
+        # behind this flag so animation iteration never touches real claim state.
+        context['ceremony_debug'] = settings.DEBUG
         return context
 
 

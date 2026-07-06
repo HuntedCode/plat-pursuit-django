@@ -32,6 +32,15 @@ def level_for_xp(total_xp: int) -> int:
     return total_xp // JOB_XP_PER_LEVEL + 1
 
 
+def frac_into_level(total_xp: int) -> float:
+    """Fraction (0.0..1.0) through the CURRENT level's band -- 0.0 exactly on a boundary.
+    Drives the job-bar fill in the claim ceremony (server-side so the flat-curve constant
+    never has to be mirrored in JS)."""
+    if total_xp <= 0:
+        return 0.0
+    return (total_xp % JOB_XP_PER_LEVEL) / JOB_XP_PER_LEVEL
+
+
 # --- Prestige tiers ---------------------------------------------------------
 # (min_level, key, name), ascending. Bounded, named milestone ladder; the level number
 # keeps climbing past the top tier (Legend) -- that's the cap-less endgame, so we never

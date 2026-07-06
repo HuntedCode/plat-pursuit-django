@@ -1,0 +1,218 @@
+/* ================================================================
+ * Claim Ceremony -- the payoff overlay when a Pursuer banks Contract XP.
+ *
+ * A rare, deliberate moment, so it takes the whole screen: the award arrives, then the XP flows
+ * into the jobs it leveled (bars fill, levels tick). Choreography is JS-driven
+ * (static/js/claim-ceremony.js); this file is the look + the discrete state animations it toggles.
+ *
+ * lightningcss guards observed: NO color-mix() inside @keyframes (pre-mixed into --ccx-* / --disc-*
+ * custom props, referenced as var()); the scrim blur transitions from blur(0), never `none`.
+ * ================================================================ */
+
+.ccx-open { overflow: hidden; }   /* lock the board behind the scrim */
+
+.ccx {
+    position: fixed; inset: 0; z-index: 80;
+    display: flex; align-items: center; justify-content: center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+}
+
+/* ---- Scrim ---- */
+.ccx__scrim {
+    position: absolute; inset: 0;
+    background: radial-gradient(120% 90% at 50% 42%,
+        color-mix(in oklab, var(--pp-bg-0, #05070a) 82%, transparent) 0%,
+        color-mix(in oklab, var(--pp-bg-0, #05070a) 94%, transparent) 70%);
+    backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px);
+    opacity: 0;
+    transition: opacity 0.32s ease, backdrop-filter 0.42s ease, -webkit-backdrop-filter 0.42s ease;
+}
+.ccx.is-in .ccx__scrim { opacity: 1; backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+
+/* ---- Stage ---- */
+.ccx__stage {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 460px;   /* --list; widened per mode below so many jobs fit without scrolling */
+    max-height: calc(100dvh - 32px);
+    display: flex; flex-direction: column;
+    padding: 26px 22px 20px;
+    border-radius: 20px;
+    background: linear-gradient(180deg,
+        color-mix(in oklab, var(--pp-primary) 8%, var(--pp-bg-2)) 0%, var(--pp-bg-1, var(--pp-bg-2)) 60%);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+    box-shadow: 0 24px 70px -18px rgba(0, 0, 0, 0.7),
+        0 0 0 1px color-mix(in oklab, var(--pp-primary) 12%, transparent),
+        inset 0 1px 0 color-mix(in oklab, var(--pp-primary) 20%, transparent);
+    opacity: 0; transform: translateY(14px) scale(0.965);
+    transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ccx.is-in .ccx__stage { opacity: 1; transform: none; }
+
+/* Gold aura behind the award. */
+.ccx__glow {
+    position: absolute; left: 50%; top: 10%; width: 320px; height: 320px;
+    transform: translate(-50%, 0) scale(0.6);
+    border-radius: 50%; pointer-events: none; z-index: -1; opacity: 0;
+    background: radial-gradient(circle,
+        color-mix(in oklab, var(--pp-primary) 42%, transparent) 0%, transparent 68%);
+    transition: opacity 0.7s ease, transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ccx.is-in .ccx__glow { opacity: 0.9; transform: translate(-50%, 0) scale(1); }
+
+/* ---- Award ---- */
+.ccx__eyebrow {
+    text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--pp-primary) 78%, var(--pp-text));
+}
+.ccx__award {
+    display: flex; align-items: baseline; justify-content: center; gap: 4px;
+    margin: 6px 0 4px; line-height: 1;
+    color: var(--pp-primary);   /* the reward accent; the hero number's glow comes from .pp-tally--glow */
+}
+/* The award is Tally (face + size + glow come from .pp-tally--hero.--glow); these only tune the
+ * satellite +/XP marks so they sit against the hero number. */
+.ccx__plus { font-size: clamp(24px, 6vw, 32px); }
+.ccx__unit { font-size: clamp(15px, 4vw, 20px); letter-spacing: 0.05em; opacity: 0.85; }
+.ccx__award.is-hit { animation: ccxAwardHit 0.5s cubic-bezier(0.22, 1.4, 0.4, 1) both; }
+@keyframes ccxAwardHit {
+    0% { transform: scale(0.72); opacity: 0.2; }
+    60% { transform: scale(1.06); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+/* ---- Job tiles ----
+ * A page holds up to 5 tiles in the roomy single-column list -- it never scrolls. Bigger claims
+ * paginate (5 at a time) and the pager below flips between pages. */
+.ccx__jobs {
+    list-style: none; margin: 14px 0 6px; padding: 2px; min-height: 0;
+    display: flex; flex-direction: column; gap: 8px;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old 5 out */
+
+/* Manual arrow flips: Material "shared axis" (X). Outgoing leaves toward the pressed direction,
+ * incoming arrives from the opposite side -- spatial, directional, GPU-only (transform + opacity). */
+@keyframes ccxPageOutL { to { opacity: 0; transform: translateX(-30px); } }
+@keyframes ccxPageOutR { to { opacity: 0; transform: translateX(30px); } }
+@keyframes ccxPageInR  { from { opacity: 0; transform: translateX(30px); } }
+@keyframes ccxPageInL  { from { opacity: 0; transform: translateX(-30px); } }
+
+.ccx__job {
+    /* --disc set inline; pre-mix the derived tones here so @keyframes can use them as var(). */
+    --disc-soft: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-3));
+    --disc-glow: color-mix(in oklab, var(--disc) 55%, transparent);
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 12px;
+    background: color-mix(in oklab, var(--disc) 6%, var(--pp-bg-2));
+    border: 1px solid color-mix(in oklab, var(--disc) 24%, var(--pp-border));
+    opacity: 0; transform: translateY(10px);
+    transition: opacity 0.42s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ccx__job.is-in { opacity: 1; transform: none; }
+
+.ccx__ji {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 10px;
+    color: var(--disc); background: var(--disc-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--disc) 40%, transparent),
+        0 0 14px color-mix(in oklab, var(--disc) 22%, transparent);
+}
+.ccx__ji svg { width: 22px; height: 22px; }
+
+.ccx__jbody { min-width: 0; }
+.ccx__jrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.ccx__jname {
+    font-size: 14px; font-weight: 700; color: var(--pp-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ccx__jgain { flex: 0 0 auto; font-size: 12px; color: var(--disc); }
+
+/* The bar is a Horizon primitive (.pp-horizon, themed --horizon-accent: var(--disc)). Only slow its
+ * fill to the ceremony's deliberate pace -- the look/gradient/glow all come from horizon.css. */
+.ccx__bar { --horizon-h: 8px; }
+.ccx__job .pp-horizon__fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+.ccx__lv {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; height: 30px; padding: 0 8px; border-radius: 8px;
+    color: var(--disc); background: var(--disc-soft);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--disc) 34%, transparent);
+}
+.ccx__lvn { font-size: 15px; }   /* Tally face; size only (bare .pp-tally is metrics-free) */
+.ccx__lv.is-levelup { animation: ccxLevelPop 0.55s cubic-bezier(0.22, 1.5, 0.4, 1) both; }
+@keyframes ccxLevelPop {
+    0% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+    35% { transform: scale(1.28); box-shadow: 0 0 20px var(--disc-glow), inset 0 0 0 1px var(--disc); }
+    100% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+}
+
+/* ---- Pager (multi-page claims only). Space is reserved from the start (min-height) so nothing
+ * shifts, but it stays hidden until the whole reveal is done -- the arrows appear at the end. ---- */
+.ccx__pager {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    margin-top: 10px; min-height: 28px;
+    opacity: 0; transition: opacity 0.45s ease;
+}
+.ccx__pager[hidden] { display: none; }
+.ccx.is-settled .ccx__pager, .ccx.is-static .ccx__pager { opacity: 1; }
+.ccx__dots { display: flex; align-items: center; gap: 6px; }
+.ccx__dot {
+    width: 7px; height: 7px; padding: 0; border: none; border-radius: 999px; cursor: pointer;
+    background: color-mix(in oklab, var(--pp-text) 28%, transparent);
+    transition: background 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+.ccx__dot:hover { background: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-text)); }
+.ccx__dot.is-on {
+    background: var(--pp-primary); transform: scale(1.3);
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pp-primary) 55%, transparent);
+}
+.ccx__pg {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px; cursor: pointer; padding: 0;
+    color: var(--pp-text); background: var(--pp-bg-3); border: 1px solid var(--pp-border);
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.ccx__pg svg { width: 16px; height: 16px; }
+.ccx__pg:hover:not(:disabled) { border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-3)); color: var(--pp-primary); }
+.ccx__pg:disabled { opacity: 0.3; cursor: default; }
+.ccx__pg:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+
+/* ---- Footer ---- */
+.ccx__foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid color-mix(in oklab, var(--pp-primary) 14%, var(--pp-border));
+    opacity: 0; transform: translateY(6px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+}
+.ccx.is-settled .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
+.ccx__rank { font-size: 13px; color: color-mix(in oklab, var(--pp-text) 75%, transparent); }
+.ccx__rank b { color: var(--pp-primary); font-weight: 800; }
+.ccx__done { flex: 0 0 auto; }
+
+/* ---- Reduced motion: no reveal, no bloom -- just show the summary. ---- */
+@media (prefers-reduced-motion: reduce) {
+    .ccx__scrim { transition: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__job .pp-horizon__fill { transition: none; }
+    .ccx__award.is-hit, .ccx__lv.is-levelup { animation: none; }
+}
+.ccx.is-static .ccx__scrim { opacity: 1; }
+.ccx.is-static .ccx__stage, .ccx.is-static .ccx__glow, .ccx.is-static .ccx__job { opacity: 1; transform: none; }
+
+/* ---- Dev replay harness (DEBUG only; see career.html) ---- */
+.ccx-dev {
+    position: fixed; left: 12px; bottom: 12px; z-index: 70;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 10px; border-radius: 12px;
+    background: color-mix(in oklab, var(--pp-bg-2) 92%, black); border: 1px dashed color-mix(in oklab, var(--pp-primary) 45%, var(--pp-border));
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6);
+    font-size: 12px;
+}
+.ccx-dev__title { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in oklab, var(--pp-primary) 80%, var(--pp-text)); }
+.ccx-dev__row { display: flex; flex-wrap: wrap; gap: 6px; max-width: 220px; }
+.ccx-dev__btn {
+    padding: 5px 9px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+    color: var(--pp-text); background: var(--pp-bg-3); border: 1px solid var(--pp-border);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ccx-dev__btn:hover { border-color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-3)); }

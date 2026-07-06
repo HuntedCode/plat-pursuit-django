@@ -91,7 +91,8 @@ def test_accept_all_with_nothing_claimable_is_noop():
     resp = _client(profile).post(URL, {'all': True}, format='json')
 
     assert resp.status_code == 200
-    assert resp.data == {'granted': 0, 'accepted': [], 'claimable_count': 0}
+    assert resp.data['granted'] == 0 and resp.data['accepted'] == [] and resp.data['claimable_count'] == 0
+    assert resp.data['claim']['jobs'] == []   # empty ceremony payload when nothing was claimed
 
 
 def test_unlinked_profile_is_forbidden():

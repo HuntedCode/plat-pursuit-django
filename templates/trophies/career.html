@@ -347,6 +347,7 @@
 {% block js_scripts %}
 {% if career %}
 <script src="{% static 'js/vendor/chart.umd.min.js' %}"></script>
+<script src="{% static 'js/claim-ceremony.js' %}"></script>
 <script>
 // Shared: count a number up from 0 to its target (data-countup attr, or the element's text),
 // easeOutCubic. Used by the hero/stats, the dossier tiles, the sheet rows, and the modal.
@@ -1129,7 +1130,14 @@ function ppCountUp(el, dur) {
             if (state.status === 'claimable') card.remove();   // it no longer matches the active filter
         });
         refreshAcceptAll(res.claimable_count || 0);
-        if (Toast && res.granted) Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+        // The claim ceremony IS the feedback (the award flows into the jobs it leveled). Toast only
+        // as a fallback when the ceremony module or its payload isn't available.
+        var claim = res.claim, Ceremony = PP.ClaimCeremony;
+        if (Ceremony && claim && claim.jobs && claim.jobs.length) {
+            Ceremony.play(claim);
+        } else if (Toast && res.granted) {
+            Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+        }
     }
     async function accept(payload, btn) {
         if (!API) return;
@@ -1521,5 +1529,114 @@ function ppCountUp(el, dur) {
     });
 })();
 </script>
+{% if ceremony_debug %}
+{# ── DEV-ONLY: claim-ceremony replay harness. Canned payloads (no DB, no accept) so the animation
+   can be iterated on endlessly. Gated on settings.DEBUG -- never ships to prod. ── #}
+<div class="ccx-dev" aria-hidden="true">
+    <div class="ccx-dev__title">Ceremony replay</div>
+    <div class="ccx-dev__row">
+        <button type="button" class="ccx-dev__btn" data-ccx="small">Small</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="levels">Level-ups</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="tier">Tier + rank</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="all">Claim-all</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="big13">13 jobs</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="big25">All 25</button>
+    </div>
+</div>
+<script>
+(function () {
+    // The real 25-job catalog (5 disciplines x 5), [slug, name, icon] per job, for the stress payloads.
+    var ROSTER_BY_DISC = {
+        combat: [['slayer', 'Slayer', 'swords'], ['gunslinger', 'Gunslinger', 'crosshair'], ['vanguard', 'Vanguard', 'shield'], ['outlaw', 'Outlaw', 'skull'], ['warrior', 'Warrior', 'sword']],
+        exploration: [['pathfinder', 'Pathfinder', 'compass'], ['infiltrator', 'Infiltrator', 'footprints'], ['cartographer', 'Cartographer', 'map'], ['mascot', 'Mascot', 'smile'], ['survivalist', 'Survivalist', 'tent']],
+        mind: [['mastermind', 'Mastermind', 'brain'], ['tactician', 'Tactician', 'flag'], ['architect', 'Architect', 'blocks'], ['tycoon', 'Tycoon', 'coins'], ['card-shark', 'Card Shark', 'spade']],
+        heart: [['mage', 'Mage', 'wand-sparkles'], ['champion', 'Champion', 'medal'], ['librarian', 'Librarian', 'library'], ['jester', 'Jester', 'drama'], ['exorcist', 'Exorcist', 'ghost']],
+        finesse: [['gamer', 'Gamer', 'gamepad-2'], ['driver', 'Driver', 'gauge'], ['athlete', 'Athlete', 'dumbbell'], ['maestro', 'Maestro', 'music'], ['freelancer', 'Freelancer', 'briefcase']],
+    };
+    function roster() {
+        // Round-robin across disciplines so any page (slice of 5) shows a mix of family colours.
+        var discs = Object.keys(ROSTER_BY_DISC), out = [];
+        for (var i = 0; i < 5; i++) {
+            discs.forEach(function (disc) {
+                var j = ROSTER_BY_DISC[disc][i];
+                out.push({ slug: j[0], name: j[1], disc: disc, icon: j[2] });
+            });
+        }
+        return out;   // 25 jobs
+    }
+    // A big claim over the first `count` catalog jobs: varied level jumps (some no-level, some multi),
+    // a scatter of tier crossings, and a plausible headline. Exercises the paged reveal + fast cascade.
+    function bigClaim(count) {
+        var jobs = roster().slice(0, count).map(function (j, i) {
+            var from = 1 + (i * 3) % 9;
+            var gained = i % 4;                        // 0..3 levels (0 = within-level nudge only)
+            var fromFrac = ((i * 17) % 55) / 100;      // 0.00..0.54
+            // Every tile's bar must visibly MOVE: a no-level tile nudges forward within its band; a
+            // level-up tile can land anywhere (it sweeps through full bands first regardless).
+            var toFrac = gained > 0 ? ((i * 29) % 70) / 100 : Math.min(0.92, fromFrac + 0.3);
+            return {
+                slug: j.slug, name: j.name, disc: j.disc, icon: j.icon,
+                xp: 6000, from_level: from, to_level: from + gained,
+                from_frac: fromFrac, to_frac: toFrac,
+                tiers: gained >= 3 ? [{ key: 'apprentice', name: 'Apprentice' }] : [],
+            };
+        });
+        return {
+            xp: count * 1500, accepted: ['multi'], first_claim: false, rank_now: 'Hunter VII',
+            jobs: jobs, pursuer: { from_level: 90, to_level: 96, ranks: [] },
+        };
+    }
+    var CANNED = {
+        // A within-level nudge: XP lands, bar creeps, no level. Proves it still feels like a reward.
+        small: {
+            xp: 6000, accepted: ['demo'], first_claim: false, rank_now: 'Hunter III',
+            jobs: [{ slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
+                     xp: 6000, from_level: 4, to_level: 4, from_frac: 0.1, to_frac: 0.9, tiers: [] }],
+            pursuer: { from_level: 40, to_level: 40, ranks: [] },
+        },
+        // A couple of clean level-ups across two disciplines.
+        levels: {
+            xp: 6000, accepted: ['demo'], first_claim: false, rank_now: 'Hunter IV',
+            jobs: [
+                { slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
+                  xp: 3000, from_level: 6, to_level: 8, from_frac: 0.5, to_frac: 0.5, tiers: [] },
+                { slug: 'cartographer', name: 'Cartographer', disc: 'exploration', icon: 'compass',
+                  xp: 3000, from_level: 9, to_level: 10, from_frac: 0.2, to_frac: 0.2,
+                  tiers: [{ key: 'apprentice', name: 'Apprentice' }] },
+            ],
+            pursuer: { from_level: 60, to_level: 63, ranks: [] },
+        },
+        // The onboarding-style burst: a big multi-tier jump (tests the compressed spin).
+        tier: {
+            xp: 90000, accepted: ['demo'], first_claim: true, rank_now: 'Ranger I',
+            jobs: [{ slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
+                     xp: 90000, from_level: 1, to_level: 31, from_frac: 0, to_frac: 0,
+                     tiers: [{ key: 'apprentice', name: 'Apprentice' }, { key: 'adept', name: 'Adept' }] }],
+            pursuer: { from_level: 25, to_level: 55, ranks: [{ key: 'recruit', name: 'Recruit' }, { key: 'ranger', name: 'Ranger' }] },
+        },
+        // Stress tests: the paged reveal (5 per page auto-play, then arrows to flip back).
+        get big13() { return bigClaim(13); },   // 3 pages (5 + 5 + 3)
+        get big25() { return bigClaim(25); },   // 5 pages
+        // Claim-all: a handful of jobs at once (single page, no pager).
+        all: {
+            xp: 30000, accepted: ['a', 'b', 'c'], first_claim: false, rank_now: 'Hunter V',
+            jobs: [
+                { slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair', xp: 6000, from_level: 3, to_level: 5, from_frac: 0.3, to_frac: 0.3, tiers: [] },
+                { slug: 'cartographer', name: 'Cartographer', disc: 'exploration', icon: 'compass', xp: 6000, from_level: 7, to_level: 9, from_frac: 0.1, to_frac: 0.1, tiers: [] },
+                { slug: 'tactician', name: 'Tactician', disc: 'mind', icon: 'brain', xp: 6000, from_level: 2, to_level: 4, from_frac: 0.6, to_frac: 0.6, tiers: [] },
+                { slug: 'enchanter', name: 'Enchanter', disc: 'heart', icon: 'wand-sparkles', xp: 6000, from_level: 5, to_level: 6, from_frac: 0.4, to_frac: 0.4, tiers: [] },
+                { slug: 'speedster', name: 'Speedster', disc: 'finesse', icon: 'gauge', xp: 6000, from_level: 8, to_level: 10, from_frac: 0.2, to_frac: 0.2, tiers: [{ key: 'apprentice', name: 'Apprentice' }] },
+            ],
+            pursuer: { from_level: 70, to_level: 80, ranks: [] },
+        },
+    };
+    document.querySelector('.ccx-dev').addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-ccx]');
+        if (!btn || !window.PlatPursuit || !PlatPursuit.ClaimCeremony) return;
+        PlatPursuit.ClaimCeremony.play(CANNED[btn.dataset.ccx]);
+    });
+})();
+</script>
+{% endif %}
 {% endif %}
 {% endblock %}

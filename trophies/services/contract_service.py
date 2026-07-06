@@ -27,7 +27,9 @@ from trophies.models import (
     ProfileJobXP, ProgressionMilestone, Trophy,
 )
 from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
-from trophies.util_modules.leveling import level_for_xp, ranks_crossed, tiers_crossed
+from trophies.util_modules.leveling import (
+    frac_into_level, level_for_xp, pursuer_rank_for_level, ranks_crossed, tiers_crossed,
+)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -330,6 +332,89 @@ def accept_contracts(profile, contracts=None):
     # claim-all flags its milestones the same way -- not just the first before XP starts landing.
     first_claim = not _has_any_job_xp(profile)
     return sum(accept_contract(profile, c, first_claim=first_claim) for c in contracts)
+
+
+# --- claim (the ceremony-facing accept) ------------------------------------
+
+def _levels_snapshot(profile, job_ids):
+    """{job_id: (logical level, total_xp)} for the given (bounded) jobs; (1, 0) floor for untouched."""
+    snap = {jid: (1, 0) for jid in job_ids}
+    for pjx in ProfileJobXP.objects.filter(profile=profile, job_id__in=job_ids).only('job_id', 'total_xp'):
+        snap[pjx.job_id] = (level_for_xp(pjx.total_xp), pjx.total_xp)
+    return snap
+
+
+def _empty_claim():
+    """A fresh, full-shape empty payload (same keys as the success path so callers see one shape).
+    A function, not a module constant, so each caller gets its own `accepted`/`jobs` lists."""
+    return {'xp': 0, 'accepted': [], 'first_claim': False, 'rank_now': '', 'jobs': [], 'pursuer': None}
+
+
+@transaction.atomic
+def claim(profile, *, contract=None, all_claimable=False):
+    """The ceremony-facing accept: bank the claimable XP (one Contract or every claimable one) and
+    return the full 'what just happened' payload that drives the claim animation -- per-job level
+    deltas + the tier/rank crossings, derived from before/after snapshots. Wraps the existing
+    accept_contract (idempotent, ledger-backed, milestone-logging); adds no new writes of its own.
+
+    The payload:
+        {xp, accepted:[slug], first_claim, rank_now,
+         jobs:[{slug, name, disc, icon, xp, from_level, to_level, from_frac, to_frac,
+                tiers:[{key,name}]}],   # every job the claim gave XP to (bar fills; may or may not level)
+         pursuer:{from_level, to_level, ranks:[{key,name}]}}
+    All work is bounded to the claimed Contracts' jobs (never the user's library)."""
+    if all_claimable:
+        contracts = [ec.contract for ec in claimable_contracts(profile)]
+    elif contract is not None:
+        contracts = [contract]
+    else:
+        contracts = []
+    contracts = sorted(contracts, key=lambda c: c.pk)
+    if not contracts:
+        return _empty_claim()
+
+    job_by_id = {j.pk: j for c in contracts for j in c.jobs.all()}   # Job PK is its slug
+    first_claim = not _has_any_job_xp(profile)
+    pre = _levels_snapshot(profile, job_by_id.keys())
+    pre_pursuer = _pursuer_level(profile)
+
+    accepted, total = [], 0
+    for c in contracts:
+        granted = accept_contract(profile, c, first_claim=first_claim)
+        if granted > 0:
+            accepted.append(c.slug)
+            total += granted
+    if not accepted:
+        return _empty_claim()
+
+    post = _levels_snapshot(profile, job_by_id.keys())
+    post_pursuer = _pursuer_level(profile)
+
+    jobs = []
+    for jid, job in job_by_id.items():
+        (frm_lvl, frm_xp), (to_lvl, to_xp) = pre[jid], post[jid]
+        if to_xp <= frm_xp:
+            continue   # this job received no XP from the claimed Contracts
+        jobs.append({
+            'slug': job.slug, 'name': job.name, 'disc': job.discipline, 'icon': job.icon,
+            'xp': to_xp - frm_xp,                      # XP this claim gave the job (the "+N" on its tile)
+            'from_level': frm_lvl, 'to_level': to_lvl,
+            'from_frac': frac_into_level(frm_xp),      # where the bar starts / lands within each level band
+            'to_frac': frac_into_level(to_xp),
+            'tiers': [{'key': k, 'name': n} for _lvl, k, n in tiers_crossed(frm_lvl, to_lvl)],
+        })
+    jobs.sort(key=lambda j: (j['to_level'] - j['from_level'], j['xp']), reverse=True)   # biggest promotions, then XP
+    return {
+        'xp': total,
+        'accepted': accepted,
+        'first_claim': first_claim,
+        'rank_now': pursuer_rank_for_level(post_pursuer)['label'],
+        'jobs': jobs,
+        'pursuer': {
+            'from_level': pre_pursuer, 'to_level': post_pursuer,
+            'ranks': [{'key': k, 'name': n} for _lvl, k, n, _hd in ranks_crossed(pre_pursuer, post_pursuer)],
+        },
+    }
 
 
 # --- cache repair ----------------------------------------------------------
