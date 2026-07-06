@@ -28,8 +28,8 @@ from trophies.models import (
 )
 from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
 from trophies.util_modules.leveling import (
-    frac_into_level, level_for_xp, pursuer_rank_for_level, ranks_crossed, tier_for_level, tier_rank,
-    tiers_crossed,
+    frac_into_level, level_for_xp, next_rank_floor, pursuer_rank_for_level, pursuer_rank_ladder,
+    ranks_crossed, tier_for_level, tier_rank, tiers_crossed,
 )
 
 
@@ -362,7 +362,8 @@ def claim(profile, *, contract=None, all_claimable=False):
         {xp, accepted:[slug], first_claim, rank_now,
          jobs:[{slug, name, disc, icon, xp, from_level, to_level, from_frac, to_frac, tier,
                 tiers:[{key,name,level,rank}]}],   # every job the claim gave XP to (bar fills; may or may not level)
-         pursuer:{from_level, to_level, from_label, to_label, rank_up, div_up, ranks:[{key,name}]}}
+         pursuer:{from_level, to_level, from_label, to_label, from_key, to_key, rank_up, div_up,
+                  ranks:[{key,name}], ladder, ladder_pre}}
     All work is bounded to the claimed Contracts' jobs (never the user's library)."""
     if all_claimable:
         contracts = [ec.contract for ec in claimable_contracts(profile)]
@@ -392,6 +393,16 @@ def claim(profile, *, contract=None, all_claimable=False):
     post_pursuer = _pursuer_level(profile)
     pre_rank = pursuer_rank_for_level(pre_pursuer)
     post_rank = pursuer_rank_for_level(post_pursuer)
+    # On a rank-up, the footer first fills the OLD rank (from_rank) to 100% -- completed to its top --
+    # BEFORE the hand-off, then swaps to the new rank on return. Basing it on the FROM rank (not the rank
+    # just below the new one) keeps it consistent with the hand-off's from->to on multi-rank skips.
+    # None for a division step.
+    ladder_pre = None
+    if post_rank['key'] != pre_rank['key']:
+        floor = next_rank_floor(pre_rank['key'])
+        if floor is not None:
+            ladder_pre = pursuer_rank_ladder(floor - 1)
+            ladder_pre['fill'] = 100
 
     jobs = []
     for jid, job in job_by_id.items():
@@ -420,11 +431,14 @@ def claim(profile, *, contract=None, all_claimable=False):
         'pursuer': {
             'from_level': pre_pursuer, 'to_level': post_pursuer,
             'from_label': pre_rank['label'], 'to_label': post_rank['label'],
+            'from_key': pre_rank['key'], 'to_key': post_rank['key'],   # for the hand-off screen's per-rank colours
             # Two finale intensities: rank_up = crossed into a new NAMED rank (heavy); div_up = climbed
             # a division within the same rank (lighter). Both false = no rank movement, no finale.
             'rank_up': post_rank['key'] != pre_rank['key'],
             'div_up': post_rank['key'] == pre_rank['key'] and post_rank['division'] != pre_rank['division'],
             'ranks': [{'key': k, 'name': n} for _lvl, k, n, _hd in ranks_crossed(pre_pursuer, post_pursuer)],
+            'ladder': pursuer_rank_ladder(post_pursuer),   # the new-rank ladder (footer after a rank-up / all else)
+            'ladder_pre': ladder_pre,                      # rank-up only: old rank filled 100% (footer pre hand-off)
         },
     }
 

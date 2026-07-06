@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block title %}Pursuer Rank Colours Workshop{% endblock %}
+
+{% comment %}
+Workshop (claim-ceremony Phase 3d): candidate colour systems for the 11 Pursuer ranks
+(Newbie -> Ascendant). Divisions within a rank SHARE the rank's colour; only the named rank
+changes hue, giving a quick, ascending "how high am I" read. Whatever wins gets wired into the
+.pgl--rank ladder (hero + job modal + claim ceremony) as a per-rank accent. Self-contained mock.
+{% endcomment %}
+
+{% block content %}
+<style>
+  .rcw-wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 80px; }
+  .rcw-card { background: var(--pp-bg-2); border: 1px solid var(--pp-border); border-radius: 16px; padding: 22px; margin-bottom: 26px; }
+  .rcw-h2 { font-size: 20px; font-weight: 800; }
+  .rcw-desc { font-size: 13px; color: var(--pp-text-mute, color-mix(in oklab, var(--pp-text) 65%, transparent)); margin: 4px 0 16px; max-width: 62ch; }
+
+  /* The ascending ladder: 11 rungs, each its rank's colour, name beneath. */
+  .rcw-ladder { display: flex; gap: 5px; align-items: stretch; }
+  .rcw-rung { flex: 1 1 0; min-width: 0; text-align: center; }
+  .rcw-bar { height: 26px; border-radius: 7px; background: var(--c); box-shadow: 0 0 12px color-mix(in oklab, var(--c) 40%, transparent), inset 0 1px 0 rgba(255,255,255,0.25); }
+  .rcw-name { font-size: 10px; font-weight: 700; margin-top: 6px; color: var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.02em; }
+
+  /* Sample rank pills (with divisions) to judge legibility of the label colour. */
+  .rcw-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .rcw-pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 999px;
+              font-size: 13px; font-weight: 800; color: var(--c);
+              background: color-mix(in oklab, var(--c) 12%, var(--pp-bg-3)); border: 1px solid color-mix(in oklab, var(--c) 40%, transparent); }
+  .rcw-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--c); box-shadow: 0 0 8px color-mix(in oklab, var(--c) 60%, transparent); }
+
+  /* .pgl--rank in context: a real ladder with each reached rung tinted by its rank. */
+  .rcw-pgl { display: flex; gap: 4px; margin-top: 20px; }
+  .rcw-pgl .seg { flex: 1 1 0; height: 9px; border-radius: 999px; background: var(--pp-bg-3); position: relative; overflow: hidden; }
+  .rcw-pgl .seg.reached::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, color-mix(in oklab, var(--c) 45%, var(--pp-bg-3)), var(--c)); }
+  .rcw-pgl .seg.cur { flex-grow: 2.4; box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--c) 75%, transparent), 0 0 10px color-mix(in oklab, var(--c) 45%, transparent); }
+  .rcw-pgl .seg.cur::after { width: 55%; }
+  .rcw-ctxrow { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .rcw-ctxlabel { font-size: 12px; font-weight: 800; }
+</style>
+
+<div class="rcw-wrap">
+  <div style="margin-bottom: 22px;">
+    <h1 style="font-size: 26px; font-weight: 800;">Pursuer Rank Colours</h1>
+    <p class="rcw-desc" style="max-width: 70ch;">
+      Eleven ranks, Newbie &rarr; Ascendant. Divisions (V&ndash;I) <b>share</b> their rank's colour &mdash; only the
+      named rank changes, so a glance tells you roughly how high someone is. Three ascending treatments below;
+      each shows the ladder, a few labelled pills, and how it reads in the real <code>.pgl--rank</code> bar
+      (Ranger current). Pick one and I'll wire it in.
+    </p>
+  </div>
+
+  <div class="rcw-card">
+    <div class="rcw-h2">A &middot; Prestige metals</div>
+    <p class="rcw-desc">A rarity climb: slate &rarr; bronze &rarr; silver &rarr; gold &rarr; gem &rarr; luminous &rarr; prismatic.
+      Reads instantly as "collector tiers," leans into the trophy-hunting soul. Most colourful.</p>
+    <div class="rcw-ladder" data-pal="A"></div>
+    <div class="rcw-pills" data-pal="A"></div>
+    <div class="rcw-pgl" data-pal="A"></div>
+    <div class="rcw-ctxrow"><span class="rcw-ctxlabel" data-curlabel="A"></span></div>
+  </div>
+
+  <div class="rcw-card">
+    <div class="rcw-h2">B &middot; Spectrum ascent</div>
+    <p class="rcw-desc">A smooth hue journey, cool &rarr; warm &rarr; transcendent. Position reads by hue alone;
+      very legible ordering, more "playful" energy. Risk: further from the restrained brand palette.</p>
+    <div class="rcw-ladder" data-pal="B"></div>
+    <div class="rcw-pills" data-pal="B"></div>
+    <div class="rcw-pgl" data-pal="B"></div>
+    <div class="rcw-ctxrow"><span class="rcw-ctxlabel" data-curlabel="B"></span></div>
+  </div>
+
+  <div class="rcw-card">
+    <div class="rcw-h2">C &middot; Tonal cyan ascent</div>
+    <p class="rcw-desc">One brand hue (cyan), ascending in brightness/energy from dim to brilliant white.
+      Most on-brand (respects the single-accent rule); subtle &mdash; the read is "brighter = higher" rather than distinct colours.</p>
+    <div class="rcw-ladder" data-pal="C"></div>
+    <div class="rcw-pills" data-pal="C"></div>
+    <div class="rcw-pgl" data-pal="C"></div>
+    <div class="rcw-ctxrow"><span class="rcw-ctxlabel" data-curlabel="C"></span></div>
+  </div>
+</div>
+
+<script>
+(function () {
+    var RANKS = ['Newbie', 'Recruit', 'Seeker', 'Hunter', 'Ranger', 'Warden', 'Marshal', 'Vanquisher', 'Paragon', 'Luminary', 'Ascendant'];
+    var PAL = {
+        A: ['#6b7280', '#a9713f', '#c68a4e', '#9aa6b3', '#c6d2df', '#d2a13f', '#ecc35c', '#3fbf8f', '#9a72f0', '#46c8f5', '#f2e7c4'],
+        B: ['#6b7280', '#4f7ef0', '#38b6d6', '#2fbf9f', '#52c25a', '#a8bf3f', '#e0b23f', '#e8853f', '#e0544f', '#b45ce0', '#eaf2ff'],
+        C: ['#3f5560', '#3f7385', '#3f8da6', '#3fa0bf', '#40b6dc', '#46c8f5', '#5fd4f8', '#7fdefa', '#a3ecfc', '#cbf4fe', '#ffffff'],
+    };
+    var CUR = 4;   // Ranger, the "current" rung in the .pgl context row
+    Object.keys(PAL).forEach(function (key) {
+        var cols = PAL[key];
+        // ladder
+        var lad = document.querySelector('.rcw-ladder[data-pal="' + key + '"]');
+        cols.forEach(function (c, i) {
+            var rung = document.createElement('div'); rung.className = 'rcw-rung'; rung.style.setProperty('--c', c);
+            rung.innerHTML = '<div class="rcw-bar"></div><div class="rcw-name">' + RANKS[i] + '</div>';
+            lad.appendChild(rung);
+        });
+        // sample pills (with divisions where applicable)
+        var pills = document.querySelector('.rcw-pills[data-pal="' + key + '"]');
+        [[0, 'Newbie'], [1, 'Recruit IV'], [3, 'Hunter II'], [5, 'Warden I'], [8, 'Paragon III'], [10, 'Ascendant']].forEach(function (s) {
+            var p = document.createElement('span'); p.className = 'rcw-pill'; p.style.setProperty('--c', cols[s[0]]);
+            p.innerHTML = '<span class="rcw-dot"></span>' + s[1];
+            pills.appendChild(p);
+        });
+        // .pgl--rank context (Ranger current)
+        var pgl = document.querySelector('.rcw-pgl[data-pal="' + key + '"]');
+        cols.forEach(function (c, i) {
+            var seg = document.createElement('div'); seg.className = 'seg' + (i < CUR ? ' reached' : (i === CUR ? ' cur reached' : ''));
+            seg.style.setProperty('--c', c);
+            pgl.appendChild(seg);
+        });
+        var cl = document.querySelector('[data-curlabel="' + key + '"]');
+        cl.textContent = 'Ranger III'; cl.style.color = cols[CUR];
+    });
+})();
+</script>
+{% endblock %}

@@ -13,6 +13,21 @@
     --disc-mind:        oklch(0.72 0.16 285);
     --disc-heart:       oklch(0.72 0.19 0);
     --disc-finesse:     oklch(0.82 0.15 75);
+
+    /* Pursuer rank accents (achievement-encoding, like trophy tiers): an ascending spectrum,
+     * cool -> warm -> transcendent. Divisions share their rank's colour; only the named rank
+     * changes hue. Distinct from the cyan brand accent, which still owns "active / interactive". */
+    --rank-newbie:     #6b7280;
+    --rank-recruit:    #4f7ef0;
+    --rank-seeker:     #38b6d6;
+    --rank-hunter:     #2fbf9f;
+    --rank-ranger:     #52c25a;
+    --rank-warden:     #aeba48;
+    --rank-marshal:    #e0b23f;
+    --rank-vanquisher: #e8853f;
+    --rank-paragon:    #e06256;
+    --rank-luminary:   #b45ce0;
+    --rank-ascendant:  #e8f1ff;
 }
 
 /* ---- Lab view toggle (Table / Radar) ---- */
@@ -384,16 +399,21 @@
 .pgl { --pgl-accent: var(--disc, var(--pp-primary)); display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
 .pgl--rank { --pgl-accent: var(--pp-primary); }
 .pgl__track { display: flex; gap: 4px; align-items: stretch; }
-.pgl__rung { flex: 1 1 0; min-width: 0; height: 7px; border-radius: 999px; background: var(--pp-bg-3); position: relative; overflow: hidden; isolation: isolate; transition: flex-grow 0.3s var(--pp-ease, ease); }
-.pgl__rung::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; width: var(--f, 0%); border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--pgl-accent) 45%, var(--pp-bg-3)), var(--pgl-accent)); transition: width 0.45s var(--pp-ease, ease); }
+/* --rung-c is the per-rung fill colour: defaults to the ladder accent (job-tier ladders stay one
+ * discipline colour), but the RANK ladder sets it per rung to that rank's spectrum colour. */
+.pgl__rung { --rung-c: var(--pgl-accent); flex: 1 1 0; min-width: 0; height: 7px; border-radius: 999px; background: var(--pp-bg-3); position: relative; overflow: hidden; isolation: isolate; transition: flex-grow 0.3s var(--pp-ease, ease); }
+.pgl__rung::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; width: var(--f, 0%); border-radius: 999px; background: linear-gradient(90deg, color-mix(in oklab, var(--rung-c) 45%, var(--pp-bg-3)), var(--rung-c)); transition: width 0.45s var(--pp-ease, ease); }
 /* The current rung widens (a subtle "you are here" focus) + glows. */
-.pgl__rung.is-current { flex-grow: 2.2; box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--pgl-accent) 75%, transparent), 0 0 9px color-mix(in oklab, var(--pgl-accent) 45%, transparent); }
+/* Every filled rung glows in its own colour (glow earned by state); the current rung glows stronger. */
+.pgl__rung.is-on { box-shadow: 0 0 7px color-mix(in oklab, var(--rung-c) 42%, transparent); }
+.pgl__rung.is-current { flex-grow: 2.2; box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--rung-c) 78%, transparent), 0 0 12px color-mix(in oklab, var(--rung-c) 50%, transparent); }
 /* Division ticks (Pursuer rank only): split the current rung into its 5 V..I divisions; the fill
    lands in the current one. Above the fill (z-index) so it reads across filled + unfilled. */
 .pgl__divs { position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none; background-image: repeating-linear-gradient(90deg, transparent 0 calc(20% - 1px), rgba(255, 255, 255, 0.32) calc(20% - 1px) 20%); }
 .pgl__foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.pgl__cur { font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: var(--pgl-accent); }
+.pgl__cur { font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: var(--pgl-cur-c, var(--pgl-accent)); text-shadow: 0 0 10px color-mix(in oklab, var(--pgl-cur-c, var(--pgl-accent)) 45%, transparent); }
 .pgl__next { font-size: 11px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
+.pgl__next-n { font-variant-numeric: tabular-nums; }   /* steady width while counting down */
 /* Premium reveal (both ladders): on mount -- the hero ladder on page load (joining the ring/level
    entrance), the job ladder on modal inject -- each rung draws itself left-to-right up to the current
    tier, the current rung blooms once, and (rank ladder) the division ticks fade in last to spotlight
@@ -406,8 +426,8 @@
    --cstart = when that creep begins (past the reached cascade). Glow pre-mixed (no color-mix in a keyframe). */
 .pgl__rung.is-current {
     --cstart: calc(0.22s + (var(--i, 0) - 1) * 55ms + 0.75s);
-    --pglg-a: 0 0 0 1.5px color-mix(in oklab, var(--pgl-accent) 75%, transparent), 0 0 9px color-mix(in oklab, var(--pgl-accent) 45%, transparent);
-    --pglg-b: 0 0 0 1.5px color-mix(in oklab, var(--pgl-accent) 95%, transparent), 0 0 20px color-mix(in oklab, var(--pgl-accent) 72%, transparent);
+    --pglg-a: 0 0 0 1.5px color-mix(in oklab, var(--rung-c) 75%, transparent), 0 0 9px color-mix(in oklab, var(--rung-c) 45%, transparent);
+    --pglg-b: 0 0 0 1.5px color-mix(in oklab, var(--rung-c) 95%, transparent), 0 0 20px color-mix(in oklab, var(--rung-c) 72%, transparent);
     animation: pglBloom 0.7s ease both; animation-delay: calc(var(--cstart) + 0.7s);
 }
 .pgl__rung.is-current::after { animation-duration: 1s; animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); animation-delay: var(--cstart); }

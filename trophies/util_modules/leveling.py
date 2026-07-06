@@ -197,6 +197,15 @@ def job_tier_ladder(level):
     }
 
 
+def next_rank_floor(key):
+    """The Pursuer Level at which the rank AFTER `key` begins (None if `key` is the apex). Used to
+    complete the OLD rank's bar (fill to its top) in the claim ceremony's pre-hand-off footer."""
+    for i, (_lvl, k, _n, _h) in enumerate(PURSUER_RANKS):
+        if k == key:
+            return PURSUER_RANKS[i + 1][0] if i + 1 < len(PURSUER_RANKS) else None
+    return None
+
+
 def pursuer_rank_ladder(level):
     """The 11-rung Pursuer rank ladder for a Pursuer Level. Each rung: {key, name, min_level,
     reached, current}. `fill` = % through the current TIER toward the next; `current` is the full

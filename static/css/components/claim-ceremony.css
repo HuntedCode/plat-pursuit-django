@@ -265,23 +265,118 @@
 .ccx__pg:disabled { opacity: 0.3; cursor: default; }
 .ccx__pg:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 
-/* ---- Footer ---- */
-.ccx__foot {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    margin-top: 12px; padding-top: 12px;
+/* ---- Resting Pursuer rank ladder (the hero's .pgl--rank, static). Space reserved from build so
+ * nothing shifts; the ladder is injected + revealed at settle. ---- */
+.ccx__rankbar {
+    min-height: 34px; margin-top: 12px; padding-top: 12px;
     border-top: 1px solid color-mix(in oklab, var(--pp-primary) 14%, var(--pp-border));
+    opacity: 0; transition: opacity 0.45s ease;
+}
+.ccx.is-settled .ccx__rankbar, .ccx.is-static .ccx__rankbar { opacity: 1; }
+.ccx__rankbar .pgl { margin-top: 0; }   /* the .pgl default top margin isn't needed here */
+
+/* ---- Footer (just Continue now; the rank lives in the ladder above) ---- */
+.ccx__foot {
+    display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 10px;
     opacity: 0; transform: translateY(6px);
     transition: opacity 0.45s ease, transform 0.45s ease;
 }
 .ccx.is-settled .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
-.ccx__rank { font-size: 13px; color: color-mix(in oklab, var(--pp-text) 75%, transparent); }
-.ccx__rank b { color: var(--pp-primary); font-weight: 800; }
 .ccx__done { flex: 0 0 auto; }
+
+/* ---- Rank finale: a takeover played after the pages when the Pursuer rank moves. Two intensities:
+ * a division step is lighter; a full rank-up (.is-heavy) adds the scan-beam + a bigger label. ---- */
+.ccx__finale {
+    position: absolute; inset: 0; z-index: 5; overflow: hidden; border-radius: inherit;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(120% 90% at 50% 40%,
+        color-mix(in oklab, var(--pp-primary) 20%, var(--pp-bg-1, var(--pp-bg-2))) 0%, var(--pp-bg-1, var(--pp-bg-2)) 72%);
+    opacity: 0; transition: opacity 0.34s ease;
+}
+.ccx__finale[hidden] { display: none; }
+.ccx__finale.is-in { opacity: 1; }
+
+/* Bottom flood: the rank colour washes up from the bottom edge. --from (old rank) is present pre
+ * hand-off; at the hand-off it fades out as --to (new rank) fades in -- so the whole card's colour
+ * changes with the labels. For a division step old==new colour, so it simply stays that hue. */
+.ccx__finale-flood {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 58%; z-index: 0; pointer-events: none;
+    background: linear-gradient(to top,
+        var(--flood-c, var(--pp-primary)) 0%,
+        color-mix(in oklab, var(--flood-c, var(--pp-primary)) 35%, transparent) 38%,
+        transparent 100%);
+    opacity: 0; transition: opacity 0.6s ease;
+}
+.ccx__finale.is-in .ccx__finale-flood--from { opacity: 0.5; }
+.ccx__finale.is-hand .ccx__finale-flood--from { opacity: 0; }
+.ccx__finale.is-hand .ccx__finale-flood--to { opacity: 0.55; transition-delay: 0.22s; }
+
+.ccx__finale-body { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; padding: 0 26px; text-align: center; }
+.ccx__finale-eyebrow {
+    font-size: 12px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--pp-primary) 80%, var(--pp-text));
+}
+/* ---- The rank hand-off: old rank lifts away, new rank rises in and lands (each its own colour). ----
+ * Both labels occupy the same centred slot; is-hand animates the changing of the guard. --rc is each
+ * label's rank colour (set inline). */
+.ccx__handoff { position: relative; width: 100%; min-height: 4.8rem; display: flex; align-items: center; justify-content: center; }
+.ccx__ho-from, .ccx__ho-to {
+    position: absolute; left: 0; right: 0; line-height: 1; color: var(--rc, var(--pp-primary));
+}
+
+/* OLD rank: fades in (is-in), GLOWS as a wind-up (is-glow), then lifts away (is-hand). The first two
+ * are transitions so they compose; only the lift-off is a keyframe animation. */
+.ccx__ho-from {
+    font-size: 1.9rem; opacity: 0; transform: translateY(10px); text-shadow: 0 0 0 transparent;
+    transition: opacity 0.5s ease, transform 0.5s ease, text-shadow 0.65s ease;
+}
+.ccx__finale.is-in .ccx__ho-from { opacity: 0.9; transform: translateY(0); }
+.ccx__finale.is-glow .ccx__ho-from { opacity: 1; text-shadow: 0 0 26px var(--rc), 0 0 9px var(--rc); }
+.ccx__finale.is-hand .ccx__ho-from { animation: ccxHoFromOut 0.72s cubic-bezier(0.4, 0, 0.9, 0.3) both; }
+
+/* NEW rank: hidden until the hand-off, then rises up and lands with an overshoot. */
+.ccx__ho-to {
+    font-size: 2.4rem; opacity: 0; transform: translateY(44px) scale(0.78);
+    text-shadow: 0 0 30px color-mix(in oklab, var(--rc, var(--pp-primary)) 52%, transparent);
+}
+.ccx__finale.is-heavy .ccx__ho-to { font-size: 3.1rem; }
+.ccx__finale.is-hand .ccx__ho-to { animation: ccxHoToIn 0.92s cubic-bezier(0.2, 1.4, 0.35, 1) both; animation-delay: 0.22s; }
+
+/* the up-chevron ascent streak between them */
+.ccx__ho-arrow { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--pp-primary); opacity: 0; }
+.ccx__ho-arrow svg { width: 15px; height: 15px; }
+.ccx__finale.is-hand .ccx__ho-arrow { animation: ccxHoArrow 0.85s ease both; }
+
+@keyframes ccxHoFromOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-48px) scale(0.9); } }
+@keyframes ccxHoArrow { 0% { opacity: 0; transform: translateY(20px); } 40% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-34px); } }
+@keyframes ccxHoToIn {
+    0% { opacity: 0; transform: translateY(44px) scale(0.78); }
+    60% { opacity: 1; transform: translateY(0) scale(1.08); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Continue lives on the screen, hidden until it's HELD -- the user closes it themselves (screenshot / admire). */
+.ccx__finale-done { margin-top: 12px; opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity 0.4s ease, transform 0.4s ease; }
+.ccx__finale.is-held .ccx__finale-done { opacity: 1; transform: none; pointer-events: auto; }
+
+/* Scan-beam sweep (heavy only): a bright band crossing the screen once (GPU transform + opacity). */
+.ccx__finale-scan {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 40%; z-index: 6; pointer-events: none;
+    opacity: 0; transform: translateX(-130%); filter: blur(2px);
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--pp-primary) 55%, white) 50%, transparent);
+}
+.ccx__finale.is-scan .ccx__finale-scan { animation: ccxScanSweep 0.85s ease-in-out both; }
+@keyframes ccxScanSweep {
+    0% { transform: translateX(-130%); opacity: 0; }
+    15% { opacity: 0.9; }
+    85% { opacity: 0.9; }
+    100% { transform: translateX(320%); opacity: 0; }
+}
 
 /* ---- Reduced motion: no reveal, no bloom -- just show the summary. ---- */
 @media (prefers-reduced-motion: reduce) {
     .ccx__scrim { transition: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-    .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__summary, .ccx__jtier, .ccx__job .pp-horizon__fill { transition: none; }
+    .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__summary, .ccx__rankbar, .ccx__jtier, .ccx__job .pp-horizon__fill { transition: none; }
     .ccx__award.is-hit, .ccx__lv.is-levelup, .ccx__lv.is-threshold { animation: none; }
     .ccx__sparks { display: none; }   /* blooms are skipped in reduced motion anyway; belt + braces */
 }

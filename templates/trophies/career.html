@@ -71,15 +71,15 @@
             {% comment %} Pursuer rank ladder: all 11 rungs Newbie -> Ascendant, filled to your current
             rank (the current rung shows partial progress through the tier), each reached rung dated. {% endcomment %}
             {% if hero.rank_ladder %}
-            <div class="pgl pgl--rank" aria-label="Pursuer rank ladder">
+            <div class="pgl pgl--rank" aria-label="Pursuer rank ladder" style="--pgl-cur-c: var(--rank-{{ hero.pursuer_rank.key }});">
                 <div class="pgl__track">
                     {% for rung in hero.rank_ladder.rungs %}
-                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
+                    <span class="pgl__rung{% if rung.current %} is-current{% endif %}{% if rung.reached %} is-on{% endif %}" style="--f: {% if rung.current %}{{ hero.rank_ladder.fill }}{% elif rung.reached %}100{% else %}0{% endif %}%; --i: {{ forloop.counter0 }};{% if rung.current %} --rung-c: var(--rank-{{ rung.key }});{% endif %}" title="{{ rung.name }} &middot; Pursuer Lv {{ rung.min_level }}{% if rung.reached_at %} &middot; reached {{ rung.reached_at|date:'M j, Y' }}{% elif not rung.reached %} &middot; locked{% endif %}">{% if rung.current and hero.pursuer_rank.division %}<span class="pgl__divs" aria-hidden="true"></span>{% endif %}</span>
                     {% endfor %}
                 </div>
                 <div class="pgl__foot">
-                    <span class="pgl__cur pgl__cur--{{ hero.pursuer_rank.key }}">{{ hero.pursuer_rank.label }}</span>
-                    {% if hero.pursuer_rank.next_label %}<span class="pgl__next">{{ hero.pursuer_rank.levels_to_next }} to {{ hero.pursuer_rank.next_label }}</span>{% else %}<span class="pgl__next">Apex reached</span>{% endif %}
+                    <span class="pgl__cur">{{ hero.pursuer_rank.label }}</span>
+                    {% if hero.pursuer_rank.next_label %}<span class="pgl__next"><b class="pgl__next-n" data-cd-from="{{ hero.pursuer_rank.next_level }}" data-cd-to="{{ hero.pursuer_rank.levels_to_next }}">{{ hero.pursuer_rank.levels_to_next }}</b> to {{ hero.pursuer_rank.next_label }}</span>{% else %}<span class="pgl__next">Apex reached</span>{% endif %}
                 </div>
             </div>
             {% endif %}
@@ -890,6 +890,34 @@ function ppCountUp(el, dur) {
     els.forEach(function (el) { io.observe(el); });
 })();
 
+// Premium: the hero rank ladder's "X to next" counts DOWN from the from-zero distance (the next
+// boundary level -- thousands, high up) to the real remaining, in sync with the bars filling on load.
+(function () {
+    var el = document.querySelector('.pgl--rank .pgl__next-n');
+    if (!el || el.dataset.cdFrom == null) return;
+    var from = parseFloat(el.dataset.cdFrom), to = parseFloat(el.dataset.cdTo);
+    if (isNaN(from) || isNaN(to)) return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function run() {
+        if (reduce) { el.textContent = to.toLocaleString(); return; }
+        var dur = 1800, start = null, span = to - from;
+        function step(ts) {
+            if (start === null) start = ts;
+            var p = Math.min(1, (ts - start) / dur);
+            var eased = 1 - Math.pow(1 - p, 3);   // easeOutCubic (matches the ladder fill)
+            el.textContent = Math.round(from + span * eased).toLocaleString();
+            if (p < 1) requestAnimationFrame(step); else el.textContent = to.toLocaleString();
+        }
+        requestAnimationFrame(step);
+    }
+    if (reduce || !('IntersectionObserver' in window)) { run(); return; }
+    el.textContent = from.toLocaleString();   // start big (no flash of the final number)
+    var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) { if (e.isIntersecting) { run(); io.unobserve(e.target); } });
+    }, { threshold: 0.4 });
+    io.observe(el);
+})();
+
 // Premium: hover a legend row (or arc) -> spotlight its discipline arc, dim the rest, pause the spin.
 (function () {
     var ring = document.querySelector('.lab-dna');
@@ -1540,6 +1568,7 @@ function ppCountUp(el, dur) {
         <button type="button" class="ccx-dev__btn" data-ccx="alltiers">All tiers</button>
         <button type="button" class="ccx-dev__btn" data-ccx="divstep">Div step</button>
         <button type="button" class="ccx-dev__btn" data-ccx="tier">Rank up</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="toprank">Top rank</button>
         <button type="button" class="ccx-dev__btn" data-ccx="all">Claim-all</button>
         <button type="button" class="ccx-dev__btn" data-ccx="big13">13 jobs</button>
         <button type="button" class="ccx-dev__btn" data-ccx="big25">All 25</button>
@@ -1572,6 +1601,36 @@ function ppCountUp(el, dur) {
         for (var i = 0; i < TIER_BANDS.length; i++) { if (level >= TIER_BANDS[i][0]) return TIER_BANDS[i][1]; }
         return 'Initiate';
     }
+    // Pursuer ranks (mirror of leveling.PURSUER_RANKS) so the harness can build a self-consistent finale.
+    var PRANKS = [[0, 'newbie', 'Newbie', false], [35, 'recruit', 'Recruit', true], [65, 'seeker', 'Seeker', true], [115, 'hunter', 'Hunter', true], [195, 'ranger', 'Ranger', true], [305, 'warden', 'Warden', true], [465, 'marshal', 'Marshal', true], [685, 'vanquisher', 'Vanquisher', true], [985, 'paragon', 'Paragon', true], [1405, 'luminary', 'Luminary', true], [2025, 'ascendant', 'Ascendant', false]];
+    var RNUM = ['V', 'IV', 'III', 'II', 'I'];
+    function rankFor(level) {
+        var idx = 0; for (var i = 0; i < PRANKS.length; i++) { if (level >= PRANKS[i][0]) idx = i; else break; }
+        var r = PRANKS[idx], nextFloor = idx + 1 < PRANKS.length ? PRANKS[idx + 1][0] : null;
+        if (!r[3]) return { key: r[1], name: r[2], division: null, label: r[2], next_label: nextFloor != null ? PRANKS[idx + 1][2] : null, next_level: nextFloor, levels_to_next: nextFloor != null ? nextFloor - level : 0 };
+        var step = (nextFloor - r[0]) / 5, band = Math.min(4, Math.floor((level - r[0]) / step)), nextBoundary = Math.round(r[0] + (band + 1) * step);
+        return { key: r[1], name: r[2], division: 5 - band, label: r[2] + ' ' + RNUM[band], next_label: band + 1 < 5 ? (r[2] + ' ' + RNUM[band + 1]) : PRANKS[idx + 1][2], next_level: nextBoundary, levels_to_next: Math.max(0, nextBoundary - level) };
+    }
+    function rankLadder(level) {
+        var cur = rankFor(level);
+        var rungs = PRANKS.map(function (r) { return { key: r[1], name: r[2], min_level: r[0], reached: level >= r[0], current: r[1] === cur.key }; });
+        var idx = 0; for (var i = 0; i < PRANKS.length; i++) { if (PRANKS[i][1] === cur.key) { idx = i; break; } }
+        var tmin = PRANKS[idx][0], tnext = idx + 1 < PRANKS.length ? PRANKS[idx + 1][0] : null;
+        var fill = tnext == null ? 100 : Math.round((level - tmin) / (tnext - tmin) * 100);
+        return { rungs: rungs, fill: Math.max(0, Math.min(100, fill)), current: cur };
+    }
+    function pursuerBlock(f, t) {
+        var fr = rankFor(f), tr = rankFor(t), ranks = [];
+        PRANKS.forEach(function (r) { if (f < r[0] && r[0] <= t) ranks.push({ key: r[1], name: r[2] }); });
+        var ladderPre = null;
+        if (fr.key !== tr.key) {
+            var frIdx = 0;
+            PRANKS.forEach(function (r, i) { if (r[1] === fr.key) frIdx = i; });   // complete the OLD rank (its top)
+            var floor = frIdx + 1 < PRANKS.length ? PRANKS[frIdx + 1][0] : null;
+            if (floor != null) { ladderPre = rankLadder(floor - 1); ladderPre.fill = 100; }
+        }
+        return { from_level: f, to_level: t, from_label: fr.label, to_label: tr.label, from_key: fr.key, to_key: tr.key, rank_up: fr.key !== tr.key, div_up: fr.key === tr.key && fr.division !== tr.division, ranks: ranks, ladder: rankLadder(t), ladder_pre: ladderPre };
+    }
     // A big claim over the first `count` catalog jobs: varied level jumps (some no-level, some multi),
     // a scatter of tier crossings, and a plausible headline. Exercises the paged reveal + fast cascade.
     function bigClaim(count) {
@@ -1592,10 +1651,10 @@ function ppCountUp(el, dur) {
                 tier: tierName(to), tiers: tiers,
             };
         });
+        var pb = pursuerBlock(90, 96);   // a division step -> the lighter finale after a big claim
         return {
-            xp: count * 1500, accepted: ['multi'], first_claim: false, rank_now: 'Hunter VII',
-            jobs: jobs,
-            pursuer: { from_level: 90, to_level: 96, from_label: 'Hunter VII', to_label: 'Hunter VII', rank_up: false, div_up: false, ranks: [] },
+            xp: count * 1500, accepted: ['multi'], first_claim: false, rank_now: pb.to_label,
+            jobs: jobs, pursuer: pb,
         };
     }
     var CANNED = {
@@ -1650,6 +1709,15 @@ function ppCountUp(el, dur) {
                      tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }, { key: 'adept', name: 'Adept', level: 25, rank: 2 }] }],
             pursuer: { from_level: 25, to_level: 55, from_label: 'Newbie', to_label: 'Recruit V', rank_up: true, div_up: false, ranks: [{ key: 'recruit', name: 'Recruit' }] },
         },
+        // A high-end rank-up (Paragon I -> Luminary V): tests the top of the colour spectrum + hand-off.
+        toprank: {
+            xp: 60000, accepted: ['demo'], first_claim: false, rank_now: 'x',
+            jobs: [
+                { slug: 'librarian', name: 'Librarian', disc: 'heart', icon: 'library', xp: 30000, from_level: 42, to_level: 51, from_frac: 0.3, to_frac: 0.3, tiers: [{ key: 'expert', name: 'Expert', level: 50, rank: 3 }] },
+                { slug: 'tycoon', name: 'Tycoon', disc: 'mind', icon: 'coins', xp: 30000, from_level: 47, to_level: 55, from_frac: 0.5, to_frac: 0.5, tiers: [] },
+            ],
+            pursuer: { from_level: 1390, to_level: 1420 },   // post-process rebuilds -> Paragon I -> Luminary V
+        },
         // Stress tests: the paged reveal (5 per page auto-play, then arrows to flip back).
         get big13() { return bigClaim(13); },   // 3 pages (5 + 5 + 3)
         get big25() { return bigClaim(25); },   // 5 pages
@@ -1666,9 +1734,12 @@ function ppCountUp(el, dur) {
             pursuer: { from_level: 70, to_level: 80, from_label: 'Seeker II', to_label: 'Seeker II', rank_up: false, div_up: false, ranks: [] },
         },
     };
-    // Fill each STATIC payload's resting tier from its to_level (the getters set their own).
-    [CANNED.small, CANNED.levels, CANNED.divstep, CANNED.tier, CANNED.all, CANNED.alltiers].forEach(function (p) {
+    // Normalize each STATIC payload (the getters set their own): fill resting tiers, and rebuild the
+    // pursuer block from the real rank/division math so the finale + labels are self-consistent.
+    [CANNED.small, CANNED.levels, CANNED.divstep, CANNED.tier, CANNED.all, CANNED.alltiers, CANNED.toprank].forEach(function (p) {
         p.jobs.forEach(function (j) { if (j.tier == null) j.tier = tierName(j.to_level); });
+        p.pursuer = pursuerBlock(p.pursuer.from_level, p.pursuer.to_level);
+        p.rank_now = p.pursuer.to_label;
     });
     document.querySelector('.ccx-dev').addEventListener('click', function (e) {
         var btn = e.target.closest('[data-ccx]');

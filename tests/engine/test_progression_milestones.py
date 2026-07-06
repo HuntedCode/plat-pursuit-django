@@ -116,6 +116,8 @@ def test_claim_returns_what_happened_payload():
     assert any(r['key'] == 'recruit' for r in p['ranks'])
     assert p['rank_up'] is True and p['div_up'] is False               # Newbie -> Recruit = a full rank-up
     assert p['from_label'] and p['to_label']                           # finale announces the new rank
+    assert p['from_key'] == 'newbie' and p['to_key'] == 'recruit'      # rank keys drive the hand-off colours
+    assert p['ladder_pre'] and p['ladder_pre']['fill'] == 100          # rank-up: old rank filled 100% pre hand-off
     assert result['rank_now']   # a display label
 
 

@@ -406,6 +406,7 @@ urlpatterns = [
     path('design/lab/', LabWorkshopView.as_view(), name='design_lab_preview'),
     path('design/research-panel/', DesignResearchPanelView.as_view(), name='design_research_panel_preview'),
     path('design/mobile-subnav/', TemplateView.as_view(template_name='design/mobile_subnav.html'), name='design_mobile_subnav'),
+    path('design/rank-colours/', TemplateView.as_view(template_name='design/rank_colours_preview.html'), name='design_rank_colours_preview'),
 
     path('users/', include('users.urls')),
     path('accounts/', include('allauth.urls')),

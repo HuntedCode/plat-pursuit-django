@@ -45,6 +45,20 @@
         });
     }
 
+    // Interpolate el's integer from -> to over dur (used for the footer "X to next" counting down as
+    // the rank bar fills). Bails to `to` if the ceremony is dismissed.
+    function countTo(el, from, to, dur, alive) {
+        var start = null, span = to - from;
+        function step(ts) {
+            if (alive && !alive()) { el.textContent = to; return; }
+            if (start === null) start = ts;
+            var p = Math.min(1, (ts - start) / dur);
+            el.textContent = Math.round(from + span * easeOut(p)).toLocaleString();
+            if (p < 1) requestAnimationFrame(step); else el.textContent = to;
+        }
+        requestAnimationFrame(step);
+    }
+
     // Drive a Horizon bar (the kit's progress primitive) to `pct` by setting --horizon-progress on
     // the .pp-horizon element; the .pp-horizon__fill child carries the width transition. `animate=false`
     // snaps instantly (used to reset to 0 between level bands). Resolves on the fill's transitionend,
@@ -82,9 +96,9 @@
 
     // Hot arcing sparks (the kit's fabrication vocabulary -- NOT confetti). Spawned into the overlay's
     // fixed spark layer at a viewport point; each arcs up-and-out then falls under "gravity" and fades.
-    function sparkBurst(layer, cx, cy, discKey, n) {
+    // `color` is any CSS colour string (a discipline var for tier blooms, the primary accent for ranks).
+    function sparkBurst(layer, cx, cy, color, n) {
         if (!layer) return;
-        var color = 'var(--disc-' + discKey + ', var(--pp-primary))';
         for (var i = 0; i < n; i++) {
             var s = document.createElement('span');
             s.className = 'ccx__spark';
@@ -115,7 +129,7 @@
         // Escalate toward Legend: Apprentice (rank 1) ~11 sparks .. Legend (rank 7) ~29. The deeper the
         // tier, the bigger the burst -- these crossings are rarer and harder-won.
         var n = 8 + (rank || 1) * 3;
-        sparkBurst(layer, r.left + r.width / 2, r.top + r.height / 2, discKey, n);
+        sparkBurst(layer, r.left + r.width / 2, r.top + r.height / 2, 'var(--disc-' + discKey + ', var(--pp-primary))', n);
         var stamp = document.createElement('div');
         stamp.className = 'ccx__tierstamp';
         var lvTag = document.createElement('span');
@@ -303,6 +317,50 @@
         });
     }
 
+    // Build the Pursuer rank ladder (.pgl--rank) from the payload -- same markup the hero uses, so its
+    // built-in pglDraw/pglBloom/pglTicks reveal auto-plays on mount (the "fills to your rank" animation).
+    function buildLadder(ladder) {
+        var wrap = document.createElement('div');
+        wrap.className = 'pgl pgl--rank';
+        if (ladder.current && ladder.current.key) wrap.style.setProperty('--pgl-cur-c', 'var(--rank-' + ladder.current.key + ')');
+        var track = document.createElement('div');
+        track.className = 'pgl__track';
+        (ladder.rungs || []).forEach(function (r, i) {
+            var rung = document.createElement('span');
+            rung.className = 'pgl__rung' + (r.current ? ' is-current' : '') + (r.reached ? ' is-on' : '');
+            rung.style.setProperty('--f', (r.current ? ladder.fill : (r.reached ? 100 : 0)) + '%');
+            rung.style.setProperty('--i', i);
+            // Only the CURRENT rung takes its rank colour; reached rungs stay the cyan default (a clean
+            // brand trail + a coloured "you are here"). --pgl-cur-c below colours the label to match.
+            if (r.current && r.key) rung.style.setProperty('--rung-c', 'var(--rank-' + r.key + ')');
+            if (r.current && ladder.current && ladder.current.division) {
+                var divs = document.createElement('span');
+                divs.className = 'pgl__divs';
+                rung.appendChild(divs);
+            }
+            track.appendChild(rung);
+        });
+        wrap.appendChild(track);
+        var foot = document.createElement('div');
+        foot.className = 'pgl__foot';
+        var cur = document.createElement('span');
+        cur.className = 'pgl__cur';
+        cur.textContent = (ladder.current && ladder.current.label) || '';
+        var next = document.createElement('span');
+        next.className = 'pgl__next';
+        var c = ladder.current || {};
+        if (c.next_label) {
+            var nnum = document.createElement('b'); nnum.className = 'pgl__next-n'; nnum.textContent = c.levels_to_next;
+            next.appendChild(nnum);
+            next.appendChild(document.createTextNode(' to ' + c.next_label));
+        } else {
+            next.textContent = 'Apex reached';
+        }
+        foot.appendChild(cur); foot.appendChild(next);
+        wrap.appendChild(foot);
+        return wrap;
+    }
+
     function build(payload) {
         var root = document.createElement('div');
         root.className = 'ccx';
@@ -327,19 +385,33 @@
                     '<button type="button" class="ccx__pg ccx__pg--next" aria-label="Next page" disabled>' + CHEVRON.next + '</button>' +
                 '</div>' +
                 '<div class="ccx__summary" hidden></div>' +
+                '<div class="ccx__rankbar"></div>' +   // resting Pursuer rank ladder (built at settle)
                 '<div class="ccx__foot">' +
-                    '<div class="ccx__rank"></div>' +
                     '<button type="button" class="ccx__done btn btn-primary btn-sm">Continue</button>' +
+                '</div>' +
+                '<div class="ccx__finale" hidden aria-hidden="true">' +   // Pursuer screen: the rank hand-off
+                    '<div class="ccx__finale-flood ccx__finale-flood--from" aria-hidden="true"></div>' +   // old rank colour floods up
+                    '<div class="ccx__finale-flood ccx__finale-flood--to" aria-hidden="true"></div>' +     // ...swaps to new at the hand-off
+                    '<div class="ccx__finale-scan" aria-hidden="true"></div>' +
+                    '<div class="ccx__finale-body">' +
+                        '<div class="ccx__finale-eyebrow"></div>' +
+                        '<div class="ccx__handoff">' +
+                            '<div class="ccx__ho-from pp-tally"></div>' +
+                            '<div class="ccx__ho-arrow" aria-hidden="true">' + CHEV_UP + CHEV_UP + CHEV_UP + '</div>' +
+                            '<div class="ccx__ho-to pp-tally pp-tally--xl"></div>' +
+                        '</div>' +
+                        '<button type="button" class="ccx__finale-done btn btn-primary btn-sm">Continue</button>' +
+                    '</div>' +
                 '</div>' +
             '</div>' +
             '<div class="ccx__sparks" aria-hidden="true"></div>';   // fixed spark layer (over everything)
         root.querySelector('.ccx__eyebrow').textContent = eyebrow(payload);
-        var rankEl = root.querySelector('.ccx__rank');
-        if (payload.rank_now) {
-            rankEl.innerHTML = 'Pursuer Rank &middot; <b></b>';
-            rankEl.querySelector('b').textContent = payload.rank_now;
-        }
         buildSummary(root.querySelector('.ccx__summary'), payload);
+        // Build the resting rank ladder NOW (invisible) so the box reserves its exact height up front
+        // -- no downward shift when it appears. A rank-up shows the OLD rank (filled) first; else the new.
+        var pr0 = payload.pursuer;
+        var lad0 = pr0 && ((pr0.rank_up && pr0.ladder_pre) ? pr0.ladder_pre : pr0.ladder);
+        if (lad0) root.querySelector('.ccx__rankbar').appendChild(buildLadder(lad0));
         return root;
     }
 
@@ -371,6 +443,8 @@
         var root = build(payload);
         document.body.appendChild(root);
         document.body.classList.add('ccx-open');
+        var zoom = document.getElementById('zoom-container');   // the page steps back behind the ceremony
+        if (zoom && !isReduced) zoom.classList.add('pp-receded');   // same depth cue the modals use
 
         var xpEl = root.querySelector('.ccx__xp');
         var jobsEl = root.querySelector('.ccx__jobs');
@@ -448,6 +522,7 @@
             torn = true;
             root.classList.remove('is-in');
             document.body.classList.remove('ccx-open');
+            if (zoom) zoom.classList.remove('pp-receded');   // the page steps back forward
             document.removeEventListener('keydown', onKey);
             var finish = function () {
                 if (root.parentNode) root.parentNode.removeChild(root);
@@ -463,8 +538,12 @@
             if (e.key === 'ArrowLeft' && interactive) { flipTo(pageIdx - 1); return; }
             if (e.key === 'ArrowRight' && interactive) { flipTo(pageIdx + 1); return; }
             if (e.key === 'Tab') {
+                // While the finale takeover is up, trap to ITS control only (the footer/pager sit behind it).
+                var fin = root.querySelector('.ccx__finale');
+                var sel = (fin && !fin.hidden) ? '.ccx__finale-done' : '.ccx__done, .ccx__pg';
                 var f = Array.prototype.filter.call(
-                    root.querySelectorAll('.ccx__done, .ccx__pg'), function (el) { return !el.disabled; });
+                    root.querySelectorAll(sel),
+                    function (el) { return !el.disabled && el.offsetParent !== null; });
                 if (!f.length) return;
                 e.preventDefault();
                 var i = f.indexOf(document.activeElement);
@@ -477,12 +556,91 @@
         document.addEventListener('keydown', onKey);
         doneBtn.focus();   // focus lands in the dialog immediately (not on the background board)
 
+        // (Re-)mount a ladder into the footer, re-triggering its fill-from-empty reveal (pglDraw). The
+        // "X to next" counts DOWN from the from-zero distance (the boundary level -- thousands, high up)
+        // to the real remaining, landing as the bar finishes filling.
+        function mountLadder(lad) {
+            var rb = root.querySelector('.ccx__rankbar');
+            if (!rb || !lad) return;
+            rb.innerHTML = '';
+            rb.appendChild(buildLadder(lad));
+            var numEl = rb.querySelector('.pgl__next-n');
+            var cur = lad.current || {};
+            if (numEl && !isReduced && cur.next_level != null) {
+                countTo(numEl, cur.next_level, cur.levels_to_next, 2000, function () { return !torn; });
+            }
+        }
         function finishAll() {
             if (torn) return;
-            root.classList.add('is-settled');   // rank line + Continue settle in; then the kit breathes
+            // Re-mount now so the fill-from-empty reveal plays HERE, visibly (the up-front build drew
+            // invisibly, just to reserve height). Pre hand-off a rank-up shows the OLD rank filled 100%.
+            var pr = payload.pursuer;
+            mountLadder(pr && ((pr.rank_up && pr.ladder_pre) ? pr.ladder_pre : pr.ladder));
+            root.classList.add('is-settled');    // footer (ladder + Continue) + pager reveal
             interactive = true; updatePager();
-            // NO confetti: the constitution reserves particles for the weld-spark / scan-beam earn
-            // vocabulary (visual-identity.md §3). The sanctioned flourish arrives with Phase 3.
+        }
+
+        // The Pursuer screen: the rank HAND-OFF, played after a beat, only when the rank advanced a step.
+        // No bar (the footer already filled) -- a focused "changing of the guard": the old rank lifts
+        // away and the new rank rises up and lands, each in its own colour. Two intensities fall out of
+        // that: a division step is a same-hue climb; a named rank-up is a full colour change + scan-beam
+        // + a bigger spark burst + a heavier land.
+        var sparkLayer = root.querySelector('.ccx__sparks');
+        function playFinale() {
+            var pr = payload.pursuer;
+            if (torn || !pr || !(pr.rank_up || pr.div_up)) return Promise.resolve();
+            var heavy = !!pr.rank_up;
+            var finaleEl = root.querySelector('.ccx__finale');
+            var fromEl = finaleEl.querySelector('.ccx__ho-from');
+            var toEl = finaleEl.querySelector('.ccx__ho-to');
+            finaleEl.querySelector('.ccx__finale-eyebrow').textContent = heavy ? 'Rank Up' : 'Division Up';
+            fromEl.textContent = pr.from_label || '';
+            toEl.textContent = pr.to_label || '';
+            if (pr.from_key) fromEl.style.setProperty('--rc', 'var(--rank-' + pr.from_key + ')');
+            if (pr.to_key) toEl.style.setProperty('--rc', 'var(--rank-' + pr.to_key + ')');
+            // Bottom flood: old rank colour, swapping to the new one at the hand-off.
+            if (pr.from_key) finaleEl.querySelector('.ccx__finale-flood--from').style.setProperty('--flood-c', 'var(--rank-' + pr.from_key + ')');
+            if (pr.to_key) finaleEl.querySelector('.ccx__finale-flood--to').style.setProperty('--flood-c', 'var(--rank-' + pr.to_key + ')');
+            finaleEl.classList.toggle('is-heavy', heavy);
+            finaleEl.hidden = false;
+            finaleEl.classList.add('is-in');       // screen + OLD rank fade in
+
+            return wait(700)                        // let it rest a moment on the old rank
+                .then(function () {
+                    if (torn) return;
+                    finaleEl.classList.add('is-glow');   // the old rank glows (wind-up: something's coming)
+                    return wait(720);
+                })
+                .then(function () {
+                    if (torn) return;
+                    finaleEl.classList.add('is-hand');   // old lifts away, chevrons stream up, new rises in
+                    return wait(heavy ? 780 : 700);      // ...until the new rank lands
+                })
+                .then(function () {
+                    if (torn) return;
+                    var r = toEl.getBoundingClientRect();
+                    var color = pr.to_key ? 'var(--rank-' + pr.to_key + ')' : 'var(--pp-primary)';
+                    sparkBurst(sparkLayer, r.left + r.width / 2, r.top + r.height / 2, color, heavy ? 28 : 14);
+                    if (heavy) finaleEl.classList.add('is-scan');   // scan-beam sweep on a full rank-up
+                    return wait(360);
+                })
+                .then(function () {
+                    if (torn) return;
+                    // HOLD here -- no auto return. Reveal Continue; the user closes it themselves (screenshot /
+                    // admire), which transitions BACK to the settled job screen (not end the ceremony).
+                    finaleEl.classList.add('is-held');
+                    var btn = finaleEl.querySelector('.ccx__finale-done');
+                    if (btn) {
+                        btn.addEventListener('click', function () {
+                            if (torn) return;
+                            if (pr.rank_up) mountLadder(pr.ladder);   // the NEW rank's bar is waiting on return
+                            finaleEl.classList.remove('is-in', 'is-glow', 'is-hand', 'is-scan', 'is-held');
+                            setTimeout(function () { finaleEl.hidden = true; }, 360);   // fade out -> the job screen
+                            if (doneBtn && doneBtn.focus) doneBtn.focus();              // hand focus to the footer Continue
+                        });
+                        btn.focus();
+                    }
+                });
         }
 
         // ---- reduced motion: show page 1 settled, hand over the arrows, no autoplay ----
@@ -490,7 +648,7 @@
             root.classList.add('is-in', 'is-static');
             xpEl.textContent = Number(payload.xp).toLocaleString();
             settlePage(firstTiles, pages[0]);
-            finishAll();
+            finishAll();   // builds the resting footer ladder; no takeover in reduced motion
             return dismissed;
         }
 
@@ -521,7 +679,25 @@
         wait(260)                                                 // stage bloom
             .then(function () { if (torn) return; pop(root.querySelector('.ccx__award'), 'is-hit'); return countUp(xpEl, payload.xp, 900, alive); })
             .then(function () { return autoplay(0, firstTiles); })
-            .then(finishAll);
+            .then(function () { return wait(420); })       // a beat after the jobs settle
+            .then(finishAll)                               // footer bar fills to its new spot
+            .then(function () {                            // then, only if the rank moved, the hand-off screen
+                var pr = payload.pursuer;
+                if (torn || !pr || !(pr.rank_up || pr.div_up)) return;
+                // The current rung is the ladder's SLOWEST beat (it creeps + blooms last). Wait for that
+                // bloom to actually finish -- so the bar is fully filled -- then rest, then the hand-off.
+                var curRung = root.querySelector('.ccx__rankbar .pgl__rung.is-current');
+                return new Promise(function (res) {
+                    if (!curRung) { res(); return; }
+                    var t = setTimeout(res, 3600);   // safety net
+                    curRung.addEventListener('animationend', function h(e) {
+                        if (e.animationName !== 'pglBloom') return;   // the current-rung bloom = ladder done
+                        clearTimeout(t); curRung.removeEventListener('animationend', h); res();
+                    });
+                })
+                    .then(function () { if (!torn) return wait(650); })   // let the fully-filled bar rest a beat
+                    .then(function () { return playFinale(); });
+            });
 
         return dismissed;
     }
