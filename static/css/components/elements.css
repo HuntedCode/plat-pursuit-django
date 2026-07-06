@@ -332,7 +332,10 @@
 .emodal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
 .emodal[hidden] { display: none; }
 .emodal__backdrop { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.55); backdrop-filter: blur(3px); }
-.emodal__dialog { position: relative; z-index: 1; width: min(440px, 100%); max-height: 88vh; overflow: auto; background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); padding: 26px 24px 24px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
+/* will-change promotes the dialog to its own compositor layer, so its per-frame content animations (the
+   glyph draw, the count-ups) repaint on THAT layer instead of dirtying the backdrop -- which otherwise
+   forces the backdrop's blur to re-sample the (tall, on mobile) page every frame and stutters them. */
+.emodal__dialog { position: relative; z-index: 1; will-change: transform; width: min(440px, 100%); max-height: 88vh; overflow: auto; background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg); padding: 26px 24px 24px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55); }
 .emodal__close { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--pp-text-mute); font-size: 26px; line-height: 1; cursor: pointer; }
 .emodal__close:hover { color: var(--pp-text); }
 /* entrance: backdrop fades, dialog scales in (exit stays instant -- can't transition to display:none) */
@@ -367,14 +370,13 @@
     .edetail__head, .edetail__levelrow, .edetail__flavor, .edetail__sources, .edetail__glyph svg * { animation: none; }
     .edetail__bar .pp-horizon__fill { transition: none; }
 }
-/* Background recede: the page pushes back + dims while the modal floats forward (the JS portals the
-   modal to <body> so it isn't scaled with the page). */
-/* Recede: only the page CONTENT (#page-recede, the wrapper around block content) steps back. The chrome --
-   nav/sub-nav/footer AND the sticky hotbar, all its siblings -- just DIMS with the container, so the whole
-   frame stays put. Scale scoped to non-legacy pages so it doesn't compound with the ZoomScaler's wrapper. */
-#zoom-container:not(.zoom-active) { transition: filter 0.34s ease; }
+/* Recede: only the page CONTENT (#page-recede, the wrapper around block content) steps back; the chrome --
+   nav/sub-nav/footer AND the sticky hotbar, all its siblings -- holds still. The DIM is left to whatever
+   floats in front (the modal's dark+blurred backdrop, the ceremony's scrim) -- NO filter on the page. A
+   `filter: brightness` here re-rasterized the whole subtree every frame the page scaled, which stuttered
+   the modal's opening animations on tall mobile pages (and was redundant with the backdrop anyway). Scale
+   scoped to non-legacy pages so it doesn't compound with the ZoomScaler's wrapper transform. */
 #zoom-container:not(.zoom-active) #page-recede { transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1); }
-#zoom-container.pp-receded { filter: brightness(0.82); }
 #zoom-container:not(.zoom-active).pp-receded #page-recede { transform: scale(0.95); }
 /* Both overrides MUST repeat :not(.zoom-active) to match the base rule's specificity -- media queries add
    none, so without it the base scale(0.95) wins and the "no step-back" never takes effect. */
