@@ -564,6 +564,16 @@ function ppCountUp(el, dur) {
             // (B) Ignite the pill that just became active.
             if (on && changed && !reduce) { void t.offsetWidth; t.classList.add('lab-view--ignite'); }
         });
+        // Reflect the active tab in the URL so it's shareable + reload-safe, and SCOPE the contract filters
+        // to the Contracts tab: strip them when leaving (a shared Jobs/Radar link stays clean); returning
+        // to Contracts re-adds them from the still-set filter UI via pp:contracts-shown -> syncURL().
+        if (window.history && history.replaceState) {
+            var qp = new URLSearchParams(location.search);
+            if (name === 'jobs') qp.delete('view'); else qp.set('view', name);   // jobs is the default -> keep its URL clean
+            if (name !== 'contracts') ['status', 'q', 'sort', 'discipline', 'job', 'platform', 'page'].forEach(function (k) { qp.delete(k); });
+            var qps = qp.toString();
+            history.replaceState(null, '', location.pathname + (qps ? '?' + qps : '') + location.hash);
+        }
         // Animate the radar in the first time it's shown (and keep it correctly sized after).
         if (name === 'radar') revealRadar();
         // Stagger the contract cards in on reveal (mirrors the Jobs tab's content animation).
@@ -1149,6 +1159,19 @@ function ppCountUp(el, dur) {
         if (!btn) return;
         if (count > 0) { btn.textContent = 'Claim all (' + count + ')'; btn.disabled = false; } else { btn.remove(); }
     }
+    // Reload after a claim but KEEP the tab the user is on. The Career tabs are client-side only, so a
+    // plain reload would land them back on the default Jobs tab. Reflect the visible panel into ?view=
+    // (the server reads it to set the active tab) and preserve the rest of the querystring (the contracts
+    // board's filters/sort). If nothing changed, force a plain reload so it still refreshes.
+    function reloadKeepingView() {
+        var vis = document.querySelector('.lab-view:not([hidden])');
+        var v = vis && vis.dataset.view;
+        var url = new URL(window.location.href);
+        if (v === 'jobs') url.searchParams.delete('view');   // jobs is the default -> clean URL (matches showView)
+        else if (v) url.searchParams.set('view', v);
+        if (url.href === window.location.href) window.location.reload();
+        else window.location.replace(url.href);   // replace (not assign): a refresh shouldn't add a history entry
+    }
     function applyResult(res) {
         (res.accepted || []).forEach(function (slug) {
             var sel = (window.CSS && CSS.escape) ? CSS.escape(slug) : slug;
@@ -1160,11 +1183,17 @@ function ppCountUp(el, dur) {
         refreshAcceptAll(res.claimable_count || 0);
         // The claim ceremony IS the feedback (the award flows into the jobs it leveled). Toast only
         // as a fallback when the ceremony module or its payload isn't available.
+        // A claim levels real jobs, so the Jobs (dossier + sheet), Radar, and hero panels -- ALL built
+        // from the server's career context -- are now stale in the DOM (the tabs render once on load and
+        // just toggle). Refresh once the moment is over so every panel reflects the new levels. We reload
+        // rather than patch client-side because the radar canvas + per-discipline geometry can't be
+        // re-derived without duplicating career_service; a reload is correct across every surface at once.
         var claim = res.claim, Ceremony = PP.ClaimCeremony;
         if (Ceremony && claim && claim.jobs && claim.jobs.length) {
-            Ceremony.play(claim);
-        } else if (Toast && res.granted) {
-            Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+            Ceremony.play(claim).then(reloadKeepingView);   // refresh (on the same tab) after the ceremony closes
+        } else {
+            if (Toast && res.granted) Toast.show('Banked ' + Number(res.granted).toLocaleString() + ' XP', 'success');
+            if (res.granted) setTimeout(reloadKeepingView, 1100);   // no ceremony -> still refresh, same tab
         }
     }
     async function accept(payload, btn) {
@@ -1553,6 +1582,7 @@ function ppCountUp(el, dur) {
     var panel = list.closest('.lab-view');
     if (panel && !panel.hidden) staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));  // Contracts is the landing view
     document.addEventListener('pp:contracts-shown', function () {
+        syncURL();   // returning to Contracts: re-add its (still-set) filters to the URL that showView scoped away
         staggerCards(Array.prototype.slice.call(list.querySelectorAll('.rp-row')));
     });
 })();
