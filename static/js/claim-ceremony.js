@@ -444,7 +444,7 @@
         document.body.appendChild(root);
         document.body.classList.add('ccx-open');
         var zoom = document.getElementById('zoom-container');   // the page steps back behind the ceremony
-        if (zoom && !isReduced) zoom.classList.add('pp-receded');   // same depth cue the modals use
+        if (zoom && !isReduced) zoom.classList.add('pp-receded');   // same depth cue the modals use (content only)
 
         var xpEl = root.querySelector('.ccx__xp');
         var jobsEl = root.querySelector('.ccx__jobs');
@@ -522,7 +522,7 @@
             torn = true;
             root.classList.remove('is-in');
             document.body.classList.remove('ccx-open');
-            if (zoom) zoom.classList.remove('pp-receded');   // the page steps back forward
+            if (zoom) zoom.classList.remove('pp-receded');
             document.removeEventListener('keydown', onKey);
             var finish = function () {
                 if (root.parentNode) root.parentNode.removeChild(root);
@@ -551,7 +551,7 @@
                 f[to].focus();
             }
         }
-        doneBtn.addEventListener('click', teardown);
+        doneBtn.addEventListener('click', function () { if (interactive) teardown(); });   // inert until controls are live
         root.querySelector('.ccx__scrim').addEventListener('click', teardown);
         document.addEventListener('keydown', onKey);
         doneBtn.focus();   // focus lands in the dialog immediately (not on the background board)
@@ -559,25 +559,41 @@
         // (Re-)mount a ladder into the footer, re-triggering its fill-from-empty reveal (pglDraw). The
         // "X to next" counts DOWN from the from-zero distance (the boundary level -- thousands, high up)
         // to the real remaining, landing as the bar finishes filling.
-        function mountLadder(lad) {
+        function mountLadder(lad, charging) {
             var rb = root.querySelector('.ccx__rankbar');
             if (!rb || !lad) return;
             rb.innerHTML = '';
             rb.appendChild(buildLadder(lad));
+            // `charging` = a rank-up's OLD rank filling to 100%: its bar shakes as it tops out (tension).
+            if (charging && !isReduced) {
+                var curRung = rb.querySelector('.pgl__rung.is-current');
+                if (curRung) curRung.classList.add('is-charging');
+            }
             var numEl = rb.querySelector('.pgl__next-n');
             var cur = lad.current || {};
             if (numEl && !isReduced && cur.next_level != null) {
                 countTo(numEl, cur.next_level, cur.levels_to_next, 2000, function () { return !torn; });
             }
         }
+        // Continue + the page arrows go live here -- but when a rank/division hand-off is queued we hold
+        // them back (hidden + inert) until the user dismisses that screen, so they can't accidentally skip
+        // past their own rank-up (the job-screen Continue tears the whole ceremony down).
+        function revealControls() {
+            root.classList.add('is-live');
+            interactive = true; updatePager();
+        }
         function finishAll() {
             if (torn) return;
             // Re-mount now so the fill-from-empty reveal plays HERE, visibly (the up-front build drew
             // invisibly, just to reserve height). Pre hand-off a rank-up shows the OLD rank filled 100%.
             var pr = payload.pursuer;
-            mountLadder(pr && ((pr.rank_up && pr.ladder_pre) ? pr.ladder_pre : pr.ladder));
-            root.classList.add('is-settled');    // footer (ladder + Continue) + pager reveal
-            interactive = true; updatePager();
+            // `charging` mounts the OLD rank filled to 100% (the finale's dismiss then swaps in the new one).
+            // Reduced motion has no finale to do that swap, so it must mount the final (new) ladder directly.
+            var charging = !isReduced && !!(pr && pr.rank_up && pr.ladder_pre);
+            mountLadder(charging ? pr.ladder_pre : (pr && pr.ladder), charging);
+            root.classList.add('is-settled');    // ladder + summary reveal (the footer fill is part of the show)
+            var finalePending = !isReduced && !!(pr && (pr.rank_up || pr.div_up));
+            if (!finalePending) revealControls();   // no hand-off coming -> controls now; else after it's dismissed
         }
 
         // The Pursuer screen: the rank HAND-OFF, played after a beat, only when the rank advanced a step.
@@ -634,6 +650,7 @@
                         btn.addEventListener('click', function () {
                             if (torn) return;
                             if (pr.rank_up) mountLadder(pr.ladder);   // the NEW rank's bar is waiting on return
+                            revealControls();                          // NOW Continue + the arrows appear on the job screen
                             finaleEl.classList.remove('is-in', 'is-glow', 'is-hand', 'is-scan', 'is-held');
                             setTimeout(function () { finaleEl.hidden = true; }, 360);   // fade out -> the job screen
                             if (doneBtn && doneBtn.focus) doneBtn.focus();              // hand focus to the footer Continue

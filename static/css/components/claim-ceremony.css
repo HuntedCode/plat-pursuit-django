@@ -85,7 +85,7 @@
  * paginate (5 at a time) and the pager below flips between pages. */
 .ccx__jobs {
     list-style: none; margin: 14px 0 6px; padding: 2px; min-height: 0;
-    display: flex; flex-direction: column; gap: 8px;
+    display: flex; flex-direction: column; gap: 6px;
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
 .ccx__jobs.is-out { opacity: 0; transform: translateY(-6px); }   /* autoplay page turn: fade the old 5 out */
@@ -103,7 +103,7 @@
     --disc-glow: color-mix(in oklab, var(--disc) 55%, transparent);
     position: relative;   /* anchors the tier stamp overlay */
     display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
-    padding: 10px 12px; border-radius: 12px;
+    padding: 7px 12px; border-radius: 12px;
     background: color-mix(in oklab, var(--disc) 6%, var(--pp-bg-2));
     border: 1px solid color-mix(in oklab, var(--disc) 24%, var(--pp-border));
     opacity: 0; transform: translateY(10px);
@@ -132,7 +132,7 @@
  * revealed in place at settle -- staggered top-to-bottom -- so the tier "arrives" with zero reflow. */
 .ccx__jtier {
     display: inline-flex; align-items: center; gap: 3px;
-    height: 14px; margin-bottom: 4px; line-height: 14px; max-width: 100%;
+    height: 14px; margin-bottom: 2px; line-height: 14px; max-width: 100%;
     font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
     color: color-mix(in oklab, var(--disc) 45%, var(--pp-text));
     opacity: 0; transform: translateY(3px);
@@ -147,24 +147,35 @@
 
 /* Revealed per PAGE (once its bars finish), so every page shows its tiers -- not just the last. */
 .ccx__jobs.show-tiers .ccx__jtier, .ccx.is-static .ccx__jtier { opacity: 1; transform: none; }
-/* On reveal, the improved tiers flare: the chevron pops up, the name glows brighter for a beat. */
-.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-chev { animation: ccxChevPop 0.6s cubic-bezier(0.22, 1.5, 0.4, 1) both; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
-.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-name { animation: ccxTierGlow 0.75s ease both; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
+/* The improved tiers KEEP flaring on a loop while the screen is up (staggered = a repeating wave): the
+ * chevron pulse-pops and the name glows brighter for a beat, then both rest for the remainder of the cycle. */
+.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-chev { animation: ccxChevPop 3.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
+.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-name { animation: ccxTierGlow 3.4s ease-in-out infinite; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
 @keyframes ccxChevPop {
-    0% { transform: translateY(4px) scale(0.6); opacity: 0.2; }
-    55% { transform: translateY(-2px) scale(1.15); opacity: 1; }
-    100% { transform: translateY(0) scale(1); opacity: 1; }
+    0% { transform: translateY(2px) scale(0.85); opacity: 0.6; }
+    8% { transform: translateY(-2px) scale(1.16); opacity: 1; }
+    16%, 100% { transform: translateY(0) scale(1); opacity: 1; }   /* pop early, rest the remainder */
 }
 @keyframes ccxTierGlow {
-    0% { text-shadow: 0 0 0 transparent; }
-    45% { text-shadow: 0 0 15px var(--disc-glow), 0 0 6px var(--disc); }
-    100% { text-shadow: 0 0 8px var(--disc-glow); }
+    0% { text-shadow: 0 0 8px var(--disc-glow); }
+    8% { text-shadow: 0 0 16px var(--disc-glow), 0 0 6px var(--disc); }   /* flare */
+    20%, 100% { text-shadow: 0 0 8px var(--disc-glow); }                  /* back to the resting glow */
 }
 
 /* The bar is a Horizon primitive (.pp-horizon, themed --horizon-accent: var(--disc)). Only slow its
  * fill to the ceremony's deliberate pace -- the look/gradient/glow all come from horizon.css. */
-.ccx__bar { --horizon-h: 8px; }
+.ccx__bar { --horizon-h: 6px; }
 .ccx__job .pp-horizon__fill { transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Mobile trims the tile's airiness (padding, gap, subtitle margin, bar height) so a full page of 5 clears
+ * a short phone with no scroll -- the icon (40px) and name (14px) are untouched, so the tiles keep their
+ * weight. Tablet/desktop have the vertical room, so they get the roomier tile back. */
+@media (min-width: 768px) {
+    .ccx__jobs { gap: 8px; }
+    .ccx__job { padding: 10px 12px; }
+    .ccx__jtier { margin-bottom: 4px; }
+    .ccx__bar { --horizon-h: 8px; }
+}
 
 .ccx__lv {
     flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
@@ -192,14 +203,14 @@
  * paused + flaring (sparks still fire from the chip, so the cause stays anchored to the level). ---- */
 .ccx__tierstamp {
     position: absolute; top: 50%; left: 50%; z-index: 3; pointer-events: none;
-    display: flex; align-items: center; gap: 5px;
-    padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px; white-space: nowrap;
     color: var(--pp-bg-0, #05070a); background: var(--disc);
     box-shadow: 0 0 18px var(--disc-glow), 0 2px 8px rgba(0, 0, 0, 0.4);
     transform: translate(-50%, -50%) scale(0.4); opacity: 0;
 }
-.ccx__ts-lv { font-size: 10px; font-weight: 800; letter-spacing: 0.03em; opacity: 0.8; }
-.ccx__ts-name { font-size: 12px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+.ccx__ts-lv { font-size: 9px; font-weight: 800; letter-spacing: 0.03em; opacity: 0.8; }
+.ccx__ts-name { font-size: 11px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
 .ccx__tierstamp.is-in { animation: ccxStampIn 0.42s cubic-bezier(0.22, 1.5, 0.4, 1) forwards; }
 .ccx__tierstamp.is-out { animation: ccxStampOut 0.36s ease forwards; }   /* declared after is-in -> wins */
 @keyframes ccxStampIn {
@@ -211,6 +222,13 @@
     from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     to { transform: translate(-50%, -80%) scale(1.03); opacity: 0; }
 }
+/* Tier-up stamp: sized to match the roomier tile on tablet/desktop (mobile keeps it tighter, above, so it
+ * doesn't dwarf the compacted tiles). Placed after the base rules so it wins the same-specificity tie. */
+@media (min-width: 768px) {
+    .ccx__tierstamp { gap: 5px; padding: 4px 11px; }
+    .ccx__ts-lv { font-size: 10px; }
+    .ccx__ts-name { font-size: 12px; }
+}
 
 /* Hot sparks: fixed layer over everything; JS spawns + animates each (arc + gravity). */
 .ccx__sparks { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
@@ -220,13 +238,17 @@
     box-shadow: 0 0 6px var(--sc, var(--pp-primary)); will-change: transform, opacity;
 }
 
-/* ---- End summary: "Tiers earned  Apprentice x2 . Adept" (revealed at settle) ---- */
+/* ---- End summary: "Tiers earned  Apprentice x2 . Adept" (revealed at settle) ----
+ * Omitted on mobile: it's the only unbounded block in the stack (its wrapped-chip height grows with the
+ * number of tiers crossed) and the most redundant (every tier it tallies just bloomed on its own tile and
+ * keeps a resting-tier subtitle). Dropping it is what keeps a full page of 5 tiles from overflowing a short
+ * phone with no scroll. Tablet/desktop have the room, so they keep the full tally. */
 .ccx__summary {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+    display: none; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
     margin-top: 10px; opacity: 0; transition: opacity 0.45s ease;
 }
-.ccx__summary[hidden] { display: none; }
 .ccx.is-settled .ccx__summary, .ccx.is-static .ccx__summary { opacity: 1; }
+@media (min-width: 768px) { .ccx__summary:not([hidden]) { display: flex; } }
 .ccx__summary-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--pp-text) 55%, transparent); }
 .ccx__summary-chip {
     padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
@@ -242,7 +264,7 @@
     opacity: 0; transition: opacity 0.45s ease;
 }
 .ccx__pager[hidden] { display: none; }
-.ccx.is-settled .ccx__pager, .ccx.is-static .ccx__pager { opacity: 1; }
+.ccx.is-live .ccx__pager, .ccx.is-static .ccx__pager { opacity: 1; }
 .ccx__dots { display: flex; align-items: center; gap: 6px; }
 .ccx__dot {
     width: 7px; height: 7px; padding: 0; border: none; border-radius: 999px; cursor: pointer;
@@ -281,7 +303,7 @@
     opacity: 0; transform: translateY(6px);
     transition: opacity 0.45s ease, transform 0.45s ease;
 }
-.ccx.is-settled .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
+.ccx.is-live .ccx__foot, .ccx.is-static .ccx__foot { opacity: 1; transform: none; }
 .ccx__done { flex: 0 0 auto; }
 
 /* ---- Rank finale: a takeover played after the pages when the Pursuer rank moves. Two intensities:
@@ -340,7 +362,15 @@
     text-shadow: 0 0 30px color-mix(in oklab, var(--rc, var(--pp-primary)) 52%, transparent);
 }
 .ccx__finale.is-heavy .ccx__ho-to { font-size: 3.1rem; }
-.ccx__finale.is-hand .ccx__ho-to { animation: ccxHoToIn 0.92s cubic-bezier(0.2, 1.4, 0.35, 1) both; animation-delay: 0.22s; }
+.ccx__finale.is-hand .ccx__ho-to { animation: ccxHoToIn 1s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: 0.22s; }
+
+/* Specular sheen: a quick diagonal glint sweeps across the freshly-landed rank (fires just after it settles). */
+.ccx__ho-to::after {
+    content: ''; position: absolute; top: -4px; bottom: -4px; left: 0; width: 28%;
+    background: linear-gradient(100deg, transparent 15%, rgba(255, 255, 255, 0.72) 50%, transparent 85%);
+    opacity: 0; pointer-events: none; mix-blend-mode: screen; transform: skewX(-12deg) translateX(-160%);
+}
+.ccx__finale.is-hand .ccx__ho-to::after { animation: ccxHoSheen 0.62s ease 1.05s both; }
 
 /* the up-chevron ascent streak between them */
 .ccx__ho-arrow { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 1px; color: var(--pp-primary); opacity: 0; }
@@ -349,10 +379,19 @@
 
 @keyframes ccxHoFromOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-48px) scale(0.9); } }
 @keyframes ccxHoArrow { 0% { opacity: 0; transform: translateY(20px); } 40% { opacity: 0.9; } 100% { opacity: 0; transform: translateY(-34px); } }
+/* Damped spring settle: rise, overshoot, a small undershoot bounce, then rest (Apple-style physics). The
+   expo-out timing on the animation lets these stops own the bounce instead of doubling it up. */
 @keyframes ccxHoToIn {
-    0% { opacity: 0; transform: translateY(44px) scale(0.78); }
-    60% { opacity: 1; transform: translateY(0) scale(1.08); }
+    0%   { opacity: 0; transform: translateY(44px) scale(0.78); }
+    52%  { opacity: 1; transform: translateY(-3px) scale(1.09); }   /* overshoot past the mark */
+    70%  { transform: translateY(1px) scale(0.978); }               /* damped undershoot */
+    85%  { transform: translateY(0) scale(1.014); }                 /* smaller second overshoot */
     100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes ccxHoSheen {
+    0%   { opacity: 0; transform: skewX(-12deg) translateX(-160%); }
+    22%  { opacity: 1; }
+    100% { opacity: 0; transform: skewX(-12deg) translateX(380%); }
 }
 
 /* Continue lives on the screen, hidden until it's HELD -- the user closes it themselves (screenshot / admire). */

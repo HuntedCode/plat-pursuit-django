@@ -1572,6 +1572,7 @@ function ppCountUp(el, dur) {
         <button type="button" class="ccx-dev__btn" data-ccx="all">Claim-all</button>
         <button type="button" class="ccx-dev__btn" data-ccx="big13">13 jobs</button>
         <button type="button" class="ccx-dev__btn" data-ccx="big25">All 25</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="maxfit">Max fit</button>
     </div>
 </div>
 <script>
@@ -1657,6 +1658,27 @@ function ppCountUp(el, dur) {
             jobs: jobs, pursuer: pb,
         };
     }
+    // Layout stress: two FULL pages (5 + 5) where every job crosses all seven tiers, so the recap shows
+    // the widest it ever can -- all 7 chips at double-digit counts. Confirms a full page of 5 tiles + the
+    // maxed summary + pager + rank bar + footer all fit with no scroll. Pursuer stays in-division (no
+    // hand-off), so the whole settled stack is on screen at once, controls and all.
+    var ALL_TIERS = [
+        { key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }, { key: 'adept', name: 'Adept', level: 25, rank: 2 },
+        { key: 'expert', name: 'Expert', level: 50, rank: 3 }, { key: 'veteran', name: 'Veteran', level: 75, rank: 4 },
+        { key: 'master', name: 'Master', level: 99, rank: 5 }, { key: 'grandmaster', name: 'Grandmaster', level: 150, rank: 6 },
+        { key: 'legend', name: 'Legend', level: 250, rank: 7 },
+    ];
+    function maxFit() {
+        var pb = pursuerBlock(82, 84);   // Seeker IV -> IV: no rank/division change, so no finale takeover
+        var jobs = roster().slice(0, 10).map(function (j, i) {
+            return {
+                slug: j.slug, name: j.name, disc: j.disc, icon: j.icon,
+                xp: 777000, from_level: 1, to_level: 260, from_frac: ((i * 17) % 55) / 100, to_frac: 0.3,
+                tier: 'Legend', tiers: ALL_TIERS.map(function (t) { return { key: t.key, name: t.name, level: t.level, rank: t.rank }; }),
+            };
+        });
+        return { xp: 7770000, accepted: ['maxfit'], first_claim: false, rank_now: pb.to_label, jobs: jobs, pursuer: pb };
+    }
     var CANNED = {
         // A within-level nudge: XP lands, bar creeps, no level. Proves it still feels like a reward.
         small: {
@@ -1721,6 +1743,7 @@ function ppCountUp(el, dur) {
         // Stress tests: the paged reveal (5 per page auto-play, then arrows to flip back).
         get big13() { return bigClaim(13); },   // 3 pages (5 + 5 + 3)
         get big25() { return bigClaim(25); },   // 5 pages
+        get maxfit() { return maxFit(); },       // 2 full pages of 5 + the widest recap (all 7 tier chips)
         // Claim-all: a handful of jobs at once (single page, no pager).
         all: {
             xp: 30000, accepted: ['a', 'b', 'c'], first_claim: false, rank_now: 'Hunter V',

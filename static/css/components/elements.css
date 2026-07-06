@@ -369,9 +369,16 @@
 }
 /* Background recede: the page pushes back + dims while the modal floats forward (the JS portals the
    modal to <body> so it isn't scaled with the page). */
-#zoom-container:not(.zoom-active) { transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.34s ease; }
-#zoom-container.pp-receded { transform: scale(0.95); filter: brightness(0.82); }
-@media (prefers-reduced-motion: reduce) { #zoom-container.pp-receded { transform: none; } }
+/* Recede: only the page CONTENT (#page-recede, the wrapper around block content) steps back. The chrome --
+   nav/sub-nav/footer AND the sticky hotbar, all its siblings -- just DIMS with the container, so the whole
+   frame stays put. Scale scoped to non-legacy pages so it doesn't compound with the ZoomScaler's wrapper. */
+#zoom-container:not(.zoom-active) { transition: filter 0.34s ease; }
+#zoom-container:not(.zoom-active) #page-recede { transition: transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1); }
+#zoom-container.pp-receded { filter: brightness(0.82); }
+#zoom-container:not(.zoom-active).pp-receded #page-recede { transform: scale(0.95); }
+/* Both overrides MUST repeat :not(.zoom-active) to match the base rule's specificity -- media queries add
+   none, so without it the base scale(0.95) wins and the "no step-back" never takes effect. */
+@media (prefers-reduced-motion: reduce) { #zoom-container:not(.zoom-active).pp-receded #page-recede { transform: none; } }
 
 .edetail__head { display: flex; align-items: center; gap: 14px; }
 .edetail__glyph { width: 54px; height: 54px; flex: none; display: grid; place-items: center; border-radius: 13px; background: color-mix(in oklab, var(--disc) 15%, var(--pp-bg-2)); border: 1px solid color-mix(in oklab, var(--disc) 45%, transparent); color: var(--disc); }
@@ -412,6 +419,15 @@
 .pgl__divs { position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none; background-image: repeating-linear-gradient(90deg, transparent 0 calc(20% - 1px), rgba(255, 255, 255, 0.32) calc(20% - 1px) 20%); }
 .pgl__foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .pgl__cur { font-size: 12px; font-weight: 800; letter-spacing: 0.02em; color: var(--pgl-cur-c, var(--pgl-accent)); text-shadow: 0 0 10px color-mix(in oklab, var(--pgl-cur-c, var(--pgl-accent)) 45%, transparent); }
+/* The Pursuer RANK label breathes a slow glow (it's special) -- rank ladder only, not job-tier ladders.
+   Glow tones are pre-mixed into custom props so the keyframe stays color-mix-free (lightningcss). */
+.pgl--rank .pgl__cur {
+    --curglow-a: 0 0 4px color-mix(in oklab, var(--pgl-cur-c, var(--pgl-accent)) 26%, transparent);
+    --curglow-b: 0 0 14px color-mix(in oklab, var(--pgl-cur-c, var(--pgl-accent)) 90%, transparent),
+                 0 0 26px color-mix(in oklab, var(--pgl-cur-c, var(--pgl-accent)) 55%, transparent);
+    animation: pglCurPulse 2.2s ease-in-out infinite;
+}
+@keyframes pglCurPulse { 0%, 100% { text-shadow: var(--curglow-a); } 50% { text-shadow: var(--curglow-b); } }
 .pgl__next { font-size: 11px; font-weight: 600; color: var(--pp-text-mute); white-space: nowrap; }
 .pgl__next-n { font-variant-numeric: tabular-nums; }   /* steady width while counting down */
 /* Premium reveal (both ladders): on mount -- the hero ladder on page load (joining the ring/level
@@ -432,11 +448,42 @@
 }
 .pgl__rung.is-current::after { animation-duration: 1s; animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); animation-delay: var(--cstart); }
 @keyframes pglBloom { 0% { box-shadow: var(--pglg-a); } 55% { box-shadow: var(--pglg-b); } 100% { box-shadow: var(--pglg-a); } }
+/* The CURRENT Pursuer-rank bar breathes too (coupled with the label pulse) so "you are here" reads as
+   special -- rank ladder only, and NOT the charging rank-up bar (that has its own strain animation).
+   Reuses the pre-mixed --pglg-a/b glows, so the keyframe stays color-mix-free; starts after the bloom. */
+.pgl--rank .pgl__rung.is-current:not(.is-charging) {
+    --pglpulse-a: 0 0 0 1.5px color-mix(in oklab, var(--rung-c) 55%, transparent), 0 0 5px color-mix(in oklab, var(--rung-c) 22%, transparent);
+    --pglpulse-b: 0 0 0 2px color-mix(in oklab, var(--rung-c) 100%, transparent), 0 0 24px color-mix(in oklab, var(--rung-c) 85%, transparent);
+    animation: pglBloom 0.7s ease calc(var(--cstart) + 0.7s) both,
+               pglRungPulse 2.2s ease-in-out calc(var(--cstart) + 1.9s) infinite;
+}
+@keyframes pglRungPulse { 0%, 100% { box-shadow: var(--pglpulse-a); } 50% { box-shadow: var(--pglpulse-b); } }
 /* Division ticks fade + settle in only once the current rung has crept into place. */
 .pgl__divs { animation: pglTicks 0.45s ease both; animation-delay: calc(var(--cstart) + 1s); }
 @keyframes pglTicks { from { opacity: 0; transform: scaleX(0.94); } to { opacity: 1; transform: scaleX(1); } }
+/* Charging (claim ceremony rank-up only, JS adds .is-charging): the OLD rank's bar fills DIFFERENTLY --
+   quick at first, then it crawls the last stretch (expo-out) while the bar trembles (sub-2px), and the
+   bloom flashes as it "ticks over" to 100%. Sells the strain-then-rank-up. Timed off --cstart. */
+.pgl__rung.is-current.is-charging::after {
+    animation-duration: 1.3s;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);   /* fast, then crawl to the top */
+}
+.pgl__rung.is-current.is-charging {
+    animation: pglBloom 0.6s ease calc(var(--cstart) + 1.25s) both,             /* the "tick over" flash */
+               pglShake 0.7s ease-in-out calc(var(--cstart) + 0.7s) both;       /* trembles into the top-out */
+}
+@keyframes pglShake {
+    0%, 100% { transform: translateX(0); }
+    12% { transform: translateX(-0.6px); }
+    24% { transform: translateX(0.6px); }
+    40% { transform: translateX(-1px); }
+    56% { transform: translateX(1px); }
+    72% { transform: translateX(-1.6px); }
+    88% { transform: translateX(1.6px); }
+}
 @media (prefers-reduced-motion: reduce) {
-    .pgl__rung::after, .pgl__rung.is-current, .pgl__divs { animation: none; }
+    .pgl__rung::after, .pgl__rung.is-current, .pgl__rung.is-current.is-charging,
+    .pgl--rank .pgl__rung.is-current:not(.is-charging), .pgl__divs, .pgl--rank .pgl__cur { animation: none; }
 }
 .edetail__sources { margin-top: 22px; border-top: 1px solid var(--pp-divider); padding-top: 16px; }
 .edetail__sources-title { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 8px; }

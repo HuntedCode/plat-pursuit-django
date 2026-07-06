@@ -109,7 +109,9 @@
         {% if hotbar.active %}
           {% include 'partials/hotbar.html' %}
         {% endif %}
-        {% block content %}{% endblock %}
+        {# #page-recede is the step-back target for the modal/ceremony recede: the hotbar above stays a #}
+        {# sibling of it, so it holds still with the rest of the chrome. See elements.css .pp-receded.   #}
+        <div id="page-recede">{% block content %}{% endblock %}</div>
       </main>
 
       <aside class="hidden lg:block sticky w-[160px] xl:w-[300px] self-start mt-20" style="top: calc(var(--chrome-height, 5rem) + 0.5rem)">
