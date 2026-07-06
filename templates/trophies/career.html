@@ -1537,7 +1537,9 @@ function ppCountUp(el, dur) {
     <div class="ccx-dev__row">
         <button type="button" class="ccx-dev__btn" data-ccx="small">Small</button>
         <button type="button" class="ccx-dev__btn" data-ccx="levels">Level-ups</button>
-        <button type="button" class="ccx-dev__btn" data-ccx="tier">Tier + rank</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="alltiers">All tiers</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="divstep">Div step</button>
+        <button type="button" class="ccx-dev__btn" data-ccx="tier">Rank up</button>
         <button type="button" class="ccx-dev__btn" data-ccx="all">Claim-all</button>
         <button type="button" class="ccx-dev__btn" data-ccx="big13">13 jobs</button>
         <button type="button" class="ccx-dev__btn" data-ccx="big25">All 25</button>
@@ -1564,26 +1566,36 @@ function ppCountUp(el, dur) {
         }
         return out;   // 25 jobs
     }
+    // Resting tier name for a job level (mirrors the server's JOB_TIERS thresholds), for the subtitle.
+    var TIER_BANDS = [[250, 'Legend'], [150, 'Grandmaster'], [99, 'Master'], [75, 'Veteran'], [50, 'Expert'], [25, 'Adept'], [10, 'Apprentice'], [1, 'Initiate']];
+    function tierName(level) {
+        for (var i = 0; i < TIER_BANDS.length; i++) { if (level >= TIER_BANDS[i][0]) return TIER_BANDS[i][1]; }
+        return 'Initiate';
+    }
     // A big claim over the first `count` catalog jobs: varied level jumps (some no-level, some multi),
     // a scatter of tier crossings, and a plausible headline. Exercises the paged reveal + fast cascade.
     function bigClaim(count) {
         var jobs = roster().slice(0, count).map(function (j, i) {
             var from = 1 + (i * 3) % 9;
             var gained = i % 4;                        // 0..3 levels (0 = within-level nudge only)
+            var to = from + gained;
             var fromFrac = ((i * 17) % 55) / 100;      // 0.00..0.54
             // Every tile's bar must visibly MOVE: a no-level tile nudges forward within its band; a
             // level-up tile can land anywhere (it sweeps through full bands first regardless).
             var toFrac = gained > 0 ? ((i * 29) % 70) / 100 : Math.min(0.92, fromFrac + 0.3);
+            var tiers = [];                            // real thresholds so some tiles bloom a tier
+            if (from < 10 && to >= 10) tiers.push({ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 });
+            if (from < 25 && to >= 25) tiers.push({ key: 'adept', name: 'Adept', level: 25, rank: 2 });
             return {
                 slug: j.slug, name: j.name, disc: j.disc, icon: j.icon,
-                xp: 6000, from_level: from, to_level: from + gained,
-                from_frac: fromFrac, to_frac: toFrac,
-                tiers: gained >= 3 ? [{ key: 'apprentice', name: 'Apprentice' }] : [],
+                xp: 6000, from_level: from, to_level: to, from_frac: fromFrac, to_frac: toFrac,
+                tier: tierName(to), tiers: tiers,
             };
         });
         return {
             xp: count * 1500, accepted: ['multi'], first_claim: false, rank_now: 'Hunter VII',
-            jobs: jobs, pursuer: { from_level: 90, to_level: 96, ranks: [] },
+            jobs: jobs,
+            pursuer: { from_level: 90, to_level: 96, from_label: 'Hunter VII', to_label: 'Hunter VII', rank_up: false, div_up: false, ranks: [] },
         };
     }
     var CANNED = {
@@ -1592,7 +1604,7 @@ function ppCountUp(el, dur) {
             xp: 6000, accepted: ['demo'], first_claim: false, rank_now: 'Hunter III',
             jobs: [{ slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
                      xp: 6000, from_level: 4, to_level: 4, from_frac: 0.1, to_frac: 0.9, tiers: [] }],
-            pursuer: { from_level: 40, to_level: 40, ranks: [] },
+            pursuer: { from_level: 40, to_level: 40, from_label: 'Hunter III', to_label: 'Hunter III', rank_up: false, div_up: false, ranks: [] },
         },
         // A couple of clean level-ups across two disciplines.
         levels: {
@@ -1602,17 +1614,41 @@ function ppCountUp(el, dur) {
                   xp: 3000, from_level: 6, to_level: 8, from_frac: 0.5, to_frac: 0.5, tiers: [] },
                 { slug: 'cartographer', name: 'Cartographer', disc: 'exploration', icon: 'compass',
                   xp: 3000, from_level: 9, to_level: 10, from_frac: 0.2, to_frac: 0.2,
-                  tiers: [{ key: 'apprentice', name: 'Apprentice' }] },
+                  tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }] },
             ],
-            pursuer: { from_level: 60, to_level: 63, ranks: [] },
+            pursuer: { from_level: 60, to_level: 63, from_label: 'Seeker III', to_label: 'Seeker III', rank_up: false, div_up: false, ranks: [] },
         },
-        // The onboarding-style burst: a big multi-tier jump (tests the compressed spin).
+        // Escalation demo: one job climbs 1 -> 260, crossing EVERY tier so the spark burst grows toward Legend.
+        alltiers: {
+            xp: 777000, accepted: ['demo'], first_claim: false, rank_now: 'Ranger I',
+            jobs: [{ slug: 'slayer', name: 'Slayer', disc: 'combat', icon: 'swords',
+                     xp: 777000, from_level: 1, to_level: 260, from_frac: 0.3, to_frac: 0.3, tiers: [
+                { key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 },
+                { key: 'adept', name: 'Adept', level: 25, rank: 2 },
+                { key: 'expert', name: 'Expert', level: 50, rank: 3 },
+                { key: 'veteran', name: 'Veteran', level: 75, rank: 4 },
+                { key: 'master', name: 'Master', level: 99, rank: 5 },
+                { key: 'grandmaster', name: 'Grandmaster', level: 150, rank: 6 },
+                { key: 'legend', name: 'Legend', level: 250, rank: 7 },
+            ] }],
+            pursuer: { from_level: 25, to_level: 90, from_label: 'Newbie', to_label: 'Seeker I', rank_up: true, div_up: false, ranks: [{ key: 'recruit', name: 'Recruit' }, { key: 'seeker', name: 'Seeker' }] },
+        },
+        // A division step within a rank (Seeker V -> IV): the LIGHTER finale.
+        divstep: {
+            xp: 12000, accepted: ['demo'], first_claim: false, rank_now: 'Seeker IV',
+            jobs: [
+                { slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair', xp: 6000, from_level: 12, to_level: 14, from_frac: 0.3, to_frac: 0.3, tiers: [] },
+                { slug: 'mage', name: 'Mage', disc: 'heart', icon: 'wand-sparkles', xp: 6000, from_level: 9, to_level: 11, from_frac: 0.4, to_frac: 0.4, tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }] },
+            ],
+            pursuer: { from_level: 75, to_level: 85, from_label: 'Seeker V', to_label: 'Seeker IV', rank_up: false, div_up: true, ranks: [] },
+        },
+        // The onboarding-style burst: a big multi-tier jump + a full RANK-UP (the heavier finale).
         tier: {
-            xp: 90000, accepted: ['demo'], first_claim: true, rank_now: 'Ranger I',
+            xp: 90000, accepted: ['demo'], first_claim: true, rank_now: 'Recruit V',
             jobs: [{ slug: 'gunslinger', name: 'Gunslinger', disc: 'combat', icon: 'crosshair',
                      xp: 90000, from_level: 1, to_level: 31, from_frac: 0, to_frac: 0,
-                     tiers: [{ key: 'apprentice', name: 'Apprentice' }, { key: 'adept', name: 'Adept' }] }],
-            pursuer: { from_level: 25, to_level: 55, ranks: [{ key: 'recruit', name: 'Recruit' }, { key: 'ranger', name: 'Ranger' }] },
+                     tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }, { key: 'adept', name: 'Adept', level: 25, rank: 2 }] }],
+            pursuer: { from_level: 25, to_level: 55, from_label: 'Newbie', to_label: 'Recruit V', rank_up: true, div_up: false, ranks: [{ key: 'recruit', name: 'Recruit' }] },
         },
         // Stress tests: the paged reveal (5 per page auto-play, then arrows to flip back).
         get big13() { return bigClaim(13); },   // 3 pages (5 + 5 + 3)
@@ -1625,11 +1661,15 @@ function ppCountUp(el, dur) {
                 { slug: 'cartographer', name: 'Cartographer', disc: 'exploration', icon: 'compass', xp: 6000, from_level: 7, to_level: 9, from_frac: 0.1, to_frac: 0.1, tiers: [] },
                 { slug: 'tactician', name: 'Tactician', disc: 'mind', icon: 'brain', xp: 6000, from_level: 2, to_level: 4, from_frac: 0.6, to_frac: 0.6, tiers: [] },
                 { slug: 'enchanter', name: 'Enchanter', disc: 'heart', icon: 'wand-sparkles', xp: 6000, from_level: 5, to_level: 6, from_frac: 0.4, to_frac: 0.4, tiers: [] },
-                { slug: 'speedster', name: 'Speedster', disc: 'finesse', icon: 'gauge', xp: 6000, from_level: 8, to_level: 10, from_frac: 0.2, to_frac: 0.2, tiers: [{ key: 'apprentice', name: 'Apprentice' }] },
+                { slug: 'speedster', name: 'Speedster', disc: 'finesse', icon: 'gauge', xp: 6000, from_level: 8, to_level: 10, from_frac: 0.2, to_frac: 0.2, tiers: [{ key: 'apprentice', name: 'Apprentice', level: 10, rank: 1 }] },
             ],
-            pursuer: { from_level: 70, to_level: 80, ranks: [] },
+            pursuer: { from_level: 70, to_level: 80, from_label: 'Seeker II', to_label: 'Seeker II', rank_up: false, div_up: false, ranks: [] },
         },
     };
+    // Fill each STATIC payload's resting tier from its to_level (the getters set their own).
+    [CANNED.small, CANNED.levels, CANNED.divstep, CANNED.tier, CANNED.all, CANNED.alltiers].forEach(function (p) {
+        p.jobs.forEach(function (j) { if (j.tier == null) j.tier = tierName(j.to_level); });
+    });
     document.querySelector('.ccx-dev').addEventListener('click', function (e) {
         var btn = e.target.closest('[data-ccx]');
         if (!btn || !window.PlatPursuit || !PlatPursuit.ClaimCeremony) return;

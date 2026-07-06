@@ -101,6 +101,7 @@
     /* --disc set inline; pre-mix the derived tones here so @keyframes can use them as var(). */
     --disc-soft: color-mix(in oklab, var(--disc) 16%, var(--pp-bg-3));
     --disc-glow: color-mix(in oklab, var(--disc) 55%, transparent);
+    position: relative;   /* anchors the tier stamp overlay */
     display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
     padding: 10px 12px; border-radius: 12px;
     background: color-mix(in oklab, var(--disc) 6%, var(--pp-bg-2));
@@ -120,12 +121,45 @@
 .ccx__ji svg { width: 22px; height: 22px; }
 
 .ccx__jbody { min-width: 0; }
-.ccx__jrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.ccx__jrow { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
 .ccx__jname {
     font-size: 14px; font-weight: 700; color: var(--pp-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ccx__jgain { flex: 0 0 auto; font-size: 12px; color: var(--disc); }
+
+/* Resting-tier subtitle (list-item supporting text). Space is reserved from build; the content is
+ * revealed in place at settle -- staggered top-to-bottom -- so the tier "arrives" with zero reflow. */
+.ccx__jtier {
+    display: inline-flex; align-items: center; gap: 3px;
+    height: 14px; margin-bottom: 4px; line-height: 14px; max-width: 100%;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--disc) 45%, var(--pp-text));
+    opacity: 0; transform: translateY(3px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    transition-delay: calc(var(--i, 0) * 60ms);
+}
+.ccx__jtier-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Improved-this-claim: brighter family colour + a soft glow, and an up-chevron that pops on reveal. */
+.ccx__jtier.is-up { color: var(--disc); }
+.ccx__jtier.is-up .ccx__jtier-name { text-shadow: 0 0 8px var(--disc-glow); }
+.ccx__jtier-chev { width: 11px; height: 11px; flex: 0 0 auto; }
+
+/* Revealed per PAGE (once its bars finish), so every page shows its tiers -- not just the last. */
+.ccx__jobs.show-tiers .ccx__jtier, .ccx.is-static .ccx__jtier { opacity: 1; transform: none; }
+/* On reveal, the improved tiers flare: the chevron pops up, the name glows brighter for a beat. */
+.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-chev { animation: ccxChevPop 0.6s cubic-bezier(0.22, 1.5, 0.4, 1) both; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
+.ccx__jobs.show-tiers .ccx__jtier.is-up .ccx__jtier-name { animation: ccxTierGlow 0.75s ease both; animation-delay: calc(var(--i, 0) * 60ms + 0.12s); }
+@keyframes ccxChevPop {
+    0% { transform: translateY(4px) scale(0.6); opacity: 0.2; }
+    55% { transform: translateY(-2px) scale(1.15); opacity: 1; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+@keyframes ccxTierGlow {
+    0% { text-shadow: 0 0 0 transparent; }
+    45% { text-shadow: 0 0 15px var(--disc-glow), 0 0 6px var(--disc); }
+    100% { text-shadow: 0 0 8px var(--disc-glow); }
+}
 
 /* The bar is a Horizon primitive (.pp-horizon, themed --horizon-accent: var(--disc)). Only slow its
  * fill to the ceremony's deliberate pace -- the look/gradient/glow all come from horizon.css. */
@@ -144,6 +178,60 @@
     0% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
     35% { transform: scale(1.28); box-shadow: 0 0 20px var(--disc-glow), inset 0 0 0 1px var(--disc); }
     100% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+}
+/* Threshold pulse: a bigger, brighter flare on the level chip while it's PAUSED on a tier level --
+ * the chip is the hero of the moment, so the eye ties the frozen number to the tier that emerges. */
+.ccx__lv.is-threshold { animation: ccxThreshold 0.62s cubic-bezier(0.22, 1.5, 0.4, 1) both; }
+@keyframes ccxThreshold {
+    0% { transform: scale(1); box-shadow: inset 0 0 0 1px var(--disc-glow); }
+    40% { transform: scale(1.55); box-shadow: 0 0 30px var(--disc), 0 0 12px var(--disc), inset 0 0 0 2px var(--disc); }
+    100% { transform: scale(1); box-shadow: 0 0 14px var(--disc-glow), inset 0 0 0 1px var(--disc); }
+}
+
+/* ---- Tier promotion callout ("Lv 10  APPRENTICE"): stamps in at the CARD CENTER while the chip is
+ * paused + flaring (sparks still fire from the chip, so the cause stays anchored to the level). ---- */
+.ccx__tierstamp {
+    position: absolute; top: 50%; left: 50%; z-index: 3; pointer-events: none;
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 11px; border-radius: 999px; white-space: nowrap;
+    color: var(--pp-bg-0, #05070a); background: var(--disc);
+    box-shadow: 0 0 18px var(--disc-glow), 0 2px 8px rgba(0, 0, 0, 0.4);
+    transform: translate(-50%, -50%) scale(0.4); opacity: 0;
+}
+.ccx__ts-lv { font-size: 10px; font-weight: 800; letter-spacing: 0.03em; opacity: 0.8; }
+.ccx__ts-name { font-size: 12px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; }
+.ccx__tierstamp.is-in { animation: ccxStampIn 0.42s cubic-bezier(0.22, 1.5, 0.4, 1) forwards; }
+.ccx__tierstamp.is-out { animation: ccxStampOut 0.36s ease forwards; }   /* declared after is-in -> wins */
+@keyframes ccxStampIn {
+    0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0; }
+    60% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@keyframes ccxStampOut {
+    from { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    to { transform: translate(-50%, -80%) scale(1.03); opacity: 0; }
+}
+
+/* Hot sparks: fixed layer over everything; JS spawns + animates each (arc + gravity). */
+.ccx__sparks { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
+.ccx__spark {
+    position: fixed; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 999px;
+    background: radial-gradient(circle, #fff 0%, var(--sc, var(--pp-primary)) 70%);
+    box-shadow: 0 0 6px var(--sc, var(--pp-primary)); will-change: transform, opacity;
+}
+
+/* ---- End summary: "Tiers earned  Apprentice x2 . Adept" (revealed at settle) ---- */
+.ccx__summary {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+    margin-top: 10px; opacity: 0; transition: opacity 0.45s ease;
+}
+.ccx__summary[hidden] { display: none; }
+.ccx.is-settled .ccx__summary, .ccx.is-static .ccx__summary { opacity: 1; }
+.ccx__summary-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in oklab, var(--pp-text) 55%, transparent); }
+.ccx__summary-chip {
+    padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    color: var(--pp-primary); background: color-mix(in oklab, var(--pp-primary) 12%, var(--pp-bg-3));
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 30%, transparent);
 }
 
 /* ---- Pager (multi-page claims only). Space is reserved from the start (min-height) so nothing
@@ -193,8 +281,9 @@
 /* ---- Reduced motion: no reveal, no bloom -- just show the summary. ---- */
 @media (prefers-reduced-motion: reduce) {
     .ccx__scrim { transition: none; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-    .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__job .pp-horizon__fill { transition: none; }
-    .ccx__award.is-hit, .ccx__lv.is-levelup { animation: none; }
+    .ccx__stage, .ccx__glow, .ccx__job, .ccx__jobs, .ccx__foot, .ccx__summary, .ccx__jtier, .ccx__job .pp-horizon__fill { transition: none; }
+    .ccx__award.is-hit, .ccx__lv.is-levelup, .ccx__lv.is-threshold { animation: none; }
+    .ccx__sparks { display: none; }   /* blooms are skipped in reduced motion anyway; belt + braces */
 }
 .ccx.is-static .ccx__scrim { opacity: 1; }
 .ccx.is-static .ccx__stage, .ccx.is-static .ccx__glow, .ccx.is-static .ccx__job { opacity: 1; transform: none; }

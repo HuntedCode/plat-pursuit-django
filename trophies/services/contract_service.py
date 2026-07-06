@@ -28,7 +28,8 @@ from trophies.models import (
 )
 from trophies.util_modules.constants import CONTRACT_PLATINUM_FRAC, CONTRACT_XP_TOTAL
 from trophies.util_modules.leveling import (
-    frac_into_level, level_for_xp, pursuer_rank_for_level, ranks_crossed, tiers_crossed,
+    frac_into_level, level_for_xp, pursuer_rank_for_level, ranks_crossed, tier_for_level, tier_rank,
+    tiers_crossed,
 )
 
 
@@ -359,9 +360,9 @@ def claim(profile, *, contract=None, all_claimable=False):
 
     The payload:
         {xp, accepted:[slug], first_claim, rank_now,
-         jobs:[{slug, name, disc, icon, xp, from_level, to_level, from_frac, to_frac,
-                tiers:[{key,name}]}],   # every job the claim gave XP to (bar fills; may or may not level)
-         pursuer:{from_level, to_level, ranks:[{key,name}]}}
+         jobs:[{slug, name, disc, icon, xp, from_level, to_level, from_frac, to_frac, tier,
+                tiers:[{key,name,level,rank}]}],   # every job the claim gave XP to (bar fills; may or may not level)
+         pursuer:{from_level, to_level, from_label, to_label, rank_up, div_up, ranks:[{key,name}]}}
     All work is bounded to the claimed Contracts' jobs (never the user's library)."""
     if all_claimable:
         contracts = [ec.contract for ec in claimable_contracts(profile)]
@@ -389,6 +390,8 @@ def claim(profile, *, contract=None, all_claimable=False):
 
     post = _levels_snapshot(profile, job_by_id.keys())
     post_pursuer = _pursuer_level(profile)
+    pre_rank = pursuer_rank_for_level(pre_pursuer)
+    post_rank = pursuer_rank_for_level(post_pursuer)
 
     jobs = []
     for jid, job in job_by_id.items():
@@ -401,17 +404,26 @@ def claim(profile, *, contract=None, all_claimable=False):
             'from_level': frm_lvl, 'to_level': to_lvl,
             'from_frac': frac_into_level(frm_xp),      # where the bar starts / lands within each level band
             'to_frac': frac_into_level(to_xp),
-            'tiers': [{'key': k, 'name': n} for _lvl, k, n in tiers_crossed(frm_lvl, to_lvl)],
+            'tier': tier_for_level(to_lvl)['name'],    # the job's RESTING tier (the at-rest subtitle)
+            # `level` = the tier's min_level (blooms exactly when the bar ticks past it); `rank` =
+            # its ladder position (Apprentice 1 .. Legend 7), so the bloom escalates toward Legend.
+            'tiers': [{'key': k, 'name': n, 'level': lvl, 'rank': tier_rank(k)}
+                      for lvl, k, n in tiers_crossed(frm_lvl, to_lvl)],
         })
     jobs.sort(key=lambda j: (j['to_level'] - j['from_level'], j['xp']), reverse=True)   # biggest promotions, then XP
     return {
         'xp': total,
         'accepted': accepted,
         'first_claim': first_claim,
-        'rank_now': pursuer_rank_for_level(post_pursuer)['label'],
+        'rank_now': post_rank['label'],
         'jobs': jobs,
         'pursuer': {
             'from_level': pre_pursuer, 'to_level': post_pursuer,
+            'from_label': pre_rank['label'], 'to_label': post_rank['label'],
+            # Two finale intensities: rank_up = crossed into a new NAMED rank (heavy); div_up = climbed
+            # a division within the same rank (lighter). Both false = no rank movement, no finale.
+            'rank_up': post_rank['key'] != pre_rank['key'],
+            'div_up': post_rank['key'] == pre_rank['key'] and post_rank['division'] != pre_rank['division'],
             'ranks': [{'key': k, 'name': n} for _lvl, k, n, _hd in ranks_crossed(pre_pursuer, post_pursuer)],
         },
     }

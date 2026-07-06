@@ -105,11 +105,17 @@ def test_claim_returns_what_happened_payload():
     assert result['xp'] == 90000 and result['accepted'] == ['clm'] and result['first_claim'] is True
     g = {j['slug']: j for j in result['jobs']}['gunslinger']
     assert g['from_level'] == 1 and g['to_level'] == 31 and g['xp'] == 90000
+    assert g['tier'] == 'Adept'                                        # resting-tier subtitle (level 31 -> Adept)
     assert 'icon' in g and g['disc'] == 'combat'                       # icon + colour for the ceremony tile
     assert 0.0 <= g['from_frac'] < 1.0 and 0.0 <= g['to_frac'] < 1.0   # within-level bar fractions
     assert {t['key'] for t in g['tiers']} == {'apprentice', 'adept'}   # crossed both, Initiate excluded
-    assert result['pursuer']['to_level'] > result['pursuer']['from_level']
-    assert any(r['key'] == 'recruit' for r in result['pursuer']['ranks'])
+    assert all('level' in t and 'rank' in t for t in g['tiers'])       # min_level -> bloom timing, rank -> escalation
+    assert {t['name']: t['rank'] for t in g['tiers']} == {'Apprentice': 1, 'Adept': 2}   # rank grows toward Legend
+    p = result['pursuer']
+    assert p['to_level'] > p['from_level']
+    assert any(r['key'] == 'recruit' for r in p['ranks'])
+    assert p['rank_up'] is True and p['div_up'] is False               # Newbie -> Recruit = a full rank-up
+    assert p['from_label'] and p['to_label']                           # finale announces the new rank
     assert result['rank_now']   # a display label
 
 

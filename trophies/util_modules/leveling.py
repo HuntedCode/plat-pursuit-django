@@ -56,6 +56,15 @@ JOB_TIERS = [
     (250, 'legend',      'Legend'),
 ]
 
+# key -> 0-based rank in the ladder (Initiate 0 .. Legend 7). Drives escalating celebration weight
+# (e.g. the claim ceremony's tier-bloom spark count grows toward Legend).
+_JOB_TIER_RANK = {key: i for i, (_lvl, key, _name) in enumerate(JOB_TIERS)}
+
+
+def tier_rank(key: str) -> int:
+    """The 0-based position of a job prestige tier (Initiate 0 .. Legend 7); 0 for unknown/floor."""
+    return _JOB_TIER_RANK.get(key, 0)
+
 
 def tier_for_level(level: int) -> dict:
     """The prestige tier for a job level. Returns {key, name, min_level, next_level} where

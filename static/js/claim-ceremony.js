@@ -24,8 +24,6 @@
     'use strict';
     var PP = (window.PlatPursuit = window.PlatPursuit || {});
 
-    var MAX_LEVEL_CYCLES = 4;   // discrete fill-pop cycles before we compress big jumps into one settle
-
     function reduced() {
         return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     }
@@ -82,9 +80,79 @@
 
     var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
 
-    // Fill one job tile's bar honestly: start where it was, sweep to full for each level gained
-    // (ticking the level number + a pop), then settle into the final band. Big jumps compress
-    // to MAX_LEVEL_CYCLES visible ticks so a 1->31 claim doesn't spin forever.
+    // Hot arcing sparks (the kit's fabrication vocabulary -- NOT confetti). Spawned into the overlay's
+    // fixed spark layer at a viewport point; each arcs up-and-out then falls under "gravity" and fades.
+    function sparkBurst(layer, cx, cy, discKey, n) {
+        if (!layer) return;
+        var color = 'var(--disc-' + discKey + ', var(--pp-primary))';
+        for (var i = 0; i < n; i++) {
+            var s = document.createElement('span');
+            s.className = 'ccx__spark';
+            s.style.left = cx + 'px'; s.style.top = cy + 'px';
+            s.style.setProperty('--sc', color);
+            layer.appendChild(s);
+            var ang = (-90 + (Math.random() * 120 - 60)) * Math.PI / 180;   // upward spread
+            var dist = 26 + Math.random() * 46;
+            var dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist;
+            var fall = Math.abs(dy) + 34 + Math.random() * 54;             // arc back down under gravity
+            var anim = s.animate([
+                { transform: 'translate(0,0) scale(1)', opacity: 1 },
+                { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(0.9)', opacity: 1, offset: 0.35 },
+                { transform: 'translate(' + (dx * 1.35) + 'px,' + fall + 'px) scale(0.25)', opacity: 0 },
+            ], { duration: 560 + Math.random() * 320, easing: 'cubic-bezier(0.2, 0.55, 0.35, 1)' });
+            anim.onfinish = (function (node) { return function () { node.remove(); }; })(s);
+        }
+    }
+
+    // A tier promotion, fired while the level counter is PAUSED on the threshold level: hot sparks off
+    // the (frozen, flaring) level chip + a callout that names the exact level -> "Lv 10  APPRENTICE" --
+    // so the crossing reads as caused by hitting that level, not a random pop.
+    function bloomTier(tile, tierName, level, rank, discKey) {
+        var lv = tile.querySelector('.ccx__lv');
+        var root = tile.closest('.ccx');
+        var layer = root && root.querySelector('.ccx__sparks');
+        var r = lv.getBoundingClientRect();
+        // Escalate toward Legend: Apprentice (rank 1) ~11 sparks .. Legend (rank 7) ~29. The deeper the
+        // tier, the bigger the burst -- these crossings are rarer and harder-won.
+        var n = 8 + (rank || 1) * 3;
+        sparkBurst(layer, r.left + r.width / 2, r.top + r.height / 2, discKey, n);
+        var stamp = document.createElement('div');
+        stamp.className = 'ccx__tierstamp';
+        var lvTag = document.createElement('span');
+        lvTag.className = 'ccx__ts-lv';
+        lvTag.textContent = 'Lv ' + Number(level);       // states the cause explicitly
+        var tierTag = document.createElement('span');
+        tierTag.className = 'ccx__ts-name';
+        tierTag.textContent = tierName;                  // textContent = XSS-safe
+        stamp.appendChild(lvTag);
+        stamp.appendChild(tierTag);
+        tile.appendChild(stamp);
+        requestAnimationFrame(function () { stamp.classList.add('is-in'); });
+        setTimeout(function () {
+            stamp.classList.add('is-out');
+            setTimeout(function () { if (stamp.parentNode) stamp.remove(); }, 380);
+        }, 1150);
+    }
+
+    // Tick the level number from -> to over `dur` (a quick climb when several levels pass between the
+    // meaningful stops). Resolves when it lands on `to`.
+    function spinNumber(lvn, from, to, dur) {
+        return new Promise(function (resolve) {
+            var steps = to - from;
+            if (steps <= 0) { lvn.textContent = to; resolve(); return; }
+            var i = 0, per = Math.max(28, dur / steps);
+            var id = setInterval(function () {
+                i += 1;
+                lvn.textContent = from + i;
+                if (i >= steps) { clearInterval(id); resolve(); }
+            }, per);
+        });
+    }
+
+    // Run a job tile: the bar fills honestly while the level number climbs, and it PAUSES on each
+    // tier-boundary level to bloom the promotion -- so a tier-up reads as caused by hitting that exact
+    // level, never a random pop. Tier boundaries + the final level are the "stops"; when many levels
+    // pass between stops the number spins quickly through them (they're not the meaningful beats).
     function runJob(tile, job, isReduced) {
         var fill = tile.querySelector('.pp-horizon');   // the Horizon bar (fillTo drives --horizon-progress)
         var lvn = tile.querySelector('.ccx__lvn');
@@ -100,23 +168,37 @@
                 .then(function () { return fillTo(fill, job.to_frac * 100, !isReduced); });
         }
 
-        var cycles = Math.min(gained, MAX_LEVEL_CYCLES);
-        var chain = fillTo(fill, job.from_frac * 100, false);   // seed the starting band, no animation
-        for (var k = 0; k < cycles; k++) {
-            (function (idx) {
-                chain = chain
-                    .then(function () { return fillTo(fill, 100, true); })
-                    .then(function () {
-                        lvn.textContent = job.from_level + idx + 1;
-                        pop(lv, 'is-levelup');
-                        return fillTo(fill, 0, false);
-                    });
-            })(k);
-        }
-        return chain.then(function () {
-            if (gained > cycles) { lvn.textContent = job.to_level; pop(lv, 'is-levelup'); }  // compressed remainder
-            return fillTo(fill, job.to_frac * 100, true);   // land in the true final band
+        // The stops: each tier boundary crossed (a deliberate beat) then the final level.
+        var stops = [];
+        (job.tiers || []).forEach(function (t) {
+            if (t.level > job.from_level && t.level <= job.to_level) stops.push({ level: t.level, name: t.name, rank: t.rank });
         });
+        if (!stops.length || stops[stops.length - 1].level !== job.to_level) stops.push({ level: job.to_level, name: null });
+
+        var chain = fillTo(fill, job.from_frac * 100, false);   // seed the starting band, no animation
+        var prev = job.from_level;
+        stops.forEach(function (stop, si) {
+            var isLast = si === stops.length - 1;
+            var from = prev;
+            chain = chain
+                // climb to this stop: fill the bar to full while the number spins up to `stop.level`
+                .then(function () { return Promise.all([fillTo(fill, 100, true), spinNumber(lvn, from, stop.level, 440)]); })
+                .then(function () {
+                    lvn.textContent = stop.level;
+                    if (stop.name) {                       // a tier boundary -> stop, flare, name it, hold
+                        pop(lv, 'is-threshold');
+                        if (!isReduced) bloomTier(tile, stop.name, stop.level, stop.rank, job.disc);
+                        return wait(620);
+                    }
+                    pop(lv, 'is-levelup');                 // an ordinary final level -> a light pop
+                })
+                .then(function () {
+                    return isLast ? fillTo(fill, job.to_frac * 100, true)   // settle into the final band
+                                  : fillTo(fill, 0, false);                 // reset to climb toward the next stop
+                });
+            prev = stop.level;
+        });
+        return chain;
     }
 
     function eyebrow(p) {
@@ -145,12 +227,21 @@
                     '<span class="ccx__jname"></span>' +
                     '<span class="ccx__jgain pp-tally">+' + Number(job.xp).toLocaleString() + '</span>' +
                 '</div>' +
+                '<div class="ccx__jtier"></div>' +   // resting tier subtitle (revealed at settle)
                 '<div class="ccx__bar pp-horizon pp-horizon__track" style="--horizon-accent: var(--disc); --horizon-progress: 0%;">' +
                     '<span class="pp-horizon__fill"></span>' +
                 '</div>' +
             '</div>' +
             '<span class="ccx__lv"><span class="ccx__lvn pp-tally">' + Number(job.from_level) + '</span></span>';
         li.querySelector('.ccx__jname').textContent = job.name;   // textContent = XSS-safe
+        // Resting-tier subtitle. If the job IMPROVED its tier this claim, mark it (up-chevron + flare)
+        // so the eye lands on which tiers actually moved -- not just what tier each job is.
+        var tierEl = li.querySelector('.ccx__jtier');
+        if (job.tiers && job.tiers.length) { tierEl.classList.add('is-up'); tierEl.innerHTML = CHEV_UP; }
+        var tierName = document.createElement('span');
+        tierName.className = 'ccx__jtier-name';
+        tierName.textContent = job.tier || '';    // textContent = XSS-safe
+        tierEl.appendChild(tierName);
         return li;
     }
 
@@ -159,6 +250,8 @@
         prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
         next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
     };
+    // Up-chevron marking a tier that IMPROVED this claim (on the resting-tier subtitle).
+    var CHEV_UP = '<svg class="ccx__jtier-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>';
 
     function chunk(arr, size) {
         var out = [];
@@ -205,6 +298,8 @@
             t.style.transition = 'none';
             t.classList.add('is-in');
             settleJob(t, pageJobs[i]);
+            var tr = t.querySelector('.ccx__jtier');   // already-settled page: tier shows instantly
+            if (tr) { tr.style.transition = 'none'; tr.style.opacity = '1'; tr.style.transform = 'none'; }
         });
     }
 
@@ -231,18 +326,43 @@
                     '<div class="ccx__dots"></div>' +
                     '<button type="button" class="ccx__pg ccx__pg--next" aria-label="Next page" disabled>' + CHEVRON.next + '</button>' +
                 '</div>' +
+                '<div class="ccx__summary" hidden></div>' +
                 '<div class="ccx__foot">' +
                     '<div class="ccx__rank"></div>' +
                     '<button type="button" class="ccx__done btn btn-primary btn-sm">Continue</button>' +
                 '</div>' +
-            '</div>';
+            '</div>' +
+            '<div class="ccx__sparks" aria-hidden="true"></div>';   // fixed spark layer (over everything)
         root.querySelector('.ccx__eyebrow').textContent = eyebrow(payload);
         var rankEl = root.querySelector('.ccx__rank');
         if (payload.rank_now) {
             rankEl.innerHTML = 'Pursuer Rank &middot; <b></b>';
             rankEl.querySelector('b').textContent = payload.rank_now;
         }
+        buildSummary(root.querySelector('.ccx__summary'), payload);
         return root;
+    }
+
+    // End-of-claim recap: "Tiers earned  Apprentice x2 . Adept x1" (aggregated across all jobs). Kept
+    // in the DOM from the start (space reserved) but revealed only at settle.
+    function buildSummary(el, payload) {
+        var tally = {};   // name -> count, preserving first-seen (ascending tier) order
+        (payload.jobs || []).forEach(function (j) {
+            (j.tiers || []).forEach(function (t) { tally[t.name] = (tally[t.name] || 0) + 1; });
+        });
+        var names = Object.keys(tally);
+        if (!names.length) return;   // stays hidden -- no tiers crossed this claim
+        var label = document.createElement('span');
+        label.className = 'ccx__summary-label';
+        label.textContent = 'Tiers earned';
+        el.appendChild(label);
+        names.forEach(function (name) {
+            var chip = document.createElement('span');
+            chip.className = 'ccx__summary-chip';
+            chip.textContent = tally[name] > 1 ? (name + ' ×' + tally[name]) : name;
+            el.appendChild(chip);
+        });
+        el.hidden = false;
     }
 
     function play(payload) {
@@ -382,11 +502,17 @@
             var pre = prebuilt ? Promise.resolve(prebuilt) : fadeOut().then(function () { return buildPage(jobsEl, pages[p]); });
             return pre.then(function (tiles) {
                 if (torn || !tiles) return;
+                jobsEl.classList.remove('show-tiers');   // this page's tiers stay hidden until its bars finish
                 pageIdx = p; updatePager();
                 return revealPage(tiles, pages[p]);
             }).then(function () {
+                if (torn) return;
+                jobsEl.classList.add('show-tiers');      // reveal THIS page's tier subtitles (staggered)
+                // Hold so the tiers are actually read before the page turns; the last page just stays put.
+                return (p + 1 >= pages.length) ? null : wait(1050);
+            }).then(function () {
                 if (torn || p + 1 >= pages.length) return;
-                return wait(300).then(function () { return autoplay(p + 1, null); });   // brief beat, then the next 5
+                return autoplay(p + 1, null);
             });
         }
 
