@@ -32,6 +32,7 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | Doc | Description |
 |-----|-------------|
 | [Product Identity](design/product-identity.md) | Strategic identity, 2-minute pitch, IA, hub model, naming, supporting pillars. The strategic frame every other doc serves. |
+| [Career: Rebuild Reference Standard](design/rebuild/career-reference-standard.md) | **The finished-quality bar for the site-wide rebuild.** Every rebuilt page is measured against Career's polish + coherence: design tokens, mobile-first fit, premium motion, performance, interaction, URL/state — plus the "what would Google/Apple do here?" polishing lens. |
 | [Visual Identity](design/visual-identity.md) | Visual constitution: brief, six adjectives, four signature primitives (Frame, Pursuer Card, Horizon, Tally), Surfaces category (Binder first, more to come), anti-references. The test every visual decision must pass. |
 | [Visual Identity References](design/visual-identity-references.md) | Curated real-world references for each primitive (trading-card chrome, identity-card design, progress UIs, number-as-reward) plus PSN-era and explorer's-office moods. Working doc for sketching/mood-boarding. |
 | [Binder Surface](design/binder-surface.md) | The Binder: first Surface (branded container, not a primitive). Six views, 3D page-flip Spread mode, locked design + technical learnings from the workshop at `/design/binder/`. Code extraction deferred. |

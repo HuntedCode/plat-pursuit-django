@@ -14,7 +14,7 @@ The full visual constitution lives in **[docs/design/visual-identity.md](docs/de
 
 ### Overview
 
-Every page in PlatPursuit is being rebuilt to match the dashboard's design language. This is a full redesign, not a re-style. The dashboard is the reference implementation and the design baseline. The goal: every page should feel like it belongs to the same app as the dashboard.
+Every page in PlatPursuit is being rebuilt into one coherent, polished product. This is a full redesign, not a re-style. The dashboard seeded the design language; the **Career page (`/career/`) is now the finished-quality standard** every page is measured against (see Reference Implementation below). The goal: every page should feel like it belongs to the same app, at the same level of polish.
 
 **Redesign in progress**: Pages are being rebuilt incrementally. Each page goes through a three-part process (backend audit, frontend rebuild, polish). Redesigned and legacy pages coexist safely due to the opt-in ZoomScaler architecture.
 
@@ -60,7 +60,9 @@ All styling tokens, patterns, component blueprints, and rules are documented in 
 
 ### Reference Implementation
 
-See `templates/trophies/dashboard.html` and its module partials in `templates/trophies/partials/dashboard/` for the canonical implementation.
+**The Career page (`/career/`) is the finished-quality standard for the rebuild.** Hold every page to its bar for polish and design coherence. See **[docs/design/rebuild/career-reference-standard.md](docs/design/rebuild/career-reference-standard.md)** for the dimensions that define "done" (design coherence, mobile-first fit, premium motion, performance, interaction, URL/state) and the **"what would Google/Apple do here?" polishing lens** that got it there. Exemplar files: `templates/trophies/career.html`, `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css`.
+
+The dashboard (`templates/trophies/dashboard.html`) seeded the design language and is still a useful token/pattern reference, but it is being sunset; Career is the current bar.
 
 ### ZoomScaler Legacy System (Non-Redesigned Pages)
 
@@ -230,13 +232,15 @@ In addition to the standard inline audit, check for Django-specific security pit
 The final audit should review every new/modified template and JS file against:
 
 1. **Platinum Pursuit Standard**: Does it feel professional, sleek, and modern while retaining the indie charm? Or does it feel generic/sterile?
-2. **Dashboard cohesion**: Would this component look at home inside a dashboard module? Uses the correct tokens from the design system doc?
-3. **Responsive design compliance**: Three-layout mobile-first system, base styles correct at 375px, proper `md:`/`lg:` progression
-4. **Component pattern compliance**: Page header cards, filter toolbars, browse cards, pagination, empty states all follow the design system patterns
-5. **Interactive polish**: Hover glow (not scale), transitions, focus indicators, loading states
-6. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
-7. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
-8. **Tailwind consistency**: Using project-standard classes rather than one-off values
+2. **Google/Apple polish lens**: For each interactive moment, ask "what would a top-tier Google/Apple product do here?" — real physics (spring settle, not a flat ease), anticipation + follow-through, exits choreographed as carefully as entrances, and deliberate restraint (not motion everywhere). This lens is what got the Career page to its bar; see [career-reference-standard.md](docs/design/rebuild/career-reference-standard.md).
+3. **Rebuild cohesion (Career standard)**: Would this page hold up next to the Career page? Uses the correct `--pp-*`/`--disc-*` tokens and the visual-identity primitives, not one-offs?
+4. **Responsive design compliance**: Three-layout mobile-first system, base styles correct at 375px, proper `md:`/`lg:` progression. Do the real mobile fit pass (compact airiness, restore at `md:`, omit expendable blocks rather than scroll)
+5. **Component pattern compliance**: Page header cards, filter toolbars, browse cards, pagination, empty states all follow the design system patterns
+6. **Interactive polish**: Hover glow (not scale), transitions, focus indicators, loading states
+7. **Performance discipline**: Per-user querysets DB-aggregate (whale-safe); no `filter` transitions on page-sized elements; isolate animations over a `backdrop-filter`. See [motion-patterns](docs/reference/motion-patterns.md) Gotchas
+8. **Image styling**: `object-cover` for game/trophy icons, `object-contain` for badges, no `object-fill`
+9. **Text handling**: `pr-1` on italic + line-clamped text, proper truncation
+10. **Tailwind consistency**: Using project-standard classes rather than one-off values
 
 ---
 

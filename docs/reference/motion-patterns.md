@@ -85,6 +85,24 @@ Roll integers only — parse `\D` out, and skip percentages/formatted text (they
 as the section reveals so opacity masks the 0-reset. Reduced-motion: show the final value. Reuse the
 `tickUp` pattern in `static/js/home-motion.js`.
 
+### Damped spring landing (Apple-style settle)
+A thing that rises into place should *settle*, not glide to a stop. Own the bounce in the keyframe
+stops — overshoot past the mark, a small undershoot, a smaller second overshoot, then rest — and use
+an **expo-out** timing so the animation doesn't add its own overshoot on top (double-bounce reads
+wrong). Pair with a short **specular sheen** (a skewed, `mix-blend-mode: screen` gradient band swept
+across the landed element) timed to fire *just after* it settles:
+```css
+@keyframes landIn {
+  0%   { opacity: 0; transform: translateY(44px) scale(.78); }
+  52%  { opacity: 1; transform: translateY(-3px) scale(1.09); }  /* overshoot */
+  70%  { transform: translateY(1px) scale(.978); }               /* undershoot */
+  85%  { transform: translateY(0)   scale(1.014); }              /* smaller 2nd overshoot */
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.el { animation: landIn 1s cubic-bezier(.16,1,.3,1) both; }   /* expo-out lets the stops own the bounce */
+```
+Reference: the rank hand-off in `claim-ceremony.css` (`ccxHoToIn` + `ccxHoSheen`).
+
 ### Persistent acknowledgment markers
 A "you have something new" marker should persist until acted on: add the class, then
 `el.addEventListener('pointerenter', clear, { once: true })`. `{ once: true }` = no listener leak,
@@ -96,6 +114,7 @@ and `pointerenter` covers mouse hover *and* touch tap.
 |------|-------|
 | Forge reveal + flowing-edge "new" marker + slot-in shift | `static/css/components/pursuer-card-forge.css`, `static/js/pursuer-card-forge.js` |
 | Home entrance settle + count-ups + hover glows | `static/css/components/home.css`, `static/js/home-motion.js` |
+| Claim ceremony: spring settle, specular sheen, shared-axis paging, staggered blooms, control-gating | `static/js/claim-ceremony.js`, `static/css/components/claim-ceremony.css` (the rebuild's signature moment -- see [Career Reference Standard](../design/rebuild/career-reference-standard.md)) |
 | The Frame Earn Moment (the canonical "wow") | `templates/design/frame_preview.html` (see [Frame Component](frame-component.md)) |
 
 ## Gotchas and Pitfalls
@@ -112,6 +131,17 @@ and `pointerenter` covers mouse hover *and* touch tap.
   driven by an animated `@property` angle renders *static* where unsupported — make sure that
   degradation still reads as an intentional marker (it does for the "new" ring: a steady lit border).
 - **Perpetual full redraws read cheap.** Loop by resting at an empty/neutral state at the wrap.
+- **Never *transition* `filter` on a page-sized element.** A filter re-rasterizes its whole subtree
+  every frame its input changes, so transitioning `filter: brightness` on the page (or scaling a page
+  behind a static one) stutters — brutal on tall mobile layouts. Dim via a translucent overlay (the
+  scrim/backdrop you already have), not a page-level filter. (Career's `.pp-receded` recede: scale the
+  content, let the overlay do the dim.)
+- **`backdrop-filter: blur` re-samples on *any* repaint in its stacking context.** Per-frame
+  animations near it (count-ups rewriting text, SVG glyph draws) force a full re-blur of the page
+  behind it each frame — so *only the animating elements* stutter, and only on tall mobile pages.
+  Promote the animating element's container to its own compositor layer (`will-change: transform`) so
+  its repaints don't dirty the backdrop. (See [career-reference-standard](../design/rebuild/career-reference-standard.md)
+  and the memory on mobile GPU jank.)
 - **Confetti is off-brand.** `canvas-confetti` / `static/js/celebrations.js` violate anti-reference
   #4 — do **not** reuse them. Draw from the Frame's fabrication vocabulary (weld / scan-beam /
   arcing sparks) instead.
