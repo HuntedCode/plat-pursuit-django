@@ -75,7 +75,7 @@ The test for any badge-rendering decision: *does this respect the card metaphor?
 
 If the Frame turns a badge into a trading card, the Badge Gallery turns the collection into an album. The trading-card metaphor doesn't stop at the individual card; it extends to the surface that displays the collection. The Badge Gallery is the kit's canonical "binder / display" — slots for each card, labeled spaces, the satisfaction of seeing your collection housed.
 
-**Implementation: the Binder.** The Album concept was prototyped end-to-end as the **Binder Surface** — a literal three-ring binder vessel for the collection, with cover, spine, rings, page tabs, sleeves, and a 3D page-flip Spread view. The Binder is documented as a Surface (a branded container that arranges Frames) in its own section below; see [Surfaces → The Binder](#surfaces-and-the-binder) and [binder-surface.md](binder-surface.md) for the full design + technical reference. The bullets below are the conceptual rationale that the Binder workshop fulfilled.
+**Implementation: the Binder.** The Album concept was prototyped end-to-end as the **Binder Surface** — a literal three-ring binder vessel for the collection, with cover, spine, rings, page tabs, sleeves, and a 3D page-flip Spread view. The Binder is documented as a Surface (a branded container that arranges Frames) in its own section below; see [Surfaces → The Binder](#surfaces-and-the-binder) and [binder-surface.md](binder-surface.md) for the full design + technical reference. The bullets below are the conceptual rationale that the Binder workshop fulfilled. **Superseded (2026-07):** the collection no longer uses the binder — badges present as medallion OBJECTS in the [Badge Medallion "Case"](../reference/badge-medallion.md); the Binder is now a design lab only. The *Album* idea (a housed, browsable collection) still holds; the Case is its current implementation.
 
 **Visual character (delivered by the Binder workshop).**
 
@@ -115,6 +115,8 @@ The four primitives share a motion and particle language that the Frame prototyp
 ### The Frame (headline primitive)
 
 **Concept.** The PlatPursuit-branded housing that surrounds badge artwork. Binder slot, museum case, graded-card sleeve. The Frame is the *brand*; the artwork inside is the *content*.
+
+> **Evolution (2026-07).** On `/collection/`, badges now present as **medallion OBJECTS** (the [Badge Medallion](../reference/badge-medallion.md)) rather than boxed in the Frame card — the badge art is *already* a self-contained laurel-framed medallion, so the card chrome double-framed it. The Frame still houses badges everywhere else (game/badge detail, share cards); a site-wide **Frame -> Medallion** migration is under evaluation. If it lands, this section is where the primitive gets redefined.
 
 **Job.**
 

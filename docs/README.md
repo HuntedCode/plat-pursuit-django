@@ -35,7 +35,7 @@ Strategic-identity docs and long-form vision documents for systems not yet fully
 | [Career: Rebuild Reference Standard](design/rebuild/career-reference-standard.md) | **The finished-quality bar for the site-wide rebuild.** Every rebuilt page is measured against Career's polish + coherence: design tokens, mobile-first fit, premium motion, performance, interaction, URL/state — plus the "what would Google/Apple do here?" polishing lens. |
 | [Visual Identity](design/visual-identity.md) | Visual constitution: brief, six adjectives, four signature primitives (Frame, Pursuer Card, Horizon, Tally), Surfaces category (Binder first, more to come), anti-references. The test every visual decision must pass. |
 | [Visual Identity References](design/visual-identity-references.md) | Curated real-world references for each primitive (trading-card chrome, identity-card design, progress UIs, number-as-reward) plus PSN-era and explorer's-office moods. Working doc for sketching/mood-boarding. |
-| [Binder Surface](design/binder-surface.md) | The Binder: first Surface (branded container, not a primitive). Six views, 3D page-flip Spread mode, locked design + technical learnings from the workshop at `/design/binder/`. Code extraction deferred. |
+| [Binder Surface](design/binder-surface.md) | **SUPERSEDED** by the [Badge Medallion Case](reference/badge-medallion.md) on `/collection/` (2026-07). Retained as the `/design/binder/` design lab reference: six views, 3D page-flip, technical learnings. |
 | [Gamification Plan](design/gamification-plan.md) | Layered Phase 1 to 4+ rollout for the Pursuer + Job system. Phase 1 ships the core loop; later phases earn their place through engagement data. |
 | [Dashboard Module Catalog](design/dashboard-module-catalog.md) | 28-module roadmap with priority tiers, data sources, and implementation status |
 | [Data Intelligence](design/data-intelligence.md) | The flagship premium *value* arc: one per-profile insight engine, three interfaces (insight engine → My Stats drill-down → conversational companion). Whale-safe via materialized pre-compute. |
@@ -100,6 +100,7 @@ Quick-lookup tables for mid-task reference.
 | [Design System](reference/design-system.md) | Site-wide styling tokens, responsive patterns, grid rules, color/contrast reference |
 | [Premium Motion Patterns](reference/motion-patterns.md) | How premium motion reads premium: principles (traveling light, restraint) + CSS recipes/gotchas (fade-don't-pop, glow-above-image, no-FOUC reveals, clip breathing room, count-ups) |
 | [Frame Component](reference/frame-component.md) | Badge chrome primitive: partial, CSS, JS controller, Earn Moment, sizes / states / tiers, reduced-motion |
+| [Badge Medallion + Case](reference/badge-medallion.md) | The shipped `/collection/` presentation: badge as a precious medallion OBJECT (4 states, segmented ring), the series-grouped Case, and the fetch-on-tap detail. Supersedes the Frame + binder on the collection. |
 | [JS Utilities](reference/js-utilities.md) | utils.js shared library (API, ToastManager, InfiniteScroller, etc.) |
 | [Template Architecture](reference/template-architecture.md) | base.html, zoom wrapper, templatetags, context processors, mixins, themes |
 | [Settings Overview](reference/settings-overview.md) | Key Django settings, environment variables, constants files |

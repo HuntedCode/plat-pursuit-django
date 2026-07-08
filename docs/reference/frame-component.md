@@ -2,6 +2,8 @@
 
 The Frame is the chrome that wraps every badge wherever it renders: tier-tinted backdrop, art layers, plinth with engraving, optional pin chip. It's one of the four signature visual primitives in the PlatPursuit design system (see [visual-identity.md §3](../design/visual-identity.md)). This doc is the implementation reference: data contract, sizes, states, public JS API, theming, the Earn Moment, and gotchas.
 
+> **Note (2026-07):** on `/collection/`, badges no longer use the Frame — they present as medallion OBJECTS via the [Badge Medallion](badge-medallion.md). The Frame still renders badges everywhere else (game/badge detail, share cards); a site-wide Frame -> Medallion migration is under evaluation.
+
 ## Quick Start
 
 ```django
