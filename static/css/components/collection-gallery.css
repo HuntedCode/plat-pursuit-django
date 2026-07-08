@@ -1,0 +1,60 @@
+/* ============================================================
+ * COLLECTION GALLERY -- the visual "hunting tool": a filterable + sortable wall of Badge Medallion
+ * OBJECTS (the List/table's sibling; same flat data, object presentation). Reuses the List toolbar
+ * chip classes (.pp-list__toolbar / __group / __chip / __search / __stats / __empty); this file only
+ * adds the sort control + the medallion grid + captions. Markup: templates/components/collection_gallery.html.
+ * Wired by static/js/collection.js (initGallery). Mobile-first.
+ * ============================================================ */
+
+/* sort dropdown (the toolbar's one gallery-specific control -- the table sorts via column headers) */
+.pp-gallery__sort-label { display: inline-flex; align-items: center; }
+.pp-gallery__sort {
+    padding: 6px 10px; border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e8e9ec; font-size: 12.5px; cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease;
+}
+.pp-gallery__sort:hover { border-color: rgba(255, 255, 255, 0.22); }
+.pp-gallery__sort:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
+
+/* the wall: medallion objects on the page substrate (not boxed rows) */
+.pp-gallery__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+    gap: 22px 12px;
+    justify-items: center;
+}
+.pp-gallery__cell {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    width: 100%; text-decoration: none; color: inherit;
+    scroll-margin-top: 96px;
+}
+.pp-gallery__cell .pp-med { --sz: 116px; }
+
+.pp-gallery__caption { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; }
+.pp-gallery__name {
+    font-size: 12px; font-weight: 600; color: var(--pp-text-mute); text-align: center;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: color 140ms ease;
+}
+.pp-gallery__cell:hover .pp-gallery__name,
+.pp-gallery__cell:focus-visible .pp-gallery__name { color: var(--pp-text); }
+.pp-gallery__cell:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 4px; border-radius: 10px; }
+
+.pp-gallery__tier {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 1px 8px; border-radius: 999px; border: 1px solid;
+}
+.pp-gallery__tier--bronze   { color: #dc9650; border-color: rgba(200, 122, 59, 0.45); }
+.pp-gallery__tier--silver   { color: #dce1eb; border-color: rgba(205, 208, 212, 0.45); }
+.pp-gallery__tier--gold     { color: #f5dc82; border-color: rgba(240, 198, 74, 0.5); }
+.pp-gallery__tier--platinum { color: #dcf0fa; border-color: rgba(207, 232, 240, 0.55); }
+
+@media (min-width: 640px) {
+    .pp-gallery__grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 24px 14px; }
+    .pp-gallery__cell .pp-med { --sz: 128px; }
+}
+@media (min-width: 1024px) {
+    .pp-gallery__grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 28px 16px; }
+    .pp-gallery__cell .pp-med { --sz: 140px; }
+}

@@ -1,0 +1,73 @@
+{% comment %}
+Collection Gallery view: the visual "hunting tool". Same flat badge set as the List/table, but rendered
+as a filterable + sortable wall of Badge Medallion OBJECTS (the table shows them as rows; this shows them
+as the objects they are). Expects `list_badges` (flat Frame dicts + theme/palette/series_slug/badge_id)
+and `themes` ([{name, palette}]). Each cell taps to the badge detail modal (data-modal-url), with the
+badge detail page as a no-JS fallback href. Reuses the List toolbar chip classes; the medallion id is
+suppressed (no_id) since the shelf in the Case owns the canonical #card-<id> anchor. Styled by
+collection-gallery.css, wired by collection.js (initGallery).
+{% endcomment %}
+<div class="pp-gallery">
+    <div class="pp-list__toolbar">
+        <div class="pp-list__group">
+            <span>Tier</span>
+            <button type="button" class="pp-list__chip is-active" data-filter-tier="all">All</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="bronze">Bronze</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="silver">Silver</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="gold">Gold</button>
+            <button type="button" class="pp-list__chip" data-filter-tier="platinum">Platinum</button>
+        </div>
+        <div class="pp-list__group">
+            <span>State</span>
+            <button type="button" class="pp-list__chip is-active" data-filter-state="all">All</button>
+            <button type="button" class="pp-list__chip" data-filter-state="earned">Earned</button>
+            <button type="button" class="pp-list__chip" data-filter-state="in_progress">In Progress</button>
+            <button type="button" class="pp-list__chip" data-filter-state="unearned">Unearned</button>
+        </div>
+        {% if themes|length > 1 %}
+        <div class="pp-list__group">
+            <span>Set</span>
+            <button type="button" class="pp-list__chip is-active" data-filter-theme="all">All</button>
+            {% for theme in themes %}
+                <button type="button" class="pp-list__chip" data-filter-theme="{{ theme.name|slugify }}">{{ theme.name }}</button>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <input type="text" class="pp-list__search" placeholder="Search series or badge&hellip;" data-search aria-label="Search collection" />
+        <label class="pp-gallery__sort-label">
+            <span class="sr-only">Sort badges</span>
+            <select class="pp-gallery__sort" data-gallery-sort>
+                <option value="series:asc">Series (A&ndash;Z)</option>
+                <option value="rarity:asc">Rarest first</option>
+                <option value="tier:desc">Tier (Platinum first)</option>
+                <option value="progress:desc">Closest to complete</option>
+                <option value="set_number:asc">Set order</option>
+            </select>
+        </label>
+        <div class="pp-list__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</div>
+    </div>
+
+    <div class="pp-gallery__grid" data-gallery-grid>
+        {% for badge in list_badges %}
+        <a class="pp-gallery__cell" data-gallery-cell
+           data-tier="{{ badge.tier }}"
+           data-state="{{ badge.state }}"
+           data-theme="{{ badge.theme|slugify }}"
+           data-series="{{ badge.series_name|lower }}"
+           data-badge="{{ badge.badge_name|lower }}"
+           data-set-number="{{ badge.set_number|default:0 }}"
+           data-rarity-pct="{{ badge.rarity_pct|default:0 }}"
+           data-rank="{{ badge.engraving_rank|default:0 }}"
+           data-progress="{{ badge.progress_pct|default:0 }}"
+           {% if badge.series_slug %}href="{% url 'badge_detail' badge.series_slug %}"{% endif %}
+           data-modal-url="{% url 'collection_badge_modal' badge.badge_id %}">
+            {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
+            <span class="pp-gallery__caption">
+                <span class="pp-gallery__name">{{ badge.series_name }}</span>
+                <span class="pp-gallery__tier pp-gallery__tier--{{ badge.tier }}">{{ badge.tier|title }}</span>
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+    <div class="pp-list__empty" data-empty-message hidden>No badges match the current filters.</div>
+</div>

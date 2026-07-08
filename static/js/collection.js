@@ -23,13 +23,26 @@
                 var on = c.getAttribute('data-collection-view') === name;
                 c.classList.toggle('is-active', on);
                 c.setAttribute('aria-selected', on ? 'true' : 'false');
+                c.tabIndex = on ? 0 : -1;   // roving tabindex: only the active view chip is in the tab order
             });
             try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* private mode */ }
         }
 
-        chips.forEach(function (c) {
+        chips.forEach(function (c, i) {
             c.addEventListener('click', function () {
                 setView(c.getAttribute('data-collection-view'));
+            });
+            // WAI-ARIA tabs keyboard model: arrows/Home/End move focus AND switch the view.
+            c.addEventListener('keydown', function (e) {
+                var next = -1;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % chips.length;
+                else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + chips.length) % chips.length;
+                else if (e.key === 'Home') next = 0;
+                else if (e.key === 'End') next = chips.length - 1;
+                else return;
+                e.preventDefault();
+                setView(chips[next].getAttribute('data-collection-view'));
+                chips[next].focus();
             });
         });
 
@@ -108,7 +121,6 @@
         if (!modal) return;
         var body = modal.querySelector('[data-detail-body]');
         var dialog = modal.querySelector('.pp-detail-modal__dialog');
-        var caseEl = root.querySelector('.pp-case');
         var lastFocus = null, busy = false;
 
         function open(url) {
@@ -134,14 +146,15 @@
             if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* gone */ } }
         }
 
-        if (caseEl) {
-            caseEl.addEventListener('click', function (e) {
-                var slot = e.target.closest('[data-modal-url]');
-                if (!slot) return;
-                e.preventDefault();
-                open(slot.getAttribute('data-modal-url'));
-            });
-        }
+        // Delegate across the whole page: any medallion with a data-modal-url (Case slots, Showcase,
+        // Chase, Gallery cells) opens the detail modal. The List table's "View ->" uses a #card hash
+        // instead, so it doesn't match here.
+        root.addEventListener('click', function (e) {
+            var slot = e.target.closest('[data-modal-url]');
+            if (!slot) return;
+            e.preventDefault();
+            open(slot.getAttribute('data-modal-url'));
+        });
         modal.querySelectorAll('[data-detail-close]').forEach(function (b) { b.addEventListener('click', close); });
         document.addEventListener('keydown', function (e) {
             if (modal.hidden) return;
@@ -178,9 +191,67 @@
         if (stored) setMode(stored);   // else leave the server default (first mode active)
     }
 
+    // --- Shared filter/sort primitives (the List table + the Gallery wall filter the SAME flat badge
+    // set on the SAME data-* attributes; only the presentation and the sort UI differ). ---
     var TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
     var STATE_ORDER = ['earned', 'maintenance', 'in_progress', 'unearned'];
 
+    function stateMatches(elState, want) {
+        if (want === 'all' || elState === want) return true;
+        // A "maintenance" badge is still held -> it counts as earned for filtering
+        // (it has no dedicated chip; the lapse only matters on the shelf).
+        return want === 'earned' && elState === 'maintenance';
+    }
+
+    function elMatches(el, filters, term) {
+        return (filters.tier === 'all' || el.getAttribute('data-tier') === filters.tier)
+            && stateMatches(el.getAttribute('data-state'), filters.state)
+            && (filters.theme === 'all' || el.getAttribute('data-theme') === filters.theme)
+            && (term === ''
+                || el.getAttribute('data-series').indexOf(term) !== -1
+                || el.getAttribute('data-badge').indexOf(term) !== -1);
+    }
+
+    function sortValue(el, key) {
+        switch (key) {
+            case 'set_number': return parseInt(el.getAttribute('data-set-number'), 10) || 0;
+            case 'series':     return el.getAttribute('data-series');
+            case 'tier':       return TIER_ORDER.indexOf(el.getAttribute('data-tier'));
+            case 'state':      return STATE_ORDER.indexOf(el.getAttribute('data-state'));
+            case 'progress':   return parseFloat(el.getAttribute('data-progress')) || 0;
+            case 'rarity':     return parseFloat(el.getAttribute('data-rarity-pct')) || 0;
+            case 'rank':       return parseInt(el.getAttribute('data-rank'), 10) || 0;
+            case 'theme':      return el.getAttribute('data-theme');
+            default:           return 0;
+        }
+    }
+
+    function compareBy(key, dir) {
+        return function (a, b) {
+            var av = sortValue(a, key), bv = sortValue(b, key);
+            if (av < bv) return dir === 'asc' ? -1 : 1;
+            if (av > bv) return dir === 'asc' ? 1 : -1;
+            return 0;
+        };
+    }
+
+    // Wire the tier/state/set filter chips within `scope`: click sets the dimension + repaints the group's
+    // active state, then re-applies. Shared by the List and the Gallery (identical chip markup).
+    function wireFilterChips(scope, filters, applyFilters) {
+        scope.querySelectorAll('[data-filter-tier], [data-filter-state], [data-filter-theme]').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var dim = chip.hasAttribute('data-filter-tier') ? 'tier'
+                    : chip.hasAttribute('data-filter-state') ? 'state' : 'theme';
+                filters[dim] = chip.getAttribute('data-filter-' + dim);
+                scope.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
+                    c.classList.toggle('is-active', c === chip);
+                });
+                applyFilters();
+            });
+        });
+    }
+
+    // The List: the data table. Column-header sort (asc/desc toggle + aria-sort) over the shared engine.
     function initList(root) {
         var listRoot = root.querySelector('.pp-list');
         if (!listRoot) return;
@@ -196,22 +267,10 @@
         var sortKey = 'series';
         var sortDir = 'asc';
 
-        function stateMatches(rowState, want) {
-            if (want === 'all' || rowState === want) return true;
-            // A "maintenance" badge is still held -> it counts as earned for filtering
-            // (it has no dedicated chip; the lapse only matters in the binder).
-            return want === 'earned' && rowState === 'maintenance';
-        }
-
         function applyFilters() {
             var visible = 0;
             rows.forEach(function (row) {
-                var ok = (filters.tier === 'all' || row.getAttribute('data-tier') === filters.tier)
-                    && stateMatches(row.getAttribute('data-state'), filters.state)
-                    && (filters.theme === 'all' || row.getAttribute('data-theme') === filters.theme)
-                    && (searchTerm === ''
-                        || row.getAttribute('data-series').indexOf(searchTerm) !== -1
-                        || row.getAttribute('data-badge').indexOf(searchTerm) !== -1);
+                var ok = elMatches(row, filters, searchTerm);
                 row.style.display = ok ? '' : 'none';
                 if (ok) visible++;
             });
@@ -219,28 +278,8 @@
             if (emptyMsg) emptyMsg.hidden = visible !== 0;
         }
 
-        function sortValue(row, key) {
-            switch (key) {
-                case 'set_number': return parseInt(row.getAttribute('data-set-number'), 10) || 0;
-                case 'series':     return row.getAttribute('data-series');
-                case 'tier':       return TIER_ORDER.indexOf(row.getAttribute('data-tier'));
-                case 'state':      return STATE_ORDER.indexOf(row.getAttribute('data-state'));
-                case 'progress':   return parseFloat(row.getAttribute('data-progress')) || 0;
-                case 'rarity':     return parseFloat(row.getAttribute('data-rarity-pct')) || 0;
-                case 'rank':       return parseInt(row.getAttribute('data-rank'), 10) || 0;
-                case 'theme':      return row.getAttribute('data-theme');
-                default:           return 0;
-            }
-        }
-
         function applySort() {
-            rows.slice().sort(function (a, b) {
-                var av = sortValue(a, sortKey);
-                var bv = sortValue(b, sortKey);
-                if (av < bv) return sortDir === 'asc' ? -1 : 1;
-                if (av > bv) return sortDir === 'asc' ? 1 : -1;
-                return 0;
-            }).forEach(function (row) { tbody.appendChild(row); });
+            rows.slice().sort(compareBy(sortKey, sortDir)).forEach(function (row) { tbody.appendChild(row); });
             listRoot.querySelectorAll('th[data-sort]').forEach(function (th) {
                 th.classList.remove('is-sorted-asc', 'is-sorted-desc');
                 if (th.getAttribute('data-sort') === sortKey) {
@@ -252,17 +291,7 @@
             });
         }
 
-        listRoot.querySelectorAll('[data-filter-tier], [data-filter-state], [data-filter-theme]').forEach(function (chip) {
-            chip.addEventListener('click', function () {
-                var dim = chip.hasAttribute('data-filter-tier') ? 'tier'
-                    : chip.hasAttribute('data-filter-state') ? 'state' : 'theme';
-                filters[dim] = chip.getAttribute('data-filter-' + dim);
-                listRoot.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
-                    c.classList.toggle('is-active', c === chip);
-                });
-                applyFilters();
-            });
-        });
+        wireFilterChips(listRoot, filters, applyFilters);
 
         var search = listRoot.querySelector('[data-search]');
         if (search) {
@@ -292,6 +321,51 @@
         applySort();  // default: series ascending (set numbers are sparse pre-launch)
     }
 
+    // The Gallery: the visual filter wall. Same filters as the List, but a flat medallion grid and a
+    // sort <select> (value = "key:dir") instead of column headers.
+    function initGallery(root) {
+        var gal = root.querySelector('.pp-gallery');
+        if (!gal) return;
+        var grid = gal.querySelector('[data-gallery-grid]');
+        var cells = Array.prototype.slice.call(gal.querySelectorAll('[data-gallery-cell]'));
+        if (!grid || !cells.length) return;
+
+        var stats = gal.querySelector('[data-visible-count]');
+        var emptyMsg = gal.querySelector('[data-empty-message]');
+        var total = cells.length;
+        var filters = { tier: 'all', state: 'all', theme: 'all' };
+        var searchTerm = '';
+
+        function applyFilters() {
+            var visible = 0;
+            cells.forEach(function (cell) {
+                var ok = elMatches(cell, filters, searchTerm);
+                cell.style.display = ok ? '' : 'none';
+                if (ok) visible++;
+            });
+            if (stats) stats.textContent = visible + ' of ' + total;
+            if (emptyMsg) emptyMsg.hidden = visible !== 0;
+        }
+
+        wireFilterChips(gal, filters, applyFilters);
+
+        var search = gal.querySelector('[data-search]');
+        if (search) {
+            search.addEventListener('input', function (e) {
+                searchTerm = e.target.value.toLowerCase().trim();
+                applyFilters();
+            });
+        }
+
+        var sortSel = gal.querySelector('[data-gallery-sort]');
+        function applySort() {
+            var spec = ((sortSel && sortSel.value) || 'series:asc').split(':');
+            cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); });
+        }
+        if (sortSel) sortSel.addEventListener('change', applySort);
+        applySort();  // default matches the select's first option (series A-Z)
+    }
+
     function init() {
         var root = document.querySelector('.pp-collection');
         if (!root) return;
@@ -299,6 +373,7 @@
         initCase(root);
         initShowcase(root);
         initDetail(root);
+        initGallery(root);
         initList(root);
     }
 

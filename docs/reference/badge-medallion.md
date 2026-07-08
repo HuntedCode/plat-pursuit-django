@@ -16,7 +16,9 @@ double-framing a round object. The decision was validated at `/design/badge-pres
 - **Reads the SAME frame dict as `components/frame.html`** (from `build_badge_frame`), so it's a
   drop-in. Keys used: `tier`, `state`, `series_name`, `art_layers` (a full-URL, filtered list:
   `[backdrop, main[, foreground]]` — a badge with no custom art has NO foreground), `stages_done`,
-  `stages_total`, `dom_id`. Optional `extra_class`.
+  `stages_total`, `dom_id`. Optional include params: `extra_class`, and **`no_id`** (pass `no_id=True`
+  to suppress the `dom_id` anchor when the same frame renders in more than one place — see the
+  duplicate-ID gotcha).
 - **Sizing** via `--sz` on `.pp-med` (the container sets it per breakpoint). The art lives in a square
   `.pp-med__stage`; the "X / Y" count sits in normal flow *below* it (never over the art).
 - GPU-only motion; `prefers-reduced-motion` honored.
@@ -47,6 +49,26 @@ silver/platinum (migration `0046` tier choices) — the detail modal labels this
   "groups tiers of the same series").
 - Responsive: 2x2 within a group on mobile -> 4-in-a-row with width; one -> two groups per row.
 
+## The three views (Case / Gallery / List)
+
+`/collection/` exposes the same flat badge set three ways, switched by the view toggle (a generic
+`data-collection-view` tablist wired by `initViewToggle`). All three read one context build; the Gallery
+and List reuse `list_badges` (already flattened by `_flatten_for_list`), so switching views is free.
+
+| View | What it's for | Presentation |
+|------|---------------|--------------|
+| **Case** (`collection_case.html`) | The display piece — browse what you have + what's missing | Set tabs -> series-grouped shelves of medallions, plus Showcase + Chase |
+| **Gallery** (`collection_gallery.html`) | The **visual** hunting tool — "show me all bronze", "only the ones I own" | A flat, filterable/sortable **wall of medallions**; tap -> detail modal |
+| **List** (`collection_list.html`) | The **data** hunting tool — dense scan/sort by rarity, rank, set # | A sortable/filterable table (column-header sort) |
+
+- **Gallery + List share one filter/sort engine** in `collection.js` (`stateMatches`/`elMatches`/
+  `sortValue`/`compareBy`/`wireFilterChips` at module scope). They filter identical `data-*` attributes;
+  only the sort UI differs (Gallery = a `key:dir` `<select>`; List = clickable column headers with
+  `aria-sort`). `initGallery` and `initList` are thin wrappers over the shared primitives.
+- The tier/state/set **filter chips + search + empty-state + count** markup is shared — the Gallery
+  reuses the List's `.pp-list__toolbar` / `__chip` / `__search` / `__stats` / `__empty` classes; its own
+  CSS file only adds the sort control + the medallion grid + captions.
+
 ## The detail ("pick it up")
 
 Tap a medallion -> `CollectionBadgeModalView` (`/collection/badge/<id>/`) fetches **one** badge's detail
@@ -68,8 +90,18 @@ trap + Escape; the slot keeps its badge-page `href` as a **no-JS fallback**. The
   leaks to the page).
 - **The count clears the ring's overhang** via a `--sz`-proportional top margin; the group title clears
   it via its bottom margin. If you resize the ring, re-check both.
+- **`dom_id` must be emitted exactly once per badge.** The same earned/in-progress frame renders in its
+  shelf AND in the Showcase/Chase/Gallery — but the `#card-<id>` deep-link anchor lives on the **shelf**
+  medallion only. Showcase, Chase, and every Gallery cell pass **`no_id=True`**; forgetting it produces
+  duplicate IDs and sends the deep-link jump to the wrong node.
 - Retiring the binder from the collection did **not** delete `binder.html`/`binder.css`/`binder.js` —
-  they're still used by `/design/binder/`. `collection_service.spreads` is now unused (cleanup pending).
+  they're still used by `/design/binder/`, which is also why `collection_service.spreads`/`pages` are
+  **still built** (the binder lab consumes them). They are not dead despite the Case not using `spreads`.
+- **Three server-rendered views = every badge in the DOM ~2x** (Case shelves + Gallery wall, plus the
+  List rows). The count is **catalog-bounded, not per-user** (all live badges show for everyone), so it's
+  not a whale-safety issue, and `loading="lazy"` + `hidden` keeps inactive/off-screen images from
+  fetching. But at a large badge catalog the raw node count grows; if that ever bites, render the Gallery
+  lazily (build its DOM only on first switch) rather than up front.
 
 ## Related Docs
 

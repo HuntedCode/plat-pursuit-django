@@ -10,7 +10,7 @@ See docs/reference/badge-medallion.md.
 <div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if state == 'in_progress' or state == 'maintenance' %}{% if total > 12 %} pp-med--ring-smooth{% endif %}{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
      data-tier="{{ tier }}" data-state="{{ state }}"
      {% if state == 'in_progress' or state == 'maintenance' %}style="--done: {{ frame.stages_done|default:0 }}; --total: {{ total|default:1 }};"{% endif %}
-     {% if frame.dom_id %}id="{{ frame.dom_id }}"{% endif %}>
+     {% if frame.dom_id and not no_id %}id="{{ frame.dom_id }}"{% endif %}>
     <div class="pp-med__stage">
         {% if state == 'in_progress' or state == 'maintenance' %}<span class="pp-med__ring" aria-hidden="true"></span>{% endif %}
         {% comment %} art_layers is a full-URL, filtered list (backdrop, main[, foreground]); a badge without

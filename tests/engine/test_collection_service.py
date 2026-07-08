@@ -448,6 +448,42 @@ def test_case_template_renders_medallions_showcase_chase_and_tablist(monkeypatch
     assert 'role="tabpanel"' in html and 'aria-labelledby="case-tab-series"' in html
 
 
+def test_case_earned_badge_dom_id_is_not_duplicated_by_showcase(monkeypatch):
+    """A badge shown in both its shelf AND the Showcase must emit its #card-<id> anchor only ONCE
+    (the shelf owns it; Showcase/Chase pass no_id) -- else the deep-link jump lands on the wrong node."""
+    from django.template.loader import render_to_string
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badges = _series('rs-dup')
+    UserBadgeFactory(profile=profile, badge=badges[0])  # earned -> appears in shelf AND Showcase
+
+    html = render_to_string('components/collection_case.html', build_collection_context(profile))
+
+    assert html.count('id="card-%d"' % badges[0].id) == 1
+
+
+def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
+    """The Gallery renders each badge as a medallion cell (tapping opens the detail modal) with the
+    shared tier/state filter chips + the sort control -- the visual sibling of the List table."""
+    from django.template.loader import render_to_string
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badges = _series('rs-gal')
+    UserBadgeFactory(profile=profile, badge=badges[0])
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert 'pp-gallery__grid' in html and 'pp-gallery__cell' in html   # the medallion wall
+    assert html.count('data-gallery-cell') == 4                        # one cell per badge in the set
+    assert 'data-filter-tier="bronze"' in html                        # shared filter chips present
+    assert 'data-gallery-sort' in html                                # the sort control
+    assert 'data-modal-url' in html                                   # cells tap to the detail modal
+    # Gallery medallions suppress the canonical anchor (the Case shelf owns it).
+    assert 'id="card-%d"' % badges[0].id not in html
+
+
 # --- list view (the sortable/filterable sibling of the binder) ----------------
 
 

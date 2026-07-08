@@ -22,7 +22,7 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
         <div class="pp-showcase__row" data-showcase-row="{{ m.mode }}"{% if not forloop.first %} hidden{% endif %}>
             {% for f in m.frames %}
             <a class="pp-showcase__slot"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
-                {% include 'components/badge_medallion.html' with frame=f %}
+                {% include 'components/badge_medallion.html' with frame=f no_id=True %}
                 <span class="pp-showcase__name">{{ f.series_name }}</span>
             </a>
             {% endfor %}
@@ -37,7 +37,7 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
         <div class="pp-chase__strip">
             {% for f in chase %}
             <a class="pp-chase__item"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
-                {% include 'components/badge_medallion.html' with frame=f %}
+                {% include 'components/badge_medallion.html' with frame=f no_id=True %}
                 <div class="pp-chase__meta">
                     <div class="pp-chase__name">{{ f.series_name }}</div>
                     <div class="pp-chase__prog">{{ f.stages_done|default:0 }} / {{ f.stages_total }} &middot; {{ f.tier|title }}</div>
