@@ -35,11 +35,11 @@
     transition: opacity 0.5s ease, transform 0.5s ease;
 }
 .pp-med--earned .pp-med__stage::before { opacity: 0.2; }
-/* pedestal -- grounds the object on the shelf */
+/* pedestal -- a soft ground shadow just BELOW the medallion (grounds it; visible at rest, not just hover) */
 .pp-med__stage::after {
-    content: ''; position: absolute; bottom: 3%; left: 50%; width: 56%; height: 8%;
+    content: ''; position: absolute; bottom: -4%; left: 50%; width: 50%; height: 6%;
     transform: translateX(-50%); border-radius: 50%;
-    background: radial-gradient(ellipse, rgba(0, 0, 0, 0.55), transparent 72%); z-index: 0;
+    background: radial-gradient(ellipse, rgba(0, 0, 0, 0.5), transparent 72%); z-index: 0;
 }
 
 /* light-catch glint (sweeps on hover for earned) */

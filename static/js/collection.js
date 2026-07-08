@@ -143,6 +143,27 @@
         });
     }
 
+    // Showcase mode toggle (Rarest / Newest / Top tier): swap the visible row, persisted. A lightweight
+    // form of curation until per-badge picking ships with the customization update.
+    function initShowcase(root) {
+        var sc = root.querySelector('.pp-showcase');
+        if (!sc) return;
+        var modes = Array.prototype.slice.call(sc.querySelectorAll('[data-showcase-mode]'));
+        var rows = Array.prototype.slice.call(sc.querySelectorAll('[data-showcase-row]'));
+        if (modes.length < 2) return;   // one mode -> nothing to toggle
+        var KEY = 'pp-collection-showcase';
+        function setMode(name) {
+            if (!rows.some(function (r) { return r.getAttribute('data-showcase-row') === name; })) return;
+            rows.forEach(function (r) { r.hidden = r.getAttribute('data-showcase-row') !== name; });
+            modes.forEach(function (m) { var on = m.getAttribute('data-showcase-mode') === name; m.classList.toggle('is-active', on); m.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+            try { localStorage.setItem(KEY, name); } catch (e) { /* private mode */ }
+        }
+        modes.forEach(function (m) { m.addEventListener('click', function () { setMode(m.getAttribute('data-showcase-mode')); }); });
+        var stored = null;
+        try { stored = localStorage.getItem(KEY); } catch (e) { /* noop */ }
+        if (stored) setMode(stored);   // else leave the server default (first mode active)
+    }
+
     var TIER_ORDER = ['bronze', 'silver', 'gold', 'platinum'];
     var STATE_ORDER = ['earned', 'maintenance', 'in_progress', 'unearned'];
 
@@ -262,6 +283,7 @@
         if (!root) return;
         initViewToggle(root);
         initCase(root);
+        initShowcase(root);
         initDetail(root);
         initList(root);
     }

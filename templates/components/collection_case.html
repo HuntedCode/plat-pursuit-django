@@ -7,6 +7,48 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
 {% endcomment %}
 {% load static %}
 <div class="pp-case">
+    {% if showcase %}
+    <section class="pp-showcase">
+        <div class="pp-showcase__head">
+            <h2 class="pp-showcase__title">Showcase</h2>
+            {% if showcase|length > 1 %}
+            <div class="pp-showcase__modes" role="group" aria-label="Showcase sort">
+                {% for m in showcase %}
+                <button type="button" class="pp-showcase__mode{% if forloop.first %} is-active{% endif %}" data-showcase-mode="{{ m.mode }}" aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">{{ m.label }}</button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% for m in showcase %}
+        <div class="pp-showcase__row" data-showcase-row="{{ m.mode }}"{% if not forloop.first %} hidden{% endif %}>
+            {% for f in m.frames %}
+            <a class="pp-showcase__slot"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
+                {% include 'components/badge_medallion.html' with frame=f %}
+                <span class="pp-showcase__name">{{ f.series_name }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if chase %}
+    <section class="pp-chase">
+        <div class="pp-chase__title">Closest to complete</div>
+        <div class="pp-chase__strip">
+            {% for f in chase %}
+            <a class="pp-chase__item"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
+                {% include 'components/badge_medallion.html' with frame=f %}
+                <div class="pp-chase__meta">
+                    <div class="pp-chase__name">{{ f.series_name }}</div>
+                    <div class="pp-chase__prog">{{ f.stages_done|default:0 }} / {{ f.stages_total }} &middot; {{ f.tier|title }}</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
     {% if binder_sets %}
     <div class="pp-case__sets" role="tablist" aria-label="Collection sets">
         {% for set in binder_sets %}
