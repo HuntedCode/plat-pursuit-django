@@ -92,6 +92,13 @@ def test_earned_badge_segments_are_all_filled():
     assert frame["segments"] == [True] * 5
 
 
+def test_holographic_flag_is_platinum_tier_only():
+    """The chase-card foil is reserved for platinum-tier badges (component still gates on earned)."""
+    assert build_badge_frame(BadgeFactory(tier=4))["is_holographic"] is True            # platinum
+    assert build_badge_frame(BadgeFactory(tier=3))["is_holographic"] is False           # gold
+    assert build_badge_frame(BadgeFactory(tier=1, rarity_pct=1.0))["is_holographic"] is False  # rare but not platinum
+
+
 def test_unearned_viewer_with_no_progress():
     profile = ProfileFactory()
     badge = BadgeFactory(tier=1, required_stages=10)

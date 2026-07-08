@@ -145,6 +145,7 @@
     .pp-bdetail__stage .pp-med__l:nth-child(3) { display: none; }
     .pp-bdetail__stage .pp-med__l:nth-child(2),
     .pp-bdetail__stage .pp-med__fill,
+    .pp-bdetail__stage .pp-med__foil,
     .pp-bdetail__stage .pp-med__glare { transform: translateZ(40px); }
     /* Ground the raised subject to the backdrop with a soft cast shadow -- a filter on this LEAF layer is
        safe (it has no children to flatten), so the card's preserve-3d is untouched. */

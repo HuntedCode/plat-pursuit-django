@@ -135,6 +135,7 @@
         glare.className = 'pp-med__glare';
         glare.setAttribute('aria-hidden', 'true');
         card.appendChild(glare);   // the glare rides the rotating card
+        var foil = card.querySelector('.pp-med__foil');   // present only on holographic (rare/top-tier) badges
 
         var MAX = 15;   // degrees of tilt at the edges
         scene.addEventListener('pointermove', function (e) {
@@ -145,11 +146,14 @@
                 + 'rotateY(' + ((px - 0.5) * 2 * MAX).toFixed(2) + 'deg) scale(1.05)';
             glare.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
             glare.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
+            // Holographic shimmer tracks the cursor (inline beats the CSS :hover shift).
+            if (foil) foil.style.backgroundPosition = (px * 100).toFixed(1) + '% ' + (py * 100).toFixed(1) + '%';
             card.classList.add('is-tilting');
         });
         scene.addEventListener('pointerleave', function () {
             card.classList.remove('is-tilting');
             card.style.transform = '';   // spring back to rest via the CSS transition
+            if (foil) foil.style.backgroundPosition = '';
         });
     }
 

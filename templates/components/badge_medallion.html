@@ -8,7 +8,7 @@ platinum/100%, filled to stages_done; a smooth bar off progress_pct above the ca
 page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medallion.md.
 {% endcomment %}
 {% with tier=frame.tier|default:"gold" state=frame.state|default:"earned" total=frame.stages_total|default:0 %}
-<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
+<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
      data-tier="{{ tier }}" data-state="{{ state }}"
      {% if frame.dom_id and not no_id %}id="{{ frame.dom_id }}"{% endif %}>
     <div class="pp-med__stage">
@@ -27,6 +27,10 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
                 <img class="pp-med__fill-l" src="{{ frame.art_layers.1 }}" alt="" loading="lazy" draggable="false">
             </div>
             {% endif %}
+            {% comment %} Holographic "chase card" foil -- rare/top-tier earned badges only (frame.is_holographic).
+            Kept LAST so the state filters' nth-child(N) still count only the art layers. No mix-blend-mode
+            (it would flatten the modal's preserve-3d parallax). {% endcomment %}
+            {% if frame.is_holographic and state == 'earned' %}<span class="pp-med__foil" aria-hidden="true"></span>{% endif %}
         </div>
         <span class="pp-med__glint" aria-hidden="true"></span>
         {% if state == 'maintenance' %}<span class="pp-med__chip">Lapsed</span>{% endif %}

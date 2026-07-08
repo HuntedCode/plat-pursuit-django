@@ -504,6 +504,28 @@ def test_medallion_surfaces_set_number_and_earn_rank_when_show_ids(monkeypatch):
     assert 'pp-med__ids' not in without                # gated on show_ids -- off elsewhere (Chase, modal)
 
 
+def test_holographic_foil_renders_only_for_earned_special_badges(monkeypatch):
+    """The foil is a reward flourish: a platinum/rare badge shows it once EARNED, not as an unearned slot."""
+    from django.template.loader import render_to_string
+    from trophies.services.frame_service import build_badge_frame
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    plat = BadgeFactory(series_slug='rs-holo', tier=4, badge_type='series', is_live=True,
+                        required_stages=5, display_series='rs-holo')
+    UserBadgeFactory(profile=profile, badge=plat)
+    earned = render_to_string('components/badge_medallion.html',
+                              {'frame': build_badge_frame(plat, profile, include_live_stats=False)})
+
+    unearned_plat = BadgeFactory(series_slug='rs-holo2', tier=4, badge_type='series', is_live=True,
+                                 required_stages=5, display_series='rs-holo2')
+    unearned = render_to_string('components/badge_medallion.html',
+                                {'frame': build_badge_frame(unearned_plat, profile, include_live_stats=False)})
+
+    assert 'pp-med__foil' in earned and 'pp-med--holographic' in earned
+    assert 'pp-med__foil' not in unearned   # unearned platinum: no flourish
+
+
 def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
     """The Gallery renders each badge as a medallion cell (tapping opens the detail modal) with the
     shared tier/state filter chips + the sort control -- the visual sibling of the List table."""

@@ -190,6 +190,9 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["rarity_rank"] = badge.rarity_rank
         if badge.rarity_class:
             frame["rarity_class"] = badge.rarity_class
+    # Holographic "chase card" foil -- platinum-tier badges only (the top of a series). The component
+    # renders it only when ALSO earned, so the flourish is a scarce reward.
+    frame["is_holographic"] = badge.tier == 4
     if badge.earned_count:
         frame["earned_count"] = badge.earned_count   # how many hunters hold this tier
     funder = badge.effective_funded_by

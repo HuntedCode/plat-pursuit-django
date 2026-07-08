@@ -89,6 +89,30 @@
     .pp-med--earned:hover .pp-med__glint::before { animation: ppMedGlint 0.8s ease 0.05s 1; }
 }
 
+/* holographic "chase card" foil (rare / top-tier earned badges only) -- an iridescent sheen over the art,
+   faintly present at rest so the badge stands out, brightening + shifting on hover. NO mix-blend-mode: it
+   lives inside the card and a blend mode would flatten the modal's preserve-3d parallax. */
+.pp-med__foil {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 3;
+    background: linear-gradient(115deg,
+        transparent 20%,
+        hsla(310, 95%, 74%, 0.62) 35%,
+        hsla(200, 95%, 70%, 0.62) 45%,
+        hsla(122, 90%, 70%, 0.62) 54%,
+        hsla(48, 100%, 72%, 0.62) 63%,
+        transparent 80%);
+    background-size: 260% 260%;
+    background-position: var(--foil-x, 78%) var(--foil-y, 22%);
+    opacity: 0.3;
+    transition: opacity 0.45s ease, background-position 0.6s ease;
+}
+@media (hover: hover) {
+    .pp-med--holographic:hover .pp-med__foil { opacity: 0.58; background-position: 22% 78%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-med__foil { transition: opacity 0.45s ease; }   /* keep the fade, drop the positional sweep */
+}
+
 /* ---- states ---- */
 /* UNEARNED + IN PROGRESS both wear a DARK, waiting mount -- earned badges are the only bright ones, so
    "done vs not done" reads at a glance. In-progress is told apart by its meter (below), not brighter art. */
