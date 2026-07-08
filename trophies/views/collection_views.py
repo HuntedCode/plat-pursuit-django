@@ -7,12 +7,16 @@ whale-safe). This is the personal album, NOT the all-badges browse or a badge de
 """
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import redirect
+from django.http import HttpResponseNotFound
+from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.views import View
 from django.views.generic import TemplateView
 
 from trophies.mixins import ProfileHotbarMixin
+from trophies.models import Badge
 from trophies.services.collection_service import build_collection_context
+from trophies.services.frame_service import build_badge_frame
 
 
 class CollectionView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
@@ -38,3 +42,28 @@ class CollectionView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
         ]
         context['seo_title'] = 'Your Collection - Platinum Pursuit'
         return context
+
+
+class CollectionBadgeModalView(LoginRequiredMixin, View):
+    """Detail modal for one badge (the Case's 'pick it up'): the medallion big + its full stats.
+    Fetched on tap so the grid stays light -- one badge, single-hero stats. Linked-profile gated."""
+
+    def get(self, request, badge_id):
+        profile = getattr(request.user, 'profile', None)
+        if not profile or not profile.is_linked:
+            return HttpResponseNotFound()   # explicit 404 (the project's handler404 renders at 200)
+        badge = (
+            Badge.objects.filter(id=badge_id, is_live=True)
+            .select_related(
+                'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
+                'base_badge__franchise', 'base_badge__collection',
+                'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
+            ).first()
+        )
+        if badge is None:
+            return HttpResponseNotFound()
+        frame = build_badge_frame(badge, profile)   # single hero: full stats + live rank/XP
+        frame['dom_id'] = f'card-{badge.id}'
+        frame['series_slug'] = badge.series_slug
+        frame['badge_id'] = badge.id
+        return render(request, 'components/collection_badge_modal.html', {'frame': frame})

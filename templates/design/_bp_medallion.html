@@ -1,0 +1,7 @@
+{# The composited badge medallion: backdrop (tier frame) + main (art) + foreground (tier crest). #}
+{# Expects `f` = a frame dict with art_layers = [backdrop, main, foreground]. #}
+<div class="bp-med">
+    <img class="bp-med__l" src="{{ f.art_layers.0 }}" alt="" loading="lazy" draggable="false">
+    <img class="bp-med__l" src="{{ f.art_layers.1 }}" alt="{{ f.series_name }} badge" loading="lazy" draggable="false">
+    <img class="bp-med__l" src="{{ f.art_layers.2 }}" alt="" loading="lazy" draggable="false">
+</div>

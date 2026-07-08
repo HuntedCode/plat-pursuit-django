@@ -121,6 +121,7 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             # per-series badge-detail link in both views.
             frame['dom_id'] = f"card-{b.id}"
             frame['series_slug'] = b.series_slug
+            frame['badge_id'] = b.id   # the collection detail modal fetches by id
             frames.append(frame)
 
         # Each set is its own binder view; pages are numbered WITHIN the set.
@@ -134,10 +135,20 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             {'number': i // 2 + 1, 'left': pages[i], 'right': pages[i + 1] if i + 1 < len(pages) else None}
             for i in range(0, len(pages), 2)
         ]
+        # Series groups: the 4 tiers (bronze -> platinum) of a series stay together as one unit, never
+        # split across a row. Frames are already sorted series-then-tier, and series_slug groups the tiers.
+        groups = []
+        for fr in frames:
+            slug = fr.get('series_slug') or ''
+            if slug and groups and groups[-1]['slug'] == slug:
+                groups[-1]['tiers'].append(fr)
+            else:
+                groups.append({'name': fr.get('series_name'), 'slug': slug, 'tiers': [fr]})
         binder_sets.append({
             'key': btype,
             'label': label,
             'palette': palette,
+            'groups': groups,
             'pages': pages,
             'spreads': spreads,
             'total': len(section),

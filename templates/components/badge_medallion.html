@@ -1,0 +1,30 @@
+{% load static %}
+{% comment %}
+Badge Medallion -- the composited badge as a precious OBJECT (backdrop + main + foreground) with a
+state treatment, replacing the trading-card Frame on the collection. Reads the SAME frame dict as
+components/frame.html (tier, state, series_name, badge_name, art_layers=[backdrop, main, foreground]).
+In-progress + maintenance read stages_done/stages_total for the segmented ring (one segment per
+platinum; capped at 12 -> smooth arc), with the "X / Y" count shown BELOW the art (never over it).
+See docs/reference/badge-medallion.md.
+{% endcomment %}
+{% with tier=frame.tier|default:"gold" state=frame.state|default:"earned" total=frame.stages_total|default:0 %}
+<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if state == 'in_progress' or state == 'maintenance' %}{% if total > 12 %} pp-med--ring-smooth{% endif %}{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
+     data-tier="{{ tier }}" data-state="{{ state }}"
+     {% if state == 'in_progress' or state == 'maintenance' %}style="--done: {{ frame.stages_done|default:0 }}; --total: {{ total|default:1 }};"{% endif %}
+     {% if frame.dom_id %}id="{{ frame.dom_id }}"{% endif %}>
+    <div class="pp-med__stage">
+        {% if state == 'in_progress' or state == 'maintenance' %}<span class="pp-med__ring" aria-hidden="true"></span>{% endif %}
+        {% comment %} art_layers is a full-URL, filtered list (backdrop, main[, foreground]); a badge without
+        custom art has no foreground, so we loop rather than hardcode 3. Order is preserved so the state
+        filters can target nth-child(1)=backdrop, nth-child(2)=subject. {% endcomment %}
+        <div class="pp-med__art">
+            {% for layer in frame.art_layers %}
+            <img class="pp-med__l" src="{{ layer }}" alt="{% if forloop.counter == 2 %}{{ frame.series_name }} badge{% endif %}" loading="lazy" draggable="false">
+            {% endfor %}
+        </div>
+        <span class="pp-med__glint" aria-hidden="true"></span>
+        {% if state == 'maintenance' %}<span class="pp-med__chip">Lapsed</span>{% endif %}
+    </div>
+    {% if total %}<span class="pp-med__count">{{ frame.stages_done|default:0 }} / {{ total }}</span>{% endif %}
+</div>
+{% endwith %}

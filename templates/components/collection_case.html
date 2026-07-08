@@ -1,0 +1,44 @@
+{% comment %}
+The Case -- the badge collection as medallion OBJECTS grouped by set (badge type), replacing the
+binder. Each set is a shelf; set tabs switch between them. Expects `binder_sets` from
+collection_service (each: key, label, palette, total, earned, pages:[{frames}]). Wired by
+collection.js (set-tab switching + the list->case jump). Each badge renders via the Badge Medallion
+component; tapping a badge links to its detail (the "pick it up" modal replaces this in a later pass).
+{% endcomment %}
+{% load static %}
+<div class="pp-case">
+    {% if binder_sets %}
+    <div class="pp-case__sets" role="tablist" aria-label="Collection sets">
+        {% for set in binder_sets %}
+        <button type="button" class="pp-case__set-tab{% if forloop.first %} is-active{% endif %}"
+                role="tab" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                data-set-tab="{{ set.key }}" data-palette="{{ set.palette }}">
+            <span class="pp-case__set-dot" data-palette="{{ set.palette }}"></span>
+            <span class="pp-case__set-label">{{ set.label }}</span>
+            <span class="pp-case__set-count">{{ set.earned }}/{{ set.total }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% for set in binder_sets %}
+    <section class="pp-case__shelf" data-set="{{ set.key }}"{% if not forloop.first %} hidden{% endif %} aria-label="{{ set.label }}">
+        <div class="pp-case__grid">
+            {% for group in set.groups %}
+            <div class="pp-case__group">
+                <div class="pp-case__group-name">{{ group.name }}</div>
+                <div class="pp-case__group-tiers">
+                    {% for f in group.tiers %}
+                    <a class="pp-case__slot"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-case-slot data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
+                        {% include 'components/badge_medallion.html' with frame=f %}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% empty %}
+    <div class="pp-case__empty">No badges to show yet. Earn your first badge to start your collection.</div>
+    {% endfor %}
+</div>

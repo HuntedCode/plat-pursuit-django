@@ -1,0 +1,652 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Badge Presentation · PlatPursuit Design Workshop</title>
+    <link rel="stylesheet" href="{% static 'css/output.css' %}" />
+    <style>
+        /* ============================================================
+         * BADGE PRESENTATION WORKSHOP
+         * Decision aid: how should an EARNED badge be presented?
+         * The badge art is ALREADY a self-contained medallion
+         * (backdrop laurel-frame + main art + foreground crest). So the
+         * question is: box it in a trading-card Frame, or let the
+         * medallion be the object? Real art, four treatments, side by side.
+         * ============================================================ */
+        :root {
+            --ink: #e8eef6; --ink-mute: #94a3b8; --ink-faint: #64748b;
+            --bg-0: #0a0e14; --bg-1: #10151d; --bg-2: #161d28; --line: #263143;
+            --accent: #59c1e6;
+        }
+        body { background: var(--bg-0); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0; padding: 0 0 120px; }
+        .bp-wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+        /* --- page header --- */
+        .bp-head { padding: 56px 0 8px; }
+        .bp-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--accent); }
+        .bp-head h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; margin: 10px 0 12px; letter-spacing: -.02em; }
+        .bp-lede { font-size: 16px; line-height: 1.6; color: var(--ink-mute); max-width: 68ch; }
+        .bp-lede strong { color: var(--ink); }
+        .bp-watch { margin: 22px 0 0; padding: 16px 18px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 12px; background: var(--bg-1); font-size: 14px; line-height: 1.6; color: var(--ink-mute); }
+        .bp-watch b { color: var(--ink); }
+
+        /* --- section scaffold --- */
+        .bp-section { margin-top: 68px; }
+        .bp-section > h2 { font-size: 22px; font-weight: 800; margin: 0 0 4px; letter-spacing: -.01em; }
+        .bp-section > .bp-sub { font-size: 14px; color: var(--ink-mute); margin: 0 0 24px; max-width: 70ch; line-height: 1.55; }
+        .bp-tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
+        .bp-tag--rec { background: color-mix(in oklab, var(--accent) 20%, transparent); color: var(--accent); border: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); }
+        .bp-tag--base { background: #1b2330; color: var(--ink-faint); border: 1px solid var(--line); }
+
+        /* ============ THE COMPOSITED MEDALLION (shared) ============ */
+        .bp-med { position: relative; width: var(--sz, 200px); aspect-ratio: 1; flex: 0 0 auto; }
+        .bp-med__l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+
+        /* tier accent colours (aura / glint / ring) */
+        [data-tier="bronze"]   { --tier-c: #cf9160; --tier-glow: #e6ad74; }
+        [data-tier="silver"]   { --tier-c: #b9c6d6; --tier-glow: #dae4f0; }
+        [data-tier="gold"]     { --tier-c: #e7c25c; --tier-glow: #f4d778; }
+        [data-tier="platinum"] { --tier-c: #8fd2ea; --tier-glow: #c4edfb; }
+
+        /* --- comparison columns --- */
+        .bp-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 20px; align-items: end; }
+        .bp-col-head { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); padding-bottom: 6px; }
+        .bp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px 20px; align-items: center; padding: 22px 0; border-top: 1px solid var(--line); }
+        .bp-cell { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+
+        /* ---- TREATMENT: bare medallion ---- */
+        .bp-bare { display: grid; place-items: center; padding: 10px; position: relative; }
+        .bp-bare .bp-med { --sz: 200px; }
+        .bp-bare .bp-med::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: 4%; height: 12px; border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.6), transparent 70%); z-index: -1; }
+
+        /* ---- TREATMENT: precious medallion (the recommendation) ---- */
+        .bp-object { position: relative; display: grid; place-items: center; padding: 26px 18px 16px; cursor: default; }
+        .bp-object .bp-med { --sz: 200px; transition: transform .5s cubic-bezier(.22,1,.36,1); z-index: 1; }
+        /* aura: a soft tier-tinted bloom behind the object */
+        .bp-object::before { content: ''; position: absolute; top: 46%; left: 50%; width: 78%; aspect-ratio: 1; transform: translate(-50%,-50%); border-radius: 50%; background: radial-gradient(circle, var(--tier-glow) 0%, transparent 62%); opacity: .22; filter: blur(14px); transition: opacity .5s ease, transform .5s ease; z-index: 0; }
+        /* pedestal: grounds the object so it reads as sitting on a surface */
+        .bp-object::after { content: ''; position: absolute; bottom: 10px; left: 50%; width: 58%; height: 16px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.6), transparent 72%); transition: width .5s ease, opacity .5s ease; z-index: 0; }
+        .bp-object:hover .bp-med { transform: translateY(-10px) scale(1.04); }
+        .bp-object:hover::before { opacity: .5; transform: translate(-50%,-52%) scale(1.06); }
+        .bp-object:hover::after { width: 50%; opacity: .8; }
+        /* light-catch: a diagonal glint sweeps the disc on hover (clipped to a circle so it reads ON the object) */
+        .bp-object .bp-glint { position: absolute; top: 50%; left: 50%; width: 72%; aspect-ratio: 1; transform: translate(-50%,-46%); border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 2; }
+        .bp-object .bp-glint::before { content: ''; position: absolute; top: -20%; bottom: -20%; left: 0; width: 40%; transform: skewX(-16deg) translateX(-220%); background: linear-gradient(100deg, transparent, rgba(255,255,255,.55) 50%, transparent); mix-blend-mode: screen; }
+        .bp-object:hover .bp-glint::before { animation: bpGlint .8s ease .05s 1; }
+        @keyframes bpGlint { to { transform: skewX(-16deg) translateX(360%); } }
+
+        /* metadata caption (shared by object treatments) */
+        .bp-meta { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+        .bp-meta__name { font-size: 14px; font-weight: 700; color: var(--ink); }
+        .bp-meta__sub { font-size: 12px; color: var(--ink-mute); }
+        .bp-meta__rare { color: var(--tier-c); font-weight: 700; }
+
+        /* ---- collection grids ---- */
+        .bp-gridwrap { position: relative; }
+        .bp-switch { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-1); margin-bottom: 22px; }
+        .bp-switch button { font: inherit; font-size: 13px; font-weight: 700; padding: 7px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-mute); cursor: pointer; transition: all .2s ease; }
+        .bp-switch button.is-on { background: var(--accent); color: #041016; }
+        .bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 4px; justify-items: center; }
+        .bp-grid[hidden] { display: none; }
+        .bp-grid .bp-object { padding: 16px 6px 8px; }
+        .bp-grid .bp-object .bp-med { --sz: 132px; }
+        .bp-grid .bp-meta__name { font-size: 12px; }
+        /* the "current" card grid reuses the production frame at its natural size */
+        .bp-cardgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; justify-items: center; }
+        .bp-cardgrid[hidden] { display: none; }
+
+        /* ============ THE HERO ("pick it up") ============ */
+        .bp-hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; padding: 40px; border: 1px solid var(--line); border-radius: 24px; background: radial-gradient(120% 100% at 30% 20%, var(--bg-2), var(--bg-0)); }
+        .bp-hero__stage { position: relative; display: grid; place-items: center; min-height: 460px; perspective: 1400px; }
+        .bp-hero__obj { position: relative; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.22,1,.36,1); cursor: pointer; }
+        .bp-hero__obj .bp-med { --sz: 400px; }
+        .bp-hero__stage::before { content: ''; position: absolute; top: 44%; left: 50%; width: 70%; aspect-ratio: 1; transform: translate(-50%,-50%); border-radius: 50%; background: radial-gradient(circle, var(--tier-glow) 0%, transparent 60%); opacity: .3; filter: blur(26px); }
+        .bp-hero__stage::after { content: ''; position: absolute; bottom: 42px; left: 50%; width: 52%; height: 26px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.65), transparent 72%); }
+        .bp-hero__glint { position: absolute; top: 48%; left: 50%; width: 66%; aspect-ratio: 1; transform: translate(-50%,-46%); border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 3; }
+        .bp-hero__glint::before { content: ''; position: absolute; top: -20%; bottom: -20%; left: 0; width: 36%; transform: skewX(-16deg) translateX(-240%); background: linear-gradient(100deg, transparent, rgba(255,255,255,.6) 50%, transparent); mix-blend-mode: screen; animation: bpGlintLoop 4.5s ease-in-out 1.2s infinite; }
+        @keyframes bpGlintLoop { 0%, 62% { transform: skewX(-16deg) translateX(-240%); } 82%, 100% { transform: skewX(-16deg) translateX(360%); } }
+        .bp-hero__hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--ink-faint); letter-spacing: .04em; }
+
+        .bp-hero__info h3 { font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--tier-c); margin: 0 0 6px; }
+        .bp-hero__info .bp-hero__title { font-size: 30px; font-weight: 800; margin: 0 0 4px; letter-spacing: -.02em; }
+        .bp-hero__info .bp-hero__desc { font-size: 14px; color: var(--ink-mute); line-height: 1.6; margin: 0 0 22px; }
+        .bp-hero__stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .bp-hero__stat { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg-1); }
+        .bp-hero__stat .k { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); }
+        .bp-hero__stat .v { font-size: 20px; font-weight: 800; margin-top: 3px; }
+        .bp-hero__stat .v.rare { color: var(--tier-c); }
+
+        /* ---- tier ladder ---- */
+        .bp-ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .bp-ladder .bp-object .bp-med { --sz: 170px; }
+
+        /* production component preview */
+        .bp-compgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .bp-compcell { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 20px 10px 12px; }
+        .bp-compcell .pp-med { --sz: 182px; }
+
+        /* ============ STATES (earned / in-progress / unearned / maintenance -- pure CSS on the art) ============ */
+        .bp-states { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .bp-st { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .bp-st__stage { position: relative; display: grid; place-items: center; padding: 22px 12px; width: 100%; }
+        .bp-st .bp-med { --sz: 176px; }
+        .bp-st__stage::after { content: ''; position: absolute; bottom: 14px; left: 50%; width: 50%; height: 12px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.5), transparent 70%); }
+        .bp-st__label { font-size: 14px; font-weight: 700; color: var(--ink); }
+        .bp-st__note { font-size: 11px; color: var(--ink-faint); text-align: center; line-height: 1.45; max-width: 22ch; }
+        /* EARNED = full colour + aura (the trophy shot) */
+        .bp-st[data-state="earned"] .bp-st__stage::before { content: ''; position: absolute; top: 44%; left: 50%; width: 72%; aspect-ratio: 1; transform: translate(-50%,-50%); border-radius: 50%; background: radial-gradient(circle, var(--tier-glow), transparent 62%); opacity: .3; filter: blur(14px); }
+        /* UNEARNED = dim laurel mount + ghosted subject (a named, waiting slot -- not a [?] wall) */
+        .bp-st[data-state="unearned"] .bp-med__l:nth-child(1),
+        .bp-st[data-state="unearned"] .bp-med__l:nth-child(3) { filter: grayscale(1) brightness(.42); }
+        .bp-st[data-state="unearned"] .bp-med__l:nth-child(2) { filter: grayscale(1) brightness(.08); opacity: .5; }
+        /* IN PROGRESS = subject materializing (faint/desaturated) + a progress ring tracking the count */
+        .bp-st[data-state="in_progress"] .bp-med__l:nth-child(2) { filter: grayscale(.55) brightness(.85); opacity: .72; }
+        .bp-st[data-state="in_progress"] .bp-med__l:nth-child(1),
+        .bp-st[data-state="in_progress"] .bp-med__l:nth-child(3) { filter: brightness(.9) saturate(.85); }
+        /* Segmented progress ring: one segment per platinum toward the badge; lit segments = earned. The
+           segment count adapts to --total, so a 4-platinum badge and a 13-platinum badge both read cleanly. */
+        .bp-st__ring { position: absolute; top: 50%; left: 50%; width: 210px; height: 210px; transform: translate(-50%,-50%); border-radius: 50%; z-index: 0;
+            --seg: calc(360deg / var(--total, 8)); --gap: 6deg;
+            background: conic-gradient(var(--tier-c) 0deg calc(var(--done, 5) / var(--total, 8) * 360deg), rgba(255,255,255,.09) calc(var(--done, 5) / var(--total, 8) * 360deg) 360deg);
+            -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+            -webkit-mask-composite: source-in;
+            mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+            mask-composite: intersect;
+            filter: drop-shadow(0 0 5px var(--tier-c)); opacity: .95; }
+        .bp-st__pct { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 800; color: var(--tier-c); }
+        /* MAINTENANCE = tarnished full art + a lapse chip */
+        .bp-st[data-state="maintenance"] .bp-med { filter: grayscale(.72) brightness(.66) sepia(.12); }
+        .bp-st__chip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: rgba(230,150,60,.18); color: #e6a53c; border: 1px solid rgba(230,150,60,.42); }
+
+        /* segment-count scaling demo */
+        .bp-segscale { margin-top: 26px; display: flex; align-items: center; gap: 22px; flex-wrap: wrap; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-1); }
+        .bp-segscale__lbl { font-size: 13px; color: var(--ink-mute); max-width: 40ch; line-height: 1.5; }
+        .bp-segscale__row { display: flex; gap: 26px; }
+        .bp-segmini { position: relative; width: 66px; height: 66px; }
+        .bp-segmini__r { position: absolute; inset: 0; border-radius: 50%;
+            --seg: calc(360deg / var(--total, 8)); --gap: 8deg;
+            background: conic-gradient(var(--tier-c) 0deg calc(var(--done) / var(--total) * 360deg), rgba(255,255,255,.09) calc(var(--done) / var(--total) * 360deg) 360deg);
+            -webkit-mask: radial-gradient(circle, transparent 56%, #000 57%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+            -webkit-mask-composite: source-in;
+            mask: radial-gradient(circle, transparent 56%, #000 57%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+            mask-composite: intersect; filter: drop-shadow(0 0 4px var(--tier-c)); }
+        .bp-segmini__n { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: var(--ink); }
+
+        /* ============ MAINTENANCE OPTIONS (exploring the lapsed look) ============ */
+        .bp-mnts { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 20px; }
+        .bp-mnt { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .bp-mnt .bp-med { --sz: 176px; }
+        .bp-mnt .bp-st__note { max-width: 24ch; }
+        /* 1 -- tarnished (baseline) */
+        .bp-mnt[data-variant="tarnish"] .bp-med { filter: grayscale(.72) brightness(.66) sepia(.12); }
+        /* crack overlay -- ONE shared code asset (SVG), applies to any badge, no per-badge art */
+        .bp-crack { position: absolute; top: 50%; left: 50%; width: 176px; height: 176px; transform: translate(-50%,-50%); z-index: 3; pointer-events: none; }
+        .bp-mnt[data-variant="crack"] .bp-med { filter: grayscale(.7) brightness(.66) sepia(.1); }
+        /* 2 -- REPAIR: cracked + tarnished art with a WARM segmented ring (red = broken, amber = repaired).
+           Deliberately unlike the cool tier-coloured in-progress ring on a faint materializing ghost. */
+        .bp-mnt[data-variant="repair"] .bp-med { filter: grayscale(.66) brightness(.62) sepia(.06); }
+        .bp-mnt__ring { position: absolute; top: 50%; left: 50%; width: 206px; height: 206px; transform: translate(-50%,-50%); border-radius: 50%; z-index: 0;
+            --seg: calc(360deg / var(--total, 8)); --gap: 6deg;
+            background: conic-gradient(#eeae42 0deg calc(var(--done, 3) / var(--total, 8) * 360deg), rgba(205,58,46,.26) calc(var(--done, 3) / var(--total, 8) * 360deg) 360deg);
+            -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+            -webkit-mask-composite: source-in;
+            mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+            mask-composite: intersect; opacity: .9; filter: drop-shadow(0 0 5px rgba(238,174,66,.5)); }
+        .bp-mnt__rlabel { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 800; color: #eeae42; }
+        /* 3 -- restore wipe: colour returns from the base up to the repair % */
+        .bp-mnt__wipe { position: relative; }
+        .bp-mnt[data-variant="wipe"] .bp-mnt__wipe > .bp-med { filter: grayscale(1) brightness(.55); }
+        .bp-mnt__color { position: absolute; inset: 0;
+            -webkit-mask: linear-gradient(to top, #000 calc(var(--pct, 55) * 1%), transparent calc(var(--pct, 55) * 1% + 7%));
+            mask: linear-gradient(to top, #000 calc(var(--pct, 55) * 1%), transparent calc(var(--pct, 55) * 1% + 7%)); }
+        /* 4 -- frosted: preserved-but-inactive, encased in frost */
+        .bp-mnt[data-variant="frost"] .bp-med { filter: grayscale(.4) brightness(.92) contrast(.93); }
+        .bp-mnt__frost { position: absolute; top: 48%; left: 50%; width: 186px; height: 186px; transform: translate(-50%,-50%); border-radius: 50%; pointer-events: none; z-index: 2;
+            background: linear-gradient(135deg, rgba(200,225,245,.26), rgba(150,190,230,.10)); backdrop-filter: blur(1.6px); -webkit-backdrop-filter: blur(1.6px);
+            box-shadow: inset 0 0 34px rgba(210,235,255,.42); }
+
+        /* ============ MAKE IT YOURS (customization -- all CSS, zero new art) ============ */
+        .bp-cz { display: grid; grid-template-columns: 1.35fr .65fr; gap: 26px; align-items: stretch; }
+        .bp-cz-stage { position: relative; border-radius: 20px; overflow: hidden; min-height: 540px; display: grid; place-items: center; isolation: isolate; border: 1px solid var(--line); }
+        .bp-cz-scene { position: absolute; inset: 0; z-index: 0; }
+        .bp-cz-scene::before, .bp-cz-scene::after { content: ''; position: absolute; }
+        /* cases -- shared environments, pure CSS backgrounds */
+        [data-case="void"] .bp-cz-scene { background: radial-gradient(120% 90% at 50% 28%, #141c28, #060a10 72%); }
+        [data-case="velvet"] .bp-cz-scene { background: radial-gradient(85% 80% at 50% 42%, #5c1233, #180612 74%); }
+        [data-case="obsidian"] .bp-cz-scene { background: linear-gradient(180deg, #0e1219 0%, #05070b 55%, #0e1219 100%); }
+        [data-case="obsidian"] .bp-cz-scene::after { left: 8%; right: 8%; bottom: 34%; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent); }
+        [data-case="starfield"] .bp-cz-scene { background: radial-gradient(100% 100% at 50% 18%, #101c30, #04060c 76%); }
+        [data-case="starfield"] .bp-cz-scene::before { inset: 0; background-image: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 68% 48%, #cfe4ff, transparent), radial-gradient(1.5px 1.5px at 42% 72%, #fff, transparent), radial-gradient(1px 1px at 84% 24%, #fff, transparent), radial-gradient(1px 1px at 55% 14%, #bcd6ff, transparent), radial-gradient(1.5px 1.5px at 12% 62%, #fff, transparent); opacity: .75; }
+        [data-case="marble"] .bp-cz-scene { background: linear-gradient(180deg, #e2e6ed 0%, #c4cbd7 58%, #a9b2c1 100%); }
+        [data-case="aurora"] .bp-cz-scene { background: radial-gradient(80% 60% at 30% 24%, rgba(60,220,160,.32), transparent 60%), radial-gradient(80% 70% at 74% 40%, rgba(150,95,240,.34), transparent 60%), #05070f; }
+        [data-case="sunset"] .bp-cz-scene { background: linear-gradient(180deg, #35204d 0%, #7a2d55 46%, #d16a3e 100%); }
+
+        .bp-cz-obj { position: relative; z-index: 2; }
+        .bp-cz-obj-i { position: relative; }
+        .bp-cz-obj .bp-med { --sz: 300px; }
+        .bp-cz-obj::before { content: ''; position: absolute; top: 44%; left: 50%; width: 78%; aspect-ratio: 1; transform: translate(-50%,-50%); border-radius: 50%; background: radial-gradient(circle, var(--cz-aura, #c4edfb) 0%, transparent 62%); opacity: .34; filter: blur(20px); z-index: -1; }
+        .bp-cz-glint { position: absolute; top: 50%; left: 50%; width: 70%; aspect-ratio: 1; transform: translate(-50%,-46%); border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 3; }
+        .bp-cz-glint::before { content: ''; position: absolute; top: -20%; bottom: -20%; left: 0; width: 38%; transform: skewX(-16deg) translateX(-240%); background: linear-gradient(100deg, transparent, rgba(255,255,255,.55) 50%, transparent); mix-blend-mode: screen; }
+
+        /* stand / pedestal */
+        .bp-cz-stand { position: absolute; bottom: 86px; left: 50%; transform: translateX(-50%); z-index: 1; pointer-events: none; }
+        [data-stand="none"] .bp-cz-stand { display: none; }
+        [data-stand="disc"] .bp-cz-stand { width: 250px; height: 42px; border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%); }
+        [data-stand="ring"] .bp-cz-stand { width: 230px; height: 66px; border-radius: 50%; border: 2px solid var(--cz-aura, #c4edfb); box-shadow: 0 0 26px var(--cz-aura, #c4edfb); opacity: .55; }
+        [data-stand="beam"] .bp-cz-stand { width: 230px; height: 340px; bottom: 96px; background: linear-gradient(to top, var(--cz-aura, #c4edfb), transparent 82%); opacity: .16; filter: blur(7px); clip-path: polygon(40% 100%, 60% 100%, 82% 0, 18% 0); }
+
+        /* nameplate -- free text personalization */
+        .bp-cz-plate { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 4; padding: 7px 24px; border-radius: 8px; background: linear-gradient(180deg, #313b49, #1a212c); border: 1px solid rgba(255,255,255,.14); box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 5px 14px rgba(0,0,0,.5); }
+        .bp-cz-plate[hidden] { display: none; }
+        .bp-cz-plate span { font-size: 14px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #dde5f0; text-shadow: 0 1px 0 rgba(0,0,0,.6); }
+
+        /* effect layers */
+        .bp-cz-motes, .bp-cz-spot { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .4s ease; }
+        .fx-spot .bp-cz-spot { opacity: 1; background: radial-gradient(46% 56% at 50% 26%, rgba(255,255,255,.12), transparent 62%); }
+        .fx-motes .bp-cz-motes { opacity: 1; }
+        .bp-cz-motes span { position: absolute; bottom: 60px; width: 4px; height: 4px; border-radius: 50%; background: var(--cz-aura, #c4edfb); box-shadow: 0 0 7px var(--cz-aura, #c4edfb); animation: bpMote linear infinite; }
+        @keyframes bpMote { 0% { transform: translateY(0); opacity: 0; } 12% { opacity: .85; } 100% { transform: translateY(-420px); opacity: 0; } }
+        /* motion effects on separate wrappers so they compose instead of fighting for `transform` */
+        .fx-float .bp-cz-obj { animation: bpFloat 4.2s ease-in-out infinite; }
+        @keyframes bpFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+        .fx-sway .bp-cz-obj-i { animation: bpSway 7s ease-in-out infinite; }
+        @keyframes bpSway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+        .fx-shimmer .bp-cz-glint::before { animation: bpGlintLoop 3.6s ease-in-out infinite; }
+
+        /* controls */
+        .bp-cz-controls { display: flex; flex-direction: column; gap: 20px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--bg-1); align-self: start; }
+        .bp-cz-group > label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px; }
+        .bp-cz-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+        .bp-cz-opt { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-2); color: var(--ink-mute); cursor: pointer; transition: all .18s ease; }
+        .bp-cz-opt:hover { color: var(--ink); border-color: var(--ink-faint); }
+        .bp-cz-opt.is-on { background: var(--accent); color: #041016; border-color: var(--accent); }
+        .bp-cz-sws { display: flex; flex-wrap: wrap; gap: 10px; }
+        .bp-cz-sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.18); cursor: pointer; padding: 0; }
+        .bp-cz-sw.is-on { border-color: #fff; box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px rgba(255,255,255,.5); }
+        .bp-cz-name { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); color: var(--ink); }
+        .bp-cz-foot { font-size: 12px; color: var(--ink-faint); line-height: 1.5; margin: 0; }
+        @media (prefers-reduced-motion: reduce) {
+            .fx-float .bp-cz-obj, .fx-sway .bp-cz-obj-i, .fx-shimmer .bp-cz-glint::before, .bp-cz-motes span { animation: none; }
+        }
+
+        .bp-note { margin-top: 14px; font-size: 13px; color: var(--ink-faint); font-style: italic; }
+        @media (max-width: 860px) {
+            .bp-hero, .bp-cz { grid-template-columns: 1fr; }
+            .bp-cols, .bp-row { grid-template-columns: 1fr; }
+            .bp-ladder, .bp-states, .bp-mnts, .bp-compgrid { grid-template-columns: repeat(2, 1fr); }
+            .bp-row .bp-cell::before { content: attr(data-label); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+        }
+    </style>
+</head>
+<body>
+<div class="bp-wrap">
+
+    <header class="bp-head">
+        <div class="bp-eyebrow">Design Workshop · Decision Aid</div>
+        <h1>How should a badge be presented?</h1>
+        <p class="bp-lede">
+            The badge art is <strong>already a self-contained medallion</strong> &mdash; a laurel-framed backdrop (tier-coloured),
+            the custom art in the centre, and a tier crest on top. So the real question isn't "does it need a frame" &mdash; it
+            already has one. It's: do we <strong>box the medallion inside a trading-card Frame</strong>, or do we
+            <strong>let the medallion be the object</strong>? Same real art, four treatments, side by side.
+        </p>
+        <div class="bp-watch">
+            <b>What to look for:</b> Which one makes you want to <em>pick it up</em>? Which respects the artwork vs. competes with it?
+            Which reads as a <em>precious earned object</em> vs. a UI element? And crucially &mdash; which scales to a whole
+            <em>collection</em> (scroll to the grids) without feeling like paperwork?
+        </div>
+    </header>
+
+    <!-- ============ PRODUCTION COMPONENT ============ -->
+    <section class="bp-section">
+        <h2>The production component <span class="bp-tag bp-tag--rec">real partial</span></h2>
+        <p class="bp-sub">This renders the actual <code>components/badge_medallion.html</code> we'll ship &mdash; the four locked states, driven by the frame dict (same data <code>collection_service</code> already provides). Confirm it matches what you approved below.</p>
+        <div class="bp-compgrid">
+            {% for f in component_frames %}
+            <div class="bp-compcell" data-tier="{{ f.tier }}">
+                {% include 'components/badge_medallion.html' with frame=f %}
+                <div class="bp-meta"><span class="bp-meta__name">{% if f.state == 'in_progress' %}In progress{% else %}{{ f.state|title }}{% endif %}</span></div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ============ A · SAME BADGE, THREE WAYS ============ -->
+    <section class="bp-section">
+        <h2>The same badge, three ways</h2>
+        <p class="bp-sub">Left: today's production Frame (the medallion boxed in a trading card with chrome + a stats plinth).
+            Middle: the bare composited medallion. Right: the medallion treated as a precious object &mdash; grounded, lit, liftable, with the art as the hero.</p>
+        <div class="bp-cols">
+            <div class="bp-col-head">Current &mdash; Frame card <span class="bp-tag bp-tag--base">baseline</span></div>
+            <div class="bp-col-head">Bare medallion</div>
+            <div class="bp-col-head">Precious object <span class="bp-tag bp-tag--rec">recommended</span></div>
+        </div>
+        {% for f in grid|slice:":4" %}
+        <div class="bp-row">
+            <div class="bp-cell" data-label="Current" data-tier="{{ f.tier }}">
+                {% include 'components/frame.html' with frame=f %}
+            </div>
+            <div class="bp-cell" data-label="Bare" data-tier="{{ f.tier }}">
+                <div class="bp-bare">{% include 'design/_bp_medallion.html' with f=f %}</div>
+            </div>
+            <div class="bp-cell" data-label="Object" data-tier="{{ f.tier }}">
+                <div class="bp-object">
+                    <span class="bp-glint"></span>
+                    {% include 'design/_bp_medallion.html' with f=f %}
+                </div>
+                <div class="bp-meta">
+                    <span class="bp-meta__name">{{ f.series_name }}</span>
+                    <span class="bp-meta__sub"><span class="bp-meta__rare">Top {{ f.rarity_pct }}%</span> &middot; #{{ f.earn_rank }} to earn</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        <p class="bp-note">Tip: hover the "Precious object" column to feel the light-catch + lift. The card and the bare medallion are static by comparison.</p>
+    </section>
+
+    <!-- ============ STATES ============ -->
+    <section class="bp-section">
+        <h2>Every state, still an object <span class="bp-tag bp-tag--rec">pure CSS on the same art</span></h2>
+        <p class="bp-sub">Most of a collection is <em>not earned yet</em> &mdash; so the unearned and in-progress states matter more than the trophy shot. All four below are the <strong>same composited art</strong> with CSS filters + overlays. No extra art, ever.</p>
+        <div class="bp-states" data-tier="{{ hero.tier }}">
+            <div class="bp-st" data-state="earned">
+                <div class="bp-st__stage">{% include 'design/_bp_medallion.html' with f=hero %}</div>
+                <div class="bp-st__label">Earned</div>
+                <div class="bp-st__note">Full colour, lit, yours.</div>
+            </div>
+            <div class="bp-st" data-state="in_progress" style="--done: 5; --total: 8;">
+                <div class="bp-st__stage">
+                    <span class="bp-st__ring"></span>
+                    {% include 'design/_bp_medallion.html' with f=hero %}
+                    <span class="bp-st__pct">5 / 8</span>
+                </div>
+                <div class="bp-st__label">In progress</div>
+                <div class="bp-st__note">Materializing &mdash; each ring segment is one platinum, lighting up as you earn.</div>
+            </div>
+            <div class="bp-st" data-state="unearned">
+                <div class="bp-st__stage">{% include 'design/_bp_medallion.html' with f=hero %}</div>
+                <div class="bp-st__label">Unearned</div>
+                <div class="bp-st__note">A named, waiting mount &mdash; the collector's pull, not a "?" wall.</div>
+            </div>
+            <div class="bp-st" data-state="maintenance">
+                <div class="bp-st__stage">
+                    <span class="bp-st__chip">Lapsed</span>
+                    {% include 'design/_bp_medallion.html' with f=hero %}
+                </div>
+                <div class="bp-st__label">Maintenance</div>
+                <div class="bp-st__note">Tarnished until you re-earn it back to full colour.</div>
+            </div>
+        </div>
+        <div class="bp-segscale" data-tier="{{ hero.tier }}">
+            <span class="bp-segscale__lbl">The ring splits into <strong>one segment per platinum</strong> &mdash; it adapts to each badge's count and lights up as you earn each one:</span>
+            <div class="bp-segscale__row">
+                <div class="bp-segmini" style="--done: 2; --total: 4;"><span class="bp-segmini__r"></span><span class="bp-segmini__n">2/4</span></div>
+                <div class="bp-segmini" style="--done: 5; --total: 8;"><span class="bp-segmini__r"></span><span class="bp-segmini__n">5/8</span></div>
+                <div class="bp-segmini" style="--done: 9; --total: 13;"><span class="bp-segmini__r"></span><span class="bp-segmini__n">9/13</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ MAINTENANCE OPTIONS ============ -->
+    <section class="bp-section">
+        <h2>Maintenance, a few ways <span class="bp-tag bp-tag--base">exploring</span></h2>
+        <p class="bp-sub">"Maintenance" = you earned it, then it lapsed (a game delisted, a condition dropped). Still held, but faded until you re-earn. A few metaphors &mdash; two of them (ring, wipe) tie to the real repair progress:</p>
+        <div class="bp-mnts" data-tier="{{ hero.tier }}">
+            <div class="bp-mnt" data-variant="tarnish">
+                <div class="bp-st__stage"><span class="bp-st__chip">Lapsed</span>{% include 'design/_bp_medallion.html' with f=hero %}</div>
+                <div class="bp-st__label">Tarnished</div>
+                <div class="bp-st__note">Aged metal &mdash; grayscale + dimmed. (Current.)</div>
+            </div>
+            <div class="bp-mnt" data-variant="crack">
+                <div class="bp-st__stage"><span class="bp-st__chip">Lapsed</span>{% include 'design/_bp_medallion.html' with f=hero %}{% include 'design/_bp_crack.html' %}</div>
+                <div class="bp-st__label">Cracked</div>
+                <div class="bp-st__note">One shared crack overlay &mdash; code, not per-badge art.</div>
+            </div>
+            <div class="bp-mnt" data-variant="repair" style="--done: 3; --total: 8;">
+                <div class="bp-st__stage"><span class="bp-mnt__ring"></span>{% include 'design/_bp_medallion.html' with f=hero %}{% include 'design/_bp_crack.html' %}<span class="bp-mnt__rlabel">Repair 3/8</span></div>
+                <div class="bp-st__label">Repair (crack + ring)</div>
+                <div class="bp-st__note">Cracked, plus a WARM ring: red = broken, amber = repaired. Distinct from the cool in-progress ring.</div>
+            </div>
+            <div class="bp-mnt" data-variant="wipe" style="--pct: 55;">
+                <div class="bp-st__stage"><div class="bp-mnt__wipe">{% include 'design/_bp_medallion.html' with f=hero %}<div class="bp-mnt__color">{% include 'design/_bp_medallion.html' with f=hero %}</div></div></div>
+                <div class="bp-st__label">Restore wipe</div>
+                <div class="bp-st__note">Colour floods back from the base as you repair. Ties to data.</div>
+            </div>
+            <div class="bp-mnt" data-variant="frost">
+                <div class="bp-st__stage"><span class="bp-st__chip">On ice</span>{% include 'design/_bp_medallion.html' with f=hero %}<span class="bp-mnt__frost"></span></div>
+                <div class="bp-st__label">Frosted</div>
+                <div class="bp-st__note">Preserved but inactive &mdash; encased, waiting to thaw.</div>
+            </div>
+        </div>
+        <p class="bp-note">A 5th &mdash; a "cracked" fracture overlay &mdash; would need one shared crack texture (still no per-badge art); say the word and I'll add it.</p>
+    </section>
+
+    <!-- ============ B · AS A COLLECTION ============ -->
+    <section class="bp-section">
+        <h2>As a collection</h2>
+        <p class="bp-sub">The real test: a <em>wall</em> of them. Does a grid of these read as a treasured shelf, or as a spreadsheet of cards? Toggle the two.</p>
+        <div class="bp-gridwrap">
+            <div class="bp-switch" role="tablist">
+                <button type="button" class="is-on" data-grid="object" role="tab">Precious objects</button>
+                <button type="button" data-grid="card" role="tab">Frame cards</button>
+            </div>
+            <div class="bp-grid" data-grid-panel="object">
+                {% for f in grid %}
+                <div class="bp-cell" data-tier="{{ f.tier }}">
+                    <div class="bp-object">
+                        <span class="bp-glint"></span>
+                        {% include 'design/_bp_medallion.html' with f=f %}
+                    </div>
+                    <div class="bp-meta"><span class="bp-meta__name">{{ f.series_name }}</span></div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="bp-cardgrid" data-grid-panel="card" hidden>
+                {% for f in grid %}{% include 'components/frame.html' with frame=f %}{% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ C · THE HERO ============ -->
+    <section class="bp-section">
+        <h2>The hero moment &mdash; "pick it up"</h2>
+        <p class="bp-sub">One badge, glorified. Move your cursor over it to tilt the object in the light; click it to turn it and read its story. This is the Apple-award treatment your art was built for &mdash; and the reason to open the page.</p>
+        <div class="bp-hero" data-tier="{{ hero.tier }}">
+            <div class="bp-hero__stage">
+                <div class="bp-hero__obj" id="bp-hero-obj">
+                    {% include 'design/_bp_medallion.html' with f=hero %}
+                    <span class="bp-hero__glint"></span>
+                </div>
+                <div class="bp-hero__hint">Hover to tilt &middot; click to turn</div>
+            </div>
+            <div class="bp-hero__info">
+                <h3>{{ hero.series_name }}</h3>
+                <div class="bp-hero__title">{{ hero.badge_name }}</div>
+                <p class="bp-hero__desc">{{ hero.description }}</p>
+                <div class="bp-hero__stats">
+                    <div class="bp-hero__stat"><div class="k">Rarity</div><div class="v rare">Top {{ hero.rarity_pct }}%</div></div>
+                    <div class="bp-hero__stat"><div class="k">Earn rank</div><div class="v">#{{ hero.earn_rank }}</div></div>
+                    <div class="bp-hero__stat"><div class="k">Earned</div><div class="v" style="font-size:16px">{{ hero.earned_date }}</div></div>
+                    <div class="bp-hero__stat"><div class="k">Series XP</div><div class="v">{{ hero.series_xp }}</div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ MAKE IT YOURS ============ -->
+    <section class="bp-section" id="bp-customize">
+        <h2>Make it yours <span class="bp-tag bp-tag--rec">all CSS &middot; zero new art</span></h2>
+        <p class="bp-sub">Every control below is <em>code</em> &mdash; a shared kit that drops the SAME badge into a different case, light, stand, and effects. The artist only ever draws the badge; personalization never touches their desk. Play with it.</p>
+        <div class="bp-cz" data-tier="{{ hero.tier }}">
+            <div class="bp-cz-stage" id="bp-cz-stage" data-case="void" data-stand="disc" style="--cz-aura: var(--tier-glow);">
+                <div class="bp-cz-scene"></div>
+                <div class="bp-cz-spot"></div>
+                <div class="bp-cz-motes" aria-hidden="true">
+                    <span style="left:22%; animation-duration:6s; animation-delay:0s;"></span>
+                    <span style="left:34%; animation-duration:7.5s; animation-delay:1.2s;"></span>
+                    <span style="left:46%; animation-duration:6.8s; animation-delay:2.4s;"></span>
+                    <span style="left:58%; animation-duration:8s; animation-delay:.6s;"></span>
+                    <span style="left:66%; animation-duration:6.2s; animation-delay:3.1s;"></span>
+                    <span style="left:74%; animation-duration:7.2s; animation-delay:1.8s;"></span>
+                    <span style="left:30%; animation-duration:8.4s; animation-delay:4s;"></span>
+                    <span style="left:62%; animation-duration:6.6s; animation-delay:2.9s;"></span>
+                </div>
+                <div class="bp-cz-stand"></div>
+                <div class="bp-cz-obj"><div class="bp-cz-obj-i">
+                    {% include 'design/_bp_medallion.html' with f=hero %}
+                    <span class="bp-cz-glint"></span>
+                </div></div>
+                <div class="bp-cz-plate" id="bp-cz-plate"><span>PLATINUM PURSUER</span></div>
+            </div>
+            <div class="bp-cz-controls">
+                <div class="bp-cz-group">
+                    <label>Case</label>
+                    <div class="bp-cz-opts" data-cz="case">
+                        <button type="button" class="bp-cz-opt is-on" data-v="void">Void</button>
+                        <button type="button" class="bp-cz-opt" data-v="velvet">Velvet</button>
+                        <button type="button" class="bp-cz-opt" data-v="obsidian">Obsidian</button>
+                        <button type="button" class="bp-cz-opt" data-v="starfield">Starfield</button>
+                        <button type="button" class="bp-cz-opt" data-v="marble">Marble</button>
+                        <button type="button" class="bp-cz-opt" data-v="aurora">Aurora</button>
+                        <button type="button" class="bp-cz-opt" data-v="sunset">Sunset</button>
+                    </div>
+                </div>
+                <div class="bp-cz-group">
+                    <label>Aura</label>
+                    <div class="bp-cz-sws" data-cz="aura">
+                        <button type="button" class="bp-cz-sw is-on" title="Tier" data-v="var(--tier-glow)" style="background: var(--tier-glow);"></button>
+                        <button type="button" class="bp-cz-sw" title="Cyan" data-v="#57d9f2" style="background:#57d9f2;"></button>
+                        <button type="button" class="bp-cz-sw" title="Gold" data-v="#f2cf5e" style="background:#f2cf5e;"></button>
+                        <button type="button" class="bp-cz-sw" title="Emerald" data-v="#4fd48a" style="background:#4fd48a;"></button>
+                        <button type="button" class="bp-cz-sw" title="Violet" data-v="#a97bf0" style="background:#a97bf0;"></button>
+                        <button type="button" class="bp-cz-sw" title="Rose" data-v="#f06fa0" style="background:#f06fa0;"></button>
+                        <button type="button" class="bp-cz-sw" title="Crimson" data-v="#f2603f" style="background:#f2603f;"></button>
+                        <button type="button" class="bp-cz-sw" title="White" data-v="#eaf4ff" style="background:#eaf4ff;"></button>
+                    </div>
+                </div>
+                <div class="bp-cz-group">
+                    <label>Stand</label>
+                    <div class="bp-cz-opts" data-cz="stand">
+                        <button type="button" class="bp-cz-opt" data-v="none">None</button>
+                        <button type="button" class="bp-cz-opt is-on" data-v="disc">Disc</button>
+                        <button type="button" class="bp-cz-opt" data-v="ring">Ring</button>
+                        <button type="button" class="bp-cz-opt" data-v="beam">Beam</button>
+                    </div>
+                </div>
+                <div class="bp-cz-group">
+                    <label>Effects</label>
+                    <div class="bp-cz-opts" data-cz="fx">
+                        <button type="button" class="bp-cz-opt" data-fx="fx-float">Float</button>
+                        <button type="button" class="bp-cz-opt" data-fx="fx-sway">Sway</button>
+                        <button type="button" class="bp-cz-opt" data-fx="fx-shimmer">Shimmer</button>
+                        <button type="button" class="bp-cz-opt" data-fx="fx-motes">Motes</button>
+                        <button type="button" class="bp-cz-opt" data-fx="fx-spot">Spotlight</button>
+                    </div>
+                </div>
+                <div class="bp-cz-group">
+                    <label>Nameplate</label>
+                    <input type="text" class="bp-cz-name" id="bp-cz-name" value="PLATINUM PURSUER" maxlength="22" placeholder="Your engraving (blank = none)">
+                </div>
+                <p class="bp-cz-foot">7 cases &times; 8 auras &times; 4 stands &times; 5 effects &times; your text = thousands of looks &mdash; and not one new art commission. Unlock them by <em>earning</em>, not just buying.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ D · TIER LADDER ============ -->
+    <section class="bp-section">
+        <h2>Tier reads through the frame, not the art</h2>
+        <p class="bp-sub">The same art across bronze &rarr; platinum. The medallion's laurel + crest carry the tier; the art stays the hero. (This is why the art doesn't need per-tier redraws.)</p>
+        <div class="bp-ladder">
+            {% for f in ladder %}
+            <div class="bp-cell" data-tier="{{ f.tier }}">
+                <div class="bp-object">
+                    <span class="bp-glint"></span>
+                    {% include 'design/_bp_medallion.html' with f=f %}
+                </div>
+                <div class="bp-meta"><span class="bp-meta__name">{{ f.tier|title }}</span></div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+</div>
+
+<script src="{% static 'js/frame.js' %}"></script>
+<script>
+    // Collection-grid toggle
+    document.querySelectorAll('.bp-switch').forEach(function (sw) {
+        var wrap = sw.closest('.bp-gridwrap');
+        sw.querySelectorAll('button').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                sw.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+                wrap.querySelectorAll('[data-grid-panel]').forEach(function (p) {
+                    p.hidden = p.getAttribute('data-grid-panel') !== btn.getAttribute('data-grid');
+                });
+            });
+        });
+    });
+
+    // Hero: cursor tilt + click-to-turn
+    (function () {
+        var obj = document.getElementById('bp-hero-obj');
+        if (!obj) return;
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var stage = obj.parentElement, flipped = false;
+        obj.addEventListener('click', function () {
+            flipped = !flipped;
+            apply(0, 0);
+        });
+        function apply(rx, ry) {
+            obj.style.transform = 'rotateX(' + rx + 'deg) rotateY(' + (ry + (flipped ? 180 : 0)) + 'deg)';
+        }
+        if (!reduce) {
+            stage.addEventListener('pointermove', function (e) {
+                var r = stage.getBoundingClientRect();
+                var px = (e.clientX - r.left) / r.width - 0.5;
+                var py = (e.clientY - r.top) / r.height - 0.5;
+                apply(-py * 12, px * 14);
+            });
+            stage.addEventListener('pointerleave', function () { apply(0, 0); });
+        }
+    })();
+
+    // Make it yours: every control just sets a data-attr / CSS var / class on the stage (pure code).
+    (function () {
+        var stage = document.getElementById('bp-cz-stage');
+        if (!stage) return;
+        var root = stage.closest('.bp-cz');
+        function pick(group, btn) {
+            group.querySelectorAll('button').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+        }
+        root.querySelectorAll('[data-cz]').forEach(function (group) {
+            var kind = group.getAttribute('data-cz');
+            group.querySelectorAll('button').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    if (kind === 'fx') {                       // effects are independent toggles
+                        var fx = btn.getAttribute('data-fx');
+                        btn.classList.toggle('is-on');
+                        stage.classList.toggle(fx);
+                        return;
+                    }
+                    var v = btn.getAttribute('data-v');
+                    pick(group, btn);
+                    if (kind === 'case') stage.setAttribute('data-case', v);
+                    else if (kind === 'stand') stage.setAttribute('data-stand', v);
+                    else if (kind === 'aura') stage.style.setProperty('--cz-aura', v);
+                });
+            });
+        });
+        var name = document.getElementById('bp-cz-name'), plate = document.getElementById('bp-cz-plate');
+        if (name && plate) {
+            name.addEventListener('input', function () {
+                var t = name.value.trim();
+                plate.hidden = t === '';
+                plate.querySelector('span').textContent = t;
+            });
+        }
+    })();
+</script>
+</body>
+</html>

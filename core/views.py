@@ -581,6 +581,69 @@ class BadgeCollectionListView(BinderPreviewView):
         return ctx
 
 
+class BadgePresentationView(TemplateView):
+    """Design workshop (/design/badge-presentation/): how should an EARNED badge be presented?
+
+    Renders the REAL composited badge art (backdrop + main + foreground -- the medallion) in
+    several treatments side by side: the production Frame card vs art-forward "precious medallion"
+    options. Lets the framing question be decided with real artwork in front of us rather than in
+    the abstract. Not a product surface -- a decision aid.
+    """
+    template_name = 'design/badge_presentation_preview.html'
+
+    _BG = {'bronze': '1', 'silver': '2', 'gold': '3', 'platinum': '4'}
+    _NEXT = {'bronze': 'Silver', 'silver': 'Gold', 'gold': 'Platinum', 'platinum': 'Maxed'}
+    _RARITY = {'bronze': (47, 14802), 'silver': (12, 1902), 'gold': (3.0, 247), 'platinum': (0.3, 11)}
+    # (main-art slug, series name, sample earn-rank) -- the real artwork drops in static/images/badges/.
+    _BADGES = [
+        ('little-nightmares', 'Little Nightmares', 11),
+        ('star-wars', 'Star Wars', 3),
+        ('spyro', 'Spyro the Dragon', 214),
+        ('spongebob', 'SpongeBob SquarePants', 88),
+        ('saints-row', 'Saints Row', 940),
+        ('call-of-duty', 'Call of Duty', 6),
+        ('goat-simulator', 'Goat Simulator', 1502),
+        ('kodaka-uchicoshi-creator', 'Kodaka & Uchikoshi', 27),
+        ('founders', "Founder's Badge", 1),
+    ]
+
+    def _frame(self, slug, series, tier, rank=None, stages=8, state='earned', done=None):
+        i = self._BG[tier]
+        pct, rrank = self._RARITY[tier]
+        return {
+            'tier': tier, 'state': state, 'size': 'default',
+            'series_name': series,
+            'badge_name': f'{series} Platinum' if tier == 'platinum' else f'{tier.title()} Trophy',
+            'art_layers': [
+                static_url(f'images/badges/backdrops/{i}_backdrop.png'),
+                static_url(f'images/badges/{slug}.png'),
+                static_url(f'images/badges/foregrounds/{i}_foreground.png'),
+            ],
+            'description': f'Awarded for earning every platinum across {series}.',
+            'rarity_pct': pct, 'rarity_rank': rrank,
+            'engraving_rank': rank, 'earned_date': 'Mar 04, 2025',
+            'stages_done': stages if done is None else done, 'stages_total': stages,
+            'next_tier_label': self._NEXT[tier], 'series_xp': 12500,
+            'dom_id': f'bp-{slug}-{tier}', 'allow_flip': True,
+            # Flat mirrors so the art-forward treatments can read the same values without the frame dict.
+            'slug': slug, 'tier_pct': pct, 'tier_rank': rrank, 'earn_rank': rank,
+        }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['grid'] = [self._frame(slug, series, 'platinum', rank=rank) for slug, series, rank in self._BADGES]
+        ctx['hero'] = self._frame('little-nightmares', 'Little Nightmares', 'platinum', rank=11)
+        ctx['ladder'] = [self._frame('spyro', 'Spyro the Dragon', t, rank=214) for t in ('bronze', 'silver', 'gold', 'platinum')]
+        # The PRODUCTION Badge Medallion component across its four states (for verifying the real partial).
+        ctx['component_frames'] = [
+            self._frame('spyro', 'Spyro the Dragon', 'platinum', rank=214, state='earned', stages=8, done=8),
+            self._frame('spyro', 'Spyro the Dragon', 'platinum', rank=214, state='in_progress', stages=8, done=5),
+            self._frame('spyro', 'Spyro the Dragon', 'platinum', rank=214, state='unearned', stages=8, done=0),
+            self._frame('spyro', 'Spyro the Dragon', 'platinum', rank=214, state='maintenance', stages=8, done=3),
+        ]
+        return ctx
+
+
 class PursuerCardRanksPreviewView(TemplateView):
     """Preview the *production* Pursuer Card at every rank tier (/design/pursuer-card-ranks/).
 

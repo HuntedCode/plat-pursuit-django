@@ -33,25 +33,113 @@
             });
         });
 
-        // Initial view: a #card-<id> deep-link lands in the binder, otherwise the stored
-        // preference, else the Binder.
-        var initial = 'binder';
+        // Initial view: a #card-<id> deep-link lands in the Case, otherwise the stored preference
+        // (legacy 'binder' maps to 'case'), else the Case.
+        var initial = 'case';
         if (window.location.hash.indexOf('#card-') !== 0) {
-            try { initial = localStorage.getItem(STORAGE_KEY) || 'binder'; } catch (e) { /* noop */ }
+            try { initial = localStorage.getItem(STORAGE_KEY) || 'case'; } catch (e) { /* noop */ }
         }
+        if (initial === 'binder') initial = 'case';
         setView(initial);
 
-        // Row "View ->" cross-link: show the binder before its hashchange handler flips
-        // to the card's page (the card lives inside the binder view, hidden until now).
-        // If the hash is ALREADY this card (re-click / arrived via #card-<id>), the browser
-        // won't fire hashchange, so nudge binder.js to re-run its jump manually.
+        // Row "View ->" cross-link: show the Case first; initCase's hashchange handler then activates
+        // the badge's set + scrolls to it. If the hash is ALREADY this card, nudge a hashchange manually.
         root.querySelectorAll('[data-binder-link]').forEach(function (a) {
             a.addEventListener('click', function () {
-                setView('binder');
+                setView('case');
                 if (window.location.hash === a.getAttribute('href')) {
                     window.dispatchEvent(new Event('hashchange'));
                 }
             });
+        });
+    }
+
+    // The Case: set tabs switch shelves; a #card-<id> deep-link (or list "View ->") lands on the
+    // badge's set and scrolls to it.
+    function initCase(root) {
+        var caseEl = root.querySelector('.pp-case');
+        if (!caseEl) return;
+        var tabs = Array.prototype.slice.call(caseEl.querySelectorAll('[data-set-tab]'));
+        var shelves = Array.prototype.slice.call(caseEl.querySelectorAll('.pp-case__shelf[data-set]'));
+        if (!shelves.length) return;
+
+        function activateSet(key) {
+            shelves.forEach(function (s) { s.hidden = s.getAttribute('data-set') !== key; });
+            tabs.forEach(function (t) {
+                var on = t.getAttribute('data-set-tab') === key;
+                t.classList.toggle('is-active', on);
+                t.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+        }
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () { activateSet(tab.getAttribute('data-set-tab')); });
+        });
+
+        function jumpToCard() {
+            if (window.location.hash.indexOf('#card-') !== 0) return;
+            var target = caseEl.querySelector(window.location.hash);
+            if (!target) return;
+            var shelf = target.closest('.pp-case__shelf[data-set]');
+            if (shelf) activateSet(shelf.getAttribute('data-set'));
+            (target.closest('.pp-case__slot') || target).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        jumpToCard();
+        window.addEventListener('hashchange', jumpToCard);
+    }
+
+    // Badge detail ("pick it up"): tap a medallion -> fetch its detail partial into the modal. The slot
+    // keeps its href to the badge page as a no-JS fallback.
+    function initDetail(root) {
+        var modal = document.getElementById('collection-detail');
+        if (!modal) return;
+        var body = modal.querySelector('[data-detail-body]');
+        var dialog = modal.querySelector('.pp-detail-modal__dialog');
+        var caseEl = root.querySelector('.pp-case');
+        var lastFocus = null, busy = false;
+
+        function open(url) {
+            if (busy) return;
+            busy = true;
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.text() : null; })
+                .then(function (html) {
+                    busy = false;
+                    if (html == null) return;
+                    body.innerHTML = html;
+                    lastFocus = document.activeElement;
+                    modal.hidden = false;
+                    document.body.style.overflow = 'hidden';
+                    if (dialog) dialog.focus();
+                })
+                .catch(function () { busy = false; });
+        }
+        function close() {
+            modal.hidden = true;
+            body.innerHTML = '';
+            document.body.style.overflow = '';
+            if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* gone */ } }
+        }
+
+        if (caseEl) {
+            caseEl.addEventListener('click', function (e) {
+                var slot = e.target.closest('[data-modal-url]');
+                if (!slot) return;
+                e.preventDefault();
+                open(slot.getAttribute('data-modal-url'));
+            });
+        }
+        modal.querySelectorAll('[data-detail-close]').forEach(function (b) { b.addEventListener('click', close); });
+        document.addEventListener('keydown', function (e) {
+            if (modal.hidden) return;
+            if (e.key === 'Escape') { close(); return; }
+            if (e.key === 'Tab') {   // trap focus within the dialog
+                var f = Array.prototype.slice.call(dialog.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+                    .filter(function (el) { return el.offsetParent !== null; });
+                if (!f.length) { e.preventDefault(); dialog.focus(); return; }
+                var first = f[0], last = f[f.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            }
         });
     }
 
@@ -173,6 +261,8 @@
         var root = document.querySelector('.pp-collection');
         if (!root) return;
         initViewToggle(root);
+        initCase(root);
+        initDetail(root);
         initList(root);
     }
 

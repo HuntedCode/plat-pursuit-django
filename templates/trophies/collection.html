@@ -18,7 +18,7 @@
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Collection</h1>
                     </div>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                        Your badge album. Earned badges sit framed in their sleeves; the rest are slots waiting to be filled.
+                        Your badge collection. Earned badges gleam on display; the rest are waiting mounts to fill.
                     </p>
                 </div>
                 <div class="shrink-0 text-right">
@@ -32,12 +32,12 @@
         </div>
     </section>
 
-    {# View toggle: the Binder (display piece) vs the List (hunting tool). Same data. #}
+    {# View toggle: the Case (display piece) vs the List (hunting tool). Same data. #}
     <div class="flex items-center justify-end mb-4">
         <div class="pp-collection__views" role="tablist" aria-label="Collection view">
-            <button type="button" id="collection-tab-binder" class="pp-collection__view-chip is-active" data-collection-view="binder" role="tab" aria-selected="true" aria-controls="collection-view-binder">
+            <button type="button" id="collection-tab-case" class="pp-collection__view-chip is-active" data-collection-view="case" role="tab" aria-selected="true" aria-controls="collection-view-case">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                Binder
+                Case
             </button>
             <button type="button" id="collection-tab-list" class="pp-collection__view-chip" data-collection-view="list" role="tab" aria-selected="false" aria-controls="collection-view-list">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -46,20 +46,27 @@
         </div>
     </div>
 
-    {# The album (Binder Surface) -- the display piece #}
-    <div class="pp-collection__view" data-collection-view="binder" id="collection-view-binder" role="tabpanel" aria-labelledby="collection-tab-binder" tabindex="0">
-        {% include 'components/binder.html' with binder_sets=binder_sets %}
+    {# The Case (medallion collection) -- the display piece #}
+    <div class="pp-collection__view" data-collection-view="case" id="collection-view-case" role="tabpanel" aria-labelledby="collection-tab-case" tabindex="0">
+        {% include 'components/collection_case.html' with binder_sets=binder_sets %}
     </div>
 
     {# The list -- the hunting tool (sort / filter / search) #}
     <div class="pp-collection__view" data-collection-view="list" id="collection-view-list" role="tabpanel" aria-labelledby="collection-tab-list" tabindex="0" hidden>
         {% include 'components/collection_list.html' %}
     </div>
+
+    {# Badge detail ("pick it up") -- content fetched on tap #}
+    <div class="pp-detail-modal" id="collection-detail" hidden>
+        <div class="pp-detail-modal__scrim" data-detail-close></div>
+        <div class="pp-detail-modal__dialog" role="dialog" aria-modal="true" aria-label="Badge detail" tabindex="-1">
+            <button type="button" class="pp-detail-modal__close" data-detail-close aria-label="Close badge detail">&times;</button>
+            <div class="pp-detail-modal__body" data-detail-body></div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block js_scripts %}
-<script src="{% static 'js/frame.js' %}"></script>
-<script src="{% static 'js/binder.js' %}"></script>
 <script src="{% static 'js/collection.js' %}"></script>
 {% endblock %}

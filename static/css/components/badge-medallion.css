@@ -1,0 +1,121 @@
+/* ============================================================
+ * BADGE MEDALLION -- the composited badge as a precious OBJECT.
+ * The badge art is already a self-contained laurel-framed medallion (backdrop + main + foreground),
+ * so this presents it as an object on a stage rather than boxing it in a trading-card Frame. Four
+ * states: earned / in_progress / unearned / maintenance. Markup: templates/components/badge_medallion.html.
+ * The art lives in a square .pp-med__stage; the progress count sits BELOW it (never over the art).
+ * Sizing via --sz (the container sets it per breakpoint). GPU-only motion; reduced-motion safe.
+ * ============================================================ */
+.pp-med {
+    --sz: 160px;
+    position: relative;
+    width: var(--sz);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+/* tier accents (aura / ring / count) */
+.pp-med[data-tier="bronze"]   { --med-c: #cf9160; --med-glow: #e6ad74; }
+.pp-med[data-tier="silver"]   { --med-c: #b9c6d6; --med-glow: #dae4f0; }
+.pp-med[data-tier="gold"]     { --med-c: #e7c25c; --med-glow: #f4d778; }
+.pp-med[data-tier="platinum"] { --med-c: #8fd2ea; --med-glow: #c4edfb; }
+
+/* the square that holds the object (art + ring + glint + chip + aura + pedestal) */
+.pp-med__stage { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; isolation: isolate; }
+
+.pp-med__art { position: relative; width: 100%; height: 100%; z-index: 1; transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.pp-med__l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+
+/* aura (earned only) -- a soft tier bloom behind the object */
+.pp-med__stage::before {
+    content: ''; position: absolute; top: 46%; left: 50%; width: 76%; aspect-ratio: 1;
+    transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(circle, var(--med-glow), transparent 62%);
+    opacity: 0; filter: blur(14px); z-index: 0;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.pp-med--earned .pp-med__stage::before { opacity: 0.2; }
+/* pedestal -- grounds the object on the shelf */
+.pp-med__stage::after {
+    content: ''; position: absolute; bottom: 3%; left: 50%; width: 56%; height: 8%;
+    transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(0, 0, 0, 0.55), transparent 72%); z-index: 0;
+}
+
+/* light-catch glint (sweeps on hover for earned) */
+.pp-med__glint {
+    position: absolute; top: 50%; left: 50%; width: 70%; aspect-ratio: 1;
+    transform: translate(-50%, -46%); border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 2;
+}
+.pp-med__glint::before {
+    content: ''; position: absolute; top: -20%; bottom: -20%; left: 0; width: 40%;
+    transform: skewX(-16deg) translateX(-220%);
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5) 50%, transparent);
+    mix-blend-mode: screen;
+}
+@keyframes ppMedGlint { to { transform: skewX(-16deg) translateX(360%); } }
+
+@media (hover: hover) {
+    .pp-med--earned { cursor: pointer; }
+    .pp-med--earned:hover .pp-med__art { transform: translateY(-6%) scale(1.04); }
+    .pp-med--earned:hover .pp-med__stage::before { opacity: 0.5; transform: translate(-50%, -53%) scale(1.06); }
+    .pp-med--earned:hover .pp-med__glint::before { animation: ppMedGlint 0.8s ease 0.05s 1; }
+}
+
+/* ---- states ---- */
+/* UNEARNED = dim laurel mount + ghosted subject (a named, waiting slot) */
+.pp-med--unearned .pp-med__l:nth-child(1),
+.pp-med--unearned .pp-med__l:nth-child(3) { filter: grayscale(1) brightness(0.52); }
+.pp-med--unearned .pp-med__l:nth-child(2) { filter: grayscale(1) brightness(0.16); opacity: 0.58; }
+.pp-med--unearned .pp-med__glint { display: none; }
+
+/* IN PROGRESS = faint materializing subject + COOL tier-coloured segmented ring */
+.pp-med--in_progress { --ring-c: var(--med-c); --ring-dim: rgba(255, 255, 255, 0.09); }
+.pp-med--in_progress .pp-med__l:nth-child(2) { filter: grayscale(0.55) brightness(0.85); opacity: 0.72; }
+.pp-med--in_progress .pp-med__l:nth-child(1),
+.pp-med--in_progress .pp-med__l:nth-child(3) { filter: brightness(0.9) saturate(0.85); }
+.pp-med--in_progress .pp-med__glint { display: none; }
+
+/* MAINTENANCE = tarnished full art + WARM segmented ring (red = broken, amber = repaired) + chip */
+.pp-med--maintenance { --ring-c: #eeae42; --ring-dim: rgba(205, 58, 46, 0.26); }
+.pp-med--maintenance .pp-med__art { filter: grayscale(0.68) brightness(0.64) sepia(0.08); }
+.pp-med--maintenance .pp-med__glint { display: none; }
+
+/* segmented progress ring (in_progress + maintenance): one segment per platinum toward the badge */
+.pp-med__ring {
+    position: absolute; top: 50%; left: 50%; width: 118%; aspect-ratio: 1;
+    transform: translate(-50%, -50%); border-radius: 50%; z-index: 0;
+    --seg: calc(360deg / var(--total, 8)); --gap: 6deg;
+    background: conic-gradient(var(--ring-c) 0deg calc(var(--done, 0) / var(--total, 8) * 360deg), var(--ring-dim) calc(var(--done, 0) / var(--total, 8) * 360deg) 360deg);
+    -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+    -webkit-mask-composite: source-in;
+    mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
+    mask-composite: intersect;
+    filter: drop-shadow(0 0 4px var(--ring-c)); opacity: 0.92;
+}
+/* capped: too many platinums to count as segments -> smooth arc (the "X / Y" number carries the detail) */
+.pp-med--ring-smooth .pp-med__ring {
+    -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
+    mask: radial-gradient(circle, transparent 62%, #000 63%);
+}
+
+/* maintenance chip (top of the stage) */
+.pp-med__chip {
+    position: absolute; top: 3%; left: 50%; transform: translateX(-50%); z-index: 3;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(230, 150, 60, 0.18); color: #e6a53c; border: 1px solid rgba(230, 150, 60, 0.42);
+}
+/* progress count (platinums earned / required) -- shown for EVERY state so all medallions are the same
+   height and their labels align. Sits BELOW the art and clear of the ring's bottom overhang. */
+.pp-med__count {
+    margin-top: calc(var(--sz) * 0.1 + 6px);
+    font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em; color: var(--ring-c, var(--med-c)); line-height: 1;
+}
+.pp-med--unearned .pp-med__count { color: rgba(148, 163, 184, 0.7); }   /* dim -- 0 toward it */
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-med__art, .pp-med__stage::before { transition: none; }
+    .pp-med--earned:hover .pp-med__glint::before { animation: none; }
+}

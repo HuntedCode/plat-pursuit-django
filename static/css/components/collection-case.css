@@ -1,0 +1,105 @@
+/* ============================================================
+ * THE CASE -- the badge collection as medallion OBJECTS grouped by set (replaces the binder).
+ * Set tabs switch between shelves; each shelf is a responsive grid of Badge Medallion components.
+ * Markup: templates/components/collection_case.html. Mobile-first.
+ * ============================================================ */
+.pp-case { margin-top: 4px; }
+
+/* ---- set tabs ---- */
+.pp-case__sets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.pp-case__set-tab {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 999px;
+    background: var(--pp-bg-2); border: 1px solid var(--pp-border);
+    color: var(--pp-text-mute); font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+.pp-case__set-tab:hover { color: var(--pp-text); border-color: var(--pp-divider); }
+.pp-case__set-tab.is-active {
+    color: var(--pp-text);
+    background: color-mix(in oklab, var(--pp-primary) 14%, var(--pp-bg-2));
+    border-color: color-mix(in oklab, var(--pp-primary) 45%, transparent);
+}
+.pp-case__set-tab:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-case__set-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--pal, var(--pp-primary)); }
+.pp-case__set-count { font-variant-numeric: tabular-nums; color: var(--pp-text-mute); font-weight: 600; }
+.pp-case__set-tab.is-active .pp-case__set-count { color: var(--pp-text); }
+/* set palettes (scoped so they don't clash with the binder's [data-palette]) */
+.pp-case [data-palette="cobalt"]  { --pal: #4f8ff0; }
+.pp-case [data-palette="amber"]   { --pal: #e0a53f; }
+.pp-case [data-palette="emerald"] { --pal: #3fbf7f; }
+.pp-case [data-palette="violet"]  { --pal: #a463e0; }
+
+/* ---- shelves: a grid of series GROUPS (each group's 4 tiers stay bound together) ---- */
+.pp-case__shelf[hidden] { display: none; }
+.pp-case__grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+/* the group panel visually ties the 4 tiers of a series together */
+.pp-case__group {
+    padding: 14px 14px 10px; border-radius: 16px;
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    border: 1px solid var(--pp-border);
+}
+.pp-case__group-name { font-size: 13px; font-weight: 700; color: var(--pp-text); margin: 0 0 20px; padding-left: 4px; }
+.pp-case__group-tiers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 6px; justify-items: center; }
+.pp-case__slot { display: flex; justify-content: center; text-decoration: none; color: inherit; }
+.pp-case__slot .pp-med { --sz: 128px; }
+
+.pp-case__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 0; }
+
+/* the 4 tiers go bronze -> platinum in a row once there's width; two groups per row on desktop */
+@media (min-width: 640px) {
+    .pp-case__group-tiers { grid-template-columns: repeat(4, 1fr); }
+}
+@media (min-width: 1024px) {
+    .pp-case__grid { grid-template-columns: repeat(2, 1fr); }
+    .pp-case__slot .pp-med { --sz: 118px; }
+}
+@media (min-width: 1400px) {
+    .pp-case__slot .pp-med { --sz: 138px; }
+}
+
+/* ============================================================
+ * Badge detail modal ("pick it up") -- fetched on tap.
+ * ============================================================ */
+.pp-detail-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }
+.pp-detail-modal[hidden] { display: none; }
+.pp-detail-modal__scrim { position: absolute; inset: 0; background: rgba(2, 4, 8, 0.62); backdrop-filter: blur(4px); }
+.pp-detail-modal__dialog {
+    position: relative; z-index: 1; will-change: transform;   /* own layer -- keeps the backdrop blur from re-sampling on repaint */
+    width: min(720px, 100%); max-height: 88vh; overflow: auto;
+    background: var(--pp-bg-1); border: 1px solid var(--pp-border); border-radius: var(--pp-radius-lg);
+    padding: 28px; box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+}
+.pp-detail-modal__close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--pp-text-mute); font-size: 28px; line-height: 1; cursor: pointer; z-index: 2; }
+.pp-detail-modal__close:hover { color: var(--pp-text); }
+.pp-detail-modal:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrim 0.2s ease; }
+.pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: ppDetailIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ppDetailScrim { from { opacity: 0; } }
+@keyframes ppDetailIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+
+.pp-bdetail { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
+.pp-bdetail__stage { display: grid; place-items: center; }
+.pp-bdetail__stage .pp-med { --sz: 260px; }
+.pp-bdetail__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-bdetail__title { font-size: 26px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.01em; }
+.pp-bdetail__state { font-size: 13px; font-weight: 700; color: var(--pp-primary); margin-bottom: 12px; }
+.pp-bdetail__desc { font-size: 14px; color: var(--pp-text-mute); line-height: 1.55; margin: 0 0 18px; }
+.pp-bdetail__stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.pp-bdetail__stat { border: 1px solid var(--pp-border); border-radius: 12px; padding: 10px 12px; background: var(--pp-bg-2); }
+.pp-bdetail__stat .k { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pp-text-mute); }
+.pp-bdetail__stat .v { font-size: 16px; font-weight: 800; margin-top: 2px; }
+.pp-bdetail__funder { font-size: 12px; color: var(--pp-text-mute); margin-top: 14px; }
+.pp-bdetail__funder span { color: var(--pp-text); font-weight: 700; }
+.pp-bdetail__link { display: inline-block; margin-top: 16px; font-size: 14px; font-weight: 700; color: var(--pp-primary); text-decoration: none; }
+.pp-bdetail__link:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+    .pp-bdetail { grid-template-columns: 1fr; gap: 18px; justify-items: center; text-align: center; }
+    .pp-bdetail__stage .pp-med { --sz: 200px; }
+    .pp-bdetail__stats { text-align: left; }
+    .pp-detail-modal__dialog { padding: 22px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pp-detail-modal:not([hidden]) .pp-detail-modal__scrim,
+    .pp-detail-modal:not([hidden]) .pp-detail-modal__dialog { animation: none; }
+}

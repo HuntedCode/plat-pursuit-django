@@ -1,0 +1,29 @@
+{% load humanize %}
+{% comment %}
+Collection badge detail ("pick it up") -- the medallion big + its full stats. Rendered by
+CollectionBadgeModalView and fetched on tap. Expects `frame` (a full build_badge_frame dict).
+{% endcomment %}
+<div class="pp-bdetail" data-tier="{{ frame.tier }}" data-state="{{ frame.state }}">
+    <div class="pp-bdetail__stage">
+        {% include 'components/badge_medallion.html' with frame=frame %}
+    </div>
+    <div class="pp-bdetail__info">
+        <div class="pp-bdetail__eyebrow">{{ frame.series_name }}</div>
+        <h2 class="pp-bdetail__title">{{ frame.badge_name }}</h2>
+        <div class="pp-bdetail__state">{{ frame.tier|title }}
+            {% if frame.state == 'earned' %}&middot; Earned{% elif frame.state == 'maintenance' %}&middot; Lapsed{% elif frame.state == 'in_progress' %}&middot; In progress{% else %}&middot; Unearned{% endif %}
+        </div>
+        {% if frame.description %}<p class="pp-bdetail__desc">{{ frame.description }}</p>{% endif %}
+        <div class="pp-bdetail__stats">
+            {% if frame.stages_total %}<div class="pp-bdetail__stat"><div class="k">{% if frame.tier == 'silver' or frame.tier == 'platinum' %}100%s{% else %}Platinums{% endif %}</div><div class="v">{{ frame.stages_done|default:0 }} / {{ frame.stages_total }}</div></div>{% endif %}
+            {% if frame.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">Top {{ frame.rarity_pct }}%{% if frame.rarity_rank %} &middot; #{{ frame.rarity_rank|intcomma }}{% endif %}</div></div>{% endif %}
+            {% if frame.engraving_rank %}<div class="pp-bdetail__stat"><div class="k">Earn rank</div><div class="v">#{{ frame.engraving_rank|intcomma }}</div></div>{% endif %}
+            {% if frame.earned_date %}<div class="pp-bdetail__stat"><div class="k">Earned</div><div class="v">{{ frame.earned_date }}</div></div>{% endif %}
+            {% if frame.current_rank %}<div class="pp-bdetail__stat"><div class="k">Leaderboard</div><div class="v">#{{ frame.current_rank|intcomma }}</div></div>{% endif %}
+            {% if frame.series_xp %}<div class="pp-bdetail__stat"><div class="k">Series XP</div><div class="v">{{ frame.series_xp|intcomma }}</div></div>{% endif %}
+            {% if frame.earned_count %}<div class="pp-bdetail__stat"><div class="k">Earned by</div><div class="v">{{ frame.earned_count|intcomma }}</div></div>{% endif %}
+        </div>
+        {% if frame.funded_by %}<div class="pp-bdetail__funder">Artwork funded by <span>{{ frame.funded_by }}</span></div>{% endif %}
+        {% if frame.series_slug %}<a class="pp-bdetail__link" href="{% url 'badge_detail' frame.series_slug %}">View full series &rarr;</a>{% endif %}
+    </div>
+</div>
