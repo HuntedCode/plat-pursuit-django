@@ -93,6 +93,21 @@
     .pp-med--earned:hover .pp-med__glint::before { animation: ppMedGlint 0.8s ease 0.05s 1; }
 }
 
+/* Tactile press: an interactive medallion (a modal-opening slot) DIPS when you push it -- a real-button
+   cue -- then settles back on release via the base .pp-med__art transition (snappy in, gentle out). It
+   presses .pp-med__art; the disc's own box is unchanged, so the container-transform grow still measures
+   the natural size. Motion-gated: reduced-motion users skip the dip (no abrupt jump). */
+@media (prefers-reduced-motion: no-preference) {
+    [data-modal-url]:active .pp-med__art { transform: scale(0.94); transition: transform 0.11s cubic-bezier(0.4, 0, 0.6, 1); }
+}
+/* But when the badge is LIFTED on hover, a plain scale() would REPLACE the lift -- dropping the whole -6%
+   translateY on press, a big down-then-up swing that fights the pick-up grow. So the hovered press KEEPS
+   the lift and just presses it IN (shrink + a touch toward the surface), composing with the lift instead
+   of cancelling it. (Non-lifted badges keep the plain dip above; that combo already reads fine.) */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+    [data-modal-url]:active .pp-med--earned:hover .pp-med__art { transform: translateY(-5%) scale(0.97); }
+}
+
 /* holographic "chase card" foil (rare / top-tier earned badges only) -- an iridescent sheen over the art,
    faintly present at rest so the badge stands out, brightening + shifting on hover. NO mix-blend-mode: it
    lives inside the card and a blend mode would flatten the modal's preserve-3d parallax. */

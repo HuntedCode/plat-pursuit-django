@@ -178,6 +178,10 @@
         // tear them down. Without this, a close mid-open leaves grow's `done` armed: it later fires over the
         // shrink (snapping the disc back to center) and steals focus onto the hidden dialog.
         var settleEl = null, settleFn = null, settleTimer = null;
+        // The modal disc's stable REST rect (centered, full size), captured in growInto BEFORE any transform.
+        // shrinkOut reuses it so a close mid-grow computes the put-down from the true rest box, not the
+        // half-grown (transformed) rect -- measuring mid-animation sent the disc to the wrong place.
+        var discRestRect = null;
         function clearSettle() {
             if (settleEl && settleFn) settleEl.removeEventListener('transitionend', settleFn);
             if (settleTimer) clearTimeout(settleTimer);
@@ -188,7 +192,11 @@
             var c = body.querySelector('.pp-bdetail__stage .pp-med__art');
             if (!c) return;
             if (c._hintTimer) { clearTimeout(c._hintTimer); c._hintTimer = null; }
-            if (c._hintAnim) { c._hintAnim.cancel(); c._hintAnim = null; }
+            if (c._hintAnim) {
+                c._hintAnim.cancel(); c._hintAnim = null;
+                // Snap the card flat instantly so a half-played wiggle can't carry its rotation into the put-down.
+                c.style.transition = 'none'; c.style.transform = 'none';
+            }
         }
 
         function open(url, sourceEl) {
@@ -201,8 +209,12 @@
             // reduced-motion.
             var srcMed = sourceEl && sourceEl.querySelector('.pp-med');
             var srcDisc = srcMed && srcMed.querySelector('.pp-med__stage');
+            // Measure the ART (not the stage) so the grow launches from where the badge VISUALLY is: the art
+            // carries the hover lift + press transform, the stage's box does not (it's immune to child
+            // transforms). The art fills the stage 1:1, so it's otherwise equivalent. Falls back to the stage.
+            var srcArt = srcMed && srcMed.querySelector('.pp-med__art');
             var canGrow = srcDisc && !prefersReducedMotion();
-            var srcRect = canGrow ? srcDisc.getBoundingClientRect() : null;
+            var srcRect = canGrow ? (srcArt || srcDisc).getBoundingClientRect() : null;
             fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                 .then(function (r) { return r.ok ? r.text() : null; })
                 .then(function (html) {
@@ -229,6 +241,7 @@
             var modalDisc = body.querySelector('.pp-bdetail__stage .pp-med__stage');
             if (!modalDisc) { if (dialog) dialog.focus(); return; }
             var mr = modalDisc.getBoundingClientRect();
+            discRestRect = mr;   // stable rest box -- shrinkOut reuses this so a mid-grow close measures right
             var scale = sr.width / mr.width;                    // start shrunk to the tapped disc's size
             var dx = (sr.left + sr.width / 2) - (mr.left + mr.width / 2);
             var dy = (sr.top + sr.height / 2) - (mr.top + mr.height / 2);
@@ -270,7 +283,7 @@
         // fine-pointer + motion-OK context as the tilt (a touch device can't tilt, so no hint). A real
         // pointermove cancels it (see initTilt) so the user's own turn always wins.
         function hintWiggle() {
-            if (!canTilt()) return;
+            if (closing || modal.hidden || !canTilt()) return;   // never fire a hint into a close (the timer may already be queued)
             var card = body.querySelector('.pp-bdetail__stage .pp-med__art');
             if (!card || !card.animate) return;
             card._hintTimer = null;
@@ -306,6 +319,7 @@
         }
         function finishClose() {
             closing = false;
+            discRestRect = null;
             clearSettle();   // idempotent: covers finishClose reached directly (e.g. shrinkOut's missing-disc bail)
             cancelHint();    // must run BEFORE body is wiped (it looks the card up in the DOM)
             modal.hidden = true;
@@ -326,7 +340,10 @@
             var modalDisc = body.querySelector('.pp-bdetail__stage .pp-med__stage');
             var srcDisc = growingSrc && growingSrc.querySelector('.pp-med__stage');
             if (!modalDisc || !srcDisc) { finishClose(); return; }
-            var mr = modalDisc.getBoundingClientRect();
+            // Use the REST rect (not a fresh measure): if we're closing mid-grow the disc is still transformed,
+            // and measuring it now would compute the shrink from the half-grown box -> the disc lurches to the
+            // wrong place. The rest box is stable; the disc transitions to it from wherever the grow left it.
+            var mr = discRestRect || modalDisc.getBoundingClientRect();
             var sr = srcDisc.getBoundingClientRect();   // still valid: body scroll is locked while the modal is open
             var scale = sr.width / mr.width;
             var dx = (sr.left + sr.width / 2) - (mr.left + mr.width / 2);
