@@ -46,6 +46,25 @@
 .pp-case__group-name { font-size: 13px; font-weight: 700; color: var(--pp-text); margin: 0 0 20px; padding-left: 4px; }
 .pp-case__group-tiers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 6px; justify-items: center; }
 .pp-case__slot { display: flex; justify-content: center; text-decoration: none; color: inherit; }
+
+/* Staggered "settle onto the shelf" arrival: each series group rises + fades + scales in. Pure CSS, applied
+   unconditionally so it plays on load AND replays whenever a shelf/view is shown again -- toggling the
+   [hidden] attribute (which the set-tab + view switches already do) restarts the animation per the CSS spec.
+   No JS, no FOUC (the `both` fill holds the hidden start-state from the first paint), no-JS-safe. The
+   forwards fill keeps content-visibility groups visible after they land (never stuck hidden). Motion-gated;
+   the nth-child stagger is capped so a big shelf doesn't crawl. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-case__group { animation: ppRevealIn 0.52s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .pp-case__group:nth-child(2) { animation-delay: 0.05s; }
+    .pp-case__group:nth-child(3) { animation-delay: 0.10s; }
+    .pp-case__group:nth-child(4) { animation-delay: 0.15s; }
+    .pp-case__group:nth-child(5) { animation-delay: 0.20s; }
+    .pp-case__group:nth-child(6) { animation-delay: 0.25s; }
+    .pp-case__group:nth-child(7) { animation-delay: 0.30s; }
+    .pp-case__group:nth-child(8) { animation-delay: 0.35s; }
+    .pp-case__group:nth-child(n+9) { animation-delay: 0.40s; }   /* cap: groups 9+ share the max delay */
+}
+@keyframes ppRevealIn { from { opacity: 0; transform: translateY(12px) scale(0.955); } to { opacity: 1; transform: none; } }
 .pp-case__slot .pp-med { --sz: 128px; }
 
 .pp-case__empty { text-align: center; color: var(--pp-text-mute); padding: 48px 0; }

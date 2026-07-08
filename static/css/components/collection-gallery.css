@@ -35,6 +35,29 @@
 }
 .pp-gallery__cell .pp-med { --sz: 116px; }
 
+/* Staggered arrival -- the wall fills cell by cell (same ppRevealIn keyframe as the Case; see
+   collection-case.css). Pure CSS, unconditional: plays on load + replays when the Gallery view is shown
+   (the [hidden] toggle restarts it). Capped nth-child stagger; motion-gated. Because filtering re-shows
+   cells via display (which would replay the animation), collection.js adds .is-touched on the first
+   filter/sort interaction to switch the wall to instant thereafter -- the arrival flourish is a one-time
+   thing, not a working-tool behaviour. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-gallery__cell { animation: ppRevealIn 0.52s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .pp-gallery__cell:nth-child(2) { animation-delay: 0.04s; }
+    .pp-gallery__cell:nth-child(3) { animation-delay: 0.08s; }
+    .pp-gallery__cell:nth-child(4) { animation-delay: 0.12s; }
+    .pp-gallery__cell:nth-child(5) { animation-delay: 0.16s; }
+    .pp-gallery__cell:nth-child(6) { animation-delay: 0.20s; }
+    .pp-gallery__cell:nth-child(7) { animation-delay: 0.24s; }
+    .pp-gallery__cell:nth-child(8) { animation-delay: 0.28s; }
+    .pp-gallery__cell:nth-child(9) { animation-delay: 0.32s; }
+    .pp-gallery__cell:nth-child(10) { animation-delay: 0.36s; }
+    .pp-gallery__cell:nth-child(11) { animation-delay: 0.40s; }
+    .pp-gallery__cell:nth-child(12) { animation-delay: 0.44s; }
+    .pp-gallery__cell:nth-child(n+13) { animation-delay: 0.48s; }   /* cap */
+    .pp-gallery.is-touched .pp-gallery__cell { animation: none; }   /* after the first filter/sort: instant */
+}
+
 .pp-gallery__caption { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; }
 .pp-gallery__name {
     font-size: 12px; font-weight: 600; color: var(--pp-text-mute); text-align: center;

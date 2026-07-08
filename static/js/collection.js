@@ -581,7 +581,11 @@
         var filters = { tier: 'all', state: 'all', theme: 'all' };
         var searchTerm = '';
 
+        // Any user filter/sort switches the wall to instant (the entrance stagger is a one-time arrival, not
+        // a working-tool behaviour; without this, re-showing a cell via display would replay its animation).
+        // applyFilters is only ever called by user actions (chips + search), never on init.
         function applyFilters() {
+            gal.classList.add('is-touched');
             var visible = 0;
             cells.forEach(function (cell) {
                 var ok = elMatches(cell, filters, searchTerm);
@@ -607,7 +611,7 @@
             var spec = ((sortSel && sortSel.value) || 'series:asc').split(':');
             cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); });
         }
-        if (sortSel) sortSel.addEventListener('change', applySort);
+        if (sortSel) sortSel.addEventListener('change', function () { gal.classList.add('is-touched'); applySort(); });
         applySort();  // default matches the select's first option (series A-Z)
     }
 
