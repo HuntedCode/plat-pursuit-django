@@ -10,6 +10,17 @@
 
     var STORAGE_KEY = 'pp-collection-view';
 
+    // Shared motion gates (kept in one place so the tilt/grow/wiggle checks can't drift out of sync).
+    function prefersReducedMotion() {
+        return !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+    // The 3D tilt + its affordance wiggle are a fine-pointer hover affordance. any-hover/any-pointer (not
+    // the plain forms): the plain ones check the PRIMARY device, `coarse` on touchscreen laptops with a mouse.
+    function canTilt() {
+        return !!window.matchMedia && !prefersReducedMotion()
+            && window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches;
+    }
+
     function initViewToggle(root) {
         var views = Array.prototype.slice.call(root.querySelectorAll('.pp-collection__view'));
         var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-collection__view-chip'));
@@ -118,11 +129,7 @@
     // that tracks the light, springing back on leave. A hover affordance -> fine-pointer + motion-OK only.
     // The rect is read off the (untransformed) .pp-med so the tilt doesn't feed back into its own bbox.
     function initTilt(scope) {
-        // any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, which is
-        // `coarse` on touchscreen laptops even with a mouse -- that made the tilt silently no-op.
-        if (!window.matchMedia
-            || window.matchMedia('(prefers-reduced-motion: reduce)').matches
-            || !window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches) return;
+        if (!canTilt()) return;
         // Perspective is on the SCENE (.pp-med__stage); we rotate the CARD (.pp-med__art) -- the layers'
         // direct parent -- so the preserve-3d parallax reaches them. The rect is read off the (untransformed)
         // scene so the tilt doesn't feed back into its own bbox. Rotation is set as an INLINE transform so it
@@ -139,6 +146,8 @@
 
         var MAX = 15;   // degrees of tilt at the edges
         scene.addEventListener('pointermove', function (e) {
+            if (card._hintTimer) { clearTimeout(card._hintTimer); card._hintTimer = null; }   // engaged during the beat -> skip the auto-hint
+            if (card._hintAnim) { card._hintAnim.cancel(); card._hintAnim = null; }   // user's own turn wins over the hint
             var r = scene.getBoundingClientRect();
             var px = (e.clientX - r.left) / r.width;
             var py = (e.clientY - r.top) / r.height;
@@ -164,12 +173,36 @@
         if (!modal) return;
         var body = modal.querySelector('[data-detail-body]');
         var dialog = modal.querySelector('.pp-detail-modal__dialog');
-        var lastFocus = null, busy = false;
+        var lastFocus = null, busy = false, growingSrc = null, closing = false;
+        // The active grow/shrink "settle" handler + its safety timer, tracked so an interrupting close can
+        // tear them down. Without this, a close mid-open leaves grow's `done` armed: it later fires over the
+        // shrink (snapping the disc back to center) and steals focus onto the hidden dialog.
+        var settleEl = null, settleFn = null, settleTimer = null;
+        function clearSettle() {
+            if (settleEl && settleFn) settleEl.removeEventListener('transitionend', settleFn);
+            if (settleTimer) clearTimeout(settleTimer);
+            settleEl = settleFn = settleTimer = null;
+        }
+        // Cancel a pending/running affordance hint (its timer + WAAPI anim live on the modal card node).
+        function cancelHint() {
+            var c = body.querySelector('.pp-bdetail__stage .pp-med__art');
+            if (!c) return;
+            if (c._hintTimer) { clearTimeout(c._hintTimer); c._hintTimer = null; }
+            if (c._hintAnim) { c._hintAnim.cancel(); c._hintAnim = null; }
+        }
 
-        function open(url) {
-            if (busy) return;
+        function open(url, sourceEl) {
+            if (busy || !modal.hidden) return;   // don't open over an already-open (or closing) modal
             busy = true;
             lastFocus = document.activeElement;   // capture the trigger before async work moves focus
+            // Container transform: capture the tapped medallion's DISC rect BEFORE the fetch so we can grow
+            // it into the modal's big medallion (spatial continuity). We match disc-to-disc (not the whole
+            // medallion) because the text below has a fixed font size that mustn't scale. Skipped under
+            // reduced-motion.
+            var srcMed = sourceEl && sourceEl.querySelector('.pp-med');
+            var srcDisc = srcMed && srcMed.querySelector('.pp-med__stage');
+            var canGrow = srcDisc && !prefersReducedMotion();
+            var srcRect = canGrow ? srcDisc.getBoundingClientRect() : null;
             fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                 .then(function (r) { return r.ok ? r.text() : null; })
                 .then(function (html) {
@@ -177,17 +210,167 @@
                     if (html == null) return;
                     body.innerHTML = html;
                     initTilt(body);
+                    var grow = canGrow && srcRect.width;
+                    // Add is-growing BEFORE showing so the dialog uses the fade (not the spring) from frame 1.
+                    if (grow) modal.classList.add('is-growing');
                     modal.hidden = false;
                     document.body.style.overflow = 'hidden';
-                    if (dialog) dialog.focus();
+                    if (grow) growInto(srcMed, srcRect);
+                    else if (dialog) dialog.focus();
                 })
                 .catch(function () { busy = false; });
         }
+
+        // Grow ONLY the disc (.pp-med__stage) from the tapped disc's spot to its final spot -- the same
+        // element the whole way (no clone), and the meter/label (siblings of the disc) stay put on BOTH the
+        // shelf and the hero, so the progress bar never travels. Matches disc-to-disc; the layers morph
+        // between the shelf and modal renderings (foreground, parallax, brightness) via is-opening.
+        function growInto(srcMed, sr) {
+            var modalDisc = body.querySelector('.pp-bdetail__stage .pp-med__stage');
+            if (!modalDisc) { if (dialog) dialog.focus(); return; }
+            var mr = modalDisc.getBoundingClientRect();
+            var scale = sr.width / mr.width;                    // start shrunk to the tapped disc's size
+            var dx = (sr.left + sr.width / 2) - (mr.left + mr.width / 2);
+            var dy = (sr.top + sr.height / 2) - (mr.top + mr.height / 2);
+            growingSrc = srcMed || null;
+            // Hide only the DISC on the shelf (leave the label/meter in place) -- the badge lifts off, its
+            // text/meter stays put. Nothing to fade or reconcile since they never move.
+            if (growingSrc) { var gs = growingSrc.querySelector('.pp-med__stage'); if (gs) gs.style.visibility = 'hidden'; }
+            // Mirror of the put-down: start in the SHELF look (is-opening, instant) at the tapped spot, then
+            // remove it so the layers settle to the modal look + the chrome fades in AS the disc grows.
+            modal.classList.add('is-opening');
+            modalDisc.style.transformOrigin = 'center center';
+            modalDisc.style.transition = 'none';
+            modalDisc.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scale + ')';
+            void modalDisc.offsetWidth;   // flush the start state (shelf look, at the tapped spot)
+            modal.classList.remove('is-opening');
+            var settled = false;
+            function done(e) {
+                if (settled || (e && e.propertyName !== 'transform')) return;
+                settled = true;
+                clearSettle();
+                modalDisc.style.transition = ''; modalDisc.style.transform = ''; modalDisc.style.transformOrigin = '';
+                // Leave the tapped grid badge HIDDEN while the modal is open -- it reads as the user having
+                // "picked it up". close() restores it (respawns on the shelf) when they put it back.
+                // NB: do NOT remove is-growing here -- that re-triggers the base ppDetailIn spring (the
+                // "flash"). It's cleared in close(), when the modal is hidden and can't re-animate.
+                if (dialog) dialog.focus();
+                var hintCard = body.querySelector('.pp-bdetail__stage .pp-med__art');   // wait a beat, then hint the tilt
+                if (hintCard) hintCard._hintTimer = setTimeout(hintWiggle, 500);
+            }
+            settleEl = modalDisc; settleFn = done;
+            modalDisc.addEventListener('transitionend', done);
+            modalDisc.style.transition = 'transform 0.46s cubic-bezier(0.2, 0.82, 0.25, 1)';
+            modalDisc.style.transform = 'none';   // grow, fully opaque (no fade -- mirror of the put-down)
+            settleTimer = setTimeout(done, 640);   // safety (0.46s transition + buffer): never leave the disc mid-transform
+        }
+
+        // Affordance hint: a beat after the pick-up settles, tilt the object toward a RANDOM point on its
+        // rim and back, decaying over a couple of swings, to signal it can be turned in the hand. Same
+        // fine-pointer + motion-OK context as the tilt (a touch device can't tilt, so no hint). A real
+        // pointermove cancels it (see initTilt) so the user's own turn always wins.
+        function hintWiggle() {
+            if (!canTilt()) return;
+            var card = body.querySelector('.pp-bdetail__stage .pp-med__art');
+            if (!card || !card.animate) return;
+            card._hintTimer = null;
+            // Already engaging (cursor resting over it -> :hover lift active, or mid-tilt)? Skip -- starting
+            // the wiggle from identity would snap off that transform. The user will discover the tilt anyway.
+            if (card.matches && card.matches(':hover')) return;
+            var A = 11, theta = Math.random() * Math.PI * 2;   // peak tilt (deg) toward a random rim point
+            var rx = -Math.sin(theta) * A, ry = Math.cos(theta) * A;
+            function f(m, s) {
+                return 'rotateX(' + (rx * m).toFixed(2) + 'deg) rotateY(' + (ry * m).toFixed(2) + 'deg) scale(' + s + ')';
+            }
+            var anim = card.animate(
+                [
+                    { transform: f(0, 1) },
+                    { transform: f(1, 1.03), offset: 0.18 },      // swing toward the point
+                    { transform: f(-0.66, 1.024), offset: 0.42 }, // back past the opposite point
+                    { transform: f(0.36, 1.014), offset: 0.64 },  // decaying return swing
+                    { transform: f(-0.15, 1.005), offset: 0.84 },
+                    { transform: f(0, 1) }                        // settle to rest
+                ],
+                { duration: 1150, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' }
+            );
+            card._hintAnim = anim;
+            anim.onfinish = anim.oncancel = function () { if (card._hintAnim === anim) card._hintAnim = null; };
+        }
+
         function close() {
+            if (closing) return;
+            clearSettle();   // cancel any in-flight grow settle (its handler + safety timer) before it can fire over the close
+            cancelHint();    // and any pending/running affordance wiggle
+            if (growingSrc && !prefersReducedMotion()) { closing = true; shrinkOut(); }
+            else finishClose();
+        }
+        function finishClose() {
+            closing = false;
+            clearSettle();   // idempotent: covers finishClose reached directly (e.g. shrinkOut's missing-disc bail)
+            cancelHint();    // must run BEFORE body is wiped (it looks the card up in the DOM)
             modal.hidden = true;
+            modal.classList.remove('is-growing', 'is-closing');
             body.innerHTML = '';
             document.body.style.overflow = '';
+            if (growingSrc) {
+                var gs = growingSrc.querySelector('.pp-med__stage');
+                if (gs) gs.style.visibility = '';   // the disc reappears on the shelf (its shadow already faded in during the shrink)
+                growingSrc = null;
+            }
             if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* gone */ } }
+        }
+        // Reverse of growInto: shrink the medallion back into the shelf spot while the chrome fades, then
+        // respawn the shelf badge -- "putting it back down". The medallion stays visible during the shrink
+        // (chrome fades via CSS, dialog opacity untouched) and fades out only as it lands, so no swap flash.
+        function shrinkOut() {
+            var modalDisc = body.querySelector('.pp-bdetail__stage .pp-med__stage');
+            var srcDisc = growingSrc && growingSrc.querySelector('.pp-med__stage');
+            if (!modalDisc || !srcDisc) { finishClose(); return; }
+            var mr = modalDisc.getBoundingClientRect();
+            var sr = srcDisc.getBoundingClientRect();   // still valid: body scroll is locked while the modal is open
+            var scale = sr.width / mr.width;
+            var dx = (sr.left + sr.width / 2) - (mr.left + mr.width / 2);
+            var dy = (sr.top + sr.height / 2) - (mr.top + mr.height / 2);
+            modal.classList.remove('is-growing');
+            modal.classList.add('is-closing');   // fades scrim + dialog chrome + hero meter out (NOT the disc)
+            modalDisc.style.transformOrigin = 'center center';
+            modalDisc.style.transition = 'transform 0.4s cubic-bezier(0.4, 0.05, 0.55, 0.95)';
+            modalDisc.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scale + ')';
+            // Disc stays fully OPAQUE the whole way down (only the chrome dissolves); the shelf disc swaps in
+            // the instant it lands -- the mirror of the pick-up, no dissolve. The meter never travels.
+            var settled = false;
+            function fin(e) {
+                if (settled || (e && e.propertyName !== 'transform')) return;
+                settled = true;
+                clearSettle();
+                finishClose();
+            }
+            settleEl = modalDisc; settleFn = fin;
+            modalDisc.addEventListener('transitionend', fin);
+            settleTimer = setTimeout(fin, 520);   // safety (0.4s transition + buffer)
+        }
+
+        // If the tapped disc sits partly behind the sticky chrome (top nav/sub-nav/hotbar stack via
+        // --sticky-top, or the bottom .mobile-tabbar), scroll it fully into the clear BEFORE the pick-up
+        // so the growing disc doesn't overlap the chrome oddly. Instant scroll -> the rect is re-measured
+        // by open() right after. No-op when the pick-up won't run (reduced motion) or nothing's obscured.
+        function revealFromChrome(slot) {
+            if (prefersReducedMotion()) return;
+            var disc = slot.querySelector('.pp-med__stage');
+            if (!disc) return;
+            var r = disc.getBoundingClientRect();
+            var vh = window.innerHeight, margin = 16;
+            var top = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sticky-top')) || 0;
+            var bottom = 0;
+            var tabbar = document.querySelector('.mobile-tabbar');
+            // NB: on desktop the tabbar is display:none (lg:hidden); its rect is all-zeros, so guard on
+            // height > 0, else bottom would balloon to the full viewport and scroll every badge off-screen.
+            if (tabbar) { var tr = tabbar.getBoundingClientRect(); if (tr.height > 0 && tr.top < vh) bottom = vh - tr.top; }
+            var safeTop = top + margin, safeBottom = vh - bottom - margin;
+            var dy = 0;
+            if (r.top < safeTop) dy = r.top - safeTop;                     // behind top chrome -> nudge the badge down
+            else if (r.bottom > safeBottom) dy = r.bottom - safeBottom;    // behind bottom chrome -> nudge it up
+            if (dy) window.scrollBy(0, dy);
         }
 
         // Delegate across the whole page: any medallion with a data-modal-url (Case slots, Showcase,
@@ -197,7 +380,8 @@
             var slot = e.target.closest('[data-modal-url]');
             if (!slot) return;
             e.preventDefault();
-            open(slot.getAttribute('data-modal-url'));
+            revealFromChrome(slot);   // free the badge from behind sticky chrome before the pick-up
+            open(slot.getAttribute('data-modal-url'), slot);
         });
         modal.querySelectorAll('[data-detail-close]').forEach(function (b) { b.addEventListener('click', close); });
         document.addEventListener('keydown', function (e) {

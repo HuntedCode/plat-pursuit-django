@@ -28,6 +28,10 @@
     display: flex; flex-direction: column; align-items: center; gap: 8px;
     width: 100%; text-decoration: none; color: inherit;
     scroll-margin-top: 96px;
+    /* NB: no content-visibility here -- its paint containment clips this tight cell, cutting off the
+       maintenance red halo (.pp-med__stage::before, 126% + blur) and the :focus-visible ring (offset 4px).
+       The medallions are cheap to paint (2 drop-shadows); the Case view keeps containment at the padded
+       group level where nothing overflows. */
 }
 .pp-gallery__cell .pp-med { --sz: 116px; }
 

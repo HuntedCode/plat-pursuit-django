@@ -33,7 +33,6 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
             {% if frame.is_holographic and state == 'earned' %}<span class="pp-med__foil" aria-hidden="true"></span>{% endif %}
         </div>
         <span class="pp-med__glint" aria-hidden="true"></span>
-        {% if state == 'maintenance' %}<span class="pp-med__chip">Lapsed</span>{% endif %}
     </div>
     {% if state == 'in_progress' or state == 'maintenance' %}
         {% if frame.segments %}

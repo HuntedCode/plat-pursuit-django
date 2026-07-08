@@ -38,6 +38,10 @@
     padding: 14px 14px 10px; border-radius: 16px;
     background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
     border: 1px solid var(--pp-border);
+    /* Skip painting off-screen groups (each holds 4 filter-heavy medallions) -- the big scroll win.
+       `auto` intrinsic size self-corrects after first render so the scrollbar doesn't jump. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 300px;
 }
 .pp-case__group-name { font-size: 13px; font-weight: 700; color: var(--pp-text); margin: 0 0 20px; padding-left: 4px; }
 .pp-case__group-tiers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 6px; justify-items: center; }
@@ -109,9 +113,50 @@
 @keyframes ppDetailScrim { from { opacity: 0; } }
 @keyframes ppDetailIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
 
+/* --- Container transform (collection.js growInto / shrinkOut): the modal medallion grows from / shrinks
+   to the tapped shelf spot, MORPHING between the shelf rendering (flat, foreground shown) and the modal
+   rendering (parallax raised at 40px, foreground hidden) so the swap at either end is seamless. Same
+   element throughout -- no clone. The medallion stays fully opaque; only the CHROME + the layer morph
+   animate. Both directions reuse these transitions; the JS just toggles the direction. --- */
+/* Chrome transitions (base) so the chrome can fade in on open / out on close. */
+.pp-detail-modal__dialog { transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
+.pp-bdetail__info, .pp-detail-modal__close { transition: opacity 0.3s ease; }
+
+/* is-growing: no spring, overflow visible (the medallion starts positioned out over the grid). */
+.pp-detail-modal.is-growing:not([hidden]) .pp-detail-modal__dialog { animation: none; overflow: visible; }
+
+/* is-opening: the pick-up's START frame -- SHELF look (parallax flat) + transparent chrome, applied
+   INSTANTLY (transition:none). growInto removes it next frame so the layers + chrome transition INTO
+   the modal look (using the default transitions above) as the medallion grows. */
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(2),
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__fill,
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__foil { transform: translateZ(0); transition: none; }
+.pp-detail-modal.is-opening .pp-detail-modal__dialog { background: transparent; border-color: transparent; box-shadow: none; transition: none; }
+.pp-detail-modal.is-opening .pp-bdetail__info,
+.pp-detail-modal.is-opening .pp-detail-modal__close { opacity: 0; transition: none; }
+
+/* is-closing: the put-down -- scrim + chrome fade OUT, and the medallion morphs to the SHELF look
+   (parallax flattens) so it matches the shelf badge on landing. `animation: none` stops the base
+   ppDetailIn from re-triggering (the flash). Medallion stays opaque (JS shrinks it). */
+.pp-detail-modal.is-closing:not([hidden]) .pp-detail-modal__scrim { animation: ppDetailScrimOut 0.34s ease forwards; }
+.pp-detail-modal.is-closing:not([hidden]) .pp-detail-modal__dialog { animation: none; overflow: visible; background: transparent; border-color: transparent; box-shadow: none; }
+.pp-detail-modal.is-closing .pp-bdetail__info,
+.pp-detail-modal.is-closing .pp-detail-modal__close { opacity: 0; }
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__l:nth-child(2),
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__fill,
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__foil { transform: translateZ(0); }
+@keyframes ppDetailScrimOut { to { opacity: 0; } }
+
+/* The progress meter stays put -- it's part of the hero (fades in/out with the chrome), NOT transported
+   with the disc (JS transforms only .pp-med__stage). Its twin stays on the shelf the whole time. */
+.pp-bdetail__stage .pp-med__meter { transition: opacity 0.3s ease; }
+.pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__meter { opacity: 0; transition: none; }
+.pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__meter { opacity: 0; }
+
 .pp-bdetail { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
 .pp-bdetail__stage { display: grid; place-items: center; }
 .pp-bdetail__stage .pp-med { --sz: 260px; }
+.pp-bdetail__stage .pp-med__count { display: none; }   /* no text under the hero badge -- the stats grid carries it */
 
 /* "Turn it in your hand" (fine-pointer + motion-OK only; matches collection.js initTilt). The layered
    parallax only works with perspective on the SCENE (.pp-med__stage) and rotation + depth on the CARD
@@ -139,18 +184,46 @@
     }
     .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
     .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
-    /* Hero: drop the foreground layer so the main subject owns center stage (only affects badges that
-       have one). Two-plane look: the backdrop (laurel) stays at the base; the subject, its rising fill,
-       and the glare lift together onto ONE raised plane above it. */
-    .pp-bdetail__stage .pp-med__l:nth-child(3) { display: none; }
-    .pp-bdetail__stage .pp-med__l:nth-child(2),
+    /* Two-plane look: the backdrop (laurel) stays at the base; the subject, its rising fill, and the glare
+       lift together onto ONE raised plane above it. (The foreground layer is hidden site-wide.) */
     .pp-bdetail__stage .pp-med__fill,
-    .pp-bdetail__stage .pp-med__foil,
-    .pp-bdetail__stage .pp-med__glare { transform: translateZ(40px); }
-    /* Ground the raised subject to the backdrop with a soft cast shadow -- a filter on this LEAF layer is
-       safe (it has no children to flatten), so the card's preserve-3d is untouched. */
-    .pp-bdetail__stage .pp-med__l:nth-child(2) { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5)); }
+    .pp-bdetail__stage .pp-med__foil { transform: translateZ(40px); transition: transform 0.4s ease; }
+    .pp-bdetail__stage .pp-med__glare { transform: translateZ(40px); }   /* Z only; keeps its own opacity transition */
+    /* Subject (nth-child 2): raised + grounded with a cast shadow (a filter on this LEAF is 3D-safe). It
+       KEEPS its per-state darkening so the hero matches the shelf -- in-progress/maintenance stay only
+       partially coloured (the bright colour comes from the rising fill, not the base), and unearned stays
+       dim. Only earned/platinum are bright. drop-shadow is appended to each so the raised subject grounds. */
+    .pp-bdetail__stage .pp-med__l:nth-child(2) {
+        transform: translateZ(40px);
+        filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+        transition: transform 0.4s ease;
+    }
+    .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(2),
+    .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(2) {
+        filter: grayscale(1) brightness(0.16) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5)); opacity: 0.58;
+    }
+    .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(2) {
+        filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
+    }
     .pp-bdetail__stage .pp-med__art.is-tilting .pp-med__glare { opacity: 1; }
+
+    /* Big cast shadow on the BACKDROP leaf (a filter on this leaf is 3D-safe) -- absent in the modal, it
+       fades IN on close / OUT on open, so it grows & shrinks WITH the disc and is fully there at landing
+       (mirrors the shelf badge's material shadow). Combined with the state darkening so the filter
+       function lists match and interpolate. Hover-only: on touch the modal keeps the full material filter. */
+    .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); transition: filter 0.4s ease; }
+    .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1) { transition: none; }   /* pick-up START is instant */
 }
 .pp-bdetail__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
 .pp-bdetail__title { font-size: 26px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.01em; }
