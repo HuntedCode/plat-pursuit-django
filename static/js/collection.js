@@ -69,11 +69,25 @@
                 var on = t.getAttribute('data-set-tab') === key;
                 t.classList.toggle('is-active', on);
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
+                t.tabIndex = on ? 0 : -1;   // roving tabindex: only the active tab is in the tab order
             });
         }
-        tabs.forEach(function (tab) {
+        tabs.forEach(function (tab, i) {
             tab.addEventListener('click', function () { activateSet(tab.getAttribute('data-set-tab')); });
+            // WAI-ARIA tabs keyboard model: arrows/Home/End move focus AND activate the tab.
+            tab.addEventListener('keydown', function (e) {
+                var next = -1;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (i + 1) % tabs.length;
+                else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (i - 1 + tabs.length) % tabs.length;
+                else if (e.key === 'Home') next = 0;
+                else if (e.key === 'End') next = tabs.length - 1;
+                else return;
+                e.preventDefault();
+                activateSet(tabs[next].getAttribute('data-set-tab'));
+                tabs[next].focus();
+            });
         });
+        tabs.forEach(function (t) { t.tabIndex = t.classList.contains('is-active') ? 0 : -1; });
 
         function jumpToCard() {
             if (window.location.hash.indexOf('#card-') !== 0) return;
@@ -100,13 +114,13 @@
         function open(url) {
             if (busy) return;
             busy = true;
+            lastFocus = document.activeElement;   // capture the trigger before async work moves focus
             fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
                 .then(function (r) { return r.ok ? r.text() : null; })
                 .then(function (html) {
                     busy = false;
                     if (html == null) return;
                     body.innerHTML = html;
-                    lastFocus = document.activeElement;
                     modal.hidden = false;
                     document.body.style.overflow = 'hidden';
                     if (dialog) dialog.focus();

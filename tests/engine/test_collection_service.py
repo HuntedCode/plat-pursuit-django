@@ -13,7 +13,9 @@ from django.test.utils import CaptureQueriesContext
 from trophies.models import Badge, Profile, ProfileGamification, UserBadge
 from trophies.services import collection_service
 from trophies.services.collection_service import PAGE_SIZE, build_collection_context
-from tests.factories import BadgeFactory, ProfileFactory, UserBadgeFactory
+from tests.factories import (
+    BadgeFactory, ProfileFactory, UserBadgeFactory, UserBadgeProgressFactory,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -299,6 +301,151 @@ def test_no_badges_returns_empty_summary():
     assert ctx['summary']['total'] == 0
     assert ctx['list_badges'] == []
     assert ctx['themes'] == []
+    assert ctx['showcase'] == []
+    assert ctx['chase'] == []
+
+
+# --- the Case: series groups (4 tiers bound together, never split) -------------
+
+
+def test_set_groups_bind_a_series_four_tiers_together():
+    """Each set carries `groups` -- one per series, holding that series' four tiers in
+    bronze->platinum order. This is what lets the Case render a series as one bound unit."""
+    profile = ProfileFactory()
+    _series('rs-a', 'series')
+    _series('rs-b', 'series')
+
+    s = build_collection_context(profile)['binder_sets'][0]
+
+    assert [g['slug'] for g in s['groups']] == ['rs-a', 'rs-b']  # series-then-tier sort order
+    for g in s['groups']:
+        assert g['name']                                          # series display name
+        assert [f['tier'] for f in g['tiers']] == ['bronze', 'silver', 'gold', 'platinum']
+
+
+def test_groups_respect_the_active_sort():
+    """Grouping walks the already-sorted frames, so the series-name sort reorders groups too."""
+    profile = ProfileFactory()
+    _number(_series('zeta', 'series'), 1)   # numbered first, alpha last
+    _number(_series('alpha', 'series'), 5)
+
+    s = build_collection_context(profile, sort='series')['binder_sets'][0]
+
+    assert [g['slug'] for g in s['groups']] == ['alpha', 'zeta']  # alpha wins under series sort
+
+
+# --- the Case: Showcase (proudest earned, swappable modes) --------------------
+
+
+def _earn(profile, slug, tier, **badge_kwargs):
+    badge = BadgeFactory(series_slug=slug, tier=tier, badge_type='series', is_live=True,
+                         required_stages=5, display_series=slug, **badge_kwargs)
+    UserBadgeFactory(profile=profile, badge=badge)
+    return badge
+
+
+def test_showcase_rarest_mode_orders_by_rarity(monkeypatch):
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    _earn(profile, 'common', 1, rarity_pct=40.0)
+    _earn(profile, 'rare', 1, rarity_pct=2.0)
+
+    showcase = build_collection_context(profile)['showcase']
+
+    rarest = next(m for m in showcase if m['mode'] == 'rarest')
+    assert [f['series_name'] for f in rarest['frames']] == ['rare', 'common']  # 2% before 40%
+
+
+def test_showcase_platinum_mode_only_appears_with_a_top_tier_earn(monkeypatch):
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    _earn(profile, 'bronze-only', 1, rarity_pct=10.0)
+
+    modes = {m['mode'] for m in build_collection_context(profile)['showcase']}
+    assert 'rarest' in modes and 'platinum' not in modes   # nothing tier-4 earned yet
+
+    _earn(profile, 'the-plat', 4, rarity_pct=1.0)
+    showcase = build_collection_context(profile)['showcase']
+    plat = next(m for m in showcase if m['mode'] == 'platinum')
+    assert [f['tier'] for f in plat['frames']] == ['platinum']  # only the tier-4 earn
+
+
+def test_showcase_is_empty_without_any_earned_badge():
+    profile = ProfileFactory()
+    _series('rs-x')   # all unearned
+
+    assert build_collection_context(profile)['showcase'] == []
+
+
+def test_showcase_caps_each_mode_at_six(monkeypatch):
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    for i in range(8):
+        _earn(profile, f'rs-{i}', 1, rarity_pct=float(i))
+
+    rarest = next(m for m in build_collection_context(profile)['showcase'] if m['mode'] == 'rarest')
+
+    assert len(rarest['frames']) == 6  # N_SHOW cap
+
+
+# --- the Case: Chase (closest to complete, one per series) --------------------
+
+
+def test_chase_orders_by_progress_and_dedupes_per_series(monkeypatch):
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    a = _series('ch-a', 'series')   # required_stages=5
+    b = _series('ch-b', 'series')
+    UserBadgeProgressFactory(profile=profile, badge=a[0], completed_concepts=4)  # 0.8
+    UserBadgeProgressFactory(profile=profile, badge=b[0], completed_concepts=1)  # 0.2
+    # a second in-progress tier of the SAME series must not add a second chase entry
+    UserBadgeProgressFactory(profile=profile, badge=a[1], completed_concepts=2)  # 0.4
+
+    chase = build_collection_context(profile)['chase']
+
+    assert [f['series_name'] for f in chase] == ['ch-a', 'ch-b']  # higher fraction first
+    assert chase[0]['tier'] == 'bronze'                            # the closest tier of ch-a wins
+
+
+def test_chase_is_empty_without_progress():
+    profile = ProfileFactory()
+    _series('rs-x')   # no UserBadgeProgress rows
+
+    assert build_collection_context(profile)['chase'] == []
+
+
+def test_chase_caps_at_four(monkeypatch):
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    for i in range(6):
+        s = _series(f'ch-{i}', 'series')
+        UserBadgeProgressFactory(profile=profile, badge=s[0], completed_concepts=i + 1)
+
+    chase = build_collection_context(profile)['chase']
+
+    assert len(chase) == 4  # N_CHASE cap
+
+
+def test_case_template_renders_medallions_showcase_chase_and_tablist(monkeypatch):
+    """The Case template renders the medallion grid plus the Showcase/Chase sections, and wires the
+    set tabs to their panels (role=tab -> aria-controls -> role=tabpanel) for screen readers."""
+    from django.template.loader import render_to_string
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badges = _series('rs-case')
+    UserBadgeFactory(profile=profile, badge=badges[0])                           # earned -> Showcase
+    UserBadgeProgressFactory(profile=profile, badge=badges[1], completed_concepts=3)  # in-progress -> Chase
+
+    html = render_to_string('components/collection_case.html', build_collection_context(profile))
+
+    assert 'pp-med' in html                                   # medallion component rendered
+    assert 'pp-showcase' in html and 'pp-chase' in html       # both top-of-Case sections present
+    # tablist wiring: the tab controls a panel that points back at the tab.
+    assert 'id="case-tab-series"' in html
+    assert 'aria-controls="case-panel-series"' in html
+    assert 'id="case-panel-series"' in html
+    assert 'role="tabpanel"' in html and 'aria-labelledby="case-tab-series"' in html
 
 
 # --- list view (the sortable/filterable sibling of the binder) ----------------

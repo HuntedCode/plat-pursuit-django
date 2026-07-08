@@ -5,7 +5,6 @@ collection_service (each: key, label, palette, total, earned, pages:[{frames}]).
 collection.js (set-tab switching + the list->case jump). Each badge renders via the Badge Medallion
 component; tapping a badge links to its detail (the "pick it up" modal replaces this in a later pass).
 {% endcomment %}
-{% load static %}
 <div class="pp-case">
     {% if showcase %}
     <section class="pp-showcase">
@@ -53,7 +52,8 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
     <div class="pp-case__sets" role="tablist" aria-label="Collection sets">
         {% for set in binder_sets %}
         <button type="button" class="pp-case__set-tab{% if forloop.first %} is-active{% endif %}"
-                role="tab" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                role="tab" id="case-tab-{{ set.key }}" aria-controls="case-panel-{{ set.key }}"
+                aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
                 data-set-tab="{{ set.key }}" data-palette="{{ set.palette }}">
             <span class="pp-case__set-dot" data-palette="{{ set.palette }}"></span>
             <span class="pp-case__set-label">{{ set.label }}</span>
@@ -64,7 +64,8 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
     {% endif %}
 
     {% for set in binder_sets %}
-    <section class="pp-case__shelf" data-set="{{ set.key }}"{% if not forloop.first %} hidden{% endif %} aria-label="{{ set.label }}">
+    <section class="pp-case__shelf" data-set="{{ set.key }}"{% if not forloop.first %} hidden{% endif %}
+             id="case-panel-{{ set.key }}" role="tabpanel" aria-labelledby="case-tab-{{ set.key }}" tabindex="0">
         <div class="pp-case__grid">
             {% for group in set.groups %}
             <div class="pp-case__group">
