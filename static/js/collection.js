@@ -125,43 +125,86 @@
         window.addEventListener('hashchange', jumpToCard);
     }
 
-    // "Turn it in your hand": tilt the big modal medallion disc in 3D toward the cursor, with a glare
-    // that tracks the light, springing back on leave. A hover affordance -> fine-pointer + motion-OK only.
-    // The rect is read off the (untransformed) .pp-med so the tilt doesn't feed back into its own bbox.
-    function initTilt(scope) {
-        if (!canTilt()) return;
-        // Perspective is on the SCENE (.pp-med__stage); we rotate the CARD (.pp-med__art) -- the layers'
-        // direct parent -- so the preserve-3d parallax reaches them. The rect is read off the (untransformed)
-        // scene so the tilt doesn't feed back into its own bbox. Rotation is set as an INLINE transform so it
-        // beats the base :hover lift's specificity.
+    // The modal medallion is a handled object: click/tap FLIPS it to its engraved base (all pointers,
+    // motion-OK), and on a fine pointer you can TILT whichever face is up toward the cursor. Both drive ONE
+    // transform on the card via render() -- flip = a 180deg base, tilt adds rotateX/Y on top -- so they
+    // compose instead of fighting. Reduced-motion skips both (the base is pure flavour, no info).
+    function initMedallionInteract(scope) {
+        if (prefersReducedMotion()) return;
         var scene = scope.querySelector('.pp-bdetail__stage .pp-med__stage');
         var card = scene && scene.querySelector('.pp-med__art');
         if (!card) return;
+        var back = card.querySelector('.pp-med__back');   // present only in the modal (with_back)
+        var flipped = false, tiltX = 0, tiltY = 0, flipping = false;
 
+        function render() {
+            // At true rest hand the card back to CSS ('') rather than pinning an inline identity transform.
+            if (!flipped && !tiltX && !tiltY) { card.style.transform = ''; return; }
+            var ry = (flipped ? 180 : 0) + tiltY;
+            card.style.transform = 'rotateX(' + tiltX.toFixed(2) + 'deg) rotateY(' + ry.toFixed(2) + 'deg)'
+                + (tiltX || tiltY ? ' scale(1.05)' : '');
+        }
+        function killHint() {
+            if (card._hintTimer) { clearTimeout(card._hintTimer); card._hintTimer = null; }
+            if (card._hintAnim) { card._hintAnim.cancel(); card._hintAnim = null; }
+        }
+
+        // FLIP (all pointers): click/tap or Enter/Space turns the object over to its base.
+        if (back) {
+            scene.setAttribute('role', 'button');
+            scene.setAttribute('tabindex', '0');
+            scene.setAttribute('aria-pressed', 'false');
+            scene.setAttribute('aria-label', 'Flip the badge to see its engraved base');
+            function flip() {
+                if (flipping) return;
+                killHint();
+                flipping = true;
+                flipped = !flipped;
+                tiltX = tiltY = 0;   // flip cleanly (no residual tilt); the tilt resumes after
+                card.classList.remove('is-tilting');
+                card.classList.add('is-flipping');
+                render();
+                scene.setAttribute('aria-pressed', flipped ? 'true' : 'false');
+                // Tracked (like the hint timer) so an interrupting close can tear it down -- see cancelHint.
+                card._flipTimer = setTimeout(function () {
+                    flipping = false; card.classList.remove('is-flipping'); card._flipTimer = null;
+                }, 660);
+            }
+            scene.addEventListener('click', flip);
+            scene.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); }
+            });
+        }
+
+        // TILT (fine pointer only): turn the shown face toward the cursor, with a light-tracking glare. The
+        // rect is read off the (untransformed) scene so the tilt doesn't feed back into its own bbox.
+        if (!canTilt()) return;
         var glare = document.createElement('span');
         glare.className = 'pp-med__glare';
         glare.setAttribute('aria-hidden', 'true');
         card.appendChild(glare);   // the glare rides the rotating card
         var foil = card.querySelector('.pp-med__foil');   // present only on holographic (rare/top-tier) badges
-
         var MAX = 15;   // degrees of tilt at the edges
         scene.addEventListener('pointermove', function (e) {
-            if (card._hintTimer) { clearTimeout(card._hintTimer); card._hintTimer = null; }   // engaged during the beat -> skip the auto-hint
-            if (card._hintAnim) { card._hintAnim.cancel(); card._hintAnim = null; }   // user's own turn wins over the hint
+            if (flipping) return;   // the flip owns the transform while it plays
+            killHint();
             var r = scene.getBoundingClientRect();
             var px = (e.clientX - r.left) / r.width;
             var py = (e.clientY - r.top) / r.height;
-            card.style.transform = 'rotateX(' + (-(py - 0.5) * 2 * MAX).toFixed(2) + 'deg) '
-                + 'rotateY(' + ((px - 0.5) * 2 * MAX).toFixed(2) + 'deg) scale(1.05)';
+            tiltX = -(py - 0.5) * 2 * MAX;
+            tiltY = (px - 0.5) * 2 * MAX;
+            card.classList.add('is-tilting');
+            render();
             glare.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
             glare.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
             // Holographic shimmer tracks the cursor (inline beats the CSS :hover shift).
             if (foil) foil.style.backgroundPosition = (px * 100).toFixed(1) + '% ' + (py * 100).toFixed(1) + '%';
-            card.classList.add('is-tilting');
         });
         scene.addEventListener('pointerleave', function () {
+            if (flipping) return;
+            tiltX = tiltY = 0;
             card.classList.remove('is-tilting');
-            card.style.transform = '';   // spring back to rest via the CSS transition
+            render();   // spring back to the resting face (front or flipped) via the CSS transition
             if (foil) foil.style.backgroundPosition = '';
         });
     }
@@ -191,6 +234,7 @@
         function cancelHint() {
             var c = body.querySelector('.pp-bdetail__stage .pp-med__art');
             if (!c) return;
+            if (c._flipTimer) { clearTimeout(c._flipTimer); c._flipTimer = null; }   // don't let a flip settle fire after teardown
             if (c._hintTimer) { clearTimeout(c._hintTimer); c._hintTimer = null; }
             if (c._hintAnim) {
                 c._hintAnim.cancel(); c._hintAnim = null;
@@ -221,7 +265,7 @@
                     busy = false;
                     if (html == null) return;
                     body.innerHTML = html;
-                    initTilt(body);
+                    initMedallionInteract(body);
                     var grow = canGrow && srcRect.width;
                     // Add is-growing BEFORE showing so the dialog uses the fade (not the spring) from frame 1.
                     if (grow) modal.classList.add('is-growing');

@@ -76,7 +76,7 @@
 /* light-catch glint -- a soft diagonal sheen that sweeps the WHOLE medallion on hover (earned). Clipped
    to a ~92% circle (inset 4%) so it tracks the round object instead of a small centred disc. */
 .pp-med__glint {
-    position: absolute; inset: 4%; border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 2;
+    position: absolute; inset: -4%; border-radius: 26%; overflow: hidden; pointer-events: none; z-index: 2;   /* matches the plate footprint */
 }
 .pp-med__glint::before {
     content: ''; position: absolute; top: -30%; bottom: -30%; left: 0; width: 55%;
@@ -112,7 +112,7 @@
    faintly present at rest so the badge stands out, brightening + shifting on hover. NO mix-blend-mode: it
    lives inside the card and a blend mode would flatten the modal's preserve-3d parallax. */
 .pp-med__foil {
-    position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 3;
+    position: absolute; inset: -4%; border-radius: 26%; pointer-events: none; z-index: 3;   /* matches the plate footprint */
     background: linear-gradient(115deg,
         transparent 20%,
         hsla(310, 95%, 74%, 0.62) 35%,
@@ -130,6 +130,64 @@
 }
 @media (prefers-reduced-motion: reduce) {
     .pp-med__foil { transition: opacity 0.45s ease; }   /* keep the fade, drop the positional sweep */
+}
+
+/* ---- flip-to-base: the object's engraved "underside" (modal only, with_back) ----
+   A tier-metal disc with the PP maker's mark embossed + the set number engraved, like the hallmark on the
+   base of a minted medal. Sits at rotateY(180) so it's hidden (backface-visibility) until the card flips.
+   The flip mechanics + the front-face backface-hiding live in collection-case.css (the modal 3D context). */
+/* The base is a round metal disc. The badge itself may be any shape, so the hero mounts it on a matching
+   round BACKPLATE (.pp-med__plate, styled in collection-case.css) that normalizes every badge to a round
+   medal body -- so this round base always reads as the object's genuine underside, not a mismatched disc. */
+.pp-med__back {
+    position: absolute; inset: -4%; z-index: 4; border-radius: 26%;
+    transform: rotateY(180deg);
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: calc(var(--sz) * 0.03);
+    overflow: hidden; pointer-events: none;
+    background: radial-gradient(circle at 50% 34%, color-mix(in oklab, var(--med-c) 26%, #141821), #0a0d13 78%);
+    border: 1px solid color-mix(in oklab, var(--med-c) 42%, transparent);
+    box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.12),
+        inset 0 -3px 12px rgba(0, 0, 0, 0.55),
+        inset 0 0 28px color-mix(in oklab, var(--med-c) 16%, transparent);
+}
+.pp-med__back-ring {   /* engraved rim following the plate's rounded-square edge */
+    position: absolute; inset: 9%; border-radius: 20%; pointer-events: none;
+    border: 1px solid color-mix(in oklab, var(--med-c) 22%, transparent);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 color-mix(in oklab, var(--med-glow) 12%, transparent);
+}
+/* Rounded-square mount behind the badge -- normalizes any badge shape to a consistent medal body. Rendered
+   on EVERY medallion (grid + hero); sits behind the art (z-index -1 within the art's own stacking context).
+   The hero adds 3D depth (translateZ) + backface in collection-case.css. */
+.pp-med__plate {
+    position: absolute; inset: -4%; z-index: -1; border-radius: 26%;
+    background: radial-gradient(circle at 50% 36%, color-mix(in oklab, var(--med-c) 24%, #161b24), #0a0d13 82%);
+    border: 1px solid color-mix(in oklab, var(--med-c) 40%, transparent);
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), inset 0 -4px 14px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+.pp-med__back-mark {   /* the maker's mark, foil-stamped + embossed */
+    width: 42%; height: auto; object-fit: contain; -webkit-user-drag: none; user-select: none;
+    filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.2)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
+}
+.pp-med__back-sub {   /* the badge's affiliation (franchise/collection/developer/series), engraved -- the subject */
+    max-width: 84%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: calc(var(--sz) * 0.064); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    line-height: 1; text-align: center;
+    color: color-mix(in oklab, var(--med-glow) 88%, #ffffff);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14), 0 -1px 1px rgba(0, 0, 0, 0.72);
+}
+.pp-med__back-no {   /* engraved edition number -- secondary to the subject above */
+    font-size: calc(var(--sz) * 0.062); font-weight: 700; letter-spacing: 0.1em; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--med-glow) 58%, #cbd5e1);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.14), 0 -1px 1px rgba(0, 0, 0, 0.7);
+}
+.pp-med__back-word {   /* maker's wordmark */
+    font-size: calc(var(--sz) * 0.048); font-weight: 700; letter-spacing: 0.26em; text-transform: uppercase;
+    line-height: 1; color: color-mix(in oklab, var(--med-c) 52%, transparent);
 }
 
 /* ---- states ---- */

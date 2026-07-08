@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize static %}
 {% comment %}
 Badge Medallion -- the composited badge as a precious OBJECT (backdrop + main + foreground) with a
 state treatment, replacing the trading-card Frame on the collection. Reads the SAME frame dict as
@@ -31,6 +31,21 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
             Kept LAST so the state filters' nth-child(N) still count only the art layers. No mix-blend-mode
             (it would flatten the modal's preserve-3d parallax). {% endcomment %}
             {% if frame.is_holographic and state == 'earned' %}<span class="pp-med__foil" aria-hidden="true"></span>{% endif %}
+            {% comment %} Flip-to-base (modal only, with_back): the object's engraved "underside" -- the PP
+            maker's mark embossed into a tier-metal disc, set number engraved below. Pure flavour, no info.
+            Kept after the foil so the state filters' nth-child(N) still count only the art layers. {% endcomment %}
+            <span class="pp-med__plate" aria-hidden="true"></span>
+            {% if with_back %}
+            <div class="pp-med__back" aria-hidden="true">
+                <span class="pp-med__back-ring" aria-hidden="true"></span>
+                <img class="pp-med__back-mark" src="{% static 'images/logo.png' %}" alt="" loading="lazy" draggable="false">
+                {% comment %} The badge's affiliation, engraved: franchise > collection > developer, else the
+                series name (the same label the Case page uses). frame sets these in that priority order. {% endcomment %}
+                <span class="pp-med__back-sub">{% firstof frame.franchise frame.collection frame.developer frame.series_name %}</span>
+                {% if frame.set_number %}<span class="pp-med__back-no">No.&nbsp;{{ frame.set_number|stringformat:"04d" }}</span>{% endif %}
+                <span class="pp-med__back-word">Platinum Pursuit</span>
+            </div>
+            {% endif %}
         </div>
         <span class="pp-med__glint" aria-hidden="true"></span>
     </div>

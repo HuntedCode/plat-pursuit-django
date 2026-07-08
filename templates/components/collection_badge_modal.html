@@ -7,7 +7,7 @@ CollectionBadgeModalView and fetched on tap. Expects `frame` (a full build_badge
     <div class="pp-bdetail__stage">
         {% comment %} No text under the hero badge -- the stats grid already carries set number + earn rank.
         Just the badge (the count is hidden via CSS for in-progress badges too). {% endcomment %}
-        {% include 'components/badge_medallion.html' with frame=frame no_id=True %}
+        {% include 'components/badge_medallion.html' with frame=frame no_id=True with_back=True %}
     </div>
     <div class="pp-bdetail__info">
         <div class="pp-bdetail__eyebrow">{{ frame.series_name }}</div>

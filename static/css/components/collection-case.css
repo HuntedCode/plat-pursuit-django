@@ -185,22 +185,63 @@
    isolation:isolate on ANY ancestor of the scene silently re-flattens the whole 3D subtree (that's why
    the dialog's overflow is overridden here and the art's material filter is dropped). */
 .pp-med__glare {
-    position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 4;
+    position: absolute; inset: -4%; border-radius: 26%; pointer-events: none; z-index: 4;   /* matches the plate footprint */
     opacity: 0; transition: opacity 0.35s ease;   /* NB: NO mix-blend-mode -- a blend mode on this child isolates a group that FLATTENS the card's preserve-3d */
     background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.5), transparent 32%);
 }
 /* any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, which is `coarse`
    on touchscreen laptops even with a mouse attached -- that silently no-op'd the whole 3D block. */
-@media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
-    /* BOTH are ancestor flatteners of the nested 3D: overflow:auto (scroll container) AND the base
-       will-change:transform (compositing-layer promotion). Neutralize both while the tilt is active. */
+/* --- Modal medallion 3D: shared by the FLIP (all pointers) and the TILT (fine pointer, below). The card
+   does real 3D, so several ancestor "flatteners" (dialog overflow/will-change, stage isolation) are
+   neutralized; the card gets preserve-3d + filter:none (a filter on the card flattens it, so the grounding
+   shadow moves to the backdrop LEAF, which is 3D-safe); and the faces get backface-visibility so the front
+   hides when the card flips to its engraved base. Motion-OK gates it (reduced-motion = flat, no flip). --- */
+@media (prefers-reduced-motion: no-preference) {
     #collection-detail .pp-detail-modal__dialog { overflow: visible; will-change: auto; }
     .pp-bdetail__stage .pp-med__stage { perspective: 560px; display: block; isolation: auto; }
-    .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
     .pp-bdetail__stage .pp-med__art {
         filter: none; transform-style: preserve-3d;   /* NB: no will-change:transform here -- it promotes a compositing layer that FLATTENS preserve-3d */
         transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
     }
+    .pp-bdetail__stage .pp-med__art.is-flipping { transition: transform 0.64s cubic-bezier(0.45, 0.05, 0.2, 1); }
+    /* front faces turn away past 90deg -> the engraved base shows cleanly when flipped */
+    .pp-bdetail__stage .pp-med__l,
+    .pp-bdetail__stage .pp-med__fill,
+    .pp-bdetail__stage .pp-med__foil,
+    .pp-bdetail__stage .pp-med__glare,
+    .pp-bdetail__stage .pp-med__plate { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    /* Round mount behind the badge: normalizes every badge (any shape) to a round medal body, so the flipped
+       round base reads as its genuine underside. Sits just behind the backdrop (the badge floats above it on
+       tilt); for round badges it hides behind the art, for shields it fills the body round. */
+    /* Base styles the plate (badge-medallion.css); the hero just raises the badge off it in 3D. */
+    .pp-bdetail__stage .pp-med__plate { transform: translateZ(-3px); }
+    /* flip affordance (JS sets role=button on the scene only when a back exists) */
+    .pp-bdetail__stage .pp-med__stage[role="button"] { cursor: pointer; }
+    .pp-bdetail__stage .pp-med__stage:focus-visible { outline: 2px solid var(--med-glow, #cfe8f0); outline-offset: 6px; border-radius: 26%; }
+
+    /* Grounding cast on the BACKDROP leaf (a filter on this leaf is 3D-safe) -- absent in the modal, it
+       fades IN on close / OUT on open, so it grows & shrinks WITH the disc (mirrors the shelf badge's
+       material shadow). Per-state so the filter function lists match and interpolate. */
+    .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); transition: filter 0.4s ease; }
+    .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1),
+    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
+    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1) { transition: none; }   /* pick-up START is instant */
+}
+
+/* Tilt enhancement (fine pointer only): the layered parallax depths + tilt tuning + the light-tracking
+   glare. any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, `coarse` on
+   touchscreen laptops even with a mouse attached -- that silently no-op'd the tilt. */
+@media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
     .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
     .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
     /* Two-plane look: the backdrop (laurel) stays at the base; the subject, its rising fill, and the glare
@@ -225,24 +266,6 @@
         filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));
     }
     .pp-bdetail__stage .pp-med__art.is-tilting .pp-med__glare { opacity: 1; }
-
-    /* Big cast shadow on the BACKDROP leaf (a filter on this leaf is 3D-safe) -- absent in the modal, it
-       fades IN on close / OUT on open, so it grows & shrinks WITH the disc and is fully there at landing
-       (mirrors the shelf badge's material shadow). Combined with the state darkening so the filter
-       function lists match and interpolate. Hover-only: on touch the modal keeps the full material filter. */
-    .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); transition: filter 0.4s ease; }
-    .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
-    .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
-    .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0)); }
-    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1),
-    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__l:nth-child(1) { filter: drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
-    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
-    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1),
-    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--in_progress .pp-med__l:nth-child(1),
-    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--unearned .pp-med__l:nth-child(1) { filter: grayscale(1) brightness(0.52) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
-    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1),
-    .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med--maintenance .pp-med__l:nth-child(1) { filter: grayscale(0.68) brightness(0.64) sepia(0.08) drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4)); }
-    .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1) { transition: none; }   /* pick-up START is instant */
 }
 .pp-bdetail__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
 .pp-bdetail__title { font-size: 26px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.01em; }
