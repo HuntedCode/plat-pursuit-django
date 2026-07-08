@@ -61,6 +61,37 @@ def test_in_progress_viewer_progress_math():
     assert frame["progress_pct"] == 30
 
 
+def test_segments_are_one_cell_per_stage_filled_to_progress():
+    """The medallion's multi-bar meter reads frame['segments']: one bool per stage, filled to done."""
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=8)
+    UserBadgeProgressFactory(profile=profile, badge=badge, completed_concepts=3)
+
+    frame = build_badge_frame(badge, profile)
+
+    assert frame["segments"] == [True, True, True, False, False, False, False, False]
+
+
+def test_segments_omitted_above_the_cap_so_the_meter_falls_back_to_smooth():
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=13)  # > SEGMENT_CAP (12)
+    UserBadgeProgressFactory(profile=profile, badge=badge, completed_concepts=5)
+
+    frame = build_badge_frame(badge, profile)
+
+    assert "segments" not in frame  # template renders the smooth bar off progress_pct instead
+
+
+def test_earned_badge_segments_are_all_filled():
+    profile = ProfileFactory()
+    badge = BadgeFactory(tier=1, required_stages=5)
+    UserBadgeFactory(profile=profile, badge=badge)
+
+    frame = build_badge_frame(badge, profile)
+
+    assert frame["segments"] == [True] * 5
+
+
 def test_unearned_viewer_with_no_progress():
     profile = ProfileFactory()
     badge = BadgeFactory(tier=1, required_stages=10)

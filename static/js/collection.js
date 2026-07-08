@@ -114,6 +114,45 @@
         window.addEventListener('hashchange', jumpToCard);
     }
 
+    // "Turn it in your hand": tilt the big modal medallion disc in 3D toward the cursor, with a glare
+    // that tracks the light, springing back on leave. A hover affordance -> fine-pointer + motion-OK only.
+    // The rect is read off the (untransformed) .pp-med so the tilt doesn't feed back into its own bbox.
+    function initTilt(scope) {
+        // any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, which is
+        // `coarse` on touchscreen laptops even with a mouse -- that made the tilt silently no-op.
+        if (!window.matchMedia
+            || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            || !window.matchMedia('(any-hover: hover) and (any-pointer: fine)').matches) return;
+        // Perspective is on the SCENE (.pp-med__stage); we rotate the CARD (.pp-med__art) -- the layers'
+        // direct parent -- so the preserve-3d parallax reaches them. The rect is read off the (untransformed)
+        // scene so the tilt doesn't feed back into its own bbox. Rotation is set as an INLINE transform so it
+        // beats the base :hover lift's specificity.
+        var scene = scope.querySelector('.pp-bdetail__stage .pp-med__stage');
+        var card = scene && scene.querySelector('.pp-med__art');
+        if (!card) return;
+
+        var glare = document.createElement('span');
+        glare.className = 'pp-med__glare';
+        glare.setAttribute('aria-hidden', 'true');
+        card.appendChild(glare);   // the glare rides the rotating card
+
+        var MAX = 15;   // degrees of tilt at the edges
+        scene.addEventListener('pointermove', function (e) {
+            var r = scene.getBoundingClientRect();
+            var px = (e.clientX - r.left) / r.width;
+            var py = (e.clientY - r.top) / r.height;
+            card.style.transform = 'rotateX(' + (-(py - 0.5) * 2 * MAX).toFixed(2) + 'deg) '
+                + 'rotateY(' + ((px - 0.5) * 2 * MAX).toFixed(2) + 'deg) scale(1.05)';
+            glare.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
+            glare.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
+            card.classList.add('is-tilting');
+        });
+        scene.addEventListener('pointerleave', function () {
+            card.classList.remove('is-tilting');
+            card.style.transform = '';   // spring back to rest via the CSS transition
+        });
+    }
+
     // Badge detail ("pick it up"): tap a medallion -> fetch its detail partial into the modal. The slot
     // keeps its href to the badge page as a no-JS fallback.
     function initDetail(root) {
@@ -133,6 +172,7 @@
                     busy = false;
                     if (html == null) return;
                     body.innerHTML = html;
+                    initTilt(body);
                     modal.hidden = false;
                     document.body.style.overflow = 'hidden';
                     if (dialog) dialog.focus();

@@ -23,8 +23,35 @@
 /* the square that holds the object (art + ring + glint + chip + aura + pedestal) */
 .pp-med__stage { position: relative; width: 100%; aspect-ratio: 1; display: grid; place-items: center; isolation: isolate; }
 
-.pp-med__art { position: relative; width: 100%; height: 100%; z-index: 1; transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.pp-med__art {
+    position: relative; width: 100%; height: 100%; z-index: 1;
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    /* Material weight -- make it read as a raised METAL object, not a flat sticker. A top rim-light, then
+       a run of crisp zero-blur offsets that cumulatively extrude a ~7px metal SIDE-WALL, then a soft cast
+       to ground the mass. drop-shadow (not box-shadow) traces the badge's real silhouette (any shape).
+       NOTE: this is the "chunky" test pass -- lots of stacked shadows; tune the wall depth to taste. */
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.25))
+        drop-shadow(0 1px 0 rgba(20, 24, 30, 0.9))
+        drop-shadow(0 1px 0 rgba(20, 24, 30, 0.9))
+        drop-shadow(0 1px 0 rgba(18, 22, 28, 0.9))
+        drop-shadow(0 1px 0 rgba(16, 20, 26, 0.9))
+        drop-shadow(0 1px 0 rgba(14, 18, 24, 0.9))
+        drop-shadow(0 1px 0 rgba(12, 15, 20, 0.92))
+        drop-shadow(0 1px 0 rgba(10, 13, 18, 0.92))
+        drop-shadow(0 9px 10px rgba(0, 0, 0, 0.42));
+}
 .pp-med__l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+.pp-med__art .pp-med__l:nth-child(3) { z-index: 3; }   /* foreground stays above the rising-colour fill */
+
+/* rising-colour fill (in_progress + maintenance) -- a full-colour copy of ONLY the subject, revealed
+   from the bottom up to --fill (progress_pct). The base subject stays darkened/tarnished behind it. */
+.pp-med__fill {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    -webkit-mask: linear-gradient(to top, #000 var(--fill, 0%), transparent calc(var(--fill, 0%) + 6%));
+    mask: linear-gradient(to top, #000 var(--fill, 0%), transparent calc(var(--fill, 0%) + 6%));
+}
+.pp-med__fill-l { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
 
 /* aura (earned only) -- a soft tier bloom behind the object */
 .pp-med__stage::before {
@@ -42,18 +69,18 @@
     background: radial-gradient(ellipse, rgba(0, 0, 0, 0.5), transparent 72%); z-index: 0;
 }
 
-/* light-catch glint (sweeps on hover for earned) */
+/* light-catch glint -- a soft diagonal sheen that sweeps the WHOLE medallion on hover (earned). Clipped
+   to a ~92% circle (inset 4%) so it tracks the round object instead of a small centred disc. */
 .pp-med__glint {
-    position: absolute; top: 50%; left: 50%; width: 70%; aspect-ratio: 1;
-    transform: translate(-50%, -46%); border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 2;
+    position: absolute; inset: 4%; border-radius: 50%; overflow: hidden; pointer-events: none; z-index: 2;
 }
 .pp-med__glint::before {
-    content: ''; position: absolute; top: -20%; bottom: -20%; left: 0; width: 40%;
-    transform: skewX(-16deg) translateX(-220%);
-    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5) 50%, transparent);
+    content: ''; position: absolute; top: -30%; bottom: -30%; left: 0; width: 55%;
+    transform: skewX(-14deg) translateX(-170%);
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.42) 50%, transparent);
     mix-blend-mode: screen;
 }
-@keyframes ppMedGlint { to { transform: skewX(-16deg) translateX(360%); } }
+@keyframes ppMedGlint { to { transform: skewX(-14deg) translateX(330%); } }
 
 @media (hover: hover) {
     .pp-med--earned { cursor: pointer; }
@@ -63,40 +90,46 @@
 }
 
 /* ---- states ---- */
-/* UNEARNED = dim laurel mount + ghosted subject (a named, waiting slot) */
+/* UNEARNED + IN PROGRESS both wear a DARK, waiting mount -- earned badges are the only bright ones, so
+   "done vs not done" reads at a glance. In-progress is told apart by its meter (below), not brighter art. */
 .pp-med--unearned .pp-med__l:nth-child(1),
-.pp-med--unearned .pp-med__l:nth-child(3) { filter: grayscale(1) brightness(0.52); }
-.pp-med--unearned .pp-med__l:nth-child(2) { filter: grayscale(1) brightness(0.16); opacity: 0.58; }
-.pp-med--unearned .pp-med__glint { display: none; }
-
-/* IN PROGRESS = faint materializing subject + COOL tier-coloured segmented ring */
-.pp-med--in_progress { --ring-c: var(--med-c); --ring-dim: rgba(255, 255, 255, 0.09); }
-.pp-med--in_progress .pp-med__l:nth-child(2) { filter: grayscale(0.55) brightness(0.85); opacity: 0.72; }
+.pp-med--unearned .pp-med__l:nth-child(3),
 .pp-med--in_progress .pp-med__l:nth-child(1),
-.pp-med--in_progress .pp-med__l:nth-child(3) { filter: brightness(0.9) saturate(0.85); }
+.pp-med--in_progress .pp-med__l:nth-child(3) { filter: grayscale(1) brightness(0.52); }
+.pp-med--unearned .pp-med__l:nth-child(2),
+.pp-med--in_progress .pp-med__l:nth-child(2) { filter: grayscale(1) brightness(0.16); opacity: 0.58; }
+.pp-med--unearned .pp-med__glint,
 .pp-med--in_progress .pp-med__glint { display: none; }
 
-/* MAINTENANCE = tarnished full art + WARM segmented ring (red = broken, amber = repaired) + chip */
-.pp-med--maintenance { --ring-c: #eeae42; --ring-dim: rgba(205, 58, 46, 0.26); }
-.pp-med--maintenance .pp-med__art { filter: grayscale(0.68) brightness(0.64) sepia(0.08); }
+/* the in-progress meter takes the COOL tier colour; maintenance takes a WARM repair amber */
+.pp-med--in_progress { --meter-c: var(--med-c); --meter-dim: rgba(255, 255, 255, 0.09); }
+
+/* MAINTENANCE = tarnished base layers + WARM meter (a held-but-lapsed badge) + "Lapsed" chip. The
+   tarnish is on the base layers (not the whole art), so the rising-colour fill reads as RESTORED. */
+.pp-med--maintenance { --meter-c: #eeae42; --meter-dim: rgba(205, 58, 46, 0.26); }
+.pp-med--maintenance .pp-med__l { filter: grayscale(0.68) brightness(0.64) sepia(0.08); }
 .pp-med--maintenance .pp-med__glint { display: none; }
 
-/* segmented progress ring (in_progress + maintenance): one segment per platinum toward the badge */
-.pp-med__ring {
-    position: absolute; top: 50%; left: 50%; width: 118%; aspect-ratio: 1;
-    transform: translate(-50%, -50%); border-radius: 50%; z-index: 0;
-    --seg: calc(360deg / var(--total, 8)); --gap: 6deg;
-    background: conic-gradient(var(--ring-c) 0deg calc(var(--done, 0) / var(--total, 8) * 360deg), var(--ring-dim) calc(var(--done, 0) / var(--total, 8) * 360deg) 360deg);
-    -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
-    -webkit-mask-composite: source-in;
-    mask: radial-gradient(circle, transparent 62%, #000 63%), repeating-conic-gradient(#000 0deg calc(var(--seg) - var(--gap)), transparent calc(var(--seg) - var(--gap)) var(--seg));
-    mask-composite: intersect;
-    filter: drop-shadow(0 0 4px var(--ring-c)); opacity: 0.92;
+/* segmented progress meter (in_progress + maintenance) -- a multi-bar echoing the job page's tier
+   ladder: one rounded cell per platinum/100% toward the badge, filled up to stages_done. */
+.pp-med__meter { display: flex; gap: 3px; width: 72%; margin-top: 9px; }
+.pp-med__seg {
+    flex: 1 1 0; min-width: 0; height: 5px; border-radius: 999px;
+    background: var(--meter-dim, rgba(255, 255, 255, 0.09));
 }
-/* capped: too many platinums to count as segments -> smooth arc (the "X / Y" number carries the detail) */
-.pp-med--ring-smooth .pp-med__ring {
-    -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
-    mask: radial-gradient(circle, transparent 62%, #000 63%);
+.pp-med__seg.is-on {
+    background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 55%, transparent), var(--meter-c));
+    box-shadow: 0 0 6px color-mix(in oklab, var(--meter-c) 45%, transparent);
+}
+/* capped: too many platinums to count as cells -> one smooth bar (the "X / Y" number carries the detail) */
+.pp-med__meter--smooth {
+    position: relative; height: 5px; border-radius: 999px; overflow: hidden;
+    background: var(--meter-dim, rgba(255, 255, 255, 0.09));
+}
+.pp-med__meter-fill {
+    position: absolute; inset: 0 auto 0 0; border-radius: 999px;
+    background: linear-gradient(90deg, color-mix(in oklab, var(--meter-c) 55%, transparent), var(--meter-c));
+    box-shadow: 0 0 6px color-mix(in oklab, var(--meter-c) 45%, transparent);
 }
 
 /* maintenance chip (top of the stage) */
@@ -106,14 +139,29 @@
     padding: 2px 8px; border-radius: 999px;
     background: rgba(230, 150, 60, 0.18); color: #e6a53c; border: 1px solid rgba(230, 150, 60, 0.42);
 }
-/* progress count (platinums earned / required) -- shown for EVERY state so all medallions are the same
-   height and their labels align. Sits BELOW the art and clear of the ring's bottom overhang. */
+/* progress count (platinums earned / required) -- shown for EVERY state. Earned/unearned reserve the
+   meter's vertical space (margin) so their count aligns with the metered states'; when a meter precedes
+   the count (in_progress/maintenance) the meter has already supplied that space. */
 .pp-med__count {
-    margin-top: calc(var(--sz) * 0.1 + 6px);
+    margin-top: 20px;
     font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em; color: var(--ring-c, var(--med-c)); line-height: 1;
+    letter-spacing: 0.02em; color: var(--meter-c, var(--med-c)); line-height: 1;
 }
+.pp-med__meter + .pp-med__count { margin-top: 6px; }                    /* meter already spaced it */
 .pp-med--unearned .pp-med__count { color: rgba(148, 163, 184, 0.7); }   /* dim -- 0 toward it */
+
+/* edition + earn marks -- surfaced under the badge so you read set # / earn rank without opening it.
+   Set number (every badge) is muted; earn rank (earned only, "5th") glows in the tier accent. */
+.pp-med__ids {
+    display: flex; align-items: center; gap: 7px; margin-top: 5px;
+    font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.pp-med__setno { color: rgba(148, 163, 184, 0.72); letter-spacing: 0.02em; }
+.pp-med__earnno {
+    color: var(--med-glow); letter-spacing: 0.01em;
+    text-shadow: 0 0 8px color-mix(in oklab, var(--med-glow) 40%, transparent);
+}
+.pp-med__setno + .pp-med__earnno { padding-left: 7px; border-left: 1px solid rgba(255, 255, 255, 0.14); }
 
 @media (prefers-reduced-motion: reduce) {
     .pp-med__art, .pp-med__stage::before { transition: none; }

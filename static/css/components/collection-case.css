@@ -73,6 +73,7 @@
 .pp-showcase__row[hidden] { display: none; }
 .pp-showcase__slot { display: flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; color: inherit; }
 .pp-showcase__row .pp-med { --sz: 130px; }
+.pp-showcase__row .pp-med__count { display: none; }   /* all showcased are earned -> "N/N" is noise; the ids line carries edition + earn rank */
 .pp-showcase__name { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-showcase__slot:hover .pp-showcase__name { color: var(--pp-text); }
 @media (min-width: 768px) { .pp-showcase__row .pp-med { --sz: 156px; } }
@@ -84,7 +85,8 @@
 .pp-chase__item { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; flex: 0 0 auto; padding: 6px 16px 6px 6px; border-radius: 12px; transition: background 0.18s ease; }
 .pp-chase__item:hover { background: var(--pp-bg-2); }
 .pp-chase__item .pp-med { --sz: 68px; }
-.pp-chase__item .pp-med__count { display: none; }   /* the strip shows progress in the meta instead */
+.pp-chase__item .pp-med__count,
+.pp-chase__item .pp-med__meter { display: none; }   /* the strip shows progress in the meta instead */
 .pp-chase__name { font-size: 14px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
 .pp-chase__prog { font-size: 12px; color: var(--pp-text-mute); white-space: nowrap; }
 
@@ -110,6 +112,45 @@
 .pp-bdetail { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
 .pp-bdetail__stage { display: grid; place-items: center; }
 .pp-bdetail__stage .pp-med { --sz: 260px; }
+
+/* "Turn it in your hand" (fine-pointer + motion-OK only; matches collection.js initTilt). The layered
+   parallax only works with perspective on the SCENE (.pp-med__stage) and rotation + depth on the CARD
+   (.pp-med__art) -- the art is the layers' DIRECT parent, so preserve-3d actually reaches them (rotating
+   the stage instead left them a level too deep and flattened). The scene doesn't move, so its pedestal
+   shadow stays grounded while the badge tilts above it. WARNING: a filter / overflow != visible /
+   isolation:isolate on ANY ancestor of the scene silently re-flattens the whole 3D subtree (that's why
+   the dialog's overflow is overridden here and the art's material filter is dropped). */
+.pp-med__glare {
+    position: absolute; inset: 0; border-radius: 50%; pointer-events: none; z-index: 4;
+    opacity: 0; transition: opacity 0.35s ease;   /* NB: NO mix-blend-mode -- a blend mode on this child isolates a group that FLATTENS the card's preserve-3d */
+    background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.5), transparent 32%);
+}
+/* any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, which is `coarse`
+   on touchscreen laptops even with a mouse attached -- that silently no-op'd the whole 3D block. */
+@media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
+    /* BOTH are ancestor flatteners of the nested 3D: overflow:auto (scroll container) AND the base
+       will-change:transform (compositing-layer promotion). Neutralize both while the tilt is active. */
+    #collection-detail .pp-detail-modal__dialog { overflow: visible; will-change: auto; }
+    .pp-bdetail__stage .pp-med__stage { perspective: 560px; display: block; isolation: auto; }
+    .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
+    .pp-bdetail__stage .pp-med__art {
+        filter: none; transform-style: preserve-3d;   /* NB: no will-change:transform here -- it promotes a compositing layer that FLATTENS preserve-3d */
+        transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
+    .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
+    /* Hero: drop the foreground layer so the main subject owns center stage (only affects badges that
+       have one). Two-plane look: the backdrop (laurel) stays at the base; the subject, its rising fill,
+       and the glare lift together onto ONE raised plane above it. */
+    .pp-bdetail__stage .pp-med__l:nth-child(3) { display: none; }
+    .pp-bdetail__stage .pp-med__l:nth-child(2),
+    .pp-bdetail__stage .pp-med__fill,
+    .pp-bdetail__stage .pp-med__glare { transform: translateZ(40px); }
+    /* Ground the raised subject to the backdrop with a soft cast shadow -- a filter on this LEAF layer is
+       safe (it has no children to flatten), so the card's preserve-3d is untouched. */
+    .pp-bdetail__stage .pp-med__l:nth-child(2) { filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5)); }
+    .pp-bdetail__stage .pp-med__art.is-tilting .pp-med__glare { opacity: 1; }
+}
 .pp-bdetail__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--pp-text-mute); }
 .pp-bdetail__title { font-size: 26px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.01em; }
 .pp-bdetail__state { font-size: 13px; font-weight: 700; color: var(--pp-primary); margin-bottom: 12px; }

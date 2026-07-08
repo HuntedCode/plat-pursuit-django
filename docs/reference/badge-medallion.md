@@ -21,22 +21,50 @@ double-framing a round object. The decision was validated at `/design/badge-pres
   duplicate-ID gotcha).
 - **Sizing** via `--sz` on `.pp-med` (the container sets it per breakpoint). The art lives in a square
   `.pp-med__stage`; the "X / Y" count sits in normal flow *below* it (never over the art).
+- **Material weight** — `.pp-med__art` carries a stacked `drop-shadow` filter (top rim-light + crisp
+  bottom edge + soft cast) that reads the badge as a *raised metal object*, not a flat sticker.
+  `drop-shadow` (not `box-shadow`) traces the PNG silhouette, so it works on any badge shape.
 - GPU-only motion; `prefers-reduced-motion` honored.
 
 ### States (all pure CSS on the same art)
 | State | Treatment |
 |-------|-----------|
-| `earned` | Full colour + tier aura; hover light-catch (glint) + lift |
-| `in_progress` | Faint materializing subject + **cool** tier-coloured segmented ring |
-| `unearned` | Dim grayscale mount + ghosted subject silhouette (a named, waiting slot) |
-| `maintenance` | Tarnished full art + **warm** segmented ring (red = broken, amber = repaired) + "Lapsed" chip |
+| `earned` | Full colour + tier aura; hover light-catch (glint sweeps the whole medallion) + lift |
+| `in_progress` | **Dark waiting mount — identical to `unearned`** + **rising-colour subject** + a **cool** multi-bar meter below |
+| `unearned` | Dark grayscale mount + ghosted subject silhouette (a named, waiting slot), **no meter, no fill** |
+| `maintenance` | Tarnished base + **rising-colour (restored) subject** + **warm** multi-bar meter + "Lapsed" chip |
 
-### The segmented ring
-In-progress + maintenance show a **segmented** progress ring: **one segment per platinum/100%** toward
-the badge (`--done`/`--total` = `stages_done`/`stages_total`). **Capped at 12** — above that,
-`pp-med--ring-smooth` renders a smooth arc instead (segments stop being countable), and the "X / Y"
-number carries the detail. A per-badge requirement is **Platinum** for bronze/gold tiers, **100%** for
-silver/platinum (migration `0046` tier choices) — the detail modal labels this correctly.
+**Earned is the only fully-bright state.** In-progress deliberately wears the *same* dark mount as
+unearned so "done vs not done" reads instantly across a shelf; the two are told apart by the **meter and
+the rising-colour fill** (in-progress has both, unearned has neither), not by brighter base art.
+
+### Edition + earn marks (`show_ids`)
+Pass **`show_ids=True`** and the medallion prints a small line under the count: the badge's **set number**
+(`#0042`, every badge has one — muted) and, for earned badges, the permanent **earn rank** (`7th`, the
+Nth profile to earn this tier — glows in the tier accent). Both come from the frame dict (`set_number`,
+`engraving_rank`), so it's read-at-a-glance without opening the badge. Passed by the Case shelf, Gallery
+cells, and Showcase (there the redundant `N/N` count is hidden); **not** the tiny Chase strip or the
+detail modal (which lists both in its full stats grid). The Case is sorted by `set_number` by default
+(series stay together as consecutive groups of 4), so the printed numbers read in order down a shelf.
+
+### Rising-colour fill
+In-progress + maintenance overlay a **full-colour copy of ONLY the subject** (`art_layers.1`, the main
+layer) that reveals **from the bottom up to `progress_pct`** — the badge visibly "colours in" as you
+complete it. It's `.pp-med__fill` (a mask-clipped div) at `z-index: 2` — above the darkened base subject,
+below any foreground (`.pp-med__l:nth-child(3)` is bumped to `z-index: 3`). For maintenance the base
+tarnish lives on the individual `.pp-med__l` layers (not the whole `.pp-med__art`), so the fill escapes
+it and reads as **restored** colour rising over a tarnished base.
+
+### The multi-bar meter
+In-progress + maintenance render a **segmented multi-bar** below the art (echoing the job page's tier
+ladder, `.pgl`): **one rounded cell per platinum/100%** toward the badge, filled up to `stages_done`.
+The cells come from `frame['segments']` (a bool list built in `build_badge_frame`, only when countable:
+`0 < stages_total <= SEGMENT_CAP`, cap = **12**). Above the cap `segments` is omitted and the template
+renders **one smooth bar** off `progress_pct` (`pp-med__meter--smooth`); the "X / Y" count carries the
+detail. Cool tier colour for in-progress (`--meter-c: var(--med-c)`), warm amber for maintenance. A
+per-badge requirement is **Platinum** for bronze/gold tiers, **100%** for silver/platinum (migration
+`0046` tier choices) — the detail modal labels this correctly. (This replaced an earlier segmented
+*ring* that wrapped the badge; the ring detracted from the object, so it was moved to a bar below.)
 
 ## The Case
 
@@ -73,23 +101,66 @@ and List reuse `list_badges` (already flattened by `_flatten_for_list`), so swit
 
 Tap a medallion -> `CollectionBadgeModalView` (`/collection/badge/<id>/`) fetches **one** badge's detail
 (single-hero `build_badge_frame`, whale-safe) -> a modal with the medallion big + full stats. Focus
-trap + Escape; the slot keeps its badge-page `href` as a **no-JS fallback**. The premium
-"turn it in your hand" interaction (cursor tilt + flip) is a planned follow-up.
+trap + Escape; the slot keeps its badge-page `href` as a **no-JS fallback**.
+
+**"Turn it in your hand"** (`initTilt`): the big medallion tilts in 3D toward the cursor with a
+light-tracking glare (a JS-injected `.pp-med__glare`) and springs back on leave. It's a hover affordance,
+gated on `(any-hover: hover) and (any-pointer: fine)` (NOT the plain `hover`/`pointer` — those check the
+*primary* device, which is `coarse` on touchscreen laptops even with a mouse) and disabled under
+`prefers-reduced-motion`. The cursor→rotation rect is read off the untransformed scene so the tilt doesn't
+feed back into its own bbox, and the rotation is applied as an **inline** transform so it beats the base
+`:hover` lift's specificity.
+
+**Layered depth (parallax) — the load-bearing architecture.** The 3D lives in
+`@media (any-hover) and (any-pointer) and (no-preference)`:
+- **Perspective on the SCENE (`.pp-med__stage`), rotation on the CARD (`.pp-med__art`).** The card is the
+  layers' *direct* parent — that's mandatory. Rotating the stage instead leaves the layers a level too
+  deep and `preserve-3d` flattens them.
+- **Two-plane look:** the backdrop (laurel) stays at Z0; the subject, its rising fill, and the glare lift
+  together to `translateZ(40px)`. The **foreground layer is hidden** on the hero so the subject owns
+  center stage. The raised subject carries a soft `drop-shadow` (a filter on the *leaf* is safe) to cast
+  onto the backdrop so it reads as *mounted*, not floating.
+- The flat material `drop-shadow` thickness is dropped here (`filter: none` on the card) — a filter
+  flattens 3D, and the parallax supplies the depth instead. Reduced-motion / touch keeps the flat, thick,
+  static badge (and the dialog stays a scroll container there).
+
+The companion **flip** (to a back face) is still a planned follow-up.
 
 ## Gotchas and Pitfalls
 
 - **`art_layers` are full URLs and a *filtered* list.** Render raw (`{{ layer }}`, never `{% static %}`
   — double-prefix) and **loop** rather than hardcode 3 `<img>`s (no-custom-art badges have 2 layers).
   State filters target `nth-child(1)` = backdrop, `nth-child(2)` = subject.
-- **The ring sits BEHIND the art** (`z-index: 0`) so the badge overlaps its inner edge — intentional
-  "ring around the object" depth. Don't shrink the ring to hug the art or it hides behind it.
-- **`radial-gradient(circle, ...)` masks default to `farthest-corner`**, so mask percentages map to the
-  element *corner*, not its radius — a too-tight band lands outside the circle and vanishes. Use
-  `closest-side` if you need radius-mapped percentages.
+- **The meter cells come from `frame['segments']`, computed server-side** (`build_badge_frame`), NOT in
+  the template — Django templates can't loop N times without a filter, so the bool list is prebuilt.
+  Change the cap in one place: `frame_service.SEGMENT_CAP`.
+- **Only `earned` is bright.** If you touch the state art filters, keep `in_progress` matched to
+  `unearned` (they share the dark-mount selectors) — brightening in-progress art breaks the at-a-glance
+  "done vs not done" read the meter exists to preserve.
+- **Parallax flatteners — the whole reason this was a saga.** `transform-style: preserve-3d` silently
+  computes to `flat` (layers "all move together") from THREE distinct places. All three bit us:
+  1. **On the element itself:** `isolation: isolate`, non-`none` `filter`, `overflow` ≠ visible,
+     `opacity < 1`, `mask`, `clip-path`, or **`will-change: transform`** (it promotes a compositing layer
+     that flattens). `.pp-med__stage` has `isolation: isolate` (glint blend) and `.pp-med__art` has the
+     material `filter` — both overridden (`isolation: auto`, `filter: none`) in the 3D block. Do NOT add
+     `will-change` to the card.
+  2. **On ANY ancestor of the 3D scene:** a `filter` / `overflow` ≠ visible / `will-change: transform`
+     re-flattens the whole subtree. The dialog's own `overflow: auto` (scroll) + base `will-change:
+     transform` did this — both are overridden to `visible` / `auto` on the dialog in the 3D block.
+  3. **On a CHILD:** `mix-blend-mode` on a descendant isolates a compositing group that flattens the
+     card. The JS-injected `.pp-med__glare` originally had `mix-blend-mode: screen`; injecting it *into
+     the card* flattened the very depth it sat in. The glare now uses a plain (no-blend) highlight.
+  If depth ever disappears again, walk the scene → card → layers chain AND every ancestor for one of these.
+- **The rising-colour fill img is `.pp-med__fill-l`, NOT `.pp-med__l`.** It's nested in `.pp-med__fill`
+  and deliberately outside the `.pp-med__l` class so the state darkening filters (`… .pp-med__l:nth-child(2)`)
+  don't grey it out — it must stay full-colour. Same reason maintenance tarnish is on `.pp-med__l`, not
+  `.pp-med__art`.
 - **Multi-line component comments must be `{% comment %}`**, not `{# #}` (which is single-line only and
   leaks to the page).
-- **The count clears the ring's overhang** via a `--sz`-proportional top margin; the group title clears
-  it via its bottom margin. If you resize the ring, re-check both.
+- **Counts align across states via the meter's reserved space.** Earned/unearned give the count a full
+  top margin; when a meter precedes it (`.pp-med__meter + .pp-med__count`) the meter has already
+  supplied that space, so the margin shrinks. If you change the meter's height/margin, re-check both so
+  the "X / Y" labels stay on one line across a mixed-state row.
 - **`dom_id` must be emitted exactly once per badge.** The same earned/in-progress frame renders in its
   shelf AND in the Showcase/Chase/Gallery — but the `#card-<id>` deep-link anchor lives on the **shelf**
   medallion only. Showcase, Chase, and every Gallery cell pass **`no_id=True`**; forgetting it produces

@@ -22,7 +22,7 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
         <div class="pp-showcase__row" data-showcase-row="{{ m.mode }}"{% if not forloop.first %} hidden{% endif %}>
             {% for f in m.frames %}
             <a class="pp-showcase__slot"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
-                {% include 'components/badge_medallion.html' with frame=f no_id=True %}
+                {% include 'components/badge_medallion.html' with frame=f no_id=True show_ids=True %}
                 <span class="pp-showcase__name">{{ f.series_name }}</span>
             </a>
             {% endfor %}
@@ -73,7 +73,7 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
                 <div class="pp-case__group-tiers">
                     {% for f in group.tiers %}
                     <a class="pp-case__slot"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-case-slot data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
-                        {% include 'components/badge_medallion.html' with frame=f %}
+                        {% include 'components/badge_medallion.html' with frame=f show_ids=True %}
                     </a>
                     {% endfor %}
                 </div>

@@ -463,6 +463,47 @@ def test_case_earned_badge_dom_id_is_not_duplicated_by_showcase(monkeypatch):
     assert html.count('id="card-%d"' % badges[0].id) == 1
 
 
+def test_medallion_in_progress_renders_meter_cells_and_rising_fill(monkeypatch):
+    """An in-progress medallion renders the segmented multi-bar (one cell per stage) AND the rising-colour
+    subject fill masked to progress_pct."""
+    from django.template.loader import render_to_string
+    from trophies.services.frame_service import build_badge_frame
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badge = BadgeFactory(series_slug='rs-ip', tier=1, badge_type='series', is_live=True,
+                         required_stages=5, display_series='rs-ip')
+    UserBadgeProgressFactory(profile=profile, badge=badge, completed_concepts=3)  # 3/5 = 60%
+    frame = build_badge_frame(badge, profile, include_live_stats=False)
+
+    html = render_to_string('components/badge_medallion.html', {'frame': frame})
+
+    assert html.count('pp-med__seg') == 5                       # one meter cell per required stage
+    assert 'pp-med__fill' in html and '--fill: 60%' in html     # subject colours in to progress
+    assert 'pp-med__ring' not in html                           # the ring is gone
+
+
+def test_medallion_surfaces_set_number_and_earn_rank_when_show_ids(monkeypatch):
+    """With show_ids, the medallion prints the badge's set number (every badge) and, for earned badges,
+    the permanent earn rank -- so both read at a glance on the Case/Gallery without opening the badge."""
+    from django.template.loader import render_to_string
+    from trophies.services.frame_service import build_badge_frame
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badge = BadgeFactory(series_slug='rs-id', tier=1, badge_type='series', is_live=True,
+                         required_stages=5, display_series='rs-id', set_number=42)
+    ub = UserBadgeFactory(profile=profile, badge=badge)
+    UserBadge.objects.filter(pk=ub.pk).update(earn_rank=7)  # 7th to earn this tier
+    frame = build_badge_frame(badge, profile, include_live_stats=False)
+
+    with_ids = render_to_string('components/badge_medallion.html', {'frame': frame, 'show_ids': True})
+    without = render_to_string('components/badge_medallion.html', {'frame': frame})
+
+    assert '#0042' in with_ids and '7th' in with_ids   # set number (zero-padded) + earn rank (ordinal)
+    assert 'pp-med__ids' not in without                # gated on show_ids -- off elsewhere (Chase, modal)
+
+
 def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
     """The Gallery renders each badge as a medallion cell (tapping opens the detail modal) with the
     shared tier/state filter chips + the sort control -- the visual sibling of the List table."""

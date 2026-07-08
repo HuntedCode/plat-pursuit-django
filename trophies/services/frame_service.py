@@ -19,6 +19,10 @@ from django.templatetags.static import static
 _TIER_NAME = {1: "bronze", 2: "silver", 3: "gold", 4: "platinum"}
 _NEXT_TIER_LABEL = {1: "Silver", 2: "Gold", 3: "Platinum", 4: "Maxed"}
 
+# Segmented progress meter: one cell per platinum/100% toward the badge, up to this many. Above the
+# cap the medallion renders a single smooth bar instead (individual cells stop being countable).
+SEGMENT_CAP = 12
+
 # Sentinel: distinguishes "caller did not pre-fetch" (query it) from "pre-fetched, and it
 # is None" (the viewer has no UserBadge/UserBadgeProgress for this badge -- do NOT query).
 _UNSET = object()
@@ -159,6 +163,11 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["earned_date"] = earned_date
     if progress_pct is not None:
         frame["progress_pct"] = progress_pct
+    # Segmented progress meter cells (the medallion's in-progress/maintenance states render these as a
+    # multi-bar). One cell per platinum/100%, filled up to stages_done; only when countable (<= cap).
+    # Above the cap the medallion falls back to a smooth bar off progress_pct instead.
+    if 0 < stages_total <= SEGMENT_CAP:
+        frame["segments"] = [i < stages_done for i in range(stages_total)]
 
     # --- STEP 2 data: type, franchise/developer, set mark, rarity, engraving,
     # live leaderboard position, series XP. The front face already renders the

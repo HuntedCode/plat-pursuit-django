@@ -15,6 +15,7 @@ CollectionBadgeModalView and fetched on tap. Expects `frame` (a full build_badge
         </div>
         {% if frame.description %}<p class="pp-bdetail__desc">{{ frame.description }}</p>{% endif %}
         <div class="pp-bdetail__stats">
+            {% if frame.set_number %}<div class="pp-bdetail__stat"><div class="k">Set number</div><div class="v">#{{ frame.set_number|stringformat:"04d" }}</div></div>{% endif %}
             {% if frame.stages_total %}<div class="pp-bdetail__stat"><div class="k">{% if frame.tier == 'silver' or frame.tier == 'platinum' %}100%s{% else %}Platinums{% endif %}</div><div class="v">{{ frame.stages_done|default:0 }} / {{ frame.stages_total }}</div></div>{% endif %}
             {% if frame.rarity_pct is not None %}<div class="pp-bdetail__stat"><div class="k">Rarity</div><div class="v">Top {{ frame.rarity_pct }}%{% if frame.rarity_rank %} &middot; #{{ frame.rarity_rank|intcomma }}{% endif %}</div></div>{% endif %}
             {% if frame.engraving_rank %}<div class="pp-bdetail__stat"><div class="k">Earn rank</div><div class="v">#{{ frame.engraving_rank|intcomma }}</div></div>{% endif %}
