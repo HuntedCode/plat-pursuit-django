@@ -21,7 +21,28 @@
     border-color: color-mix(in oklab, var(--pp-primary) 45%, transparent);
 }
 .pp-case__set-tab:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.pp-case__set-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--pal, var(--pp-primary)); }
+/* Completion ring (replaces the old dot): a conic fill in the set's palette shows how done the set is at a
+   glance -- the trophy-hunter's "close the ring". */
+.pp-case__set-ring {
+    width: 15px; height: 15px; border-radius: 50%; flex: 0 0 auto;
+    background: conic-gradient(var(--pal, var(--pp-primary)) calc(var(--pct, 0) * 1%), rgba(255, 255, 255, 0.14) 0);
+    -webkit-mask: radial-gradient(circle, transparent 47%, #000 49%);
+    mask: radial-gradient(circle, transparent 47%, #000 49%);
+    transition: background 0.5s ease;
+}
+/* Set complete: the ring seals into a solid glowing token + the tab picks up the palette -- a small payoff. */
+.pp-case__set-tab.is-complete .pp-case__set-ring {
+    background: var(--pal, var(--pp-primary)); -webkit-mask: none; mask: none;
+    box-shadow: 0 0 8px color-mix(in oklab, var(--pal, var(--pp-primary)) 65%, transparent);
+}
+.pp-case__set-tab.is-complete {
+    border-color: color-mix(in oklab, var(--pal, var(--pp-primary)) 50%, transparent);
+    color: var(--pp-text);
+}
+.pp-case__set-tab.is-complete .pp-case__set-count {
+    color: color-mix(in oklab, var(--pal, var(--pp-primary)) 75%, var(--pp-text));
+    font-weight: 700; letter-spacing: 0.03em;
+}
 .pp-case__set-count { font-variant-numeric: tabular-nums; color: var(--pp-text-mute); font-weight: 600; }
 .pp-case__set-tab.is-active .pp-case__set-count { color: var(--pp-text); }
 /* set palettes (scoped so they don't clash with the binder's [data-palette]) */
@@ -33,19 +54,62 @@
 /* ---- shelves: a grid of series GROUPS (each group's 4 tiers stay bound together) ---- */
 .pp-case__shelf[hidden] { display: none; }
 .pp-case__grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
-/* the group panel visually ties the 4 tiers of a series together */
+/* Each series group is a lit NICHE in the display case: light falls in from the top (the gradient), a thin
+   front-lip catches it (inset top highlight), and the floor recedes into shadow (inset bottom) -- so the
+   medallions read as objects set into a case, not tiles on a page. Inset-only shadows so content-visibility
+   (paint containment) doesn't clip them. */
 .pp-case__group {
     padding: 14px 14px 10px; border-radius: 16px;
-    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    background: linear-gradient(to bottom,
+        color-mix(in oklab, var(--pp-bg-2) 62%, transparent), color-mix(in oklab, var(--pp-bg-1) 34%, transparent));
     border: 1px solid var(--pp-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055), inset 0 -16px 28px -16px rgba(0, 0, 0, 0.42);
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
     /* Skip painting off-screen groups (each holds 4 filter-heavy medallions) -- the big scroll win.
        `auto` intrinsic size self-corrects after first render so the scrollbar doesn't jump. */
     content-visibility: auto;
     contain-intrinsic-size: auto 300px;
 }
-.pp-case__group-name { font-size: 13px; font-weight: 700; color: var(--pp-text); margin: 0 0 20px; padding-left: 4px; }
+/* Hover WARMS the display light (no lift -- the medallions already lift, and doubling reads busy). */
+@media (hover: hover) {
+    .pp-case__group:hover {
+        border-color: color-mix(in oklab, var(--pp-primary) 24%, var(--pp-border));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09),
+            inset 0 0 30px -6px color-mix(in oklab, var(--pp-primary) 15%, transparent),
+            inset 0 -16px 28px -16px rgba(0, 0, 0, 0.42);
+    }
+}
+/* Group header: series name + its own little quest -- "2/4" toward the full set, a check when complete. */
+.pp-case__group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 20px; padding-left: 4px; }
+.pp-case__group-name { font-size: 13px; font-weight: 700; color: var(--pp-text); }
+.pp-case__group-prog { flex: 0 0 auto; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.03em; color: var(--pp-text-mute); }
+.pp-case__group.is-complete .pp-case__group-prog {
+    font-size: 13px; color: color-mix(in oklab, var(--pp-primary) 82%, var(--pp-text));
+    text-shadow: 0 0 9px color-mix(in oklab, var(--pp-primary) 45%, transparent);
+}
+/* A fully-earned series gets a quiet payoff: the niche light warms with the accent + a brighter border,
+   so the completed quest reads (the base niche shadow carries through -- only bg + border change here). */
+.pp-case__group.is-complete {
+    border-color: color-mix(in oklab, var(--pp-primary) 34%, var(--pp-border));
+    background: linear-gradient(to bottom,
+        color-mix(in oklab, var(--pp-primary) 10%, color-mix(in oklab, var(--pp-bg-2) 62%, transparent)),
+        color-mix(in oklab, var(--pp-bg-1) 34%, transparent));
+}
 .pp-case__group-tiers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 6px; justify-items: center; }
 .pp-case__slot { display: flex; justify-content: center; text-decoration: none; color: inherit; }
+/* Aspirational "next": a NEON glow tracing the next rung's silhouette. Appended to the art's existing
+   rim-light + cast drop-shadows (a bright near-white core + a wider colour bloom) so it reads as EMITTED
+   light hugging the emblem, not a disc behind it -- and drop-shadow draws outside the art, so nothing
+   occludes it. Earned art stays the only bright art; this lights the next rung to climb without
+   recolouring it. Static: pulsing would animate a filter every frame across cells (the exact "metal wall"
+   scroll-lag this file already warns about) -- steady neon reads as "alive" just fine. */
+.pp-case__slot.is-next .pp-med__art {
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.22))
+        drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4))
+        drop-shadow(0 0 4px color-mix(in oklab, white 16%, var(--pp-primary)))
+        drop-shadow(0 0 12px color-mix(in oklab, var(--pp-primary) 55%, transparent));
+}
 
 /* Staggered "settle onto the shelf" arrival: each series group rises + fades + scales in. Pure CSS, applied
    unconditionally so it plays on load AND replays whenever a shelf/view is shown again -- toggling the

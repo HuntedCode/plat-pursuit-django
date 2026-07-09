@@ -87,8 +87,14 @@
         var tabs = Array.prototype.slice.call(caseEl.querySelectorAll('[data-set-tab]'));
         var shelves = Array.prototype.slice.call(caseEl.querySelectorAll('.pp-case__shelf[data-set]'));
         if (!shelves.length) return;
+        // The set the case is currently showing (template marks the first tab active). Guards
+        // activateSet against redundant re-activation -- and against a haptic tick when you tap the
+        // set you're already on.
+        var currentKey = tabs.length ? tabs[0].getAttribute('data-set-tab') : null;
 
-        function activateSet(key) {
+        function activateSet(key, userAction) {
+            if (key === currentKey) return;
+            currentKey = key;
             shelves.forEach(function (s) { s.hidden = s.getAttribute('data-set') !== key; });
             tabs.forEach(function (t) {
                 var on = t.getAttribute('data-set-tab') === key;
@@ -96,9 +102,11 @@
                 t.setAttribute('aria-selected', on ? 'true' : 'false');
                 t.tabIndex = on ? 0 : -1;   // roving tabindex: only the active tab is in the tab order
             });
+            // A light tick confirms the switch on touch devices (desktop has no vibrate -- a no-op there).
+            if (userAction && navigator.vibrate) { try { navigator.vibrate(5); } catch (e) {} }
         }
         tabs.forEach(function (tab, i) {
-            tab.addEventListener('click', function () { activateSet(tab.getAttribute('data-set-tab')); });
+            tab.addEventListener('click', function () { activateSet(tab.getAttribute('data-set-tab'), true); });
             // WAI-ARIA tabs keyboard model: arrows/Home/End move focus AND activate the tab.
             tab.addEventListener('keydown', function (e) {
                 var next = -1;
@@ -108,7 +116,7 @@
                 else if (e.key === 'End') next = tabs.length - 1;
                 else return;
                 e.preventDefault();
-                activateSet(tabs[next].getAttribute('data-set-tab'));
+                activateSet(tabs[next].getAttribute('data-set-tab'), true);
                 tabs[next].focus();
             });
         });

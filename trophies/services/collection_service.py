@@ -159,6 +159,21 @@ def _build_sets(profile, sort=DEFAULT_SORT):
                 groups[-1]['tiers'].append(fr)
             else:
                 groups.append({'name': fr.get('series_name'), 'slug': slug, 'tiers': [fr]})
+        set_total = len(section)
+        set_earned = sum(1 for b in section if b.id in earned_ids)
+        # Per-series progress for the group headers (a series = 4 tiers, bronze -> platinum). "Held" =
+        # earned or maintenance (you earned it, it may have lapsed) so the completion ring counts it.
+        for g in groups:
+            g['total'] = len(g['tiers'])
+            g['earned'] = sum(1 for t in g['tiers'] if t.get('state') in ('earned', 'maintenance'))
+            g['complete'] = g['total'] > 0 and g['earned'] >= g['total']
+            # Aspirational "next": glow the next rung to climb -- the first tier you don't yet HOLD,
+            # whether you've started it (in_progress) or not (unearned). A fully-held series has none.
+            # Tiers are bronze -> platinum order, so the first non-held one is the lowest rung left.
+            for t in g['tiers']:
+                if t.get('state') not in ('earned', 'maintenance'):
+                    t['is_next'] = True
+                    break
         binder_sets.append({
             'key': btype,
             'label': label,
@@ -166,8 +181,10 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             'groups': groups,
             'pages': pages,
             'spreads': spreads,
-            'total': len(section),
-            'earned': sum(1 for b in section if b.id in earned_ids),
+            'total': set_total,
+            'earned': set_earned,
+            'pct': round(set_earned / set_total * 100) if set_total else 0,
+            'complete': set_total > 0 and set_earned >= set_total,
         })
 
     # Showcase = your proudest earned, in three swappable modes (the client toggles; per-badge curation

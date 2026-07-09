@@ -75,8 +75,8 @@
     </div>
 
     {% if dev_mint %}
-    {# Dev-only (settings.DEBUG): replay the first-earn mint ceremony on the visible earned badges. Reuses
-       the claim-ceremony dev-panel styling; never ships to prod. #}
+    {% comment %} Dev-only (settings.DEBUG): replay the first-earn mint ceremony on the visible earned
+    badges. Reuses the claim-ceremony dev-panel styling; never ships to prod. {% endcomment %}
     <div class="ccx-dev" aria-hidden="true">
         <div class="ccx-dev__title">Mint ceremony</div>
         <div class="ccx-dev__row">

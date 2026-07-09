@@ -51,13 +51,13 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
     {% if binder_sets %}
     <div class="pp-case__sets" role="tablist" aria-label="Collection sets">
         {% for set in binder_sets %}
-        <button type="button" class="pp-case__set-tab{% if forloop.first %} is-active{% endif %}"
+        <button type="button" class="pp-case__set-tab{% if forloop.first %} is-active{% endif %}{% if set.complete %} is-complete{% endif %}"
                 role="tab" id="case-tab-{{ set.key }}" aria-controls="case-panel-{{ set.key }}"
                 aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
                 data-set-tab="{{ set.key }}" data-palette="{{ set.palette }}">
-            <span class="pp-case__set-dot" data-palette="{{ set.palette }}"></span>
+            <span class="pp-case__set-ring" data-palette="{{ set.palette }}" style="--pct: {{ set.pct }};" aria-hidden="true"></span>
             <span class="pp-case__set-label">{{ set.label }}</span>
-            <span class="pp-case__set-count">{{ set.earned }}/{{ set.total }}</span>
+            <span class="pp-case__set-count">{% if set.complete %}Complete{% else %}{{ set.earned }}/{{ set.total }}{% endif %}</span>
         </button>
         {% endfor %}
     </div>
@@ -68,11 +68,15 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
              id="case-panel-{{ set.key }}" role="tabpanel" aria-labelledby="case-tab-{{ set.key }}" tabindex="0">
         <div class="pp-case__grid">
             {% for group in set.groups %}
-            <div class="pp-case__group">
-                <div class="pp-case__group-name">{{ group.name }}</div>
+            <div class="pp-case__group{% if group.complete %} is-complete{% endif %}">
+                <div class="pp-case__group-head">
+                    <span class="pp-case__group-name">{{ group.name }}</span>
+                    <span class="pp-case__group-prog" aria-hidden="true">{% if group.complete %}&#10003;{% else %}{{ group.earned }}/{{ group.total }}{% endif %}</span>
+                    <span class="sr-only">{% if group.complete %}series complete{% else %}{{ group.earned }} of {{ group.total }} earned{% endif %}</span>
+                </div>
                 <div class="pp-case__group-tiers">
                     {% for f in group.tiers %}
-                    <a class="pp-case__slot"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-case-slot data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
+                    <a class="pp-case__slot{% if f.is_next %} is-next{% endif %}"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-case-slot data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
                         {% include 'components/badge_medallion.html' with frame=f show_ids=True %}
                     </a>
                     {% endfor %}
