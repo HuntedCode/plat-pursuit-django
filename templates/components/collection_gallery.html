@@ -41,6 +41,7 @@ collection-gallery.css, wired by collection.js (initGallery).
                 <option value="rarity:asc">Rarest first</option>
                 <option value="tier:desc">Tier (Platinum first)</option>
                 <option value="progress:desc">Closest to complete</option>
+                <option value="earned:desc">Recently earned</option>
                 <option value="set_number:asc">Set order</option>
             </select>
         </label>
@@ -59,6 +60,7 @@ collection-gallery.css, wired by collection.js (initGallery).
            data-rarity-pct="{{ badge.rarity_pct|default:0 }}"
            data-rank="{{ badge.engraving_rank|default:0 }}"
            data-progress="{{ badge.progress_pct|default:0 }}"
+           data-earned="{{ badge.earned_ts|default:0 }}"
            {% if badge.series_slug %}href="{% url 'badge_detail' badge.series_slug %}"{% endif %}
            data-modal-url="{% url 'collection_badge_modal' badge.badge_id %}">
             {% include 'components/badge_medallion.html' with frame=badge no_id=True show_ids=True %}

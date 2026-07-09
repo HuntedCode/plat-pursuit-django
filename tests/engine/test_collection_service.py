@@ -301,8 +301,6 @@ def test_no_badges_returns_empty_summary():
     assert ctx['summary']['total'] == 0
     assert ctx['list_badges'] == []
     assert ctx['themes'] == []
-    assert ctx['showcase'] == []
-    assert ctx['chase'] == []
 
 
 # --- the Case: series groups (4 tiers bound together, never split) -------------
@@ -334,7 +332,7 @@ def test_groups_respect_the_active_sort():
     assert [g['slug'] for g in s['groups']] == ['alpha', 'zeta']  # alpha wins under series sort
 
 
-# --- the Case: Showcase (proudest earned, swappable modes) --------------------
+# --- the Gallery: "Recently earned" sort data (earned_ts) ---------------------
 
 
 def _earn(profile, slug, tier, **badge_kwargs):
@@ -344,103 +342,38 @@ def _earn(profile, slug, tier, **badge_kwargs):
     return badge
 
 
-def test_showcase_rarest_mode_orders_by_rarity(monkeypatch):
+def test_frames_carry_earned_ts_for_the_gallery_sort(monkeypatch):
+    """Each frame exposes `earned_ts` (the earn epoch, 0 when not held) so the Gallery's client-side
+    'Recently earned' sort has a numeric key. Held badges get a positive epoch; unearned stay 0."""
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
     profile = ProfileFactory()
-    _earn(profile, 'common', 1, rarity_pct=40.0)
-    _earn(profile, 'rare', 1, rarity_pct=2.0)
+    _earn(profile, 'held', 1)
+    _series('unheld', 'series')   # all unearned
 
-    showcase = build_collection_context(profile)['showcase']
+    by_slug = {
+        f['series_slug']: f
+        for s in build_collection_context(profile)['binder_sets']
+        for g in s['groups'] for f in g['tiers']
+    }
 
-    rarest = next(m for m in showcase if m['mode'] == 'rarest')
-    assert [f['series_name'] for f in rarest['frames']] == ['rare', 'common']  # 2% before 40%
-
-
-def test_showcase_platinum_mode_only_appears_with_a_top_tier_earn(monkeypatch):
-    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
-    profile = ProfileFactory()
-    _earn(profile, 'bronze-only', 1, rarity_pct=10.0)
-
-    modes = {m['mode'] for m in build_collection_context(profile)['showcase']}
-    assert 'rarest' in modes and 'platinum' not in modes   # nothing tier-4 earned yet
-
-    _earn(profile, 'the-plat', 4, rarity_pct=1.0)
-    showcase = build_collection_context(profile)['showcase']
-    plat = next(m for m in showcase if m['mode'] == 'platinum')
-    assert [f['tier'] for f in plat['frames']] == ['platinum']  # only the tier-4 earn
+    assert by_slug['held']['earned_ts'] > 0       # a real earn epoch
+    assert by_slug['unheld']['earned_ts'] == 0    # not held -> sinks under a desc sort
 
 
-def test_showcase_is_empty_without_any_earned_badge():
-    profile = ProfileFactory()
-    _series('rs-x')   # all unearned
-
-    assert build_collection_context(profile)['showcase'] == []
-
-
-def test_showcase_caps_each_mode_at_six(monkeypatch):
-    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
-    profile = ProfileFactory()
-    for i in range(8):
-        _earn(profile, f'rs-{i}', 1, rarity_pct=float(i))
-
-    rarest = next(m for m in build_collection_context(profile)['showcase'] if m['mode'] == 'rarest')
-
-    assert len(rarest['frames']) == 6  # N_SHOW cap
-
-
-# --- the Case: Chase (closest to complete, one per series) --------------------
-
-
-def test_chase_orders_by_progress_and_dedupes_per_series(monkeypatch):
-    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
-    profile = ProfileFactory()
-    a = _series('ch-a', 'series')   # required_stages=5
-    b = _series('ch-b', 'series')
-    UserBadgeProgressFactory(profile=profile, badge=a[0], completed_concepts=4)  # 0.8
-    UserBadgeProgressFactory(profile=profile, badge=b[0], completed_concepts=1)  # 0.2
-    # a second in-progress tier of the SAME series must not add a second chase entry
-    UserBadgeProgressFactory(profile=profile, badge=a[1], completed_concepts=2)  # 0.4
-
-    chase = build_collection_context(profile)['chase']
-
-    assert [f['series_name'] for f in chase] == ['ch-a', 'ch-b']  # higher fraction first
-    assert chase[0]['tier'] == 'bronze'                            # the closest tier of ch-a wins
-
-
-def test_chase_is_empty_without_progress():
-    profile = ProfileFactory()
-    _series('rs-x')   # no UserBadgeProgress rows
-
-    assert build_collection_context(profile)['chase'] == []
-
-
-def test_chase_caps_at_four(monkeypatch):
-    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
-    profile = ProfileFactory()
-    for i in range(6):
-        s = _series(f'ch-{i}', 'series')
-        UserBadgeProgressFactory(profile=profile, badge=s[0], completed_concepts=i + 1)
-
-    chase = build_collection_context(profile)['chase']
-
-    assert len(chase) == 4  # N_CHASE cap
-
-
-def test_case_template_renders_medallions_showcase_chase_and_tablist(monkeypatch):
-    """The Case template renders the medallion grid plus the Showcase/Chase sections, and wires the
-    set tabs to their panels (role=tab -> aria-controls -> role=tabpanel) for screen readers."""
+def test_case_template_renders_medallions_and_tablist(monkeypatch):
+    """The Case template renders the medallion grid and wires the set tabs to their panels
+    (role=tab -> aria-controls -> role=tabpanel) for screen readers. Showcase/Chase were retired --
+    the Gallery's sort/filter now owns 'proudest' and 'closest' views."""
     from django.template.loader import render_to_string
 
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
     profile = ProfileFactory()
-    badges = _series('rs-case')
-    UserBadgeFactory(profile=profile, badge=badges[0])                           # earned -> Showcase
-    UserBadgeProgressFactory(profile=profile, badge=badges[1], completed_concepts=3)  # in-progress -> Chase
+    _series('rs-case')
 
     html = render_to_string('components/collection_case.html', build_collection_context(profile))
 
     assert 'pp-med' in html                                   # medallion component rendered
-    assert 'pp-showcase' in html and 'pp-chase' in html       # both top-of-Case sections present
+    assert 'pp-showcase' not in html and 'pp-chase' not in html   # retired top-of-Case sections
     # tablist wiring: the tab controls a panel that points back at the tab.
     assert 'id="case-tab-series"' in html
     assert 'aria-controls="case-panel-series"' in html
@@ -448,15 +381,15 @@ def test_case_template_renders_medallions_showcase_chase_and_tablist(monkeypatch
     assert 'role="tabpanel"' in html and 'aria-labelledby="case-tab-series"' in html
 
 
-def test_case_earned_badge_dom_id_is_not_duplicated_by_showcase(monkeypatch):
-    """A badge shown in both its shelf AND the Showcase must emit its #card-<id> anchor only ONCE
-    (the shelf owns it; Showcase/Chase pass no_id) -- else the deep-link jump lands on the wrong node."""
+def test_case_earned_badge_dom_id_emitted_once(monkeypatch):
+    """The shelf owns each badge's #card-<id> deep-link anchor and must emit it exactly once, so the
+    list 'View ->' jump lands on the right node."""
     from django.template.loader import render_to_string
 
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
     profile = ProfileFactory()
     badges = _series('rs-dup')
-    UserBadgeFactory(profile=profile, badge=badges[0])  # earned -> appears in shelf AND Showcase
+    UserBadgeFactory(profile=profile, badge=badges[0])
 
     html = render_to_string('components/collection_case.html', build_collection_context(profile))
 
@@ -501,7 +434,7 @@ def test_medallion_surfaces_set_number_and_earn_rank_when_show_ids(monkeypatch):
     without = render_to_string('components/badge_medallion.html', {'frame': frame})
 
     assert '#0042' in with_ids and '7th' in with_ids   # set number (zero-padded) + earn rank (ordinal)
-    assert 'pp-med__ids' not in without                # gated on show_ids -- off elsewhere (Chase, modal)
+    assert 'pp-med__ids' not in without                # gated on show_ids -- off in no_id contexts (modal)
 
 
 def test_holographic_foil_renders_only_for_earned_special_badges(monkeypatch):

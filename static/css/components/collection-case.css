@@ -146,38 +146,6 @@
 }
 
 /* ============================================================
- * Showcase (your proudest, swappable) + Chase (closest to complete) -- top of the Case.
- * ============================================================ */
-.pp-showcase { margin-bottom: 30px; }
-.pp-showcase__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.pp-showcase__title { font-size: 18px; font-weight: 800; margin: 0; }
-.pp-showcase__modes { display: inline-flex; gap: 4px; padding: 3px; border: 1px solid var(--pp-border); border-radius: 999px; background: var(--pp-bg-2); }
-.pp-showcase__mode { font: inherit; font-size: 12px; font-weight: 700; padding: 5px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--pp-text-mute); cursor: pointer; transition: color 0.18s ease, background 0.18s ease; }
-.pp-showcase__mode:hover { color: var(--pp-text); }
-.pp-showcase__mode.is-active { background: var(--pp-primary); color: #041016; }
-.pp-showcase__mode:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
-.pp-showcase__row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 22px 10px; justify-items: center; }
-.pp-showcase__row[hidden] { display: none; }
-.pp-showcase__slot { display: flex; flex-direction: column; align-items: center; gap: 6px; text-decoration: none; color: inherit; }
-.pp-showcase__row .pp-med { --sz: 130px; }
-.pp-showcase__row .pp-med__count { display: none; }   /* all showcased are earned -> "N/N" is noise; the ids line carries edition + earn rank */
-.pp-showcase__name { font-size: 12px; font-weight: 600; color: var(--pp-text-mute); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pp-showcase__slot:hover .pp-showcase__name { color: var(--pp-text); }
-@media (min-width: 768px) { .pp-showcase__row .pp-med { --sz: 156px; } }
-@media (min-width: 1024px) { .pp-showcase__row .pp-med { --sz: 172px; } }
-
-.pp-chase { margin-bottom: 30px; padding: 16px; border: 1px solid var(--pp-border); border-radius: 16px; background: color-mix(in oklab, var(--pp-primary) 5%, var(--pp-bg-1)); }
-.pp-chase__title { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pp-text-mute); margin-bottom: 12px; }
-.pp-chase__strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
-.pp-chase__item { display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; flex: 0 0 auto; padding: 6px 16px 6px 6px; border-radius: 12px; transition: background 0.18s ease; }
-.pp-chase__item:hover { background: var(--pp-bg-2); }
-.pp-chase__item .pp-med { --sz: 68px; }
-.pp-chase__item .pp-med__count,
-.pp-chase__item .pp-med__meter { display: none; }   /* the strip shows progress in the meta instead */
-.pp-chase__name { font-size: 14px; font-weight: 700; color: var(--pp-text); white-space: nowrap; }
-.pp-chase__prog { font-size: 12px; color: var(--pp-text-mute); white-space: nowrap; }
-
-/* ============================================================
  * Badge detail modal ("pick it up") -- fetched on tap.
  * ============================================================ */
 .pp-detail-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 20px; }

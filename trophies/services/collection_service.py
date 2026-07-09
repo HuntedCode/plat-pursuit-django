@@ -69,7 +69,7 @@ def _build_sets(profile, sort=DEFAULT_SORT):
     """
     badges = _live_badges()
     if not badges:
-        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}}, [], []
+        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}}
 
     # Bulk per-viewer state (one query each), keyed by badge id.
     badge_ids = [b.id for b in badges]
@@ -101,7 +101,6 @@ def _build_sets(profile, sort=DEFAULT_SORT):
     earned_ids = set(earned_map.keys())
     sort_key = _sort_key(sort)
     binder_sets, palette_i = [], 0
-    showcase_pool, chase_pool = [], []   # accumulate across sets for the top-of-Case Showcase + Chase
     for btype in ordered_types:
         section = sorted(by_type[btype], key=sort_key)
         palette = _PALETTES[palette_i % len(_PALETTES)]
@@ -123,21 +122,10 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             frame['dom_id'] = f"card-{b.id}"
             frame['series_slug'] = b.series_slug
             frame['badge_id'] = b.id   # the collection detail modal fetches by id
+            # Epoch of the earn (0 when not held) -- powers the Gallery's "Recently earned" sort.
+            ub = earned_map.get(b.id)
+            frame['earned_ts'] = int(ub.earned_at.timestamp()) if ub and ub.earned_at else 0
             frames.append(frame)
-
-            # Feed the Showcase (earned) + Chase (in-progress) pools with the sort metadata they need.
-            if frame.get('state') == 'earned':
-                ub = earned_map.get(b.id)
-                showcase_pool.append({
-                    'frame': frame,
-                    'rarity': b.rarity_pct if b.rarity_pct is not None else 999.0,
-                    'earned_at': ub.earned_at if ub else None,
-                    'tier': b.tier,
-                })
-            elif frame.get('state') == 'in_progress':
-                total = frame.get('stages_total') or 0
-                done = frame.get('stages_done') or 0
-                chase_pool.append({'frame': frame, 'frac': (done / total) if total else 0.0, 'series': b.series_slug or ''})
 
         # Each set is its own binder view; pages are numbered WITHIN the set.
         pages = [
@@ -187,24 +175,6 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             'complete': set_total > 0 and set_earned >= set_total,
         })
 
-    # Showcase = your proudest earned, in three swappable modes (the client toggles; per-badge curation
-    # is the future customization update). Chase = the badges you're closest to earning, one per series.
-    N_SHOW, N_CHASE = 6, 4
-    _modes = [
-        ('rarest', 'Rarest', sorted(showcase_pool, key=lambda x: x['rarity'])),
-        ('newest', 'Newest', sorted((x for x in showcase_pool if x['earned_at']), key=lambda x: x['earned_at'], reverse=True)),
-        ('platinum', 'Top tier', sorted((x for x in showcase_pool if x['tier'] == 4), key=lambda x: x['rarity'])),
-    ]
-    showcase = [{'mode': m, 'label': lbl, 'frames': [x['frame'] for x in pool[:N_SHOW]]} for m, lbl, pool in _modes if pool]
-    seen_series, chase = set(), []
-    for x in sorted(chase_pool, key=lambda x: x['frac'], reverse=True):
-        if x['series'] and x['series'] in seen_series:
-            continue
-        seen_series.add(x['series'])
-        chase.append(x['frame'])
-        if len(chase) >= N_CHASE:
-            break
-
     by_tier = defaultdict(int)
     for b in badges:
         if b.id in earned_ids:
@@ -217,7 +187,7 @@ def _build_sets(profile, sort=DEFAULT_SORT):
         'pct': round(earned / total * 100) if total else 0,
         'by_tier': dict(by_tier),
     }
-    return binder_sets, summary, showcase, chase
+    return binder_sets, summary
 
 
 def _flatten_for_list(binder_sets):
@@ -246,16 +216,13 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
         sort = DEFAULT_SORT
     context = {
         'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}},
-        'showcase': [], 'chase': [],
         'list_badges': [], 'themes': [], 'total_pages': 0,
         'sort': sort, 'sort_options': COLLECTION_SORTS,
     }
     try:
-        binder_sets, summary, showcase, chase = _build_sets(profile, sort)
+        binder_sets, summary = _build_sets(profile, sort)
         context['binder_sets'] = binder_sets
         context['summary'] = summary
-        context['showcase'] = showcase
-        context['chase'] = chase
         context['total_pages'] = sum(len(s['pages']) for s in binder_sets)
         context['list_badges'], context['themes'] = _flatten_for_list(binder_sets)
     except Exception:
