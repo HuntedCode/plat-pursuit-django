@@ -307,6 +307,19 @@ def test_server_platform_default_is_modern():
     assert 'plat-ps3' in _slugs(contracts_page(profile, platforms=['PS3']))   # opt-in to legacy
 
 
+def test_platform_filter_matches_any_overlapping_platform():
+    """A member game on MULTIPLE platforms is matched when the board includes ANY of them -- the
+    EXISTS `?|` overlap must mirror the old OR-of-contains. Regression guard for the platform-filter
+    query rewrite (M2M join -> EXISTS)."""
+    profile = ProfileFactory()
+    _c, _con, g = _contract('multi')
+    g.title_platform = ['PS4', 'PS3']                       # one legacy + one current-gen
+    g.save(update_fields=['title_platform'])
+    assert 'multi' in _slugs(contracts_page(profile))                        # current-gen default (PS4 overlaps)
+    assert 'multi' in _slugs(contracts_page(profile, platforms=['PS3']))     # legacy-only board (PS3 overlaps)
+    assert 'multi' not in _slugs(contracts_page(profile, platforms=['PS5'])) # a board it shares no platform with
+
+
 def test_server_job_drilldown():
     profile = ProfileFactory()
     _contract('job-gs', ('gunslinger', 'mage'))

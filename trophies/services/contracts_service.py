@@ -209,6 +209,18 @@ _SORTS = {
 }
 
 
+def _platform_exists(platforms):
+    """A contract with any member game on one of `platforms`, as an EXISTS subquery rather than an
+    M2M join through memberships->concept->games. The join multiplied contract rows (one per member
+    game x platform), which forced a DISTINCT and made the planner seq-scan the whole game table
+    re-evaluating the JSONB filter (~170ms on the default board). EXISTS evaluates once per contract
+    and hits the title_platform GIN index via `?|` (has_any_keys)."""
+    return Exists(Game.objects.filter(
+        concept__contract_membership__contract=OuterRef('pk'),
+        title_platform__has_any_keys=list(platforms),
+    ))
+
+
 def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platforms=None):
     if status and status != 'all':
         qs = qs.filter(status=status)
@@ -219,11 +231,8 @@ def _filter_contracts(qs, q='', status='', disciplines=None, jobs=None, platform
     for disc in (disciplines or ()):
         if disc and disc != 'all':
             qs = qs.filter(jobs__discipline=disc)
-    if platforms:                             # any member game on a selected platform (GIN-indexed JSONB)
-        plat_q = Q()
-        for p in platforms:
-            plat_q |= Q(memberships__concept__games__title_platform__contains=[p])
-        qs = qs.filter(plat_q)
+    if platforms:                             # any member game on a selected platform (EXISTS, not a join)
+        qs = qs.filter(_platform_exists(platforms))
     if q:
         qs = qs.filter(
             Q(name__icontains=q)
@@ -368,7 +377,7 @@ def board_facets(profile, disc_levels=None, q='', status='', disciplines=None, j
     # platform shows its true total even while the board is defaulted to current-gen.
     p_base = _filter_contracts(base, q=q, status=status, disciplines=disciplines, jobs=jobs)
     platform_counts = {
-        p: p_base.filter(memberships__concept__games__title_platform__contains=[p]).distinct().count()
+        p: p_base.filter(_platform_exists([p])).distinct().count()
         for p in ALL_PLATFORMS
     }
     # Discipline + job popovers: REFINEMENT counts. Jobs/disciplines are ANDed, so unlike the OR-based
