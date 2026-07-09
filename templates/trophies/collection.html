@@ -27,21 +27,28 @@
                         <span class="text-sm text-base-content/50">/ {{ summary.total|intcomma }}</span>
                     </div>
                     <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">badges collected &middot; {{ summary.pct }}%</div>
+                    {% if summary.recent %}
+                    {# Momentum: earns within the last week -- only rendered when there's something new. #}
+                    <div class="pp-coll-new mt-1.5" title="Badges earned in the last 7 days">
+                        <span class="pp-coll-new__spark" aria-hidden="true"></span>+{{ summary.recent }} this week
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
             {# Completion Horizon + tier composition -- substance in the header, not a separate section. #}
             <div class="mt-3 md:mt-4">
                 <div class="pp-horizon" data-horizon-band="{{ summary.pct|horizon_band }}" style="--horizon-h: 6px;">
-                    <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {{ summary.pct }}%;"></span></span>
+                    <span class="pp-horizon__track"><span class="pp-horizon__fill pp-coll-horizon" style="--horizon-progress: {{ summary.pct }}%;"></span></span>
                 </div>
                 <div class="pp-coll-tiers">
                     {% for t in summary.tiers %}
-                    <span class="pp-coll-tier" data-tier="{{ t.key }}">
+                    <button type="button" class="pp-coll-tier" data-tier="{{ t.key }}" data-tier-jump="{{ t.key }}"
+                            aria-label="Show {{ t.label }} badges in the Gallery">
                         <span class="pp-coll-tier__dot" aria-hidden="true"></span>
                         <span class="pp-coll-tier__n pp-tally" data-countup="{{ t.count }}">{{ t.count }}</span>
                         <span class="pp-coll-tier__label">{{ t.label }}</span>
-                    </span>
+                    </button>
                     {% endfor %}
                 </div>
             </div>

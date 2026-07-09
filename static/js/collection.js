@@ -767,11 +767,23 @@
     function init() {
         var root = document.querySelector('.pp-collection');
         if (!root) return;
-        // Header stats (earned tally + tier composition) count up on load -- shared util; no-op if
+        // Header stats (earned tally + tier composition) count up on load, matched to the completion
+        // bar's ~0.85s CSS entrance so the number and the bar rise together -- shared util; no-op if
         // reduced-motion or utils.js hasn't loaded.
         if (window.PlatPursuit && PlatPursuit.countUp) {
-            root.querySelectorAll('[data-countup]').forEach(function (el) { PlatPursuit.countUp(el); });
+            root.querySelectorAll('[data-countup]').forEach(function (el) { PlatPursuit.countUp(el, 850); });
         }
+        // Tappable tier stats: jump to the Gallery filtered to that tier ("stats are controls"). Reuses
+        // the existing view-chip + filter-chip handlers by clicking them, so no new filter logic here.
+        root.querySelectorAll('[data-tier-jump]').forEach(function (el) {
+            el.addEventListener('click', function () {
+                var tier = el.getAttribute('data-tier-jump');
+                var galleryChip = root.querySelector('.pp-collection__view-chip[data-collection-view="gallery"]');
+                if (galleryChip) galleryChip.click();
+                var filterChip = root.querySelector('.pp-gallery [data-filter-tier="' + tier + '"]');
+                if (filterChip) filterChip.click();
+            });
+        });
         initViewToggle(root);
         initCase(root);
         initDetail(root);

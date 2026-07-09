@@ -12,12 +12,17 @@ prescribed batch path). Read-only.
 """
 import logging
 from collections import defaultdict
+from datetime import timedelta
+
+from django.utils import timezone
 
 from trophies.models import Badge, UserBadge, UserBadgeProgress
 from trophies.services.frame_service import build_badge_frame
 from trophies.services.redis_leaderboard_service import get_earners_ranks
 
 logger = logging.getLogger(__name__)
+
+_RECENT_DAYS = 7  # window for the header's "+N this week" momentum pill
 
 # Section order (badge types) + the binder page palettes that cycle per section. Each badge
 # type is its own "set" (its own page run + independent set numbering).
@@ -69,7 +74,7 @@ def _build_sets(profile, sort=DEFAULT_SORT):
     """
     badges = _live_badges()
     if not badges:
-        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'tiers': []}
+        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'recent': 0, 'tiers': []}
 
     # Bulk per-viewer state (one query each), keyed by badge id.
     badge_ids = [b.id for b in badges]
@@ -181,11 +186,16 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             by_tier[_TIER_NAME.get(b.tier, 'gold')] += 1
     earned = len(earned_ids)
     total = len(badges)
+    # "+N this week" momentum: earns within the recent window. Counts off the already-fetched
+    # earned_map (bounded by live-badge count, not the user's trophy count) -- whale-safe, no new query.
+    recent_cutoff = timezone.now() - timedelta(days=_RECENT_DAYS)
+    recent = sum(1 for ub in earned_map.values() if ub.earned_at and ub.earned_at >= recent_cutoff)
     summary = {
         'total': total,
         'earned': earned,
         'pct': round(earned / total * 100) if total else 0,
         'by_tier': dict(by_tier),
+        'recent': recent,
         # Ordered bronze->platinum breakdown for the header's at-a-glance composition row.
         'tiers': [
             {'key': name, 'label': name.title(), 'count': by_tier.get(name, 0)}
@@ -220,7 +230,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
     if sort not in dict(COLLECTION_SORTS):
         sort = DEFAULT_SORT
     context = {
-        'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'tiers': []},
+        'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'recent': 0, 'tiers': []},
         'list_badges': [], 'themes': [], 'total_pages': 0,
         'sort': sort, 'sort_options': COLLECTION_SORTS,
     }

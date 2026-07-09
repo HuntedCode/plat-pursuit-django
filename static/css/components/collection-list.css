@@ -21,8 +21,16 @@
 /* ── Header: completion Horizon + tier composition row ──────────────
  * At-a-glance breakdown in the summary card (bronze -> platinum earned counts),
  * so the header carries substance without a separate stats section. */
-.pp-coll-tiers { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 12px; }
-.pp-coll-tier { display: inline-flex; align-items: center; gap: 6px; }
+.pp-coll-tiers { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 12px; }
+/* Each tier is a BUTTON: tap to jump to the Gallery filtered to that tier ("stats are controls"). */
+.pp-coll-tier {
+    display: inline-flex; align-items: center; gap: 6px;
+    font: inherit; color: inherit; background: none; border: 0;
+    padding: 4px 7px; margin: -4px -1px; border-radius: 8px; cursor: pointer;
+    transition: background 0.15s ease;
+}
+.pp-coll-tier:hover { background: color-mix(in oklab, var(--pp-text) 9%, transparent); }
+.pp-coll-tier:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
 .pp-coll-tier__dot {
     width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
     background: var(--dot); box-shadow: 0 0 6px color-mix(in oklab, var(--dot) 55%, transparent);
@@ -34,6 +42,37 @@
 .pp-coll-tier[data-tier="silver"]   { --dot: #b9c6d6; }
 .pp-coll-tier[data-tier="gold"]     { --dot: #e7c25c; }
 .pp-coll-tier[data-tier="platinum"] { --dot: #8fd2ea; }
+
+/* "+N this week" momentum pill (only rendered when there ARE recent earns). */
+.pp-coll-new {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+    color: color-mix(in oklab, var(--pp-primary) 78%, white);
+    background: color-mix(in oklab, var(--pp-primary) 14%, transparent);
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, transparent);
+    box-shadow: 0 0 12px color-mix(in oklab, var(--pp-primary) 20%, transparent);
+}
+.pp-coll-new__spark {
+    width: 5px; height: 5px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--pp-primary); box-shadow: 0 0 6px var(--pp-primary);
+}
+
+/* Choreographed entrance: the completion bar rises from empty in step with the header count-ups
+ * (matched ~0.85s ease-out). CSS-driven so it's flash-free + no-JS-safe; the omitted `to` frame
+ * resolves to the fill's set width (var(--horizon-progress)). Motion-gated. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-coll-horizon { animation: pp-coll-fill 0.85s var(--pp-ease, cubic-bezier(0.22, 1, 0.36, 1)) both; }
+    /* At the 'hot' band (>=90%), horizon.css swaps in a leading-edge pulse on this same element at higher
+       specificity, which would replace our entrance. Re-assert BOTH so completionists still get the fill-in
+       AND the pulse (different properties: width vs box-shadow, so they run together cleanly). */
+    .pp-horizon[data-horizon-band="hot"] .pp-coll-horizon {
+        animation:
+            pp-coll-fill 0.85s var(--pp-ease, cubic-bezier(0.22, 1, 0.36, 1)) both,
+            pp-horizon-pulse 2.4s ease-in-out infinite;
+    }
+}
+@keyframes pp-coll-fill { from { width: 0; } }
 
 /* ── View toggle (Binder vs List) -- the Surface-level switch ──────── */
 .pp-collection__views {

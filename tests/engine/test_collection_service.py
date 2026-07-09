@@ -6,9 +6,12 @@ within the set), PAGE_SIZE pagination, per-set + overall counts, id-based DOM an
 -- the load-bearing one -- a CONSTANT query count regardless of badge count (the
 whale-safety batch path: no per-badge UserBadge / UserBadgeProgress / Redis fan-out).
 """
+from datetime import timedelta
+
 import pytest
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from trophies.models import Badge, Profile, ProfileGamification, UserBadge
 from trophies.services import collection_service
@@ -44,7 +47,7 @@ def test_full_set_shown_with_earned_and_unearned():
     states = {f['state'] for f in frames}
     assert 'earned' in states and 'unearned' in states
     assert ctx['summary'] == {
-        'total': 4, 'earned': 1, 'pct': 25, 'by_tier': {'bronze': 1},
+        'total': 4, 'earned': 1, 'pct': 25, 'by_tier': {'bronze': 1}, 'recent': 1,
         'tiers': [
             {'key': 'bronze', 'label': 'Bronze', 'count': 1},
             {'key': 'silver', 'label': 'Silver', 'count': 0},
@@ -382,6 +385,21 @@ def test_summary_tiers_ordered_bronze_to_platinum(monkeypatch):
     assert [t['key'] for t in tiers] == ['bronze', 'silver', 'gold', 'platinum']   # stable order
     assert {t['key']: t['count'] for t in tiers} == {'bronze': 0, 'silver': 0, 'gold': 1, 'platinum': 1}
     assert all(t['label'] == t['key'].title() for t in tiers)
+
+
+def test_summary_recent_counts_only_earns_within_the_window(monkeypatch):
+    """summary.recent (the '+N this week' pill) counts earns inside the recent window; older earns
+    and unearned badges don't count."""
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    _earn(profile, 'fresh', 1)                 # earned now -> recent
+    old = _earn(profile, 'old', 1)             # earned now, then backdated past the window
+    _series('unearned-s')                      # unearned -> not counted
+    UserBadge.objects.filter(profile=profile, badge=old).update(
+        earned_at=timezone.now() - timedelta(days=collection_service._RECENT_DAYS + 1)
+    )
+
+    assert build_collection_context(profile)['summary']['recent'] == 1   # only the fresh earn
 
 
 def test_case_template_renders_medallions_and_tablist(monkeypatch):
