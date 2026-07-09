@@ -102,90 +102,12 @@
 }
 
 .pp-collection__view[hidden] { display: none; }
+/* Leave room for the sticky site chrome when the header's tier stats scroll-jump into the Gallery. */
+.pp-collection__view { scroll-margin-top: calc(var(--sticky-top, 0px) + 14px); }
 
-/* Keyboard focus: a visible cyan ring on every interactive control (the dark
- * substrate swallows the browser default). */
-.pp-collection__view-chip:focus-visible,
-.pp-list__chip:focus-visible,
-.pp-list__search:focus-visible {
+/* Keyboard focus: a visible cyan ring on the view toggle (the dark substrate swallows the browser
+ * default). The Gallery's own toolbar controls carry their focus rings in collection-gallery.css. */
+.pp-collection__view-chip:focus-visible {
     outline: 2px solid var(--pp-list-accent);
     outline-offset: 2px;
-}
-
-/* ── Toolbar (filters + search + sort) ────────────────────────────── */
-.pp-list__toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
-    background: rgba(14, 16, 22, 0.94);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-.pp-list__group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.5);
-}
-.pp-list__group + .pp-list__group {
-    border-left: 1px solid rgba(255, 255, 255, 0.07);
-    padding-left: 14px;
-}
-.pp-list__chip {
-    padding: 5px 11px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.03);
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 11.5px;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    transition: background 160ms ease, border-color 160ms ease;
-}
-.pp-list__chip:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.22);
-}
-.pp-list__chip.is-active {
-    background: rgba(63, 205, 220, 0.14);
-    border-color: rgba(63, 205, 220, 0.6);
-    color: rgba(180, 230, 245, 1);
-}
-.pp-list__search {
-    flex: 1;
-    min-width: 180px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
-    color: #e8e9ec;
-    font-size: 12.5px;
-}
-.pp-list__search:focus {
-    outline: none;
-    border-color: rgba(63, 205, 220, 0.55);
-    background: rgba(255, 255, 255, 0.06);
-}
-.pp-list__stats {
-    margin-left: auto;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.55);
-    font-variant-numeric: tabular-nums;
-}
-
-
-.pp-list__empty {
-    padding: 60px 30px;
-    text-align: center;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 13px;
 }

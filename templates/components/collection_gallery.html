@@ -8,32 +8,32 @@ suppressed (no_id) since the shelf in the Case owns the canonical #card-<id> anc
 collection-gallery.css, wired by collection.js (initGallery).
 {% endcomment %}
 <div class="pp-gallery">
-    <div class="pp-list__toolbar">
-        <div class="pp-list__group">
+    <div class="pp-gallery__toolbar">
+        <div class="pp-gallery__fgroup">
             <span>Tier</span>
-            <button type="button" class="pp-list__chip is-active" data-filter-tier="all">All</button>
-            <button type="button" class="pp-list__chip" data-filter-tier="bronze">Bronze</button>
-            <button type="button" class="pp-list__chip" data-filter-tier="silver">Silver</button>
-            <button type="button" class="pp-list__chip" data-filter-tier="gold">Gold</button>
-            <button type="button" class="pp-list__chip" data-filter-tier="platinum">Platinum</button>
+            <button type="button" class="pp-gallery__chip is-active" data-filter-tier="all">All</button>
+            <button type="button" class="pp-gallery__chip" data-filter-tier="bronze">Bronze</button>
+            <button type="button" class="pp-gallery__chip" data-filter-tier="silver">Silver</button>
+            <button type="button" class="pp-gallery__chip" data-filter-tier="gold">Gold</button>
+            <button type="button" class="pp-gallery__chip" data-filter-tier="platinum">Platinum</button>
         </div>
-        <div class="pp-list__group">
+        <div class="pp-gallery__fgroup">
             <span>State</span>
-            <button type="button" class="pp-list__chip is-active" data-filter-state="all">All</button>
-            <button type="button" class="pp-list__chip" data-filter-state="earned">Earned</button>
-            <button type="button" class="pp-list__chip" data-filter-state="in_progress">In Progress</button>
-            <button type="button" class="pp-list__chip" data-filter-state="unearned">Unearned</button>
+            <button type="button" class="pp-gallery__chip is-active" data-filter-state="all">All</button>
+            <button type="button" class="pp-gallery__chip" data-filter-state="earned">Earned</button>
+            <button type="button" class="pp-gallery__chip" data-filter-state="in_progress">In Progress</button>
+            <button type="button" class="pp-gallery__chip" data-filter-state="unearned">Unearned</button>
         </div>
         {% if themes|length > 1 %}
-        <div class="pp-list__group">
+        <div class="pp-gallery__fgroup">
             <span>Set</span>
-            <button type="button" class="pp-list__chip is-active" data-filter-theme="all">All</button>
+            <button type="button" class="pp-gallery__chip is-active" data-filter-theme="all">All</button>
             {% for theme in themes %}
-                <button type="button" class="pp-list__chip" data-filter-theme="{{ theme.name|slugify }}">{{ theme.name }}</button>
+                <button type="button" class="pp-gallery__chip" data-filter-theme="{{ theme.name|slugify }}">{{ theme.name }}</button>
             {% endfor %}
         </div>
         {% endif %}
-        <input type="text" class="pp-list__search" placeholder="Search series or badge&hellip;" data-search aria-label="Search collection" />
+        <input type="text" class="pp-gallery__search" placeholder="Search series or badge&hellip;" data-search aria-label="Search collection" />
         <label class="pp-gallery__sort-label">
             <span class="sr-only">Sort badges</span>
             <select class="pp-gallery__sort" data-gallery-sort>
@@ -45,7 +45,8 @@ collection-gallery.css, wired by collection.js (initGallery).
                 <option value="set_number:asc">Set order</option>
             </select>
         </label>
-        <div class="pp-list__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</div>
+        <div class="pp-gallery__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</div>
+        <button type="button" class="pp-gallery__clear" data-clear-filters hidden>Clear filters</button>
     </div>
 
     <div class="pp-gallery__grid" data-gallery-grid>
@@ -61,15 +62,22 @@ collection-gallery.css, wired by collection.js (initGallery).
            data-rank="{{ badge.engraving_rank|default:0 }}"
            data-progress="{{ badge.progress_pct|default:0 }}"
            data-earned="{{ badge.earned_ts|default:0 }}"
+           data-earned-label="{{ badge.earned_date|default:'' }}"
            {% if badge.series_slug %}href="{% url 'badge_detail' badge.series_slug %}"{% endif %}
            data-modal-url="{% url 'collection_badge_modal' badge.badge_id %}">
-            {% include 'components/badge_medallion.html' with frame=badge no_id=True show_ids=True %}
+            {% comment %} No show_ids on the wall: the medallion already reads tier + state, and the
+            caption carries the name + a sort-adaptive stat. Set number / earn rank live in the modal. {% endcomment %}
+            {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
             <span class="pp-gallery__caption">
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>
-                <span class="pp-gallery__tier pp-gallery__tier--{{ badge.tier }}">{{ badge.tier|title }}</span>
+                <span class="pp-gallery__stat" data-gallery-stat></span>
             </span>
         </a>
         {% endfor %}
     </div>
-    <div class="pp-list__empty" data-empty-message hidden>No badges match the current filters.</div>
+    <div class="pp-gallery__empty" data-empty-message hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
+        <p class="pp-gallery__empty-title">No badges match these filters</p>
+        <button type="button" class="pp-gallery__clear" data-clear-filters>Clear filters</button>
+    </div>
 </div>

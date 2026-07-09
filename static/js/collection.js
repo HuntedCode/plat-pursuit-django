@@ -593,7 +593,15 @@
 
         // Any user filter/sort switches the wall to instant (the entrance stagger is a one-time arrival, not
         // a working-tool behaviour; without this, re-showing a cell via display would replay its animation).
-        // applyFilters is only ever called by user actions (chips + search), never on init.
+        // Only the TOOLBAR clear toggles with filter state; the empty-state clear shows/hides with its
+        // (already-conditional) empty panel.
+        var toolbarClear = gal.querySelector('.pp-gallery__toolbar [data-clear-filters]');
+        function anyActive() {
+            return filters.tier !== 'all' || filters.state !== 'all' || filters.theme !== 'all' || searchTerm !== '';
+        }
+        function syncClear() { if (toolbarClear) toolbarClear.hidden = !anyActive(); }
+
+        // applyFilters is only ever called by user actions (chips + search + clear), never on init.
         function applyFilters() {
             gal.classList.add('is-touched');
             var visible = 0;
@@ -604,6 +612,7 @@
             });
             if (stats) stats.textContent = visible + ' of ' + total;
             if (emptyMsg) emptyMsg.hidden = visible !== 0;
+            syncClear();
         }
 
         wireFilterChips(gal, filters, applyFilters);
@@ -616,13 +625,45 @@
             });
         }
 
+        function clearAll() {
+            filters.tier = filters.state = filters.theme = 'all';
+            searchTerm = '';
+            if (search) search.value = '';
+            // Reset every chip's active state to its "all" option.
+            gal.querySelectorAll('[data-filter-tier], [data-filter-state], [data-filter-theme]').forEach(function (c) {
+                var dim = c.hasAttribute('data-filter-tier') ? 'tier'
+                    : c.hasAttribute('data-filter-state') ? 'state' : 'theme';
+                c.classList.toggle('is-active', c.getAttribute('data-filter-' + dim) === 'all');
+            });
+            applyFilters();
+        }
+        gal.querySelectorAll('[data-clear-filters]').forEach(function (b) { b.addEventListener('click', clearAll); });
+
         var sortSel = gal.querySelector('[data-gallery-sort]');
+        // The caption's second line reflects what you're sorting by: rarity / earned date / progress,
+        // defaulting to the rarity flex for the name/tier/set sorts. The medallion already carries
+        // tier + state, so this surfaces the ONE stat the object doesn't.
+        function statText(cell, key) {
+            if (key === 'earned') return cell.getAttribute('data-earned-label') || '';
+            if (key === 'progress') {
+                var st = cell.getAttribute('data-state');
+                if (st === 'earned' || st === 'maintenance') return 'Complete';
+                var p = parseFloat(cell.getAttribute('data-progress')) || 0;
+                return p ? p + '%' : '';
+            }
+            var rarity = parseFloat(cell.getAttribute('data-rarity-pct')) || 0;
+            return rarity ? 'Top ' + rarity + '%' : '';
+        }
         function applySort() {
             var spec = ((sortSel && sortSel.value) || 'series:asc').split(':');
             cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); });
+            cells.forEach(function (c) {
+                var el = c.querySelector('[data-gallery-stat]');
+                if (el) el.textContent = statText(c, spec[0]);
+            });
         }
         if (sortSel) sortSel.addEventListener('change', function () { gal.classList.add('is-touched'); applySort(); });
-        applySort();  // default matches the select's first option (series A-Z)
+        applySort();  // default matches the select's first option (series A-Z) + fills the rarity stat
     }
 
     // First-earn "minting" ceremony: the first time you see a newly-earned badge on the collection, it
@@ -711,6 +752,12 @@
                 if (galleryChip) galleryChip.click();
                 var filterChip = root.querySelector('.pp-gallery [data-filter-tier="' + tier + '"]');
                 if (filterChip) filterChip.click();
+                // Bring the (now-filtered) wall into view so the jump reads as "here are your <tier>s".
+                var galleryView = root.querySelector('#collection-view-gallery');
+                if (galleryView) {
+                    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    galleryView.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+                }
             });
         });
         initViewToggle(root);
