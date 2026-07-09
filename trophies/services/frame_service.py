@@ -23,6 +23,7 @@ _NEXT_TIER_LABEL = {1: "Silver", 2: "Gold", 3: "Platinum", 4: "Maxed"}
 # cap the medallion renders a single smooth bar instead (individual cells stop being countable).
 SEGMENT_CAP = 12
 
+
 # Sentinel: distinguishes "caller did not pre-fetch" (query it) from "pre-fetched, and it
 # is None" (the viewer has no UserBadge/UserBadgeProgress for this badge -- do NOT query).
 _UNSET = object()
@@ -190,8 +191,8 @@ def build_badge_frame(badge, profile=None, *, size="default", allow_flip=True,
         frame["rarity_rank"] = badge.rarity_rank
         if badge.rarity_class:
             frame["rarity_class"] = badge.rarity_class
-    # Holographic "chase card" foil -- platinum-tier badges only (the top of a series). The component
-    # renders it only when ALSO earned, so the flourish is a scarce reward.
+    # Holographic "chase card" foil -- platinum-tier badges only (the top of a series), so the shimmer stays
+    # a special payoff. The component renders it only when ALSO earned, so the flourish is a scarce reward.
     frame["is_holographic"] = badge.tier == 4
     if badge.earned_count:
         frame["earned_count"] = badge.earned_count   # how many hunters hold this tier

@@ -73,10 +73,11 @@
     background: radial-gradient(ellipse, rgba(0, 0, 0, 0.5), transparent 72%); z-index: 0;
 }
 
-/* light-catch glint -- a soft diagonal sheen that sweeps the WHOLE medallion on hover (earned). Clipped
-   to a ~92% circle (inset 4%) so it tracks the round object instead of a small centred disc. */
+/* light-catch glint -- a soft diagonal sheen that sweeps the WHOLE medallion on hover (earned). Matches the
+   backplate exactly (.pp-med__plate: inset -4%, border-radius 26%) so the sheen covers the full plate area. */
 .pp-med__glint {
-    position: absolute; inset: -4%; border-radius: 26%; overflow: hidden; pointer-events: none; z-index: 2;   /* matches the plate footprint */
+    position: absolute; inset: -4%; border-radius: 26%; overflow: hidden; pointer-events: none; z-index: 2;
+    transform: translateY(-4%);   /* nudge up: the -4% inset otherwise bleeds the sheen below the badge into the count text */
 }
 .pp-med__glint::before {
     content: ''; position: absolute; top: -30%; bottom: -30%; left: 0; width: 55%;
@@ -91,6 +92,26 @@
     .pp-med--earned:hover .pp-med__art { transform: translateY(-6%) scale(1.04); }
     .pp-med--earned:hover .pp-med__stage::before { opacity: 0.5; transform: translate(-50%, -53%) scale(1.06); }
     .pp-med--earned:hover .pp-med__glint::before { animation: ppMedGlint 0.8s ease 0.05s 1; }
+}
+
+/* First-earn "minting" ceremony (collection.js adds .is-minting the first time you see a newly-earned
+   badge): it pops into place, its aura flares, and a light sweeps across -- struck like a fresh coin.
+   Motion-gated (JS also skips it under reduced motion). No filter animation, so the material shadow is
+   untouched; the flash comes from the aura + glint sweep. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-med.is-minting .pp-med__art { animation: ppMedMint 0.9s cubic-bezier(0.3, 1.35, 0.5, 1) both; }
+    .pp-med--earned.is-minting .pp-med__stage::before { animation: ppMedMintAura 0.9s ease both; }
+    .pp-med.is-minting .pp-med__glint::before { animation: ppMedGlint 0.85s ease 0.2s 1; }
+}
+@keyframes ppMedMint {
+    0% { transform: scale(1); }
+    24% { transform: scale(1.17); }
+    52% { transform: scale(0.965); }
+    100% { transform: scale(1); }
+}
+@keyframes ppMedMintAura {
+    0%, 100% { opacity: 0.2; transform: translate(-50%, -50%) scale(1); }
+    28% { opacity: 0.92; transform: translate(-50%, -50%) scale(1.34); }
 }
 
 /* Tactile press: an interactive medallion (a modal-opening slot) DIPS when you push it -- a real-button
@@ -161,12 +182,36 @@
 /* Rounded-square mount behind the badge -- normalizes any badge shape to a consistent medal body. Rendered
    on EVERY medallion (grid + hero); sits behind the art (z-index -1 within the art's own stacking context).
    The hero adds 3D depth (translateZ) + backface in collection-case.css. */
+/* Contact shadow the raised badge casts onto its plate -- hero-only (shown/positioned in the 3D block).
+   Sits just above the plate; the badge floats above it, so the tilt parallax shifts it under the badge. */
+.pp-med__contact { display: none; }
 .pp-med__plate {
-    position: absolute; inset: -4%; z-index: -1; border-radius: 26%;
+    position: absolute; inset: -4%; z-index: -1; border-radius: 26%; overflow: hidden;
     background: radial-gradient(circle at 50% 36%, color-mix(in oklab, var(--med-c) 24%, #161b24), #0a0d13 82%);
     border: 1px solid color-mix(in oklab, var(--med-c) 40%, transparent);
     box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), inset 0 -4px 14px rgba(0, 0, 0, 0.5);
     pointer-events: none;
+}
+/* Environment reflection: a soft diagonal light band that slides across the metal with the tilt (--tx/--ty
+   set by collection.js) -- a room reflecting on a polished surface. On BOTH faces (front mount + flipped
+   base) since both are metal. Transform-driven (compositor-cheap); static + centred on the grid (no tilt).
+   Clipped to each face's shape by their overflow:hidden. The back's copy sits behind its engraving. */
+/* Hero-only: the reflection band is tilt-driven, so it's pointless (and a needless per-cell paint) on the
+   grid where nothing tilts. The back only exists in the hero, so its band is scoped there already. */
+.pp-bdetail__stage .pp-med__plate::before,
+.pp-med__back::before {
+    content: ''; position: absolute; inset: -40%; pointer-events: none;
+    background: linear-gradient(118deg, transparent 32%,
+        rgba(255, 255, 255, 0.08) 44%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.08) 56%, transparent 68%);
+    transform: translate(calc(var(--tx, 0) * 26px), calc(var(--ty, 0) * 26px));
+    transition: transform 0.16s ease-out;   /* a touch of lag = a "liquid metal" reflection */
+}
+/* Specular rim: a crisp bright inner edge -- the machined-bevel cue. The sweeping band lights it up as it
+   passes, so the rim reads as catching the moving reflection. Both faces. */
+.pp-med__plate::after,
+.pp-med__back::after {
+    content: ''; position: absolute; inset: 0; border-radius: 26%; pointer-events: none;
+    box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.16), inset 0 0 0 1px color-mix(in oklab, var(--med-glow) 20%, transparent);
 }
 .pp-med__back-mark {   /* the maker's mark, foil-stamped + embossed */
     width: 42%; height: auto; object-fit: contain; -webkit-user-drag: none; user-select: none;
@@ -189,6 +234,45 @@
     font-size: calc(var(--sz) * 0.048); font-weight: 700; letter-spacing: 0.26em; text-transform: uppercase;
     line-height: 1; color: color-mix(in oklab, var(--med-c) 52%, transparent);
 }
+.pp-med__back-owner {   /* the owner engraving: their name + the rank they earned it at (earned badges only) */
+    max-width: 84%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin-top: calc(var(--sz) * 0.01);
+    font-size: calc(var(--sz) * 0.052); font-weight: 700; letter-spacing: 0.04em; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--med-glow) 68%, #e2e8f0);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.12), 0 -1px 1px rgba(0, 0, 0, 0.7);
+}
+
+/* Non-earned base: a tarnished, un-personalised plate -- colourless dark metal, dimmed mark + engraving,
+   and no owner line. Earning a badge lights its base up in the tier metal and engraves it with the owner,
+   so it visibly becomes theirs -- the earned base feels special against the "not yet yours" one. */
+.pp-med--unearned .pp-med__back,
+.pp-med--in_progress .pp-med__back {
+    background: radial-gradient(circle at 50% 34%, #191c22, #08090d 78%);
+    border-color: rgba(255, 255, 255, 0.07);
+}
+.pp-med--unearned .pp-med__back-mark,
+.pp-med--in_progress .pp-med__back-mark {
+    filter: grayscale(1) brightness(0.5) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    opacity: 0.5;
+}
+.pp-med--unearned .pp-med__back-sub,
+.pp-med--in_progress .pp-med__back-sub,
+.pp-med--unearned .pp-med__back-no,
+.pp-med--in_progress .pp-med__back-no {
+    color: rgba(148, 163, 184, 0.5); text-shadow: none;
+}
+.pp-med--unearned .pp-med__back-word,
+.pp-med--in_progress .pp-med__back-word { color: rgba(148, 163, 184, 0.3); }
+.pp-med--unearned .pp-med__back-ring,
+.pp-med--in_progress .pp-med__back-ring { border-color: rgba(255, 255, 255, 0.06); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6); }
+/* Tarnish the reflection too -- drop the bright tier-glow rim + polished sheen to plain, colourless dark. */
+.pp-med--unearned .pp-med__back::after,
+.pp-med--in_progress .pp-med__back::after {
+    box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.05), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.pp-med--unearned .pp-med__back::before,
+.pp-med--in_progress .pp-med__back::before { opacity: 0.35; }
 
 /* ---- states ---- */
 /* UNEARNED + IN PROGRESS both wear a DARK, waiting mount -- earned badges are the only bright ones, so

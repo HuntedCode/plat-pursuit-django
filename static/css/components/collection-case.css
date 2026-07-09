@@ -168,7 +168,7 @@
 
 /* The progress meter stays put -- it's part of the hero (fades in/out with the chrome), NOT transported
    with the disc (JS transforms only .pp-med__stage). Its twin stays on the shelf the whole time. */
-.pp-bdetail__stage .pp-med__meter { transition: opacity 0.3s ease; }
+.pp-bdetail__stage .pp-med__meter { transition: opacity 0.3s ease; margin-top: calc(var(--sz) * 0.09); }   /* clear the backplate, which overflows ~4% below the badge's box */
 .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__meter { opacity: 0; transition: none; }
 .pp-detail-modal.is-closing .pp-bdetail__stage .pp-med__meter { opacity: 0; }
 
@@ -187,7 +187,17 @@
 .pp-med__glare {
     position: absolute; inset: -4%; border-radius: 26%; pointer-events: none; z-index: 4;   /* matches the plate footprint */
     opacity: 0; transition: opacity 0.35s ease;   /* NB: NO mix-blend-mode -- a blend mode on this child isolates a group that FLATTENS the card's preserve-3d */
-    background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.5), transparent 32%);
+    /* Reads as a glass DOME the badge lives inside: a moving specular (layer 1) + a soft ambient top-light
+       on the curved glass (layer 2); the inset box-shadow is the dome's edge wrapping "around the sides"
+       (it follows the rounded-square silhouette). Raised above the art (translateZ, in the 3D block) so it
+       floats as a separate glass surface over the badge. */
+    background:
+        radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.5), transparent 30%),
+        radial-gradient(115% 95% at 32% 22%, rgba(255, 255, 255, 0.12), transparent 48%);
+    box-shadow:
+        inset 0 0 11px 2px rgba(255, 255, 255, 0.13),
+        inset 0 2px 5px rgba(255, 255, 255, 0.1),
+        inset 0 -6px 12px rgba(0, 0, 0, 0.16);
 }
 /* any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, which is `coarse`
    on touchscreen laptops even with a mouse attached -- that silently no-op'd the whole 3D block. */
@@ -201,15 +211,26 @@
     .pp-bdetail__stage .pp-med__stage { perspective: 560px; display: block; isolation: auto; }
     .pp-bdetail__stage .pp-med__art {
         filter: none; transform-style: preserve-3d;   /* NB: no will-change:transform here -- it promotes a compositing layer that FLATTENS preserve-3d */
-        transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+        transition: transform 0.7s cubic-bezier(0.34, 1.8, 0.42, 1);   /* spring settle: the tilt overshoots flat + wobbles back on release (bigger curve since the tilt angle is small) */
     }
-    .pp-bdetail__stage .pp-med__art.is-flipping { transition: transform 0.64s cubic-bezier(0.45, 0.05, 0.2, 1); }
+    .pp-bdetail__stage .pp-med__art.is-flipping { transition: transform 0.66s cubic-bezier(0.3, 1.32, 0.5, 1); }   /* the base lands with a small settle, like a real object flipping over */
     /* front faces turn away past 90deg -> the engraved base shows cleanly when flipped */
     .pp-bdetail__stage .pp-med__l,
     .pp-bdetail__stage .pp-med__fill,
     .pp-bdetail__stage .pp-med__foil,
     .pp-bdetail__stage .pp-med__glare,
+    .pp-bdetail__stage .pp-med__contact,
     .pp-bdetail__stage .pp-med__plate { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    /* Contact shadow the raised badge casts onto its plate. Sits just above the plate; the badge floats
+       ~40px above it, so the tilt parallax slides this under the badge -- the cue that it's a separate
+       object resting on the mount, not a flat print. A blur on this leaf is 3D-safe. */
+    .pp-bdetail__stage .pp-med__contact {
+        display: block; position: absolute; inset: 4%; border-radius: 28%;
+        background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.26) 52%, transparent 74%);
+        filter: blur(9px);
+        transform: translateZ(-2px);
+        pointer-events: none;
+    }
     /* Round mount behind the badge: normalizes every badge (any shape) to a round medal body, so the flipped
        round base reads as its genuine underside. Sits just behind the backdrop (the badge floats above it on
        tilt); for round badges it hides behind the art, for shields it fills the body round. */
@@ -237,10 +258,11 @@
     .pp-detail-modal.is-opening .pp-bdetail__stage .pp-med__l:nth-child(1) { transition: none; }   /* pick-up START is instant */
 }
 
-/* Tilt enhancement (fine pointer only): the layered parallax depths + tilt tuning + the light-tracking
-   glare. any-hover/any-pointer (not hover/pointer): the plain forms check the PRIMARY device, `coarse` on
-   touchscreen laptops even with a mouse attached -- that silently no-op'd the tilt. */
-@media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
+/* Tilt enhancement: the layered parallax depths + tilt tuning + the light-tracking glare. Motion-OK on ALL
+   pointers now -- a fine pointer drives it via the cursor, a coarse one (phone) drives it via the gyroscope
+   (collection.js). The hover-only rule below simply no-ops where there's no hover. At rest (no tilt) the
+   raised layers just sit at their Z with no visible parallax, so this is harmless on a gyro-less touch device. */
+@media (prefers-reduced-motion: no-preference) {
     .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
     .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
     .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
@@ -248,7 +270,7 @@
        lift together onto ONE raised plane above it. (The foreground layer is hidden site-wide.) */
     .pp-bdetail__stage .pp-med__fill,
     .pp-bdetail__stage .pp-med__foil { transform: translateZ(40px); transition: transform 0.4s ease; }
-    .pp-bdetail__stage .pp-med__glare { transform: translateZ(40px); }   /* Z only; keeps its own opacity transition */
+    .pp-bdetail__stage .pp-med__glare { transform: translateZ(52px); }   /* raised ABOVE the art (subject is at 40) so the dome floats as its own glass surface */
     /* Subject (nth-child 2): raised + grounded with a cast shadow (a filter on this LEAF is 3D-safe). It
        KEEPS its per-state darkening so the hero matches the shelf -- in-progress/maintenance stay only
        partially coloured (the bright colour comes from the rising fill, not the base), and unearned stays

@@ -9,6 +9,7 @@
     'use strict';
 
     var STORAGE_KEY = 'pp-collection-view';
+    var gyroGranted = false;   // iOS DeviceOrientation permission, once granted, persists for the session
 
     // Shared motion gates (kept in one place so the tilt/grow/wiggle checks can't drift out of sync).
     function prefersReducedMotion() {
@@ -158,9 +159,11 @@
             function flip() {
                 if (flipping) return;
                 killHint();
+                if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) { /* unsupported */ } }   // a tactile tick as it turns over
                 flipping = true;
                 flipped = !flipped;
                 tiltX = tiltY = 0;   // flip cleanly (no residual tilt); the tilt resumes after
+                card.style.setProperty('--tx', '0'); card.style.setProperty('--ty', '0');   // recenter the metal reflection
                 card.classList.remove('is-tilting');
                 card.classList.add('is-flipping');
                 render();
@@ -176,37 +179,82 @@
             });
         }
 
-        // TILT (fine pointer only): turn the shown face toward the cursor, with a light-tracking glare. The
-        // rect is read off the (untransformed) scene so the tilt doesn't feed back into its own bbox.
-        if (!canTilt()) return;
+        // TILT: turn the shown face toward the light, with a tracking glare. A FINE pointer drives it from
+        // the cursor; a COARSE one (a phone) drives it from the gyroscope -- both feed applyTilt(px, py).
+        if (!canTilt() && !window.DeviceOrientationEvent) return;   // no tilt input available
         var glare = document.createElement('span');
         glare.className = 'pp-med__glare';
         glare.setAttribute('aria-hidden', 'true');
         card.appendChild(glare);   // the glare rides the rotating card
         var foil = card.querySelector('.pp-med__foil');   // present only on holographic (rare/top-tier) badges
         var MAX = 15;   // degrees of tilt at the edges
-        scene.addEventListener('pointermove', function (e) {
+
+        // px,py are 0..1 across the object (0.5,0.5 = centred/flat). Shared by the pointer + gyro drivers.
+        function applyTilt(px, py) {
             if (flipping) return;   // the flip owns the transform while it plays
             killHint();
-            var r = scene.getBoundingClientRect();
-            var px = (e.clientX - r.left) / r.width;
-            var py = (e.clientY - r.top) / r.height;
             tiltX = -(py - 0.5) * 2 * MAX;
             tiltY = (px - 0.5) * 2 * MAX;
             card.classList.add('is-tilting');
             render();
             glare.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
             glare.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
-            // Holographic shimmer tracks the cursor (inline beats the CSS :hover shift).
+            // Normalised tilt (-1..1) for the plate's environment reflection + rim (transform-driven overlays).
+            card.style.setProperty('--tx', ((px - 0.5) * 2).toFixed(3));
+            card.style.setProperty('--ty', ((py - 0.5) * 2).toFixed(3));
             if (foil) foil.style.backgroundPosition = (px * 100).toFixed(1) + '% ' + (py * 100).toFixed(1) + '%';
-        });
-        scene.addEventListener('pointerleave', function () {
+        }
+        function releaseTilt() {
             if (flipping) return;
             tiltX = tiltY = 0;
             card.classList.remove('is-tilting');
             render();   // spring back to the resting face (front or flipped) via the CSS transition
+            card.style.setProperty('--tx', '0'); card.style.setProperty('--ty', '0');
             if (foil) foil.style.backgroundPosition = '';
-        });
+        }
+
+        if (canTilt()) {
+            // FINE pointer: track the cursor. Rect read off the (untransformed) scene so tilt doesn't feed back.
+            scene.addEventListener('pointermove', function (e) {
+                var r = scene.getBoundingClientRect();
+                applyTilt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+            });
+            scene.addEventListener('pointerleave', releaseTilt);
+        } else {
+            // COARSE pointer (phone): tilt the object by tilting the DEVICE. Calibrate to the orientation when
+            // it starts, map +-GYRO_RANGE degrees of device tilt onto the full swing, rAF-coalesced to 1/frame.
+            var GYRO_RANGE = 26, gbase = null, pend = null, raf = 0;
+            function clampG(v) { return v < -GYRO_RANGE ? -GYRO_RANGE : v > GYRO_RANGE ? GYRO_RANGE : v; }
+            function flushGyro() { raf = 0; if (pend) { applyTilt(pend[0], pend[1]); pend = null; } }
+            function onOrient(e) {
+                if (e.beta == null && e.gamma == null) return;
+                if (!gbase) gbase = [e.beta || 0, e.gamma || 0];   // "rest" = however the phone is held on start
+                var db = clampG((e.beta || 0) - gbase[0]);    // front-back -> up/down
+                var dg = clampG((e.gamma || 0) - gbase[1]);   // left-right
+                pend = [0.5 + dg / (2 * GYRO_RANGE), 0.5 + db / (2 * GYRO_RANGE)];
+                if (!raf) raf = requestAnimationFrame(flushGyro);
+            }
+            var torn = false;
+            function startGyro() { if (torn) return; gbase = null; window.addEventListener('deviceorientation', onOrient); }
+            // The window listener outlives the wiped modal body, so expose a teardown for cancelHint() to call.
+            // `torn` guards the async iOS grant: if the modal closed before requestPermission() resolves, the
+            // later startGyro() must NOT attach a listener to a dead card.
+            card._gyroCleanup = function () {
+                torn = true;
+                window.removeEventListener('deviceorientation', onOrient);
+                if (raf) { cancelAnimationFrame(raf); raf = 0; }
+            };
+            if (typeof DeviceOrientationEvent.requestPermission === 'function' && !gyroGranted) {
+                // iOS 13+ needs a user gesture -- the first tap on the medallion grants it, then gyro starts.
+                scene.addEventListener('click', function () {
+                    DeviceOrientationEvent.requestPermission().then(function (s) {
+                        if (s === 'granted') { gyroGranted = true; startGyro(); }
+                    }).catch(function () { /* denied */ });
+                }, { once: true });
+            } else {
+                startGyro();   // Android / already-granted iOS: no gesture needed
+            }
+        }
     }
 
     // Badge detail ("pick it up"): tap a medallion -> fetch its detail partial into the modal. The slot
@@ -234,6 +282,7 @@
         function cancelHint() {
             var c = body.querySelector('.pp-bdetail__stage .pp-med__art');
             if (!c) return;
+            if (c._gyroCleanup) { c._gyroCleanup(); c._gyroCleanup = null; }   // remove the window deviceorientation listener
             if (c._flipTimer) { clearTimeout(c._flipTimer); c._flipTimer = null; }   // don't let a flip settle fire after teardown
             if (c._hintTimer) { clearTimeout(c._hintTimer); c._hintTimer = null; }
             if (c._hintAnim) {
@@ -659,6 +708,74 @@
         applySort();  // default matches the select's first option (series A-Z)
     }
 
+    // First-earn "minting" ceremony: the first time you see a newly-earned badge on the collection, it
+    // mints in with a flash + light-sweep. "Seen" is tracked per-device in localStorage (no backend); the
+    // first-ever visit initialises the set silently so your existing collection doesn't all mint at once.
+    var MINT_KEY = 'pp-badges-minted';
+    function isEarnedState(s) { return s === 'earned' || s === 'maintenance'; }
+    // Play the mint ceremony across a list of medallions, staggered; clears the class after so hover/tilt
+    // work again. (The .is-minting CSS is motion-gated, so this is a no-op under reduced motion.)
+    function playMint(els) {
+        els.forEach(function (el, i) {
+            setTimeout(function () {
+                el.classList.add('is-minting');
+                setTimeout(function () { el.classList.remove('is-minting'); }, 1300);
+            }, i * 200);
+        });
+    }
+    // Dev/preview helper (exposed on window.PlatPursuit.Collection.previewMint): replay the ceremony on every
+    // earned badge currently on screen, WITHOUT touching the localStorage "seen" set.
+    function previewMint() {
+        var root = document.querySelector('.pp-collection');
+        if (!root) return;
+        playMint(Array.prototype.slice.call(root.querySelectorAll('.pp-med[data-badge-id]')).filter(function (el) {
+            return isEarnedState(el.getAttribute('data-state')) && el.offsetParent !== null;
+        }));
+    }
+    function initMint(root) {
+        if (prefersReducedMotion() || !window.IntersectionObserver) return;
+        var meds = Array.prototype.slice.call(root.querySelectorAll('.pp-med[data-badge-id]'));
+        var earnedIds = {};
+        meds.forEach(function (el) { if (isEarnedState(el.getAttribute('data-state'))) earnedIds[el.getAttribute('data-badge-id')] = true; });
+
+        var stored = null;
+        try { stored = JSON.parse(localStorage.getItem(MINT_KEY) || 'null'); } catch (e) { /* corrupt */ }
+        if (!Array.isArray(stored)) {   // first-ever visit (or a corrupt/non-array value): seed silently, no mint storm
+            try { localStorage.setItem(MINT_KEY, JSON.stringify(Object.keys(earnedIds))); } catch (e) { /* private mode */ }
+            return;
+        }
+        var seen = {};
+        stored.forEach(function (id) { seen[id] = true; });
+        function markSeen(id) {
+            if (seen[id]) return;
+            seen[id] = true;
+            try { localStorage.setItem(MINT_KEY, JSON.stringify(Object.keys(seen))); } catch (e) { /* private mode */ }
+        }
+        // Fresh = earned now, badge_id never minted before.
+        var fresh = meds.filter(function (el) {
+            var id = el.getAttribute('data-badge-id');
+            return earnedIds[id] && !seen[id];
+        });
+        if (!fresh.length) return;
+
+        // Mint each new badge WHEN it scrolls into view, so a fresh badge far down the page (or in another
+        // view / set tab) isn't missed -- it stays "unminted" until you actually see it. Marking the badge_id
+        // seen the first time ANY of its instances mints means it won't re-play in another view.
+        var io = new IntersectionObserver(function (entries) {
+            var toMint = [];
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                var el = entry.target, id = el.getAttribute('data-badge-id');
+                io.unobserve(el);
+                if (seen[id]) return;   // already minted (another instance / view)
+                toMint.push(el);
+                markSeen(id);
+            });
+            if (toMint.length) playMint(toMint);   // staggers if several enter at once
+        }, { threshold: 0.4 });
+        fresh.forEach(function (el) { io.observe(el); });
+    }
+
     function init() {
         var root = document.querySelector('.pp-collection');
         if (!root) return;
@@ -668,6 +785,9 @@
         initDetail(root);
         initGallery(root);
         initList(root);
+        initMint(root);
+        var mintBtn = document.querySelector('[data-mint-preview]');   // dev-only replay button (settings.DEBUG)
+        if (mintBtn) mintBtn.addEventListener('click', previewMint);
     }
 
     if (document.readyState === 'loading') {
@@ -676,5 +796,5 @@
         init();
     }
     window.PlatPursuit = window.PlatPursuit || {};
-    window.PlatPursuit.Collection = { init: init };
+    window.PlatPursuit.Collection = { init: init, previewMint: previewMint };
 })();

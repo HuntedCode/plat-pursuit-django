@@ -5,6 +5,7 @@ binder -- earned badges framed, earnable ones as named slots. Requires a linked 
 Page data is assembled by `collection_service.build_collection_context` (read-only,
 whale-safe). This is the personal album, NOT the all-badges browse or a badge detail page.
 """
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseNotFound
@@ -41,6 +42,7 @@ class CollectionView(LoginRequiredMixin, ProfileHotbarMixin, TemplateView):
             {'text': 'Collection'},
         ]
         context['seo_title'] = 'Your Collection - Platinum Pursuit'
+        context['dev_mint'] = settings.DEBUG   # dev-only "replay mint ceremony" button (never ships to prod)
         return context
 
 
@@ -66,4 +68,5 @@ class CollectionBadgeModalView(LoginRequiredMixin, View):
         frame['dom_id'] = f'card-{badge.id}'
         frame['series_slug'] = badge.series_slug
         frame['badge_id'] = badge.id
+        frame['owner_name'] = profile.display_psn_username or profile.psn_username   # engraved on the earned base
         return render(request, 'components/collection_badge_modal.html', {'frame': frame})

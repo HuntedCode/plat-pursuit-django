@@ -9,7 +9,7 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
 {% endcomment %}
 {% with tier=frame.tier|default:"gold" state=frame.state|default:"earned" total=frame.stages_total|default:0 %}
 <div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
-     data-tier="{{ tier }}" data-state="{{ state }}"
+     data-tier="{{ tier }}" data-state="{{ state }}"{% if frame.badge_id %} data-badge-id="{{ frame.badge_id }}"{% endif %}
      {% if frame.dom_id and not no_id %}id="{{ frame.dom_id }}"{% endif %}>
     <div class="pp-med__stage">
         {% comment %} art_layers is a full-URL, filtered list (backdrop, main[, foreground]); a badge without
@@ -35,6 +35,7 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
             maker's mark embossed into a tier-metal disc, set number engraved below. Pure flavour, no info.
             Kept after the foil so the state filters' nth-child(N) still count only the art layers. {% endcomment %}
             <span class="pp-med__plate" aria-hidden="true"></span>
+            <span class="pp-med__contact" aria-hidden="true"></span>
             {% if with_back %}
             <div class="pp-med__back" aria-hidden="true">
                 <span class="pp-med__back-ring" aria-hidden="true"></span>
@@ -44,6 +45,11 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
                 <span class="pp-med__back-sub">{% firstof frame.franchise frame.collection frame.developer frame.series_name %}</span>
                 {% if frame.set_number %}<span class="pp-med__back-no">No.&nbsp;{{ frame.set_number|stringformat:"04d" }}</span>{% endif %}
                 <span class="pp-med__back-word">Platinum Pursuit</span>
+                {% comment %} Personalised to the owner -- only on a badge they HOLD (earned/maintenance, so the
+                earn rank exists): their name + the rank they earned it at. Makes the base feel truly theirs. {% endcomment %}
+                {% if frame.owner_name and frame.engraving_rank and state != 'unearned' and state != 'in_progress' %}
+                <span class="pp-med__back-owner">{{ frame.owner_name }} &middot; #{{ frame.engraving_rank|stringformat:"04d" }}</span>
+                {% endif %}
             </div>
             {% endif %}
         </div>

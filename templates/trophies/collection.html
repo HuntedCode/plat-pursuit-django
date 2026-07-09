@@ -73,6 +73,17 @@
             <div class="pp-detail-modal__body" data-detail-body></div>
         </div>
     </div>
+
+    {% if dev_mint %}
+    {# Dev-only (settings.DEBUG): replay the first-earn mint ceremony on the visible earned badges. Reuses
+       the claim-ceremony dev-panel styling; never ships to prod. #}
+    <div class="ccx-dev" aria-hidden="true">
+        <div class="ccx-dev__title">Mint ceremony</div>
+        <div class="ccx-dev__row">
+            <button type="button" class="ccx-dev__btn" data-mint-preview>Replay</button>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
