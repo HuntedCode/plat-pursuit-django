@@ -55,17 +55,18 @@
     transition: opacity 0.5s ease, transform 0.5s ease;
 }
 .pp-med--earned .pp-med__stage::before { opacity: 0.2; }
-/* maintenance = a red "broken" glow (replaces the old "Lapsed" chip) -- the warm meter + tarnish + this
-   pulsing red halo together read as damaged/needs-repair. Bigger than the badge (126%) so it spills OUT
-   past the art as a visible halo (the 76% earned aura hides behind the opaque medallion). */
-.pp-med--maintenance .pp-med__stage::before {
-    width: 126%;
-    background: rgba(226, 48, 38, 0.9);   /* solid red disc; the blur below is what forms the soft halo */
-    filter: blur(22px);
-    opacity: 0.62;
-    animation: ppMedBroken 2.4s ease-in-out infinite;
+/* maintenance = "needs repair": the SAME neon silhouette glow as the Case's aspirational "next"
+   (collection-case.css .pp-case__slot.is-next), just RED -- emitted light hugging the emblem, not a disc
+   behind it. Appended to the art's base rim+cast drop-shadows (see .pp-med__art above) so the object keeps
+   its weight; keep the two base shadows byte-identical or it loses its material weight. Static now (the
+   old pulsing red disc + ppMedBroken keyframe are gone). */
+.pp-med--maintenance .pp-med__art {
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.22))
+        drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4))
+        drop-shadow(0 0 4px color-mix(in oklab, white 12%, #e23026))
+        drop-shadow(0 0 12px color-mix(in oklab, #e23026 58%, transparent));
 }
-@keyframes ppMedBroken { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.72; } }
 /* pedestal -- a soft ground shadow just BELOW the medallion (grounds it; visible at rest, not just hover) */
 .pp-med__stage::after {
     content: ''; position: absolute; bottom: -4%; left: 50%; width: 50%; height: 6%;
@@ -92,6 +93,13 @@
     .pp-med--earned:hover .pp-med__art { transform: translateY(-6%) scale(1.04); }
     .pp-med--earned:hover .pp-med__stage::before { opacity: 0.5; transform: translate(-50%, -53%) scale(1.06); }
     .pp-med--earned:hover .pp-med__glint::before { animation: ppMedGlint 0.8s ease 0.05s 1; }
+    /* Non-earned badges answer the cursor with a gentler LIFT only -- no sheen sweep, no aura bloom (those
+       stay earned-only, so the done/not-done read holds). Subtler than earned's -6%/1.04 so it feels alive
+       without pretending to be earned. */
+    .pp-med--unearned, .pp-med--in_progress, .pp-med--maintenance { cursor: pointer; }
+    .pp-med--unearned:hover .pp-med__art,
+    .pp-med--in_progress:hover .pp-med__art,
+    .pp-med--maintenance:hover .pp-med__art { transform: translateY(-3%) scale(1.02); }
 }
 
 /* First-earn "minting" ceremony (collection.js adds .is-minting the first time you see a newly-earned
@@ -295,7 +303,7 @@
 
 /* segmented progress meter (in_progress + maintenance) -- a multi-bar echoing the job page's tier
    ladder: one rounded cell per platinum/100% toward the badge, filled up to stages_done. */
-.pp-med__meter { display: flex; gap: 3px; width: 72%; margin-top: 9px; }
+.pp-med__meter { display: flex; gap: 3px; width: 72%; margin-top: 16px; }
 .pp-med__seg {
     flex: 1 1 0; min-width: 0; height: 5px; border-radius: 999px;
     background: var(--meter-dim, rgba(255, 255, 255, 0.09));
@@ -318,7 +326,8 @@
    meter's vertical space (margin) so their count aligns with the metered states'; when a meter precedes
    the count (in_progress/maintenance) the meter has already supplied that space. */
 .pp-med__count {
-    margin-top: 20px;
+    margin-top: 27px;   /* clears the neon glow's downward bloom; = 16 (meter top) + 5 (meter) + 6, so
+                           non-metered counts stay aligned with metered ones */
     font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em; color: var(--meter-c, var(--med-c)); line-height: 1;
 }
@@ -338,8 +347,12 @@
 }
 .pp-med__setno + .pp-med__earnno { padding-left: 7px; border-left: 1px solid rgba(255, 255, 255, 0.14); }
 
+/* Keep the info row legible ON TOP of the art's glow: the neon "next"/maintenance drop-shadow blooms
+   downward past the emblem into this area, and the art sits at z-index 1 -- so lift the meter/count/ids
+   above it. */
+.pp-med__meter, .pp-med__count, .pp-med__ids { position: relative; z-index: 2; }
+
 @media (prefers-reduced-motion: reduce) {
     .pp-med__art, .pp-med__stage::before { transition: none; }
     .pp-med--earned:hover .pp-med__glint::before { animation: none; }
-    .pp-med--maintenance .pp-med__stage::before { animation: none; opacity: 0.58; }   /* steady red glow, no pulse */
 }
