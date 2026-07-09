@@ -1,10 +1,7 @@
-/* Collection page controller (baseline).
- * Two concerns: the Surface-level view toggle (Binder vs List, the binder's own
- * Binder/Gallery presentation toggle is separate and owned by binder.js), and the
- * list view's client-side sort / filter / search. The list's "View ->" links set a
- * #card-<id> hash; binder.js flips to that page on hashchange, and this controller just
- * makes the binder visible first. (The binder links back via per-series detail-page links,
- * which are plain server-rendered anchors.) Namespaced under window.PlatPursuit.Collection. */
+/* Collection page controller.
+ * Drives the Case/Gallery view toggle, the medallion physicality (flip/tilt/gyro), the first-earn
+ * mint ceremony, the badge detail modal, the header count-ups + tappable tier stats, and the Gallery's
+ * client-side filter / sort / search. Namespaced under window.PlatPursuit.Collection. */
 (function () {
     'use strict';
 
@@ -64,7 +61,8 @@
         if (window.location.hash.indexOf('#card-') !== 0) {
             try { initial = localStorage.getItem(STORAGE_KEY) || 'case'; } catch (e) { /* noop */ }
         }
-        if (initial === 'binder') initial = 'case';
+        if (initial === 'binder') initial = 'case';       // legacy binder view -> Case
+        if (initial === 'list') initial = 'gallery';       // the List was retired; its data lives in the Gallery
         setView(initial);
 
         // Row "View ->" cross-link: show the Case first; initCase's hashchange handler then activates
@@ -577,75 +575,6 @@
         });
     }
 
-    // The List: the data table. Column-header sort (asc/desc toggle + aria-sort) over the shared engine.
-    function initList(root) {
-        var listRoot = root.querySelector('.pp-list');
-        if (!listRoot) return;
-        var tbody = listRoot.querySelector('.pp-list__table tbody');
-        if (!tbody) return;
-
-        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-        var stats = listRoot.querySelector('[data-visible-count]');
-        var emptyMsg = listRoot.querySelector('[data-empty-message]');
-        var totalRows = rows.length;
-        var filters = { tier: 'all', state: 'all', theme: 'all' };
-        var searchTerm = '';
-        var sortKey = 'series';
-        var sortDir = 'asc';
-
-        function applyFilters() {
-            var visible = 0;
-            rows.forEach(function (row) {
-                var ok = elMatches(row, filters, searchTerm);
-                row.style.display = ok ? '' : 'none';
-                if (ok) visible++;
-            });
-            if (stats) stats.textContent = visible + ' of ' + totalRows;
-            if (emptyMsg) emptyMsg.hidden = visible !== 0;
-        }
-
-        function applySort() {
-            rows.slice().sort(compareBy(sortKey, sortDir)).forEach(function (row) { tbody.appendChild(row); });
-            listRoot.querySelectorAll('th[data-sort]').forEach(function (th) {
-                th.classList.remove('is-sorted-asc', 'is-sorted-desc');
-                if (th.getAttribute('data-sort') === sortKey) {
-                    th.classList.add(sortDir === 'asc' ? 'is-sorted-asc' : 'is-sorted-desc');
-                    th.setAttribute('aria-sort', sortDir === 'asc' ? 'ascending' : 'descending');
-                } else {
-                    th.setAttribute('aria-sort', 'none');
-                }
-            });
-        }
-
-        wireFilterChips(listRoot, filters, applyFilters);
-
-        var search = listRoot.querySelector('[data-search]');
-        if (search) {
-            search.addEventListener('input', function (e) {
-                searchTerm = e.target.value.toLowerCase().trim();
-                applyFilters();
-            });
-        }
-
-        listRoot.querySelectorAll('th[data-sort]').forEach(function (th) {
-            function toggleSort() {
-                var key = th.getAttribute('data-sort');
-                if (sortKey === key) {
-                    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-                } else {
-                    sortKey = key;
-                    sortDir = 'asc';
-                }
-                applySort();
-            }
-            th.addEventListener('click', toggleSort);
-            th.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSort(); }
-            });
-        });
-
-        applySort();  // default: series ascending (set numbers are sparse pre-launch)
-    }
 
     // The Gallery: the visual filter wall. Same filters as the List, but a flat medallion grid and a
     // sort <select> (value = "key:dir") instead of column headers.
@@ -788,7 +717,6 @@
         initCase(root);
         initDetail(root);
         initGallery(root);
-        initList(root);
         initMint(root);
         var mintBtn = document.querySelector('[data-mint-preview]');   // dev-only replay button (settings.DEBUG)
         if (mintBtn) mintBtn.addEventListener('click', previewMint);

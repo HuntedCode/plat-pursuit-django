@@ -1,21 +1,16 @@
 /* ============================================================
- * Collection list view -- the sibling "hunting tool" to the Binder
- * Surface. Same data as the binder, flattened to a sortable /
- * filterable / searchable table. Productionized from the
- * /design/badge-collection/ workshop. Wired by collection.js.
+ * Collection page chrome: the .pp-collection wrapper, the Case/Gallery view
+ * toggle, the summary-header additions (tier composition + completion Horizon +
+ * momentum pill), and the filter/search toolbar the Gallery uses. Wired by
+ * collection.js. (The old List/table view was retired -- its data lives in the
+ * Gallery's sort + the badge modal.)
  *
  * Chrome is intentionally NON-sticky: the global hub sub-nav is the
  * only pinned chrome on the site (see docs/architecture/ia-and-subnav).
  * ============================================================ */
 
 .pp-collection {
-    --pp-list-row-1:    rgba(22, 24, 30, 0.92);
-    --pp-list-row-2:    rgba(18, 20, 26, 0.92);
-    --pp-list-edge:     rgba(255, 255, 255, 0.06);
-    --pp-list-hover:    rgba(40, 46, 58, 0.7);
-    --pp-list-head-bg:  rgba(16, 18, 24, 0.95);
-    --pp-list-head-edge: rgba(255, 255, 255, 0.1);
-    --pp-list-accent:   rgba(63, 205, 220, 1);
+    --pp-list-accent: rgba(63, 205, 220, 1);   /* focus ring + active-chip cyan */
 }
 
 /* ── Header: completion Horizon + tier composition row ──────────────
@@ -112,9 +107,7 @@
  * substrate swallows the browser default). */
 .pp-collection__view-chip:focus-visible,
 .pp-list__chip:focus-visible,
-.pp-list__search:focus-visible,
-.pp-list__binder-link:focus-visible,
-.pp-list__table thead th:focus-visible {
+.pp-list__search:focus-visible {
     outline: 2px solid var(--pp-list-accent);
     outline-offset: 2px;
 }
@@ -189,141 +182,10 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* ── Table ─────────────────────────────────────────────────────────── */
-.pp-list__table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-size: 12.5px;
-    background: rgba(14, 16, 22, 0.5);
-    border: 1px solid var(--pp-list-edge);
-    border-radius: 6px;
-}
-.pp-list__table thead th:first-child { border-top-left-radius: 6px; }
-.pp-list__table thead th:last-child  { border-top-right-radius: 6px; }
-.pp-list__table tbody tr:last-child td:first-child { border-bottom-left-radius: 6px; }
-.pp-list__table tbody tr:last-child td:last-child  { border-bottom-right-radius: 6px; }
-.pp-list__table thead th {
-    text-align: left;
-    padding: 10px 14px;
-    font-size: 10.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: rgba(255, 255, 255, 0.62);
-    background: var(--pp-list-head-bg);
-    border-bottom: 1px solid var(--pp-list-head-edge);
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-.pp-list__table thead th:hover { color: rgba(180, 230, 245, 1); }
-.pp-list__table thead th.is-sorted-asc::after  { content: " \2191"; opacity: 0.7; }
-.pp-list__table thead th.is-sorted-desc::after { content: " \2193"; opacity: 0.7; }
-.pp-list__table tbody tr {
-    background: var(--pp-list-row-1);
-    transition: background 120ms ease;
-    border-left: 3px solid transparent;
-    scroll-margin-top: 96px;
-}
-.pp-list__table tbody tr:nth-child(even) { background: var(--pp-list-row-2); }
-.pp-list__table tbody tr:hover { background: var(--pp-list-hover); }
-.pp-list__table tbody tr[data-tier="bronze"]   { border-left-color: rgba(200, 122, 59, 0.6); }
-.pp-list__table tbody tr[data-tier="silver"]   { border-left-color: rgba(205, 208, 212, 0.6); }
-.pp-list__table tbody tr[data-tier="gold"]     { border-left-color: rgba(240, 198, 74, 0.7); }
-.pp-list__table tbody tr[data-tier="platinum"] { border-left-color: rgba(207, 232, 240, 0.7); }
-.pp-list__table tbody td {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--pp-list-edge);
-    vertical-align: middle;
-    font-variant-numeric: tabular-nums;
-}
-.pp-list__table tbody tr:last-child td { border-bottom: none; }
-
-
-/* ── Cell adornments ──────────────────────────────────────────────── */
-.pp-list__tier {
-    display: inline-block;
-    padding: 3px 9px;
-    border-radius: 3px;
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    border: 1px solid;
-}
-.pp-list__tier--bronze   { color: rgba(220, 150, 80, 1);  border-color: rgba(200, 122, 59, 0.45); background: rgba(200, 122, 59, 0.1); }
-.pp-list__tier--silver   { color: rgba(220, 225, 235, 1); border-color: rgba(205, 208, 212, 0.45); background: rgba(205, 208, 212, 0.1); }
-.pp-list__tier--gold     { color: rgba(245, 220, 130, 1); border-color: rgba(240, 198, 74, 0.5);   background: rgba(240, 198, 74, 0.1); }
-.pp-list__tier--platinum { color: rgba(220, 240, 250, 1); border-color: rgba(207, 232, 240, 0.55); background: rgba(207, 232, 240, 0.1); }
-
-.pp-list__state {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-.pp-list__state--earned      { color: rgba(160, 230, 180, 1); background: rgba(50, 140, 80, 0.18); }
-.pp-list__state--in_progress { color: rgba(180, 220, 240, 1); background: rgba(63, 130, 180, 0.18); }
-.pp-list__state--maintenance { color: rgba(255, 200, 120, 1); background: rgba(200, 130, 50, 0.18); }
-.pp-list__state--unearned    { color: rgba(170, 175, 185, 1); background: rgba(80, 84, 92, 0.22); }
-
-.pp-list__theme {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11.5px;
-    color: rgba(255, 255, 255, 0.82);
-    white-space: nowrap;
-}
-.pp-list__theme-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
-}
-.pp-list__theme-dot[data-palette="cobalt"]  { background: hsl(215, 55%, 50%); }
-.pp-list__theme-dot[data-palette="amber"]   { background: hsl(28,  62%, 52%); }
-.pp-list__theme-dot[data-palette="emerald"] { background: hsl(140, 48%, 44%); }
-.pp-list__theme-dot[data-palette="violet"]  { background: hsl(280, 45%, 52%); }
-
-.pp-list__set-mark { color: rgba(255, 255, 255, 0.75); font-weight: 700; letter-spacing: 0.08em; font-size: 11.5px; }
-.pp-list__series   { color: rgba(255, 255, 255, 0.92); font-weight: 600; }
-/* Series name links to the badge detail page; reads as text until hovered/focused. */
-.pp-list__series-link { color: inherit; text-decoration: none; transition: color 140ms ease; }
-.pp-list__series-link:hover,
-.pp-list__series-link:focus-visible { color: rgb(63, 205, 220); text-decoration: underline; }
-.pp-list__progress { color: rgba(180, 220, 240, 0.85); font-variant-numeric: tabular-nums; font-size: 11.5px; }
-.pp-list__rank     { color: rgba(245, 220, 130, 0.9); font-weight: 700; font-size: 11.5px; }
-.pp-list__binder-link {
-    display: inline-block;
-    padding: 4px 10px;
-    border: 1px solid rgba(63, 205, 220, 0.4);
-    border-radius: 3px;
-    color: rgba(180, 230, 245, 1);
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    text-decoration: none;
-    transition: background 140ms ease, border-color 140ms ease;
-}
-.pp-list__binder-link:hover { background: rgba(63, 205, 220, 0.14); border-color: rgba(63, 205, 220, 0.7); }
 
 .pp-list__empty {
     padding: 60px 30px;
     text-align: center;
     color: rgba(255, 255, 255, 0.45);
     font-size: 13px;
-}
-
-@media (max-width: 1023px) {
-    .pp-list__table { font-size: 11.5px; }
-    .pp-list__table thead th,
-    .pp-list__table tbody td { padding: 8px 10px; }
-    .pp-list__col--theme,
-    .pp-list__col--rank { display: none; }
 }

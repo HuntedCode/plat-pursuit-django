@@ -503,7 +503,7 @@ def test_holographic_foil_renders_only_for_earned_special_badges(monkeypatch):
 
 def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
     """The Gallery renders each badge as a medallion cell (tapping opens the detail modal) with the
-    shared tier/state filter chips + the sort control -- the visual sibling of the List table."""
+    tier/state filter chips + the sort control -- the flat filter/sort hunting tool beside the Case."""
     from django.template.loader import render_to_string
 
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
@@ -522,7 +522,7 @@ def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
     assert 'id="card-%d"' % badges[0].id not in html
 
 
-# --- list view (the sortable/filterable sibling of the binder) ----------------
+# --- the Gallery's flat badge feed (list_badges, built by _flatten_for_list) ---
 
 
 def test_list_badges_flatten_every_frame_with_theme_and_palette():
