@@ -18,6 +18,23 @@
     --pp-list-accent:   rgba(63, 205, 220, 1);
 }
 
+/* ── Header: completion Horizon + tier composition row ──────────────
+ * At-a-glance breakdown in the summary card (bronze -> platinum earned counts),
+ * so the header carries substance without a separate stats section. */
+.pp-coll-tiers { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 12px; }
+.pp-coll-tier { display: inline-flex; align-items: center; gap: 6px; }
+.pp-coll-tier__dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--dot); box-shadow: 0 0 6px color-mix(in oklab, var(--dot) 55%, transparent);
+}
+.pp-coll-tier__n { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--pp-text); }
+.pp-coll-tier__label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+/* Tier palette mirrors the medallion tiers (badge-medallion.css). */
+.pp-coll-tier[data-tier="bronze"]   { --dot: #cf9160; }
+.pp-coll-tier[data-tier="silver"]   { --dot: #b9c6d6; }
+.pp-coll-tier[data-tier="gold"]     { --dot: #e7c25c; }
+.pp-coll-tier[data-tier="platinum"] { --dot: #8fd2ea; }
+
 /* ── View toggle (Binder vs List) -- the Surface-level switch ──────── */
 .pp-collection__views {
     display: inline-flex;

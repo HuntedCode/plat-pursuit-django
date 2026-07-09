@@ -567,6 +567,36 @@ function debounce(fn, delay = 300) {
 }
 
 /**
+ * Count a number up from 0 to a target with easeOutCubic. Reads the target from the element's
+ * `data-countup` attribute (falling back to its current text), honours `data-countup-decimals`
+ * for fixed-decimal values, and prefers-reduced-motion (jumps straight to the target). This is the
+ * canonical shared count-up; career.html + home-motion.js still hand-roll their own -- new callers
+ * (and eventually those) should use this.
+ * @param {HTMLElement} el
+ * @param {number} [dur=750] duration in ms
+ */
+function countUp(el, dur = 750) {
+    if (!el) return;
+    const dec = parseInt(el.dataset.countupDecimals || '0', 10);
+    const raw = el.dataset.countup != null ? el.dataset.countup : (el.textContent || '').replace(/,/g, '');
+    const target = parseFloat(raw);
+    if (isNaN(target)) return;
+    const fmt = (v) => (dec ? v.toFixed(dec) : Math.round(v).toLocaleString());
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || target === 0) { el.textContent = fmt(target); return; }
+    el.textContent = fmt(0);
+    let start = null;
+    function step(ts) {
+        if (start === null) start = ts;
+        const p = Math.min(1, (ts - start) / dur);
+        el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)));
+        if (p < 1) requestAnimationFrame(step);
+        else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(step);
+}
+
+/**
  * Drag Reorder Manager
  * Wraps SortableJS for smooth, touch-friendly drag-and-drop reordering.
  * Drop-in replacement: same constructor API, same onReorder callback signature.
@@ -1607,6 +1637,7 @@ window.PlatPursuit.API = API;
 window.PlatPursuit.UnsavedChangesManager = UnsavedChangesManager;
 window.PlatPursuit.HTMLUtils = HTMLUtils;
 window.PlatPursuit.debounce = debounce;
+window.PlatPursuit.countUp = countUp;
 window.PlatPursuit.InfiniteScroller = InfiniteScroller;
 window.PlatPursuit.DragReorderManager = DragReorderManager;
 window.PlatPursuit.ZoomScaler = ZoomScaler;

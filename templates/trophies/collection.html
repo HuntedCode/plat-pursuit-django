@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load humanize static %}
+{% load humanize static custom_filters %}
 {% block title %}Your Collection{% endblock %}
 
 {% block content %}
@@ -23,10 +23,26 @@
                 </div>
                 <div class="shrink-0 text-right">
                     <div class="leading-none">
-                        <span class="pp-tally text-2xl md:text-3xl text-primary">{{ summary.earned|intcomma }}</span>
+                        <span class="pp-tally text-2xl md:text-3xl text-primary" data-countup="{{ summary.earned }}">{{ summary.earned|intcomma }}</span>
                         <span class="text-sm text-base-content/50">/ {{ summary.total|intcomma }}</span>
                     </div>
                     <div class="text-[0.6rem] md:text-xs uppercase tracking-wider text-base-content/50 mt-1">badges collected &middot; {{ summary.pct }}%</div>
+                </div>
+            </div>
+
+            {# Completion Horizon + tier composition -- substance in the header, not a separate section. #}
+            <div class="mt-3 md:mt-4">
+                <div class="pp-horizon" data-horizon-band="{{ summary.pct|horizon_band }}" style="--horizon-h: 6px;">
+                    <span class="pp-horizon__track"><span class="pp-horizon__fill" style="--horizon-progress: {{ summary.pct }}%;"></span></span>
+                </div>
+                <div class="pp-coll-tiers">
+                    {% for t in summary.tiers %}
+                    <span class="pp-coll-tier" data-tier="{{ t.key }}">
+                        <span class="pp-coll-tier__dot" aria-hidden="true"></span>
+                        <span class="pp-coll-tier__n pp-tally" data-countup="{{ t.count }}">{{ t.count }}</span>
+                        <span class="pp-coll-tier__label">{{ t.label }}</span>
+                    </span>
+                    {% endfor %}
                 </div>
             </div>
         </div>

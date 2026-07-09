@@ -69,7 +69,7 @@ def _build_sets(profile, sort=DEFAULT_SORT):
     """
     badges = _live_badges()
     if not badges:
-        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}}
+        return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'tiers': []}
 
     # Bulk per-viewer state (one query each), keyed by badge id.
     badge_ids = [b.id for b in badges]
@@ -186,6 +186,11 @@ def _build_sets(profile, sort=DEFAULT_SORT):
         'earned': earned,
         'pct': round(earned / total * 100) if total else 0,
         'by_tier': dict(by_tier),
+        # Ordered bronze->platinum breakdown for the header's at-a-glance composition row.
+        'tiers': [
+            {'key': name, 'label': name.title(), 'count': by_tier.get(name, 0)}
+            for name in ('bronze', 'silver', 'gold', 'platinum')
+        ],
     }
     return binder_sets, summary
 
@@ -215,7 +220,7 @@ def build_collection_context(profile, sort=DEFAULT_SORT):
     if sort not in dict(COLLECTION_SORTS):
         sort = DEFAULT_SORT
     context = {
-        'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}},
+        'binder_sets': [], 'summary': {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'tiers': []},
         'list_badges': [], 'themes': [], 'total_pages': 0,
         'sort': sort, 'sort_options': COLLECTION_SORTS,
     }

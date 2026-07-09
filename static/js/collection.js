@@ -767,6 +767,11 @@
     function init() {
         var root = document.querySelector('.pp-collection');
         if (!root) return;
+        // Header stats (earned tally + tier composition) count up on load -- shared util; no-op if
+        // reduced-motion or utils.js hasn't loaded.
+        if (window.PlatPursuit && PlatPursuit.countUp) {
+            root.querySelectorAll('[data-countup]').forEach(function (el) { PlatPursuit.countUp(el); });
+        }
         initViewToggle(root);
         initCase(root);
         initDetail(root);

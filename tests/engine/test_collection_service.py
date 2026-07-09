@@ -43,7 +43,15 @@ def test_full_set_shown_with_earned_and_unearned():
     assert len(frames) == 4                       # the whole set, not just earned
     states = {f['state'] for f in frames}
     assert 'earned' in states and 'unearned' in states
-    assert ctx['summary'] == {'total': 4, 'earned': 1, 'pct': 25, 'by_tier': {'bronze': 1}}
+    assert ctx['summary'] == {
+        'total': 4, 'earned': 1, 'pct': 25, 'by_tier': {'bronze': 1},
+        'tiers': [
+            {'key': 'bronze', 'label': 'Bronze', 'count': 1},
+            {'key': 'silver', 'label': 'Silver', 'count': 0},
+            {'key': 'gold', 'label': 'Gold', 'count': 0},
+            {'key': 'platinum', 'label': 'Platinum', 'count': 0},
+        ],
+    }
 
 
 def test_non_live_badges_excluded():
@@ -358,6 +366,22 @@ def test_frames_carry_earned_ts_for_the_gallery_sort(monkeypatch):
 
     assert by_slug['held']['earned_ts'] > 0       # a real earn epoch
     assert by_slug['unheld']['earned_ts'] == 0    # not held -> sinks under a desc sort
+
+
+def test_summary_tiers_ordered_bronze_to_platinum(monkeypatch):
+    """The summary carries an ordered tier composition (bronze->platinum, every tier present each
+    render) for the header row -- counting only held badges."""
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    _earn(profile, 'g1', 3)          # a held gold
+    _earn(profile, 'p1', 4)          # a held platinum
+    _series('unheld-series')         # unearned -> counts toward nothing
+
+    tiers = build_collection_context(profile)['summary']['tiers']
+
+    assert [t['key'] for t in tiers] == ['bronze', 'silver', 'gold', 'platinum']   # stable order
+    assert {t['key']: t['count'] for t in tiers} == {'bronze': 0, 'silver': 0, 'gold': 1, 'platinum': 1}
+    assert all(t['label'] == t['key'].title() for t in tiers)
 
 
 def test_case_template_renders_medallions_and_tablist(monkeypatch):
