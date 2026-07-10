@@ -52,12 +52,16 @@ collection-gallery.css, wired by collection.js (initGallery).
                 <option value="set_number:asc">Set order</option>
             </select>
         </label>
-        <div class="pp-gallery__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</div>
-        <button type="button" class="pp-gallery__clear" data-clear-filters hidden>Clear filters</button>
     </div>
 
-    {# Applied-filter pills (removable tokens) -- built + toggled by collection.js from the filter state. #}
-    <div class="pp-gallery__pills" data-gallery-pills hidden></div>
+    {# Meta row: result count + applied-filter pills + clear. Keeping the count/clear here (not in the
+       toolbar) means applying a filter never wraps the toolbar to a second line. Pills are built + toggled
+       by collection.js from the filter state. #}
+    <div class="pp-gallery__meta">
+        <span class="pp-gallery__stats" data-visible-count>{{ list_badges|length }} of {{ list_badges|length }}</span>
+        <div class="pp-gallery__pills" data-gallery-pills></div>
+        <button type="button" class="pp-gallery__clear" data-clear-filters hidden>Clear filters</button>
+    </div>
 
     {% comment %} Gallery body: a clean card grid holding the full Case medallion (identical to the Case --
     backdrop, subject, plate, glint, state fills, hover physicality). All the data-* hooks +

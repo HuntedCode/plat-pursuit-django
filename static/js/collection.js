@@ -635,11 +635,11 @@
             flipTimer = setTimeout(flipCleanup, 520);
         }
 
-        var toolbarClear = gal.querySelector('.pp-gallery__toolbar [data-clear-filters]');
+        var metaClear = gal.querySelector('.pp-gallery__meta [data-clear-filters]');
         function anyActive() {
             return filters.tier !== 'all' || filters.state !== 'all' || filters.theme !== 'all' || searchTerm !== '';
         }
-        function syncClear() { if (toolbarClear) toolbarClear.hidden = !anyActive(); }
+        function syncClear() { if (metaClear) metaClear.hidden = !anyActive(); }
 
         // animate defaults on (discrete actions -- chips / dropdowns / clear / pills get the FLIP glide);
         // search passes false so per-keystroke typing filters instantly (FLIP every keystroke is janky).

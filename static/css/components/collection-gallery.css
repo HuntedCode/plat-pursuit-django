@@ -82,7 +82,12 @@
 .pp-gallery__search-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
 .pp-gallery__search-clear[hidden] { display: none; }
 
+/* Meta row below the toolbar: result count + applied-filter pills + clear -- so applying a filter never
+   wraps the toolbar itself to a second line. */
+.pp-gallery__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 16px; min-height: 22px; }
+.pp-gallery__meta .pp-gallery__clear { margin-left: auto; }
 .pp-gallery__stats {
+    flex: 0 0 auto;
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--pp-text-mute); font-variant-numeric: tabular-nums;
 }
@@ -99,8 +104,9 @@
 .pp-gallery__clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-gallery__clear[hidden] { display: none; }
 
-/* Applied-filter pills -- one removable token per active filter (collection.js builds them). */
-.pp-gallery__pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+/* Applied-filter pills -- one removable token per active filter (collection.js builds them). display:
+   contents so each pill flows as a direct item of the meta row (sharing its gap) between count + clear. */
+.pp-gallery__pills { display: contents; }
 .pp-gallery__pills[hidden] { display: none; }
 .pp-gallery__pill {
     display: inline-flex; align-items: center; gap: 6px;
