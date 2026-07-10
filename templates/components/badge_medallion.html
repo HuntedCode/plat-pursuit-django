@@ -8,7 +8,7 @@ platinum/100%, filled to stages_done; a smooth bar off progress_pct above the ca
 page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medallion.md.
 {% endcomment %}
 {% with tier=frame.tier|default:"gold" state=frame.state|default:"earned" total=frame.stages_total|default:0 %}
-<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
+<div class="pp-med pp-med--{{ tier }} pp-med--{{ state }}{% if frame.is_holographic and state == 'earned' %} pp-med--holographic{% endif %}{% if show_repair and state == 'maintenance' %} pp-med--repair{% endif %}{% if frame.extra_class %} {{ frame.extra_class }}{% endif %}"
      data-tier="{{ tier }}" data-state="{{ state }}"{% if frame.badge_id %} data-badge-id="{{ frame.badge_id }}"{% endif %}
      {% if frame.dom_id and not no_id %}id="{{ frame.dom_id }}"{% endif %}>
     <div class="pp-med__stage">
@@ -19,13 +19,14 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
             {% for layer in frame.art_layers %}
             <img class="pp-med__l" src="{{ layer }}" alt="{% if forloop.counter == 2 %}{{ frame.series_name }} badge{% endif %}" loading="lazy" draggable="false">
             {% endfor %}
-            {% comment %} Rising colour (in_progress + maintenance): a full-colour copy of ONLY the subject
-            (main = art_layers.1), masked to reveal bottom-up to progress_pct -- the badge "colours in" as
-            you complete it. Sits above the darkened base subject, below any foreground. {% endcomment %}
+            {% comment %} Rising colour (in_progress + maintenance): full-colour copies of the backdrop AND
+            the subject (art_layers.0 + .1) masked bottom-up to progress_pct, so the whole badge "colours in"
+            as you complete it. TWO separate fills (not one) because the modal's 3D puts the backdrop and the
+            subject on different Z planes -- the backdrop fill must ride the backdrop's plane, so a single
+            masked container (which flattens) can't span both. {% endcomment %}
             {% if state == 'in_progress' or state == 'maintenance' %}
-            <div class="pp-med__fill" style="--fill: {{ frame.progress_pct|default:0 }}%;" aria-hidden="true">
-                <img class="pp-med__fill-l" src="{{ frame.art_layers.1 }}" alt="" loading="lazy" draggable="false">
-            </div>
+            {% if frame.art_layers.0 %}<div class="pp-med__fill pp-med__fill--bg" style="--fill: {{ frame.progress_pct|default:0 }}%;" aria-hidden="true"><img class="pp-med__fill-l" src="{{ frame.art_layers.0 }}" alt="" loading="lazy" draggable="false"></div>{% endif %}
+            <div class="pp-med__fill" style="--fill: {{ frame.progress_pct|default:0 }}%;" aria-hidden="true"><img class="pp-med__fill-l" src="{{ frame.art_layers.1 }}" alt="" loading="lazy" draggable="false"></div>
             {% endif %}
             {% comment %} Holographic "chase card" foil -- rare/top-tier earned badges only (frame.is_holographic).
             Kept LAST so the state filters' nth-child(N) still count only the art layers. No mix-blend-mode
@@ -64,7 +65,7 @@ page's tier ladder, with the "X / Y" count below. See docs/reference/badge-medal
         <div class="pp-med__meter pp-med__meter--smooth" aria-hidden="true"><span class="pp-med__meter-fill" style="width: {{ frame.progress_pct|default:0 }}%;"></span></div>
         {% endif %}
     {% endif %}
-    {% if total %}<span class="pp-med__count">{{ frame.stages_done|default:0 }} / {{ total }}</span>{% endif %}
+    {% if total %}<span class="pp-med__count">{% if show_repair and state == 'maintenance' %}<svg class="pp-med__wrench" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><span class="sr-only">needs re-earning, </span>{% endif %}{{ frame.stages_done|default:0 }} / {{ total }}</span>{% endif %}
     {% comment %} Edition + earn marks (Case/Gallery/Showcase pass show_ids): the badge's set number
     (every badge has one) and, for earned badges, the permanent earn rank (you were the Nth to earn it). {% endcomment %}
     {% if show_ids %}{% if frame.set_number or frame.engraving_rank %}

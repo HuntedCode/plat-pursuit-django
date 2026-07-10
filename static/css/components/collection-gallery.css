@@ -182,6 +182,28 @@
 .pp-gallery__card[data-tier="silver"]   { --tier-c: #b9c6d6; }
 .pp-gallery__card[data-tier="gold"]     { --tier-c: #e7c25c; }
 .pp-gallery__card[data-tier="platinum"] { --tier-c: #8fd2ea; }
+/* Held cells wear a resting frame so "earned vs not" reads at a glance without hovering: earned = GREEN
+   ("got it"), maintenance = RED ("held but lapsed, needs repair"). Both stay distinct from all four tier
+   hover colours. Unearned/in-progress keep the dim default border. Placed BEFORE :hover so the tier-colour
+   hover still wins on equal specificity. */
+.pp-gallery__card[data-state="earned"] {
+    --pp-earned: #3fbf7f;
+    border-color: color-mix(in oklab, var(--pp-earned) 62%, var(--pp-border));
+    box-shadow: 0 0 14px -5px color-mix(in oklab, var(--pp-earned) 48%, transparent);
+}
+.pp-gallery__card[data-state="maintenance"] {
+    --pp-maint: #e23026;
+    border-color: color-mix(in oklab, var(--pp-maint) 58%, var(--pp-border));
+    box-shadow: 0 0 14px -5px color-mix(in oklab, var(--pp-maint) 44%, transparent);
+}
+/* The cell now carries the maintenance signal (red frame + "M"), so drop the medallion art's OWN red neon
+   glow inside the Gallery -- keep just its base rim + cast shadows so the object still reads with weight.
+   (The two base shadows mirror .pp-med--maintenance .pp-med__art in badge-medallion.css.) */
+.pp-gallery__card[data-state="maintenance"] .pp-med__art {
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.22))
+        drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4));
+}
 /* Hover WARMS the card (border + glow); the medallion's own art-lift is the motion, so the card stays put
    to avoid a double-lift. */
 @media (hover: hover) {
@@ -197,22 +219,36 @@
    identical to the Case, now framed by the card. */
 .pp-gallery__card .pp-med { --sz: 108px; }
 
-/* "New" spark: a tier-tinted corner dot with a gentle expanding ping on badges earned this week (ties to
-   the header's "+N this week" pill). Transform-based ping, motion-gated. */
-.pp-gallery__new {
-    position: absolute; top: 9px; right: 9px; z-index: 3;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--tier-c, var(--pp-primary));
-    box-shadow: 0 0 8px 1px color-mix(in oklab, var(--tier-c, var(--pp-primary)) 70%, transparent);
+/* Earned tick: a green check-disc in the top-right of every earned cell -- the quickest "you have this"
+   read, matching the green earned-cell border/glow. Recently-earned badges (--new) also get a gentle
+   expanding ping (this absorbs the old "new" spark, so the corner never carries two marks). */
+.pp-gallery__check {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 50%;
+    background: var(--pp-earned, #3fbf7f); color: #06140d;
+    box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-earned, #3fbf7f) 70%, transparent);
 }
+.pp-gallery__check svg { width: 11px; height: 11px; }
 @media (prefers-reduced-motion: no-preference) {
-    .pp-gallery__new::after {
+    .pp-gallery__check--new::after {
         content: ''; position: absolute; inset: -2px; border-radius: 50%;
-        border: 1.5px solid var(--tier-c, var(--pp-primary));
+        border: 1.5px solid var(--pp-earned, #3fbf7f);
         animation: pp-gallery-ping 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
     }
 }
 @keyframes pp-gallery-ping { 0% { transform: scale(1); opacity: 0.75; } 100% { transform: scale(2.4); opacity: 0; } }
+
+/* Maintenance mark: a red "M" disc in the same top-right slot the earned tick uses -- a held-but-lapsed
+   badge (needs re-earning). Mirrors .pp-gallery__check's geometry, red instead of green. */
+.pp-gallery__badge-m {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 50%;
+    background: var(--pp-maint, #e23026); color: #fff;
+    font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: -0.02em;
+    box-shadow: 0 0 8px -1px color-mix(in oklab, var(--pp-maint, #e23026) 70%, transparent);
+}
 
 /* Caption */
 .pp-gallery__caption { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 100%; margin-top: auto; padding-top: 4px; }

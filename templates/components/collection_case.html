@@ -26,16 +26,21 @@ component; tapping a badge links to its detail (the "pick it up" modal replaces 
              id="case-panel-{{ set.key }}" role="tabpanel" aria-labelledby="case-tab-{{ set.key }}" tabindex="0">
         <div class="pp-case__grid">
             {% for group in set.groups %}
-            <div class="pp-case__group{% if group.complete %} is-complete{% endif %}">
+            {% comment %} A lapsed (maintenance) rung flips the whole series into is-maintenance (red/amber niche +
+            red "M" in the header), taking priority over is-complete -- one lapsed badge still needs attention. {% endcomment %}
+            <div class="pp-case__group{% if group.has_maintenance %} is-maintenance{% elif group.complete %} is-complete{% endif %}">
                 <div class="pp-case__group-head">
                     <span class="pp-case__group-name">{{ group.name }}</span>
-                    <span class="pp-case__group-prog" aria-hidden="true">{% if group.complete %}&#10003;{% else %}{{ group.earned }}/{{ group.total }}{% endif %}</span>
-                    <span class="sr-only">{% if group.complete %}series complete{% else %}{{ group.earned }} of {{ group.total }} earned{% endif %}</span>
+                    <span class="pp-case__group-prog" aria-hidden="true">{% if group.has_maintenance %}M{% elif group.complete %}&#10003;{% else %}{{ group.earned }}/{{ group.total }}{% endif %}</span>
+                    <span class="sr-only">{% if group.has_maintenance %}series needs maintenance{% elif group.complete %}series complete{% else %}{{ group.earned }} of {{ group.total }} earned{% endif %}</span>
                 </div>
                 <div class="pp-case__group-tiers">
                     {% for f in group.tiers %}
+                    {% comment %} Earned reads at the GROUP level (is-complete niche + header ✓), not per badge. A lapsed
+                    rung ALSO flags its series (is-maintenance niche + header "M"); show_repair then adds the pulsing amber
+                    wrench beside the count + a red unfilled meter on that specific badge, so you see which one to repair. {% endcomment %}
                     <a class="pp-case__slot{% if f.is_next %} is-next{% endif %}"{% if f.series_slug %} href="{% url 'badge_detail' f.series_slug %}"{% endif %} data-case-slot data-modal-url="{% url 'collection_badge_modal' f.badge_id %}">
-                        {% include 'components/badge_medallion.html' with frame=f show_ids=True %}
+                        {% include 'components/badge_medallion.html' with frame=f show_ids=True show_repair=True %}
                     </a>
                     {% endfor %}
                 </div>

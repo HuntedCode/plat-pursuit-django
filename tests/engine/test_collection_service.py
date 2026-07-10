@@ -438,6 +438,35 @@ def test_case_earned_badge_dom_id_emitted_once(monkeypatch):
     html = render_to_string('components/collection_case.html', build_collection_context(profile))
 
     assert html.count('id="card-%d"' % badges[0].id) == 1
+    assert 'pp-case__check' not in html                       # no per-badge tick -- earned reads at the group level
+
+
+def test_case_group_flags_maintenance_and_renders_red_treatment(monkeypatch):
+    """A lapsed (maintenance) rung flips the whole series group into is-maintenance: the service sets
+    group.has_maintenance, and the Case renders the red niche + a red 'M' where the complete-check sits.
+    Maintenance is a GROUP-level signal here (no per-badge 'M'), and it wins over is-complete."""
+    from django.template.loader import render_to_string
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badges = _series('rs-maint')
+    # Hold the whole series but let the bronze rung lapse -> complete AND has_maintenance; maintenance wins.
+    for b in badges:
+        UserBadgeFactory(profile=profile, badge=b)
+    UserBadge.objects.filter(profile=profile, badge=badges[0]).update(status='maintenance')
+
+    ctx = build_collection_context(profile)
+    group = ctx['binder_sets'][0]['groups'][0]
+    assert group['has_maintenance'] is True
+    assert group['complete'] is True                         # all four are held (maintenance still counts)
+
+    html = render_to_string('components/collection_case.html', ctx)
+    assert 'is-maintenance' in html                          # the group niche warms red/amber
+    assert 'series needs maintenance' in html                # the header 'M' + its sr-only label
+    assert 'pp-case__badge-m' not in html                    # no per-badge 'M' -- the series 'M' is group-level
+    # The lapsed rung's medallion carries the repair cue: pulsing amber wrench by the count + red unfilled meter.
+    assert html.count('pp-med--repair') == 1                 # exactly the one lapsed badge is in repair mode
+    assert 'pp-med__wrench' in html
 
 
 def test_medallion_in_progress_renders_meter_cells_and_rising_fill(monkeypatch):
@@ -457,6 +486,7 @@ def test_medallion_in_progress_renders_meter_cells_and_rising_fill(monkeypatch):
 
     assert html.count('pp-med__seg') == 5                       # one meter cell per required stage
     assert 'pp-med__fill' in html and '--fill: 60%' in html     # subject colours in to progress
+    assert 'pp-med__fill--bg' in html                           # backdrop fill (2nd container) colours in too
     assert 'pp-med__ring' not in html                           # the ring is gone
 
 
@@ -524,10 +554,32 @@ def test_gallery_template_renders_medallion_cards(monkeypatch):
     assert 'data-search-clear' in html                                # search clear (x) button
     assert 'data-gallery-pills' in html                               # applied-filter pills container
     assert 'data-empty-suggest' in html                               # smart empty-state suggestion button
-    assert 'pp-gallery__new' in html                                  # badges[0] earned just now -> "new" spark
+    assert 'pp-gallery__check' in html                                # earned cells carry the green earned tick
+    assert 'pp-gallery__check--new' in html                           # badges[0] earned just now -> the tick pings
     assert 'data-modal-url' in html                                   # cards tap to the detail modal
     # The Case shelf owns the canonical #card-<id> anchor; the Gallery passes no_id so it never emits it.
     assert 'id="card-%d"' % badges[0].id not in html
+
+
+def test_gallery_maintenance_cell_shows_the_red_m_not_the_check(monkeypatch):
+    """A lapsed (maintenance) badge cell in the Gallery carries the red 'M' emblem, and that cell does NOT
+    also get the green earned tick -- the two corner emblems are mutually exclusive per cell (earned -> check,
+    maintenance -> M). The Gallery marks maintenance per-badge (unlike the Case, which flags it per group)."""
+    from django.template.loader import render_to_string
+
+    monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
+    profile = ProfileFactory()
+    badges = _series('rs-galm')
+    UserBadgeFactory(profile=profile, badge=badges[0])          # earned -> green check
+    UserBadgeFactory(profile=profile, badge=badges[1])
+    UserBadge.objects.filter(profile=profile, badge=badges[1]).update(status='maintenance')  # lapsed -> red M
+
+    html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
+
+    assert html.count('pp-gallery__badge-m') == 1              # exactly the one lapsed cell gets the red 'M'
+    assert 'pp-gallery__check' in html                         # the earned cell still gets its green tick
+    # Maintenance counts as held, so its cell wears the red frame; earned wears green -- both distinct states.
+    assert 'data-state="maintenance"' in html and 'data-state="earned"' in html
 
 
 # --- the Gallery's flat badge feed (list_badges, built by _flatten_for_list) ---

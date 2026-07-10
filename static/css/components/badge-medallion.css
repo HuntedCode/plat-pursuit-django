@@ -334,6 +334,30 @@
 .pp-med__meter + .pp-med__count { margin-top: 6px; }                    /* meter already spaced it */
 .pp-med--unearned .pp-med__count { color: rgba(148, 163, 184, 0.7); }   /* dim -- 0 toward it */
 
+/* Repair cue (pp-med--repair, set when the Case passes show_repair to a lapsed badge): the badge is yours
+   but needs re-earning, so an amber wrench pulses beside the count and the UNFILLED meter (kept neutral gray)
+   breathes a soft red glow. ONE clock drives both so they pulse in lockstep: a single animation on the
+   medallion sweeps a shared --repair-pulse (0->1->0), and the wrench + meter derive their look from it (no
+   two-animation drift). @property makes the number interpolate; the keyframe only sets a number, never a
+   color-mix (lightningcss drops color-mix keyframes). initial-value 1 = the rest/reduced-motion look. */
+@property --repair-pulse { syntax: '<number>'; inherits: true; initial-value: 1; }
+@media (prefers-reduced-motion: no-preference) {
+    .pp-med--repair { animation: ppRepairPulse 1.7s ease-in-out infinite; }
+}
+@keyframes ppRepairPulse { 0%, 100% { --repair-pulse: 0; } 50% { --repair-pulse: 1; } }
+
+.pp-med__wrench {
+    display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: -2px; color: #eeae42;
+    transform-origin: 60% 40%;
+    opacity: calc(0.6 + 0.4 * var(--repair-pulse));
+    transform: scale(calc(0.9 + 0.15 * var(--repair-pulse))) rotate(calc(-6deg + 9deg * var(--repair-pulse)));
+}
+.pp-med--repair .pp-med__seg:not(.is-on),
+.pp-med--repair .pp-med__meter--smooth {
+    background: rgba(255, 255, 255, 0.09);
+    box-shadow: 0 0 calc(3px + 6px * var(--repair-pulse)) rgb(226 48 38 / calc(0.28 + 0.32 * var(--repair-pulse)));
+}
+
 /* edition + earn marks -- surfaced under the badge so you read set # / earn rank without opening it.
    Set number (every badge) is muted; earn rank (earned only, "5th") glows in the tier accent. */
 .pp-med__ids {

@@ -164,6 +164,9 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             g['total'] = len(g['tiers'])
             g['earned'] = sum(1 for t in g['tiers'] if t.get('state') in ('earned', 'maintenance'))
             g['complete'] = g['total'] > 0 and g['earned'] >= g['total']
+            # A held badge that has lapsed puts the whole series into a "needs maintenance" state -- the Case
+            # warms the group niche red/amber + flags the header, so a single lapsed rung is easy to spot.
+            g['has_maintenance'] = any(t.get('state') == 'maintenance' for t in g['tiers'])
             # Aspirational "next": glow the next rung to climb -- the first tier you don't yet HOLD,
             # whether you've started it (in_progress) or not (unearned). A fully-held series has none.
             # Tiers are bronze -> platinum order, so the first non-held one is the lowest rung left.

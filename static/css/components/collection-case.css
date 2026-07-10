@@ -95,8 +95,30 @@
         color-mix(in oklab, var(--pp-primary) 10%, color-mix(in oklab, var(--pp-bg-2) 62%, transparent)),
         color-mix(in oklab, var(--pp-bg-1) 34%, transparent));
 }
+/* Maintenance cousin of is-complete: a series holding a lapsed rung warms its niche RED/AMBER instead of the
+   accent -- a "needs repair" payoff that reads at a glance. Header "M" glows red where the ✓ would sit.
+   (Red border + warm amber floor -- the amber ties to the maintenance meter colour on the medallion.) */
+.pp-case__group.is-maintenance {
+    border-color: color-mix(in oklab, #e23026 40%, var(--pp-border));
+    background: linear-gradient(to bottom,
+        color-mix(in oklab, #eeae42 13%, color-mix(in oklab, var(--pp-bg-2) 62%, transparent)),
+        color-mix(in oklab, var(--pp-bg-1) 34%, transparent));
+}
+.pp-case__group.is-maintenance .pp-case__group-prog {
+    font-size: 13px; font-weight: 800; color: color-mix(in oklab, #e23026 82%, var(--pp-text));
+    text-shadow: 0 0 9px color-mix(in oklab, #e23026 48%, transparent);
+}
 .pp-case__group-tiers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 6px; justify-items: center; }
 .pp-case__slot { display: flex; justify-content: center; text-decoration: none; color: inherit; }
+
+/* The group carries the maintenance signal, so drop the individual medallion's red-neon art glow inside the
+   Case (keep just its base rim + cast shadows so the object still reads with weight). Mirrors the two base
+   shadows on .pp-med--maintenance .pp-med__art in badge-medallion.css. */
+.pp-case__slot .pp-med--maintenance .pp-med__art {
+    filter:
+        drop-shadow(0 -1px 0.5px rgba(255, 255, 255, 0.22))
+        drop-shadow(var(--med-cast) rgba(0, 0, 0, 0.4));
+}
 /* Aspirational "next": a NEON glow tracing the next rung's silhouette. Appended to the art's existing
    rim-light + cast drop-shadows (a bright near-white core + a wider colour bloom) so it reads as EMITTED
    light hugging the emblem, not a disc behind it -- and drop-shadow draws outside the art, so nothing
@@ -298,10 +320,14 @@
     .pp-bdetail__stage .pp-med__glint { display: none; }                 /* the moving glare replaces the hover sweep here */
     .pp-bdetail__stage .pp-med__art.is-tilting { transition: transform 0.09s linear; }
     .pp-bdetail__stage .pp-med--earned:hover .pp-med__art { transform: none; }   /* JS inline transform drives the tilt; suppress the base hover-lift */
-    /* Two-plane look: the backdrop (laurel) stays at the base; the subject, its rising fill, and the glare
+    /* Two-plane look: the backdrop (laurel) stays at the base; the SUBJECT, its rising fill, and the glare
        lift together onto ONE raised plane above it. (The foreground layer is hidden site-wide.) */
     .pp-bdetail__stage .pp-med__fill,
     .pp-bdetail__stage .pp-med__foil { transform: translateZ(40px); transition: transform 0.4s ease; }
+    /* The BACKDROP's rising-colour fill must ride the backdrop's base plane (not the subject's raised one),
+       or the coloured-in portion collapses forward onto the subject and looks flat. A tiny +Z just seats it
+       in front of the grey base backdrop. */
+    .pp-bdetail__stage .pp-med__fill--bg { transform: translateZ(0.5px); }
     .pp-bdetail__stage .pp-med__glare { transform: translateZ(52px); }   /* raised ABOVE the art (subject is at 40) so the dome floats as its own glass surface */
     /* Subject (nth-child 2): raised + grounded with a cast shadow (a filter on this LEAF is 3D-safe). It
        KEEPS its per-state darkening so the hero matches the shelf -- in-progress/maintenance stay only
