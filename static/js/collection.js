@@ -663,21 +663,26 @@
         var search = gal.querySelector('[data-search]');
         var searchClear = gal.querySelector('[data-search-clear]');
         function syncSearchClear() { if (searchClear) searchClear.hidden = !searchTerm; }
-        function runSearch(val) {
+        // Typing glides the wall too (FLIP), but DEBOUNCED so it animates once you pause -- a FLIP on
+        // every keystroke is a jittery mess. Clearing / Esc animate immediately (discrete actions).
+        var searchGlide = (window.PlatPursuit && PlatPursuit.debounce)
+            ? PlatPursuit.debounce(function () { applyFilters(true); }, 160)
+            : function () { applyFilters(true); };
+        function runSearch(val, immediate) {
             searchTerm = (val || '').toLowerCase().trim();
-            applyFilters(false);   // instant while typing
             syncSearchClear();
+            if (immediate) applyFilters(true); else searchGlide();
         }
         if (search) {
             search.addEventListener('input', function (e) { runSearch(e.target.value); });
             search.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && searchTerm) { e.preventDefault(); search.value = ''; runSearch(''); }
+                if (e.key === 'Escape' && searchTerm) { e.preventDefault(); search.value = ''; runSearch('', true); }
             });
         }
         if (searchClear) {
             searchClear.addEventListener('click', function () {
                 if (search) { search.value = ''; search.focus(); }
-                runSearch('');
+                runSearch('', true);
             });
         }
 
