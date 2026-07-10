@@ -56,8 +56,9 @@
     background: var(--chip); box-shadow: 0 0 5px color-mix(in oklab, var(--chip) 55%, transparent);
 }
 
+.pp-gallery__search-wrap { position: relative; flex: 1; min-width: 180px; display: inline-flex; }
 .pp-gallery__search {
-    flex: 1; min-width: 180px; padding: 7px 12px;
+    width: 100%; padding: 7px 30px 7px 12px;
     background: color-mix(in oklab, var(--pp-text) 4%, transparent);
     border: 1px solid var(--pp-border); border-radius: 8px;
     color: var(--pp-text); font-size: 12.5px;
@@ -69,6 +70,17 @@
     border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border));
     background: color-mix(in oklab, var(--pp-text) 6%, transparent);
 }
+/* clear (x) inside the field -- shown only when there's a query (collection.js toggles [hidden]) */
+.pp-gallery__search-clear {
+    position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+    width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 50%; background: color-mix(in oklab, var(--pp-text) 12%, transparent);
+    color: var(--pp-text-mute); font-size: 14px; line-height: 1; cursor: pointer;
+    transition: color 0.14s ease, background 0.14s ease;
+}
+.pp-gallery__search-clear:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-text) 20%, transparent); }
+.pp-gallery__search-clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 1px; }
+.pp-gallery__search-clear[hidden] { display: none; }
 
 .pp-gallery__stats {
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
@@ -86,103 +98,137 @@
 .pp-gallery__clear:hover { color: var(--pp-text); background: color-mix(in oklab, var(--pp-primary) 12%, transparent); }
 .pp-gallery__clear:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
 .pp-gallery__clear[hidden] { display: none; }
+
+/* Applied-filter pills -- one removable token per active filter (collection.js builds them). */
+.pp-gallery__pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.pp-gallery__pills[hidden] { display: none; }
+.pp-gallery__pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 6px 4px 11px; border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 32%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    color: var(--pp-text); font: inherit; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+    cursor: pointer; transition: border-color 0.14s ease, background 0.14s ease;
+}
+.pp-gallery__pill:hover { border-color: color-mix(in oklab, var(--pp-primary) 55%, var(--pp-border)); background: color-mix(in oklab, var(--pp-primary) 18%, transparent); }
+.pp-gallery__pill:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-gallery__pill-x {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 50%; font-size: 13px; line-height: 1;
+    background: color-mix(in oklab, var(--pp-text) 14%, transparent); color: var(--pp-text-mute);
+}
+.pp-gallery__pill:hover .pp-gallery__pill-x { color: var(--pp-text); }
+
 .pp-gallery__empty { padding: 56px 30px; text-align: center; color: var(--pp-text-mute); }
 .pp-gallery__empty svg { width: 34px; height: 34px; margin: 0 auto 12px; opacity: 0.5; display: block; }
 .pp-gallery__empty-title { font-size: 13px; margin: 0 0 14px; }
 
-/* sort dropdown */
+/* Dropdowns (the sort control + the Set filter) -- appearance:none so our dark bg fully applies (a native
+   <select> renders a white box on some platforms, and its option popup is white by default -- the
+   readability bug). Custom chevron + explicitly dark-themed options. */
 .pp-gallery__sort-label { display: inline-flex; align-items: center; }
-.pp-gallery__sort {
-    padding: 7px 12px; border-radius: 8px;
-    background: color-mix(in oklab, var(--pp-text) 4%, transparent);
+.pp-gallery__select {
+    appearance: none; -webkit-appearance: none;
+    padding: 7px 30px 7px 12px; border-radius: 8px;
+    background-color: color-mix(in oklab, var(--pp-text) 4%, transparent);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
     border: 1px solid var(--pp-border);
-    color: var(--pp-text); font-size: 12px; cursor: pointer;
-    transition: border-color 0.16s ease, background 0.16s ease;
+    color: var(--pp-text); font-size: 12px; cursor: pointer; max-width: 100%;
+    transition: border-color 0.16s ease, background-color 0.16s ease;
 }
-.pp-gallery__sort:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
-.pp-gallery__sort:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-gallery__select:hover { border-color: color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border)); }
+.pp-gallery__select:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+/* The option popup is OS-drawn (white by default) -- pin it to the dark theme so the text is readable. */
+.pp-gallery__select option { background-color: var(--pp-bg-2); color: var(--pp-text); }
 
-/* the wall: medallion objects on the page substrate (not boxed rows) */
+/* ── The wall: the full Case medallion inside a clean card ──
+   Each card frames the real medallion (backdrop, subject, plate, glint, state fills, hover physicality),
+   identical to the Case -- the card just gives it padding + a defined edge on the flat wall. */
 .pp-gallery__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
-    gap: 22px 12px;
-    justify-items: center;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 14px;
 }
-.pp-gallery__cell {
+.pp-gallery__card {
+    --tier-c: var(--pp-primary);
     position: relative;
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
-    width: 100%; text-decoration: none; color: inherit;
-    scroll-margin-top: 96px;
-    /* NB: no content-visibility here -- its paint containment would clip this tight cell, cutting off the
-       hover glow-pool (below, 120%) and the :focus-visible ring (offset 4px). The medallions are cheap to
-       paint; the Case view keeps containment at the padded group level where nothing overflows. */
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 16px 12px 12px; border-radius: 14px;
+    background: color-mix(in oklab, var(--pp-bg-2) 55%, transparent);
+    border: 1px solid var(--pp-border);
+    text-decoration: none; color: inherit; scroll-margin-top: 96px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
-/* Hover/focus spotlight: a soft tier-tinted pool behind the object (complements the medallion's own
-   lift). Tinted by the badge's tier so hovering a gold badge warms gold. Cheap (opacity fade only). */
-.pp-gallery__cell::before {
-    content: ''; position: absolute; z-index: 0; pointer-events: none;
-    top: 40%; left: 50%; transform: translate(-50%, -50%);
-    width: 120%; aspect-ratio: 1; border-radius: 50%;
-    background: radial-gradient(circle, color-mix(in oklab, var(--pool, var(--pp-primary)) 22%, transparent), transparent 70%);
-    opacity: 0; transition: opacity 0.25s ease;
+.pp-gallery__card[data-tier="bronze"]   { --tier-c: #cf9160; }
+.pp-gallery__card[data-tier="silver"]   { --tier-c: #b9c6d6; }
+.pp-gallery__card[data-tier="gold"]     { --tier-c: #e7c25c; }
+.pp-gallery__card[data-tier="platinum"] { --tier-c: #8fd2ea; }
+/* Hover WARMS the card (border + glow); the medallion's own art-lift is the motion, so the card stays put
+   to avoid a double-lift. */
+@media (hover: hover) {
+    .pp-gallery__card:hover {
+        border-color: color-mix(in oklab, var(--tier-c) 45%, var(--pp-border));
+        background: color-mix(in oklab, var(--pp-bg-2) 72%, transparent);
+        box-shadow: 0 10px 24px -12px color-mix(in oklab, var(--tier-c) 45%, #000);
+    }
 }
-.pp-gallery__cell:hover::before,
-.pp-gallery__cell:focus-visible::before { opacity: 1; }
-.pp-gallery__cell > * { position: relative; z-index: 1; }   /* medallion + caption sit above the pool */
-.pp-gallery__cell[data-tier="bronze"]   { --pool: #cf9160; }
-.pp-gallery__cell[data-tier="silver"]   { --pool: #b9c6d6; }
-.pp-gallery__cell[data-tier="gold"]     { --pool: #e7c25c; }
-.pp-gallery__cell[data-tier="platinum"] { --pool: #8fd2ea; }
-.pp-gallery__cell .pp-med { --sz: 116px; }
+.pp-gallery__card:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 2px; }
 
-/* Staggered arrival -- the wall fills cell by cell (same ppRevealIn keyframe as the Case; see
-   collection-case.css). Pure CSS, unconditional: plays on load + replays when the Gallery view is shown
-   (the [hidden] toggle restarts it). Capped nth-child stagger; motion-gated. Because filtering re-shows
-   cells via display (which would replay the animation), collection.js adds .is-touched on the first
-   filter/sort interaction to switch the wall to instant thereafter -- the arrival flourish is a one-time
-   thing, not a working-tool behaviour. */
+/* The medallion, sized to the card -- the full Case medallion (backdrop + subject + plate + glint),
+   identical to the Case, now framed by the card. */
+.pp-gallery__card .pp-med { --sz: 108px; }
+
+/* "New" spark: a tier-tinted corner dot with a gentle expanding ping on badges earned this week (ties to
+   the header's "+N this week" pill). Transform-based ping, motion-gated. */
+.pp-gallery__new {
+    position: absolute; top: 9px; right: 9px; z-index: 3;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--tier-c, var(--pp-primary));
+    box-shadow: 0 0 8px 1px color-mix(in oklab, var(--tier-c, var(--pp-primary)) 70%, transparent);
+}
 @media (prefers-reduced-motion: no-preference) {
-    .pp-gallery__cell { animation: ppRevealIn 0.52s cubic-bezier(0.22, 1, 0.36, 1) both; }
-    .pp-gallery__cell:nth-child(2) { animation-delay: 0.04s; }
-    .pp-gallery__cell:nth-child(3) { animation-delay: 0.08s; }
-    .pp-gallery__cell:nth-child(4) { animation-delay: 0.12s; }
-    .pp-gallery__cell:nth-child(5) { animation-delay: 0.16s; }
-    .pp-gallery__cell:nth-child(6) { animation-delay: 0.20s; }
-    .pp-gallery__cell:nth-child(7) { animation-delay: 0.24s; }
-    .pp-gallery__cell:nth-child(8) { animation-delay: 0.28s; }
-    .pp-gallery__cell:nth-child(9) { animation-delay: 0.32s; }
-    .pp-gallery__cell:nth-child(10) { animation-delay: 0.36s; }
-    .pp-gallery__cell:nth-child(11) { animation-delay: 0.40s; }
-    .pp-gallery__cell:nth-child(12) { animation-delay: 0.44s; }
-    .pp-gallery__cell:nth-child(n+13) { animation-delay: 0.48s; }   /* cap */
-    .pp-gallery.is-touched .pp-gallery__cell { animation: none; }   /* after the first filter/sort: instant */
+    .pp-gallery__new::after {
+        content: ''; position: absolute; inset: -2px; border-radius: 50%;
+        border: 1.5px solid var(--tier-c, var(--pp-primary));
+        animation: pp-gallery-ping 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+    }
 }
+@keyframes pp-gallery-ping { 0% { transform: scale(1); opacity: 0.75; } 100% { transform: scale(2.4); opacity: 0; } }
 
-.pp-gallery__caption { display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; }
+/* Caption */
+.pp-gallery__caption { display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 100%; margin-top: auto; padding-top: 4px; }
 .pp-gallery__name {
-    font-size: 12px; font-weight: 600; color: var(--pp-text-mute); text-align: center;
+    font-size: 12px; font-weight: 600; color: var(--pp-text); text-align: center;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    transition: color 140ms ease;
 }
-.pp-gallery__cell:hover .pp-gallery__name,
-.pp-gallery__cell:focus-visible .pp-gallery__name { color: var(--pp-text); }
-.pp-gallery__cell:focus-visible { outline: 2px solid var(--pp-list-accent); outline-offset: 4px; border-radius: 10px; }
-
-/* Sort-adaptive stat: collection.js fills it with the value you're sorting by (rarity / date /
-   progress, defaulting to rarity) so the wall reflects your hunt. min-height reserves the row so
-   the grid doesn't reflow when a cell has no value (e.g. an unearned badge under "Recently earned"). */
+/* Sort-adaptive stat: collection.js fills it with the value you're sorting by (rarity / date / progress,
+   default rarity). min-height reserves the row so the grid doesn't reflow when a cell has no value. */
 .pp-gallery__stat {
     font-size: 10.5px; font-weight: 600; color: var(--pp-text-mute);
     font-variant-numeric: tabular-nums; letter-spacing: 0.02em; min-height: 1.1em;
     text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-@media (min-width: 640px) {
-    .pp-gallery__grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 24px 14px; }
-    .pp-gallery__cell .pp-med { --sz: 128px; }
+/* Staggered arrival -- fires whenever the Gallery view is shown (collection.js restarts `.is-revealing`
+   on every view-switch, matching the Case). Filter/sort motion is the JS FLIP, not this. Motion-gated. */
+@media (prefers-reduced-motion: no-preference) {
+    .pp-gallery.is-revealing .pp-gallery__card { animation: ppRevealIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(2) { animation-delay: 0.03s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(3) { animation-delay: 0.06s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(4) { animation-delay: 0.09s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(5) { animation-delay: 0.12s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(6) { animation-delay: 0.15s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(7) { animation-delay: 0.18s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(8) { animation-delay: 0.21s; }
+    .pp-gallery.is-revealing .pp-gallery__card:nth-child(n+9) { animation-delay: 0.24s; }   /* cap */
+}
+
+@media (min-width: 768px) {
+    .pp-gallery__grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+    .pp-gallery__card .pp-med { --sz: 118px; }
 }
 @media (min-width: 1024px) {
-    .pp-gallery__grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 28px 16px; }
-    .pp-gallery__cell .pp-med { --sz: 140px; }
+    .pp-gallery__grid { grid-template-columns: repeat(auto-fill, minmax(162px, 1fr)); gap: 18px; }
+    .pp-gallery__card .pp-med { --sz: 128px; }
 }

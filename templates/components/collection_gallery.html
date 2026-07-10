@@ -25,18 +25,25 @@ collection-gallery.css, wired by collection.js (initGallery).
             <button type="button" class="pp-gallery__chip" data-filter-state="unearned">Unearned</button>
         </div>
         {% if themes|length > 1 %}
+        {% comment %} Set filter is a dropdown (not chips): the set types keep growing -- series, franchise,
+        developer, publisher, event, collection... -- so a row of chips would overflow the toolbar. {% endcomment %}
         <div class="pp-gallery__fgroup">
             <span>Set</span>
-            <button type="button" class="pp-gallery__chip is-active" data-filter-theme="all">All</button>
-            {% for theme in themes %}
-                <button type="button" class="pp-gallery__chip" data-filter-theme="{{ theme.name|slugify }}">{{ theme.name }}</button>
-            {% endfor %}
+            <select class="pp-gallery__select" data-filter-theme-select aria-label="Filter by set">
+                <option value="all">All sets</option>
+                {% for theme in themes %}
+                <option value="{{ theme.name|slugify }}">{{ theme.name }}</option>
+                {% endfor %}
+            </select>
         </div>
         {% endif %}
-        <input type="text" class="pp-gallery__search" placeholder="Search series or badge&hellip;" data-search aria-label="Search collection" />
+        <span class="pp-gallery__search-wrap">
+            <input type="text" class="pp-gallery__search" placeholder="Search series or badge&hellip;  ( / )" data-search aria-label="Search collection" />
+            <button type="button" class="pp-gallery__search-clear" data-search-clear hidden aria-label="Clear search">&times;</button>
+        </span>
         <label class="pp-gallery__sort-label">
             <span class="sr-only">Sort badges</span>
-            <select class="pp-gallery__sort" data-gallery-sort>
+            <select class="pp-gallery__select" data-gallery-sort>
                 <option value="series:asc">Series (A&ndash;Z)</option>
                 <option value="rarity:asc">Rarest first</option>
                 <option value="tier:desc">Tier (Platinum first)</option>
@@ -49,10 +56,15 @@ collection-gallery.css, wired by collection.js (initGallery).
         <button type="button" class="pp-gallery__clear" data-clear-filters hidden>Clear filters</button>
     </div>
 
+    {# Applied-filter pills (removable tokens) -- built + toggled by collection.js from the filter state. #}
+    <div class="pp-gallery__pills" data-gallery-pills hidden></div>
+
+    {% comment %} Gallery body: a clean card grid holding the full Case medallion (identical to the Case --
+    backdrop, subject, plate, glint, state fills, hover physicality). All the data-* hooks +
+    [data-gallery-stat] the toolbar JS drives are unchanged, so filter/sort/search/clear keep working. {% endcomment %}
     <div class="pp-gallery__grid" data-gallery-grid>
         {% for badge in list_badges %}
-        <a class="pp-gallery__cell" data-gallery-cell
-           data-tier="{{ badge.tier }}"
+        <a class="pp-gallery__card" data-gallery-cell data-tier="{{ badge.tier }}"
            data-state="{{ badge.state }}"
            data-theme="{{ badge.theme|slugify }}"
            data-series="{{ badge.series_name|lower }}"
@@ -65,8 +77,7 @@ collection-gallery.css, wired by collection.js (initGallery).
            data-earned-label="{{ badge.earned_date|default:'' }}"
            {% if badge.series_slug %}href="{% url 'badge_detail' badge.series_slug %}"{% endif %}
            data-modal-url="{% url 'collection_badge_modal' badge.badge_id %}">
-            {% comment %} No show_ids on the wall: the medallion already reads tier + state, and the
-            caption carries the name + a sort-adaptive stat. Set number / earn rank live in the modal. {% endcomment %}
+            {% if badge.is_new %}<span class="pp-gallery__new" title="Earned this week"><span class="sr-only">Earned this week</span></span>{% endif %}
             {% include 'components/badge_medallion.html' with frame=badge no_id=True %}
             <span class="pp-gallery__caption">
                 <span class="pp-gallery__name">{{ badge.series_name }}</span>

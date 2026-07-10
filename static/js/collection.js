@@ -559,13 +559,12 @@
         };
     }
 
-    // Wire the tier/state/set filter chips within `scope`: click sets the dimension + repaints the group's
-    // active state, then re-applies. Shared by the List and the Gallery (identical chip markup).
+    // Wire the tier/state filter chips within `scope`: click sets the dimension + repaints the group's
+    // active state, then re-applies. (The Set dimension is a <select>, wired separately in initGallery.)
     function wireFilterChips(scope, filters, applyFilters) {
-        scope.querySelectorAll('[data-filter-tier], [data-filter-state], [data-filter-theme]').forEach(function (chip) {
+        scope.querySelectorAll('[data-filter-tier], [data-filter-state]').forEach(function (chip) {
             chip.addEventListener('click', function () {
-                var dim = chip.hasAttribute('data-filter-tier') ? 'tier'
-                    : chip.hasAttribute('data-filter-state') ? 'state' : 'theme';
+                var dim = chip.hasAttribute('data-filter-tier') ? 'tier' : 'state';
                 filters[dim] = chip.getAttribute('data-filter-' + dim);
                 scope.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
                     c.classList.toggle('is-active', c === chip);
@@ -591,53 +590,162 @@
         var filters = { tier: 'all', state: 'all', theme: 'all' };
         var searchTerm = '';
 
-        // Any user filter/sort switches the wall to instant (the entrance stagger is a one-time arrival, not
-        // a working-tool behaviour; without this, re-showing a cell via display would replay its animation).
-        // Only the TOOLBAR clear toggles with filter state; the empty-state clear shows/hides with its
-        // (already-conditional) empty panel.
+        function reduced() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+        function isShown(c) { return c.style.display !== 'none'; }
+
+        // FLIP: run `mutate` (which changes cell visibility and/or DOM order), then glide the surviving
+        // cards from their old grid positions to their new ones and fade/scale entering cards in. Hidden
+        // cards just drop out (no exit tween -- the survivors' glide is the premium bit). The final layout
+        // is whatever `mutate` produced, so a dropped frame never leaves the grid wrong. Cancels any active
+        // reveal first (its animation-fill would otherwise override our inline transforms).
+        var flipPending = [];   // cards carrying FLIP inline styles awaiting cleanup
+        var flipTimer;
+        function flipCleanup() {   // settle any in-flight FLIP: strip inline styles (transition first, so
+            clearTimeout(flipTimer);   // clearing transform snaps rather than animating back)
+            flipPending.forEach(function (c) { c.style.transition = ''; c.style.transform = ''; c.style.opacity = ''; });
+            flipPending = [];
+        }
+        function flip(mutate) {
+            if (reduced()) { mutate(); return; }
+            flipCleanup();   // finish any prior FLIP before re-measuring -- no stale transforms, no mid-anim wipe
+            gal.classList.remove('is-revealing');
+            var first = new Map();
+            cells.forEach(function (c) { if (isShown(c)) first.set(c, c.getBoundingClientRect()); });
+            mutate();
+            var moved = [];
+            cells.forEach(function (c) {
+                if (!isShown(c)) return;
+                var last = c.getBoundingClientRect();
+                var f = first.get(c);
+                if (f) {
+                    var dx = f.left - last.left, dy = f.top - last.top;
+                    if (dx || dy) { c.style.transition = 'none'; c.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)'; moved.push(c); }
+                } else {
+                    c.style.transition = 'none'; c.style.opacity = '0'; c.style.transform = 'scale(0.9)'; moved.push(c);
+                }
+            });
+            if (!moved.length) return;
+            flipPending = moved;
+            requestAnimationFrame(function () { requestAnimationFrame(function () {
+                moved.forEach(function (c) {
+                    c.style.transition = 'transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease';
+                    c.style.transform = ''; c.style.opacity = '';
+                });
+            }); });
+            flipTimer = setTimeout(flipCleanup, 520);
+        }
+
         var toolbarClear = gal.querySelector('.pp-gallery__toolbar [data-clear-filters]');
         function anyActive() {
             return filters.tier !== 'all' || filters.state !== 'all' || filters.theme !== 'all' || searchTerm !== '';
         }
         function syncClear() { if (toolbarClear) toolbarClear.hidden = !anyActive(); }
 
-        // applyFilters is only ever called by user actions (chips + search + clear), never on init.
-        function applyFilters() {
-            gal.classList.add('is-touched');
+        // animate defaults on (discrete actions -- chips / dropdowns / clear / pills get the FLIP glide);
+        // search passes false so per-keystroke typing filters instantly (FLIP every keystroke is janky).
+        function applyFilters(animate) {
+            function mutate() {
+                cells.forEach(function (cell) {
+                    cell.style.display = elMatches(cell, filters, searchTerm) ? '' : 'none';
+                });
+            }
+            if (animate === false) mutate(); else flip(mutate);
             var visible = 0;
-            cells.forEach(function (cell) {
-                var ok = elMatches(cell, filters, searchTerm);
-                cell.style.display = ok ? '' : 'none';
-                if (ok) visible++;
-            });
+            cells.forEach(function (c) { if (isShown(c)) visible++; });
             if (stats) stats.textContent = visible + ' of ' + total;
             if (emptyMsg) emptyMsg.hidden = visible !== 0;
             syncClear();
+            renderPills();
         }
 
-        wireFilterChips(gal, filters, applyFilters);
+        wireFilterChips(gal, filters, applyFilters);   // tier + state chips (theme is a <select>, below)
 
         var search = gal.querySelector('[data-search]');
+        var searchClear = gal.querySelector('[data-search-clear]');
+        function syncSearchClear() { if (searchClear) searchClear.hidden = !searchTerm; }
+        function runSearch(val) {
+            searchTerm = (val || '').toLowerCase().trim();
+            applyFilters(false);   // instant while typing
+            syncSearchClear();
+        }
         if (search) {
-            search.addEventListener('input', function (e) {
-                searchTerm = e.target.value.toLowerCase().trim();
+            search.addEventListener('input', function (e) { runSearch(e.target.value); });
+            search.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && searchTerm) { e.preventDefault(); search.value = ''; runSearch(''); }
+            });
+        }
+        if (searchClear) {
+            searchClear.addEventListener('click', function () {
+                if (search) { search.value = ''; search.focus(); }
+                runSearch('');
+            });
+        }
+
+        // Set filter is a dropdown (the set types keep growing) -- change swaps the theme dimension.
+        var themeSelect = gal.querySelector('[data-filter-theme-select]');
+        if (themeSelect) {
+            themeSelect.addEventListener('change', function () {
+                filters.theme = themeSelect.value;
                 applyFilters();
             });
         }
 
+        function resetChips(dim) {   // point a chip group back at its "all" option
+            gal.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
+                c.classList.toggle('is-active', c.getAttribute('data-filter-' + dim) === 'all');
+            });
+        }
         function clearAll() {
             filters.tier = filters.state = filters.theme = 'all';
             searchTerm = '';
             if (search) search.value = '';
-            // Reset every chip's active state to its "all" option.
-            gal.querySelectorAll('[data-filter-tier], [data-filter-state], [data-filter-theme]').forEach(function (c) {
-                var dim = c.hasAttribute('data-filter-tier') ? 'tier'
-                    : c.hasAttribute('data-filter-state') ? 'state' : 'theme';
-                c.classList.toggle('is-active', c.getAttribute('data-filter-' + dim) === 'all');
-            });
+            if (themeSelect) themeSelect.value = 'all';
+            resetChips('tier'); resetChips('state');
             applyFilters();
+            syncSearchClear();
         }
         gal.querySelectorAll('[data-clear-filters]').forEach(function (b) { b.addEventListener('click', clearAll); });
+
+        // Applied-filter pills: one removable token per active filter, so it's clear what's narrowing the
+        // wall and any single one can be dropped (vs "Clear filters" nuking everything).
+        var pillsBox = gal.querySelector('[data-gallery-pills]');
+        var STATE_LABELS = { earned: 'Earned', in_progress: 'In Progress', unearned: 'Unearned', maintenance: 'Maintenance' };
+        function filterLabel(dim, val) {
+            if (dim === 'state') return STATE_LABELS[val] || val;
+            if (dim === 'theme') {
+                var opt = themeSelect && themeSelect.querySelector('option[value="' + val + '"]');
+                return 'Set: ' + (opt ? opt.textContent.trim() : val);
+            }
+            if (dim === 'tier') return 'Tier: ' + val.charAt(0).toUpperCase() + val.slice(1);
+            return val;
+        }
+        function removeFilter(dim) {
+            if (dim === 'search') { searchTerm = ''; if (search) search.value = ''; syncSearchClear(); }
+            else if (dim === 'theme') { filters.theme = 'all'; if (themeSelect) themeSelect.value = 'all'; }
+            else { filters[dim] = 'all'; resetChips(dim); }
+            applyFilters();
+        }
+        function renderPills() {
+            if (!pillsBox) return;
+            var active = [];
+            if (filters.tier !== 'all') active.push(['tier', filterLabel('tier', filters.tier)]);
+            if (filters.state !== 'all') active.push(['state', filterLabel('state', filters.state)]);
+            if (filters.theme !== 'all') active.push(['theme', filterLabel('theme', filters.theme)]);
+            if (searchTerm) active.push(['search', '“' + searchTerm + '”']);
+            pillsBox.textContent = '';
+            active.forEach(function (a) {
+                var pill = document.createElement('button');
+                pill.type = 'button';
+                pill.className = 'pp-gallery__pill';
+                pill.setAttribute('aria-label', 'Remove filter: ' + a[1]);
+                var label = document.createElement('span'); label.textContent = a[1];
+                var x = document.createElement('span'); x.className = 'pp-gallery__pill-x'; x.setAttribute('aria-hidden', 'true'); x.textContent = '×';
+                pill.appendChild(label); pill.appendChild(x);
+                pill.addEventListener('click', function () { removeFilter(a[0]); });
+                pillsBox.appendChild(pill);
+            });
+            pillsBox.hidden = active.length === 0;
+        }
 
         var sortSel = gal.querySelector('[data-gallery-sort]');
         // The caption's second line reflects what you're sorting by: rarity / earned date / progress,
@@ -654,16 +762,66 @@
             var rarity = parseFloat(cell.getAttribute('data-rarity-pct')) || 0;
             return rarity ? 'Top ' + rarity + '%' : '';
         }
-        function applySort() {
+        function applySort(animate) {
             var spec = ((sortSel && sortSel.value) || 'series:asc').split(':');
-            cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); });
+            var reorder = function () { cells.slice().sort(compareBy(spec[0], spec[1] || 'asc')).forEach(function (c) { grid.appendChild(c); }); };
+            if (animate) flip(reorder); else reorder();
             cells.forEach(function (c) {
                 var el = c.querySelector('[data-gallery-stat]');
                 if (el) el.textContent = statText(c, spec[0]);
             });
         }
-        if (sortSel) sortSel.addEventListener('change', function () { gal.classList.add('is-touched'); applySort(); });
-        applySort();  // default matches the select's first option (series A-Z) + fills the rarity stat
+        // Remember the sort choice across visits (sort only -- persisting filters would be surprising).
+        var SORT_KEY = 'pp-gallery-sort';
+        if (sortSel) {
+            try {
+                var savedSort = localStorage.getItem(SORT_KEY);
+                if (savedSort) {
+                    for (var si = 0; si < sortSel.options.length; si++) {
+                        if (sortSel.options[si].value === savedSort) { sortSel.value = savedSort; break; }
+                    }
+                }
+            } catch (e) { /* private mode */ }
+            sortSel.addEventListener('change', function () {
+                try { localStorage.setItem(SORT_KEY, sortSel.value); } catch (e) { /* noop */ }
+                applySort(true);
+            });
+        }
+        applySort(false);  // initial (persisted) sort, no animation + fill the stat
+
+        // Reveal stagger whenever the Gallery view becomes visible (view-switch or first load) -- matches
+        // the Case, which staggers on every switch. Restart the class each show so the animation replays;
+        // strip it after so its animation-fill can't shadow the FLIP transforms. (No is-touched hack.)
+        var galleryView = root.querySelector('#collection-view-gallery');
+        var revealT;
+        function reveal() {
+            if (reduced()) return;
+            gal.classList.remove('is-revealing');
+            void gal.offsetWidth;   // force reflow so the animation restarts from 0
+            gal.classList.add('is-revealing');
+            clearTimeout(revealT);
+            revealT = setTimeout(function () { gal.classList.remove('is-revealing'); }, 900);
+        }
+        if (galleryView) {
+            if (!galleryView.hasAttribute('hidden')) reveal();
+            new MutationObserver(function (muts) {
+                for (var i = 0; i < muts.length; i++) {
+                    if (muts[i].attributeName === 'hidden' && !galleryView.hasAttribute('hidden')) { reveal(); break; }
+                }
+            }).observe(galleryView, { attributes: true, attributeFilter: ['hidden'] });
+        }
+
+        // "/" jump-focuses the search when the Gallery is showing and you're not already typing.
+        if (search) {
+            document.addEventListener('keydown', function (e) {
+                if (e.key !== '/' || e.defaultPrevented) return;
+                if (galleryView && galleryView.hasAttribute('hidden')) return;
+                var ae = document.activeElement, tag = ae && ae.tagName;
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ae && ae.isContentEditable)) return;
+                e.preventDefault();
+                search.focus();
+            });
+        }
     }
 
     // First-earn "minting" ceremony: the first time you see a newly-earned badge on the collection, it

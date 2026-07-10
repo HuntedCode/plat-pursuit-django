@@ -369,6 +369,8 @@ def test_frames_carry_earned_ts_for_the_gallery_sort(monkeypatch):
 
     assert by_slug['held']['earned_ts'] > 0       # a real earn epoch
     assert by_slug['unheld']['earned_ts'] == 0    # not held -> sinks under a desc sort
+    assert by_slug['held']['is_new'] is True      # earned just now -> the Gallery "new" spark
+    assert by_slug['unheld']['is_new'] is False   # never earned -> not new
 
 
 def test_summary_tiers_ordered_bronze_to_platinum(monkeypatch):
@@ -501,9 +503,10 @@ def test_holographic_foil_renders_only_for_earned_special_badges(monkeypatch):
     assert 'pp-med__foil' not in unearned   # unearned platinum: no flourish
 
 
-def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
-    """The Gallery renders each badge as a medallion cell (tapping opens the detail modal) with the
-    tier/state filter chips + the sort control -- the flat filter/sort hunting tool beside the Case."""
+def test_gallery_template_renders_medallion_cards(monkeypatch):
+    """The Gallery renders each badge as the full medallion inside a clean card (tapping opens the detail
+    modal), with the tier/state filter chips + the sort control -- the flat filter/sort hunting tool beside
+    the Case."""
     from django.template.loader import render_to_string
 
     monkeypatch.setattr(collection_service, 'get_earners_ranks', lambda slugs, pid: {})
@@ -513,12 +516,16 @@ def test_gallery_template_renders_a_filterable_medallion_wall(monkeypatch):
 
     html = render_to_string('components/collection_gallery.html', build_collection_context(profile))
 
-    assert 'pp-gallery__grid' in html and 'pp-gallery__cell' in html   # the medallion wall
-    assert html.count('data-gallery-cell') == 4                        # one cell per badge in the set
-    assert 'data-filter-tier="bronze"' in html                        # shared filter chips present
+    assert 'pp-gallery__grid' in html and 'pp-gallery__card' in html   # the card grid
+    assert html.count('data-gallery-cell') == 4                        # one card per badge in the set
+    assert html.count('pp-med__plate') == 4                            # the full medallion inside each card
+    assert 'data-filter-tier="bronze"' in html                        # tier filter chips present
     assert 'data-gallery-sort' in html                                # the sort control
-    assert 'data-modal-url' in html                                   # cells tap to the detail modal
-    # Gallery medallions suppress the canonical anchor (the Case shelf owns it).
+    assert 'data-search-clear' in html                                # search clear (x) button
+    assert 'data-gallery-pills' in html                               # applied-filter pills container
+    assert 'pp-gallery__new' in html                                  # badges[0] earned just now -> "new" spark
+    assert 'data-modal-url' in html                                   # cards tap to the detail modal
+    # The Case shelf owns the canonical #card-<id> anchor; the Gallery passes no_id so it never emits it.
     assert 'id="card-%d"' % badges[0].id not in html
 
 

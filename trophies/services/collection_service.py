@@ -82,6 +82,7 @@ def _build_sets(profile, sort=DEFAULT_SORT):
         ub.badge_id: ub
         for ub in UserBadge.objects.filter(profile=profile, badge_id__in=badge_ids)
     }
+    recent_cutoff = timezone.now() - timedelta(days=_RECENT_DAYS)   # "+N this week" pill + per-badge "new" flag
     progress_map = {
         pr.badge_id: pr
         for pr in UserBadgeProgress.objects.filter(profile=profile, badge_id__in=badge_ids)
@@ -130,6 +131,9 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             # Epoch of the earn (0 when not held) -- powers the Gallery's "Recently earned" sort.
             ub = earned_map.get(b.id)
             frame['earned_ts'] = int(ub.earned_at.timestamp()) if ub and ub.earned_at else 0
+            # "New" flag: earned within the recent window -- the Gallery's per-badge spark, matching the
+            # header's "+N this week" pill.
+            frame['is_new'] = bool(ub and ub.earned_at and ub.earned_at >= recent_cutoff)
             frames.append(frame)
 
         # Each set is its own binder view; pages are numbered WITHIN the set.
@@ -186,9 +190,9 @@ def _build_sets(profile, sort=DEFAULT_SORT):
             by_tier[_TIER_NAME.get(b.tier, 'gold')] += 1
     earned = len(earned_ids)
     total = len(badges)
-    # "+N this week" momentum: earns within the recent window. Counts off the already-fetched
-    # earned_map (bounded by live-badge count, not the user's trophy count) -- whale-safe, no new query.
-    recent_cutoff = timezone.now() - timedelta(days=_RECENT_DAYS)
+    # "+N this week" momentum: earns within the recent window (recent_cutoff, computed once above).
+    # Counts off the already-fetched earned_map (bounded by live-badge count, not the user's trophy
+    # count) -- whale-safe, no new query.
     recent = sum(1 for ub in earned_map.values() if ub.earned_at and ub.earned_at >= recent_cutoff)
     summary = {
         'total': total,
