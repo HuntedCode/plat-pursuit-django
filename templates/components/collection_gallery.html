@@ -93,6 +93,8 @@ collection-gallery.css, wired by collection.js (initGallery).
     <div class="pp-gallery__empty" data-empty-message hidden>
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>
         <p class="pp-gallery__empty-title">No badges match these filters</p>
+        {# Smart suggestion (collection.js fills it): drop the one filter that reveals the most badges. #}
+        <button type="button" class="pp-gallery__empty-suggest" data-empty-suggest hidden></button>
         <button type="button" class="pp-gallery__clear" data-clear-filters>Clear filters</button>
     </div>
 </div>

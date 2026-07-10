@@ -523,6 +523,7 @@ def test_gallery_template_renders_medallion_cards(monkeypatch):
     assert 'data-gallery-sort' in html                                # the sort control
     assert 'data-search-clear' in html                                # search clear (x) button
     assert 'data-gallery-pills' in html                               # applied-filter pills container
+    assert 'data-empty-suggest' in html                               # smart empty-state suggestion button
     assert 'pp-gallery__new' in html                                  # badges[0] earned just now -> "new" spark
     assert 'data-modal-url' in html                                   # cards tap to the detail modal
     # The Case shelf owns the canonical #card-<id> anchor; the Gallery passes no_id so it never emits it.

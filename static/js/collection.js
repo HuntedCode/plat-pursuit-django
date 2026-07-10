@@ -24,6 +24,9 @@
         var chips = Array.prototype.slice.call(root.querySelectorAll('.pp-collection__view-chip'));
         if (!views.length || !chips.length) return;
 
+        // The Gallery's URL params -- mirrored in the URL only while the Gallery is active, and stripped
+        // when you leave it (so a shared Case link stays clean). Kept in sync with initGallery.
+        var GALLERY_PARAMS = ['tier', 'state', 'set', 'q', 'sort'];
         function setView(name) {
             views.forEach(function (v) {
                 v.hidden = v.getAttribute('data-collection-view') !== name;
@@ -35,6 +38,16 @@
                 c.tabIndex = on ? 0 : -1;   // roving tabindex: only the active view chip is in the tab order
             });
             try { localStorage.setItem(STORAGE_KEY, name); } catch (e) { /* private mode */ }
+            // Reflect the active view in the URL (shareable + reload-safe), matching the Career tabs. Case
+            // is the default so its URL stays clean. Leaving the Gallery strips its filter params; returning
+            // re-adds them from the Gallery's live state (initGallery re-syncs on view-show).
+            if (window.history && history.replaceState) {
+                var qp = new URLSearchParams(location.search);
+                if (name === 'case') qp.delete('view'); else qp.set('view', name);
+                if (name !== 'gallery') GALLERY_PARAMS.forEach(function (k) { qp.delete(k); });
+                var qps = qp.toString();
+                history.replaceState(null, '', location.pathname + (qps ? '?' + qps : '') + location.hash);
+            }
         }
 
         chips.forEach(function (c, i) {
@@ -55,10 +68,15 @@
             });
         });
 
-        // Initial view: a #card-<id> deep-link lands in the Case, otherwise the stored preference
-        // (legacy 'binder' maps to 'case'), else the Case.
+        // Initial view: a #card-<id> deep-link lands in the Case; else an explicit ?view= wins (shared /
+        // reloaded link); else the stored preference; else the Case. (legacy 'binder'->case, 'list'->gallery)
         var initial = 'case';
-        if (window.location.hash.indexOf('#card-') !== 0) {
+        var urlView = new URLSearchParams(location.search).get('view');
+        if (window.location.hash.indexOf('#card-') === 0) {
+            initial = 'case';
+        } else if (urlView === 'gallery' || urlView === 'case') {
+            initial = urlView;
+        } else {
             try { initial = localStorage.getItem(STORAGE_KEY) || 'case'; } catch (e) { /* noop */ }
         }
         if (initial === 'binder') initial = 'case';       // legacy binder view -> Case
@@ -564,6 +582,7 @@
     function wireFilterChips(scope, filters, applyFilters) {
         scope.querySelectorAll('[data-filter-tier], [data-filter-state]').forEach(function (chip) {
             chip.addEventListener('click', function () {
+                if (navigator.vibrate) { try { navigator.vibrate(5); } catch (e) { /* no-op on desktop */ } }
                 var dim = chip.hasAttribute('data-filter-tier') ? 'tier' : 'state';
                 filters[dim] = chip.getAttribute('data-filter-' + dim);
                 scope.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
@@ -654,8 +673,10 @@
             cells.forEach(function (c) { if (isShown(c)) visible++; });
             if (stats) stats.textContent = visible + ' of ' + total;
             if (emptyMsg) emptyMsg.hidden = visible !== 0;
+            updateSuggest(visible);
             syncClear();
             renderPills();
+            syncURL();
         }
 
         wireFilterChips(gal, filters, applyFilters);   // tier + state chips (theme is a <select>, below)
@@ -699,6 +720,21 @@
             gal.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
                 c.classList.toggle('is-active', c.getAttribute('data-filter-' + dim) === 'all');
             });
+        }
+        function activateChip(dim, val) {   // light the chip whose value === val (used when restoring from URL)
+            gal.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) {
+                c.classList.toggle('is-active', c.getAttribute('data-filter-' + dim) === val);
+            });
+        }
+        function chipHas(dim, val) {   // does a chip with this value exist? (validate untrusted URL values)
+            var ok = false;
+            gal.querySelectorAll('[data-filter-' + dim + ']').forEach(function (c) { if (c.getAttribute('data-filter-' + dim) === val) ok = true; });
+            return ok;
+        }
+        function optHas(sel, val) {   // does a <select> have this option value?
+            if (!sel) return false;
+            for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === val) return true;
+            return false;
         }
         function clearAll() {
             filters.tier = filters.state = filters.theme = 'all';
@@ -752,7 +788,38 @@
             pillsBox.hidden = active.length === 0;
         }
 
+        // Smart empty state: when a filter combo returns nothing, offer to drop the SINGLE filter whose
+        // removal reveals the most badges ("Remove Silver to see 12"), like the Contracts board does.
+        var suggestBtn = gal.querySelector('[data-empty-suggest]');
+        function countIf(f, term) {
+            var n = 0;
+            cells.forEach(function (c) { if (elMatches(c, f, term)) n++; });
+            return n;
+        }
+        function bestRelaxation() {
+            var out = null;   // [dim, label, count]
+            function consider(dim, f, term, label) {
+                var n = countIf(f, term);
+                if (n > 0 && (!out || n > out[2])) out = [dim, label, n];
+            }
+            if (filters.tier !== 'all') consider('tier', { tier: 'all', state: filters.state, theme: filters.theme }, searchTerm, filters.tier.charAt(0).toUpperCase() + filters.tier.slice(1));
+            if (filters.state !== 'all') consider('state', { tier: filters.tier, state: 'all', theme: filters.theme }, searchTerm, STATE_LABELS[filters.state] || filters.state);
+            if (filters.theme !== 'all') consider('theme', { tier: filters.tier, state: filters.state, theme: 'all' }, searchTerm, filterLabel('theme', filters.theme).replace(/^Set: /, ''));
+            if (searchTerm) consider('search', filters, '', 'the search');
+            return out;
+        }
+        function updateSuggest(visible) {
+            if (!suggestBtn) return;
+            var b = visible === 0 ? bestRelaxation() : null;
+            if (!b) { suggestBtn.hidden = true; suggestBtn._dim = null; return; }
+            suggestBtn.textContent = (b[0] === 'search' ? 'Clear the search to see ' : 'Remove ' + b[1] + ' to see ') + b[2];
+            suggestBtn._dim = b[0];
+            suggestBtn.hidden = false;
+        }
+        if (suggestBtn) suggestBtn.addEventListener('click', function () { if (suggestBtn._dim) removeFilter(suggestBtn._dim); });
+
         var sortSel = gal.querySelector('[data-gallery-sort]');
+        var galleryView = root.querySelector('#collection-view-gallery');
         // The caption's second line reflects what you're sorting by: rarity / earned date / progress,
         // defaulting to the rarity flex for the name/tier/set sorts. The medallion already carries
         // tier + state, so this surfaces the ONE stat the object doesn't.
@@ -775,29 +842,57 @@
                 var el = c.querySelector('[data-gallery-stat]');
                 if (el) el.textContent = statText(c, spec[0]);
             });
+            syncURL();
         }
-        // Remember the sort choice across visits (sort only -- persisting filters would be surprising).
+
+        // --- URL state (matches the Career tabs): mirror the Gallery's filters + sort in the URL while it
+        //     is the active view, and restore them from a shared / reloaded ?view=gallery link. ---
+        function syncURL() {
+            if (!window.history || !history.replaceState) return;
+            if (!galleryView || galleryView.hasAttribute('hidden')) return;   // only mirror while the Gallery is shown
+            var qp = new URLSearchParams(location.search);
+            qp.set('view', 'gallery');
+            function put(k, v, def) { if (v && v !== def) qp.set(k, v); else qp.delete(k); }
+            put('tier', filters.tier, 'all');
+            put('state', filters.state, 'all');
+            put('set', filters.theme, 'all');
+            put('q', searchTerm, '');
+            put('sort', sortSel ? sortSel.value : '', 'series:asc');
+            var qps = qp.toString();
+            history.replaceState(null, '', location.pathname + (qps ? '?' + qps : '') + location.hash);
+        }
+        function restoreFromURL() {
+            var qp = new URLSearchParams(location.search);
+            if (qp.get('view') !== 'gallery') return;   // only restore when deep-linked to the Gallery
+            var t = qp.get('tier'), s = qp.get('state'), set = qp.get('set'), q = qp.get('q'), so = qp.get('sort');
+            if (t && chipHas('tier', t)) { filters.tier = t; activateChip('tier', t); }
+            if (s && chipHas('state', s)) { filters.state = s; activateChip('state', s); }
+            if (set && optHas(themeSelect, set)) { filters.theme = set; themeSelect.value = set; }
+            if (q) { searchTerm = q.toLowerCase().trim(); if (search) search.value = q; }
+            if (so && optHas(sortSel, so)) { sortSel.value = so; }
+            syncSearchClear();
+        }
+
+        // Remember the sort choice across visits (sort only) -- an explicit ?sort= URL wins (restored below).
         var SORT_KEY = 'pp-gallery-sort';
         if (sortSel) {
             try {
                 var savedSort = localStorage.getItem(SORT_KEY);
-                if (savedSort) {
-                    for (var si = 0; si < sortSel.options.length; si++) {
-                        if (sortSel.options[si].value === savedSort) { sortSel.value = savedSort; break; }
-                    }
-                }
+                if (savedSort && optHas(sortSel, savedSort)) sortSel.value = savedSort;
             } catch (e) { /* private mode */ }
             sortSel.addEventListener('change', function () {
                 try { localStorage.setItem(SORT_KEY, sortSel.value); } catch (e) { /* noop */ }
                 applySort(true);
             });
         }
-        applySort(false);  // initial (persisted) sort, no animation + fill the stat
+        restoreFromURL();      // a deep-linked ?view=gallery restores its filters + sort (overrides stored sort)
+        applyFilters(false);   // apply any restored filters instantly (visually a no-op if none)
+        applySort(false);      // initial / persisted / URL sort + fill the stat
 
         // Reveal stagger whenever the Gallery view becomes visible (view-switch or first load) -- matches
         // the Case, which staggers on every switch. Restart the class each show so the animation replays;
         // strip it after so its animation-fill can't shadow the FLIP transforms. (No is-touched hack.)
-        var galleryView = root.querySelector('#collection-view-gallery');
+        // On show we also re-sync the URL (the view toggle strips the Gallery params when you leave it).
         var revealT;
         function reveal() {
             if (reduced()) return;
@@ -811,7 +906,7 @@
             if (!galleryView.hasAttribute('hidden')) reveal();
             new MutationObserver(function (muts) {
                 for (var i = 0; i < muts.length; i++) {
-                    if (muts[i].attributeName === 'hidden' && !galleryView.hasAttribute('hidden')) { reveal(); break; }
+                    if (muts[i].attributeName === 'hidden' && !galleryView.hasAttribute('hidden')) { reveal(); syncURL(); break; }
                 }
             }).observe(galleryView, { attributes: true, attributeFilter: ['hidden'] });
         }
@@ -827,6 +922,25 @@
                 search.focus();
             });
         }
+
+        // Arrow-key grid navigation: when a card is focused, move focus across the visible cards (Left/Right
+        // step one, Up/Down step a full row). Enter opens it (native <a> activation). Columns are read live
+        // from the layout so it works at any breakpoint / filtered set.
+        var ARROWS = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: 0, ArrowDown: 0 };
+        grid.addEventListener('keydown', function (e) {
+            if (!(e.key in ARROWS)) return;
+            var focused = document.activeElement;
+            if (!focused || !focused.classList || !focused.classList.contains('pp-gallery__card')) return;
+            var vis = cells.filter(isShown);
+            var idx = vis.indexOf(focused);
+            if (idx < 0) return;
+            var cols = 1, top0 = vis[0].getBoundingClientRect().top;
+            for (var k = 0; k < vis.length; k++) { if (Math.abs(vis[k].getBoundingClientRect().top - top0) < 4) cols = k + 1; else break; }
+            var next = (e.key === 'ArrowUp') ? idx - cols : (e.key === 'ArrowDown') ? idx + cols : idx + ARROWS[e.key];
+            if (next < 0 || next >= vis.length) return;   // at an edge -- leave the key to the browser
+            e.preventDefault();
+            vis[next].focus();
+        });
     }
 
     // First-earn "minting" ceremony: the first time you see a newly-earned badge on the collection, it

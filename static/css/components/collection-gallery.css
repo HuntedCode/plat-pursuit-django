@@ -127,7 +127,19 @@
 
 .pp-gallery__empty { padding: 56px 30px; text-align: center; color: var(--pp-text-mute); }
 .pp-gallery__empty svg { width: 34px; height: 34px; margin: 0 auto 12px; opacity: 0.5; display: block; }
-.pp-gallery__empty-title { font-size: 13px; margin: 0 0 14px; }
+.pp-gallery__empty-title { font-size: 13px; margin: 0 0 12px; }
+/* Smart suggestion: "Remove X to see N" -- drop the single filter that reveals the most badges. */
+.pp-gallery__empty-suggest {
+    display: inline-block; margin: 0 0 12px; padding: 6px 14px; border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--pp-primary) 40%, var(--pp-border));
+    background: color-mix(in oklab, var(--pp-primary) 12%, transparent);
+    color: color-mix(in oklab, var(--pp-primary) 80%, var(--pp-text));
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    transition: background 0.14s ease, border-color 0.14s ease;
+}
+.pp-gallery__empty-suggest:hover { background: color-mix(in oklab, var(--pp-primary) 20%, transparent); border-color: color-mix(in oklab, var(--pp-primary) 60%, var(--pp-border)); }
+.pp-gallery__empty-suggest:focus-visible { outline: 2px solid var(--pp-primary); outline-offset: 2px; }
+.pp-gallery__empty-suggest[hidden] { display: none; }
 
 /* Dropdowns (the sort control + the Set filter) -- appearance:none so our dark bg fully applies (a native
    <select> renders a white box on some platforms, and its option popup is white by default -- the
