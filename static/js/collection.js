@@ -666,7 +666,7 @@
         // Typing glides the wall too (FLIP), but DEBOUNCED so it animates once you pause -- a FLIP on
         // every keystroke is a jittery mess. Clearing / Esc animate immediately (discrete actions).
         var searchGlide = (window.PlatPursuit && PlatPursuit.debounce)
-            ? PlatPursuit.debounce(function () { applyFilters(true); }, 160)
+            ? PlatPursuit.debounce(function () { applyFilters(true); }, 320)
             : function () { applyFilters(true); };
         function runSearch(val, immediate) {
             searchTerm = (val || '').toLowerCase().trim();
