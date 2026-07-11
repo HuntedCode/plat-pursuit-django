@@ -102,7 +102,7 @@
     and page size, injected below. {% endcomment %}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
-        var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-slist__row{% endif %}';
+        var CARD = '{% if view == "gallery" %}.pp-bgal__card{% else %}.pp-srow{% endif %}';
         var PAGE = {% if view == "gallery" %}{{ gallery_page_size|default:48 }}{% else %}{{ series_page_size|default:30 }}{% endif %};
         var scroller = null;
         function initScroller() {

@@ -32,8 +32,8 @@ def test_series_renders_pp_slist_rows(client):
     html = resp.content.decode()
 
     assert resp.status_code == 200
-    assert 'pp-slist__row' in html                 # rebuilt row (not the legacy DaisyUI card)
-    assert 'pp-slist__trophies' in html            # comprehensive: the 4-col trophy-type grid
+    assert 'pp-srow' in html                        # the from-scratch Career-grade card (not DaisyUI/pp-slist row)
+    assert 'pp-srow__spread' in html                # comprehensive: the 4-col trophy-type spread
     assert '/badges/rs-series/' in html
     assert 'pp-vtoggle' in html                     # shared Series|Gallery toggle present
 
@@ -88,7 +88,7 @@ def test_series_earned_row_is_marked(client):
 
     html = client.get(SERIES).content.decode()
 
-    assert 'pp-slist__row is-earned' in html
+    assert 'pp-srow is-earned' in html
 
 
 def test_series_xhr_returns_bare_rows_partial(client):
