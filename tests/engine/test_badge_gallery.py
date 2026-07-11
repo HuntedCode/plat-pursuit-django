@@ -140,3 +140,38 @@ def test_gallery_view_defaults_to_series(client):
     html = client.get(GALLERY).content.decode()
 
     assert 'pp-bgal' not in html  # series view, not the gallery island
+
+
+def test_gallery_full_page_carries_infinite_scroll_hooks(client):
+    """The full gallery page emits the InfiniteScroller hooks: the grid + a sentinel + a loader, but NO
+    page-number pager (infinite scroll owns pagination)."""
+    _series('rs-inf')
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'id="items-grid"' in html and 'id="bgal-sentinel"' in html and 'id="bgal-loading"' in html
+    assert 'page-jump-form' not in html  # the page-number pager (pagination.html) is gone
+
+
+def test_gallery_xhr_page_returns_bare_card_grid(client):
+    """An InfiniteScroller ?page=N XHR fetch returns just the results partial (cards), not the full page
+    chrome, so the scroller can extract + append the .pp-bgal__card nodes."""
+    _series('rs-xhr')
+
+    resp = client.get(GALLERY, {'view': 'gallery', 'page': 1}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    html = resp.content.decode()
+
+    assert 'pp-bgal__card' in html          # the cards are there to append
+    assert 'pp-bgal__toolbar' not in html   # ... but not the toolbar/full-page shell
+
+
+def test_gallery_xhr_past_the_end_returns_no_cards(client):
+    """Paginator.get_page CLAMPS an out-of-range page; the view must instead emit ZERO cards for an XHR
+    fetch past the last page, so InfiniteScroller sees 0 and stops (rather than re-appending the last page
+    forever)."""
+    _series('rs-end')  # 4 badges -> a single page
+
+    resp = client.get(GALLERY, {'view': 'gallery', 'page': 2}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    html = resp.content.decode()
+
+    assert 'pp-bgal__card' not in html  # past the end -> nothing to append -> the scroller stops

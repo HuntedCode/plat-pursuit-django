@@ -190,7 +190,18 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         page_obj = paginator.get_page(self.request.GET.get('page'))
         profile = self._profile()
 
-        page_badges = list(page_obj)
+        # InfiniteScroller walks pages 2,3,... via XHR; Paginator.get_page CLAMPS an out-of-range page to
+        # the last one, which would loop forever re-appending it. For an XHR fetch past the end, emit no
+        # cards so the scroller sees zero and stops.
+        try:
+            requested_page = int(self.request.GET.get('page') or 1)
+        except (TypeError, ValueError):
+            requested_page = 1
+        is_xhr = (
+            self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or (getattr(self.request, 'htmx', False) and self.request.htmx.target == 'browse-results')
+        )
+        page_badges = [] if (is_xhr and requested_page > paginator.num_pages) else list(page_obj)
         badge_ids = [b.id for b in page_badges]
         earned_map, progress_map = {}, {}
         if profile:

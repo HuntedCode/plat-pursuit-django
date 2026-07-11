@@ -1,11 +1,10 @@
 {% comment %} Browse badge Gallery island (?view=gallery): the public catalog's per-tier medallion wall,
 the cohesive rebuilt cousin of the Collection Gallery. Showcase-first medallions + a card-corner ownership
-marker for logged-in viewers. Server-driven: the toolbar is a plain GET form -- browse-filters.js
-auto-submits the selects/checkbox and HTMX-swaps #browse-results (get_template_names returns
-gallery_results.html for the swap). Reuses the .pp-gallery__ toolbar classes for a consistent look. {% endcomment %}
+marker for logged-in viewers. Server-driven: the toolbar is a plain GET form that full-reloads on change
+(gallery init in badge_list.html auto-submits it; InfiniteScroller preserves scroll across the reload and
+then appends pages 2+ on scroll). Reuses the .pp-gallery__ toolbar classes for a consistent look. {% endcomment %}
 <div class="pp-bgal">
-    <form id="filter-form" method="get" data-browse-form
-          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-push-url="true" hx-swap="innerHTML" hx-trigger="submit">
+    <form id="filter-form" method="get" action="{% url 'badges_list' %}">
         <input type="hidden" name="view" value="gallery" />
         <input type="hidden" name="page" value="1" />
         <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
@@ -63,7 +62,7 @@ gallery_results.html for the swap). Reuses the .pp-gallery__ toolbar classes for
                     </label>
                     {% endif %}
 
-                    <button type="button" data-submit-btn class="btn btn-sm btn-primary gap-1.5">
+                    <button type="submit" class="btn btn-sm btn-primary gap-1.5">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         <span class="hidden md:inline">Search</span>
                     </button>
@@ -74,5 +73,12 @@ gallery_results.html for the swap). Reuses the .pp-gallery__ toolbar classes for
 
     <div id="browse-results">
         {% include 'trophies/partials/badge_list/gallery_results.html' %}
+    </div>
+
+    {# Infinite scroll: the sentinel is observed; when it nears the viewport, InfiniteScroller fetches the
+       next ?page and appends its .pp-bgal__card nodes to #items-grid. #}
+    <div id="bgal-sentinel" class="h-4"></div>
+    <div id="bgal-loading" class="hidden justify-center py-4">
+        <span class="loading loading-spinner loading-md text-primary"></span>
     </div>
 </div>

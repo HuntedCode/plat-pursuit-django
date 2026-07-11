@@ -159,5 +159,34 @@
 {% endblock %}
 
 {% block js_scripts %}
+    {% if view == 'gallery' %}
+    {% comment %} Gallery: a plain GET form that full-reloads on any control change (no HTMX here), plus
+    InfiniteScroller for the endless wall. Each reload re-inits the scroller fresh from the new filters, so
+    no formSelector/scrollKey is needed (a filter change lands you back at the top, which is what you want). {% endcomment %}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var form = document.getElementById('filter-form');
+        if (form) {
+            form.querySelectorAll('select, input[type="checkbox"]').forEach(function (el) {
+                el.addEventListener('change', function () {
+                    var pageInput = form.querySelector('input[name="page"]');
+                    if (pageInput) { pageInput.value = 1; }
+                    form.submit();
+                });
+            });
+        }
+        if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
+            PlatPursuit.InfiniteScroller.create({
+                gridId: 'items-grid',
+                sentinelId: 'bgal-sentinel',
+                loadingId: 'bgal-loading',
+                paginateBy: 48,
+                cardSelector: '.pp-bgal__card',
+            });
+        }
+    });
+    </script>
+    {% else %}
     <script src="{% static 'js/browse-filters.js' %}"></script>
+    {% endif %}
 {% endblock %}
