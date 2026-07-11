@@ -39,8 +39,8 @@
                 {% endif %}
             </div>
 
-            {# Completion Horizon + tier composition -- substance in the header, not a separate section.
-               Hidden when the album is empty (a new user) -- a 0% horizon + all-zero tier jumps are noise. #}
+            {% comment %} Completion Horizon + tier composition -- substance in the header, not a separate
+            section. Hidden when the album is empty (new user): a 0% horizon + all-zero tier jumps are noise. {% endcomment %}
             {% if summary.total %}
             <div class="mt-3 md:mt-4">
                 <div class="pp-horizon" data-horizon-band="{{ summary.pct|horizon_band }}" style="--horizon-h: 6px;">
