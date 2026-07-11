@@ -75,8 +75,8 @@ then appends pages 2+ on scroll). Reuses the .pp-gallery__ toolbar classes for a
         {% include 'trophies/partials/badge_list/gallery_results.html' %}
     </div>
 
-    {# Infinite scroll: the sentinel is observed; when it nears the viewport, InfiniteScroller fetches the
-       next ?page and appends its .pp-bgal__card nodes to #items-grid. #}
+    {% comment %} Infinite scroll: the sentinel is observed; when it nears the viewport, InfiniteScroller
+    fetches the next ?page and appends its .pp-bgal__card nodes to #items-grid. {% endcomment %}
     <div id="bgal-sentinel" class="h-4"></div>
     <div id="bgal-loading" class="hidden justify-center py-4">
         <span class="loading loading-spinner loading-md text-primary"></span>

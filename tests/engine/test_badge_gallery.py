@@ -130,7 +130,8 @@ def test_gallery_query_count_constant_regardless_of_catalog_size(client):
     with CaptureQueriesContext(connection) as large:
         client.get(GALLERY, {'view': 'gallery'})
 
-    assert len(large) == len(small)
+    assert len(large) == len(small)      # no growth with catalog size
+    assert len(small) < 20               # absolute ceiling: a per-card N+1 (a page is 48 cards) can't hide
 
 
 def test_gallery_view_defaults_to_series(client):
@@ -140,6 +141,34 @@ def test_gallery_view_defaults_to_series(client):
     html = client.get(GALLERY).content.decode()
 
     assert 'pp-bgal' not in html  # series view, not the gallery island
+
+
+def test_gallery_badge_type_filter(client):
+    """?badge_type filters to that type (per-tier, across every series of the type)."""
+    _series('rs-type')  # badge_type='series'
+    BadgeFactory(series_slug='fr-type', tier=1, badge_type='franchise',
+                 is_live=True, required_stages=5, display_series='fr-type')
+
+    html = client.get(GALLERY, {'view': 'gallery', 'badge_type': 'franchise'}).content.decode()
+
+    assert '/badges/fr-type/' in html
+    assert '/badges/rs-type/' not in html
+
+
+def test_gallery_card_markers_for_maintenance_and_in_progress(client):
+    """The card-corner marker reads owned_state: a held (incl. lapsed/maintenance) badge shows the green
+    check, an in-progress one shows the hollow ring. The medallions all stay showcase colour."""
+    profile = ProfileFactory()
+    badges = _series('rs-mark')
+    ub = UserBadgeFactory(profile=profile, badge=badges[0])
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # bronze -> held/lapsed
+    UserBadgeProgressFactory(profile=profile, badge=badges[1], completed_concepts=2)  # silver -> in progress
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery'}).content.decode()
+
+    assert 'pp-bgal__owned--earned' in html      # maintenance is still held -> the owned check
+    assert 'pp-bgal__owned--progress' in html    # in-progress -> the hollow ring
 
 
 def test_gallery_full_page_carries_infinite_scroll_hooks(client):

@@ -166,18 +166,21 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             if g.get('hide_owned'):
                 qs = qs.filter(~Exists(held))
 
+        # Every order_by ends on 'pk' -- a unique final tiebreaker so ties (same earned_count / name / date)
+        # get a DEFINED, stable order across the page-1 render and the ?page=N infinite-scroll fetches
+        # (otherwise Postgres could reorder ties between pages -> a duplicated or skipped medallion).
         name_key = Lower('name')
         sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name'
         if sort == 'rarity':
-            qs = qs.order_by('earned_count', name_key)      # fewest earners = rarest first
+            qs = qs.order_by('earned_count', name_key, 'pk')      # fewest earners = rarest first
         elif sort == 'popular':
-            qs = qs.order_by('-earned_count', name_key)
+            qs = qs.order_by('-earned_count', name_key, 'pk')
         elif sort == 'newest':
-            qs = qs.order_by('-created_at', name_key)
+            qs = qs.order_by('-created_at', name_key, 'pk')
         elif sort == 'tier':
-            qs = qs.order_by('tier', name_key)
+            qs = qs.order_by('tier', name_key, 'pk')
         else:
-            qs = qs.order_by(name_key, 'tier')
+            qs = qs.order_by(name_key, 'tier', 'pk')
         return qs
 
     def _gallery_context_data(self, **kwargs):
@@ -243,6 +246,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             'gallery_q': g.get('q', ''),
             'gallery_hide_owned': bool(g.get('hide_owned')),
             'gallery_sorts': GALLERY_SORTS,
+            'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
             'breadcrumb': [
                 {'text': 'Home', 'url': reverse_lazy('home')},
                 {'text': 'Badges'},
@@ -252,7 +256,9 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 "your next platinum to chase."
             ),
         })
-        track_page_view('badges_list', 'gallery', self.request)
+        # Only count a real page view, not each infinite-scroll ?page=N XHR fetch (which would inflate it).
+        if not is_xhr:
+            track_page_view('badges_list', 'gallery', self.request)
         return context
 
     def _calculate_all_series_stats(self, series_slugs):
