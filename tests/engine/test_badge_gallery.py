@@ -66,6 +66,19 @@ def test_gallery_search_matches_series(client):
     assert '/badges/dark-souls/' not in html
 
 
+def test_gallery_search_by_set_number(client):
+    """A numeric query matches the edition/set number too -- plain, #-prefixed, and zero-padded all work."""
+    BadgeFactory(series_slug='rs-sn42', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='rs-sn42', name='Set Search A', set_number=42)
+    BadgeFactory(series_slug='rs-sn7', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='rs-sn7', name='Set Search B', set_number=7)
+
+    for query in ('42', '#42', '#0042'):
+        html = client.get(GALLERY, {'view': 'gallery', 'q': query}).content.decode()
+        assert '/badges/rs-sn42/' in html, query
+        assert '/badges/rs-sn7/' not in html, query
+
+
 def test_gallery_anonymous_hides_personal_state_chips(client):
     """The State chips are auth-only (anonymous browses the pure catalog); tier + set chips still show."""
     _series('rs-anon')

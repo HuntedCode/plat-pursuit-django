@@ -151,9 +151,14 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             qs = qs.filter(badge_type__in=types)
         q = (g.get('q') or '').strip()
         if q:
-            qs = qs.filter(
+            search_q = (
                 Q(series_slug__icontains=slugify(q)) | Q(name__icontains=q) | Q(display_title__icontains=q)
             )
+            # A numeric query (optionally "#0042") also matches the badge's edition/set number.
+            numeric = q.lstrip('#')
+            if numeric.isdigit():
+                search_q |= Q(set_number=int(numeric))
+            qs = qs.filter(search_q)
 
         # Personal-state multi-select (auth only): pick any of earned / in-progress / maintenance / unearned;
         # the chosen states are OR'd. Derived from EXISTS probes annotated once, then a Q per selected state
