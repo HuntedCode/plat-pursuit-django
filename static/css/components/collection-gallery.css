@@ -177,11 +177,11 @@
     border: 1px solid var(--pp-border);
     text-decoration: none; color: inherit; scroll-margin-top: 96px;
     transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-    /* Skip painting off-screen cells so a whale's engaged set (still bounded, but can run to hundreds of
-       medallions) stays cheap to scroll -- mirrors the Case's .pp-case__group. The intrinsic-size box keeps
-       FLIP measurements stable for off-screen cells (their reflow is invisible anyway). */
-    content-visibility: auto;
-    contain-intrinsic-size: auto 190px;
+    /* NOTE: no content-visibility here. It applies paint containment continuously, which clips the
+       medallion's OUTSET effects -- the cast/rim drop-shadows, the pedestal, and the aspirational
+       "next"/maintenance neon bloom -- at the tight card edge (the Case dodged this by using inset-only
+       shadows on its groups). The engaged-scope already bounds this wall, so the per-cell paint win isn't
+       worth losing those glows. Revisit with inset shadows or a row wrapper if a whale set ever bites. */
 }
 .pp-gallery__card[data-tier="bronze"]   { --tier-c: #cf9160; }
 .pp-gallery__card[data-tier="silver"]   { --tier-c: #b9c6d6; }

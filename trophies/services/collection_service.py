@@ -16,6 +16,7 @@ import logging
 from collections import defaultdict
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 from trophies.models import Badge, UserBadge, UserBadgeProgress
@@ -57,36 +58,41 @@ def _sort_key(sort):
     )
 
 
-def _engaged_series_slugs(profile):
-    """The set of series_slugs the profile has ENGAGED with: holds any tier (a UserBadge row)
-    or has real progress on any tier (a UserBadgeProgress with completed_concepts > 0). The
-    Collection is scoped to these, and since every tier of a series shares the slug, all 4 tiers
-    come along -- earned rungs plus the ones left to chase. Two cheap distinct FK reads, unioned;
-    zero-progress rows are skipped (functionally unearned, matching frame_service's state logic)."""
-    held = (
-        UserBadge.objects
-        .filter(profile=profile, badge__series_slug__isnull=False)
-        .values_list('badge__series_slug', flat=True).distinct()
+def _engaged_scope(profile):
+    """The viewer's ENGAGED badge scope for the album: the set of series_slugs they hold any tier of
+    (a UserBadge, any status incl maintenance) or are in-progress on (a UserBadgeProgress with
+    completed_concepts > 0), PLUS the ids of any held/started badge that has NO series_slug -- a
+    standalone badge can't be captured by slug, so it's kept by id and never silently dropped from an
+    album you hold it in. Two bounded reads (one row per held / started badge -- bounded by the catalog,
+    not the trophy count), split in Python. Zero-progress rows are skipped (functionally unearned,
+    matching frame_service's state logic). Returns (series_slugs, extra_badge_ids)."""
+    rows = list(
+        UserBadge.objects.filter(profile=profile)
+        .values_list('badge__series_slug', 'badge_id')
+    ) + list(
+        UserBadgeProgress.objects.filter(profile=profile, completed_concepts__gt=0)
+        .values_list('badge__series_slug', 'badge_id')
     )
-    started = (
-        UserBadgeProgress.objects
-        .filter(profile=profile, completed_concepts__gt=0, badge__series_slug__isnull=False)
-        .values_list('badge__series_slug', flat=True).distinct()
-    )
-    return set(held) | set(started)
+    slugs = {slug for slug, _ in rows if slug}
+    extra_ids = {bid for slug, bid in rows if not slug}
+    return slugs, extra_ids
 
 
-def _live_badges(series_slugs=None):
+def _live_badges(series_slugs=None, extra_ids=None):
     """Live badges with every FK build_badge_frame touches select_related, so the batched frame
     build issues zero per-badge FK queries. When `series_slugs` is given (the Collection's engaged
-    scope), only those series' badges are returned (an empty set -> no badges, i.e. an empty album)."""
+    scope), only those series' badges are returned, plus any `extra_ids` (held standalone badges with
+    no slug). An empty scope (no slugs, no ids) -> no badges, i.e. an empty album."""
     qs = Badge.objects.filter(is_live=True).select_related(
         'base_badge', 'franchise', 'collection', 'developer', 'funded_by', 'submitted_by',
         'base_badge__franchise', 'base_badge__collection',
         'base_badge__developer', 'base_badge__funded_by', 'base_badge__submitted_by',
     )
     if series_slugs is not None:
-        qs = qs.filter(series_slug__in=series_slugs)
+        scope = Q(series_slug__in=series_slugs)
+        if extra_ids:
+            scope |= Q(id__in=extra_ids)
+        qs = qs.filter(scope)
     return list(qs)
 
 
@@ -95,10 +101,10 @@ def _build_sets(profile, sort=DEFAULT_SORT):
     sub-binder: its pages are numbered within the set, and the page (Series / Developers /
     ...) is selected as a distinct binder view on the page. Returns (binder_sets, summary).
 
-    Scoped to the viewer's ENGAGED series (see _engaged_series_slugs) -- the album shows only
-    series you've started, never the full catalog.
+    Scoped to the viewer's ENGAGED badges (see _engaged_scope) -- the album shows only series
+    you've started (plus any held standalone badge), never the full catalog.
     """
-    badges = _live_badges(_engaged_series_slugs(profile))
+    badges = _live_badges(*_engaged_scope(profile))
     if not badges:
         return [], {'total': 0, 'earned': 0, 'pct': 0, 'by_tier': {}, 'recent': 0, 'tiers': []}
 

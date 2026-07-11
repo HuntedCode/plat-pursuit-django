@@ -168,11 +168,12 @@ The companion **flip** (to a back face) is still a planned follow-up.
 - Retiring the binder from the collection did **not** delete `binder.html`/`binder.css`/`binder.js` —
   they're still used by `/design/binder/`, which is also why `collection_service.spreads`/`pages` are
   **still built** (the binder lab consumes them). They are not dead despite the Case not using `spreads`.
-- **Three server-rendered views = every badge in the DOM ~2x** (Case shelves + Gallery wall, plus the
-  List rows). The count is **catalog-bounded, not per-user** (all live badges show for everyone), so it's
-  not a whale-safety issue, and `loading="lazy"` + `hidden` keeps inactive/off-screen images from
-  fetching. But at a large badge catalog the raw node count grows; if that ever bites, render the Gallery
-  lazily (build its DOM only on first switch) rather than up front.
+- **Two server-rendered views = the badge set in the DOM ~2x** (Case shelves + Gallery wall). As of the
+  July 2026 discovery restructure the Collection is scoped to the viewer's **ENGAGED series** (series they
+  hold or are in-progress on -- see `collection_service._engaged_scope`), so the count is **bounded by the
+  viewer's engaged set, not the whole catalog**. `loading="lazy"` + `hidden` keeps inactive/off-screen
+  images from fetching. Full-catalog discovery lives on the Browse badge Gallery (server-paginated), not
+  here, so this DOM stays bounded even for whales.
 
 ## Related Docs
 

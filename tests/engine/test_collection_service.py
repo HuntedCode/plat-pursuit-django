@@ -1,6 +1,7 @@
 """Tests for collection_service.build_collection_context (the Collection album / Binder).
 
-Pins the album contract: the FULL live-badge set shown (earned framed + unearned slots),
+Pins the album contract: the viewer's ENGAGED series shown (series they hold or are
+in-progress on -- all four tiers of each, earned framed + the remaining rungs as slots),
 grouping into binder SETS by badge type (each type is its own binder view, paginated
 within the set), PAGE_SIZE pagination, per-set + overall counts, id-based DOM anchors, and
 -- the load-bearing one -- a CONSTANT query count regardless of badge count (the
@@ -125,6 +126,20 @@ def test_empty_album_when_badges_exist_but_none_engaged():
 
     assert ctx['binder_sets'] == []
     assert ctx['summary']['total'] == 0
+
+
+def test_held_standalone_badge_with_no_series_slug_still_appears():
+    """A held badge with no series_slug can't be captured by the engaged-SERIES filter, so it's kept by
+    id (the _engaged_scope extra_ids path) -- a standalone badge you hold never silently drops."""
+    profile = ProfileFactory()
+    standalone = BadgeFactory(series_slug=None, tier=1, badge_type='event', is_live=True,
+                              required_stages=1, display_series='One-off')
+    UserBadgeFactory(profile=profile, badge=standalone)
+
+    ctx = build_collection_context(profile)
+
+    ids = {f['badge_id'] for s in ctx['binder_sets'] for g in s['groups'] for f in g['tiers']}
+    assert standalone.id in ids
 
 
 def test_each_badge_type_is_its_own_set():

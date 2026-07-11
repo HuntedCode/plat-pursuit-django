@@ -36,7 +36,9 @@
                 </div>
             </div>
 
-            {# Completion Horizon + tier composition -- substance in the header, not a separate section. #}
+            {# Completion Horizon + tier composition -- substance in the header, not a separate section.
+               Hidden when the album is empty (a new user) -- a 0% horizon + all-zero tier jumps are noise. #}
+            {% if summary.total %}
             <div class="mt-3 md:mt-4">
                 <div class="pp-horizon" data-horizon-band="{{ summary.pct|horizon_band }}" style="--horizon-h: 6px;">
                     <span class="pp-horizon__track"><span class="pp-horizon__fill pp-coll-horizon" style="--horizon-progress: {{ summary.pct }}%;"></span></span>
@@ -52,6 +54,7 @@
                     {% endfor %}
                 </div>
             </div>
+            {% endif %}
         </div>
     </section>
 
@@ -83,7 +86,7 @@
     {# No engaged series yet -- the album is scoped to series you've started, so it's empty. Point discovery at the Browse catalog. #}
     <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
         <div class="card-body items-center text-center py-12 md:py-16">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-primary/70 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-primary/70 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
             </svg>
             <h2 class="text-lg md:text-xl font-bold">Your collection is empty</h2>
