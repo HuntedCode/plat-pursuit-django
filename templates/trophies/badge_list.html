@@ -160,20 +160,54 @@
 
 {% block js_scripts %}
     {% if view == 'gallery' %}
-    {% comment %} Gallery: a plain GET form applied on its Search button (multi-select chips must NOT reload
-    per toggle), plus InfiniteScroller for the endless wall. Each apply full-reloads and re-inits the scroller
-    fresh from the new filters (landing you at the top), so no formSelector/scrollKey is needed. {% endcomment %}
+    {% comment %} Gallery: filters apply INSTANTLY via HTMX (the form hx-swaps #browse-results on change), so
+    there's no Apply button and multi-select is fine. We (re)create InfiniteScroller after each swap (the grid
+    is replaced), and wire the collapsible Filters panel + its active-count badge. {% endcomment %}
     <script>
     document.addEventListener('DOMContentLoaded', function () {
-        if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
-            PlatPursuit.InfiniteScroller.create({
-                gridId: 'items-grid',
-                sentinelId: 'bgal-sentinel',
-                loadingId: 'bgal-loading',
-                paginateBy: {{ gallery_page_size|default:48 }},
-                cardSelector: '.pp-bgal__card',
-            });
+        var scroller = null;
+        function initScroller() {
+            if (scroller && scroller.destroy) { scroller.destroy(); }
+            if (window.PlatPursuit && PlatPursuit.InfiniteScroller) {
+                scroller = PlatPursuit.InfiniteScroller.create({
+                    gridId: 'items-grid', sentinelId: 'bgal-sentinel', loadingId: 'bgal-loading',
+                    paginateBy: {{ gallery_page_size|default:48 }}, cardSelector: '.pp-bgal__card',
+                });
+            }
         }
+        // The HTMX filter swap replaces #browse-results (a fresh #items-grid) -> re-init the scroller on it.
+        document.body.addEventListener('htmx:afterSwap', function (e) {
+            if (e.target && e.target.id === 'browse-results') { initScroller(); }
+        });
+        initScroller();
+
+        var form = document.getElementById('filter-form');
+        var toggle = document.getElementById('bgal-filters-toggle');
+        var panel = document.getElementById('bgal-advanced');
+        var countEl = document.getElementById('bgal-filter-count');
+
+        function setPanel(open) {
+            if (!panel || !toggle) { return; }
+            if (open) { panel.removeAttribute('hidden'); } else { panel.setAttribute('hidden', ''); }
+            toggle.classList.toggle('is-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        }
+        if (toggle) {
+            toggle.addEventListener('click', function () { setPanel(panel.hasAttribute('hidden')); });
+        }
+        function activeCount() {
+            return form ? form.querySelectorAll('input[type="checkbox"]:checked').length : 0;
+        }
+        function updateCount() {
+            if (!countEl) { return; }
+            var n = activeCount();
+            countEl.textContent = n;
+            countEl.hidden = (n === 0);
+        }
+        if (form) { form.addEventListener('change', updateCount); }
+        updateCount();
+        // Start expanded if filters are already applied (so what's active is visible on load).
+        if (activeCount() > 0) { setPanel(true); }
     });
     </script>
     {% else %}

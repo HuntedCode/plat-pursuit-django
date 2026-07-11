@@ -1,56 +1,63 @@
 {% comment %} Browse badge Gallery island (?view=gallery): the public catalog's per-tier medallion wall,
 the cohesive rebuilt cousin of the Collection Gallery. Showcase-first medallions + a card-corner ownership
-marker for logged-in viewers. Server-driven: a plain GET form of MULTI-select chip filters (tier / state /
-set), applied on the Search button so multi-select doesn't reload per click; InfiniteScroller then appends
-pages 2+ on scroll. {% endcomment %}
+marker for logged-in viewers. Compact toolbar (mirrors Contracts): a one-row primary bar (search + sort +
+a Filters toggle) with the MULTI-select chip groups in a collapsible advanced panel. Filters apply INSTANTLY
+via HTMX swap of #browse-results (no Apply button); InfiniteScroller re-inits per swap + appends on scroll.
+Degrades to a plain GET (Enter) without JS. {% endcomment %}
 <div class="pp-bgal">
-    <form id="filter-form" method="get" action="{% url 'badges_list' %}">
+    <form id="filter-form" method="get" action="{% url 'badges_list' %}"
+          hx-get="{% url 'badges_list' %}" hx-target="#browse-results" hx-swap="innerHTML"
+          hx-push-url="true" hx-trigger="change delay:250ms, submit">
         <input type="hidden" name="view" value="gallery" />
         <input type="hidden" name="page" value="1" />
+        {% comment %} Enables Enter-to-search (implicit submit) without a visible Apply button; filters
+        otherwise auto-apply on change. {% endcomment %}
+        <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Search</button>
         <div class="card bg-base-200/90 border-2 border-base-300 shadow-lg shadow-neutral">
             <div class="card-body p-3 md:p-4">
-                <div class="pp-bgal__filters">
-                    <div class="pp-bgal__cgroup">
-                        <span class="pp-bgal__clabel">Tier</span>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="bronze"{% if 'bronze' in gallery_tiers %} checked{% endif %}>Bronze</label>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="silver"{% if 'silver' in gallery_tiers %} checked{% endif %}>Silver</label>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="gold"{% if 'gold' in gallery_tiers %} checked{% endif %}>Gold</label>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="platinum"{% if 'platinum' in gallery_tiers %} checked{% endif %}>Platinum</label>
-                    </div>
+                <div class="pp-bgal__bar">
+                    <span class="pp-bgal__search">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input type="search" name="q" value="{{ gallery_q }}" placeholder="Search badges&hellip;" aria-label="Search badges" />
+                    </span>
+                    <select class="pp-gallery__select" name="sort" aria-label="Sort badges">
+                        {% for key, label in gallery_sorts %}
+                        <option value="{{ key }}"{% if gallery_sort == key %} selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="pp-bgal__advbtn" id="bgal-filters-toggle" aria-expanded="false" aria-controls="bgal-advanced">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+                        <span class="hidden md:inline">Filters</span>
+                        <span class="pp-bgal__advbtn__n" id="bgal-filter-count" hidden>0</span>
+                    </button>
+                </div>
 
-                    {% if gallery_authed %}
-                    <div class="pp-bgal__cgroup">
-                        <span class="pp-bgal__clabel">State</span>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="state" value="earned"{% if 'earned' in gallery_states %} checked{% endif %}>Earned</label>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="state" value="in_progress"{% if 'in_progress' in gallery_states %} checked{% endif %}>In Progress</label>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="state" value="maintenance"{% if 'maintenance' in gallery_states %} checked{% endif %}>Maintenance</label>
-                        <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in gallery_states %} checked{% endif %}>Unearned</label>
-                    </div>
-                    {% endif %}
+                <div class="pp-bgal__advanced" id="bgal-advanced" hidden>
+                    <div class="pp-bgal__filters">
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Tier</span>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="bronze"{% if 'bronze' in gallery_tiers %} checked{% endif %}>Bronze</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="silver"{% if 'silver' in gallery_tiers %} checked{% endif %}>Silver</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="gold"{% if 'gold' in gallery_tiers %} checked{% endif %}>Gold</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="tier" value="platinum"{% if 'platinum' in gallery_tiers %} checked{% endif %}>Platinum</label>
+                        </div>
 
-                    <div class="pp-bgal__cgroup">
-                        <span class="pp-bgal__clabel">Set</span>
-                        {% for value, display in form.badge_type.field.choices %}{% if value %}
-                        <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in gallery_types %} checked{% endif %}>{{ display }}</label>
-                        {% endif %}{% endfor %}
-                    </div>
+                        {% if gallery_authed %}
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">State</span>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="earned"{% if 'earned' in gallery_states %} checked{% endif %}>Earned</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="in_progress"{% if 'in_progress' in gallery_states %} checked{% endif %}>In Progress</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="maintenance"{% if 'maintenance' in gallery_states %} checked{% endif %}>Maintenance</label>
+                            <label class="pp-bgal__chip"><input type="checkbox" name="state" value="unearned"{% if 'unearned' in gallery_states %} checked{% endif %}>Unearned</label>
+                        </div>
+                        {% endif %}
 
-                    <div class="pp-bgal__actions">
-                        <span class="pp-gallery__search-wrap">
-                            <input type="text" class="pp-gallery__search" name="q" value="{{ gallery_q }}" placeholder="Search badges&hellip;" aria-label="Search badges" />
-                        </span>
-                        <label class="pp-gallery__sort-label">
-                            <span class="sr-only">Sort badges</span>
-                            <select class="pp-gallery__select" name="sort" aria-label="Sort badges">
-                                {% for key, label in gallery_sorts %}
-                                <option value="{{ key }}"{% if gallery_sort == key %} selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                        </label>
-                        <button type="submit" class="btn btn-sm btn-primary gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                            <span class="hidden md:inline">Apply</span>
-                        </button>
+                        <div class="pp-bgal__cgroup">
+                            <span class="pp-bgal__clabel">Set</span>
+                            {% for value, display in form.badge_type.field.choices %}{% if value %}
+                            <label class="pp-bgal__chip"><input type="checkbox" name="badge_type" value="{{ value }}"{% if value in gallery_types %} checked{% endif %}>{{ display }}</label>
+                            {% endif %}{% endfor %}
+                        </div>
                     </div>
                 </div>
             </div>
