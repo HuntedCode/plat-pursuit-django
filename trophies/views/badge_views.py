@@ -21,20 +21,24 @@ def _badge_xp(badge):
 # Series view. Every filter/sort below maps to a real Badge column so it stays DB-side + paginated at scale.
 _TIER_NAME_TO_INT = {'bronze': 1, 'silver': 2, 'gold': 3, 'platinum': 4}
 _GALLERY_STATES = ('earned', 'in_progress', 'maintenance', 'unearned')  # multi-select personal-state chips
+# Badge-type display order (matches the Collection's sets) -- used to group the set-number sort by type,
+# since set numbers restart per type (Series #1 and Franchise #1 both exist).
+_TYPE_ORDER = ('series', 'franchise', 'collection', 'megamix', 'developer', 'user', 'event')
 GALLERY_PAGE_SIZE = 48  # medallions per page (a multiple of common 2/3/4/6-column grids)
-GALLERY_SORTS = [  # (key, label) -- the Gallery's own sorts (distinct from the Series view's)
+# (key, label). Order mirrors the Collection Gallery's sort dropdown (name, rarest, tier, ..., set last).
+GALLERY_SORTS = [
     ('name', 'Name (A-Z)'),
-    ('set_number', 'Set number'),
     ('rarity', 'Rarest first'),
+    ('tier', 'Tier (Platinum first)'),
     ('popular', 'Most earned'),
     ('newest', 'Newest'),
-    ('tier', 'Tier (Bronze first)'),
+    ('set_number', 'Set number'),
 ]
 GALLERY_SORT_KEYS = {k for k, _ in GALLERY_SORTS}
 
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Q, F, Prefetch, Max, Exists, OuterRef
+from django.db.models import Q, F, Prefetch, Max, Exists, OuterRef, Case, When, Value, IntegerField
 from django.db.models.functions import Lower
 from django.http import Http404, HttpResponseRedirect
 from urllib.parse import urlencode
@@ -184,7 +188,13 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         name_key = Lower('name')
         sort = g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name'
         if sort == 'set_number':
-            qs = qs.order_by(F('set_number').asc(nulls_last=True), 'pk')  # edition order; unnumbered last
+            # Set numbers restart per badge type, so group by type first, then edition order (unnumbered
+            # last), then tier -- keeping each type's numbered run contiguous.
+            type_order = Case(
+                *[When(badge_type=t, then=Value(i)) for i, t in enumerate(_TYPE_ORDER)],
+                default=Value(len(_TYPE_ORDER)), output_field=IntegerField(),
+            )
+            qs = qs.order_by(type_order, F('set_number').asc(nulls_last=True), 'tier', 'pk')
         elif sort == 'rarity':
             qs = qs.order_by('earned_count', name_key, 'pk')      # fewest earners = rarest first
         elif sort == 'popular':
@@ -192,7 +202,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
         elif sort == 'newest':
             qs = qs.order_by('-created_at', name_key, 'pk')
         elif sort == 'tier':
-            qs = qs.order_by('tier', name_key, 'pk')
+            qs = qs.order_by('-tier', name_key, 'pk')             # platinum first (matches the Collection)
         else:
             qs = qs.order_by(name_key, 'tier', 'pk')
         return qs
