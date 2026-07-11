@@ -156,7 +156,7 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             )
             # A numeric query (optionally "#0042") also matches the badge's edition/set number.
             numeric = q.lstrip('#')
-            if numeric.isdigit():
+            if numeric.isdigit() and len(numeric) <= 9:   # fits a PositiveIntegerField; guards absurd input
                 search_q |= Q(set_number=int(numeric))
             qs = qs.filter(search_q)
 

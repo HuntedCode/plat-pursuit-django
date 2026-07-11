@@ -252,6 +252,47 @@ def test_gallery_sort_by_set_number(client):
     assert html.index('/badges/rs-sn-lo/') < html.index('/badges/rs-sn-hi/')  # #0001 before #0009
 
 
+def test_gallery_set_number_sort_groups_by_type(client):
+    """Set numbers restart per type, so the sort groups by TYPE (series before franchise) first -- a
+    series #2 still sorts before a franchise #1."""
+    BadgeFactory(series_slug='sr-2', tier=1, badge_type='series', is_live=True,
+                 required_stages=5, display_series='sr-2', set_number=2)
+    BadgeFactory(series_slug='fr-1', tier=1, badge_type='franchise', is_live=True,
+                 required_stages=5, display_series='fr-1', set_number=1)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'sort': 'set_number'}).content.decode()
+
+    assert html.index('/badges/sr-2/') < html.index('/badges/fr-1/')  # type group wins over the raw number
+
+
+def test_gallery_sort_by_tier_is_platinum_first(client):
+    """?sort=tier orders platinum -> bronze (matches the Collection Gallery)."""
+    _series('rs-tsort')
+
+    html = client.get(GALLERY, {'view': 'gallery', 'sort': 'tier'}).content.decode()
+
+    assert html.index('data-tier="platinum"') < html.index('data-tier="bronze"')
+
+
+def test_gallery_state_maintenance_and_in_progress_filters(client):
+    """The maintenance and in-progress state chips filter via their own EXISTS paths (in-progress =
+    started but NOT held, so an earned badge is excluded)."""
+    profile = ProfileFactory()
+    badges = _series('rs-mstate')
+    UserBadgeFactory(profile=profile, badge=badges[0])                                # bronze earned
+    ub = UserBadgeFactory(profile=profile, badge=badges[1])
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # silver maintenance
+    UserBadgeProgressFactory(profile=profile, badge=badges[2], completed_concepts=2)  # gold in progress
+    client.force_login(profile.user)
+
+    m_html = client.get(GALLERY, {'view': 'gallery', 'state': 'maintenance'}).content.decode()
+    assert m_html.count('data-bgal-cell') == 1 and 'pp-bgal__owned--maintenance' in m_html
+
+    p_html = client.get(GALLERY, {'view': 'gallery', 'state': 'in_progress'}).content.decode()
+    assert p_html.count('data-bgal-cell') == 1 and 'pp-bgal__owned--progress' in p_html
+    assert 'pp-bgal__owned--earned' not in p_html  # the earned bronze is NOT in-progress
+
+
 def test_gallery_full_page_carries_infinite_scroll_hooks(client):
     """The full gallery page emits the InfiniteScroller hooks: the grid + a sentinel + a loader, but NO
     page-number pager (infinite scroll owns pagination)."""
@@ -272,7 +313,8 @@ def test_gallery_xhr_page_returns_bare_card_grid(client):
     html = resp.content.decode()
 
     assert 'pp-bgal__card' in html          # the cards are there to append
-    assert 'pp-bgal__toolbar' not in html   # ... but not the toolbar/full-page shell
+    assert 'id="filter-form"' not in html   # ... but not the toolbar form / full-page shell
+    assert 'id="bgal-sentinel"' not in html  # ... nor the scroll sentinel
 
 
 def test_gallery_xhr_past_the_end_returns_no_cards(client):

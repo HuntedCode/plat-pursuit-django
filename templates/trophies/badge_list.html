@@ -19,6 +19,9 @@
                             <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
                         </svg>
                         <h1 class="text-lg md:text-xl lg:text-2xl font-bold">Browse Badges</h1>
+                        {% if view == 'gallery' %}
+                            {% for value, display in gallery_sorts %}{% if value == gallery_sort %}<span class="badge badge-sm badge-ghost">{{ display }}</span>{% endif %}{% endfor %}
+                        {% else %}
                         {% with sort_val=request.GET.sort %}
                             {% if sort_val %}
                                 {% for value, display in form.sort.field.choices %}
@@ -30,9 +33,12 @@
                                 <span class="badge badge-sm badge-ghost">Alphabetical</span>
                             {% endif %}
                         {% endwith %}
+                        {% endif %}
                     </div>
                     <p class="text-xs md:text-sm text-base-content/50 mt-0.5 italic pr-1">
-                        {% if request.GET.series_slug %}
+                        {% if view == 'gallery' %}
+                            {{ paginator.count|intcomma }} badge{{ paginator.count|pluralize }} to explore. Filter by tier, set, and more.
+                        {% elif request.GET.series_slug %}
                             Searching for "{{ request.GET.series_slug }}"
                             {% if is_paginated %}across {{ paginator.count|intcomma }} badge series...{% endif %}
                         {% elif selected_badge_type %}
@@ -222,8 +228,9 @@
             });
         }
         refreshControls();
-        // Start expanded if filters are already applied (so what's active is visible on load).
-        if (activeCount() > 0 || searchValue()) { setPanel(true); }
+        // Collapse the panel on load (it renders open for the no-JS case); keep it open if filters are
+        // already applied, so what's active stays visible.
+        setPanel(activeCount() > 0 || searchValue());
     });
     </script>
     {% else %}

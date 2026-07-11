@@ -158,11 +158,13 @@ def test_showcase_maintenance_owned_state():
     badge = BadgeFactory(tier=1, required_stages=5)
     ub = UserBadgeFactory(profile=profile, badge=badge)
     UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')
+    UserBadgeProgressFactory(profile=profile, badge=badge, completed_concepts=2)  # partial repair
 
     frame = build_badge_frame(badge, profile, showcase=True)
 
     assert frame["state"] == "earned"
     assert frame["owned_state"] == "maintenance"
+    assert frame["owned_stages_done"] == 2   # repair progress drives the card's "2 / 5 stages" stat
 
 
 def test_showcase_anonymous_has_no_owned_state():
