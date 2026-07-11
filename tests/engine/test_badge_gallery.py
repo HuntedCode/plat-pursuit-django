@@ -114,6 +114,46 @@ def test_gallery_hide_owned_excludes_held(client):
     assert 'pp-bgal__owned--earned' not in html      # the held one is gone
 
 
+def test_gallery_hide_owned_targets_earned_not_maintenance(client):
+    """'Hide owned' drops EARNED only; a maintenance (held-but-lapsed) badge has its own toggle and stays."""
+    profile = ProfileFactory()
+    badges = _series('rs-hideo')
+    UserBadgeFactory(profile=profile, badge=badges[0])                                # bronze earned
+    ub = UserBadgeFactory(profile=profile, badge=badges[1])
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # silver maintenance
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'hide_owned': '1'}).content.decode()
+
+    assert 'pp-bgal__owned--earned' not in html      # earned hidden
+    assert 'pp-bgal__owned--maintenance' in html     # maintenance still shown
+
+
+def test_gallery_hide_maintenance(client):
+    profile = ProfileFactory()
+    badges = _series('rs-hidem')
+    ub = UserBadgeFactory(profile=profile, badge=badges[0])
+    UserBadge.objects.filter(pk=ub.pk).update(status='maintenance')                   # bronze maintenance
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'hide_maintenance': '1'}).content.decode()
+
+    assert html.count('data-bgal-cell') == 3         # the maintenance one is dropped
+    assert 'pp-bgal__owned--maintenance' not in html
+
+
+def test_gallery_hide_in_progress(client):
+    profile = ProfileFactory()
+    badges = _series('rs-hidep')
+    UserBadgeProgressFactory(profile=profile, badge=badges[0], completed_concepts=2)  # bronze in progress
+    client.force_login(profile.user)
+
+    html = client.get(GALLERY, {'view': 'gallery', 'hide_in_progress': '1'}).content.decode()
+
+    assert html.count('data-bgal-cell') == 3         # the in-progress one is dropped
+    assert 'pp-bgal__owned--progress' not in html
+
+
 def test_gallery_query_count_constant_regardless_of_catalog_size(client):
     """Whale-safety: rendering a page of the Gallery over a MUCH larger catalog issues the same number of
     queries (no per-badge N+1 -- the frames are batch-built with include_live_stats=False)."""

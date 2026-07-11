@@ -56,10 +56,12 @@ then appends pages 2+ on scroll). Reuses the .pp-gallery__ toolbar classes for a
                     </label>
 
                     {% if gallery_authed %}
-                    <label class="pp-gallery__fgroup" style="gap: 6px;">
-                        <input type="checkbox" name="hide_owned" value="1"{% if gallery_hide_owned %} checked{% endif %} aria-label="Hide badges you own" />
-                        <span>Hide owned</span>
-                    </label>
+                    <span class="pp-bgal__hide">
+                        <span>Hide</span>
+                        <label><input type="checkbox" name="hide_owned" value="1"{% if gallery_hide_owned %} checked{% endif %} /> Owned</label>
+                        <label><input type="checkbox" name="hide_maintenance" value="1"{% if gallery_hide_maintenance %} checked{% endif %} /> Maintenance</label>
+                        <label><input type="checkbox" name="hide_in_progress" value="1"{% if gallery_hide_in_progress %} checked{% endif %} /> In progress</label>
+                    </span>
                     {% endif %}
 
                     <button type="submit" class="btn btn-sm btn-primary gap-1.5">

@@ -20,6 +20,11 @@
 @media (min-width: 1280px) { .pp-bgal__grid { grid-template-columns: repeat(8, minmax(0, 1fr)); } }
 .pp-bgal__meta { color: var(--pp-text-mute); }
 
+/* "Hide" toggle group (auth): drop earned / maintenance / in-progress to carve down to the chase list. */
+.pp-bgal__hide { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pp-bgal__hide > span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pp-text-mute); }
+.pp-bgal__hide label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--pp-text); cursor: pointer; }
+
 /* Each card frames the showcase medallion. Neutral resting edge (no per-state frame -- state lives in the
    corner marker, not the card), tier-accent warm on hover. */
 .pp-bgal__card {

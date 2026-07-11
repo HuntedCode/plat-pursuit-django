@@ -149,10 +149,12 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             )
 
         # Personal state filters (auth only), via EXISTS subqueries: earned / in-progress / unearned,
-        # plus a "hide owned" toggle for chase-hunting. Anonymous viewers get the pure catalog (no state).
+        # plus independent "hide" toggles for chase-hunting. Anonymous viewers get the pure catalog.
         profile = self._profile()
         if profile:
             held = UserBadge.objects.filter(profile=profile, badge=OuterRef('pk'))
+            earned = held.filter(status='earned')
+            maint = held.filter(status='maintenance')
             started = UserBadgeProgress.objects.filter(
                 profile=profile, badge=OuterRef('pk'), completed_concepts__gt=0,
             )
@@ -163,8 +165,14 @@ class BadgeListView(ProfileHotbarMixin, ListView):
                 qs = qs.filter(Exists(started), ~Exists(held))
             elif state == 'unearned':
                 qs = qs.filter(~Exists(held), ~Exists(started))
+            # Independent hide toggles -- each drops one state so you can carve down to what's left to chase
+            # (e.g. hide all three -> only unearned). "Owned" = fully earned; maintenance/in-progress separate.
             if g.get('hide_owned'):
-                qs = qs.filter(~Exists(held))
+                qs = qs.filter(~Exists(earned))
+            if g.get('hide_maintenance'):
+                qs = qs.filter(~Exists(maint))
+            if g.get('hide_in_progress'):
+                qs = qs.exclude(Exists(started), ~Exists(held))   # in-progress = started but not held
 
         # Every order_by ends on 'pk' -- a unique final tiebreaker so ties (same earned_count / name / date)
         # get a DEFINED, stable order across the page-1 render and the ?page=N infinite-scroll fetches
@@ -245,6 +253,8 @@ class BadgeListView(ProfileHotbarMixin, ListView):
             'gallery_sort': g.get('sort') if g.get('sort') in GALLERY_SORT_KEYS else 'name',
             'gallery_q': g.get('q', ''),
             'gallery_hide_owned': bool(g.get('hide_owned')),
+            'gallery_hide_maintenance': bool(g.get('hide_maintenance')),
+            'gallery_hide_in_progress': bool(g.get('hide_in_progress')),
             'gallery_sorts': GALLERY_SORTS,
             'gallery_page_size': GALLERY_PAGE_SIZE,          # keeps the JS paginateBy in sync (no magic 48)
             'breadcrumb': [
