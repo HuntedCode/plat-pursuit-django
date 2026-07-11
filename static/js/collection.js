@@ -541,7 +541,12 @@
         if (want === 'all' || elState === want) return true;
         // A "maintenance" badge is still held -> it counts as earned for filtering
         // (it has no dedicated chip; the lapse only matters on the shelf).
-        return want === 'earned' && elState === 'maintenance';
+        if (want === 'earned' && elState === 'maintenance') return true;
+        // The Collection is scoped to ENGAGED series, so every badge here belongs to a series you're
+        // working on. An "unearned" tier (0 progress -- a rung not yet started) therefore counts as
+        // In Progress for FILTERING, so you can find those chase-rungs without dropping to "All". The
+        // medallion still renders unearned (data-state is untouched); only the filter is widened.
+        return want === 'in_progress' && elState === 'unearned';
     }
 
     function elMatches(el, filters, term) {
